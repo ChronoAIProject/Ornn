@@ -1,0 +1,177 @@
+/**
+ * Chat Input Component.
+ * Auto-resizing textarea with Enter=send, Shift+Enter=newline.
+ * Shows stop button during streaming. Includes model selector dropdown.
+ * @module components/playground/ChatInput
+ */
+
+import { useState, useRef, useCallback, useEffect } from "react";
+import { motion } from "framer-motion";
+import { usePlaygroundStore } from "@/stores/playgroundStore";
+import { AVAILABLE_MODELS, type AvailableModelId } from "@/types/playground";
+
+export interface ChatInputProps {
+  onSend: (content: string) => void;
+  onAbort: () => void;
+  disabled: boolean;
+  isStreaming: boolean;
+  /** Custom placeholder text (overrides the default disabled/active placeholders). */
+  placeholder?: string;
+}
+
+/** Maximum textarea height before scrolling. */
+const MAX_HEIGHT_PX = 200;
+
+export function ChatInput({
+  onSend,
+  onAbort,
+  disabled,
+  isStreaming,
+  placeholder: customPlaceholder,
+}: ChatInputProps) {
+  const [value, setValue] = useState("");
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const selectedModel = usePlaygroundStore((s) => s.selectedModel);
+  const setSelectedModel = usePlaygroundStore((s) => s.setSelectedModel);
+
+  /** Resize textarea to fit content. */
+  const adjustHeight = useCallback(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, MAX_HEIGHT_PX)}px`;
+  }, []);
+
+  useEffect(() => {
+    adjustHeight();
+  }, [value, adjustHeight]);
+
+  const handleSend = useCallback(() => {
+    const trimmed = value.trim();
+    if (!trimmed || disabled) return;
+    onSend(trimmed);
+    setValue("");
+  }, [value, disabled, onSend]);
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        handleSend();
+      }
+    },
+    [handleSend],
+  );
+
+  const canSend = value.trim().length > 0 && !disabled;
+
+  return (
+    <div className="border-t border-neon-cyan/10 px-4 pb-4 pt-2">
+      {/* Model selector */}
+      <div className="mb-2 flex items-center gap-2">
+        <label className="font-heading text-[10px] uppercase tracking-wider text-text-muted">
+          Model
+        </label>
+        <select
+          value={selectedModel}
+          onChange={(e) => setSelectedModel(e.target.value as AvailableModelId)}
+          disabled={isStreaming}
+          className="neon-input cursor-pointer appearance-none rounded-md px-2 py-1 font-mono text-xs text-text-primary disabled:opacity-50"
+        >
+          {AVAILABLE_MODELS.map((m) => (
+            <option key={m.id} value={m.id} className="bg-bg-deep">
+              {m.label} ({m.provider})
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* Input row */}
+      <div className="flex items-end gap-2">
+        <div className="relative flex-1">
+          <textarea
+            ref={textareaRef}
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            onKeyDown={handleKeyDown}
+            disabled={disabled}
+            placeholder={
+              customPlaceholder
+                ?? (disabled
+                  ? isStreaming
+                    ? "Generating response..."
+                    : "Awaiting tool approval..."
+                  : "Type a message... (Enter to send, Shift+Enter for newline)")
+            }
+            rows={1}
+            className="neon-input w-full resize-none rounded-lg px-4 py-3 pr-12 font-body text-sm text-text-primary placeholder:text-text-muted/50 disabled:opacity-50"
+            style={{ maxHeight: `${MAX_HEIGHT_PX}px` }}
+            aria-label="Chat message input"
+          />
+        </div>
+
+        {isStreaming ? (
+          <motion.button
+            type="button"
+            onClick={onAbort}
+            whileTap={{ scale: 0.97 }}
+            whileHover={{ scale: 1.02 }}
+            transition={{ duration: 0.1, ease: "easeIn" }}
+            className="glass cursor-pointer rounded-lg border border-neon-red/50 px-4 py-3 font-body text-sm font-semibold text-neon-red transition-all duration-200 hover:border-neon-red hover:shadow-[0_0_15px_rgba(255,0,60,0.3)]"
+            aria-label="Stop generation"
+          >
+            <StopIcon className="h-5 w-5" />
+          </motion.button>
+        ) : (
+          <motion.button
+            type="button"
+            onClick={handleSend}
+            disabled={!canSend}
+            whileTap={canSend ? { scale: 0.97 } : undefined}
+            whileHover={canSend ? { scale: 1.02 } : undefined}
+            transition={{ duration: 0.1, ease: "easeIn" }}
+            className={`glass cursor-pointer rounded-lg border px-4 py-3 font-body text-sm font-semibold transition-all duration-200 ${
+              canSend
+                ? "border-neon-cyan/50 text-neon-cyan hover:border-neon-cyan hover:shadow-[0_0_15px_rgba(255,107,0,0.3)]"
+                : "border-text-muted/20 text-text-muted/40 cursor-not-allowed"
+            }`}
+            aria-label="Send message"
+          >
+            <SendIcon className="h-5 w-5" />
+          </motion.button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SendIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M12 19V5m0 0l-7 7m7-7l7 7"
+      />
+    </svg>
+  );
+}
+
+function StopIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      fill="currentColor"
+      viewBox="0 0 24 24"
+    >
+      <rect x="6" y="6" width="12" height="12" rx="2" />
+    </svg>
+  );
+}

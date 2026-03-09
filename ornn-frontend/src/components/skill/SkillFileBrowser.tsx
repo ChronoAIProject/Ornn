@@ -1,0 +1,260 @@
+/**
+ * Skill File Browser Component.
+ * Two-panel layout: file tree (left) + file viewer/editor (right).
+ * Replaces the Readme tab on the SkillDetailPage.
+ * @module components/skill/SkillFileBrowser
+ */
+
+import { useState, useEffect, useCallback } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { FileTree, type FileNode } from "@/components/editor/FileTree";
+import { SkillFileViewer } from "@/components/skill/SkillFileViewer";
+import { Button } from "@/components/ui/Button";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { buildFileTreeFromEntries, type FileTreeEntry } from "@/utils/fileTreeBuilder";
+import { useToastStore } from "@/stores/toastStore";
+import { apiGet, apiPut } from "@/services/apiClient";
+
+/** Response from the file tree endpoint. */
+interface FileTreeResponse {
+  tree: FileTreeEntry[];
+  contents: Record<string, string>;
+}
+
+/** Fetch the file tree and viewable contents for a skill version. */
+async function fetchFileTree(skillId: string, version: string): Promise<FileTreeResponse> {
+  const res = await apiGet<FileTreeResponse>(
+    `/api/skills/${skillId}/versions/${encodeURIComponent(version)}/files`,
+  );
+  return res.data!;
+}
+
+/** Update a single file's content within a skill version package. */
+async function updateFileContent(
+  skillId: string,
+  version: string,
+  filePath: string,
+  content: string,
+): Promise<void> {
+  await apiPut(
+    `/api/skills/${skillId}/versions/${encodeURIComponent(version)}/files/${filePath}`,
+    { content },
+  );
+}
+
+const FILE_TREE_KEY = "file-tree";
+
+function useFileTree(skillId: string, version: string) {
+  return useQuery({
+    queryKey: [FILE_TREE_KEY, skillId, version],
+    queryFn: () => fetchFileTree(skillId, version),
+    enabled: !!skillId && !!version,
+  });
+}
+
+function useUpdateFile(skillId: string, version: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ filePath, content }: { filePath: string; content: string }) =>
+      updateFileContent(skillId, version, filePath, content),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [FILE_TREE_KEY, skillId, version] });
+    },
+  });
+}
+
+export interface SkillFileBrowserProps {
+  skillId: string;
+  version: string;
+  isOwner: boolean;
+}
+
+/** Check if a file path is editable (SKILL.md or scripts/*). */
+function isEditablePath(path: string): boolean {
+  return path === "SKILL.md" || path.startsWith("scripts/");
+}
+
+/** Find the default file to select, preferring SKILL.md. */
+function findDefaultFile(nodes: FileNode[]): string | undefined {
+  for (const node of nodes) {
+    if (node.type === "file" && node.id === "SKILL.md") return node.id;
+    if (node.children) {
+      const found = findDefaultFile(node.children);
+      if (found) return found;
+    }
+  }
+  // Fallback to first file
+  for (const node of nodes) {
+    if (node.type === "file") return node.id;
+    if (node.children) {
+      const found = findFirstFile(node.children);
+      if (found) return found;
+    }
+  }
+  return undefined;
+}
+
+function findFirstFile(nodes: FileNode[]): string | undefined {
+  for (const node of nodes) {
+    if (node.type === "file") return node.id;
+    if (node.children) {
+      const found = findFirstFile(node.children);
+      if (found) return found;
+    }
+  }
+  return undefined;
+}
+
+export function SkillFileBrowser({ skillId, version, isOwner }: SkillFileBrowserProps) {
+  const addToast = useToastStore((s) => s.addToast);
+  const { data, isLoading, error } = useFileTree(skillId, version);
+  const updateFile = useUpdateFile(skillId, version);
+
+  const [selectedFileId, setSelectedFileId] = useState<string | undefined>();
+  const [editedContent, setEditedContent] = useState<string | null>(null);
+
+  const treeNodes = data ? buildFileTreeFromEntries(data.tree) : [];
+  const contents = data?.contents ?? {};
+
+  // Select default file when data loads
+  useEffect(() => {
+    if (treeNodes.length > 0 && !selectedFileId) {
+      setSelectedFileId(findDefaultFile(treeNodes));
+    }
+  }, [data]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Reset edited content when switching files
+  useEffect(() => {
+    setEditedContent(null);
+  }, [selectedFileId]);
+
+  const isViewable = selectedFileId ? selectedFileId in contents : false;
+  const isEditable = isOwner && selectedFileId ? isEditablePath(selectedFileId) : false;
+  const originalContent = selectedFileId ? contents[selectedFileId] ?? "" : "";
+  const displayContent = editedContent ?? originalContent;
+  const isDirty = editedContent !== null && editedContent !== originalContent;
+
+  const handleFileSelect = useCallback((node: FileNode) => {
+    if (node.type === "file") {
+      setSelectedFileId(node.id);
+    }
+  }, []);
+
+  const handleContentChange = useCallback((content: string) => {
+    setEditedContent(content);
+  }, []);
+
+  const handleSave = async () => {
+    if (!selectedFileId || editedContent === null) return;
+    try {
+      await updateFile.mutateAsync({ filePath: selectedFileId, content: editedContent });
+      setEditedContent(null);
+      addToast({ type: "success", message: "File saved" });
+    } catch {
+      addToast({ type: "error", message: "Failed to save file" });
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex gap-4">
+        <div className="w-1/3">
+          <Skeleton lines={8} />
+        </div>
+        <div className="w-2/3">
+          <Skeleton lines={12} />
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center rounded-lg border border-neon-red/20 bg-bg-surface py-12">
+        <p className="font-body text-sm text-neon-red">
+          Failed to load files
+        </p>
+      </div>
+    );
+  }
+
+  if (treeNodes.length === 0) {
+    return (
+      <div className="flex items-center justify-center rounded-lg border border-neon-cyan/10 bg-bg-surface py-12">
+        <p className="font-body text-sm text-text-muted">
+          No package files available
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-col lg:flex-row gap-4">
+        {/* Left: File tree */}
+        <div className="lg:w-1/3 rounded-lg border border-neon-cyan/10 bg-bg-surface min-h-[300px]">
+          <FileTree
+            files={treeNodes}
+            selectedId={selectedFileId}
+            onSelect={handleFileSelect}
+          />
+        </div>
+
+        {/* Right: File viewer */}
+        <div className="lg:w-2/3">
+          {selectedFileId ? (
+            isViewable ? (
+              <SkillFileViewer
+                filename={selectedFileId}
+                content={displayContent}
+                editable={isEditable}
+                onChange={isEditable ? handleContentChange : undefined}
+              />
+            ) : (
+              <div className="flex flex-col items-center justify-center h-full min-h-[300px] rounded-lg border border-neon-cyan/10 bg-bg-deep">
+                <svg
+                  className="h-10 w-10 text-text-muted mb-3"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={1.5}
+                    d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                  />
+                </svg>
+                <p className="font-body text-sm text-text-muted text-center px-4">
+                  This file type cannot be viewed online.
+                  <br />
+                  Download the package to access it.
+                </p>
+              </div>
+            )
+          ) : (
+            <div className="flex items-center justify-center h-full min-h-[300px] rounded-lg border border-neon-cyan/10 bg-bg-deep">
+              <p className="font-body text-sm text-text-muted">
+                Select a file to view its content
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Save button (shown when content is dirty) */}
+      {isDirty && (
+        <div className="flex justify-end">
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={handleSave}
+            loading={updateFile.isPending}
+          >
+            Save Changes
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}

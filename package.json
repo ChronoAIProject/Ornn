@@ -1,0 +1,15 @@
+{
+  "name": "chrono-ornn",
+  "private": true,
+  "workspaces": [
+    "ornn-skill",
+    "ornn-frontend"
+  ],
+  "scripts": {
+    "dev": "bun run dev:skill",
+    "dev:skill": "bun run --filter ornn-skill dev",
+    "dev:frontend": "bun run --filter ornn-frontend dev",
+    "test": "bun run test:skill",
+    "test:skill": "bun test --filter ornn-skill"
+  }
+}

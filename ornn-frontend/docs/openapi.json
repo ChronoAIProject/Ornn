@@ -1,0 +1,22 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "ornn-frontend",
+    "version": "1.0.0",
+    "description": "Web frontend for the Ornn skill platform. Serves the React SPA and proxies API requests to backend microservices."
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "summary": "Health check",
+        "description": "Nginx health check endpoint.",
+        "tags": ["Infrastructure"],
+        "responses": {
+          "200": {
+            "description": "Service is healthy"
+          }
+        }
+      }
+    }
+  }
+}
