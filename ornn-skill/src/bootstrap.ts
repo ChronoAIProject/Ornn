@@ -11,6 +11,9 @@ import { join } from "node:path";
 import pino from "pino";
 import type { SkillConfig } from "./infra/config";
 
+// Auth setup
+import { jwtAuthSetup, proxyAuthSetup } from "./middleware/nyxidAuth";
+
 // Infrastructure
 import { connectMongo, type MongoConnection } from "./infra/db/mongodb";
 
@@ -213,19 +216,29 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
     );
   });
 
-  // Mount web routes — serves the frontend UI
-  app.route("/api/web", skillRoutes);
-  app.route("/api/web", searchRoutes);
-  app.route("/api/web", generationRoutes);
-  app.route("/api/web", playgroundRoutes);
-  app.route("/api/web", adminRoutes);
-  app.route("/api/web", formatRoutes);
-  app.route("/api/web", docsRoutes);
+  // ---- Web routes — frontend accesses ornn directly, JWT verified here ----
+  const webApp = new Hono();
+  webApp.use("*", jwtAuthSetup({
+    jwksUrl: config.nyxidJwksUrl,
+    issuer: config.nyxidIssuer,
+    audience: config.nyxidAudience,
+  }));
+  webApp.route("/", skillRoutes);
+  webApp.route("/", searchRoutes);
+  webApp.route("/", generationRoutes);
+  webApp.route("/", playgroundRoutes);
+  webApp.route("/", adminRoutes);
+  webApp.route("/", formatRoutes);
+  webApp.route("/", docsRoutes);
+  app.route("/api/web", webApp);
 
-  // Mount agent routes — exposed as MCP tools for AI agents
-  app.route("/api/agent", skillRoutes);      // POST /skills (upload), GET /skills/:idOrName/json (read as JSON)
-  app.route("/api/agent", searchRoutes);     // GET /skill-search
-  app.route("/api/agent", generationRoutes); // POST /skills/generate
+  // ---- Agent routes — accessed via NyxID proxy, trust proxy headers ----
+  const agentApp = new Hono();
+  agentApp.use("*", proxyAuthSetup());
+  agentApp.route("/", skillRoutes);
+  agentApp.route("/", searchRoutes);
+  agentApp.route("/", generationRoutes);
+  app.route("/api/agent", agentApp);
 
   // OpenAPI specs — auto-generated from Zod schemas
   const webSpec = buildWebSpec();
