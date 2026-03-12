@@ -85,8 +85,43 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   const db = mongo.db;
   logger.info("MongoDB connected");
 
+  // ---- SA Token Provider (shared by proxy-authenticated clients) ----
+  let saTokenCache: { accessToken: string; expiresAt: number } | null = null;
+  const getSaAccessToken = async (): Promise<string> => {
+    const now = Date.now();
+    if (saTokenCache && saTokenCache.expiresAt > now + 60_000) {
+      return saTokenCache.accessToken;
+    }
+    logger.info("Acquiring SA access token for storage proxy");
+    const body = new URLSearchParams({
+      grant_type: "client_credentials",
+      client_id: config.nyxidClientId,
+      client_secret: config.nyxidClientSecret,
+    });
+    const resp = await fetch(config.nyxidTokenUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: body.toString(),
+    });
+    if (!resp.ok) {
+      const errText = await resp.text().catch(() => "");
+      throw new Error(`SA token acquisition failed (${resp.status}): ${errText.slice(0, 200)}`);
+    }
+    const result = (await resp.json()) as { access_token: string; expires_in?: number };
+    if (!result.access_token) throw new Error("SA token response missing access_token");
+    saTokenCache = {
+      accessToken: result.access_token,
+      expiresAt: now + (result.expires_in ?? 900) * 1000,
+    };
+    return saTokenCache.accessToken;
+  };
+
   // ---- External Clients ----
-  const storageClient = new StorageClient(config.storageServiceUrl);
+  const needsProxyAuth = config.storageServiceUrl.includes("proxy");
+  const storageClient = new StorageClient(
+    config.storageServiceUrl,
+    needsProxyAuth ? getSaAccessToken : undefined,
+  );
   const sandboxClient = new SandboxClient(config.sandboxServiceUrl);
   const nyxLlmClient = new NyxLlmClient({
     gatewayUrl: config.nyxLlmGatewayUrl,

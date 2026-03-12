@@ -16,8 +16,20 @@ export interface IStorageClient {
 }
 
 export class StorageClient implements IStorageClient {
-  constructor(private readonly baseUrl: string) {
-    logger.info({ baseUrl }, "StorageClient initialized");
+  private readonly getAccessToken?: () => Promise<string>;
+
+  constructor(baseUrl: string, getAccessToken?: () => Promise<string>) {
+    this.baseUrl = baseUrl;
+    this.getAccessToken = getAccessToken;
+    logger.info({ baseUrl, authenticated: !!getAccessToken }, "StorageClient initialized");
+  }
+
+  private readonly baseUrl: string;
+
+  private async authHeaders(): Promise<Record<string, string>> {
+    if (!this.getAccessToken) return {};
+    const token = await this.getAccessToken();
+    return { Authorization: `Bearer ${token}` };
   }
 
   async upload(
@@ -29,9 +41,10 @@ export class StorageClient implements IStorageClient {
     const params = new URLSearchParams({ key, contentType });
     const url = `${this.baseUrl}/api/buckets/${bucket}/objects?${params.toString()}`;
 
+    const auth = await this.authHeaders();
     const res = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": contentType },
+      headers: { "Content-Type": contentType, ...auth },
       body: data as unknown as BodyInit,
     });
 
@@ -50,7 +63,8 @@ export class StorageClient implements IStorageClient {
     const params = new URLSearchParams({ key });
     const url = `${this.baseUrl}/api/buckets/${bucket}/objects?${params.toString()}`;
 
-    const res = await fetch(url, { method: "DELETE" });
+    const auth = await this.authHeaders();
+    const res = await fetch(url, { method: "DELETE", headers: auth });
 
     if (!res.ok) {
       const text = await res.text().catch(() => "");
@@ -72,7 +86,8 @@ export class StorageClient implements IStorageClient {
     }
     const url = `${this.baseUrl}/api/buckets/${bucket}/presigned-url?${params.toString()}`;
 
-    const res = await fetch(url, { method: "GET" });
+    const auth = await this.authHeaders();
+    const res = await fetch(url, { method: "GET", headers: auth });
 
     if (!res.ok) {
       const text = await res.text().catch(() => "");
@@ -87,9 +102,10 @@ export class StorageClient implements IStorageClient {
   async copy(bucket: string, sourceKey: string, destKey: string): Promise<void> {
     const url = `${this.baseUrl}/api/buckets/${bucket}/objects/copy`;
 
+    const auth = await this.authHeaders();
     const res = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...auth },
       body: JSON.stringify({ sourceKey, destKey }),
     });
 
