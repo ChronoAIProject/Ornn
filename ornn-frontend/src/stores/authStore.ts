@@ -18,6 +18,9 @@ const logger = {
 /** Refresh token 1 minute before expiry. */
 const TOKEN_REFRESH_BUFFER_MS = 60 * 1000;
 
+/** Consider token expired if less than 30s remaining (for proactive refresh). */
+const TOKEN_EXPIRY_THRESHOLD_MS = 30 * 1000;
+
 /** NyxID OAuth configuration from environment variables. */
 const NYXID_CONFIG = {
   authorizeUrl: import.meta.env.VITE_NYXID_AUTHORIZE_URL ?? "",
@@ -42,6 +45,7 @@ interface AuthState {
   refreshToken(): Promise<void>;
   logout(): void;
   initialize(): void;
+  ensureFreshToken(): Promise<void>;
   startTokenRefresh(): void;
   stopTokenRefresh(): void;
 }
@@ -337,6 +341,21 @@ export const useAuthStore = create<AuthState>()(
         });
       },
 
+      /**
+       * Proactively refresh the token if it is expired or about to expire.
+       * Called before API requests and when the tab regains focus.
+       */
+      ensureFreshToken: async () => {
+        const state = get();
+        if (!state.accessToken || !state.tokenExpiresAt) return;
+
+        const remaining = state.tokenExpiresAt - Date.now();
+        if (remaining > TOKEN_EXPIRY_THRESHOLD_MS) return;
+
+        logger.info("Token expired or near-expiry, proactively refreshing");
+        await state.refreshToken();
+      },
+
       startTokenRefresh: () => {
         const state = get();
         if (state._refreshTimerId) {
@@ -374,6 +393,30 @@ export const useAuthStore = create<AuthState>()(
     },
   ),
 );
+
+// ── Auto-initialize on module load ──────────────────────────────────────
+// Ensures auth state is restored from localStorage on every page load,
+// not only when AuthGuard mounts. This fixes the bug where refreshing
+// public pages (/, /docs, /registry) loses the logged-in state.
+useAuthStore.getState().initialize();
+
+// ── Refresh token when tab regains focus ────────────────────────────────
+// Browsers throttle/skip setTimeout in background tabs. When the user
+// comes back after idling, the scheduled refresh may have been missed
+// and the access token may have expired.
+if (typeof document !== "undefined") {
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") {
+      const state = useAuthStore.getState();
+      if (state.isAuthenticated) {
+        logger.info("Tab became visible, checking token freshness");
+        state.ensureFreshToken();
+        // Re-arm the scheduled refresh in case the timer was skipped
+        state.startTokenRefresh();
+      }
+    }
+  });
+}
 
 /**
  * Hook to get current access token.

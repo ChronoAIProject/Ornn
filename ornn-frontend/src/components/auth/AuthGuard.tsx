@@ -23,13 +23,9 @@ export function AuthGuard({ children }: AuthGuardProps) {
     isAuthenticated,
     isInitialized,
     isLoading,
-    initialize,
   } = useAuthStore();
 
-  // Initialize auth on mount
-  useEffect(() => {
-    initialize();
-  }, [initialize]);
+  // initialize() is called at module load in authStore.ts — no need here
 
   // Redirect based on auth state
   useEffect(() => {

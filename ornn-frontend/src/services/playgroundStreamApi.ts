@@ -20,8 +20,9 @@ export interface StreamHandle {
   abort: () => void;
 }
 
-/** Retrieve Bearer token from auth store. */
-function getAuthHeaders(): Record<string, string> {
+/** Ensure fresh token and retrieve Bearer header from auth store. */
+async function getAuthHeaders(): Promise<Record<string, string>> {
+  await useAuthStore.getState().ensureFreshToken();
   const token = useAuthStore.getState().accessToken;
   if (!token) return {};
   return { Authorization: `Bearer ${token}` };
@@ -50,12 +51,13 @@ export function streamChat(
 
   (async () => {
     try {
+      const authHeaders = await getAuthHeaders();
       const response = await fetch(url.toString(), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Accept: "text/event-stream",
-          ...getAuthHeaders(),
+          ...authHeaders,
         },
         body: JSON.stringify({
           messages: params.messages,

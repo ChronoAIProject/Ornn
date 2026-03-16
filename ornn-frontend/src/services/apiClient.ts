@@ -135,17 +135,27 @@ async function handleResponse<T>(response: Response): Promise<ApiResponse<T>> {
 }
 
 /**
- * Execute fetch with automatic retry on 401.
+ * Execute fetch with proactive token refresh and automatic retry on 401/403.
  */
 async function fetchWithRetry<T>(
   url: string,
   options: RequestInit,
   retried: boolean = false,
 ): Promise<ApiResponse<T>> {
+  // Proactively refresh expired tokens before sending the request
+  if (!retried && getAccessToken()) {
+    await useAuthStore.getState().ensureFreshToken();
+    // Re-attach the (possibly refreshed) token
+    options = {
+      ...options,
+      headers: { ...options.headers, Authorization: `Bearer ${getAccessToken()}` },
+    };
+  }
+
   const response = await fetch(url, options);
 
-  // Handle 401 Unauthorized — only attempt refresh if user was authenticated
-  if (response.status === 401 && !retried) {
+  // Handle 401/403 — attempt refresh if user was authenticated and not already retried
+  if ((response.status === 401 || response.status === 403) && !retried) {
     const hadToken = !!getAccessToken();
 
     if (hadToken) {
@@ -251,13 +261,18 @@ export async function apiPatch<T>(
  * DELETE request with auth.
  */
 export async function apiDelete(path: string): Promise<void> {
+  // Proactively refresh expired tokens before sending
+  if (getAccessToken()) {
+    await useAuthStore.getState().ensureFreshToken();
+  }
+
   const response = await fetch(buildUrl(path), {
     method: "DELETE",
     headers: createHeaders(),
   });
 
-  // Handle 401 Unauthorized
-  if (response.status === 401) {
+  // Handle 401/403
+  if (response.status === 401 || response.status === 403) {
     const refreshSuccess = await attemptTokenRefresh();
 
     if (refreshSuccess) {
