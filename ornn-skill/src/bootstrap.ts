@@ -8,8 +8,12 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { join } from "node:path";
+import { readFileSync } from "node:fs";
 import pino from "pino";
 import type { SkillConfig } from "./infra/config";
+
+const pkg = JSON.parse(readFileSync(join(import.meta.dir, "..", "package.json"), "utf-8"));
+
 
 // Auth setup
 import { jwtAuthSetup, proxyAuthSetup } from "./middleware/nyxidAuth";
@@ -290,6 +294,7 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
     c.json({
       status: "ok",
       service: "ornn-skill",
+      version: pkg.version,
       timestamp: new Date().toISOString(),
     }),
   );
