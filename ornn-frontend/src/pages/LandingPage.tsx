@@ -5,9 +5,11 @@
  * @module pages/LandingPage
  */
 
-import { useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+
+const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
 
 /** Decorative skill names that float in the background */
 const SKILL_NAMES = [
@@ -130,13 +132,28 @@ function FloatingBackground() {
   );
 }
 
-const APP_VERSION = typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "dev";
-
 function AnnouncementBanner() {
-  const { t } = useTranslation();
-  const text = `${t("landing.bannerNew")}  Ornn v${APP_VERSION} — ${t("landing.bannerSkills")}`;
+  const { t, i18n } = useTranslation();
+  const lang = i18n.language === "zh" ? "zh" : "en";
+  const [version, setVersion] = useState("");
+  const [title, setTitle] = useState("");
 
-  // Each group must be >= 100vw so the second group is always ready to fill the gap
+  useEffect(() => {
+    fetch(`${API_BASE}/api/web/docs/releases?lang=${lang}`)
+      .then((r) => r.json())
+      .then((json) => {
+        if (json.data?.length > 0) {
+          setVersion(json.data[0].version);
+          setTitle(json.data[0].title);
+        }
+      })
+      .catch(() => {});
+  }, [lang]);
+
+  if (!version) return null;
+
+  const text = `${t("landing.bannerNew")}  Ornn v${version} — ${title}`;
+
   return (
     <div className="shrink-0 relative z-10 overflow-hidden border-b border-neon-cyan/15 bg-neon-cyan/5">
       <div className="inline-flex whitespace-nowrap" style={{ animation: "marquee 30s linear infinite" }}>
