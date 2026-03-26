@@ -432,7 +432,7 @@ function CopyButton({ text }: { text: string }) {
     <button
       type="button"
       onClick={handleCopy}
-      className="absolute top-2 right-2 px-2 py-1 rounded text-xs font-mono transition-all cursor-pointer border border-neon-cyan/30 bg-bg-deep/80 text-text-muted hover:text-neon-cyan hover:border-neon-cyan/60"
+      className="sticky float-right top-2 right-2 z-10 px-2 py-1 rounded text-xs font-mono transition-all cursor-pointer border border-neon-cyan/30 bg-bg-deep/80 text-text-muted hover:text-neon-cyan hover:border-neon-cyan/60 -mb-7 mr-2 mt-2"
     >
       {copied ? "Copied!" : "Copy"}
     </button>
@@ -458,12 +458,12 @@ function CodeBlock({
 
   if (isFenced) {
     return (
-      <div className="relative group">
+      <>
         <CopyButton text={code} />
         <code className={className} {...props}>
           {children}
         </code>
-      </div>
+      </>
     );
   }
 
