@@ -98,11 +98,6 @@ export function RootLayout() {
       <main className="flex-1 min-h-0 px-6 sm:px-10 overflow-hidden">
         <Outlet />
       </main>
-      <footer className="shrink-0 flex items-center justify-center px-6 py-2 border-t border-neon-cyan/10">
-        <span className="font-mono text-xs text-text-muted/50">
-          Ornn v{typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "dev"}
-        </span>
-      </footer>
       <ToastContainer />
     </div>
   );

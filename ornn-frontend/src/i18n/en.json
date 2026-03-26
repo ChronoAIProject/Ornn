@@ -295,6 +295,8 @@
   },
   "landing": {
     "badge": "NOW LIVE: REGISTRY V2.0",
+    "bannerNew": "NEW",
+    "bannerSkills": "Core Skills for Claude Code, Codex, Cursor & Antigravity",
     "heroTitle1": "Forge the Future of",
     "heroTitle2": "AI Capabilities",
     "heroDesc": "Ornn is the industry-standard skill registry for AI agents. Standardized, verifiable, and executable capabilities for the next generation of autonomous intelligence.",

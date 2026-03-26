@@ -201,6 +201,12 @@ code, pre {
   animation: shimmer 1.5s linear infinite;
 }
 
+/* Marquee scroll for announcement banner */
+@keyframes marquee {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
 /* Background grid pattern */
 .bg-grid {
   background-image: radial-gradient(

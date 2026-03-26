@@ -295,6 +295,8 @@
   },
   "landing": {
     "badge": "正式上线：技能库 V2.0",
+    "bannerNew": "全新发布",
+    "bannerSkills": "核心技能已支持 Claude Code、Codex、Cursor 和 Antigravity",
     "heroTitle1": "锻造",
     "heroTitle2": "AI 能力的未来",
     "heroDesc": "Ornn 是 AI Agent 的行业标准技能库。为下一代自主智能提供标准化、可验证、可执行的能力。",

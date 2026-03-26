@@ -130,11 +130,38 @@ function FloatingBackground() {
   );
 }
 
+const APP_VERSION = typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "dev";
+
+function AnnouncementBanner() {
+  const { t } = useTranslation();
+  const text = `${t("landing.bannerNew")}  Ornn v${APP_VERSION} — ${t("landing.bannerSkills")}`;
+  const separator = "   ★   ";
+  const segment = `${text}${separator}`;
+
+  return (
+    <div className="shrink-0 relative z-10 overflow-hidden border-b border-neon-cyan/15 bg-neon-cyan/5">
+      <div className="flex whitespace-nowrap" style={{ animation: "marquee 25s linear infinite" }}>
+        {/* Two identical groups for seamless loop */}
+        {[0, 1].map((g) => (
+          <span key={g} className="inline-flex items-center py-1.5 font-mono text-xs text-neon-cyan/80 shrink-0">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <span key={i}>{segment}</span>
+            ))}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function LandingPage() {
   const { t } = useTranslation();
 
   return (
     <div className="h-full -mx-6 sm:-mx-10 relative overflow-hidden flex flex-col">
+      {/* Announcement banner */}
+      <AnnouncementBanner />
+
       {/* Floating skill names background */}
       <FloatingBackground />
 
