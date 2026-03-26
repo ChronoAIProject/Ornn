@@ -160,9 +160,7 @@ function AnnouncementBanner() {
         {[0, 1].map((g) => (
           <span key={g} className="inline-flex items-center py-1.5 shrink-0 min-w-[100vw] justify-around">
             <span className="font-mono text-xs text-neon-cyan/80">{text}</span>
-            <span className="font-mono text-xs text-neon-cyan/30">★</span>
             <span className="font-mono text-xs text-neon-cyan/80">{text}</span>
-            <span className="font-mono text-xs text-neon-cyan/30">★</span>
           </span>
         ))}
       </div>
