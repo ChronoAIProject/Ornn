@@ -58,7 +58,7 @@ Fetch the three Ornn core skill directories from https://github.com/aevatarAI/ch
 
 Once installed, the three skills are available as slash commands. Each skill guides your agent through the full NyxID MCP workflow (service discovery → connection → tool calls) automatically.
 
-> **Prerequisite:** Your agent must be connected to a NyxID MCP server. See [NyxID MCP Integration](nyxid-mcp-integration) for setup details and tool reference.
+> **Prerequisite:** Your agent must be connected to a NyxID MCP server. See [NyxID MCP Integration](/docs?section=nyxid-mcp-integration&title=NyxID%20MCP%20Integration) for setup details and tool reference.
 
 ### `/ornn-search-and-run` — Discover and Execute Skills
 
@@ -172,4 +172,4 @@ graph LR
 
 You can always download a skill package and manually configure it for your AI agent. However, we strongly recommend using the core skills described above — they significantly reduce manual work and enable fully automated skill discovery and application.
 
-For low-level tool reference and NyxID MCP setup details, see [NyxID MCP Integration](nyxid-mcp-integration).
+For low-level tool reference and NyxID MCP setup details, see [NyxID MCP Integration](/docs?section=nyxid-mcp-integration&title=NyxID%20MCP%20Integration).

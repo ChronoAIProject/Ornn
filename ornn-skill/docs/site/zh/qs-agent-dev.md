@@ -58,7 +58,7 @@ codex/skills/ornn-build/SKILL.md
 
 安装后，三个技能可作为斜杠命令使用。每个技能会自动引导 Agent 完成整个 NyxID MCP 工作流（服务发现 → 连接 → 工具调用）。
 
-> **前置条件：** 你的 Agent 必须连接到 NyxID MCP 服务器。详见 [NyxID MCP 集成](nyxid-mcp-integration) 了解设置细节和工具参考。
+> **前置条件：** 你的 Agent 必须连接到 NyxID MCP 服务器。详见 [NyxID MCP 集成](/docs?section=nyxid-mcp-integration&title=NyxID%20MCP%20%E9%9B%86%E6%88%90) 了解设置细节和工具参考。
 
 ### `/ornn-search-and-run` — 发现并执行技能
 
@@ -172,4 +172,4 @@ graph LR
 
 当然，你永远都可以将一个技能包下载并手动装配到你的 AI Agent 中。但我们非常建议使用上面提到的核心技能方式，因为它可以大大减少手动工作并实现全自动化的技能检索与应用。
 
-如需底层工具参考和 NyxID MCP 设置细节，请参阅 [NyxID MCP 集成](nyxid-mcp-integration)。
+如需底层工具参考和 NyxID MCP 设置细节，请参阅 [NyxID MCP 集成](/docs?section=nyxid-mcp-integration&title=NyxID%20MCP%20%E9%9B%86%E6%88%90)。
