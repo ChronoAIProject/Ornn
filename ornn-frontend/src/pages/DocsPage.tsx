@@ -415,6 +415,30 @@ function MermaidBlock({ chart }: { chart: string }) {
 
 /* ──────────────── Custom code component for react-markdown ──────────────── */
 
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      /* clipboard may not be available */
+    }
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={handleCopy}
+      className="absolute top-2 right-2 px-2 py-1 rounded text-xs font-mono transition-all cursor-pointer border border-neon-cyan/30 bg-bg-deep/80 text-text-muted hover:text-neon-cyan hover:border-neon-cyan/60"
+    >
+      {copied ? "Copied!" : "Copy"}
+    </button>
+  );
+}
+
 function CodeBlock({
   className,
   children,
@@ -428,6 +452,19 @@ function CodeBlock({
     return <MermaidBlock chart={code} />;
   }
 
+  // Fenced code block (has language class) — wrap with copy button
+  if (lang) {
+    return (
+      <div className="relative group">
+        <CopyButton text={code} />
+        <code className={className} {...props}>
+          {children}
+        </code>
+      </div>
+    );
+  }
+
+  // Inline code
   return (
     <code className={className} {...props}>
       {children}
