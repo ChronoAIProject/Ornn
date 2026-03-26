@@ -37,9 +37,9 @@ export interface JwtAuthConfig {
   jwksUrl: string;
   issuer: string;
   audience: string;
-  introspectionUrl?: string;
-  clientId?: string;
-  clientSecret?: string;
+  introspectionUrl: string;
+  clientId: string;
+  clientSecret: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -63,7 +63,8 @@ class AppError extends Error {
 
 /**
  * JWT auth setup for `/api/web` routes.
- * Verifies Bearer token against NyxID JWKS and populates auth context.
+ * Verifies Bearer token signature against NyxID JWKS for identity (sub),
+ * then calls NyxID token introspection to get authoritative roles/permissions.
  * Skips silently when no Authorization header is present (public routes).
  * Throws 401 when a token IS present but invalid/expired.
  */
@@ -79,61 +80,63 @@ export function jwtAuthSetup(config: JwtAuthConfig) {
     }
 
     const token = authHeader.slice(7);
+
+    // Step 1: Verify JWT signature to confirm identity
+    let userId: string;
     try {
       const { payload } = await jwtVerify(token, jwks, {
         issuer: config.issuer,
         audience: config.audience,
       });
-
-      const jwtRoles = (payload as Record<string, unknown>).roles as string[] | undefined;
-      const jwtPermissions = (payload as Record<string, unknown>).permissions as string[] | undefined;
-
-      let roles = jwtRoles ?? [];
-      let permissions = jwtPermissions ?? [];
-
-      // If JWT lacks roles/permissions, fetch them from NyxID introspection
-      if ((!jwtRoles?.length || !jwtPermissions?.length) && config.introspectionUrl) {
-        try {
-          const body = new URLSearchParams({ token });
-          if (config.clientId) body.set("client_id", config.clientId);
-          if (config.clientSecret) body.set("client_secret", config.clientSecret);
-
-          const introspectResp = await fetch(config.introspectionUrl, {
-            method: "POST",
-            headers: { "Content-Type": "application/x-www-form-urlencoded" },
-            body: body.toString(),
-          });
-
-          if (introspectResp.ok) {
-            const introspectData = await introspectResp.json() as Record<string, unknown>;
-            if (introspectData.active) {
-              if (!jwtRoles?.length && Array.isArray(introspectData.roles)) {
-                roles = introspectData.roles as string[];
-              }
-              if (!jwtPermissions?.length && Array.isArray(introspectData.permissions)) {
-                permissions = introspectData.permissions as string[];
-              }
-              logger.debug({ userId: payload.sub }, "Enriched auth from introspection");
-            }
-          }
-        } catch (introspectErr) {
-          logger.warn({ err: introspectErr }, "Token introspection failed, using JWT claims only");
-        }
-      }
-
-      const auth: AuthContext = {
-        userId: payload.sub!,
-        email: c.req.header("X-User-Email") ?? "",
-        roles,
-        permissions,
-      };
-
-      c.set("auth", auth);
-      logger.debug({ userId: auth.userId, permissions: auth.permissions }, "Authenticated via JWT");
+      userId = payload.sub!;
     } catch (err) {
       logger.warn({ err }, "JWT verification failed");
       throw new AppError(401, "AUTH_INVALID", "Invalid or expired access token");
     }
+
+    // Step 2: Call NyxID introspection for authoritative roles/permissions
+    let roles: string[] = [];
+    let permissions: string[] = [];
+
+    try {
+      const body = new URLSearchParams({
+        token,
+        client_id: config.clientId,
+        client_secret: config.clientSecret,
+      });
+
+      const introspectResp = await fetch(config.introspectionUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: body.toString(),
+      });
+
+      if (introspectResp.ok) {
+        const data = await introspectResp.json() as Record<string, unknown>;
+        if (data.active) {
+          if (Array.isArray(data.roles)) roles = data.roles as string[];
+          if (Array.isArray(data.permissions)) permissions = data.permissions as string[];
+        } else {
+          // Token is not active according to NyxID (e.g., revoked)
+          throw new AppError(401, "AUTH_INVALID", "Token is no longer active");
+        }
+      } else {
+        logger.error({ status: introspectResp.status }, "NyxID introspection request failed");
+      }
+    } catch (err) {
+      if (err instanceof AppError) throw err;
+      logger.warn({ err }, "Token introspection failed");
+    }
+
+    const auth: AuthContext = {
+      userId,
+      email: c.req.header("X-User-Email") ?? "",
+      roles,
+      permissions,
+    };
+
+    c.set("auth", auth);
+    logger.debug({ userId: auth.userId }, "Authenticated via JWT + introspection");
 
     await next();
   });
