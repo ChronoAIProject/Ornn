@@ -6,6 +6,70 @@ Ornn 平台提供的所有技能可供 AI Agent 直接使用。Ornn 平台暴露
 
 > **最简单的方式：** 如果你的 Agent 已经装配好了 NyxID MCP，那么它将自动拥有 Ornn 平台中所有技能的能力！
 
+## 安装 Ornn 核心技能
+
+Ornn 提供三个**核心技能**，将整个工作流自动化 — 搜索、生成和上传 — 让你的 Agent 可以用简单的斜杠命令代替手动调用工具。
+
+选择你的 Agent 平台对应的安装提示词，复制并粘贴给你的 Agent：
+
+### Claude Code
+
+```
+从 https://github.com/aevatarAI/chrono-ornn/tree/main/ornn-core-skills 获取三个 Ornn 核心技能目录 — 每个目录（ornn-search-and-run、ornn-upload、ornn-build）包含一个 SKILL.md 文件。下载每个 SKILL.md 并在我项目的 .claude/skills/ 目录下创建对应的技能文件夹。最终结构应为：
+
+.claude/skills/ornn-search-and-run/SKILL.md
+.claude/skills/ornn-upload/SKILL.md
+.claude/skills/ornn-build/SKILL.md
+```
+
+### OpenAI Codex
+
+```
+从 https://github.com/aevatarAI/chrono-ornn/tree/main/ornn-core-skills 获取三个 Ornn 核心技能文件 — 每个目录（ornn-search-and-run、ornn-upload、ornn-build）包含一个 SKILL.md 文件。下载每个 SKILL.md 并保存到我项目的 codex/skills/ 目录。最终结构应为：
+
+codex/skills/ornn-search-and-run/SKILL.md
+codex/skills/ornn-upload/SKILL.md
+codex/skills/ornn-build/SKILL.md
+
+然后在我的 AGENTS.md 文件中添加对这些技能的引用（如果不存在则创建），以便 Codex 能够发现并调用它们。
+```
+
+### Cursor
+
+```
+从 https://github.com/aevatarAI/chrono-ornn/tree/main/ornn-core-skills 获取三个 Ornn 核心技能文件 — 每个目录（ornn-search-and-run、ornn-upload、ornn-build）包含一个 SKILL.md 文件。下载每个 SKILL.md 并作为规则文件保存到我项目的 .cursor/rules/ 目录。最终结构应为：
+
+.cursor/rules/ornn-search-and-run.md
+.cursor/rules/ornn-upload.md
+.cursor/rules/ornn-build.md
+```
+
+### Antigravity
+
+```
+从 https://github.com/aevatarAI/chrono-ornn/tree/main/ornn-core-skills 获取三个 Ornn 核心技能目录 — 每个目录（ornn-search-and-run、ornn-upload、ornn-build）包含一个 SKILL.md 文件。下载每个 SKILL.md 并在我项目的 .antigravity/skills/ 目录下创建对应的技能文件夹。最终结构应为：
+
+.antigravity/skills/ornn-search-and-run/SKILL.md
+.antigravity/skills/ornn-upload/SKILL.md
+.antigravity/skills/ornn-build/SKILL.md
+```
+
+### 核心技能说明
+
+| 技能 | 命令 | 描述 |
+|------|------|------|
+| `ornn-search-and-run` | `/ornn-search-and-run` | 搜索 Ornn 技能库、拉取技能并一步执行 |
+| `ornn-build` | `/ornn-build` | 通过自然语言描述生成完整技能 |
+| `ornn-upload` | `/ornn-upload` | 打包并上传技能到 Ornn 注册中心 |
+
+**示例用法（Claude Code）：**
+
+```
+/ornn-search-and-run 找一个韩语翻译的skill，翻译一下：你好，我是机器人
+/ornn-build 写一个plain skill，用来检测文本中的敏感信息
+/ornn-upload 上传我们刚刚生成的skill
+```
+
 ## 前置条件
 
 你的 AI Agent 必须连接到 **NyxID MCP 服务器**。NyxID MCP 是所有 Chrono 平台服务的中心网关 —— 它负责处理认证、授权和服务路由，你的 Agent 无需自行处理这些。
@@ -303,70 +367,6 @@ sequenceDiagram
 
 - **Agent 自主执行** — 如果你的 AI Agent 本身具备代码执行能力（例如自带沙箱运行时），可以直接执行脚本
 - **chrono-sandbox** — 如果你的 Agent 没有代码执行能力，可以调用 Chrono 平台提供的沙箱服务来运行脚本并返回结果
-
-## 安装 Ornn 核心技能
-
-Ornn 提供三个**核心技能**，将上述整个工作流自动化 — 搜索、生成和上传 — 让你的 Agent 可以用简单的斜杠命令代替手动调用工具。
-
-选择你的 Agent 平台对应的安装提示词，复制并粘贴给你的 Agent：
-
-### Claude Code
-
-```
-从 https://github.com/aevatarAI/chrono-ornn/tree/main/ornn-core-skills 获取三个 Ornn 核心技能目录 — 每个目录（ornn-search-and-run、ornn-upload、ornn-build）包含一个 SKILL.md 文件。下载每个 SKILL.md 并在我项目的 .claude/skills/ 目录下创建对应的技能文件夹。最终结构应为：
-
-.claude/skills/ornn-search-and-run/SKILL.md
-.claude/skills/ornn-upload/SKILL.md
-.claude/skills/ornn-build/SKILL.md
-```
-
-### OpenAI Codex
-
-```
-从 https://github.com/aevatarAI/chrono-ornn/tree/main/ornn-core-skills 获取三个 Ornn 核心技能文件 — 每个目录（ornn-search-and-run、ornn-upload、ornn-build）包含一个 SKILL.md 文件。下载每个 SKILL.md 并保存到我项目的 codex/skills/ 目录。最终结构应为：
-
-codex/skills/ornn-search-and-run/SKILL.md
-codex/skills/ornn-upload/SKILL.md
-codex/skills/ornn-build/SKILL.md
-
-然后在我的 AGENTS.md 文件中添加对这些技能的引用（如果不存在则创建），以便 Codex 能够发现并调用它们。
-```
-
-### Cursor
-
-```
-从 https://github.com/aevatarAI/chrono-ornn/tree/main/ornn-core-skills 获取三个 Ornn 核心技能文件 — 每个目录（ornn-search-and-run、ornn-upload、ornn-build）包含一个 SKILL.md 文件。下载每个 SKILL.md 并作为规则文件保存到我项目的 .cursor/rules/ 目录。最终结构应为：
-
-.cursor/rules/ornn-search-and-run.md
-.cursor/rules/ornn-upload.md
-.cursor/rules/ornn-build.md
-```
-
-### Antigravity
-
-```
-从 https://github.com/aevatarAI/chrono-ornn/tree/main/ornn-core-skills 获取三个 Ornn 核心技能目录 — 每个目录（ornn-search-and-run、ornn-upload、ornn-build）包含一个 SKILL.md 文件。下载每个 SKILL.md 并在我项目的 .antigravity/skills/ 目录下创建对应的技能文件夹。最终结构应为：
-
-.antigravity/skills/ornn-search-and-run/SKILL.md
-.antigravity/skills/ornn-upload/SKILL.md
-.antigravity/skills/ornn-build/SKILL.md
-```
-
-### 核心技能说明
-
-| 技能 | 命令 | 描述 |
-|------|------|------|
-| `ornn-search-and-run` | `/ornn-search-and-run` | 搜索 Ornn 技能库、拉取技能并一步执行 |
-| `ornn-build` | `/ornn-build` | 通过自然语言描述生成完整技能 |
-| `ornn-upload` | `/ornn-upload` | 打包并上传技能到 Ornn 注册中心 |
-
-**示例用法（Claude Code）：**
-
-```
-/ornn-search-and-run 找一个韩语翻译的skill，翻译一下：你好，我是机器人
-/ornn-build 写一个plain skill，用来检测文本中的敏感信息
-/ornn-upload 上传我们刚刚生成的skill
-```
 
 ## 手动替代方案
 
