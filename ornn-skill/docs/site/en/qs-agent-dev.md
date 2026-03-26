@@ -304,6 +304,70 @@ If the skill involves code or script execution, you have two options:
 - **Self-execution** — If your AI agent has code execution capabilities (e.g., a sandboxed runtime), it can execute the scripts directly
 - **chrono-sandbox** — If your agent does not have code execution capabilities, call the chrono platform's sandbox service to run scripts and return results
 
+## Install Ornn Core Skills
+
+Ornn provides three **core skills** that automate the entire workflow above — search, build, and upload — so your agent can use them as simple slash commands instead of calling tools manually.
+
+Pick the installation prompt for your agent platform, copy it, and paste it into your agent:
+
+### Claude Code
+
+```
+Fetch the three Ornn core skill directories from https://github.com/aevatarAI/chrono-ornn/tree/main/ornn-core-skills — each directory (ornn-search-and-run, ornn-upload, ornn-build) contains a SKILL.md file. Download each SKILL.md and create the corresponding skill folder in my project's .claude/skills/ directory. The final structure should be:
+
+.claude/skills/ornn-search-and-run/SKILL.md
+.claude/skills/ornn-upload/SKILL.md
+.claude/skills/ornn-build/SKILL.md
+```
+
+### OpenAI Codex
+
+```
+Fetch the three Ornn core skill files from https://github.com/aevatarAI/chrono-ornn/tree/main/ornn-core-skills — each directory (ornn-search-and-run, ornn-upload, ornn-build) contains a SKILL.md file. Download each SKILL.md and save them into my project's codex/skills/ directory. The final structure should be:
+
+codex/skills/ornn-search-and-run/SKILL.md
+codex/skills/ornn-upload/SKILL.md
+codex/skills/ornn-build/SKILL.md
+
+Then add a reference to these skills in my AGENTS.md file (create it if it doesn't exist) so that Codex can discover and invoke them.
+```
+
+### Cursor
+
+```
+Fetch the three Ornn core skill files from https://github.com/aevatarAI/chrono-ornn/tree/main/ornn-core-skills — each directory (ornn-search-and-run, ornn-upload, ornn-build) contains a SKILL.md file. Download each SKILL.md and save them as rule files in my project's .cursor/rules/ directory. The final structure should be:
+
+.cursor/rules/ornn-search-and-run.md
+.cursor/rules/ornn-upload.md
+.cursor/rules/ornn-build.md
+```
+
+### Antigravity
+
+```
+Fetch the three Ornn core skill directories from https://github.com/aevatarAI/chrono-ornn/tree/main/ornn-core-skills — each directory (ornn-search-and-run, ornn-upload, ornn-build) contains a SKILL.md file. Download each SKILL.md and create the corresponding skill folder in my project's .antigravity/skills/ directory. The final structure should be:
+
+.antigravity/skills/ornn-search-and-run/SKILL.md
+.antigravity/skills/ornn-upload/SKILL.md
+.antigravity/skills/ornn-build/SKILL.md
+```
+
+### What the Core Skills Do
+
+| Skill | Command | Description |
+|-------|---------|-------------|
+| `ornn-search-and-run` | `/ornn-search-and-run` | Search the Ornn library, pull a skill, and execute it in one step |
+| `ornn-build` | `/ornn-build` | Generate a complete skill from a natural language description |
+| `ornn-upload` | `/ornn-upload` | Package and upload a skill to the Ornn registry |
+
+**Example usage (Claude Code):**
+
+```
+/ornn-search-and-run Find a Korean translation skill and translate: Hello, I am a robot
+/ornn-build Create a plain skill that detects sensitive information in text
+/ornn-upload Upload the skill we just generated
+```
+
 ## Manual Alternative
 
 You can always download a skill package and manually configure it for your AI agent. However, we strongly recommend using the NyxID MCP approach described above — it significantly reduces manual work and enables fully automated skill discovery and application.
