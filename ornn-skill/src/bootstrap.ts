@@ -265,6 +265,9 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
     jwksUrl: config.nyxidJwksUrl,
     issuer: config.nyxidIssuer,
     audience: config.nyxidAudience,
+    introspectionUrl: config.nyxidIntrospectionUrl,
+    clientId: config.nyxidClientId,
+    clientSecret: config.nyxidClientSecret,
   }));
   webApp.route("/", skillRoutes);
   webApp.route("/", searchRoutes);

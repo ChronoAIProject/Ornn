@@ -37,6 +37,9 @@ export interface JwtAuthConfig {
   jwksUrl: string;
   issuer: string;
   audience: string;
+  introspectionUrl?: string;
+  clientId?: string;
+  clientSecret?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -82,15 +85,51 @@ export function jwtAuthSetup(config: JwtAuthConfig) {
         audience: config.audience,
       });
 
+      const jwtRoles = (payload as Record<string, unknown>).roles as string[] | undefined;
+      const jwtPermissions = (payload as Record<string, unknown>).permissions as string[] | undefined;
+
+      let roles = jwtRoles ?? [];
+      let permissions = jwtPermissions ?? [];
+
+      // If JWT lacks roles/permissions, fetch them from NyxID introspection
+      if ((!jwtRoles?.length || !jwtPermissions?.length) && config.introspectionUrl) {
+        try {
+          const body = new URLSearchParams({ token });
+          if (config.clientId) body.set("client_id", config.clientId);
+          if (config.clientSecret) body.set("client_secret", config.clientSecret);
+
+          const introspectResp = await fetch(config.introspectionUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: body.toString(),
+          });
+
+          if (introspectResp.ok) {
+            const introspectData = await introspectResp.json() as Record<string, unknown>;
+            if (introspectData.active) {
+              if (!jwtRoles?.length && Array.isArray(introspectData.roles)) {
+                roles = introspectData.roles as string[];
+              }
+              if (!jwtPermissions?.length && Array.isArray(introspectData.permissions)) {
+                permissions = introspectData.permissions as string[];
+              }
+              logger.debug({ userId: payload.sub }, "Enriched auth from introspection");
+            }
+          }
+        } catch (introspectErr) {
+          logger.warn({ err: introspectErr }, "Token introspection failed, using JWT claims only");
+        }
+      }
+
       const auth: AuthContext = {
         userId: payload.sub!,
         email: c.req.header("X-User-Email") ?? "",
-        roles: (payload as Record<string, unknown>).roles as string[] ?? [],
-        permissions: (payload as Record<string, unknown>).permissions as string[] ?? [],
+        roles,
+        permissions,
       };
 
       c.set("auth", auth);
-      logger.debug({ userId: auth.userId }, "Authenticated via JWT");
+      logger.debug({ userId: auth.userId, permissions: auth.permissions }, "Authenticated via JWT");
     } catch (err) {
       logger.warn({ err }, "JWT verification failed");
       throw new AppError(401, "AUTH_INVALID", "Invalid or expired access token");
