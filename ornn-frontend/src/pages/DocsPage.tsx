@@ -432,19 +432,44 @@ function CopyButton({ text }: { text: string }) {
     <button
       type="button"
       onClick={handleCopy}
-      className="sticky float-right top-2 right-2 z-10 px-2 py-1 rounded text-xs font-mono transition-all cursor-pointer border border-neon-cyan/30 bg-bg-deep/80 text-text-muted hover:text-neon-cyan hover:border-neon-cyan/60 -mb-7 mr-2 mt-2"
+      className="absolute top-2 right-2 z-10 px-2 py-1 rounded text-xs font-mono transition-all cursor-pointer border border-neon-cyan/30 bg-bg-deep/80 text-text-muted hover:text-neon-cyan hover:border-neon-cyan/60"
     >
       {copied ? "Copied!" : "Copy"}
     </button>
   );
 }
 
+/** Wraps <pre> blocks with a relative container and copy button outside the scrollable area */
+function PreBlock({ children, ...props }: React.HTMLAttributes<HTMLPreElement>) {
+  const codeText = useRef("");
+
+  // Extract text content from children (the <code> element inside <pre>)
+  const extractText = (node: React.ReactNode): string => {
+    if (typeof node === "string") return node;
+    if (typeof node === "number") return String(node);
+    if (Array.isArray(node)) return node.map(extractText).join("");
+    if (node && typeof node === "object" && "props" in node) {
+      const el = node as { props?: { children?: React.ReactNode } };
+      return extractText(el.props?.children);
+    }
+    return "";
+  };
+
+  codeText.current = extractText(children).replace(/\n$/, "");
+
+  return (
+    <div className="relative">
+      <CopyButton text={codeText.current} />
+      <pre {...props}>{children}</pre>
+    </div>
+  );
+}
+
 function CodeBlock({
   className,
   children,
-  node,
   ...props
-}: React.HTMLAttributes<HTMLElement> & { children?: React.ReactNode; node?: { position?: unknown; tagName?: string; parent?: { tagName?: string } } }) {
+}: React.HTMLAttributes<HTMLElement> & { children?: React.ReactNode }) {
   const match = /language-(\w+)/.exec(className ?? "");
   const lang = match?.[1];
   const code = String(children).replace(/\n$/, "");
@@ -453,21 +478,6 @@ function CodeBlock({
     return <MermaidBlock chart={code} />;
   }
 
-  // Fenced code block: has language class OR contains newlines (multi-line = fenced)
-  const isFenced = !!lang || code.includes("\n");
-
-  if (isFenced) {
-    return (
-      <>
-        <CopyButton text={code} />
-        <code className={className} {...props}>
-          {children}
-        </code>
-      </>
-    );
-  }
-
-  // Inline code
   return (
     <code className={className} {...props}>
       {children}
@@ -797,7 +807,7 @@ export function DocsPage() {
                       <ReactMarkdown
                         remarkPlugins={[remarkGfm]}
                         rehypePlugins={[rehypeHighlight]}
-                        components={{ code: CodeBlock as never, ...headingComponents }}
+                        components={{ code: CodeBlock as never, pre: PreBlock as never, ...headingComponents }}
                       >
                         {before}
                       </ReactMarkdown>
@@ -805,7 +815,7 @@ export function DocsPage() {
                       <ReactMarkdown
                         remarkPlugins={[remarkGfm]}
                         rehypePlugins={[rehypeHighlight]}
-                        components={{ code: CodeBlock as never, ...headingComponents }}
+                        components={{ code: CodeBlock as never, pre: PreBlock as never, ...headingComponents }}
                       >
                         {after}
                       </ReactMarkdown>
@@ -820,6 +830,7 @@ export function DocsPage() {
                   rehypePlugins={[rehypeHighlight]}
                   components={{
                     code: CodeBlock as never,
+                    pre: PreBlock as never,
                     ...headingComponents,
                   }}
                 >
