@@ -109,16 +109,34 @@ function ReleaseAccordion({ lang }: { lang: Lang }) {
   const [expandedVersion, setExpandedVersion] = useState<string | null>(null);
   const [releaseContent, setReleaseContent] = useState<Record<string, string>>({});
   const [loadingContent, setLoadingContent] = useState<string | null>(null);
+  const [initialized, setInitialized] = useState(false);
   const { t } = useTranslation();
 
   useEffect(() => {
     fetch(`${API_BASE}/api/web/docs/releases?lang=${lang}`)
       .then((r) => r.json())
       .then((json) => {
-        if (json.data) setReleases(json.data);
+        if (json.data) {
+          setReleases(json.data);
+          // Auto-expand the latest (first) version on initial load
+          if (!initialized && json.data.length > 0) {
+            const latest = json.data[0].version;
+            setExpandedVersion(latest);
+            setInitialized(true);
+            // Pre-fetch its content
+            fetch(`${API_BASE}/api/web/docs/releases/${latest}?lang=${lang}`)
+              .then((r2) => r2.json())
+              .then((j2) => {
+                if (j2.data?.content) {
+                  setReleaseContent((prev) => ({ ...prev, [latest]: j2.data.content }));
+                }
+              })
+              .catch(() => {});
+          }
+        }
       })
       .catch((err) => console.error("[ReleaseAccordion] Failed to load releases:", err));
-  }, [lang]);
+  }, [lang]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleToggle = async (version: string) => {
     if (expandedVersion === version) {
