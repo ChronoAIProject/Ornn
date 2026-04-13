@@ -9,13 +9,14 @@
     "dev": "bun run dev:api",
     "dev:api": "bun run --filter ornn-api dev",
     "dev:web": "bun run --filter ornn-web dev",
-    "test": "bun run test:skill",
+    "test": "bun run test:api",
     "test:api": "bun test --filter ornn-api",
     "changeset": "changeset",
     "version-packages": "changeset version",
     "release": "changeset tag"
   },
   "devDependencies": {
+    "@changesets/changelog-github": "^0.6.0",
     "@changesets/cli": "^2.30.0"
   }
 }

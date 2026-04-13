@@ -49,7 +49,8 @@ TypeScript, Bun workspace monorepo
 
 This project uses **Changesets** (`@changesets/cli`) for versioning.
 
-- Both packages (`ornn-api`, `ornn-web`) share a unified version number.
+- Both packages (`ornn-api`, `ornn-web`) share a unified version number (fixed mode).
+- Each package has its own `CHANGELOG.md`, auto-generated with GitHub PR links.
 - Release notes are published on [GitHub Releases](https://github.com/aevatarAI/chrono-ornn/releases).
 
 **Workflow:**
