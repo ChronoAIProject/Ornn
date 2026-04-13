@@ -5,8 +5,7 @@
  */
 
 import { createMiddleware } from "hono/factory";
-import type { ApiKeyInfo } from "ornn-shared";
-import { AppError } from "ornn-shared";
+import { AppError, type ApiKeyInfo } from "../../../shared/types/index";
 import type { IAuthClient } from "../../../clients/authClient";
 
 /**

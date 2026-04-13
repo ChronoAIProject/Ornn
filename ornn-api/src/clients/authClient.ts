@@ -4,8 +4,7 @@
  * @module clients/authClient
  */
 
-import { AppError, INTERNAL_AUTH_HEADER } from "ornn-shared";
-import type { ApiKeyInfo } from "ornn-shared";
+import { AppError, INTERNAL_AUTH_HEADER, type ApiKeyInfo } from "../shared/types/index";
 
 /** Interface for auth operations needed by ornn-api. */
 export interface IAuthClient {

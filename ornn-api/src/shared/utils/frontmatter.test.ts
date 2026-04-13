@@ -116,11 +116,11 @@ describe("validateFrontmatter", () => {
   });
 
   test("validOldFlatFormat_autoMappedAndValid", () => {
+    // Old flat format with category "imported" maps to "plain" which requires no extra fields.
     const result = validateFrontmatter({
       name: "test-skill",
       description: "A test",
-      category: "runtime_required",
-      runtimes: ["node"],
+      category: "imported",
     });
     expect(result.valid).toBe(true);
   });

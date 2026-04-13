@@ -3,7 +3,7 @@ import {
   validateSkillFrontmatter,
   type SkillFrontmatterOutput,
   type FrontmatterValidationError,
-} from "ornn-shared";
+} from "../schemas/skillFrontmatter";
 import { adaptOldFrontmatter, yamlKeysToCamel } from "./frontmatterAdapter";
 
 const FRONTMATTER_REGEX = /^\s*---\r?\n([\s\S]*?)\r?\n---/;

@@ -6,9 +6,9 @@
  */
 
 import { Hono } from "hono";
-import type { TokenVerifier } from "ornn-shared";
-import { createAuthMiddleware, type AuthVariables, AppError } from "ornn-shared";
-import { validateSkillPackageZip, type ValidationViolation } from "../services/skillFormatValidator";
+import { createAuthMiddleware, AppError, type TokenVerifier } from "../../../shared/types/index";
+import type { AuthVariables } from "../../../middleware/nyxidAuth";
+import { validateSkillPackageZip } from "../services/skillFormatValidator";
 
 /**
  * The canonical skill format rules per the ornn platform spec.

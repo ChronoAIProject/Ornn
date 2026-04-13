@@ -202,7 +202,7 @@ export class SkillService {
     // 3. Extract all files
     const zip = await JSZip.loadAsync(zipBuffer);
     const allPaths = Object.keys(zip.files);
-    const { rootEntries } = resolveZipRoot(zip, allPaths);
+    const { rootEntries: _rootEntries } = resolveZipRoot(zip, allPaths);
 
     const files: Record<string, string> = {};
 

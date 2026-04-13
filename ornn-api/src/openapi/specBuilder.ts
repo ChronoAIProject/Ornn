@@ -93,7 +93,7 @@ function pathParam(name: string, description: string): Record<string, unknown> {
 // Shared path definitions
 // ---------------------------------------------------------------------------
 
-function skillUploadPath(prefix: string): PathItem {
+function skillUploadPath(_prefix: string): PathItem {
   return {
     post: {
       summary: "Upload a skill package",
@@ -118,7 +118,7 @@ function skillUploadPath(prefix: string): PathItem {
   };
 }
 
-function skillReadPath(prefix: string): PathItem {
+function skillReadPath(_prefix: string): PathItem {
   return {
     get: {
       summary: "Get skill by GUID or name",
@@ -132,7 +132,7 @@ function skillReadPath(prefix: string): PathItem {
   };
 }
 
-function skillJsonPath(prefix: string): PathItem {
+function skillJsonPath(_prefix: string): PathItem {
   return {
     get: {
       summary: "Get skill package as JSON with all file contents",
@@ -146,7 +146,7 @@ function skillJsonPath(prefix: string): PathItem {
   };
 }
 
-function skillUpdatePath(prefix: string): PathItem {
+function skillUpdatePath(_prefix: string): PathItem {
   return {
     put: {
       summary: "Update a skill (ZIP, metadata, or privacy flag)",
@@ -168,7 +168,7 @@ function skillUpdatePath(prefix: string): PathItem {
   };
 }
 
-function skillDeletePath(prefix: string): PathItem {
+function skillDeletePath(_prefix: string): PathItem {
   return {
     delete: {
       summary: "Delete a skill",
@@ -181,7 +181,7 @@ function skillDeletePath(prefix: string): PathItem {
   };
 }
 
-function skillSearchPath(prefix: string): PathItem {
+function skillSearchPath(_prefix: string): PathItem {
   return {
     get: {
       summary: "Search skills by keyword or semantic similarity",
@@ -195,7 +195,7 @@ function skillSearchPath(prefix: string): PathItem {
   };
 }
 
-function skillGeneratePath(prefix: string): PathItem {
+function skillGeneratePath(_prefix: string): PathItem {
   return {
     post: {
       summary: "Generate a skill via AI (SSE stream)",

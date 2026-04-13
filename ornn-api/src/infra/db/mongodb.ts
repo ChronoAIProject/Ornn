@@ -35,7 +35,7 @@ export async function connectMongo(uri: string, dbName: string): Promise<MongoCo
       const message = err instanceof Error ? err.message : String(err);
       logger.error({ attempt, maxRetries: MAX_RETRIES }, `MongoDB connection attempt ${attempt}/${MAX_RETRIES} failed: ${message}`);
       if (attempt === MAX_RETRIES) {
-        throw new Error(`MongoDB connection failed after ${MAX_RETRIES} attempts: ${message}`);
+        throw new Error(`MongoDB connection failed after ${MAX_RETRIES} attempts: ${message}`, { cause: err });
       }
       const delay = BASE_DELAY_MS * Math.pow(2, attempt - 1);
       await new Promise((resolve) => setTimeout(resolve, delay));

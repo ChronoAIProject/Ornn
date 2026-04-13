@@ -9,7 +9,6 @@
 import type {
   NyxLlmClient,
   ResponsesApiInputMessage,
-  ResponsesApiStreamEvent,
   ResponsesApiTool,
 } from "../../clients/nyxLlmClient";
 import type { SandboxClient } from "../../clients/sandboxClient";

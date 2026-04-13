@@ -3,7 +3,7 @@ import { Hono } from "hono";
 import pino from "pino";
 import { createApiKeyMiddleware, getApiKeyUser } from "./apiKeyMiddleware";
 import type { IAuthClient } from "../../../clients/authClient";
-import { createErrorHandler } from "ornn-shared";
+import { createErrorHandler } from "../../../shared/types/index";
 
 const silentLogger = pino({ level: "silent" });
 const errorHandler = createErrorHandler(silentLogger);

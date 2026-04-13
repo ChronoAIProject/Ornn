@@ -1,262 +1,200 @@
 import { describe, test, expect, mock, beforeEach } from "bun:test";
 import { Hono } from "hono";
-import pino from "pino";
-import { createSkillGenerateRoutes } from "./skillGenerateRoutes";
-import { createErrorHandler } from "ornn-shared";
-import type { ISkillGenerationService } from "../services/skillGenerationService";
-
-const silentLogger = pino({ level: "silent" });
-const errorHandler = createErrorHandler(silentLogger);
-import type { TokenVerifier } from "ornn-shared";
+import { createGenerationRoutes } from "../routes";
 import type { SkillStreamEvent } from "../types/streaming";
+import type { SkillGenerationService } from "../service";
+
+/**
+ * Error handler that recognises AppError from both shared/types and nyxidAuth
+ * (the latter has its own inlined class so instanceof checks differ).
+ */
+function errorHandler(err: Error, c: any) {
+  const statusCode = (err as any).statusCode;
+  const code = (err as any).code ?? "INTERNAL_ERROR";
+  if (typeof statusCode === "number") {
+    return c.json({ data: null, error: { code, message: err.message } }, statusCode);
+  }
+  return c.json({ data: null, error: { code: "INTERNAL_ERROR", message: "Internal server error" } }, 500);
+}
+
+/** Minimal interface matching what createGenerationRoutes expects. */
+interface ISkillGenerationService {
+  generateStream(query: string, signal?: AbortSignal): AsyncIterable<SkillStreamEvent>;
+  generateStreamWithHistory(
+    messages: Array<{ role: "user" | "assistant"; content: string }>,
+    signal?: AbortSignal,
+  ): AsyncIterable<SkillStreamEvent>;
+}
 
 function createMockGenerationService(): ISkillGenerationService {
   return {
-    generate: mock(async () => ({} as any)),
-    generateStream: mock(async function* () {} as any),
-    generateStreamDirect: mock(async function* (): AsyncIterable<SkillStreamEvent> {
+    generateStream: mock(async function* (): AsyncIterable<SkillStreamEvent> {
       yield { type: "generation_start" };
       yield { type: "token", content: "test output" };
       yield { type: "generation_complete", raw: '{"name":"test"}' };
     }),
-    generateRefinementStream: mock(async function* (): AsyncIterable<SkillStreamEvent> {
+    generateStreamWithHistory: mock(async function* (): AsyncIterable<SkillStreamEvent> {
       yield { type: "generation_start" };
-      yield { type: "token", content: "refined output" };
+      yield { type: "token", content: "multi-turn output" };
       yield { type: "generation_complete", raw: '{"name":"test-refined"}' };
     }),
   };
 }
 
-function createMockTokenService(): TokenVerifier {
-  return {
-    verifyAccessToken: mock(async () => ({
-      userId: "user-123",
-      email: "test@example.com",
-      role: "user" as const,
-      iat: 0,
-      exp: 0,
-    })),
+/** Auth context injected by a test setup middleware (simulating nyxid auth setup). */
+function createAuthSetupMiddleware(authenticated = true, permissions: string[] = ["ornn:skill:build"]) {
+  return async (c: any, next: () => Promise<void>) => {
+    if (authenticated) {
+      c.set("auth", {
+        userId: "user-123",
+        email: "test@example.com",
+        roles: [],
+        permissions,
+      });
+    }
+    await next();
   };
 }
-
-const VALID_BEARER = "Bearer valid-token";
 
 describe("Skill Generate Routes", () => {
   let app: Hono;
   let mockService: ISkillGenerationService;
-  let mockTokenService: TokenVerifier;
 
   beforeEach(() => {
     mockService = createMockGenerationService();
-    mockTokenService = createMockTokenService();
     app = new Hono();
     app.onError(errorHandler);
-    app.route("/api", createSkillGenerateRoutes(mockService, mockTokenService));
+    // Inject auth context before routing (simulates nyxid auth setup middleware)
+    app.use("*", createAuthSetupMiddleware(true));
+    app.route(
+      "/api",
+      createGenerationRoutes({
+        generationService: mockService as unknown as SkillGenerationService,
+        keepAliveIntervalMs: 60_000,
+      }),
+    );
   });
 
   describe("auth enforcement", () => {
-    test("stream_noAuthHeader_returns401", async () => {
-      const res = await app.request("/api/skills/generate/stream", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: "Create a skill" }),
-      });
-
-      expect(res.status).toBe(401);
-    });
-
-    test("refine_noAuthHeader_returns401", async () => {
-      const res = await app.request("/api/skills/generate/refine", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          conversationHistory: [],
-          instruction: "Add logging",
+    test("generate_noAuth_returns401", async () => {
+      const unauthApp = new Hono();
+      unauthApp.onError(errorHandler);
+      // No auth setup middleware — auth context is absent
+      unauthApp.route(
+        "/api",
+        createGenerationRoutes({
+          generationService: mockService as unknown as SkillGenerationService,
+          keepAliveIntervalMs: 60_000,
         }),
+      );
+
+      const res = await unauthApp.request("/api/skills/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: "Create a skill" }),
       });
 
       expect(res.status).toBe(401);
     });
 
-    test("stream_invalidToken_returns401", async () => {
-      (mockTokenService.verifyAccessToken as any) = mock(async () => {
-        throw new Error("Invalid token");
-      });
+    test("generate_missingPermission_returns403", async () => {
+      const noPermApp = new Hono();
+      noPermApp.onError(errorHandler);
+      // Auth set but without ornn:skill:build permission
+      noPermApp.use("*", createAuthSetupMiddleware(true, []));
+      noPermApp.route(
+        "/api",
+        createGenerationRoutes({
+          generationService: mockService as unknown as SkillGenerationService,
+          keepAliveIntervalMs: 60_000,
+        }),
+      );
 
-      const res = await app.request("/api/skills/generate/stream", {
+      const res = await noPermApp.request("/api/skills/generate", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: "Bearer invalid-token",
-        },
-        body: JSON.stringify({ query: "Create a skill" }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: "Create a skill" }),
       });
 
-      expect(res.status).toBe(401);
-    });
-
-    test("stream_malformedAuthHeader_returns401", async () => {
-      const res = await app.request("/api/skills/generate/stream", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: "Basic abc123",
-        },
-        body: JSON.stringify({ query: "Create a skill" }),
-      });
-
-      expect(res.status).toBe(401);
+      expect(res.status).toBe(403);
     });
   });
 
-  describe("POST /api/skills/generate/stream", () => {
-    test("validQuery_returns200SSE", async () => {
-      const res = await app.request("/api/skills/generate/stream", {
+  describe("POST /api/skills/generate", () => {
+    test("validJsonPrompt_returns200SSE", async () => {
+      const res = await app.request("/api/skills/generate", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: VALID_BEARER,
-        },
-        body: JSON.stringify({ query: "Create a PDF parser" }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: "Create a PDF parser" }),
       });
 
       expect(res.status).toBe(200);
       expect(res.headers.get("Content-Type")).toContain("text/event-stream");
     });
 
-    test("missingQuery_returns400", async () => {
-      const res = await app.request("/api/skills/generate/stream", {
+    test("missingPrompt_returns400", async () => {
+      const res = await app.request("/api/skills/generate", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: VALID_BEARER,
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({}),
       });
 
       expect(res.status).toBe(400);
     });
 
-    test("emptyQuery_returns400", async () => {
-      const res = await app.request("/api/skills/generate/stream", {
+    test("emptyPrompt_returns400", async () => {
+      const res = await app.request("/api/skills/generate", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: VALID_BEARER,
-        },
-        body: JSON.stringify({ query: "" }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: "" }),
       });
 
       expect(res.status).toBe(400);
     });
 
-    test("queryTooLong_returns400", async () => {
-      const res = await app.request("/api/skills/generate/stream", {
+    test("invalidContentType_returns400", async () => {
+      const res = await app.request("/api/skills/generate", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: VALID_BEARER,
-        },
-        body: JSON.stringify({ query: "x".repeat(2001) }),
+        headers: { "Content-Type": "text/plain" },
+        body: "Create a skill",
       });
 
       expect(res.status).toBe(400);
     });
 
     test("setsCorrectSSEHeaders", async () => {
-      const res = await app.request("/api/skills/generate/stream", {
+      const res = await app.request("/api/skills/generate", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: VALID_BEARER,
-        },
-        body: JSON.stringify({ query: "Create a tool" }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: "Create a tool" }),
       });
 
       expect(res.headers.get("Cache-Control")).toBe("no-cache");
       expect(res.headers.get("X-Accel-Buffering")).toBe("no");
     });
 
-    test("callsGenerateStreamDirect", async () => {
-      await app.request("/api/skills/generate/stream", {
+    test("callsGenerateStream", async () => {
+      await app.request("/api/skills/generate", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: VALID_BEARER,
-        },
-        body: JSON.stringify({ query: "Create a skill" }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: "Create a skill" }),
       });
 
-      expect(mockService.generateStreamDirect).toHaveBeenCalled();
+      expect(mockService.generateStream).toHaveBeenCalled();
     });
-  });
 
-  describe("POST /api/skills/generate/refine", () => {
-    test("validInput_returns200SSE", async () => {
-      const res = await app.request("/api/skills/generate/refine", {
+    test("messagesArray_callsGenerateStreamWithHistory", async () => {
+      await app.request("/api/skills/generate", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: VALID_BEARER,
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          conversationHistory: [
+          messages: [
             { role: "user", content: "Create a skill" },
-            { role: "assistant", content: '{"name":"test"}' },
           ],
-          instruction: "Add error handling",
         }),
       });
 
-      expect(res.status).toBe(200);
-      expect(res.headers.get("Content-Type")).toContain("text/event-stream");
-    });
-
-    test("missingInstruction_returns400", async () => {
-      const res = await app.request("/api/skills/generate/refine", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: VALID_BEARER,
-        },
-        body: JSON.stringify({
-          conversationHistory: [],
-        }),
-      });
-
-      expect(res.status).toBe(400);
-    });
-
-    test("emptyInstruction_returns400", async () => {
-      const res = await app.request("/api/skills/generate/refine", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: VALID_BEARER,
-        },
-        body: JSON.stringify({
-          conversationHistory: [],
-          instruction: "",
-        }),
-      });
-
-      expect(res.status).toBe(400);
-    });
-
-    test("callsGenerateRefinementStream", async () => {
-      await app.request("/api/skills/generate/refine", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: VALID_BEARER,
-        },
-        body: JSON.stringify({
-          conversationHistory: [],
-          instruction: "Create from scratch",
-        }),
-      });
-
-      expect(mockService.generateRefinementStream).toHaveBeenCalled();
+      expect(mockService.generateStreamWithHistory).toHaveBeenCalled();
     });
   });
 });

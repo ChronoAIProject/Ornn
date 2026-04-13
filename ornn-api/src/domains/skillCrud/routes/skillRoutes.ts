@@ -9,8 +9,8 @@
 
 import { Hono } from "hono";
 import type { ISkillService } from "../services/skillService.interface";
-import type { TokenVerifier } from "ornn-shared";
-import { createAuthMiddleware, getAuth, type AuthVariables, AppError } from "ornn-shared";
+import { createAuthMiddleware, AppError, type TokenVerifier } from "../../../shared/types/index";
+import { getAuth, type AuthVariables } from "../../../middleware/nyxidAuth";
 
 export interface SkillRoutesOptions {
   skillService: ISkillService;

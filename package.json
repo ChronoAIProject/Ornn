@@ -13,10 +13,19 @@
     "test:api": "bun test --filter ornn-api",
     "changeset": "changeset",
     "version-packages": "changeset version",
-    "release": "changeset tag"
+    "release": "changeset tag",
+    "lint": "eslint ornn-api/src ornn-web/src",
+    "lint:fix": "eslint ornn-api/src ornn-web/src --fix",
+    "typecheck": "bunx tsc --noEmit -p ornn-web/tsconfig.json",
+    "build:web": "bun run --filter ornn-web build"
   },
   "devDependencies": {
     "@changesets/changelog-github": "^0.6.0",
-    "@changesets/cli": "^2.30.0"
+    "@changesets/cli": "^2.30.0",
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.2.0",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "eslint-plugin-react-refresh": "^0.5.2",
+    "typescript-eslint": "^8.58.1"
   }
 }

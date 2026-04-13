@@ -8,8 +8,8 @@
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import type { ISkillGenerationService } from "../services/skillGenerationService";
-import type { TokenVerifier } from "ornn-shared";
-import { createAuthMiddleware, getAuth, type AuthVariables, AppError } from "ornn-shared";
+import { createAuthMiddleware, AppError, type TokenVerifier } from "../../../shared/types/index";
+import { getAuth, type AuthVariables } from "../../../middleware/nyxidAuth";
 import JSZip from "jszip";
 import { fetchUserLlmConfig } from "../services/userLlmConfigFetcher";
 import { createLlmClientFromConfig } from "../services/llmClientFactory";
@@ -114,7 +114,7 @@ export function createSkillGenerateRoutes(
    */
   app.post("/skills/generate", async (c) => {
     const contentType = c.req.header("content-type") ?? "";
-    let prompt = "";
+    let prompt: string;
     let packageContent: string | null = null;
 
     if (contentType.includes("multipart/form-data")) {
