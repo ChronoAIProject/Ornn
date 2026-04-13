@@ -114,7 +114,7 @@ export function createSkillGenerateRoutes(
    */
   app.post("/skills/generate", async (c) => {
     const contentType = c.req.header("content-type") ?? "";
-    let prompt = "";
+    let prompt: string;
     let packageContent: string | null = null;
 
     if (contentType.includes("multipart/form-data")) {

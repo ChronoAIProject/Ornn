@@ -8,7 +8,6 @@
 import { z } from "zod";
 import type { NyxLlmClient, ResponsesApiStreamEvent, ResponsesApiInputMessage } from "../../clients/nyxLlmClient";
 import type { GeneratedSkill, SkillStreamEvent } from "../../shared/types/index";
-import { AppError } from "../../shared/types/index";
 import { buildDirectGenerationPrompt, GENERATION_SYSTEM_PROMPT } from "./prompts";
 import pino from "pino";
 

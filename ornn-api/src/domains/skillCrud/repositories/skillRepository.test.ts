@@ -1,6 +1,6 @@
 import { describe, test, expect, beforeEach, mock } from "bun:test";
 import { SkillRepository } from "./skillRepository";
-import type { Db, Collection } from "mongodb";
+import type { Db } from "mongodb";
 
 /**
  * Unit tests for the MongoDB-backed SkillRepository.

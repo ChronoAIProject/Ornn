@@ -63,7 +63,7 @@ async function streamGenerationEvents(
 async function analyzePackageContent(zipBuffer: Uint8Array): Promise<string> {
   const zip = await JSZip.loadAsync(zipBuffer);
   const allPaths = Object.keys(zip.files);
-  const { getFile } = resolveZipRoot(zip, allPaths);
+  resolveZipRoot(zip, allPaths);
   const parts: string[] = [];
 
   const relevantFiles = ["SKILL.md"];
@@ -119,7 +119,7 @@ export function createGenerationRoutes(config: GenerationRoutesConfig): Hono<{ V
     async (c) => {
       const contentType = c.req.header("content-type") ?? "";
       const authCtx = getAuth(c);
-      let prompt = "";
+      let prompt: string;
       let packageContent: string | null = null;
 
       if (contentType.includes("multipart/form-data")) {

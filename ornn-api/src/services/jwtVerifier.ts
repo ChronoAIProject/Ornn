@@ -5,7 +5,7 @@
  * @module services/jwtVerifier
  */
 
-import { sign, verify } from "hono/jwt";
+import { verify } from "hono/jwt";
 import { AppError, type TokenVerifier, type AccessTokenPayload } from "ornn-shared";
 
 /**

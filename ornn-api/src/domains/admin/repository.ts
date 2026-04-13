@@ -4,7 +4,7 @@
  * @module domains/admin/repository
  */
 
-import type { Collection, Db, Document, ObjectId } from "mongodb";
+import type { Collection, Db, Document } from "mongodb";
 import pino from "pino";
 
 const logger = pino({ level: "info" }).child({ module: "adminRepository" });

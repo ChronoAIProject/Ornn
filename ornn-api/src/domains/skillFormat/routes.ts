@@ -13,9 +13,6 @@ import {
   requirePermission,
 } from "../../middleware/nyxidAuth";
 import { AppError } from "../../shared/types/index";
-import pino from "pino";
-
-const logger = pino({ level: "info" }).child({ module: "skillFormatRoutes" });
 
 /** Canonical skill format rules per the ornn platform spec. Updated with output-type. */
 export const SKILL_FORMAT_RULES = `# Ornn Skill Package Format Rules
