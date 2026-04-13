@@ -46,7 +46,8 @@ jobs:
           fetch-depth: 0
       - name: Install gitleaks
         run: |
-          curl -sSfL https://github.com/gitleaks/gitleaks/releases/latest/download/gitleaks_8.24.3_linux_x64.tar.gz | tar xz
+          VERSION=$(curl -sI https://github.com/gitleaks/gitleaks/releases/latest | grep -i location | grep -oE 'v[0-9.]+' | head -1 | sed 's/^v//')
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${VERSION}/gitleaks_${VERSION}_linux_x64.tar.gz" | tar xz
           sudo mv gitleaks /usr/local/bin/
       - name: Scan for secrets
         run: gitleaks detect --source . --verbose
