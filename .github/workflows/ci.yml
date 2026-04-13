@@ -50,4 +50,4 @@ jobs:
           curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${VERSION}/gitleaks_${VERSION}_linux_x64.tar.gz" | tar xz
           sudo mv gitleaks /usr/local/bin/
       - name: Scan for secrets
-        run: gitleaks detect --source . --verbose
+        run: gitleaks detect --source . --log-opts="origin/${{ github.base_ref }}..HEAD" --verbose
