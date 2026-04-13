@@ -6,7 +6,7 @@
 
 ### 新增内容
 
-1. **Ornn 核心技能** — 三个技能位于 `ornn-core-skills/` 目录：
+1. **Ornn 核心技能** — 三个技能位于 `.ornn-skills/` 目录：
    - `ornn-search-and-run` — 通过 NyxID MCP 发现、拉取并执行 Ornn 技能库中的技能
    - `ornn-upload` — 打包并上传技能到 Ornn 注册中心（使用正确的根文件夹 ZIP 结构和 base64 body 编码）
    - `ornn-build` — 通过自然语言描述使用 AI 生成完整技能包（支持单轮和多轮迭代）
@@ -29,9 +29,9 @@
 
 | 范围 | 变更 |
 |------|------|
-| `ornn-core-skills/` | 新增目录，包含三个核心技能 |
-| `ornn-core-skills/setup.sh` | 已移除 — 由提示词安装替代 |
-| `ornn-core-skills/ornn-upload/SKILL.md` | 修复 ZIP 打包说明（需要根文件夹）并添加 base64 body 编码指南 |
+| `.ornn-skills/` | 新增目录，包含三个核心技能 |
+| `.ornn-skills/setup.sh` | 已移除 — 由提示词安装替代 |
+| `.ornn-skills/ornn-upload/SKILL.md` | 修复 ZIP 打包说明（需要根文件夹）并添加 base64 body 编码指南 |
 | `README.md` | 新增核心技能章节与多平台安装表格 |
 | `CLAUDE.md` | 新增核心技能章节与编辑规范 |
 | `developer-guide.md`（中英文） | 新增核心技能安装、技能说明与示例 |

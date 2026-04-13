@@ -1,19 +1,13 @@
 # CLAUDE.md — chrono-ornn
 
-## Project Overview
+## Tech Stack
 
-chrono-ornn is an AI skill platform. Users create, publish, search, and execute AI skills (packaged prompts + scripts) via a web UI or API. Authentication and LLM calls go through NyxID. Script execution runs in chrono-sandbox.
-
-**Tech stack:** TypeScript, Bun workspace monorepo
+TypeScript, Bun workspace monorepo
 
 - **Runtime:** Bun (backend + tests), Vite (frontend dev/build)
-- **Backend framework:** Hono
+- **Backend:** Hono
 - **Frontend:** React 19, Zustand, TanStack Query, Tailwind CSS 4, Framer Motion, React Router 7
-- **Databases:** MongoDB 7
-- **Object storage:** chrono-storage (S3-compatible backend)
-- **AI/LLM:** Nyx Provider (NyxID LLM Gateway, Responses API format)
-- **Sandbox:** chrono-sandbox (OpenSandbox-based, supports Node.js + Python)
-- **Auth:** NyxID (OAuth, JWT, API keys)
+- **Database:** MongoDB 7
 - **Validation:** Zod
 - **Logging:** Pino
 - **Testing:** Bun test (backend), Vitest + Testing Library (frontend)
@@ -22,84 +16,66 @@ chrono-ornn is an AI skill platform. Users create, publish, search, and execute 
 
 | Package | Description |
 |---------|-------------|
-| `ornn-skill` | Backend API — skill CRUD, search, AI generation, playground chat, admin |
-| `ornn-frontend` | React SPA — skill browsing, creation, playground, admin |
+| `ornn-skill` | Backend API |
+| `ornn-frontend` | React SPA |
 
----
+## Architecture
 
-## Architecture Rules
-
-1. This project has exactly two packages: `ornn-skill` (backend) and `ornn-frontend` (web UI).
-2. All Docker orchestration lives in `chrono-docker-compose` (separate repo). **Never** create or maintain docker-compose files in this repo.
-3. There is exactly ONE `.gitignore` at the repo root. No nested `.gitignore` files.
-4. All configurable values MUST be read from environment variables. Zero hardcoded config.
-5. Each package has its own `Dockerfile`. Dockerfiles MUST NOT contain `ENV` definitions.
-
-## External Services
-
-| Service | How ornn-skill talks to it |
-|---------|---------------------------|
-| NyxID | JWT verification (JWKS), API key introspection, LLM Gateway (Responses API) |
-| chrono-sandbox | `POST /execute` — script execution with env vars, dependencies, file retrieval |
-| chrono-storage | Upload/download/delete skill packages (presigned URLs) |
-
-## Skill Format
-
-- Available runtimes: `node`, `python`
-- Frontmatter field for dependencies: `runtime-dependency` (formerly `npmDependencies` in generation schema — now `dependencies`)
-- Category types: `plain`, `tool-based`, `runtime-based`, `mixed`
-- Output types: `text` (stdout), `file` (generated files retrieved via glob)
-
-## Ornn Core Skills
-
-The `ornn-core-skills/` directory contains three plain skills that teach AI agents how to use Ornn:
-
-| Skill | Purpose |
-|-------|---------|
-| `ornn-search-and-run` | Discover, pull, and execute skills via NyxID MCP |
-| `ornn-upload` | Package and upload skills to the registry |
-| `ornn-build` | Generate new skills from natural language via AI |
-
-### Installation for End Users
-
-There are two ways for users to install core skills into their AI agent:
-
-Users tell their AI agent to fetch skills from this repo's `ornn-core-skills/` directory and copy the skill folders (each containing a `SKILL.md`) into their project's skills directory (e.g., `.claude/skills/`). No scripts needed — the agent handles everything.
-
-### Editing Core Skills
-
-When editing skills in `ornn-core-skills/`:
-- Each skill is a single directory containing at minimum a `SKILL.md` file
-- `SKILL.md` must have valid YAML frontmatter with `name`, `description`, and `metadata.category`
-- Skills guide AI agents through multi-step MCP workflows — keep instructions precise and include example JSON payloads
-- The upload skill must instruct agents to create ZIPs **with a root folder** (e.g., `skill-name/SKILL.md`), not flat files
+- Two packages: `ornn-skill` (backend) and `ornn-frontend` (web UI).
+- Docker orchestration lives in `chrono-docker-compose` (separate repo). **Never** create docker-compose files in this repo.
+- Each package has its own `Dockerfile`. Dockerfiles MUST NOT contain `ENV` definitions.
+- All configurable values MUST be read from environment variables. Zero hardcoded config.
+- For project domain knowledge (external services, skill format, etc.), see `docs/ARCHITECTURE.md`.
 
 ## Code Standards
 
-6. TypeScript + Bun. Follow TypeScript and Bun conventions.
-7. Use `Result` patterns and Zod validation. No bare `try/catch` in routes — use error middleware.
-8. Keep code simple. Fewer lines > more abstractions.
+- TypeScript + Bun. Follow TypeScript and Bun conventions.
+- Use `Result` patterns and Zod validation. No bare `try/catch` in routes — use error middleware.
+- Keep code simple. Fewer lines > more abstractions.
+- All code MUST include sufficient logging (Pino). `info` for lifecycle events, `debug` for detailed flow, `error` for failures with context.
+- Logs MUST NOT contain plaintext secrets. Mask or redact sensitive values.
+- No hardcoded secrets, credentials, API keys, tokens in code — ever.
+- Backend tests: `bun test`. Frontend tests: `vitest run`.
+- Unit tests colocated with source files. Integration tests in `tests/` directory.
 
-## Security Rules
+## Branching Strategy
 
-9. `.gitignore` MUST ignore: `.env`, `.env.*` (except committed dev configs), `*.pem`, `*.key`, `credentials.json`.
-10. No hardcoded secrets, credentials, API keys, tokens in code — ever.
-11. Logs MUST NOT contain plaintext secrets. Mask or redact sensitive values.
+- **`main`** — Production release branch. Protected: no direct push, no force push, PRs only from `develop`.
+- **`develop`** — Active development branch (default). Protected: no direct push, no force push, PRs from any feature branch.
+- **Workflow:** `feature/xxx` → PR → `develop` → PR → `main`
+- PR merge auto-deletes the source branch (protected branches excluded).
 
-## Logging
+## Versioning & Releases
 
-12. All code MUST include sufficient logging (Pino).
-13. `info` for lifecycle events, `debug` for detailed flow, `error` for failures with context.
+This project uses **Changesets** (`@changesets/cli`) for independent package versioning.
 
-## Testing Rules
+- Each package (`ornn-skill`, `ornn-frontend`) has its own version and `CHANGELOG.md`.
+- Release notes are published on [GitHub Releases](https://github.com/aevatarAI/chrono-ornn/releases).
 
-14. Backend tests: Bun test (`bun test`). Frontend tests: Vitest (`vitest run`).
-15. Unit tests colocated with source files. Integration tests in `tests/` directory.
-16. Target test coverage > 80%.
+**Workflow:**
+
+1. After completing a feature or fix, create a changeset:
+   ```bash
+   bun changeset
+   ```
+   Select affected package(s), semver bump level (`patch`/`minor`/`major`), and write a short description. Commit the generated `.changeset/*.md` file with the PR.
+
+2. When preparing a release, consume all pending changesets:
+   ```bash
+   bun run version-packages
+   ```
+   This updates `package.json` versions, appends to `CHANGELOG.md`, and deletes consumed changeset files.
+
+3. Tag the release:
+   ```bash
+   bun run release
+   ```
+
+4. Merge `develop` → `main` via PR, then create a GitHub Release with release notes.
 
 ## Git Rules
 
-17. **Never** include `Co-Authored-By` lines in commit messages.
-18. **Never** auto-push without explicit user approval.
-19. **Never** force push.
-20. Single `.gitignore` at repo root only.
+- **Never** include `Co-Authored-By` lines in commit messages.
+- **Never** auto-push without explicit user approval.
+- **Never** force push.
+- Single `.gitignore` at repo root only. Must ignore `.env`, `.env.*`, `*.pem`, `*.key`, `credentials.json`.

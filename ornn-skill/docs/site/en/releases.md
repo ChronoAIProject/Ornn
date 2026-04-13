@@ -6,7 +6,7 @@ This release introduces Ornn Core Skills — three foundational skills that teac
 
 ### What's New
 
-1. **Ornn Core Skills** — Three skills shipped in the `ornn-core-skills/` directory:
+1. **Ornn Core Skills** — Three skills shipped in the `.ornn-skills/` directory:
    - `ornn-search-and-run` — Discover, pull, and execute skills from the Ornn library via NyxID MCP
    - `ornn-upload` — Package and upload skills to the Ornn registry (with proper root folder ZIP structure and base64 body encoding)
    - `ornn-build` — Generate complete skill packages from natural language descriptions using AI (single-turn and multi-turn refinement)
@@ -29,9 +29,9 @@ This release introduces Ornn Core Skills — three foundational skills that teac
 
 | Area | Change |
 |------|--------|
-| `ornn-core-skills/` | New directory with three core skills |
-| `ornn-core-skills/setup.sh` | Removed — replaced by prompt-based installation |
-| `ornn-core-skills/ornn-upload/SKILL.md` | Fixed ZIP packaging instructions (root folder required) and added base64 body encoding guide |
+| `.ornn-skills/` | New directory with three core skills |
+| `.ornn-skills/setup.sh` | Removed — replaced by prompt-based installation |
+| `.ornn-skills/ornn-upload/SKILL.md` | Fixed ZIP packaging instructions (root folder required) and added base64 body encoding guide |
 | `README.md` | Added core skills section with multi-platform installation table |
 | `CLAUDE.md` | Added core skills section with editing guidelines |
 | `developer-guide.md` (EN + ZH) | Added core skills installation, skill reference, and examples |
