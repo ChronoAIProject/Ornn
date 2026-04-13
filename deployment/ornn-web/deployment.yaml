@@ -1,0 +1,29 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ornn-web
+  namespace: ${NAMESPACE}
+  labels:
+    app: ornn-web
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ornn-web
+  template:
+    metadata:
+      labels:
+        app: ornn-web
+    spec:
+      containers:
+        - name: ornn-web
+          image: ${ORNN_WEB_IMAGE}
+          imagePullPolicy: ${IMAGE_PULL_POLICY}
+          ports:
+            - containerPort: 80
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 5

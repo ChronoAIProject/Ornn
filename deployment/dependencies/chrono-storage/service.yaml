@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: chrono-storage
+  namespace: ${NAMESPACE}
+spec:
+  selector:
+    app: chrono-storage
+  ports:
+    - name: http
+      port: 3805
+      targetPort: 3805

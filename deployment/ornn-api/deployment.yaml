@@ -1,0 +1,40 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ornn-api
+  namespace: ${NAMESPACE}
+  labels:
+    app: ornn-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ornn-api
+  template:
+    metadata:
+      labels:
+        app: ornn-api
+    spec:
+      containers:
+        - name: ornn-api
+          image: ${ORNN_API_IMAGE}
+          imagePullPolicy: ${IMAGE_PULL_POLICY}
+          ports:
+            - containerPort: 3802
+          envFrom:
+            - configMapRef:
+                name: ornn-api-config
+            - secretRef:
+                name: ornn-api-secret
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3802
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3802
+            initialDelaySeconds: 20
+            periodSeconds: 10

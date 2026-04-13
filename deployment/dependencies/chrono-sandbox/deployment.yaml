@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: chrono-sandbox
+  namespace: ${NAMESPACE}
+  labels:
+    app: chrono-sandbox
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: chrono-sandbox
+  template:
+    metadata:
+      labels:
+        app: chrono-sandbox
+    spec:
+      initContainers:
+        - name: wait-for-opensandbox
+          image: busybox:1.37
+          command: ['sh', '-c', 'until nc -z opensandbox-server.opensandbox-system.svc 80; do echo "waiting for opensandbox..."; sleep 2; done']
+      containers:
+        - name: chrono-sandbox
+          image: ${CHRONO_SANDBOX_IMAGE}
+          imagePullPolicy: ${IMAGE_PULL_POLICY}
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: chrono-sandbox-config
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10

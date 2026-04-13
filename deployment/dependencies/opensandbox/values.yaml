@@ -1,0 +1,41 @@
+opensandbox-controller:
+  controller:
+    replicaCount: 1
+    resources:
+      limits:
+        cpu: 500m
+        memory: 128Mi
+      requests:
+        cpu: 10m
+        memory: 64Mi
+
+opensandbox-server:
+  server:
+    image:
+      repository: opensandbox/server
+      tag: "v0.1.6"
+    replicaCount: 1
+    resources:
+      limits:
+        cpu: "1"
+        memory: 1Gi
+      requests:
+        cpu: 100m
+        memory: 256Mi
+
+  configToml: |
+    [server]
+    host = "0.0.0.0"
+    port = 80
+    log_level = "info"
+
+    [runtime]
+    type = "kubernetes"
+    execd_image = "opensandbox/execd:v1.0.6"
+
+    [kubernetes]
+    namespace = "ornn-cluster"
+    workload_provider = "batchsandbox"
+    informer_enabled = true
+    informer_resync_seconds = 300
+    informer_watch_timeout_seconds = 60

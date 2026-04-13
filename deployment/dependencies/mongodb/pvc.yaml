@@ -1,0 +1,30 @@
+# PV pointing to host directory for persistent MongoDB data
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: mongodb-data-pv
+  labels:
+    app: mongodb
+spec:
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  hostPath:
+    path: ${MONGODB_HOST_PATH}
+    type: Directory
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ${MONGODB_PVC_NAME}
+  namespace: ${NAMESPACE}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: ""
+  volumeName: mongodb-data-pv

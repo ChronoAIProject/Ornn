@@ -1,0 +1,42 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: minio-init
+  namespace: ${NAMESPACE}
+spec:
+  backoffLimit: 3
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: minio-init
+          image: minio/mc:latest
+          imagePullPolicy: ${IMAGE_PULL_POLICY}
+          command:
+            - /bin/sh
+            - -c
+            - |
+              mc alias set local http://minio:9000 ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD}
+              mc admin user add local ${STS_USER} ${STS_PASSWORD} || true
+              mc admin policy attach local readwrite --user ${STS_USER} || true
+          env:
+            - name: MINIO_ROOT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: minio-secret
+                  key: MINIO_ROOT_USER
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: minio-secret
+                  key: MINIO_ROOT_PASSWORD
+            - name: STS_USER
+              valueFrom:
+                secretKeyRef:
+                  name: minio-secret
+                  key: STS_USER
+            - name: STS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: minio-secret
+                  key: STS_PASSWORD

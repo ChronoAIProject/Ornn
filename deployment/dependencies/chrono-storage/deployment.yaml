@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: chrono-storage
+  namespace: ${NAMESPACE}
+  labels:
+    app: chrono-storage
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: chrono-storage
+  template:
+    metadata:
+      labels:
+        app: chrono-storage
+    spec:
+      initContainers:
+        - name: wait-for-minio
+          image: busybox:1.37
+          command: ['sh', '-c', 'until nc -z minio 9000; do echo "waiting for minio..."; sleep 2; done']
+      containers:
+        - name: chrono-storage
+          image: ${CHRONO_STORAGE_IMAGE}
+          imagePullPolicy: ${IMAGE_PULL_POLICY}
+          ports:
+            - containerPort: 3805
+          envFrom:
+            - configMapRef:
+                name: chrono-storage-config
+            - secretRef:
+                name: chrono-storage-secret
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3805
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3805
+            initialDelaySeconds: 10
+            periodSeconds: 10

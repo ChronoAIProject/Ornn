@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: ornn-api
+  namespace: ${NAMESPACE}
+spec:
+  selector:
+    app: ornn-api
+  ports:
+    - name: http
+      port: 3802
+      targetPort: 3802
