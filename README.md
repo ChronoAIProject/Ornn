@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="ornn-frontend/public/ornn.png" width="180" />
+  <img src="ornn-web/public/ornn.png" width="180" />
 </p>
 
 <h1 align="center">Ornn</h1>

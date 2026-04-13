@@ -16,12 +16,12 @@ TypeScript, Bun workspace monorepo
 
 | Package | Description |
 |---------|-------------|
-| `ornn-skill` | Backend API |
-| `ornn-frontend` | React SPA |
+| `ornn-api` | Backend API |
+| `ornn-web` | React SPA |
 
 ## Architecture
 
-- Two packages: `ornn-skill` (backend) and `ornn-frontend` (web UI).
+- Two packages: `ornn-api` (backend) and `ornn-web` (web UI).
 - Docker orchestration lives in `chrono-docker-compose` (separate repo). **Never** create docker-compose files in this repo.
 - Each package has its own `Dockerfile`. Dockerfiles MUST NOT contain `ENV` definitions.
 - All configurable values MUST be read from environment variables. Zero hardcoded config.
@@ -49,7 +49,7 @@ TypeScript, Bun workspace monorepo
 
 This project uses **Changesets** (`@changesets/cli`) for independent package versioning.
 
-- Each package (`ornn-skill`, `ornn-frontend`) has its own version and `CHANGELOG.md`.
+- Each package (`ornn-api`, `ornn-web`) has its own version and `CHANGELOG.md`.
 - Release notes are published on [GitHub Releases](https://github.com/aevatarAI/chrono-ornn/releases).
 
 **Workflow:**

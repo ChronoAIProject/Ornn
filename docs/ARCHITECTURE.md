@@ -6,7 +6,7 @@ chrono-ornn is an AI skill platform. Users create, publish, search, and execute 
 
 ## External Services
 
-| Service | How ornn-skill talks to it |
+| Service | How ornn-api talks to it |
 |---------|---------------------------|
 | NyxID | JWT verification (JWKS), API key introspection, LLM Gateway (Responses API) |
 | chrono-sandbox | `POST /execute` — script execution with env vars, dependencies, file retrieval |
@@ -21,7 +21,7 @@ chrono-ornn is an AI skill platform. Users create, publish, search, and execute 
 
 ## Ornn Core Skills
 
-The `.ornn-skills/` directory contains three plain skills that teach AI agents how to use Ornn:
+The `.ornn-apis/` directory contains three plain skills that teach AI agents how to use Ornn:
 
 | Skill | Purpose |
 |-------|---------|
@@ -31,7 +31,7 @@ The `.ornn-skills/` directory contains three plain skills that teach AI agents h
 
 ### Editing Core Skills
 
-When editing skills in `.ornn-skills/`:
+When editing skills in `.ornn-apis/`:
 - Each skill is a single directory containing at minimum a `SKILL.md` file
 - `SKILL.md` must have valid YAML frontmatter with `name`, `description`, and `metadata.category`
 - Skills guide AI agents through multi-step MCP workflows — keep instructions precise and include example JSON payloads
