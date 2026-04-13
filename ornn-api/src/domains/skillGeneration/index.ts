@@ -9,7 +9,7 @@ import { Hono } from "hono";
 import type pino from "pino";
 import type { SkillConfig } from "../../config";
 import type { ISkillGenerationService } from "./services/skillGenerationService";
-import type { TokenVerifier } from "ornn-shared";
+import type { TokenVerifier } from "../../shared/types/index";
 
 import { createSkillGenerateRoutes } from "./routes/skillGenerateRoutes";
 

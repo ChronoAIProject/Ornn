@@ -1,128 +1,174 @@
-import { describe, test, expect, beforeEach } from "bun:test";
+import { describe, test, expect, beforeEach, mock } from "bun:test";
 import { Hono } from "hono";
 import pino from "pino";
 import { createSkillRoutes } from "./skillRoutes";
-import { createErrorHandler, AppError } from "ornn-shared";
+import { createErrorHandler, AppError, type TokenVerifier } from "../../../shared/types/index";
+import type { SkillDetailResponse } from "../../../shared/types/index";
 
 const silentLogger = pino({ level: "silent" });
 const errorHandler = createErrorHandler(silentLogger);
-import type { ISkillService } from "../services/skillService";
-import type { SkillDetail, SkillSummary } from "../types/api";
 
-function mockSkillDetail(overrides: Partial<SkillDetail> = {}): SkillDetail {
+/** Minimal SkillService shape expected by skillRoutes.ts. */
+interface ISkillService {
+  createSkill(zipBuffer: Uint8Array, userId: string, options?: Record<string, unknown>): Promise<{ guid: string }>;
+  getSkill(idOrName: string): Promise<SkillDetailResponse>;
+  updateSkill(guid: string, userId: string, options: Record<string, unknown>): Promise<SkillDetailResponse>;
+  deleteSkill(guid: string): Promise<void>;
+}
+
+function mockSkillDetail(overrides: Partial<SkillDetailResponse> = {}): SkillDetailResponse {
   return {
-    id: "id-1",
+    guid: "guid-1",
     name: "test-skill",
     description: "desc",
-    authorName: "author",
-    category: "util",
-    tags: [],
-    latestVersion: "1",
-    downloadCount: 0,
-    createdAt: "2026-01-01",
-    updatedAt: "2026-01-01",
     license: null,
-    repoUrl: null,
-    latestVersionDetail: {
-      id: "v-1",
-      version: "1",
-      downloadCount: 0,
-      fileSize: 1024,
-      createdAt: "2026-01-01",
-      readmeMd: null,
-      fileHash: "abc",
-    },
-    versions: [],
+    compatibility: null,
+    metadata: { category: "plain" },
+    tags: [],
+    skillHash: "abc",
+    presignedPackageUrl: "https://example.com/skill.zip",
+    isPrivate: true,
+    createdBy: "user-1",
+    createdOn: "2026-01-01T00:00:00.000Z",
+    updatedOn: "2026-01-01T00:00:00.000Z",
     ...overrides,
   };
 }
 
+function createMockTokenService(): TokenVerifier {
+  return {
+    verifyAccessToken: mock(async () => ({
+      sub: "user-123",
+      email: "test@example.com",
+      roles: [] as string[],
+      permissions: [] as string[],
+    })),
+  };
+}
+
+const VALID_BEARER = "Bearer valid-token";
+
 let app: Hono;
 let mockService: ISkillService;
+let mockTokenService: TokenVerifier;
 
 beforeEach(() => {
+  mockTokenService = createMockTokenService();
   mockService = {
-    listSkills: async () => ({ skills: [], total: 0 }),
-    getSkill: async () => mockSkillDetail(),
-    createSkill: async () => mockSkillDetail(),
-    updateSkill: async () => mockSkillDetail(),
-    deleteSkill: async () => {},
+    createSkill: mock(async () => ({ guid: "guid-1" })),
+    getSkill: mock(async () => mockSkillDetail()),
+    updateSkill: mock(async () => mockSkillDetail()),
+    deleteSkill: mock(async () => {}),
   };
   app = new Hono();
   app.onError(errorHandler);
-  app.route("/api", createSkillRoutes(mockService));
+  app.route("/api", createSkillRoutes(mockService as any, mockTokenService));
 });
 
 describe("Skill Routes", () => {
-  test("GET /api/skills - returns list", async () => {
-    const summary: SkillSummary = {
-      id: "id-1",
-      name: "s",
-      description: "d",
-      authorName: "a",
-      category: "c",
-      tags: [],
-      latestVersion: "1",
-      downloadCount: 0,
-      createdAt: "",
-      updatedAt: "",
-    };
-    mockService.listSkills = async () => ({ skills: [summary], total: 1 });
-
-    const res = await app.request("/api/skills");
-    const body = await res.json();
-
-    expect(res.status).toBe(200);
-    expect(body.data.length).toBe(1);
-    expect(body.meta.total).toBe(1);
-  });
-
-  test("GET /api/skills/:id - returns detail", async () => {
-    const res = await app.request("/api/skills/id-1");
-    const body = await res.json();
-
-    expect(res.status).toBe(200);
-    expect(body.data.name).toBe("test-skill");
-  });
-
-  test("GET /api/skills/:id - 404 for missing", async () => {
-    mockService.getSkill = async () => {
-      throw AppError.notFound("SKILL_NOT_FOUND", "Not found");
-    };
-
-    const res = await app.request("/api/skills/nope");
-    const body = await res.json();
-
-    expect(res.status).toBe(404);
-    expect(body.error.code).toBe("SKILL_NOT_FOUND");
-  });
-
-  test("PUT /api/skills/:id - updates skill", async () => {
-    const updated = mockSkillDetail({ description: "new desc" });
-    mockService.updateSkill = async () => updated;
-
-    const res = await app.request("/api/skills/id-1", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ description: "new desc" }),
+  describe("auth enforcement", () => {
+    test("GET /api/skills/:id - no auth returns 401", async () => {
+      const res = await app.request("/api/skills/guid-1");
+      expect(res.status).toBe(401);
     });
-    const body = await res.json();
 
-    expect(res.status).toBe(200);
-    expect(body.data.description).toBe("new desc");
+    test("PUT /api/skills/:id - no auth returns 401", async () => {
+      const res = await app.request("/api/skills/guid-1", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isPrivate: false }),
+      });
+      expect(res.status).toBe(401);
+    });
+
+    test("DELETE /api/skills/:id - no auth returns 401", async () => {
+      const res = await app.request("/api/skills/guid-1", { method: "DELETE" });
+      expect(res.status).toBe(401);
+    });
   });
 
-  test("DELETE /api/skills/:id - returns 204", async () => {
-    const res = await app.request("/api/skills/id-1", { method: "DELETE" });
-    expect(res.status).toBe(204);
+  describe("GET /api/skills/:id", () => {
+    test("returns skill detail with valid auth", async () => {
+      const res = await app.request("/api/skills/guid-1", {
+        headers: { Authorization: VALID_BEARER },
+      });
+      const body = await res.json();
+
+      expect(res.status).toBe(200);
+      expect(body.data.name).toBe("test-skill");
+    });
+
+    test("returns 404 when skill not found", async () => {
+      (mockService.getSkill as any) = mock(async () => {
+        throw AppError.notFound("SKILL_NOT_FOUND", "Not found");
+      });
+
+      const res = await app.request("/api/skills/nope", {
+        headers: { Authorization: VALID_BEARER },
+      });
+      const body = await res.json();
+
+      expect(res.status).toBe(404);
+      expect(body.error.code).toBe("SKILL_NOT_FOUND");
+    });
   });
 
-  test("DELETE /api/skills/:id - 404 for missing", async () => {
-    mockService.deleteSkill = async () => {
-      throw AppError.notFound("SKILL_NOT_FOUND", "Not found");
-    };
+  describe("PUT /api/skills/:id", () => {
+    test("updates isPrivate with valid auth", async () => {
+      const updated = mockSkillDetail({ isPrivate: false });
+      (mockService.updateSkill as any) = mock(async () => updated);
 
-    const res = await app.request("/api/skills/nope", { method: "DELETE" });
-    expect(res.status).toBe(404);
+      const res = await app.request("/api/skills/guid-1", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: VALID_BEARER,
+        },
+        body: JSON.stringify({ isPrivate: false }),
+      });
+      const body = await res.json();
+
+      expect(res.status).toBe(200);
+      expect(body.data.isPrivate).toBe(false);
+    });
+
+    test("returns 400 when no update data provided", async () => {
+      const res = await app.request("/api/skills/guid-1", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: VALID_BEARER,
+        },
+        body: JSON.stringify({}),
+      });
+
+      expect(res.status).toBe(400);
+    });
+  });
+
+  describe("DELETE /api/skills/:id", () => {
+    test("deletes skill and returns success", async () => {
+      const res = await app.request("/api/skills/guid-1", {
+        method: "DELETE",
+        headers: { Authorization: VALID_BEARER },
+      });
+      const body = await res.json();
+
+      expect(res.status).toBe(200);
+      expect(body.data.success).toBe(true);
+    });
+
+    test("returns 404 when skill not found", async () => {
+      (mockService.deleteSkill as any) = mock(async () => {
+        throw AppError.notFound("SKILL_NOT_FOUND", "Not found");
+      });
+
+      const res = await app.request("/api/skills/nope", {
+        method: "DELETE",
+        headers: { Authorization: VALID_BEARER },
+      });
+
+      expect(res.status).toBe(404);
+    });
   });
 });

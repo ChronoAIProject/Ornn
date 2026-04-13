@@ -1,12 +1,12 @@
 /**
  * Local JWT access token verifier for ornn-api.
  * Verifies JWT tokens using the shared JWT_SECRET.
- * Implements TokenVerifier from ornn-shared.
+ * Implements TokenVerifier interface.
  * @module services/jwtVerifier
  */
 
 import { verify } from "hono/jwt";
-import { AppError, type TokenVerifier, type AccessTokenPayload } from "ornn-shared";
+import { AppError, type TokenVerifier, type AccessTokenPayload } from "../shared/types/index";
 
 /**
  * Create a local JWT verifier that can validate access tokens.

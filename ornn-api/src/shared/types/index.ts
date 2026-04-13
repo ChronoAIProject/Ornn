@@ -1,5 +1,5 @@
 /**
- * Shared TypeScript types inlined from ornn-shared.
+ * Shared TypeScript types for ornn-api.
  * @module shared/types
  */
 
@@ -199,3 +199,64 @@ export type PlaygroundChatEvent =
   | { type: "file-output"; file: { path: string; content: string; size: number; mimeType: string } }
   | { type: "error"; message: string }
   | { type: "finish"; finishReason: string };
+
+// ---------------------------------------------------------------------------
+// Auth Types
+// ---------------------------------------------------------------------------
+
+export interface TokenVerifier {
+  verifyAccessToken(token: string): Promise<AccessTokenPayload>;
+}
+
+export interface AccessTokenPayload {
+  sub: string;
+  email?: string;
+  roles?: string[];
+  permissions?: string[];
+  [key: string]: unknown;
+}
+
+export interface ApiKeyInfo {
+  userId: string;
+  email: string;
+  roles: string[];
+  permissions: string[];
+}
+
+// ---------------------------------------------------------------------------
+// Auth Utilities
+// ---------------------------------------------------------------------------
+
+export const INTERNAL_AUTH_HEADER = "X-Internal-Auth";
+
+export function isDuplicateKeyError(err: unknown): boolean {
+  return typeof err === "object" && err !== null && "code" in err && (err as { code: number }).code === 11000;
+}
+
+export function createErrorHandler(logger: { error: (...args: unknown[]) => void }) {
+  return (err: Error, c: { json: (body: unknown, status: number) => unknown }) => {
+    if (err instanceof AppError) {
+      return c.json({ data: null, error: { code: err.code, message: err.message } }, err.statusCode);
+    }
+    logger.error(err, "Unhandled error");
+    return c.json({ data: null, error: { code: "INTERNAL_ERROR", message: "Internal server error" } }, 500);
+  };
+}
+
+export function createAuthMiddleware(tokenService: TokenVerifier) {
+  return async (c: any, next: () => Promise<void>) => {
+    const authHeader = c.req.header("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      throw new AppError(401, "AUTH_MISSING", "Authentication required");
+    }
+    const token = authHeader.slice(7);
+    const payload = await tokenService.verifyAccessToken(token);
+    c.set("auth", {
+      userId: payload.sub,
+      email: payload.email ?? "",
+      roles: payload.roles ?? [],
+      permissions: payload.permissions ?? [],
+    });
+    await next();
+  };
+}

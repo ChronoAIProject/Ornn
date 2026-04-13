@@ -6,8 +6,8 @@
  */
 
 import { Hono } from "hono";
-import type { TokenVerifier } from "ornn-shared";
-import { createAuthMiddleware, type AuthVariables, AppError } from "ornn-shared";
+import { createAuthMiddleware, AppError, type TokenVerifier } from "../../../shared/types/index";
+import type { AuthVariables } from "../../../middleware/nyxidAuth";
 import { validateSkillPackageZip } from "../services/skillFormatValidator";
 
 /**
