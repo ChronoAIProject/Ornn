@@ -4,7 +4,7 @@
 
 <h1 align="center">Ornn</h1>
 
-<p align="center">The skill platform for AI agents</p>
+<p align="center">The skill platform for AI agents — build, discover, and execute AI skills</p>
 
 ---
 
