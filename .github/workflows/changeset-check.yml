@@ -1,0 +1,33 @@
+name: Changeset check
+
+on:
+  pull_request:
+    branches: [develop]
+    types: [opened, synchronize, reopened]
+
+jobs:
+  check-changeset:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: oven-sh/setup-bun@v2
+
+      - run: bun install --frozen-lockfile
+
+      - name: Check for changeset
+        run: |
+          # Get list of changeset files added in this PR
+          CHANGESETS=$(git diff --name-only origin/develop...HEAD -- '.changeset/*.md' | grep -v README.md || true)
+
+          if [ -z "$CHANGESETS" ]; then
+            echo "::error::This PR is missing a changeset. Run 'bun changeset' to create one."
+            echo ""
+            echo "If this change does not need a version bump (e.g., CI config, docs), add an empty changeset:"
+            echo "  bun changeset --empty"
+            exit 1
+          fi
+
+          echo "Changeset found: $CHANGESETS"
