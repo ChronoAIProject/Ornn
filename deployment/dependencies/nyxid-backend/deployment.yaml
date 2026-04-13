@@ -1,0 +1,52 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nyxid-backend
+  namespace: ${NAMESPACE}
+  labels:
+    app: nyxid-backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nyxid-backend
+  template:
+    metadata:
+      labels:
+        app: nyxid-backend
+    spec:
+      initContainers:
+        - name: wait-for-mongodb
+          image: busybox:1.37
+          command: ['sh', '-c', 'until nc -z mongodb 27017; do echo "waiting for mongodb..."; sleep 2; done']
+      containers:
+        - name: nyxid-backend
+          image: ${NYXID_BACKEND_IMAGE}
+          imagePullPolicy: ${IMAGE_PULL_POLICY}
+          ports:
+            - containerPort: 3001
+          envFrom:
+            - configMapRef:
+                name: nyxid-backend-config
+            - secretRef:
+                name: nyxid-backend-secret
+          volumeMounts:
+            - name: jwt-keys
+              mountPath: /app/keys
+              readOnly: true
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3001
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3001
+            initialDelaySeconds: 20
+            periodSeconds: 10
+      volumes:
+        - name: jwt-keys
+          secret:
+            secretName: nyxid-jwt-keys

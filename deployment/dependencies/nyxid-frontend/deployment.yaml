@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nyxid-frontend
+  namespace: ${NAMESPACE}
+  labels:
+    app: nyxid-frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nyxid-frontend
+  template:
+    metadata:
+      labels:
+        app: nyxid-frontend
+    spec:
+      initContainers:
+        - name: wait-for-nyxid-backend
+          image: busybox:1.37
+          command: ['sh', '-c', 'until nc -z nyxid-backend 3001; do echo "waiting for nyxid-backend..."; sleep 2; done']
+      containers:
+        - name: nyxid-frontend
+          image: ${NYXID_FRONTEND_IMAGE}
+          imagePullPolicy: ${IMAGE_PULL_POLICY}
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: nyxid-frontend-config
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 5

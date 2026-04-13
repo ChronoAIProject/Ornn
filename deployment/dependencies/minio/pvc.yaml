@@ -1,0 +1,30 @@
+# PV pointing to host directory for persistent MinIO data
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: minio-data-pv
+  labels:
+    app: minio
+spec:
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  hostPath:
+    path: ${MINIO_HOST_PATH}
+    type: Directory
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ${MINIO_PVC_NAME}
+  namespace: ${NAMESPACE}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: ""
+  volumeName: minio-data-pv
