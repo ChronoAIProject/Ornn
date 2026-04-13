@@ -62,4 +62,4 @@ Full documentation is available at [ornn.chrono-ai.fun/docs](https://ornn.chrono
 
 ## License
 
-[MIT](LICENSE)
+[Apache License 2.0](LICENSE)
