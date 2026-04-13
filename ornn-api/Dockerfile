@@ -6,10 +6,10 @@ WORKDIR /app
 COPY package.json bun.lock ./
 
 # Copy this service
-COPY ornn-skill/package.json ornn-skill/
+COPY ornn-api/package.json ornn-api/
 
 # Stub frontend workspace (required by bun workspace resolution)
-RUN mkdir -p ornn-frontend && echo '{"name":"ornn-frontend","version":"1.0.0","private":true}' > ornn-frontend/package.json
+RUN mkdir -p ornn-web && echo '{"name":"ornn-web","version":"1.0.0","private":true}' > ornn-web/package.json
 
 RUN bun install
 
@@ -21,12 +21,12 @@ WORKDIR /app
 COPY --from=install /app /app
 
 # Copy source code
-COPY ornn-skill/src/ /app/ornn-skill/src/
+COPY ornn-api/src/ /app/ornn-api/src/
 
 # Copy docs for OpenAPI spec
-COPY ornn-skill/docs/ /app/ornn-skill/docs/
+COPY ornn-api/docs/ /app/ornn-api/docs/
 
-WORKDIR /app/ornn-skill
+WORKDIR /app/ornn-api
 
 # Create data directory for SQLite
 RUN mkdir -p /app/data
