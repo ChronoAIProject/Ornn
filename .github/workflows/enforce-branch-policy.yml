@@ -1,0 +1,18 @@
+name: Enforce branch policy
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+jobs:
+  check-source-branch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify PR source branch is develop
+        run: |
+          if [ "${{ github.head_ref }}" != "develop" ]; then
+            echo "::error::PRs targeting main must come from the develop branch. Got: ${{ github.head_ref }}"
+            exit 1
+          fi
+          echo "Source branch is develop — OK"
