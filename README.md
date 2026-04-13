@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="ornn-frontend/public/ornn.png" width="180" />
+  <img src="ornn-web/public/ornn.png" width="180" />
 </p>
 
 <h1 align="center">Ornn</h1>
@@ -31,7 +31,7 @@ The **sandbox playground** lets users test any skill interactively. When a skill
 
 ## Ornn Core Skills
 
-Ornn ships with three **core skills** that teach AI agents how to interact with the platform. They live in the [`ornn-core-skills/`](ornn-core-skills/) directory:
+Ornn ships with three **core skills** that teach AI agents how to interact with the platform. They live in the [`.ornn-skills/`](.ornn-skills/) directory:
 
 | Skill | Description |
 |-------|-------------|

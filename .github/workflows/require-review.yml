@@ -1,0 +1,57 @@
+name: Require team review
+
+on:
+  pull_request:
+    branches: [main, develop]
+    types: [opened, synchronize, reopened]
+  pull_request_review:
+    types: [submitted]
+
+jobs:
+  check-approval:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check if team approval is required
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const pr = context.payload.pull_request;
+            const author = pr.user.login;
+
+            // Owner can self-merge without approval
+            if (author === 'chronoai-shining') {
+              console.log(`PR author is ${author} — no approval required`);
+              return;
+            }
+
+            // For other contributors, check for Aevatarians team approval
+            const reviews = await github.rest.pulls.listReviews({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pr.number,
+            });
+
+            // Get Aevatarians team members
+            let teamMembers;
+            try {
+              const members = await github.rest.teams.listMembersInOrg({
+                org: 'aevatarAI',
+                team_slug: 'Aevatarians',
+              });
+              teamMembers = members.data.map(m => m.login);
+            } catch (e) {
+              core.setFailed('Could not fetch Aevatarians team members. Ensure the GITHUB_TOKEN has org:read scope.');
+              return;
+            }
+
+            // Check if any team member approved
+            const approved = reviews.data.some(
+              r => r.state === 'APPROVED' && teamMembers.includes(r.user.login)
+            );
+
+            if (!approved) {
+              core.setFailed(`PRs from external contributors require at least 1 approval from the Aevatarians team. Author: ${author}`);
+            } else {
+              console.log('Aevatarians team approval found — OK');
+            }
