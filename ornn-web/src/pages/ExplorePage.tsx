@@ -67,9 +67,8 @@ function SystemSkillsTab({ isAdmin }: { isAdmin: boolean }) {
   });
 
   const generateMutation = useMutation({
-    mutationFn: ({ serviceId, specUrl, serviceName, serviceDescription }: { serviceId: string; specUrl: string; serviceName: string; serviceDescription?: string }) =>
-      generateSystemSkill(serviceId, { specUrl, serviceName, serviceDescription }),
-    onMutate: (vars) => setGeneratingServiceId(vars.serviceId),
+    mutationFn: (serviceId: string) => generateSystemSkill(serviceId),
+    onMutate: (serviceId) => setGeneratingServiceId(serviceId),
     onSuccess: (data) => {
       addToast({ type: "success", message: `Skill "${data.name}" generated` });
       queryClient.invalidateQueries({ queryKey: ["system-skills"] });
@@ -82,9 +81,8 @@ function SystemSkillsTab({ isAdmin }: { isAdmin: boolean }) {
   });
 
   const regenerateMutation = useMutation({
-    mutationFn: ({ serviceId, specUrl, serviceName, serviceDescription }: { serviceId: string; specUrl: string; serviceName: string; serviceDescription?: string }) =>
-      regenerateSystemSkill(serviceId, { specUrl, serviceName, serviceDescription }),
-    onMutate: (vars) => setGeneratingServiceId(vars.serviceId),
+    mutationFn: (serviceId: string) => regenerateSystemSkill(serviceId),
+    onMutate: (serviceId) => setGeneratingServiceId(serviceId),
     onSuccess: (data) => {
       addToast({ type: "success", message: `Skill "${data.name}" regenerated` });
       queryClient.invalidateQueries({ queryKey: ["system-skills"] });
@@ -192,7 +190,7 @@ function SystemSkillsTab({ isAdmin }: { isAdmin: boolean }) {
                         <Button
                           size="sm"
                           variant="secondary"
-                          onClick={() => regenerateMutation.mutate({ serviceId: item.serviceId, specUrl: item.openApiSpecUrl!, serviceName: item.serviceName, serviceDescription: item.serviceDescription ?? undefined })}
+                          onClick={() => regenerateMutation.mutate(item.serviceId)}
                           disabled={isGenerating}
                         >
                           {isGenerating ? "..." : "Regenerate"}
@@ -215,7 +213,7 @@ function SystemSkillsTab({ isAdmin }: { isAdmin: boolean }) {
                     {item.hasOpenApiSpec ? (
                       <Button
                         size="sm"
-                        onClick={() => generateMutation.mutate({ serviceId: item.serviceId, specUrl: item.openApiSpecUrl!, serviceName: item.serviceName, serviceDescription: item.serviceDescription ?? undefined })}
+                        onClick={() => generateMutation.mutate(item.serviceId)}
                         disabled={isGenerating}
                       >
                         {isGenerating ? "Generating..." : "Generate Skill"}

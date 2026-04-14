@@ -211,6 +211,7 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
     skillService,
     generationService,
     nyxidServiceClient,
+    nyxidTokenUrl: config.nyxidTokenUrl,
   });
 
   // ---- Domain: Skill Format ----

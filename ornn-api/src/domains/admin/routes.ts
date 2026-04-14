@@ -47,10 +47,12 @@ export interface AdminRoutesConfig {
   skillService: SkillService;
   generationService?: SkillGenerationService;
   nyxidServiceClient?: NyxidServiceClient;
+  nyxidTokenUrl?: string;
 }
 
 export function createAdminRoutes(config: AdminRoutesConfig): Hono<{ Variables: AuthVariables }> {
-  const { adminService, activityRepo, skillRepo, skillService, generationService, nyxidServiceClient } = config;
+  const { adminService, activityRepo, skillRepo, skillService, generationService, nyxidServiceClient, nyxidTokenUrl } = config;
+  const nyxidBaseUrl = nyxidTokenUrl?.replace("/oauth/token", "") ?? "";
   const app = new Hono<{ Variables: AuthVariables }>();
 
   const auth = nyxidAuthMiddleware();
@@ -344,6 +346,48 @@ export function createAdminRoutes(config: AdminRoutesConfig): Hono<{ Variables: 
   // =========================================================================
 
   /**
+   * Fetch a service's OpenAPI spec using the user's token.
+   * Calls NyxID /api/v1/proxy/services to list services, finds the target,
+   * then fetches the spec from the openapi_url.
+   */
+  async function fetchServiceSpec(
+    client: NonNullable<typeof nyxidServiceClient>,
+    userToken: string,
+    serviceId: string,
+  ): Promise<{ service: { name: string; description: string | null }; specContent: string }> {
+    // Call NyxID proxy/services with user's token
+    const svcResp = await fetch(`${nyxidBaseUrl}/api/v1/proxy/services`, {
+      headers: { Authorization: `Bearer ${userToken}` },
+    });
+    if (!svcResp.ok) {
+      const body = await svcResp.text().catch(() => "");
+      throw AppError.badRequest("NYXID_FETCH_FAILED", `Failed to fetch NyxID services: ${svcResp.status} ${body.slice(0, 200)}`);
+    }
+    const svcData = await svcResp.json() as { services: Array<{ id: string; name: string; description?: string; openapi_url?: string }> };
+    const service = svcData.services.find((s) => s.id === serviceId);
+    if (!service) {
+      throw AppError.notFound("SERVICE_NOT_FOUND", `NyxID service ${serviceId} not found`);
+    }
+    if (!service.openapi_url) {
+      throw AppError.badRequest("NO_OPENAPI_SPEC", `Service ${service.name} has no OpenAPI spec`);
+    }
+
+    // Fetch the spec (openapi_url goes through NyxID proxy, needs user token)
+    const specResp = await fetch(service.openapi_url, {
+      headers: { Authorization: `Bearer ${userToken}` },
+    });
+    if (!specResp.ok) {
+      throw AppError.badRequest("SPEC_FETCH_FAILED", `Failed to fetch spec from ${service.openapi_url}: ${specResp.status}`);
+    }
+    const specJson = await specResp.json();
+    const specContent = JSON.stringify(specJson, null, 2);
+
+    logger.info({ serviceId, serviceName: service.name, specLength: specContent.length }, "Fetched OpenAPI spec for system skill generation");
+
+    return { service: { name: service.name, description: service.description ?? null }, specContent };
+  }
+
+  /**
    * GET /system-skills
    * List generated system skills. Accessible to any authenticated user.
    */
@@ -386,20 +430,17 @@ export function createAdminRoutes(config: AdminRoutesConfig): Hono<{ Variables: 
     "/admin/system-skills/:serviceId/generate",
     requirePermission("ornn:admin:skill"),
     async (c) => {
-      if (!generationService) {
+      if (!generationService || !nyxidServiceClient) {
         throw AppError.serviceUnavailable("SERVICE_UNAVAILABLE", "Generation service not configured");
       }
 
       const serviceId = c.req.param("serviceId");
       const authCtx = getAuth(c);
       const body = await c.req.json();
+      const userToken = body.userToken as string;
 
-      const specContent = body.spec as string;
-      const serviceName = (body.serviceName as string) ?? "unknown";
-      const serviceDescription = (body.serviceDescription as string) ?? "";
-
-      if (!specContent) {
-        throw AppError.badRequest("MISSING_SPEC", "OpenAPI spec content is required");
+      if (!userToken) {
+        throw AppError.badRequest("MISSING_TOKEN", "userToken is required");
       }
 
       // Check if skill already exists for this service
@@ -408,10 +449,13 @@ export function createAdminRoutes(config: AdminRoutesConfig): Hono<{ Variables: 
         throw AppError.conflict("SYSTEM_SKILL_EXISTS", `System skill already exists for service ${serviceId}. Use regenerate endpoint.`);
       }
 
+      // Fetch service list from NyxID using user's token
+      const { service, specContent } = await fetchServiceSpec(nyxidServiceClient, userToken, serviceId);
+
       // Generate skill
       let generatedRaw = "";
       for await (const event of generationService.generateFromOpenApi(specContent, {
-        description: `Skill for ${serviceName}: ${serviceDescription}`,
+        description: `Skill for ${service.name}: ${service.description ?? ""}`,
       })) {
         if (event.type === "generation_complete") {
           generatedRaw = (event as any).raw ?? "";
@@ -461,20 +505,17 @@ export function createAdminRoutes(config: AdminRoutesConfig): Hono<{ Variables: 
     "/admin/system-skills/:serviceId/regenerate",
     requirePermission("ornn:admin:skill"),
     async (c) => {
-      if (!generationService) {
+      if (!generationService || !nyxidServiceClient) {
         throw AppError.serviceUnavailable("SERVICE_UNAVAILABLE", "Generation service not configured");
       }
 
       const serviceId = c.req.param("serviceId");
       const authCtx = getAuth(c);
       const body = await c.req.json();
+      const userToken = body.userToken as string;
 
-      const specContent = body.spec as string;
-      const serviceName = (body.serviceName as string) ?? "unknown";
-      const serviceDescription = (body.serviceDescription as string) ?? "";
-
-      if (!specContent) {
-        throw AppError.badRequest("MISSING_SPEC", "OpenAPI spec content is required");
+      if (!userToken) {
+        throw AppError.badRequest("MISSING_TOKEN", "userToken is required");
       }
 
       // Delete existing if present
@@ -484,9 +525,12 @@ export function createAdminRoutes(config: AdminRoutesConfig): Hono<{ Variables: 
         logger.info({ guid: existing.guid, serviceId }, "Deleted existing system skill for regeneration");
       }
 
+      // Fetch service list from NyxID using user's token
+      const { service, specContent } = await fetchServiceSpec(nyxidServiceClient, userToken, serviceId);
+
       let generatedRaw = "";
       for await (const event of generationService.generateFromOpenApi(specContent, {
-        description: `Skill for ${serviceName}: ${serviceDescription}`,
+        description: `Skill for ${service.name}: ${service.description ?? ""}`,
       })) {
         if (event.type === "generation_complete") {
           generatedRaw = (event as any).raw ?? "";

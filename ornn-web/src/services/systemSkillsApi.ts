@@ -127,30 +127,14 @@ export async function getPublicSystemSkills() {
 }
 
 /**
- * Fetch OpenAPI spec content from NyxID proxy (frontend has user token).
- */
-async function fetchSpecContent(specUrl: string): Promise<string> {
-  const token = useAuthStore.getState().accessToken;
-  const resp = await fetch(specUrl, {
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-  });
-  if (!resp.ok) throw new Error(`Failed to fetch OpenAPI spec: ${resp.status}`);
-  const data = await resp.json();
-  return JSON.stringify(data, null, 2);
-}
-
-/**
  * Generate skill from a NyxID service's OpenAPI spec (admin only).
- * Frontend fetches the spec content and sends it to the backend.
+ * Sends user token so backend can call NyxID proxy/services endpoint.
  */
-export async function generateSystemSkill(
-  serviceId: string,
-  opts: { specUrl: string; serviceName: string; serviceDescription?: string },
-): Promise<{ guid: string; name: string }> {
-  const specContent = await fetchSpecContent(opts.specUrl);
+export async function generateSystemSkill(serviceId: string): Promise<{ guid: string; name: string }> {
+  const token = useAuthStore.getState().accessToken;
   const res = await apiPost<{ guid: string; name: string; serviceId: string }>(
     `/api/admin/system-skills/${serviceId}/generate`,
-    { spec: specContent, serviceName: opts.serviceName, serviceDescription: opts.serviceDescription },
+    { userToken: token },
   );
   if (!res.data) throw new Error("Failed to generate system skill");
   return res.data;
@@ -159,14 +143,11 @@ export async function generateSystemSkill(
 /**
  * Regenerate (delete + recreate) a system skill (admin only).
  */
-export async function regenerateSystemSkill(
-  serviceId: string,
-  opts: { specUrl: string; serviceName: string; serviceDescription?: string },
-): Promise<{ guid: string; name: string }> {
-  const specContent = await fetchSpecContent(opts.specUrl);
+export async function regenerateSystemSkill(serviceId: string): Promise<{ guid: string; name: string }> {
+  const token = useAuthStore.getState().accessToken;
   const res = await apiPost<{ guid: string; name: string; serviceId: string }>(
     `/api/admin/system-skills/${serviceId}/regenerate`,
-    { spec: specContent, serviceName: opts.serviceName, serviceDescription: opts.serviceDescription },
+    { userToken: token },
   );
   if (!res.data) throw new Error("Failed to regenerate system skill");
   return res.data;
