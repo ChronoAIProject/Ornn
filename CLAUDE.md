@@ -215,9 +215,75 @@ kubectl get pods -n ornn-cluster
 - `deployment/.env.sample.ornn` — ornn-api and ornn-web config. Copy to `deployment/.env.ornn`.
 - `deployment/dependencies/.env.sample.dependencies` — all dependency service config. Copy to `deployment/dependencies/.env.dependencies`.
 
+## gstack
+
+Use the `/browse` skill from gstack for all web browsing. Never use `mcp__claude-in-chrome__*` tools.
+
+### Available skills
+
+- `/office-hours` - YC Office Hours (startup diagnostic + builder brainstorm)
+- `/plan-ceo-review` - CEO review plan
+- `/plan-eng-review` - Engineering review plan
+- `/plan-design-review` - Design review plan
+- `/design-consultation` - Design system from scratch
+- `/design-shotgun` - Visual design exploration
+- `/design-html` - Design to HTML
+- `/review` - PR review
+- `/ship` - Ship workflow
+- `/land-and-deploy` - Merge, deploy, canary verify
+- `/canary` - Post-deploy monitoring loop
+- `/benchmark` - Performance regression detection
+- `/browse` - Headless browser for QA, testing, and web browsing
+- `/connect-chrome` - Launch GStack Browser
+- `/qa` - QA testing with fixes
+- `/qa-only` - Report-only QA (no fixes)
+- `/design-review` - Design audit + fix loop
+- `/setup-browser-cookies` - Browser cookie setup
+- `/setup-deploy` - One-time deploy config
+- `/retro` - Retrospective (includes global cross-project mode)
+- `/investigate` - Systematic root-cause debugging
+- `/document-release` - Post-ship doc updates
+- `/codex` - Multi-AI second opinion via OpenAI Codex CLI
+- `/cso` - OWASP Top 10 + STRIDE security audit
+- `/autoplan` - Auto-review pipeline (CEO, design, eng)
+- `/plan-devex-review` - DevEx review plan
+- `/devex-review` - DevEx review
+- `/careful` - Careful mode
+- `/freeze` - Freeze changes
+- `/guard` - Guard mode
+- `/unfreeze` - Unfreeze changes
+- `/gstack-upgrade` - Upgrade gstack
+- `/learn` - Learn from context
+
 ## Git Rules
 
 - **Never** include `Co-Authored-By` lines in commit messages.
 - **Never** auto-push without explicit user approval.
 - **Never** force push.
 - Single `.gitignore` at repo root only. Must ignore `.env`, `.env.*`, `*.pem`, `*.key`, `credentials.json`.
+
+## Design System
+Always read DESIGN.md before making any visual or UI decisions.
+All font choices, colors, spacing, and aesthetic direction are defined there.
+Do not deviate without explicit user approval.
+In QA mode, flag any code that doesn't match DESIGN.md.
+
+## Skill routing
+
+When the user's request matches an available skill, ALWAYS invoke it using the Skill
+tool as your FIRST action. Do NOT answer directly, do NOT use other tools first.
+The skill has specialized workflows that produce better results than ad-hoc answers.
+
+Key routing rules:
+- Product ideas, "is this worth building", brainstorming → invoke office-hours
+- Bugs, errors, "why is this broken", 500 errors → invoke investigate
+- Ship, deploy, push, create PR → invoke ship
+- QA, test the site, find bugs → invoke qa
+- Code review, check my diff → invoke review
+- Update docs after shipping → invoke document-release
+- Weekly retro → invoke retro
+- Design system, brand → invoke design-consultation
+- Visual audit, design polish → invoke design-review
+- Architecture review → invoke plan-eng-review
+- Save progress, checkpoint, resume → invoke checkpoint
+- Code quality, health check → invoke health
