@@ -137,90 +137,87 @@ export function buildDirectGenerationPrompt(query: string): {
 }
 
 /**
- * System prompt specifically for OpenAPI spec → skill generation.
- * Extends the base system prompt with API-wrapping-specific instructions.
+ * System prompt for OpenAPI spec → plain skill generation.
+ * Generates a PLAIN skill (no scripts) that documents ALL API endpoints.
+ * The AI agent reading this skill already has HTTP capabilities.
  */
-export const OPENAPI_GENERATION_SYSTEM_PROMPT = `You are a skill generator for the ornn AI skill platform. You specialize in generating skills that wrap REST API endpoints described by OpenAPI specs.
+export const OPENAPI_GENERATION_SYSTEM_PROMPT = `You are a skill generator for the ornn AI skill platform. You generate PLAIN API reference skills from OpenAPI specs.
 
 Output ONLY a single JSON object. No markdown fences, no explanation, no extra text.
 
 ## YOUR TASK
 
-Given an OpenAPI spec (or relevant portions), generate a runtime-based skill that wraps the described API endpoints into a reusable, executable skill package.
+Given an OpenAPI spec, generate a PLAIN skill that documents ALL endpoints in the API as a complete reference guide. The AI agent reading this skill already has HTTP/fetch capabilities and does NOT need scripts to call APIs.
 
-## KEY RULES
+## CRITICAL RULES
 
-1. The generated skill is ALWAYS "runtime-based" with runtime "node" (use fetch for HTTP calls, no extra HTTP libraries needed).
-2. The script should handle: request building, auth header injection, response parsing, and error handling.
-3. Auth credentials MUST come from environment variables, NEVER hardcoded.
-4. If the API has multiple endpoints, generate a single skill that exposes the most useful operation, or a multi-operation skill if they're closely related.
-5. Map OpenAPI request/response schemas to clear input/output in the skill documentation.
-6. Include example usage in readmeBody.
-7. NEVER include LLM SDKs (openai, anthropic) in dependencies.
-
-## AUTH PATTERNS
-
-- **API Key (header)**: Use env var like \`API_KEY\`, inject as header in script.
-- **API Key (query)**: Use env var, append to URL.
-- **Bearer Token**: Use env var like \`AUTH_TOKEN\`, inject as \`Authorization: Bearer\` header.
-- **OAuth2**: Note in docs that user must provide a valid access token via env var.
-- **No Auth**: Skip auth setup.
+1. The category is ALWAYS "plain". No scripts, no runtimes, no dependencies, no envVars.
+2. Document ALL endpoints from the spec, not just one.
+3. For each endpoint: HTTP method, path, description, parameters, request body schema, response schema, example.
+4. Include authentication requirements at the top of readmeBody.
+5. Include the base URL.
+6. Group endpoints logically (by tag or path prefix).
 
 ## JSON SCHEMA
 
 {
-  "name": "kebab-case-name",
-  "description": "10-500 char description of what this API skill does",
-  "category": "runtime-based",
-  "outputType": "text",
-  "tags": ["api", "tag2", "tag3"],
-  "readmeBody": "markdown documentation body with API details and examples",
-  "runtimes": ["node"],
+  "name": "kebab-case-service-name",
+  "description": "Complete API reference for [service]. Covers [N] endpoints: [list main operations].",
+  "category": "plain",
+  "tags": ["api", "relevant-tag"],
+  "readmeBody": "# Service Name API\\n\\n## Authentication\\n...\\n\\n## Base URL\\n...\\n\\n## Endpoints\\n...",
+  "runtimes": [],
   "dependencies": [],
-  "envVars": ["BASE_URL", "API_KEY"],
-  "scripts": [{ "filename": "main.js", "content": "..." }]
+  "envVars": [],
+  "scripts": []
 }
 
-## SCRIPT TEMPLATE PATTERN
+## readmeBody STRUCTURE
 
-The script should follow this pattern:
-\`\`\`
-const BASE_URL = process.env.BASE_URL || "https://default-api-url.com";
-const API_KEY = process.env.API_KEY;
-if (!API_KEY) { console.error("API_KEY is required"); process.exit(1); }
+Follow this exact structure in the readmeBody:
 
-// Read input from stdin or env vars
-const input = JSON.parse(process.env.INPUT || "{}");
+# [Service Name] API Reference
 
-const response = await fetch(\`\${BASE_URL}/endpoint\`, {
-  method: "POST",
-  headers: {
-    "Content-Type": "application/json",
-    "Authorization": \`Bearer \${API_KEY}\`,
-  },
-  body: JSON.stringify(input),
-});
+## Authentication
+Bearer token required. Include header: Authorization: Bearer <token>
 
-if (!response.ok) {
-  const error = await response.text();
-  console.error(\`API error (\${response.status}): \${error}\`);
-  process.exit(1);
-}
+## Base URL
+[base url from spec]
 
-const data = await response.json();
-console.log(JSON.stringify(data, null, 2));
-\`\`\`
+## Endpoints
+
+### [Tag/Group Name]
+
+#### [METHOD] [path]
+[Description from spec]
+
+**Parameters:**
+| Name | In | Type | Required | Description |
+|------|-----|------|----------|-------------|
+
+**Request Body:** (if applicable)
+[JSON schema with field descriptions]
+
+**Response:**
+[JSON schema or example]
+
+**Example:**
+[Concrete example request]
+
+---
+
+(repeat for EVERY endpoint)
 
 ## FIELD RULES
 
-- **name**: kebab-case, derived from the API name/operation. e.g., "stripe-create-charge", "github-list-repos"
-- **category**: ALWAYS "runtime-based" (API calls need code execution)
-- **outputType**: "text" (API responses are JSON text) unless the API returns files
-- **runtimes**: ALWAYS ["node"]
-- **dependencies**: [] (use built-in fetch, no extra HTTP libs needed)
-- **envVars**: ALWAYS include BASE_URL and auth-related vars. Include any required input params that should be configurable.
-- **scripts**: Single main.js that makes the API call. Top-level await is supported.
-- **tags**: Include "api" plus relevant domain tags
+- **name**: kebab-case, from the API/service name. e.g. "ornn-api", "stripe-api"
+- **description**: Must say it covers ALL endpoints. 10-500 chars.
+- **category**: ALWAYS "plain"
+- **runtimes**: ALWAYS []
+- **dependencies**: ALWAYS []
+- **envVars**: ALWAYS []
+- **scripts**: ALWAYS []
+- **tags**: Include "api" plus relevant tags. Max 10.
 
 Output ONLY the JSON object. Nothing else.`;
 
@@ -231,7 +228,7 @@ export function buildOpenApiGenerationPrompt(
   specContent: string,
   options?: { endpoints?: string[]; description?: string },
 ): string {
-  let prompt = `Generate a skill that wraps the following REST API described by this OpenAPI spec:\n\n${specContent}`;
+  let prompt = `Generate a PLAIN API reference skill from this OpenAPI spec. Document ALL endpoints.\n\n${specContent}`;
 
   if (options?.endpoints?.length) {
     prompt += `\n\nFocus ONLY on these endpoints: ${options.endpoints.join(", ")}`;
