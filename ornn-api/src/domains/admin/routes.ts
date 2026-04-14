@@ -363,7 +363,7 @@ export function createAdminRoutes(config: AdminRoutesConfig): Hono<{ Variables: 
       const body = await svcResp.text().catch(() => "");
       throw AppError.badRequest("NYXID_FETCH_FAILED", `Failed to fetch NyxID services: ${svcResp.status} ${body.slice(0, 200)}`);
     }
-    const svcData = await svcResp.json() as { services: Array<{ id: string; name: string; description?: string; openapi_url?: string }> };
+    const svcData = await svcResp.json() as { services: Array<{ id: string; name: string; description?: string; openapi_url?: string; proxy_url_slug?: string }> };
     const service = svcData.services.find((s) => s.id === serviceId);
     if (!service) {
       throw AppError.notFound("SERVICE_NOT_FOUND", `NyxID service ${serviceId} not found`);
@@ -372,15 +372,27 @@ export function createAdminRoutes(config: AdminRoutesConfig): Hono<{ Variables: 
       throw AppError.badRequest("NO_OPENAPI_SPEC", `Service ${service.name} has no OpenAPI spec`);
     }
 
-    // Replace the domain in openapi_url with our internal NyxID base URL
-    const specUrlParsed = new URL(service.openapi_url);
-    const internalSpecUrl = `${nyxidBaseUrl}${specUrlParsed.pathname}${specUrlParsed.search}`;
-    logger.debug({ originalUrl: service.openapi_url, internalUrl: internalSpecUrl }, "Resolved spec URL");
-    const specResp = await fetch(internalSpecUrl, {
+    // NyxID's openapi_url proxy endpoint has SSRF protection that blocks internal IPs.
+    // Instead, use the service's proxy_url_slug to fetch the spec through NyxID's
+    // general proxy path, which does allow internal service access.
+    const proxySlugBase = service.proxy_url_slug?.replace("/{path}", "");
+    if (!proxySlugBase) {
+      throw AppError.badRequest("NO_PROXY_URL", `Service ${service.name} has no proxy URL`);
+    }
+    // Resolve to internal NyxID URL
+    const proxySlugParsed = new URL(proxySlugBase);
+    const internalProxyBase = `${nyxidBaseUrl}${proxySlugParsed.pathname}`;
+    // Fetch /api/openapi.json through the proxy (the registered spec path)
+    const specFetchUrl = `${internalProxyBase}/api/openapi.json`;
+    logger.info({ specFetchUrl, serviceId }, "Fetching spec via NyxID proxy");
+
+    const specResp = await fetch(specFetchUrl, {
       headers: { Authorization: `Bearer ${userToken}` },
     });
+
     if (!specResp.ok) {
-      throw AppError.badRequest("SPEC_FETCH_FAILED", `Failed to fetch spec from ${service.openapi_url}: ${specResp.status}`);
+      const body = await specResp.text().catch(() => "");
+      throw AppError.badRequest("SPEC_FETCH_FAILED", `Failed to fetch spec (${specResp.status}): ${body.slice(0, 200)}`);
     }
     const specJson = await specResp.json();
     const specContent = JSON.stringify(specJson, null, 2);
