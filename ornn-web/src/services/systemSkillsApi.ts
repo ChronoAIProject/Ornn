@@ -20,6 +20,7 @@ export interface NyxidService {
   visibility: string;
   service_category: string;
   openapi_spec_url: string | null;
+  api_spec_url?: string | null;
   is_active: boolean;
 }
 
@@ -96,8 +97,8 @@ export async function getSystemSkills(): Promise<SystemSkillItem[]> {
       serviceDescription: svc.description,
       baseUrl: svc.base_url,
       serviceCategory: svc.service_category,
-      hasOpenApiSpec: !!svc.openapi_spec_url,
-      openApiSpecUrl: svc.openapi_spec_url,
+      hasOpenApiSpec: !!(svc.openapi_spec_url || (svc as any).api_spec_url),
+      openApiSpecUrl: svc.openapi_spec_url || (svc as any).api_spec_url || null,
       skillGenerated: !!skill,
       skill,
     };
