@@ -79,7 +79,7 @@ export function AdminNyxidServicesPage() {
 
   return (
     <PageTransition>
-      <div className="py-4">
+      <div className="py-4 h-full flex flex-col">
         <div className="mb-4">
           <h1 className="font-heading text-xl tracking-wider text-text-primary">Admin NyxID Services</h1>
           <p className="font-body text-sm text-text-muted mt-1">
@@ -96,7 +96,7 @@ export function AdminNyxidServicesPage() {
             description="No services registered in NyxID."
           />
         ) : (
-          <div className="overflow-x-auto rounded-lg border border-neon-cyan/10">
+          <div className="flex-1 min-h-0 overflow-auto rounded-lg border border-neon-cyan/10">
             <table className="w-full">
               <thead>
                 <tr className="border-b border-neon-cyan/10 bg-bg-elevated/50">
