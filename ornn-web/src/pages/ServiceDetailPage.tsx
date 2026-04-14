@@ -117,10 +117,11 @@ export function ServiceDetailPage() {
         setService(detail);
         setIsLoading(false);
 
-        // If OpenAPI spec URL exists, fetch and parse endpoints
-        if (detail.openapiSpecUrl) {
+        // If OpenAPI spec URL exists, fetch via NyxID proxy to avoid mixed content
+        if (detail.openapiSpecUrl && detail.slug) {
           setSpecLoading(true);
-          fetch(detail.openapiSpecUrl, { headers })
+          const proxySpecUrl = `${NYXID_API_BASE}/api/v1/proxy/s/${detail.slug}/api/openapi.json`;
+          fetch(proxySpecUrl, { headers })
             .then((r) => r.ok ? r.json() : null)
             .then((spec) => {
               if (spec) setEndpoints(parseOpenApiEndpoints(spec));
