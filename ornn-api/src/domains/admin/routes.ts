@@ -11,6 +11,8 @@ import type { AdminService } from "./service";
 import type { ActivityRepository, ActivityAction } from "./activityRepository";
 import type { SkillRepository } from "../skillCrud/repository";
 import type { SkillService } from "../skillCrud/service";
+import type { SkillGenerationService } from "../skillGeneration/service";
+import type { NyxidServiceClient } from "../../clients/nyxidServiceClient";
 import {
   type AuthVariables,
   nyxidAuthMiddleware,
@@ -43,10 +45,12 @@ export interface AdminRoutesConfig {
   activityRepo: ActivityRepository;
   skillRepo: SkillRepository;
   skillService: SkillService;
+  generationService?: SkillGenerationService;
+  nyxidServiceClient?: NyxidServiceClient;
 }
 
 export function createAdminRoutes(config: AdminRoutesConfig): Hono<{ Variables: AuthVariables }> {
-  const { adminService, activityRepo, skillRepo, skillService } = config;
+  const { adminService, activityRepo, skillRepo, skillService, generationService, nyxidServiceClient } = config;
   const app = new Hono<{ Variables: AuthVariables }>();
 
   const auth = nyxidAuthMiddleware();
@@ -335,5 +339,316 @@ export function createAdminRoutes(config: AdminRoutesConfig): Hono<{ Variables: 
     },
   );
 
+  // =========================================================================
+  // System Skills — auto-generate skills from NyxID service catalog
+  // =========================================================================
+
+  /**
+   * GET /admin/system-skills
+   * List NyxID services + their skill generation status.
+   */
+  app.get(
+    "/admin/system-skills",
+    requirePermission("ornn:admin:skill"),
+    async (c) => {
+      if (!nyxidServiceClient) {
+        throw AppError.serviceUnavailable("NYXID_CLIENT_UNAVAILABLE", "NyxID service client not configured");
+      }
+
+      const services = await nyxidServiceClient.listServices();
+      const systemSkills = await skillRepo.findSystemSkills();
+
+      const skillMap = new Map(systemSkills.map((s) => [s.nyxidServiceId, s]));
+
+      const items = services.map((svc) => {
+        const skill = skillMap.get(svc.id);
+        return {
+          serviceId: svc.id,
+          serviceName: svc.name,
+          serviceSlug: svc.slug,
+          serviceDescription: svc.description,
+          baseUrl: svc.base_url,
+          serviceCategory: svc.service_category,
+          hasOpenApiSpec: !!svc.openapi_spec_url,
+          openApiSpecUrl: svc.openapi_spec_url,
+          skillGenerated: !!skill,
+          skill: skill ? {
+            guid: skill.guid,
+            name: skill.name,
+            description: skill.description,
+            tags: (skill.metadata?.tags as string[]) ?? [],
+            createdOn: skill.createdOn instanceof Date ? skill.createdOn.toISOString() : String(skill.createdOn),
+            updatedOn: skill.updatedOn instanceof Date ? skill.updatedOn.toISOString() : String(skill.updatedOn),
+          } : null,
+        };
+      });
+
+      return c.json({ data: { items }, error: null });
+    },
+  );
+
+  /**
+   * GET /admin/system-skills (non-admin version for regular users)
+   * Regular users can view system skills in the registry.
+   */
+  app.get(
+    "/system-skills",
+    async (c) => {
+      const systemSkills = await skillRepo.findSystemSkills();
+      const items = systemSkills.map((s) => ({
+        guid: s.guid,
+        name: s.name,
+        description: s.description,
+        createdBy: s.createdBy,
+        createdByEmail: s.createdByEmail,
+        createdByDisplayName: s.createdByDisplayName,
+        createdOn: s.createdOn instanceof Date ? s.createdOn.toISOString() : String(s.createdOn),
+        updatedOn: s.updatedOn instanceof Date ? s.updatedOn.toISOString() : String(s.updatedOn),
+        isPrivate: false,
+        isSystem: true,
+        nyxidServiceId: s.nyxidServiceId,
+        tags: (s.metadata?.tags as string[]) ?? [],
+      }));
+      return c.json({
+        data: {
+          items,
+          total: items.length,
+          page: 1,
+          pageSize: items.length,
+          totalPages: 1,
+        },
+        error: null,
+      });
+    },
+  );
+
+  /**
+   * POST /admin/system-skills/:serviceId/generate
+   * Fetch OpenAPI spec from NyxID service, generate and store skill.
+   */
+  app.post(
+    "/admin/system-skills/:serviceId/generate",
+    requirePermission("ornn:admin:skill"),
+    async (c) => {
+      if (!nyxidServiceClient || !generationService) {
+        throw AppError.serviceUnavailable("SERVICE_UNAVAILABLE", "Generation service or NyxID client not configured");
+      }
+
+      const serviceId = c.req.param("serviceId");
+      const authCtx = getAuth(c);
+
+      // Check if skill already exists for this service
+      const existing = await skillRepo.findByNyxidServiceId(serviceId);
+      if (existing) {
+        throw AppError.conflict("SYSTEM_SKILL_EXISTS", `System skill already exists for service ${serviceId}. Use regenerate endpoint.`);
+      }
+
+      // Fetch service info
+      const services = await nyxidServiceClient.listServices();
+      const service = services.find((s) => s.id === serviceId);
+      if (!service) {
+        throw AppError.notFound("SERVICE_NOT_FOUND", `NyxID service ${serviceId} not found`);
+      }
+      if (!service.openapi_spec_url) {
+        throw AppError.badRequest("NO_OPENAPI_SPEC", `Service ${service.name} has no OpenAPI spec URL configured`);
+      }
+
+      // Fetch OpenAPI spec
+      const specContent = await nyxidServiceClient.fetchOpenApiSpec(service.openapi_spec_url);
+
+      // Generate skill (collect all events, extract the result)
+      let generatedRaw = "";
+      for await (const event of generationService.generateFromOpenApi(specContent, {
+        description: `Skill for ${service.name}: ${service.description ?? ""}`,
+      })) {
+        if (event.type === "generation_complete") {
+          generatedRaw = (event as any).raw ?? "";
+        }
+        if (event.type === "error") {
+          throw AppError.internal(`Skill generation failed: ${(event as any).message}`);
+        }
+      }
+
+      // Parse the generated skill
+      const parsed = generationService.parseAndValidate(generatedRaw);
+      if (!parsed) {
+        throw AppError.internal("Generated skill failed validation");
+      }
+
+      // Build SKILL.md content
+      const skillMd = buildSkillMd(parsed);
+
+      // Build ZIP package
+      const JSZip = (await import("jszip")).default;
+      const zip = new JSZip();
+      const folder = zip.folder(parsed.name)!;
+      folder.file("SKILL.md", skillMd);
+      for (const script of parsed.scripts) {
+        folder.file(`scripts/${script.filename}`, script.content);
+      }
+      const zipBuffer = await zip.generateAsync({ type: "uint8array" });
+
+      // Create skill via service (handles storage upload)
+      const { guid } = await skillService.createSkill(zipBuffer, authCtx.userId, {
+        userEmail: authCtx.email,
+        isSystem: true,
+        nyxidServiceId: serviceId,
+      });
+
+      logger.info({ guid, serviceId, serviceName: service.name }, "System skill generated");
+
+      return c.json({ data: { guid, name: parsed.name, serviceId }, error: null }, 201);
+    },
+  );
+
+  /**
+   * POST /admin/system-skills/:serviceId/regenerate
+   * Delete existing system skill and regenerate.
+   */
+  app.post(
+    "/admin/system-skills/:serviceId/regenerate",
+    requirePermission("ornn:admin:skill"),
+    async (c) => {
+      if (!nyxidServiceClient || !generationService) {
+        throw AppError.serviceUnavailable("SERVICE_UNAVAILABLE", "Generation service or NyxID client not configured");
+      }
+
+      const serviceId = c.req.param("serviceId");
+      const authCtx = getAuth(c);
+
+      // Delete existing if present
+      const existing = await skillRepo.findByNyxidServiceId(serviceId);
+      if (existing) {
+        await skillService.deleteSkill(existing.guid);
+        logger.info({ guid: existing.guid, serviceId }, "Deleted existing system skill for regeneration");
+      }
+
+      // Fetch service info
+      const services = await nyxidServiceClient.listServices();
+      const service = services.find((s) => s.id === serviceId);
+      if (!service) {
+        throw AppError.notFound("SERVICE_NOT_FOUND", `NyxID service ${serviceId} not found`);
+      }
+      if (!service.openapi_spec_url) {
+        throw AppError.badRequest("NO_OPENAPI_SPEC", `Service ${service.name} has no OpenAPI spec URL configured`);
+      }
+
+      const specContent = await nyxidServiceClient.fetchOpenApiSpec(service.openapi_spec_url);
+
+      let generatedRaw = "";
+      for await (const event of generationService.generateFromOpenApi(specContent, {
+        description: `Skill for ${service.name}: ${service.description ?? ""}`,
+      })) {
+        if (event.type === "generation_complete") {
+          generatedRaw = (event as any).raw ?? "";
+        }
+        if (event.type === "error") {
+          throw AppError.internal(`Skill generation failed: ${(event as any).message}`);
+        }
+      }
+
+      const parsed = generationService.parseAndValidate(generatedRaw);
+      if (!parsed) {
+        throw AppError.internal("Generated skill failed validation");
+      }
+
+      const skillMd = buildSkillMd(parsed);
+      const JSZip = (await import("jszip")).default;
+      const zip = new JSZip();
+      const folder = zip.folder(parsed.name)!;
+      folder.file("SKILL.md", skillMd);
+      for (const script of parsed.scripts) {
+        folder.file(`scripts/${script.filename}`, script.content);
+      }
+      const zipBuffer = await zip.generateAsync({ type: "uint8array" });
+
+      const { guid } = await skillService.createSkill(zipBuffer, authCtx.userId, {
+        userEmail: authCtx.email,
+        isSystem: true,
+        nyxidServiceId: serviceId,
+      });
+
+      logger.info({ guid, serviceId, serviceName: service.name }, "System skill regenerated");
+
+      return c.json({ data: { guid, name: parsed.name, serviceId }, error: null }, 201);
+    },
+  );
+
+  /**
+   * DELETE /admin/system-skills/:serviceId
+   * Delete the system skill for a NyxID service.
+   */
+  app.delete(
+    "/admin/system-skills/:serviceId",
+    requirePermission("ornn:admin:skill"),
+    async (c) => {
+      const serviceId = c.req.param("serviceId");
+      const authCtx = getAuth(c);
+
+      const existing = await skillRepo.findByNyxidServiceId(serviceId);
+      if (!existing) {
+        throw AppError.notFound("SYSTEM_SKILL_NOT_FOUND", `No system skill found for service ${serviceId}`);
+      }
+
+      await skillService.deleteSkill(existing.guid);
+
+      const email = c.req.header("X-User-Email") ?? "";
+      const displayName = c.req.header("X-User-Display-Name") ?? "";
+      await activityRepo.log(authCtx.userId, email, displayName, "skill:delete", {
+        skillId: existing.guid,
+        systemSkill: true,
+        serviceId,
+      });
+
+      logger.info({ guid: existing.guid, serviceId, adminUserId: authCtx.userId }, "System skill deleted by admin");
+      return c.json({ data: { success: true }, error: null });
+    },
+  );
+
   return app;
+}
+
+/**
+ * Build SKILL.md content from a GeneratedSkill object.
+ */
+function buildSkillMd(skill: import("../../shared/types/index").GeneratedSkill): string {
+  const lines: string[] = ["---"];
+  lines.push(`name: ${skill.name}`);
+  lines.push(`description: ${skill.description}`);
+  lines.push(`metadata:`);
+  lines.push(`  category: ${skill.category}`);
+  if (skill.outputType) {
+    lines.push(`  output-type: ${skill.outputType}`);
+  }
+  if (skill.runtimes.length > 0) {
+    lines.push(`  runtimes:`);
+    for (const rt of skill.runtimes) {
+      lines.push(`    - runtime: ${rt}`);
+      const rtDeps = skill.dependencies.filter(Boolean);
+      if (rtDeps.length > 0) {
+        lines.push(`      runtime-dependency:`);
+        for (const dep of rtDeps) {
+          lines.push(`        - ${dep}`);
+        }
+      }
+      const rtEnvs = skill.envVars.filter(Boolean);
+      if (rtEnvs.length > 0) {
+        lines.push(`      envs:`);
+        for (const env of rtEnvs) {
+          lines.push(`        - var: ${env}`);
+          lines.push(`          description: "${env} environment variable"`);
+        }
+      }
+    }
+  }
+  if (skill.tags.length > 0) {
+    lines.push(`  tags:`);
+    for (const tag of skill.tags) {
+      lines.push(`    - ${tag}`);
+    }
+  }
+  lines.push("---");
+  lines.push("");
+  lines.push(skill.readmeBody);
+  return lines.join("\n");
 }

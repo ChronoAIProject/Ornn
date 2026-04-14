@@ -87,6 +87,10 @@ export interface SkillDocument {
   updatedBy: string;
   updatedOn: Date;
   isPrivate: boolean;
+  /** System skills are auto-generated from NyxID service catalog. */
+  isSystem?: boolean;
+  /** NyxID service ID this system skill was generated from. */
+  nyxidServiceId?: string;
 }
 
 export interface SkillMetadata {
@@ -116,6 +120,8 @@ export interface SkillDetailResponse {
   skillHash: string;
   presignedPackageUrl: string;
   isPrivate: boolean;
+  isSystem?: boolean;
+  nyxidServiceId?: string;
   createdBy: string;
   createdByEmail?: string;
   createdByDisplayName?: string;
@@ -133,6 +139,8 @@ export interface SkillSearchItem {
   createdOn: string;
   updatedOn: string;
   isPrivate: boolean;
+  isSystem?: boolean;
+  nyxidServiceId?: string;
   tags: string[];
 }
 
