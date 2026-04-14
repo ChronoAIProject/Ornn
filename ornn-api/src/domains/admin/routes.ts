@@ -394,12 +394,12 @@ export function createAdminRoutes(config: AdminRoutesConfig): Hono<{ Variables: 
       const authCtx = getAuth(c);
       const body = await c.req.json();
 
-      const specUrl = body.specUrl as string;
-      const serviceName = body.serviceName as string;
+      const specContent = body.spec as string;
+      const serviceName = (body.serviceName as string) ?? "unknown";
       const serviceDescription = (body.serviceDescription as string) ?? "";
 
-      if (!specUrl) {
-        throw AppError.badRequest("MISSING_SPEC_URL", "specUrl is required");
+      if (!specContent) {
+        throw AppError.badRequest("MISSING_SPEC", "OpenAPI spec content is required");
       }
 
       // Check if skill already exists for this service
@@ -407,16 +407,6 @@ export function createAdminRoutes(config: AdminRoutesConfig): Hono<{ Variables: 
       if (existing) {
         throw AppError.conflict("SYSTEM_SKILL_EXISTS", `System skill already exists for service ${serviceId}. Use regenerate endpoint.`);
       }
-
-      // Fetch OpenAPI spec from the URL
-      const specResp = await fetch(specUrl);
-      if (!specResp.ok) {
-        throw AppError.badRequest("SPEC_FETCH_FAILED", `Failed to fetch OpenAPI spec from ${specUrl}: ${specResp.status}`);
-      }
-      const specContentType = specResp.headers.get("content-type") ?? "";
-      const specContent = specContentType.includes("json")
-        ? JSON.stringify(await specResp.json(), null, 2)
-        : await specResp.text();
 
       // Generate skill
       let generatedRaw = "";
@@ -479,12 +469,12 @@ export function createAdminRoutes(config: AdminRoutesConfig): Hono<{ Variables: 
       const authCtx = getAuth(c);
       const body = await c.req.json();
 
-      const specUrl = body.specUrl as string;
-      const serviceName = body.serviceName as string;
+      const specContent = body.spec as string;
+      const serviceName = (body.serviceName as string) ?? "unknown";
       const serviceDescription = (body.serviceDescription as string) ?? "";
 
-      if (!specUrl) {
-        throw AppError.badRequest("MISSING_SPEC_URL", "specUrl is required");
+      if (!specContent) {
+        throw AppError.badRequest("MISSING_SPEC", "OpenAPI spec content is required");
       }
 
       // Delete existing if present
@@ -493,16 +483,6 @@ export function createAdminRoutes(config: AdminRoutesConfig): Hono<{ Variables: 
         await skillService.deleteSkill(existing.guid);
         logger.info({ guid: existing.guid, serviceId }, "Deleted existing system skill for regeneration");
       }
-
-      // Fetch OpenAPI spec
-      const specResp = await fetch(specUrl);
-      if (!specResp.ok) {
-        throw AppError.badRequest("SPEC_FETCH_FAILED", `Failed to fetch OpenAPI spec from ${specUrl}: ${specResp.status}`);
-      }
-      const specContentType = specResp.headers.get("content-type") ?? "";
-      const specContent = specContentType.includes("json")
-        ? JSON.stringify(await specResp.json(), null, 2)
-        : await specResp.text();
 
       let generatedRaw = "";
       for await (const event of generationService.generateFromOpenApi(specContent, {

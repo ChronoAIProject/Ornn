@@ -15,13 +15,13 @@ export interface NyxidService {
   name: string;
   slug: string;
   description: string | null;
-  base_url: string;
-  service_type: string;
-  visibility: string;
   service_category: string;
-  openapi_spec_url: string | null;
-  api_spec_url?: string | null;
-  is_active: boolean;
+  connected: boolean;
+  requires_connection: boolean;
+  proxy_url: string;
+  proxy_url_slug: string;
+  openapi_url: string | null;
+  streaming_supported: boolean;
 }
 
 export interface SystemSkillInfo {
@@ -51,19 +51,20 @@ export interface SystemSkillItem {
 const NYXID_API_BASE = import.meta.env.VITE_NYXID_AUTHORIZE_URL?.replace("/oauth/authorize", "") ?? "";
 
 /**
- * Fetch NyxID service list directly from NyxID (frontend has user access token).
+ * Fetch proxyable services from NyxID proxy/services endpoint.
+ * This endpoint is available to any authenticated user with proxy scope.
  */
 async function fetchNyxidServices(): Promise<NyxidService[]> {
   const token = useAuthStore.getState().accessToken;
   if (!token) return [];
 
-  const resp = await fetch(`${NYXID_API_BASE}/api/v1/services`, {
+  const resp = await fetch(`${NYXID_API_BASE}/api/v1/proxy/services`, {
     headers: { Authorization: `Bearer ${token}` },
   });
 
   if (!resp.ok) return [];
   const data = await resp.json();
-  return (data.services ?? []).filter((s: NyxidService) => s.is_active);
+  return data.services ?? [];
 }
 
 /**
@@ -95,10 +96,10 @@ export async function getSystemSkills(): Promise<SystemSkillItem[]> {
       serviceName: svc.name,
       serviceSlug: svc.slug,
       serviceDescription: svc.description,
-      baseUrl: svc.base_url,
+      baseUrl: svc.proxy_url_slug,
       serviceCategory: svc.service_category,
-      hasOpenApiSpec: !!(svc.openapi_spec_url || (svc as any).api_spec_url),
-      openApiSpecUrl: svc.openapi_spec_url || (svc as any).api_spec_url || null,
+      hasOpenApiSpec: !!svc.openapi_url,
+      openApiSpecUrl: svc.openapi_url,
       skillGenerated: !!skill,
       skill,
     };
@@ -126,16 +127,30 @@ export async function getPublicSystemSkills() {
 }
 
 /**
+ * Fetch OpenAPI spec content from NyxID proxy (frontend has user token).
+ */
+async function fetchSpecContent(specUrl: string): Promise<string> {
+  const token = useAuthStore.getState().accessToken;
+  const resp = await fetch(specUrl, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!resp.ok) throw new Error(`Failed to fetch OpenAPI spec: ${resp.status}`);
+  const data = await resp.json();
+  return JSON.stringify(data, null, 2);
+}
+
+/**
  * Generate skill from a NyxID service's OpenAPI spec (admin only).
- * Frontend passes specUrl and serviceName so backend doesn't need to call NyxID.
+ * Frontend fetches the spec content and sends it to the backend.
  */
 export async function generateSystemSkill(
   serviceId: string,
   opts: { specUrl: string; serviceName: string; serviceDescription?: string },
 ): Promise<{ guid: string; name: string }> {
+  const specContent = await fetchSpecContent(opts.specUrl);
   const res = await apiPost<{ guid: string; name: string; serviceId: string }>(
     `/api/admin/system-skills/${serviceId}/generate`,
-    opts,
+    { spec: specContent, serviceName: opts.serviceName, serviceDescription: opts.serviceDescription },
   );
   if (!res.data) throw new Error("Failed to generate system skill");
   return res.data;
@@ -148,9 +163,10 @@ export async function regenerateSystemSkill(
   serviceId: string,
   opts: { specUrl: string; serviceName: string; serviceDescription?: string },
 ): Promise<{ guid: string; name: string }> {
+  const specContent = await fetchSpecContent(opts.specUrl);
   const res = await apiPost<{ guid: string; name: string; serviceId: string }>(
     `/api/admin/system-skills/${serviceId}/regenerate`,
-    opts,
+    { spec: specContent, serviceName: opts.serviceName, serviceDescription: opts.serviceDescription },
   );
   if (!res.data) throw new Error("Failed to regenerate system skill");
   return res.data;
