@@ -1,18 +1,15 @@
 /**
  * Admin System Skills Page.
- * Lists NyxID services and their auto-generated skills.
- * Admin can generate, regenerate, preview, and delete system skills.
+ * Table list of NyxID services with generate/regenerate/delete actions.
  * @module pages/admin/SystemSkillsPage
  */
 
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { motion } from "framer-motion";
-import { Card } from "@/components/ui/Card";
-import { Skeleton } from "@/components/ui/Skeleton";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { Modal } from "@/components/ui/Modal";
 import {
   getSystemSkills,
@@ -22,28 +19,6 @@ import {
   type SystemSkillItem,
 } from "@/services/systemSkillsApi";
 import { useToastStore } from "@/stores/toastStore";
-
-const containerVariants = {
-  hidden: {},
-  visible: { transition: { staggerChildren: 0.05 } },
-};
-
-const itemVariants = {
-  hidden: { opacity: 0, y: 10 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.15, ease: "easeOut" } },
-};
-
-function formatDate(dateStr: string): string {
-  const date = new Date(dateStr);
-  return date.toLocaleString("en-SG", {
-    timeZone: "Asia/Singapore",
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
 
 export function SystemSkillsPage() {
   const navigate = useNavigate();
@@ -61,7 +36,7 @@ export function SystemSkillsPage() {
     mutationFn: (serviceId: string) => generateSystemSkill(serviceId),
     onMutate: (serviceId) => setGeneratingServiceId(serviceId),
     onSuccess: (data) => {
-      addToast({ type: "success", message: `Skill "${data.name}" generated successfully` });
+      addToast({ type: "success", message: `Skill "${data.name}" generated` });
       queryClient.invalidateQueries({ queryKey: ["admin", "system-skills"] });
       setGeneratingServiceId(null);
     },
@@ -75,7 +50,7 @@ export function SystemSkillsPage() {
     mutationFn: (serviceId: string) => regenerateSystemSkill(serviceId),
     onMutate: (serviceId) => setGeneratingServiceId(serviceId),
     onSuccess: (data) => {
-      addToast({ type: "success", message: `Skill "${data.name}" regenerated successfully` });
+      addToast({ type: "success", message: `Skill "${data.name}" regenerated` });
       queryClient.invalidateQueries({ queryKey: ["admin", "system-skills"] });
       setGeneratingServiceId(null);
     },
@@ -101,137 +76,111 @@ export function SystemSkillsPage() {
     return (
       <div className="space-y-4">
         <h1 className="font-heading text-xl tracking-wider text-text-primary">System Skills</h1>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <Card key={i}><Skeleton lines={4} /></Card>
-          ))}
-        </div>
+        <Skeleton lines={8} />
       </div>
     );
   }
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="font-heading text-xl tracking-wider text-text-primary">System Skills</h1>
-          <p className="font-body text-sm text-text-muted mt-1">
-            Auto-generated skills from NyxID service catalog. {items?.length ?? 0} services found.
-          </p>
-        </div>
+      <div>
+        <h1 className="font-heading text-xl tracking-wider text-text-primary">System Skills</h1>
+        <p className="font-body text-sm text-text-muted mt-1">
+          {items?.length ?? 0} services from NyxID registry
+        </p>
       </div>
 
-      <motion.div
-        variants={containerVariants}
-        initial="hidden"
-        animate="visible"
-        className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
-      >
-        {items?.map((item) => {
-          const isGenerating = generatingServiceId === item.serviceId;
+      <div className="overflow-x-auto rounded-lg border border-neon-cyan/10">
+        <table className="w-full">
+          <thead>
+            <tr className="border-b border-neon-cyan/10 bg-bg-elevated/50">
+              <th className="font-heading text-[10px] font-700 tracking-widest uppercase text-text-muted text-left px-4 py-3">Service</th>
+              <th className="font-heading text-[10px] font-700 tracking-widest uppercase text-text-muted text-left px-4 py-3">Category</th>
+              <th className="font-heading text-[10px] font-700 tracking-widest uppercase text-text-muted text-left px-4 py-3">Spec</th>
+              <th className="font-heading text-[10px] font-700 tracking-widest uppercase text-text-muted text-left px-4 py-3">Skill</th>
+              <th className="font-heading text-[10px] font-700 tracking-widest uppercase text-text-muted text-right px-4 py-3">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {items?.map((item) => {
+              const isGenerating = generatingServiceId === item.serviceId;
 
-          return (
-            <motion.div key={item.serviceId} variants={itemVariants}>
-              <Card className="flex flex-col h-full">
-                {/* Service info */}
-                <div className="flex items-start justify-between mb-2">
-                  <div className="min-w-0 flex-1">
-                    <h3 className="font-mono text-sm font-semibold text-neon-cyan truncate">
-                      {item.serviceName}
-                    </h3>
-                    <p className="font-body text-xs text-text-muted mt-0.5 truncate">
-                      {item.baseUrl}
-                    </p>
-                  </div>
-                  <div className="flex gap-1 ml-2 shrink-0">
-                    <Badge color={item.hasOpenApiSpec ? "green" : "cyan"}>
-                      {item.hasOpenApiSpec ? "spec" : "no spec"}
-                    </Badge>
+              return (
+                <tr
+                  key={item.serviceId}
+                  className="border-b border-neon-cyan/5 hover:bg-bg-elevated/30 transition-colors"
+                >
+                  <td className="px-4 py-3">
+                    <div>
+                      <span className="font-mono text-sm font-semibold text-neon-cyan">{item.serviceName}</span>
+                      {item.serviceDescription && (
+                        <p className="font-body text-xs text-text-muted mt-0.5 truncate max-w-xs">{item.serviceDescription}</p>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">
                     <Badge color="yellow">{item.serviceCategory}</Badge>
-                  </div>
-                </div>
-
-                {item.serviceDescription && (
-                  <p className="font-body text-xs text-text-muted mb-3 line-clamp-2">
-                    {item.serviceDescription}
-                  </p>
-                )}
-
-                {/* Skill status */}
-                <div className="mt-auto pt-3 border-t border-neon-cyan/10">
-                  {item.skillGenerated && item.skill ? (
-                    <div className="space-y-2">
+                  </td>
+                  <td className="px-4 py-3">
+                    <Badge color={item.hasOpenApiSpec ? "green" : "muted"}>
+                      {item.hasOpenApiSpec ? "available" : "none"}
+                    </Badge>
+                  </td>
+                  <td className="px-4 py-3">
+                    {item.skillGenerated && item.skill ? (
                       <div className="flex items-center gap-2">
                         <Badge color="green">generated</Badge>
-                        <span className="font-mono text-xs text-text-muted truncate">
-                          {item.skill.name}
-                        </span>
-                      </div>
-                      {item.skill.tags.length > 0 && (
-                        <div className="flex flex-wrap gap-1">
-                          {item.skill.tags.slice(0, 4).map((tag) => (
-                            <span key={tag} className="font-mono text-[10px] text-text-muted bg-bg-deep px-1.5 py-0.5 rounded">
-                              {tag}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                      <p className="font-body text-[10px] text-text-muted">
-                        Generated: {formatDate(item.skill.createdOn)}
-                      </p>
-                      <div className="flex gap-2">
-                        <Button
-                          size="sm"
-                          variant="secondary"
+                        <button
                           onClick={() => navigate(`/skills/${item.skill!.name}`)}
+                          className="font-mono text-xs text-neon-cyan hover:underline cursor-pointer"
                         >
-                          Preview
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          onClick={() => regenerateMutation.mutate(item.serviceId)}
-                          disabled={isGenerating}
-                        >
-                          {isGenerating ? "Regenerating..." : "Regenerate"}
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="danger"
-                          onClick={() => setDeleteTarget(item)}
-                        >
-                          Delete
-                        </Button>
+                          {item.skill.name}
+                        </button>
                       </div>
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      <p className="font-body text-xs text-text-muted italic">
-                        No skill generated yet
-                      </p>
-                      {item.hasOpenApiSpec ? (
+                    ) : (
+                      <span className="font-body text-xs text-text-muted italic">not generated</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex justify-end gap-2">
+                      {item.skillGenerated ? (
+                        <>
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            onClick={() => regenerateMutation.mutate(item.serviceId)}
+                            disabled={isGenerating}
+                          >
+                            {isGenerating ? "..." : "Regenerate"}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="danger"
+                            onClick={() => setDeleteTarget(item)}
+                          >
+                            Delete
+                          </Button>
+                        </>
+                      ) : item.hasOpenApiSpec ? (
                         <Button
                           size="sm"
                           onClick={() => generateMutation.mutate(item.serviceId)}
                           disabled={isGenerating}
                         >
-                          {isGenerating ? "Generating..." : "Generate Skill"}
+                          {isGenerating ? "Generating..." : "Generate"}
                         </Button>
                       ) : (
-                        <p className="font-body text-[10px] text-text-muted">
-                          No OpenAPI spec available. Add a spec URL in NyxID to enable generation.
-                        </p>
+                        <span className="font-body text-[10px] text-text-muted">No spec</span>
                       )}
                     </div>
-                  )}
-                </div>
-              </Card>
-            </motion.div>
-          );
-        })}
-      </motion.div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
 
-      {/* Delete confirmation modal */}
       {deleteTarget && (
         <Modal
           isOpen={!!deleteTarget}
@@ -240,7 +189,6 @@ export function SystemSkillsPage() {
         >
           <p className="font-body text-sm text-text-muted mb-4">
             Delete the generated skill for <strong className="text-text-primary">{deleteTarget.serviceName}</strong>?
-            The service will remain in NyxID. You can regenerate the skill later.
           </p>
           <div className="flex justify-end gap-3">
             <Button variant="secondary" onClick={() => setDeleteTarget(null)}>
