@@ -344,52 +344,8 @@ export function createAdminRoutes(config: AdminRoutesConfig): Hono<{ Variables: 
   // =========================================================================
 
   /**
-   * GET /admin/system-skills
-   * List NyxID services + their skill generation status.
-   */
-  app.get(
-    "/admin/system-skills",
-    requirePermission("ornn:admin:skill"),
-    async (c) => {
-      if (!nyxidServiceClient) {
-        throw AppError.serviceUnavailable("NYXID_CLIENT_UNAVAILABLE", "NyxID service client not configured");
-      }
-
-      const services = await nyxidServiceClient.listServices();
-      const systemSkills = await skillRepo.findSystemSkills();
-
-      const skillMap = new Map(systemSkills.map((s) => [s.nyxidServiceId, s]));
-
-      const items = services.map((svc) => {
-        const skill = skillMap.get(svc.id);
-        return {
-          serviceId: svc.id,
-          serviceName: svc.name,
-          serviceSlug: svc.slug,
-          serviceDescription: svc.description,
-          baseUrl: svc.base_url,
-          serviceCategory: svc.service_category,
-          hasOpenApiSpec: !!svc.openapi_spec_url,
-          openApiSpecUrl: svc.openapi_spec_url,
-          skillGenerated: !!skill,
-          skill: skill ? {
-            guid: skill.guid,
-            name: skill.name,
-            description: skill.description,
-            tags: (skill.metadata?.tags as string[]) ?? [],
-            createdOn: skill.createdOn instanceof Date ? skill.createdOn.toISOString() : String(skill.createdOn),
-            updatedOn: skill.updatedOn instanceof Date ? skill.updatedOn.toISOString() : String(skill.updatedOn),
-          } : null,
-        };
-      });
-
-      return c.json({ data: { items }, error: null });
-    },
-  );
-
-  /**
-   * GET /admin/system-skills (non-admin version for regular users)
-   * Regular users can view system skills in the registry.
+   * GET /system-skills
+   * List generated system skills. Accessible to any authenticated user.
    */
   app.get(
     "/system-skills",
