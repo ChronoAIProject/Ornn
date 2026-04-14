@@ -380,18 +380,27 @@ export function createAdminRoutes(config: AdminRoutesConfig): Hono<{ Variables: 
 
   /**
    * POST /admin/system-skills/:serviceId/generate
-   * Fetch OpenAPI spec from NyxID service, generate and store skill.
+   * Frontend sends specUrl + serviceName. Backend fetches spec and generates skill.
    */
   app.post(
     "/admin/system-skills/:serviceId/generate",
     requirePermission("ornn:admin:skill"),
     async (c) => {
-      if (!nyxidServiceClient || !generationService) {
-        throw AppError.serviceUnavailable("SERVICE_UNAVAILABLE", "Generation service or NyxID client not configured");
+      if (!generationService) {
+        throw AppError.serviceUnavailable("SERVICE_UNAVAILABLE", "Generation service not configured");
       }
 
       const serviceId = c.req.param("serviceId");
       const authCtx = getAuth(c);
+      const body = await c.req.json();
+
+      const specUrl = body.specUrl as string;
+      const serviceName = body.serviceName as string;
+      const serviceDescription = (body.serviceDescription as string) ?? "";
+
+      if (!specUrl) {
+        throw AppError.badRequest("MISSING_SPEC_URL", "specUrl is required");
+      }
 
       // Check if skill already exists for this service
       const existing = await skillRepo.findByNyxidServiceId(serviceId);
@@ -399,23 +408,20 @@ export function createAdminRoutes(config: AdminRoutesConfig): Hono<{ Variables: 
         throw AppError.conflict("SYSTEM_SKILL_EXISTS", `System skill already exists for service ${serviceId}. Use regenerate endpoint.`);
       }
 
-      // Fetch service info
-      const services = await nyxidServiceClient.listServices();
-      const service = services.find((s) => s.id === serviceId);
-      if (!service) {
-        throw AppError.notFound("SERVICE_NOT_FOUND", `NyxID service ${serviceId} not found`);
+      // Fetch OpenAPI spec from the URL
+      const specResp = await fetch(specUrl);
+      if (!specResp.ok) {
+        throw AppError.badRequest("SPEC_FETCH_FAILED", `Failed to fetch OpenAPI spec from ${specUrl}: ${specResp.status}`);
       }
-      if (!service.openapi_spec_url) {
-        throw AppError.badRequest("NO_OPENAPI_SPEC", `Service ${service.name} has no OpenAPI spec URL configured`);
-      }
+      const specContentType = specResp.headers.get("content-type") ?? "";
+      const specContent = specContentType.includes("json")
+        ? JSON.stringify(await specResp.json(), null, 2)
+        : await specResp.text();
 
-      // Fetch OpenAPI spec
-      const specContent = await nyxidServiceClient.fetchOpenApiSpec(service.openapi_spec_url);
-
-      // Generate skill (collect all events, extract the result)
+      // Generate skill
       let generatedRaw = "";
       for await (const event of generationService.generateFromOpenApi(specContent, {
-        description: `Skill for ${service.name}: ${service.description ?? ""}`,
+        description: `Skill for ${serviceName}: ${serviceDescription}`,
       })) {
         if (event.type === "generation_complete") {
           generatedRaw = (event as any).raw ?? "";
@@ -451,7 +457,7 @@ export function createAdminRoutes(config: AdminRoutesConfig): Hono<{ Variables: 
         nyxidServiceId: serviceId,
       });
 
-      logger.info({ guid, serviceId, serviceName: service.name }, "System skill generated");
+      logger.info({ guid, serviceId, serviceName }, "System skill generated");
 
       return c.json({ data: { guid, name: parsed.name, serviceId }, error: null }, 201);
     },
@@ -465,12 +471,21 @@ export function createAdminRoutes(config: AdminRoutesConfig): Hono<{ Variables: 
     "/admin/system-skills/:serviceId/regenerate",
     requirePermission("ornn:admin:skill"),
     async (c) => {
-      if (!nyxidServiceClient || !generationService) {
-        throw AppError.serviceUnavailable("SERVICE_UNAVAILABLE", "Generation service or NyxID client not configured");
+      if (!generationService) {
+        throw AppError.serviceUnavailable("SERVICE_UNAVAILABLE", "Generation service not configured");
       }
 
       const serviceId = c.req.param("serviceId");
       const authCtx = getAuth(c);
+      const body = await c.req.json();
+
+      const specUrl = body.specUrl as string;
+      const serviceName = body.serviceName as string;
+      const serviceDescription = (body.serviceDescription as string) ?? "";
+
+      if (!specUrl) {
+        throw AppError.badRequest("MISSING_SPEC_URL", "specUrl is required");
+      }
 
       // Delete existing if present
       const existing = await skillRepo.findByNyxidServiceId(serviceId);
@@ -479,21 +494,19 @@ export function createAdminRoutes(config: AdminRoutesConfig): Hono<{ Variables: 
         logger.info({ guid: existing.guid, serviceId }, "Deleted existing system skill for regeneration");
       }
 
-      // Fetch service info
-      const services = await nyxidServiceClient.listServices();
-      const service = services.find((s) => s.id === serviceId);
-      if (!service) {
-        throw AppError.notFound("SERVICE_NOT_FOUND", `NyxID service ${serviceId} not found`);
+      // Fetch OpenAPI spec
+      const specResp = await fetch(specUrl);
+      if (!specResp.ok) {
+        throw AppError.badRequest("SPEC_FETCH_FAILED", `Failed to fetch OpenAPI spec from ${specUrl}: ${specResp.status}`);
       }
-      if (!service.openapi_spec_url) {
-        throw AppError.badRequest("NO_OPENAPI_SPEC", `Service ${service.name} has no OpenAPI spec URL configured`);
-      }
-
-      const specContent = await nyxidServiceClient.fetchOpenApiSpec(service.openapi_spec_url);
+      const specContentType = specResp.headers.get("content-type") ?? "";
+      const specContent = specContentType.includes("json")
+        ? JSON.stringify(await specResp.json(), null, 2)
+        : await specResp.text();
 
       let generatedRaw = "";
       for await (const event of generationService.generateFromOpenApi(specContent, {
-        description: `Skill for ${service.name}: ${service.description ?? ""}`,
+        description: `Skill for ${serviceName}: ${serviceDescription}`,
       })) {
         if (event.type === "generation_complete") {
           generatedRaw = (event as any).raw ?? "";
@@ -524,7 +537,7 @@ export function createAdminRoutes(config: AdminRoutesConfig): Hono<{ Variables: 
         nyxidServiceId: serviceId,
       });
 
-      logger.info({ guid, serviceId, serviceName: service.name }, "System skill regenerated");
+      logger.info({ guid, serviceId, serviceName }, "System skill regenerated");
 
       return c.json({ data: { guid, name: parsed.name, serviceId }, error: null }, 201);
     },

@@ -126,11 +126,15 @@ export async function getPublicSystemSkills() {
 
 /**
  * Generate skill from a NyxID service's OpenAPI spec (admin only).
+ * Frontend passes specUrl and serviceName so backend doesn't need to call NyxID.
  */
-export async function generateSystemSkill(serviceId: string): Promise<{ guid: string; name: string }> {
+export async function generateSystemSkill(
+  serviceId: string,
+  opts: { specUrl: string; serviceName: string; serviceDescription?: string },
+): Promise<{ guid: string; name: string }> {
   const res = await apiPost<{ guid: string; name: string; serviceId: string }>(
     `/api/admin/system-skills/${serviceId}/generate`,
-    {},
+    opts,
   );
   if (!res.data) throw new Error("Failed to generate system skill");
   return res.data;
@@ -139,10 +143,13 @@ export async function generateSystemSkill(serviceId: string): Promise<{ guid: st
 /**
  * Regenerate (delete + recreate) a system skill (admin only).
  */
-export async function regenerateSystemSkill(serviceId: string): Promise<{ guid: string; name: string }> {
+export async function regenerateSystemSkill(
+  serviceId: string,
+  opts: { specUrl: string; serviceName: string; serviceDescription?: string },
+): Promise<{ guid: string; name: string }> {
   const res = await apiPost<{ guid: string; name: string; serviceId: string }>(
     `/api/admin/system-skills/${serviceId}/regenerate`,
-    {},
+    opts,
   );
   if (!res.data) throw new Error("Failed to regenerate system skill");
   return res.data;
