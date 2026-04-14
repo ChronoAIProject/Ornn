@@ -139,23 +139,27 @@ export function ServiceDetailPage() {
             )}
           </Card>
 
-          {service.repositoryUrl && (
-            <Card>
-              <h3 className="font-heading text-[10px] font-700 tracking-widest uppercase text-text-muted mb-2">Source Code</h3>
+          <Card>
+            <h3 className="font-heading text-[10px] font-700 tracking-widest uppercase text-text-muted mb-2">Source Code</h3>
+            {service.repositoryUrl ? (
               <a href={service.repositoryUrl} target="_blank" rel="noopener noreferrer" className="font-mono text-xs text-neon-cyan hover:underline break-all">
                 {service.repositoryUrl}
               </a>
-            </Card>
-          )}
+            ) : (
+              <p className="font-body text-xs text-text-muted italic">Not configured</p>
+            )}
+          </Card>
 
-          {service.homepageUrl && (
-            <Card>
-              <h3 className="font-heading text-[10px] font-700 tracking-widest uppercase text-text-muted mb-2">Homepage</h3>
+          <Card>
+            <h3 className="font-heading text-[10px] font-700 tracking-widest uppercase text-text-muted mb-2">Homepage</h3>
+            {service.homepageUrl ? (
               <a href={service.homepageUrl} target="_blank" rel="noopener noreferrer" className="font-mono text-xs text-neon-cyan hover:underline break-all">
                 {service.homepageUrl}
               </a>
-            </Card>
-          )}
+            ) : (
+              <p className="font-body text-xs text-text-muted italic">Not configured</p>
+            )}
+          </Card>
         </div>
       </div>
     </PageTransition>
