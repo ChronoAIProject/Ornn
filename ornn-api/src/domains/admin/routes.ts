@@ -506,7 +506,7 @@ export function createAdminRoutes(config: AdminRoutesConfig): Hono<{ Variables: 
         nyxidServiceId: serviceId,
       });
 
-      logger.info({ guid, serviceId, serviceName }, "System skill generated");
+      logger.info({ guid, serviceId, serviceName: service.name }, "System skill generated");
 
       return c.json({ data: { guid, name: parsed.name, serviceId }, error: null }, 201);
     },
@@ -576,7 +576,7 @@ export function createAdminRoutes(config: AdminRoutesConfig): Hono<{ Variables: 
         nyxidServiceId: serviceId,
       });
 
-      logger.info({ guid, serviceId, serviceName }, "System skill regenerated");
+      logger.info({ guid, serviceId, serviceName: service.name }, "System skill regenerated");
 
       return c.json({ data: { guid, name: parsed.name, serviceId }, error: null }, 201);
     },
