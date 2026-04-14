@@ -629,28 +629,25 @@ function buildSkillMd(skill: import("../../shared/types/index").GeneratedSkill):
     lines.push(`  output-type: ${skill.outputType}`);
   }
   if (skill.runtimes.length > 0) {
-    lines.push(`  runtimes:`);
+    lines.push(`  runtime:`);
     for (const rt of skill.runtimes) {
-      lines.push(`    - runtime: ${rt}`);
-      const rtDeps = skill.dependencies.filter(Boolean);
-      if (rtDeps.length > 0) {
-        lines.push(`      runtime-dependency:`);
-        for (const dep of rtDeps) {
-          lines.push(`        - ${dep}`);
-        }
-      }
-      const rtEnvs = skill.envVars.filter(Boolean);
-      if (rtEnvs.length > 0) {
-        lines.push(`      envs:`);
-        for (const env of rtEnvs) {
-          lines.push(`        - var: ${env}`);
-          lines.push(`          description: "${env} environment variable"`);
-        }
-      }
+      lines.push(`    - ${rt}`);
+    }
+  }
+  if (skill.dependencies.length > 0) {
+    lines.push(`  runtime-dependency:`);
+    for (const dep of skill.dependencies.filter(Boolean)) {
+      lines.push(`    - ${dep}`);
+    }
+  }
+  if (skill.envVars.length > 0) {
+    lines.push(`  runtime-env-var:`);
+    for (const env of skill.envVars.filter(Boolean)) {
+      lines.push(`    - ${env}`);
     }
   }
   if (skill.tags.length > 0) {
-    lines.push(`  tags:`);
+    lines.push(`  tag:`);
     for (const tag of skill.tags) {
       lines.push(`    - ${tag}`);
     }
