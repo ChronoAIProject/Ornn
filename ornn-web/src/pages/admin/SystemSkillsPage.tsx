@@ -147,7 +147,7 @@ export function SystemSkillsPage() {
                     <Badge color={item.hasOpenApiSpec ? "green" : "cyan"}>
                       {item.hasOpenApiSpec ? "spec" : "no spec"}
                     </Badge>
-                    <Badge color="orange">{item.serviceCategory}</Badge>
+                    <Badge color="yellow">{item.serviceCategory}</Badge>
                   </div>
                 </div>
 
@@ -234,6 +234,7 @@ export function SystemSkillsPage() {
       {/* Delete confirmation modal */}
       {deleteTarget && (
         <Modal
+          isOpen={!!deleteTarget}
           title="Delete System Skill"
           onClose={() => setDeleteTarget(null)}
         >
