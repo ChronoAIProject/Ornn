@@ -372,8 +372,11 @@ export function createAdminRoutes(config: AdminRoutesConfig): Hono<{ Variables: 
       throw AppError.badRequest("NO_OPENAPI_SPEC", `Service ${service.name} has no OpenAPI spec`);
     }
 
-    // Fetch the spec (openapi_url goes through NyxID proxy, needs user token)
-    const specResp = await fetch(service.openapi_url, {
+    // Replace the domain in openapi_url with our internal NyxID base URL
+    const specUrlParsed = new URL(service.openapi_url);
+    const internalSpecUrl = `${nyxidBaseUrl}${specUrlParsed.pathname}${specUrlParsed.search}`;
+    logger.debug({ originalUrl: service.openapi_url, internalUrl: internalSpecUrl }, "Resolved spec URL");
+    const specResp = await fetch(internalSpecUrl, {
       headers: { Authorization: `Bearer ${userToken}` },
     });
     if (!specResp.ok) {
