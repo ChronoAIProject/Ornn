@@ -10,7 +10,8 @@ import { PageTransition } from "@/components/layout/PageTransition";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { useAuthStore } from "@/stores/authStore";
+import { useAuthStore, isAdmin as checkIsAdmin, useCurrentUser } from "@/stores/authStore";
+import { GenerateSkillModal } from "@/components/skill/GenerateSkillModal";
 
 const NYXID_API_BASE = import.meta.env.VITE_NYXID_AUTHORIZE_URL?.replace("/oauth/authorize", "") ?? "";
 
@@ -36,7 +37,10 @@ export function ServiceDetailPage() {
   const [service, setService] = useState<ServiceDetail | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showGenerateModal, setShowGenerateModal] = useState(false);
   const accessToken = useAuthStore((s) => s.accessToken);
+  const user = useCurrentUser();
+  const isAdminUser = checkIsAdmin(user);
 
   useEffect(() => {
     if (!accessToken || !id) {
@@ -110,12 +114,19 @@ export function ServiceDetailPage() {
         </button>
 
         <div className="mb-6">
-          <div className="flex items-center gap-3 mb-2">
-            <h1 className="font-heading text-2xl tracking-wider text-text-primary">{service.name}</h1>
-            <Badge color={service.isActive ? "green" : "muted"}>
-              {service.isActive ? "active" : "inactive"}
-            </Badge>
-            <Badge color="yellow">{service.serviceCategory}</Badge>
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-3">
+              <h1 className="font-heading text-2xl tracking-wider text-text-primary">{service.name}</h1>
+              <Badge color={service.isActive ? "green" : "muted"}>
+                {service.isActive ? "active" : "inactive"}
+              </Badge>
+              <Badge color="yellow">{service.serviceCategory}</Badge>
+            </div>
+            {isAdminUser && (
+              <Button onClick={() => setShowGenerateModal(true)}>
+                Generate Skill
+              </Button>
+            )}
           </div>
           {service.description && (
             <p className="font-body text-sm text-text-muted">{service.description}</p>
@@ -161,6 +172,22 @@ export function ServiceDetailPage() {
             )}
           </Card>
         </div>
+        {showGenerateModal && service && (
+          <GenerateSkillModal
+            isOpen={showGenerateModal}
+            onClose={() => setShowGenerateModal(false)}
+            onSuccess={() => {
+              setShowGenerateModal(false);
+              navigate("/registry?tab=system");
+            }}
+            serviceId={service.id}
+            serviceName={service.name}
+            proxyUrl={service.proxyUrl}
+            openapiSpecUrl={service.openapiProxyUrl}
+            repositoryUrl={service.repositoryUrl}
+            homepageUrl={service.homepageUrl}
+          />
+        )}
       </div>
     </PageTransition>
   );
