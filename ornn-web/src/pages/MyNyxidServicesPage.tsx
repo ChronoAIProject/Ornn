@@ -4,10 +4,9 @@
  * @module pages/MyNyxidServicesPage
  */
 
-import { useQuery } from "@tanstack/react-query";
+import { useState, useEffect } from "react";
 import { PageTransition } from "@/components/layout/PageTransition";
 import { Badge } from "@/components/ui/Badge";
-import { Skeleton } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useAuthStore } from "@/stores/authStore";
 
@@ -22,28 +21,37 @@ interface UserService {
   label: string;
   is_active: boolean;
   credential_source?: string;
-  allowed?: boolean;
-  proxy_url?: string;
-}
-
-async function fetchMyServices(): Promise<UserService[]> {
-  const token = useAuthStore.getState().accessToken;
-  if (!token) return [];
-
-  const resp = await fetch(`${NYXID_API_BASE}/api/v1/user-services`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-
-  if (!resp.ok) return [];
-  const data = await resp.json();
-  return data.services ?? [];
 }
 
 export function MyNyxidServicesPage() {
-  const { data: services, isLoading } = useQuery({
-    queryKey: ["nyxid", "my-services"],
-    queryFn: fetchMyServices,
-  });
+  const [services, setServices] = useState<UserService[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const accessToken = useAuthStore((s) => s.accessToken);
+
+  useEffect(() => {
+    if (!accessToken) {
+      setIsLoading(false);
+      return;
+    }
+
+    fetch(`${NYXID_API_BASE}/api/v1/user-services`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      })
+      .then((data) => {
+        setServices(data.services ?? []);
+        setIsLoading(false);
+      })
+      .catch((err) => {
+        console.error("[MyNyxidServices]", err);
+        setError(err.message);
+        setIsLoading(false);
+      });
+  }, [accessToken]);
 
   return (
     <PageTransition>
@@ -56,8 +64,10 @@ export function MyNyxidServicesPage() {
         </div>
 
         {isLoading ? (
-          <Skeleton lines={6} />
-        ) : !services?.length ? (
+          <p className="font-body text-sm text-text-muted">Loading...</p>
+        ) : error ? (
+          <p className="font-body text-sm text-neon-red">Failed to load services: {error}</p>
+        ) : services.length === 0 ? (
           <EmptyState
             title="No services connected"
             description="Connect services in NyxID to see them here."
