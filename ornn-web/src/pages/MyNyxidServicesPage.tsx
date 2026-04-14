@@ -85,19 +85,19 @@ export function MyNyxidServicesPage() {
                 </tr>
               </thead>
               <tbody>
-                {services.map((svc) => (
-                  <tr key={svc.id} className="border-b border-neon-cyan/5 hover:bg-bg-elevated/30 transition-colors">
+                {services.map((svc, idx) => (
+                  <tr key={svc.id ?? idx} className="border-b border-neon-cyan/5 hover:bg-bg-elevated/30 transition-colors">
                     <td className="px-4 py-3">
-                      <span className="font-mono text-sm font-semibold text-neon-cyan">{svc.service_name || svc.service_slug}</span>
+                      <span className="font-mono text-sm font-semibold text-neon-cyan">{String(svc.service_name || svc.service_slug || "")}</span>
                     </td>
                     <td className="px-4 py-3">
-                      <span className="font-body text-sm text-text-primary">{svc.label}</span>
+                      <span className="font-body text-sm text-text-primary">{String(svc.label || "")}</span>
                     </td>
                     <td className="px-4 py-3">
-                      <Badge color="yellow">{svc.service_category}</Badge>
+                      <Badge color="yellow">{String(svc.service_category || "unknown")}</Badge>
                     </td>
                     <td className="px-4 py-3">
-                      <span className="font-mono text-xs text-text-muted">{svc.credential_source ?? "personal"}</span>
+                      <span className="font-mono text-xs text-text-muted">{String(svc.credential_source ?? "personal")}</span>
                     </td>
                     <td className="px-4 py-3">
                       <Badge color={svc.is_active ? "green" : "muted"}>
