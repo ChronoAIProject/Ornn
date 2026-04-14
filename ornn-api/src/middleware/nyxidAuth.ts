@@ -1,8 +1,11 @@
 /**
  * NyxID authentication middleware.
  *
- * All traffic flows through NyxID proxy; proxyAuthSetup() trusts X-NyxID-*
- * headers injected by the proxy.
+ * All traffic flows through NyxID proxy. proxyAuthSetup() decodes the
+ * X-NyxID-Identity-Token JWT (signed by NyxID, already verified by proxy)
+ * to extract userId, email, roles, and permissions.
+ *
+ * Falls back to X-NyxID-* headers if the identity token is absent.
  *
  * Route-level middlewares (nyxidAuthMiddleware / optionalAuthMiddleware) only
  * check whether auth was already set by the setup layer.
@@ -47,27 +50,81 @@ class AppError extends Error {
 }
 
 // ---------------------------------------------------------------------------
+// JWT decode (no verification — proxy already verified the token)
+// ---------------------------------------------------------------------------
+
+interface IdentityAssertionPayload {
+  sub?: string;
+  email?: string;
+  name?: string;
+  roles?: string[];
+  groups?: string[];
+  permissions?: string[];
+  nyx_service_id?: string;
+}
+
+/**
+ * Decode a JWT payload without signature verification.
+ * Safe because NyxID proxy has already verified the token before forwarding.
+ */
+function decodeJwtPayload(token: string): IdentityAssertionPayload | null {
+  try {
+    const parts = token.split(".");
+    if (parts.length !== 3) return null;
+    const payload = Buffer.from(parts[1], "base64url").toString("utf-8");
+    return JSON.parse(payload) as IdentityAssertionPayload;
+  } catch (e) {
+    logger.warn({ error: (e as Error).message }, "Failed to decode identity token");
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Setup middlewares — run once per request prefix to populate auth context
 // ---------------------------------------------------------------------------
 
 /**
- * Proxy header auth setup for `/api/agent` routes.
- * Reads identity from X-NyxID-* headers injected by NyxID proxy.
- * Skips when no identity headers are present.
+ * NyxID proxy auth setup.
+ *
+ * Primary: decodes X-NyxID-Identity-Token JWT to extract userId, email,
+ * roles, and permissions.
+ *
+ * Fallback: reads X-NyxID-* headers (for backward compatibility or when
+ * identity propagation mode is "headers").
  */
 export function proxyAuthSetup() {
   return createMiddleware<{ Variables: AuthVariables }>(async (c, next) => {
+    // Try identity token first (JWT mode or Both mode)
+    const identityToken = c.req.header("X-NyxID-Identity-Token");
+    if (identityToken) {
+      const payload = decodeJwtPayload(identityToken);
+      if (payload?.sub) {
+        const auth: AuthContext = {
+          userId: payload.sub,
+          email: payload.email ?? "",
+          roles: payload.roles ?? [],
+          permissions: payload.permissions ?? [],
+        };
+        c.set("auth", auth);
+        logger.debug({ userId: auth.userId, roles: auth.roles }, "Authenticated via identity token");
+        await next();
+        return;
+      }
+    }
+
+    // Fallback to plain headers (Headers mode)
     const userId = c.req.header("X-NyxID-User-Id");
     if (userId) {
       const auth: AuthContext = {
         userId,
         email: c.req.header("X-NyxID-User-Email") ?? "",
-        roles: (c.req.header("X-NyxID-User-Roles") ?? "").split(",").filter(Boolean),
-        permissions: (c.req.header("X-NyxID-User-Permissions") ?? "").split(",").filter(Boolean),
+        roles: [],
+        permissions: [],
       };
       c.set("auth", auth);
-      logger.debug({ userId: auth.userId }, "Authenticated via proxy headers");
+      logger.debug({ userId: auth.userId }, "Authenticated via proxy headers (no RBAC data)");
     }
+
     await next();
   });
 }
