@@ -98,8 +98,8 @@ export function AdminNyxidServicesPage() {
         ) : (
           <div className="flex-1 min-h-0 overflow-auto rounded-lg border border-neon-cyan/10">
             <table className="w-full">
-              <thead>
-                <tr className="border-b border-neon-cyan/10 bg-bg-elevated/50">
+              <thead className="sticky top-0 bg-bg-elevated/95 backdrop-blur-sm">
+                <tr className="border-b border-neon-cyan/10">
                   <th className="font-heading text-[10px] font-700 tracking-widest uppercase text-text-muted text-left px-4 py-3">Service</th>
                   <th className="font-heading text-[10px] font-700 tracking-widest uppercase text-text-muted text-left px-4 py-3">Category</th>
                   <th className="font-heading text-[10px] font-700 tracking-widest uppercase text-text-muted text-left px-4 py-3">Spec</th>
