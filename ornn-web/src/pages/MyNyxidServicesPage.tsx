@@ -58,54 +58,36 @@ export function MyNyxidServicesPage() {
     const headers = { Authorization: `Bearer ${accessToken}` };
 
     Promise.all([
-      fetch(`${NYXID_API_BASE}/api/v1/user-services`, { headers }).then((r) => r.ok ? r.json() : { services: [] }),
-      fetch(`${NYXID_API_BASE}/api/v1/proxy/services?per_page=100`, { headers }).then((r) => r.ok ? r.json() : { services: [] }),
+      fetch(`${NYXID_API_BASE}/api/v1/keys`, { headers }).then((r) => r.ok ? r.json() : { keys: [] }),
       getPublicSystemSkills().catch(() => ({ items: [] })),
     ])
-      .then(([userSvcData, proxySvcData, systemSkillsData]) => {
-        const userServices = userSvcData.services ?? [];
-        const proxyServices = proxySvcData.services ?? [];
+      .then(([keysData, systemSkillsData]) => {
+        const keys = keysData.keys ?? keysData ?? [];
+        const allKeys = Array.isArray(keys) ? keys : [];
         const systemSkills = systemSkillsData?.items ?? [];
 
-        // Build lookups
-        const proxyBySlug = new Map<string, any>();
-        for (const ps of proxyServices) {
-          proxyBySlug.set(ps.slug, ps);
-        }
         const skillByServiceId = new Map<string, any>();
         for (const sk of systemSkills) {
           if (sk.nyxidServiceId) skillByServiceId.set(sk.nyxidServiceId, sk);
         }
 
-        // Filter: only user's own services (not auto-connected)
-        // Auto-connected services have requires_connection=false on the proxy service
-        // (admin set them up, users don't need to provide credentials)
-        const display: UserServiceDisplay[] = userServices
-          .filter((us: any) => {
-            const baseSlug = us.slug?.replace(/-[a-z0-9]{4}$/, "") ?? "";
-            const proxy = proxyBySlug.get(baseSlug) || proxyBySlug.get(us.slug);
-            // Keep only services that require user connection (user manually added)
-            return proxy?.requires_connection === true;
-          })
-          .map((us: any) => {
-            const baseSlug = us.slug?.replace(/-[a-z0-9]{4}$/, "") ?? "";
-            const proxy = proxyBySlug.get(baseSlug) || proxyBySlug.get(us.slug) || null;
-            const proxyId = proxy?.id ?? "";
-            const skill = skillByServiceId.get(proxyId);
+        // Filter out auto-connected services
+        const display: UserServiceDisplay[] = allKeys
+          .filter((k: any) => !k.auto_connected)
+          .map((k: any) => {
+            const skill = skillByServiceId.get(k.service_id ?? k.id);
 
             return {
-              id: us.id,
-              serviceId: proxyId,
-              slug: us.slug,
-              name: proxy?.name ?? us.slug ?? "Unknown",
-              description: proxy?.description ?? null,
-              serviceCategory: proxy?.service_category ?? "unknown",
-              isActive: us.is_active ?? false,
-              credentialSource: typeof us.credential_source === "object"
-                ? us.credential_source?.type ?? "unknown"
-                : String(us.credential_source ?? "personal"),
-              hasSpec: !!proxy?.openapi_url,
-              openApiUrl: proxy?.openapi_url ?? null,
+              id: k.id,
+              serviceId: k.service_id ?? k.id,
+              slug: k.slug ?? "",
+              name: k.catalog_service_name ?? k.label ?? k.slug ?? "Unknown",
+              description: k.description ?? null,
+              serviceCategory: k.service_category ?? "unknown",
+              isActive: k.is_active ?? false,
+              credentialSource: k.auth_method ?? "none",
+              hasSpec: false, // /keys doesn't have spec info
+              openApiUrl: null,
               skillGenerated: !!skill,
               skillName: skill?.name ?? null,
               skillGuid: skill?.guid ?? null,
