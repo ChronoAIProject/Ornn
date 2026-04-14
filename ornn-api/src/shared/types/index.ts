@@ -204,18 +204,6 @@ export type PlaygroundChatEvent =
 // Auth Types
 // ---------------------------------------------------------------------------
 
-export interface TokenVerifier {
-  verifyAccessToken(token: string): Promise<AccessTokenPayload>;
-}
-
-export interface AccessTokenPayload {
-  sub: string;
-  email?: string;
-  roles?: string[];
-  permissions?: string[];
-  [key: string]: unknown;
-}
-
 export interface ApiKeyInfo {
   userId: string;
   email: string;
@@ -243,20 +231,3 @@ export function createErrorHandler(logger: { error: (...args: unknown[]) => void
   };
 }
 
-export function createAuthMiddleware(tokenService: TokenVerifier) {
-  return async (c: any, next: () => Promise<void>) => {
-    const authHeader = c.req.header("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      throw new AppError(401, "AUTH_MISSING", "Authentication required");
-    }
-    const token = authHeader.slice(7);
-    const payload = await tokenService.verifyAccessToken(token);
-    c.set("auth", {
-      userId: payload.sub,
-      email: payload.email ?? "",
-      roles: payload.roles ?? [],
-      permissions: payload.permissions ?? [],
-    });
-    await next();
-  };
-}

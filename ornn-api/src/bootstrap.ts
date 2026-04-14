@@ -16,7 +16,7 @@ const pkg = JSON.parse(readFileSync(join(import.meta.dir, "..", "package.json"),
 
 
 // Auth setup
-import { jwtAuthSetup, proxyAuthSetup } from "./middleware/nyxidAuth";
+import { proxyAuthSetup } from "./middleware/nyxidAuth";
 
 // Infrastructure
 import { connectMongo, type MongoConnection } from "./infra/db/mongodb";
@@ -57,7 +57,7 @@ import { createFormatRoutes } from "./domains/skillFormat/routes";
 import { createDocsRoutes } from "./domains/docs/routes";
 
 // OpenAPI spec
-import { buildWebSpec, buildAgentSpec } from "./openapi/specBuilder";
+import { buildSpec } from "./openapi/specBuilder";
 
 // Error handler
 import { AppError } from "./shared/types/index";
@@ -259,38 +259,21 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
     );
   });
 
-  // ---- Web routes — frontend accesses ornn directly, JWT verified here ----
-  const webApp = new Hono();
-  webApp.use("*", jwtAuthSetup({
-    jwksUrl: config.nyxidJwksUrl,
-    issuer: config.nyxidIssuer,
-    audience: config.nyxidAudience,
-    introspectionUrl: config.nyxidIntrospectionUrl,
-    clientId: config.nyxidClientId,
-    clientSecret: config.nyxidClientSecret,
-  }));
-  webApp.route("/", skillRoutes);
-  webApp.route("/", searchRoutes);
-  webApp.route("/", generationRoutes);
-  webApp.route("/", playgroundRoutes);
-  webApp.route("/", adminRoutes);
-  webApp.route("/", formatRoutes);
-  webApp.route("/", docsRoutes);
-  app.route("/api/web", webApp);
+  // ---- API routes — all traffic via NyxID proxy, trust proxy headers ----
+  const apiApp = new Hono();
+  apiApp.use("*", proxyAuthSetup());
+  apiApp.route("/", skillRoutes);
+  apiApp.route("/", searchRoutes);
+  apiApp.route("/", generationRoutes);
+  apiApp.route("/", playgroundRoutes);
+  apiApp.route("/", adminRoutes);
+  apiApp.route("/", formatRoutes);
+  apiApp.route("/", docsRoutes);
+  app.route("/api", apiApp);
 
-  // ---- Agent routes — accessed via NyxID proxy, trust proxy headers ----
-  const agentApp = new Hono();
-  agentApp.use("*", proxyAuthSetup());
-  agentApp.route("/", skillRoutes);
-  agentApp.route("/", searchRoutes);
-  agentApp.route("/", generationRoutes);
-  app.route("/api/agent", agentApp);
-
-  // OpenAPI specs — auto-generated from Zod schemas
-  const webSpec = buildWebSpec();
-  const agentSpec = buildAgentSpec();
-  app.get("/api/web/openapi.json", (c) => c.json(webSpec));
-  app.get("/api/agent/openapi.json", (c) => c.json(agentSpec));
+  // OpenAPI spec — auto-generated from Zod schemas
+  const spec = buildSpec();
+  app.get("/api/openapi.json", (c) => c.json(spec));
 
   // Health endpoint
   app.get("/health", (c) =>

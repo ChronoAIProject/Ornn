@@ -379,41 +379,19 @@ function baseSpec(title: string, description: string): OpenApiSpec {
   };
 }
 
-export function buildAgentSpec(): OpenApiSpec {
-  const prefix = "/api/agent";
+export function buildSpec(): OpenApiSpec {
+  const prefix = "/api";
   return {
     ...baseSpec(
-      "ornn-api Agent API",
-      "API for AI agents and MCP tools to interact with the ornn skill registry. A 'skill' is a packaged AI prompt (with optional scripts and tool declarations) that can be searched, retrieved, executed, and generated. All endpoints require NyxID JWT authentication via Bearer token. Responses follow a uniform envelope: { data: T | null, error: { code, message } | null }.",
+      "ornn API",
+      "API for the ornn skill registry. Provides skill CRUD, search, AI-powered generation, playground, and admin endpoints. All endpoints require NyxID authentication via Bearer token. Responses follow a uniform envelope: { data: T | null, error: { code, message } | null }.",
     ),
     tags: [
-      { name: "Skills", description: "Upload, retrieve, and inspect AI skill packages. Each skill is a ZIP containing a skill.md file (YAML frontmatter + prompt body) and optional supporting files (scripts, configs). Use 'upload' to publish, 'get' to fetch metadata, and 'json' to read file contents without downloading the ZIP." },
-      { name: "Search", description: "Find skills in the registry by keyword text matching or AI-powered semantic similarity. Supports pagination, visibility scope filtering (public/private/mixed), and optional model override for semantic search." },
-      { name: "Generation", description: "Generate complete skill packages from natural language descriptions using AI. Supports single-turn and multi-turn conversational generation with real-time SSE streaming of progress events." },
-    ],
-    paths: {
-      [`${prefix}/skills`]: skillUploadPath(prefix),
-      [`${prefix}/skills/{idOrName}`]: skillReadPath(prefix),
-      [`${prefix}/skills/{idOrName}/json`]: skillJsonPath(prefix),
-      [`${prefix}/skill-search`]: skillSearchPath(prefix),
-      [`${prefix}/skills/generate`]: skillGeneratePath(prefix),
-    },
-  };
-}
-
-export function buildWebSpec(): OpenApiSpec {
-  const prefix = "/api/web";
-  return {
-    ...baseSpec(
-      "ornn-api Web API",
-      "Frontend-facing endpoints for the ornn web UI. Full skill CRUD, search, generation, playground, and admin.",
-    ),
-    tags: [
-      { name: "Skills", description: "Skill CRUD operations" },
-      { name: "Search", description: "Keyword and semantic skill search" },
-      { name: "Generation", description: "AI-powered skill generation" },
+      { name: "Skills", description: "Upload, retrieve, update, delete, and inspect AI skill packages." },
+      { name: "Search", description: "Find skills by keyword text matching or AI-powered semantic similarity." },
+      { name: "Generation", description: "Generate complete skill packages from natural language descriptions using AI." },
       { name: "Format", description: "Skill format rules and validation" },
-      { name: "Playground", description: "Credential management and chat" },
+      { name: "Playground", description: "Multi-turn chat playground" },
       { name: "Admin", description: "Category and tag management" },
     ],
     paths: {

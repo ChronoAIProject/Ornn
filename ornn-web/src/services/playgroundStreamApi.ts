@@ -1,6 +1,6 @@
 /**
  * SSE streaming client for the playground chat endpoint.
- * POST /api/web/playground/chat with Responses API format body, receives SSE response.
+ * POST /api/playground/chat with Responses API format body, receives SSE response.
  * @module services/playgroundStreamApi
  */
 
@@ -47,7 +47,7 @@ export function streamChat(
   onEvent: (event: PlaygroundChatEvent) => void,
 ): StreamHandle {
   const controller = new AbortController();
-  const url = new URL(`${API_BASE}/api/web/playground/chat`, window.location.origin);
+  const url = new URL(`${API_BASE}/api/playground/chat`, window.location.origin);
 
   (async () => {
     try {

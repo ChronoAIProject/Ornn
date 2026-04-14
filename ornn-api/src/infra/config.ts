@@ -15,10 +15,6 @@ export interface SkillConfig {
   readonly logPretty: boolean;
 
   // NyxID
-  readonly nyxidJwksUrl: string;
-  readonly nyxidIssuer: string;
-  readonly nyxidAudience: string;
-  readonly nyxidIntrospectionUrl: string;
   readonly nyxidTokenUrl: string;
   readonly nyxidClientId: string;
   readonly nyxidClientSecret: string;
@@ -68,10 +64,6 @@ export function loadConfig(): SkillConfig {
     logPretty: optionalEnv("LOG_PRETTY", "false") === "true",
 
     // NyxID
-    nyxidJwksUrl: requiredEnv("NYXID_JWKS_URL"),
-    nyxidIssuer: requiredEnv("NYXID_ISSUER"),
-    nyxidAudience: requiredEnv("NYXID_AUDIENCE"),
-    nyxidIntrospectionUrl: requiredEnv("NYXID_INTROSPECTION_URL"),
     nyxidTokenUrl: requiredEnv("NYXID_TOKEN_URL"),
     nyxidClientId: requiredEnv("NYXID_CLIENT_ID"),
     nyxidClientSecret: requiredEnv("NYXID_CLIENT_SECRET"),

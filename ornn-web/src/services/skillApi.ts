@@ -7,7 +7,7 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
 
 /** Fetch a single skill by GUID or name */
 export async function fetchSkill(idOrName: string): Promise<SkillDetail> {
-  const res = await apiGet<SkillDetail>(`/api/web/skills/${encodeURIComponent(idOrName)}`);
+  const res = await apiGet<SkillDetail>(`/api/skills/${encodeURIComponent(idOrName)}`);
   return res.data!;
 }
 
@@ -31,7 +31,7 @@ export async function createSkill(zipFile: File, skipValidation = false): Promis
   }
 
   const params = skipValidation ? "?skip_validation=true" : "";
-  const response = await fetch(`${API_BASE}/api/web/skills${params}`, {
+  const response = await fetch(`${API_BASE}/api/skills${params}`, {
     method: "POST",
     headers,
     body: zipFile,
@@ -54,7 +54,7 @@ export async function createSkill(zipFile: File, skipValidation = false): Promis
  * Update skill metadata (e.g. isPrivate) via JSON body.
  */
 export async function updateSkill(id: string, data: UpdateSkillMetadata): Promise<SkillDetail> {
-  const res = await apiPut<SkillDetail>(`/api/web/skills/${id}`, data);
+  const res = await apiPut<SkillDetail>(`/api/skills/${id}`, data);
   return res.data!;
 }
 
@@ -71,7 +71,7 @@ export async function updateSkillPackage(id: string, zipFile: File, skipValidati
   }
 
   const params = skipValidation ? "?skip_validation=true" : "";
-  const response = await fetch(`${API_BASE}/api/web/skills/${id}${params}`, {
+  const response = await fetch(`${API_BASE}/api/skills/${id}${params}`, {
     method: "PUT",
     headers,
     body: zipFile,
@@ -92,5 +92,5 @@ export async function updateSkillPackage(id: string, zipFile: File, skipValidati
 
 /** Hard-delete a skill */
 export async function deleteSkill(id: string): Promise<void> {
-  await apiDelete(`/api/web/skills/${id}`);
+  await apiDelete(`/api/skills/${id}`);
 }

@@ -27,7 +27,7 @@ function getAuthHeaders(): Record<string, string> {
 
 /**
  * Connect to the generation SSE endpoint.
- * POST /api/web/skills/generate
+ * POST /api/skills/generate
  */
 export function generateSkillStream(
   params: GenerateStreamParams,
@@ -36,7 +36,7 @@ export function generateSkillStream(
   const controller = new AbortController();
 
   const url = new URL(
-    `${API_BASE}/api/web/skills/generate`,
+    `${API_BASE}/api/skills/generate`,
     window.location.origin,
   );
 

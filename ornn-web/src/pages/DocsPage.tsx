@@ -113,7 +113,7 @@ function ReleaseAccordion({ lang }: { lang: Lang }) {
   const { t } = useTranslation();
 
   useEffect(() => {
-    fetch(`${API_BASE}/api/web/docs/releases?lang=${lang}`)
+    fetch(`${API_BASE}/api/docs/releases?lang=${lang}`)
       .then((r) => r.json())
       .then((json) => {
         if (json.data) {
@@ -124,7 +124,7 @@ function ReleaseAccordion({ lang }: { lang: Lang }) {
             setExpandedVersion(latest);
             setInitialized(true);
             // Pre-fetch its content
-            fetch(`${API_BASE}/api/web/docs/releases/${latest}?lang=${lang}`)
+            fetch(`${API_BASE}/api/docs/releases/${latest}?lang=${lang}`)
               .then((r2) => r2.json())
               .then((j2) => {
                 if (j2.data?.content) {
@@ -148,7 +148,7 @@ function ReleaseAccordion({ lang }: { lang: Lang }) {
     if (!releaseContent[version]) {
       setLoadingContent(version);
       try {
-        const resp = await fetch(`${API_BASE}/api/web/docs/releases/${version}?lang=${lang}`);
+        const resp = await fetch(`${API_BASE}/api/docs/releases/${version}?lang=${lang}`);
         const json = await resp.json();
         if (json.data?.content) {
           setReleaseContent((prev) => ({ ...prev, [version]: json.data.content }));
@@ -682,7 +682,7 @@ export function DocsPage() {
     let cancelled = false;
     setMenuLoading(true);
 
-    fetch(`${API_BASE}/api/web/docs/tree?lang=${lang}`)
+    fetch(`${API_BASE}/api/docs/tree?lang=${lang}`)
       .then((resp) => resp.json())
       .then((json) => {
         if (!cancelled && json.data) {
@@ -703,7 +703,7 @@ export function DocsPage() {
   const fetchDoc = useCallback(async (slug: string, language: Lang) => {
     setLoading(true);
     try {
-      const resp = await fetch(`${API_BASE}/api/web/docs/content/${language}/${slug}`);
+      const resp = await fetch(`${API_BASE}/api/docs/content/${language}/${slug}`);
       const json = await resp.json();
       if (resp.ok && json.data?.content) {
         setMarkdown(json.data.content);
