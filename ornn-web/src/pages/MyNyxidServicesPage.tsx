@@ -78,19 +78,14 @@ export function MyNyxidServicesPage() {
         }
 
         // Filter: only user's own services (not auto-connected)
-        // Auto-connected services have credential_source.type !== "personal" with no user credential,
-        // or requires_connection is false on the proxy service.
-        // Heuristic: if the user-service has no matching proxy service that requires_connection,
-        // it might be auto-connected. But simplest: filter by credential_source type.
+        // Auto-connected services have requires_connection=false on the proxy service
+        // (admin set them up, users don't need to provide credentials)
         const display: UserServiceDisplay[] = userServices
           .filter((us: any) => {
-            // Keep services where user explicitly added credentials
-            // Auto-connected services from admin typically have credential_source.type = "auto" or "catalog"
-            const srcType = typeof us.credential_source === "object"
-              ? us.credential_source?.type ?? ""
-              : String(us.credential_source ?? "");
-            // Filter out auto-connected (type "auto", "catalog", or empty with no auth)
-            return srcType === "personal" || srcType === "org";
+            const baseSlug = us.slug?.replace(/-[a-z0-9]{4}$/, "") ?? "";
+            const proxy = proxyBySlug.get(baseSlug) || proxyBySlug.get(us.slug);
+            // Keep only services that require user connection (user manually added)
+            return proxy?.requires_connection === true;
           })
           .map((us: any) => {
             const baseSlug = us.slug?.replace(/-[a-z0-9]{4}$/, "") ?? "";
