@@ -422,22 +422,18 @@ export function Navbar({ className = "" }: NavbarProps) {
                             {t("nav.adminPanel")}
                           </Link>
                         )}
-                        <a
-                          href={`${getNyxIdUrl()}/services`}
-                          target="_blank"
-                          rel="noopener noreferrer"
+                        <Link
+                          to="/services/my"
                           className="flex items-center gap-3 px-4 py-2.5 font-body text-sm text-text-primary transition-colors hover:bg-neon-cyan/5"
                         >
                           <svg className="h-4 w-4 text-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2" />
                           </svg>
                           My NyxID Services
-                        </a>
+                        </Link>
                         {isAdmin(user) && (
-                          <a
-                            href={`${getNyxIdUrl()}/admin/services`}
-                            target="_blank"
-                            rel="noopener noreferrer"
+                          <Link
+                            to="/services/admin"
                             className="flex items-center gap-3 px-4 py-2.5 font-body text-sm text-text-primary transition-colors hover:bg-neon-cyan/5"
                           >
                             <svg className="h-4 w-4 text-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -445,7 +441,7 @@ export function Navbar({ className = "" }: NavbarProps) {
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                             </svg>
                             Admin NyxID Services
-                          </a>
+                          </Link>
                         )}
                         <a
                           href={getNyxIdUrl()}
@@ -605,23 +601,21 @@ export function Navbar({ className = "" }: NavbarProps) {
                       </Link>
                     )}
 
-                    <a
-                      href={`${getNyxIdUrl()}/services`}
-                      target="_blank"
-                      rel="noopener noreferrer"
+                    <Link
+                      to="/services/my"
+                      onClick={() => setIsMobileMenuOpen(false)}
                       className="flex items-center gap-3 px-4 py-3 rounded-lg text-text-muted hover:bg-bg-elevated hover:text-text-primary transition-colors"
                     >
                       <span className="font-body text-sm font-medium">My NyxID Services</span>
-                    </a>
+                    </Link>
                     {isAdmin(user) && (
-                      <a
-                        href={`${getNyxIdUrl()}/admin/services`}
-                        target="_blank"
-                        rel="noopener noreferrer"
+                      <Link
+                        to="/services/admin"
+                        onClick={() => setIsMobileMenuOpen(false)}
                         className="flex items-center gap-3 px-4 py-3 rounded-lg text-text-muted hover:bg-bg-elevated hover:text-text-primary transition-colors"
                       >
                         <span className="font-body text-sm font-medium">Admin NyxID Services</span>
-                      </a>
+                      </Link>
                     )}
                     <a
                       href={getNyxIdUrl()}
