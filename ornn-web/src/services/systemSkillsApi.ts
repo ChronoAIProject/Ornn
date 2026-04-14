@@ -16,12 +16,7 @@ export interface NyxidService {
   slug: string;
   description: string | null;
   service_category: string;
-  connected: boolean;
-  requires_connection: boolean;
-  proxy_url: string;
-  proxy_url_slug: string;
-  openapi_url: string | null;
-  streaming_supported: boolean;
+  hasOpenApiSpec: boolean;
 }
 
 export interface SystemSkillInfo {
@@ -51,20 +46,30 @@ export interface SystemSkillItem {
 const NYXID_API_BASE = import.meta.env.VITE_NYXID_AUTHORIZE_URL?.replace("/oauth/authorize", "") ?? "";
 
 /**
- * Fetch proxyable services from NyxID proxy/services endpoint.
- * This endpoint is available to any authenticated user with proxy scope.
+ * Fetch admin (auto-connected) services from NyxID /keys endpoint.
  */
-async function fetchNyxidServices(): Promise<NyxidService[]> {
+async function fetchAdminServices(): Promise<NyxidService[]> {
   const token = useAuthStore.getState().accessToken;
   if (!token) return [];
 
-  const resp = await fetch(`${NYXID_API_BASE}/api/v1/proxy/services`, {
+  const resp = await fetch(`${NYXID_API_BASE}/api/v1/keys`, {
     headers: { Authorization: `Bearer ${token}` },
   });
 
   if (!resp.ok) return [];
   const data = await resp.json();
-  return data.services ?? [];
+  const keys = Array.isArray(data.keys) ? data.keys : Array.isArray(data) ? data : [];
+
+  return keys
+    .filter((k: any) => k.auto_connected)
+    .map((k: any) => ({
+      id: k.id,
+      name: k.catalog_service_name ?? k.label ?? k.slug ?? "Unknown",
+      slug: k.slug ?? "",
+      description: k.description ?? null,
+      service_category: k.service_category ?? "unknown",
+      hasOpenApiSpec: false, // will be enriched by skill status
+    }));
 }
 
 /**
@@ -83,7 +88,7 @@ async function fetchGeneratedSystemSkills(): Promise<SystemSkillInfo[]> {
  */
 export async function getSystemSkills(): Promise<SystemSkillItem[]> {
   const [services, skills] = await Promise.all([
-    fetchNyxidServices(),
+    fetchAdminServices(),
     fetchGeneratedSystemSkills(),
   ]);
 
@@ -96,10 +101,10 @@ export async function getSystemSkills(): Promise<SystemSkillItem[]> {
       serviceName: svc.name,
       serviceSlug: svc.slug,
       serviceDescription: svc.description,
-      baseUrl: svc.proxy_url_slug,
+      baseUrl: "",
       serviceCategory: svc.service_category,
-      hasOpenApiSpec: !!svc.openapi_url,
-      openApiSpecUrl: svc.openapi_url,
+      hasOpenApiSpec: svc.hasOpenApiSpec,
+      openApiSpecUrl: null,
       skillGenerated: !!skill,
       skill,
     };
