@@ -23,7 +23,6 @@ import {
   generateSystemSkill,
   regenerateSystemSkill,
   deleteSystemSkill,
-  type SystemSkillItem,
 } from "@/services/systemSkillsApi";
 
 type ExploreTab = "public" | "my-skills" | "system";
