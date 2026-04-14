@@ -138,7 +138,7 @@ export const useAuthStore = create<AuthState>()(
           response_type: "code",
           client_id: NYXID_CONFIG.clientId,
           redirect_uri: NYXID_CONFIG.redirectUri,
-          scope: "openid profile email roles",
+          scope: "openid profile email roles proxy",
           state,
           code_challenge: challenge,
           code_challenge_method: "S256",

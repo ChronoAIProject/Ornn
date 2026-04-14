@@ -172,5 +172,41 @@ export function createGenerationRoutes(config: GenerationRoutesConfig): Hono<{ V
     },
   );
 
+  /**
+   * POST /skills/generate/from-openapi
+   * Input: JSON { spec: string (OpenAPI JSON/YAML), endpoints?: string[], description?: string }
+   * Response: SSE stream of generation events
+   * Requires: ornn:skill:build
+   */
+  app.post(
+    "/skills/generate/from-openapi",
+    auth,
+    requirePermission("ornn:skill:build"),
+    async (c) => {
+      const authCtx = getAuth(c);
+      const body = await c.req.json();
+
+      if (!body.spec || typeof body.spec !== "string") {
+        throw AppError.badRequest("MISSING_SPEC", "An OpenAPI 'spec' field (JSON or YAML string) is required");
+      }
+
+      const endpoints = Array.isArray(body.endpoints) ? body.endpoints : undefined;
+      const description = typeof body.description === "string" ? body.description : undefined;
+
+      logger.info(
+        { userId: authCtx.userId, specLength: body.spec.length, endpoints, hasDescription: !!description },
+        "OpenAPI generation request",
+      );
+
+      const signal = c.req.raw.signal;
+
+      return streamGenerationEvents(
+        c,
+        generationService.generateFromOpenApi(body.spec, { endpoints, description }, signal),
+        keepAliveIntervalMs,
+      );
+    },
+  );
+
   return app;
 }

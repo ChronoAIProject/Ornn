@@ -8,7 +8,7 @@
 import { z } from "zod";
 import type { NyxLlmClient, ResponsesApiStreamEvent, ResponsesApiInputMessage } from "../../clients/nyxLlmClient";
 import type { GeneratedSkill, SkillStreamEvent } from "../../shared/types/index";
-import { buildDirectGenerationPrompt, GENERATION_SYSTEM_PROMPT } from "./prompts";
+import { buildDirectGenerationPrompt, buildOpenApiGenerationPrompt, GENERATION_SYSTEM_PROMPT, OPENAPI_GENERATION_SYSTEM_PROMPT } from "./prompts";
 import pino from "pino";
 
 const logger = pino({ level: "info" }).child({ module: "skillGenerationService" });
@@ -223,6 +223,65 @@ export class SkillGenerationService {
       yield { type: "validation_error", message: "Invalid JSON from LLM", retrying: false };
     } else {
       logger.info({ skillName: parsed.name }, "Multi-turn validation passed");
+    }
+
+    yield { type: "generation_complete", raw: accumulated };
+  }
+
+  /**
+   * Generate a skill from an OpenAPI spec. Streams tokens via SSE events.
+   */
+  async *generateFromOpenApi(
+    specContent: string,
+    options?: { endpoints?: string[]; description?: string },
+    signal?: AbortSignal,
+  ): AsyncIterable<SkillStreamEvent> {
+    if (signal?.aborted) {
+      yield { type: "error", message: "Request aborted" };
+      return;
+    }
+
+    yield { type: "generation_start" };
+
+    const userPrompt = buildOpenApiGenerationPrompt(specContent, options);
+    const input: ResponsesApiInputMessage[] = [
+      { role: "developer", content: OPENAPI_GENERATION_SYSTEM_PROMPT },
+      { role: "user", content: userPrompt },
+    ];
+
+    let accumulated = "";
+
+    try {
+      const streamEvents = this.llmClient.stream({
+        model: this.defaultModel,
+        input,
+        max_output_tokens: this.maxOutputTokens,
+        temperature: this.temperature,
+      });
+
+      for await (const event of streamEvents) {
+        if (signal?.aborted) {
+          yield { type: "error", message: "Request aborted" };
+          return;
+        }
+
+        const text = extractTextFromEvent(event);
+        if (text) {
+          accumulated += text;
+          yield { type: "token", content: text };
+        }
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      logger.error({ err: message }, "OpenAPI generation LLM stream error");
+      yield { type: "error", message: `LLM error: ${message}` };
+      return;
+    }
+
+    const parsed = this.parseAndValidate(accumulated);
+    if (!parsed) {
+      logger.warn("OpenAPI generation output failed validation");
+      yield { type: "validation_error", message: "Invalid JSON from LLM", retrying: false };
     }
 
     yield { type: "generation_complete", raw: accumulated };
