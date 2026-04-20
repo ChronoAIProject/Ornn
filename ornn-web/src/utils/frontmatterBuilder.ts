@@ -65,6 +65,10 @@ export function buildFrontmatter(meta: SkillMetadata): string {
   // Core fields
   lines.push(`name: ${formatYamlValue(meta.name)}`);
   lines.push(`description: ${formatYamlValue(meta.description)}`);
+  // version is required by the backend. Quoted unconditionally — without
+  // quotes, YAML parses "0.1" as a float and the backend's string schema
+  // rejects it with "Expected string, received number".
+  lines.push(`version: "${(meta.version || "0.1").replace(/"/g, '\\"')}"`);
 
   // Official Claude fields (only if non-default)
   if (meta.disableModelInvocation) {

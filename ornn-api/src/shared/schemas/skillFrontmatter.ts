@@ -105,11 +105,29 @@ export const refinedMetadataSchema = metadataSchema.superRefine((data, ctx) => {
   }
 });
 
+/**
+ * Skill version format: `<major>.<minor>` (2-digit, no patch).
+ * Both parts must be non-negative integers. Leading zeroes are rejected.
+ */
+export const SKILL_VERSION_REGEX = /^(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
+
 // Full frontmatter schema
 export const skillFrontmatterSchema = z.object({
   name: z.string().min(1).max(64).regex(/^[a-z0-9][a-z0-9-]*$/, "Name must be kebab-case"),
   description: z.string().min(1).max(1024),
-  version: z.string().max(20).optional(),
+  // YAML parses `version: 0.1` (unquoted) as a float and `1.0` as an
+  // integer `1`, which both lose the intended two-digit shape. We require
+  // the author to quote it (`version: "0.1"`) so the round-trip is
+  // lossless. A clear message points them at the fix.
+  version: z
+    .string({
+      invalid_type_error:
+        "version must be a quoted string — write `version: \"0.1\"` in SKILL.md, not `version: 0.1` (YAML parses the unquoted form as a number and loses the trailing zero).",
+    })
+    .regex(
+      SKILL_VERSION_REGEX,
+      "version must be in `<major>.<minor>` format, e.g. `1.0` (non-negative integers, no leading zeroes, no patch digit)",
+    ),
   license: z.string().max(50).optional(),
   compatibility: z.string().max(500).optional(),
   metadata: refinedMetadataSchema,

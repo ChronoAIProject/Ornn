@@ -148,6 +148,12 @@ export const refinedMetadataSchema = metadataSchema.superRefine(
 
 // --- Full frontmatter schema ---
 
+/**
+ * Skill version format: `<major>.<minor>` (2-digit, no patch).
+ * Both parts must be non-negative integers. Leading zeroes are rejected.
+ */
+export const SKILL_VERSION_REGEX = /^(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
+
 export const skillFrontmatterSchema = z.object({
   // Official Claude skill fields (top-level)
   name: z
@@ -159,6 +165,12 @@ export const skillFrontmatterSchema = z.object({
       "Name must start with a letter or number and contain only lowercase letters, numbers, and hyphens",
     ),
   description: z.string().min(1).max(1024),
+  version: z
+    .string()
+    .regex(
+      SKILL_VERSION_REGEX,
+      "version must be in `<major>.<minor>` format, e.g. `1.0` (non-negative integers, no leading zeroes, no patch digit)",
+    ),
   disableModelInvocation: z.boolean().default(false),
   userInvocable: z.boolean().default(true),
   allowedTools: z.array(z.string()).optional(),

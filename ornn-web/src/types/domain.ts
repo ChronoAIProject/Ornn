@@ -17,4 +17,21 @@ export interface SkillDetail extends SkillSummary {
   presignedPackageUrl: string;
   metadata: Record<string, unknown>;
   isSystem?: boolean;
+  /** Version of the currently-returned payload (latest by default). */
+  version: string;
+  /** True when the resolved version is deprecated by the author. */
+  isDeprecated?: boolean;
+  /** Optional note the author left when deprecating this version. */
+  deprecationNote?: string | null;
+}
+
+export interface SkillVersionEntry {
+  version: string;
+  skillHash: string;
+  createdBy: string;
+  createdByEmail?: string;
+  createdByDisplayName?: string;
+  createdOn: string;
+  isDeprecated: boolean;
+  deprecationNote: string | null;
 }

@@ -102,7 +102,22 @@
     "downloadSkill": "下载技能包",
     "tryWithCli": "在你的 Agent 中试用",
     "cliPromptCopied": "提示词已复制 —— 粘贴到你的 Agent 中",
-    "cliCopyFailed": "复制提示词到剪贴板失败"
+    "cliCopyFailed": "复制提示词到剪贴板失败",
+    "version": "版本",
+    "versions": "历史版本",
+    "latest": "最新",
+    "deprecated": "已弃用",
+    "deprecationWarning": "作者已将此版本标记为弃用，建议切换到更新的版本。",
+    "deprecationBannerTitle": "版本 {{version}} 已弃用",
+    "deprecationBannerBody": "作者说明：{{note}}",
+    "viewLatest": "切换到最新版本 ({{version}})",
+    "markDeprecated": "标记为弃用",
+    "unmarkDeprecated": "取消弃用",
+    "deprecationModalTitle": "版本 {{version}} 的弃用状态",
+    "deprecationNoteLabel": "说明（可选）",
+    "deprecationNotePlaceholder": "理由、迁移路径或替代版本…",
+    "deprecationUpdated": "弃用状态已更新",
+    "deprecationFailed": "更新弃用状态失败"
   },
   "playground": {
     "selectSkill": "选择一个技能在试验场中尝试。",
