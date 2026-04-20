@@ -32,6 +32,7 @@ import { PlaygroundPage } from "@/pages/PlaygroundPage";
 import { MySkillsPage } from "@/pages/MySkillsPage";
 import { MyNyxidServicesPage } from "@/pages/MyNyxidServicesPage";
 import { AdminNyxidServicesPage } from "@/pages/AdminNyxidServicesPage";
+import { ServiceDetailPage } from "@/pages/ServiceDetailPage";
 
 // Admin pages
 import {
@@ -85,6 +86,7 @@ export function App() {
                 <Route path="/my-skills" element={<MySkillsPage />} />
                 <Route path="/services/my" element={<MyNyxidServicesPage />} />
                 <Route path="/services/admin" element={<AdminNyxidServicesPage />} />
+                <Route path="/services/:id" element={<ServiceDetailPage />} />
               </Route>
 
               {/* Admin routes - separate layout */}

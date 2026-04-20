@@ -47,6 +47,14 @@ function useBreadcrumbs() {
     crumbs.push({ label: "My NyxID Services", to: "/services/my" });
   } else if (path === "/services/admin") {
     crumbs.push({ label: "Admin NyxID Services", to: "/services/admin" });
+  } else if (path.match(/^\/services\/[^/]+$/)) {
+    const source = new URLSearchParams(location.search).get("source");
+    if (source === "my") {
+      crumbs.push({ label: "My NyxID Services", to: "/services/my" });
+    } else {
+      crumbs.push({ label: "Admin NyxID Services", to: "/services/admin" });
+    }
+    crumbs.push({ label: "Service Detail", to: path });
   } else if (path === "/settings") {
     crumbs.push({ label: t("breadcrumb.settings"), to: "/settings" });
   } else if (path === "/docs") {

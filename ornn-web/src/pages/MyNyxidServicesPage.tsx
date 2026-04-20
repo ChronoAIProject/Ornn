@@ -181,7 +181,7 @@ export function MyNyxidServicesPage() {
                   const isGenerating = generatingId === svc.serviceId;
 
                   return (
-                    <tr key={svc.id} className="border-b border-neon-cyan/5 hover:bg-bg-elevated/30 transition-colors">
+                    <tr key={svc.id} className="border-b border-neon-cyan/5 hover:bg-bg-elevated/30 transition-colors cursor-pointer" onClick={() => navigate(`/services/${svc.serviceId || svc.id}?source=my`)}>
                       <td className="px-4 py-3">
                         <div>
                           <span className="font-mono text-sm font-semibold text-neon-cyan">{svc.name}</span>
@@ -213,7 +213,7 @@ export function MyNyxidServicesPage() {
                           <span className="font-body text-xs text-text-muted italic">not generated</span>
                         )}
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                         <div className="flex justify-end gap-2">
                           {svc.skillGenerated ? (
                             <>

@@ -112,7 +112,7 @@ export function AdminNyxidServicesPage() {
                   const isGenerating = generatingServiceId === item.serviceId;
 
                   return (
-                    <tr key={item.serviceId} className="border-b border-neon-cyan/5 hover:bg-bg-elevated/30 transition-colors">
+                    <tr key={item.serviceId} className="border-b border-neon-cyan/5 hover:bg-bg-elevated/30 transition-colors cursor-pointer" onClick={() => navigate(`/services/${item.serviceId}?source=admin`)}>
                       <td className="px-4 py-3">
                         <div>
                           <span className="font-mono text-sm font-semibold text-neon-cyan">{item.serviceName}</span>
@@ -144,7 +144,7 @@ export function AdminNyxidServicesPage() {
                           <span className="font-body text-xs text-text-muted italic">not generated</span>
                         )}
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                         <div className="flex justify-end gap-2">
                           {item.skillGenerated ? (
                             <>
