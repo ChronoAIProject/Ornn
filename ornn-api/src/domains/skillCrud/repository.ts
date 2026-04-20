@@ -19,6 +19,11 @@ export interface CreateSkillData {
   metadata: SkillMetadata;
   skillHash: string;
   storageKey: string;
+  /**
+   * Owner — person user_id (personal skill) OR org user_id (org-owned skill).
+   * Defaults to `createdBy` when omitted.
+   */
+  ownerId?: string;
   createdBy: string;
   createdByEmail?: string;
   createdByDisplayName?: string;
@@ -79,6 +84,7 @@ export class SkillRepository {
       metadata: data.metadata,
       skillHash: data.skillHash,
       storageKey: data.storageKey,
+      ownerId: data.ownerId ?? data.createdBy,
       createdBy: data.createdBy,
       createdByEmail: data.createdByEmail ?? null,
       createdByDisplayName: data.createdByDisplayName ?? null,
@@ -134,19 +140,26 @@ export class SkillRepository {
     query: string,
     scope: "public" | "private" | "mixed",
     currentUserId: string,
+    userOrgIds: string[],
     page: number,
     pageSize: number,
     /** Optional additional filter — restrict results to this set of GUIDs. */
     restrictToGuids?: string[],
   ): Promise<{ skills: SkillDocument[]; total: number }> {
     const matchStage: Record<string, unknown> = {};
-    applyScope(matchStage, scope, currentUserId);
+    applyScope(matchStage, scope, currentUserId, userOrgIds);
 
-    matchStage.$or = [
-      { _id: query },
-      { name: { $regex: escapeRegex(query), $options: "i" } },
-      { description: { $regex: escapeRegex(query), $options: "i" } },
+    matchStage.$and = [
+      ...(matchStage.$or ? [{ $or: matchStage.$or }] : []),
+      {
+        $or: [
+          { _id: query },
+          { name: { $regex: escapeRegex(query), $options: "i" } },
+          { description: { $regex: escapeRegex(query), $options: "i" } },
+        ],
+      },
     ];
+    delete matchStage.$or;
 
     if (restrictToGuids) {
       if (restrictToGuids.length === 0) return { skills: [], total: 0 };
@@ -163,13 +176,14 @@ export class SkillRepository {
   async findByScope(
     scope: "public" | "private" | "mixed",
     currentUserId: string,
+    userOrgIds: string[],
     page: number,
     pageSize: number,
     /** Optional additional filter — restrict results to this set of GUIDs. */
     restrictToGuids?: string[],
   ): Promise<{ skills: SkillDocument[]; total: number }> {
     const matchStage: Record<string, unknown> = {};
-    applyScope(matchStage, scope, currentUserId);
+    applyScope(matchStage, scope, currentUserId, userOrgIds);
 
     if (restrictToGuids) {
       if (restrictToGuids.length === 0) return { skills: [], total: 0 };
@@ -190,13 +204,14 @@ export class SkillRepository {
   async findAllByScope(
     scope: "public" | "private" | "mixed",
     currentUserId: string,
+    userOrgIds: string[],
   ): Promise<SkillDocument[]> {
     const matchStage: Record<string, unknown> = {};
-    applyScope(matchStage, scope, currentUserId);
+    applyScope(matchStage, scope, currentUserId, userOrgIds);
 
     const docs = await this.collection
       .find(matchStage)
-      .project({ _id: 1, name: 1, description: 1, metadata: 1, isPrivate: 1, createdBy: 1, createdByEmail: 1, createdByDisplayName: 1, createdOn: 1, updatedOn: 1, storageKey: 1, skillHash: 1, license: 1, compatibility: 1, updatedBy: 1 })
+      .project({ _id: 1, name: 1, description: 1, metadata: 1, isPrivate: 1, ownerId: 1, createdBy: 1, createdByEmail: 1, createdByDisplayName: 1, createdOn: 1, updatedOn: 1, storageKey: 1, skillHash: 1, license: 1, compatibility: 1, updatedBy: 1 })
       .sort({ createdOn: -1 })
       .toArray();
 
@@ -246,13 +261,33 @@ export class SkillRepository {
   }
 }
 
-function applyScope(matchStage: Record<string, unknown>, scope: "public" | "private" | "mixed", currentUserId: string): void {
+/**
+ * Build the visibility match stage for a scoped query.
+ *
+ * "Ownership" now includes the caller's orgs (admin/member memberships).
+ * `private` means "owned by me or one of my orgs"; `mixed` is "public OR
+ * anything I own"; `public` is unchanged.
+ *
+ * Note: we match on `ownerId`, not `createdBy`. An org-owned skill is
+ * visible to every org member even though `createdBy` points at one
+ * specific author.
+ */
+function applyScope(
+  matchStage: Record<string, unknown>,
+  scope: "public" | "private" | "mixed",
+  currentUserId: string,
+  userOrgIds: string[],
+): void {
+  const ownerIds = [currentUserId, ...userOrgIds];
   if (scope === "public") {
     matchStage.isPrivate = false;
   } else if (scope === "private") {
-    matchStage.createdBy = currentUserId;
+    matchStage.ownerId = { $in: ownerIds };
   } else if (scope === "mixed") {
-    matchStage.$or = [{ isPrivate: false }, { createdBy: currentUserId }];
+    matchStage.$or = [
+      { isPrivate: false },
+      { ownerId: { $in: ownerIds } },
+    ];
   }
 }
 
@@ -267,6 +302,9 @@ function mapDoc(doc: Document | null): SkillDocument | null {
     metadata: doc.metadata ?? { category: "plain" },
     skillHash: doc.skillHash ?? "",
     storageKey: doc.storageKey ?? doc.s3Url ?? "",
+    // Fallback to createdBy for pre-migration rows; migration backfills this
+    // so runtime reads converge on the field after it ships.
+    ownerId: doc.ownerId ?? doc.createdBy ?? "",
     createdBy: doc.createdBy ?? "",
     createdByEmail: doc.createdByEmail ?? undefined,
     createdByDisplayName: doc.createdByDisplayName ?? undefined,

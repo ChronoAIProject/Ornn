@@ -72,7 +72,19 @@ export class SkillService {
   async createSkill(
     zipBuffer: Uint8Array,
     userId: string,
-    options?: { skipValidation?: boolean; userEmail?: string; userDisplayName?: string; isSystem?: boolean; nyxidServiceId?: string },
+    options?: {
+      skipValidation?: boolean;
+      userEmail?: string;
+      userDisplayName?: string;
+      isSystem?: boolean;
+      nyxidServiceId?: string;
+      /**
+       * When set, the new skill is owned by this entity (org user_id).
+       * The caller is responsible for verifying the actor is a member
+       * of that org BEFORE invoking — service does not re-check.
+       */
+      ownerId?: string;
+    },
   ): Promise<{ guid: string }> {
     // 1. Validate ZIP format rules
     if (!options?.skipValidation) {
@@ -114,6 +126,9 @@ export class SkillService {
       metadata,
       skillHash,
       storageKey,
+      // `ownerId` falls back to `userId` (personal skill); when the caller
+      // passes an `ownerId` (org user_id) they've already validated membership.
+      ownerId: options?.ownerId ?? userId,
       createdBy: userId,
       createdByEmail: options?.userEmail,
       createdByDisplayName: options?.userDisplayName,
@@ -594,6 +609,7 @@ export class SkillService {
       isPrivate: skill.isPrivate,
       isSystem: skill.isSystem,
       nyxidServiceId: skill.nyxidServiceId,
+      ownerId: skill.ownerId,
       createdBy: skill.createdBy,
       createdByEmail: skill.createdByEmail,
       createdByDisplayName: skill.createdByDisplayName,

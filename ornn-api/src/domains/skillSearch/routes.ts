@@ -10,6 +10,8 @@ import type { SearchService } from "./service";
 import {
   type AuthVariables,
   optionalAuthMiddleware,
+  readUserOrgIds,
+  readUserOrgMemberships,
 } from "../../middleware/nyxidAuth";
 import { AppError } from "../../shared/types/index";
 import pino from "pino";
@@ -91,6 +93,13 @@ export function createSearchRoutes(config: SearchRoutesConfig): Hono<{ Variables
 
       logger.debug({ mode, scope, query: query.slice(0, 50), userId: currentUserId, anonymous: isAnonymous }, "Search request");
 
+      const userOrgIds = await readUserOrgIds(c);
+      // The topic-visibility gate needs full memberships (userId + role) to
+      // decide whether the caller can see a private org-owned topic, not
+      // just the flat list of org user_ids. Anonymous callers end up with
+      // an empty array and can't reach private topics anyway.
+      const memberships = authCtx ? await readUserOrgMemberships(c) : [];
+
       const response = await searchService.search({
         query,
         mode,
@@ -98,6 +107,8 @@ export function createSearchRoutes(config: SearchRoutesConfig): Hono<{ Variables
         page,
         pageSize,
         currentUserId,
+        userOrgIds,
+        memberships,
         model,
         topic,
         isAdmin,

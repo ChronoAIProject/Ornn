@@ -17,10 +17,11 @@ import {
   nyxidAuthMiddleware,
   optionalAuthMiddleware,
   requirePermission,
-  requireOwnerOrAdmin,
   getAuth,
+  readUserOrgMemberships,
 } from "../../middleware/nyxidAuth";
 import { AppError } from "../../shared/types/index";
+import { canReadSkill, canManageSkill, isMemberOfOrg } from "./authorize";
 import pino from "pino";
 
 const deprecationPatchSchema = z.object({
@@ -73,10 +74,33 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
       const zipBuffer = new Uint8Array(body);
       const userEmail = c.req.header("X-User-Email") ?? undefined;
       const userDisplayName = c.req.header("X-User-Display-Name") ?? undefined;
+
+      // Org ownership: accepted via ?targetOrgId=. When set, the actor must
+      // be an admin/member of that org (NyxID). Viewers and non-members get
+      // 403. Fail-closed on write paths.
+      const targetOrgId = c.req.query("targetOrgId") || undefined;
+      let ownerId: string | undefined;
+      if (targetOrgId) {
+        const memberships = await readUserOrgMemberships(c);
+        const actor = {
+          userId: authCtx.userId,
+          memberships,
+          isPlatformAdmin: authCtx.permissions.includes("ornn:admin:skill"),
+        };
+        if (!isMemberOfOrg(actor, targetOrgId) && !actor.isPlatformAdmin) {
+          throw AppError.forbidden(
+            "NOT_ORG_MEMBER",
+            `You are not an admin or member of org '${targetOrgId}'`,
+          );
+        }
+        ownerId = targetOrgId;
+      }
+
       const result = await skillService.createSkill(zipBuffer, authCtx.userId, {
         skipValidation,
         userEmail,
         userDisplayName,
+        ownerId,
       });
       logger.info({ guid: result.guid, userId: authCtx.userId, userEmail }, "Skill created via API");
 
@@ -118,14 +142,21 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
       const idOrName = c.req.param("idOrName");
       const authCtx = c.get("auth");
 
-      // Reuse getSkill for the visibility check; we throw SKILL_NOT_FOUND for
-      // unauthenticated readers of private skills, matching the existing rule.
       const skill = await skillService.getSkill(idOrName);
+      // Anonymous viewers only see public skills.
       if (!authCtx && skill.isPrivate) {
         throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${idOrName}' not found`);
       }
-      if (authCtx && skill.isPrivate && skill.createdBy !== authCtx.userId && !authCtx.permissions.includes("ornn:admin:skill")) {
-        throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${idOrName}' not found`);
+      if (authCtx && skill.isPrivate) {
+        const memberships = await readUserOrgMemberships(c);
+        const actor = {
+          userId: authCtx.userId,
+          memberships,
+          isPlatformAdmin: authCtx.permissions.includes("ornn:admin:skill"),
+        };
+        if (!canReadSkill(skill, actor)) {
+          throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${idOrName}' not found`);
+        }
       }
 
       const items = await skillService.listSkillVersions(idOrName);
@@ -149,14 +180,22 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
       const authCtx = c.get("auth");
       const skill = await skillService.getSkill(idOrName, version);
 
-      // Anonymous users can only see public skills
+      // Anonymous users can only see public skills.
       if (!authCtx && skill.isPrivate) {
         throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${idOrName}' not found`);
       }
 
-      // Authenticated non-owner can't see private skills (unless admin)
-      if (authCtx && skill.isPrivate && skill.createdBy !== authCtx.userId && !authCtx.permissions.includes("ornn:admin:skill")) {
-        throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${idOrName}' not found`);
+      // Authenticated users: apply the full ownership/org-visibility rules.
+      if (authCtx && skill.isPrivate) {
+        const memberships = await readUserOrgMemberships(c);
+        const actor = {
+          userId: authCtx.userId,
+          memberships,
+          isPlatformAdmin: authCtx.permissions.includes("ornn:admin:skill"),
+        };
+        if (!canReadSkill(skill, actor)) {
+          throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${idOrName}' not found`);
+        }
       }
 
       // Signal deprecation via response headers so non-JSON-aware clients
@@ -182,17 +221,29 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
     "/skills/:idOrName/versions/:version",
     auth,
     requirePermission("ornn:skill:update"),
-    requireOwnerOrAdmin(async (c) => {
-      const idOrName = c.req.param("idOrName");
-      const skill =
-        (await skillRepo.findByGuid(idOrName)) ??
-        (await skillRepo.findByName(idOrName));
-      return skill?.createdBy ?? "";
-    }),
     async (c) => {
       const idOrName = c.req.param("idOrName");
       const version = c.req.param("version");
       const authCtx = getAuth(c);
+
+      const existing =
+        (await skillRepo.findByGuid(idOrName)) ??
+        (await skillRepo.findByName(idOrName));
+      if (!existing) {
+        throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${idOrName}' not found`);
+      }
+      const memberships = await readUserOrgMemberships(c);
+      const actor = {
+        userId: authCtx.userId,
+        memberships,
+        isPlatformAdmin: authCtx.permissions.includes("ornn:admin:skill"),
+      };
+      if (!canManageSkill(existing, actor)) {
+        throw AppError.forbidden(
+          "FORBIDDEN",
+          "You do not have permission to manage this skill",
+        );
+      }
 
       let body: unknown;
       try {
@@ -238,16 +289,28 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
     "/skills/:id",
     auth,
     requirePermission("ornn:skill:update"),
-    requireOwnerOrAdmin(async (c) => {
-      const guid = c.req.param("id");
-      const skill = await skillRepo.findByGuid(guid);
-      return skill?.createdBy ?? "";
-    }),
     async (c) => {
       const guid = c.req.param("id");
       const authCtx = getAuth(c);
       const contentType = c.req.header("content-type") ?? "";
       const skipValidation = c.req.query("skip_validation") === "true";
+
+      const existing = await skillRepo.findByGuid(guid);
+      if (!existing) {
+        throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${guid}' not found`);
+      }
+      const memberships = await readUserOrgMemberships(c);
+      const actor = {
+        userId: authCtx.userId,
+        memberships,
+        isPlatformAdmin: authCtx.permissions.includes("ornn:admin:skill"),
+      };
+      if (!canManageSkill(existing, actor)) {
+        throw AppError.forbidden(
+          "FORBIDDEN",
+          "You do not have permission to update this skill",
+        );
+      }
 
       let zipBuffer: Uint8Array | undefined;
       let isPrivate: boolean | undefined;
@@ -314,15 +377,25 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
     "/skills/:id",
     auth,
     requirePermission("ornn:skill:delete"),
-    requireOwnerOrAdmin(async (c) => {
-      const guid = c.req.param("id");
-      const skill = await skillRepo.findByGuid(guid);
-      return skill?.createdBy ?? "";
-    }),
     async (c) => {
       const guid = c.req.param("id");
       const authCtx = getAuth(c);
       const skill = await skillRepo.findByGuid(guid);
+      if (!skill) {
+        throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${guid}' not found`);
+      }
+      const memberships = await readUserOrgMemberships(c);
+      const actor = {
+        userId: authCtx.userId,
+        memberships,
+        isPlatformAdmin: authCtx.permissions.includes("ornn:admin:skill"),
+      };
+      if (!canManageSkill(skill, actor)) {
+        throw AppError.forbidden(
+          "FORBIDDEN",
+          "You do not have permission to delete this skill",
+        );
+      }
       logger.info({ guid }, "Skill delete via API");
       await skillService.deleteSkill(guid);
 
