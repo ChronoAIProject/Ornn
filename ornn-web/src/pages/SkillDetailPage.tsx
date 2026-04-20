@@ -13,6 +13,7 @@ import { useSkillPackage } from "@/hooks/useSkillPackage";
 import { useCurrentUser, useIsAuthenticated } from "@/stores/authStore";
 import { useToastStore } from "@/stores/toastStore";
 import { buildFileTreeFromEntries, type FileTreeEntry } from "@/utils/fileTreeBuilder";
+import { buildTrySkillPrompt } from "@/lib/buildTrySkillPrompt";
 
 /** Format a date string to exact SGT (Asia/Singapore) timestamp */
 function formatDateSGT(dateStr: string): string {
@@ -52,6 +53,7 @@ export function SkillDetailPage() {
   } = useSkillPackage(skill?.presignedPackageUrl);
 
   const isOwner = isAuthenticated && user?.id && skill?.createdBy === user.id;
+  const canTryWithCli = !!skill && (skill.isSystem === true || !skill.isPrivate || !!isOwner);
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showSaveConfirm, setShowSaveConfirm] = useState(false);
@@ -209,6 +211,23 @@ export function SkillDetailPage() {
       addToast({ type: "error", message: t("skillDetail.deleteFailed") });
     } finally {
       setShowDeleteConfirm(false);
+    }
+  };
+
+  const handleCopyTryPrompt = async () => {
+    if (!skill) return;
+    const prompt = buildTrySkillPrompt({
+      guid: skill.guid,
+      name: skill.name,
+      description: skill.description,
+      metadata: skill.metadata ?? {},
+      ornnOrigin: window.location.origin,
+    });
+    try {
+      await navigator.clipboard.writeText(prompt);
+      addToast({ type: "success", message: t("skillDetail.cliPromptCopied") });
+    } catch {
+      addToast({ type: "error", message: t("skillDetail.cliCopyFailed") });
     }
   };
 
@@ -372,6 +391,21 @@ export function SkillDetailPage() {
                   >
                     {t("skillDetail.tryPlayground")}
                   </Button>
+                  {canTryWithCli && (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      className="w-full"
+                      onClick={handleCopyTryPrompt}
+                    >
+                      <span className="flex items-center justify-center gap-2">
+                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+                        </svg>
+                        {t("skillDetail.tryWithCli")}
+                      </span>
+                    </Button>
+                  )}
                   {rawZip && (
                     <Button
                       variant="secondary"

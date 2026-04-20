@@ -99,7 +99,10 @@
     "backToExplore": "Back to Explore",
     "failedPackage": "Failed to load package contents.",
     "noPackage": "No package contents available.",
-    "downloadSkill": "Download Package"
+    "downloadSkill": "Download Package",
+    "tryWithCli": "Try with Nyx CLI",
+    "cliPromptCopied": "Prompt copied — paste it into your agent",
+    "cliCopyFailed": "Failed to copy prompt to clipboard"
   },
   "playground": {
     "selectSkill": "Select a skill to try in the playground.",
