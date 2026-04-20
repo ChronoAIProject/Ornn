@@ -91,6 +91,39 @@ export interface SkillDocument {
   isSystem?: boolean;
   /** NyxID service ID this system skill was generated from. */
   nyxidServiceId?: string;
+  /**
+   * Cached pointer to the highest version published for this skill, e.g. "1.2".
+   * The `skill_versions` collection is the source of truth; this field exists
+   * for fast default-read access and must be kept in sync by the service layer.
+   */
+  latestVersion: string;
+}
+
+/**
+ * Immutable record of a single published version of a skill.
+ * Stored in the `skill_versions` collection. The corresponding `SkillDocument`
+ * carries the "latest version" pointer for fast default-read access; the
+ * version collection is the source of truth for history + specific-version
+ * fetches.
+ */
+export interface SkillVersionDocument {
+  /** `${skillGuid}@${version}` — uniqueness guaranteed via `_id`. */
+  _id: string;
+  skillGuid: string;
+  /** "<major>.<minor>" string, e.g. "1.2". */
+  version: string;
+  majorVersion: number;
+  minorVersion: number;
+  /** Storage key unique to this version — versions are immutable. */
+  storageKey: string;
+  skillHash: string;
+  metadata: SkillMetadata;
+  license: string | null;
+  compatibility: string | null;
+  createdBy: string;
+  createdByEmail?: string;
+  createdByDisplayName?: string;
+  createdOn: Date;
 }
 
 export interface SkillMetadata {
@@ -127,6 +160,11 @@ export interface SkillDetailResponse {
   createdByDisplayName?: string;
   createdOn: string;
   updatedOn: string;
+  /**
+   * Version of this skill payload: latest when no `?version=` query was
+   * passed, otherwise the specifically requested version.
+   */
+  version: string;
 }
 
 export interface SkillSearchItem {

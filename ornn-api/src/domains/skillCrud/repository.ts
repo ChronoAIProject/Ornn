@@ -25,6 +25,8 @@ export interface CreateSkillData {
   isPrivate?: boolean;
   isSystem?: boolean;
   nyxidServiceId?: string;
+  /** Initial version, e.g. "1.0". Required. */
+  latestVersion: string;
 }
 
 export interface UpdateSkillData {
@@ -36,6 +38,8 @@ export interface UpdateSkillData {
   skillHash?: string;
   storageKey?: string;
   isPrivate?: boolean;
+  /** Cached latest-version pointer; update when a new package version is published. */
+  latestVersion?: string;
   updatedBy: string;
 }
 
@@ -84,6 +88,7 @@ export class SkillRepository {
       isPrivate: data.isPrivate ?? true,
       isSystem: data.isSystem ?? false,
       nyxidServiceId: data.nyxidServiceId ?? null,
+      latestVersion: data.latestVersion,
     };
 
     try {
@@ -113,6 +118,7 @@ export class SkillRepository {
     if (data.skillHash !== undefined) setFields.skillHash = data.skillHash;
     if (data.storageKey !== undefined) setFields.storageKey = data.storageKey;
     if (data.isPrivate !== undefined) setFields.isPrivate = data.isPrivate;
+    if (data.latestVersion !== undefined) setFields.latestVersion = data.latestVersion;
 
     await this.collection.updateOne({ _id: guid as any }, { $set: setFields });
     logger.info({ guid }, "Skill updated");
@@ -256,6 +262,7 @@ function mapDoc(doc: Document | null): SkillDocument | null {
     isPrivate: doc.isPrivate ?? true,
     isSystem: doc.isSystem ?? false,
     nyxidServiceId: doc.nyxidServiceId ?? undefined,
+    latestVersion: doc.latestVersion ?? "0.1",
   };
 }
 

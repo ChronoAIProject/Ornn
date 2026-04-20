@@ -7,11 +7,13 @@
 import { createHash } from "node:crypto";
 import { randomUUID } from "node:crypto";
 import type { SkillRepository } from "./repository";
+import type { SkillVersionRepository } from "./skillVersionRepository";
 import type { IStorageClient } from "../../clients/storageClient";
-import type { SkillDocument, SkillMetadata, SkillDetailResponse } from "../../shared/types/index";
+import type { SkillDocument, SkillMetadata, SkillDetailResponse, SkillVersionDocument } from "../../shared/types/index";
 import { AppError } from "../../shared/types/index";
 import { validateSkillFrontmatter } from "../../shared/schemas/skillFrontmatter";
 import { resolveZipRoot } from "../../shared/utils/zip";
+import { parseVersion, isGreater } from "./version";
 import { parse as parseYaml } from "yaml";
 import JSZip from "jszip";
 import pino from "pino";
@@ -20,19 +22,32 @@ const logger = pino({ level: "info" }).child({ module: "skillCrudService" });
 
 const FRONTMATTER_REGEX = /^---\s*\n([\s\S]*?)\n---/;
 
+/**
+ * Versioned storage key layout: `skills/{guid}/{version}.zip`.
+ * Keeps every published version as its own immutable blob.
+ * Legacy, pre-migration skills may still live at `skills/{guid}.zip`; the
+ * migration script preserves that key when backfilling a version row.
+ */
+function buildVersionedStorageKey(guid: string, version: string): string {
+  return `skills/${guid}/${version}.zip`;
+}
+
 export interface SkillServiceDeps {
   skillRepo: SkillRepository;
+  skillVersionRepo: SkillVersionRepository;
   storageClient: IStorageClient;
   storageBucket: string;
 }
 
 export class SkillService {
   private readonly skillRepo: SkillRepository;
+  private readonly skillVersionRepo: SkillVersionRepository;
   private readonly storageClient: IStorageClient;
   private readonly storageBucket: string;
 
   constructor(deps: SkillServiceDeps) {
     this.skillRepo = deps.skillRepo;
+    this.skillVersionRepo = deps.skillVersionRepo;
     this.storageClient = deps.storageClient;
     this.storageBucket = deps.storageBucket;
   }
@@ -54,7 +69,8 @@ export class SkillService {
     }
 
     // 2. Parse SKILL.md from ZIP
-    const { name, description, license, compatibility, metadata } = await this.extractSkillInfo(zipBuffer);
+    const { name, description, version, license, compatibility, metadata } = await this.extractSkillInfo(zipBuffer);
+    const parsedVersion = parseVersion(version);
 
     // 3. Check name uniqueness
     const existing = await this.skillRepo.findByName(name);
@@ -66,12 +82,12 @@ export class SkillService {
     const guid = randomUUID();
     const skillHash = createHash("sha256").update(zipBuffer).digest("hex");
 
-    // 5. Upload ZIP to chrono-storage
-    const storageKey = `skills/${guid}.zip`;
+    // 5. Upload ZIP to chrono-storage under a versioned key (versions are immutable).
+    const storageKey = buildVersionedStorageKey(guid, version);
     await this.storageClient.upload(this.storageBucket, storageKey, zipBuffer, "application/zip");
-    logger.info({ guid, storageKey }, "Skill package uploaded to storage");
+    logger.info({ guid, storageKey, version }, "Skill package uploaded to storage");
 
-    // 6. Save to MongoDB
+    // 6. Save the skill document.
     await this.skillRepo.create({
       guid,
       name,
@@ -87,12 +103,72 @@ export class SkillService {
       isPrivate: options?.isSystem ? false : true,
       isSystem: options?.isSystem,
       nyxidServiceId: options?.nyxidServiceId,
+      latestVersion: version,
+    });
+
+    // 7. Record the initial version row.
+    await this.skillVersionRepo.create({
+      skillGuid: guid,
+      version,
+      majorVersion: parsedVersion.major,
+      minorVersion: parsedVersion.minor,
+      storageKey,
+      skillHash,
+      metadata,
+      license,
+      compatibility,
+      createdBy: userId,
+      createdByEmail: options?.userEmail,
+      createdByDisplayName: options?.userDisplayName,
     });
 
     return { guid };
   }
 
-  async getSkill(idOrName: string): Promise<SkillDetailResponse> {
+  /**
+   * Read a skill. Without `version` returns the latest (the skill doc's
+   * cached pointer). With `version`, reads from the `skill_versions` collection
+   * and overlays that version's storageKey / metadata / hash on the identity
+   * fields from the skill doc.
+   */
+  async getSkill(idOrName: string, version?: string): Promise<SkillDetailResponse> {
+    const skill = await this.findSkillByIdOrName(idOrName);
+    if (version !== undefined) {
+      // Validate format early so clients get a clear 400, not a 404.
+      parseVersion(version);
+      const versionDoc = await this.skillVersionRepo.findBySkillAndVersion(skill.guid, version);
+      if (!versionDoc) {
+        throw AppError.notFound("SKILL_VERSION_NOT_FOUND", `Version '${version}' not found for skill '${skill.name}'`);
+      }
+      return this.buildDetailResponse(skill, versionDoc);
+    }
+    return this.buildDetailResponse(skill);
+  }
+
+  /**
+   * List every published version for a skill, newest first.
+   */
+  async listSkillVersions(idOrName: string): Promise<Array<{
+    version: string;
+    skillHash: string;
+    createdBy: string;
+    createdByEmail?: string;
+    createdByDisplayName?: string;
+    createdOn: string;
+  }>> {
+    const skill = await this.findSkillByIdOrName(idOrName);
+    const versions = await this.skillVersionRepo.listBySkill(skill.guid);
+    return versions.map((v) => ({
+      version: v.version,
+      skillHash: v.skillHash,
+      createdBy: v.createdBy,
+      createdByEmail: v.createdByEmail,
+      createdByDisplayName: v.createdByDisplayName,
+      createdOn: v.createdOn instanceof Date ? v.createdOn.toISOString() : String(v.createdOn),
+    }));
+  }
+
+  private async findSkillByIdOrName(idOrName: string): Promise<SkillDocument> {
     let skill = await this.skillRepo.findByGuid(idOrName);
     if (!skill) {
       skill = await this.skillRepo.findByName(idOrName);
@@ -100,14 +176,19 @@ export class SkillService {
     if (!skill) {
       throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${idOrName}' not found`);
     }
-
-    return this.buildDetailResponse(skill);
+    return skill;
   }
 
   async updateSkill(
     guid: string,
     userId: string,
-    options: { zipBuffer?: Uint8Array; isPrivate?: boolean; skipValidation?: boolean },
+    options: {
+      zipBuffer?: Uint8Array;
+      isPrivate?: boolean;
+      skipValidation?: boolean;
+      userEmail?: string;
+      userDisplayName?: string;
+    },
   ): Promise<SkillDetailResponse> {
     const existing = await this.skillRepo.findByGuid(guid);
     if (!existing) {
@@ -127,13 +208,43 @@ export class SkillService {
         }
       }
 
-      const { name, description, license, compatibility, metadata } = await this.extractSkillInfo(options.zipBuffer);
+      const { name, description, version, license, compatibility, metadata } = await this.extractSkillInfo(options.zipBuffer);
+      const parsedNewVersion = parseVersion(version);
+
+      // Enforce strictly-incrementing version on every package update.
+      const currentLatest = await this.skillVersionRepo.findLatestBySkill(guid);
+      if (currentLatest) {
+        const parsedCurrent = parseVersion(currentLatest.version);
+        if (!isGreater(parsedNewVersion, parsedCurrent)) {
+          throw AppError.conflict(
+            "VERSION_NOT_INCREMENTED",
+            `New version '${version}' must be strictly greater than the current latest '${currentLatest.version}'. Bump the version in SKILL.md.`,
+          );
+        }
+      }
+
       const skillHash = createHash("sha256").update(options.zipBuffer).digest("hex");
 
-      // Upload new ZIP to chrono-storage (overwrite same key)
-      const storageKey = `skills/${guid}.zip`;
+      // Upload under a new, versioned storage key — versions are immutable.
+      const storageKey = buildVersionedStorageKey(guid, version);
       await this.storageClient.upload(this.storageBucket, storageKey, options.zipBuffer, "application/zip");
-      logger.info({ guid, storageKey }, "Skill package updated in storage");
+      logger.info({ guid, storageKey, version }, "Skill package updated in storage");
+
+      // Record the new version row.
+      await this.skillVersionRepo.create({
+        skillGuid: guid,
+        version,
+        majorVersion: parsedNewVersion.major,
+        minorVersion: parsedNewVersion.minor,
+        storageKey,
+        skillHash,
+        metadata,
+        license,
+        compatibility,
+        createdBy: userId,
+        createdByEmail: options.userEmail,
+        createdByDisplayName: options.userDisplayName,
+      });
 
       Object.assign(updateData, {
         name,
@@ -143,8 +254,8 @@ export class SkillService {
         metadata,
         skillHash,
         storageKey,
+        latestVersion: version,
       });
-
     }
 
     if (options.isPrivate !== undefined) {
@@ -161,16 +272,27 @@ export class SkillService {
       throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${guid}' not found`);
     }
 
-    // Delete from chrono-storage
-    const storageKey = `skills/${guid}.zip`;
-    try {
-      await this.storageClient.delete(this.storageBucket, storageKey);
-      logger.info({ guid, storageKey }, "Skill package deleted from storage");
-    } catch (err) {
-      logger.warn({ guid, storageKey, err }, "Best-effort storage cleanup failed");
+    // Collect every storage key to clean up: the current pointer on the skill
+    // doc plus each versioned key in the skill_versions collection. Using a
+    // Set dedupes the overlap between the two.
+    const versions = await this.skillVersionRepo.listBySkill(guid);
+    const storageKeys = new Set<string>();
+    if (existing.storageKey) storageKeys.add(existing.storageKey);
+    for (const v of versions) {
+      if (v.storageKey) storageKeys.add(v.storageKey);
     }
 
-    // Hard delete from MongoDB
+    for (const key of storageKeys) {
+      try {
+        await this.storageClient.delete(this.storageBucket, key);
+      } catch (err) {
+        logger.warn({ guid, storageKey: key, err }, "Best-effort storage cleanup failed");
+      }
+    }
+    logger.info({ guid, storageKeys: Array.from(storageKeys) }, "Skill package(s) deleted from storage");
+
+    // Cascade-delete version rows first, then the skill doc.
+    await this.skillVersionRepo.deleteAllBySkill(guid);
     await this.skillRepo.hardDelete(guid);
   }
 
@@ -251,6 +373,7 @@ export class SkillService {
   private async extractSkillInfo(zipBuffer: Uint8Array): Promise<{
     name: string;
     description: string;
+    version: string;
     license: string | null;
     compatibility: string | null;
     metadata: SkillMetadata;
@@ -333,44 +456,58 @@ export class SkillService {
     return {
       name: fm.name,
       description: fm.description,
+      version: fm.version,
       license: fm.license ?? null,
       compatibility: fm.compatibility ?? null,
       metadata,
     };
   }
 
-  private async buildDetailResponse(skill: SkillDocument): Promise<SkillDetailResponse> {
+  private async buildDetailResponse(
+    skill: SkillDocument,
+    versionOverlay?: SkillVersionDocument,
+  ): Promise<SkillDetailResponse> {
+    // When reading a specific version, swap in that version's package fields;
+    // identity fields (name, createdBy, isPrivate, ...) still come from the
+    // skill doc.
+    const storageKey = versionOverlay?.storageKey ?? skill.storageKey;
+    const metadata = versionOverlay?.metadata ?? skill.metadata;
+    const skillHash = versionOverlay?.skillHash ?? skill.skillHash;
+    const license = versionOverlay ? versionOverlay.license : skill.license;
+    const compatibility = versionOverlay ? versionOverlay.compatibility : skill.compatibility;
+    const version = versionOverlay?.version ?? skill.latestVersion;
+
     let presignedPackageUrl = "";
-    if (skill.storageKey) {
+    if (storageKey) {
       try {
-        const result = await this.storageClient.getPresignedUrl(
-          this.storageBucket,
-          skill.storageKey,
-        );
+        const result = await this.storageClient.getPresignedUrl(this.storageBucket, storageKey);
         presignedPackageUrl = result.presignedUrl;
       } catch (err) {
-        logger.warn({ guid: skill.guid, err }, "Presigned URL generation failed");
+        logger.warn({ guid: skill.guid, version, err }, "Presigned URL generation failed");
       }
     }
 
-    const tags: string[] = skill.metadata?.tags ?? [];
+    const tags: string[] = metadata?.tags ?? [];
 
     return {
       guid: skill.guid,
       name: skill.name,
       description: skill.description,
-      license: skill.license,
-      compatibility: skill.compatibility,
-      metadata: skill.metadata as unknown as Record<string, unknown>,
+      license,
+      compatibility,
+      metadata: metadata as unknown as Record<string, unknown>,
       tags,
-      skillHash: skill.skillHash,
+      skillHash,
       presignedPackageUrl,
       isPrivate: skill.isPrivate,
+      isSystem: skill.isSystem,
+      nyxidServiceId: skill.nyxidServiceId,
       createdBy: skill.createdBy,
       createdByEmail: skill.createdByEmail,
       createdByDisplayName: skill.createdByDisplayName,
       createdOn: skill.createdOn instanceof Date ? skill.createdOn.toISOString() : String(skill.createdOn),
       updatedOn: skill.updatedOn instanceof Date ? skill.updatedOn.toISOString() : String(skill.updatedOn),
+      version,
     };
   }
 

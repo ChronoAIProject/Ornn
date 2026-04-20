@@ -108,6 +108,7 @@ describe("validateFrontmatter", () => {
     const result = validateFrontmatter({
       name: "test-skill",
       description: "A test",
+      version: "1.0",
       metadata: { category: "plain" },
     });
     expect(result.valid).toBe(true);
@@ -120,6 +121,7 @@ describe("validateFrontmatter", () => {
     const result = validateFrontmatter({
       name: "test-skill",
       description: "A test",
+      version: "1.0",
       category: "imported",
     });
     expect(result.valid).toBe(true);
@@ -148,11 +150,33 @@ describe("validateFrontmatter", () => {
     const result = validateFrontmatter({
       name: "test-skill",
       description: "A test",
+      version: "1.0",
     });
     expect(result.valid).toBe(true);
     if (result.data) {
       expect(result.data.metadata.category).toBe("plain");
     }
+  });
+
+  test("missingVersion_returnsStructuredError", () => {
+    const result = validateFrontmatter({
+      name: "test-skill",
+      description: "A test",
+      metadata: { category: "plain" },
+    });
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((e) => e.field === "version")).toBe(true);
+  });
+
+  test("invalidVersionFormat_3DigitSemver_returnsError", () => {
+    const result = validateFrontmatter({
+      name: "test-skill",
+      description: "A test",
+      version: "1.0.0",
+      metadata: { category: "plain" },
+    });
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((e) => e.field === "version")).toBe(true);
   });
 
   test("conditionalViolation_returnsFieldPath", () => {

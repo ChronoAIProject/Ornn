@@ -102,7 +102,36 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
   );
 
   /**
+   * GET /skills/:idOrName/versions — List all published versions, newest first.
+   * Visibility rules match GET /skills/:idOrName.
+   */
+  app.get(
+    "/skills/:idOrName/versions",
+    optionalAuth,
+    async (c) => {
+      const idOrName = c.req.param("idOrName");
+      const authCtx = c.get("auth");
+
+      // Reuse getSkill for the visibility check; we throw SKILL_NOT_FOUND for
+      // unauthenticated readers of private skills, matching the existing rule.
+      const skill = await skillService.getSkill(idOrName);
+      if (!authCtx && skill.isPrivate) {
+        throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${idOrName}' not found`);
+      }
+      if (authCtx && skill.isPrivate && skill.createdBy !== authCtx.userId && !authCtx.permissions.includes("ornn:admin:skill")) {
+        throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${idOrName}' not found`);
+      }
+
+      const items = await skillService.listSkillVersions(idOrName);
+      return c.json({ data: { items }, error: null });
+    },
+  );
+
+  /**
    * GET /skills/:idOrName — Read a skill by GUID or name.
+   * Query params:
+   *   - version: optional `<major>.<minor>` — when set, return that version's
+   *     package (storageKey, metadata, hash). When omitted, return the latest.
    * Auth: Optional. Anonymous users can only view public skills.
    */
   app.get(
@@ -110,8 +139,9 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
     optionalAuth,
     async (c) => {
       const idOrName = c.req.param("idOrName");
+      const version = c.req.query("version") || undefined;
       const authCtx = c.get("auth");
-      const skill = await skillService.getSkill(idOrName);
+      const skill = await skillService.getSkill(idOrName, version);
 
       // Anonymous users can only see public skills
       if (!authCtx && skill.isPrivate) {
@@ -185,7 +215,13 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
       logger.info({ guid, userId: authCtx.userId }, "Skill update via API");
       const userEmail = c.req.header("X-User-Email") ?? "";
       const userDN = c.req.header("X-User-Display-Name") ?? "";
-      const result = await skillService.updateSkill(guid, authCtx.userId, { zipBuffer, isPrivate, skipValidation });
+      const result = await skillService.updateSkill(guid, authCtx.userId, {
+        zipBuffer,
+        isPrivate,
+        skipValidation,
+        userEmail: userEmail || undefined,
+        userDisplayName: userDN || undefined,
+      });
 
       const action = isPrivate !== undefined && zipBuffer === undefined ? "skill:visibility_change" : "skill:update";
       activityRepo?.log(authCtx.userId, userEmail, userDN, action, {

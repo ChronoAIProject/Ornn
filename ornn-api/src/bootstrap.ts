@@ -30,6 +30,7 @@ import { NyxidServiceClient } from "./clients/nyxidServiceClient";
 
 // Domain: Skill CRUD
 import { SkillRepository } from "./domains/skillCrud/repository";
+import { SkillVersionRepository } from "./domains/skillCrud/skillVersionRepository";
 import { SkillService } from "./domains/skillCrud/service";
 import { createSkillRoutes } from "./domains/skillCrud/routes";
 
@@ -141,6 +142,8 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
 
   // ---- Repositories ----
   const skillRepo = new SkillRepository(db);
+  const skillVersionRepo = new SkillVersionRepository(db);
+  await skillVersionRepo.ensureIndexes();
   const categoryRepo = new CategoryRepository(db);
   const tagRepo = new TagRepository(db);
   const activityRepo = new ActivityRepository(db);
@@ -148,6 +151,7 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   // ---- Domain: Skill CRUD ----
   const skillService = new SkillService({
     skillRepo,
+    skillVersionRepo,
     storageClient,
     storageBucket: config.storageBucket,
   });
