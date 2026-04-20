@@ -215,6 +215,24 @@ kubectl get pods -n ornn-cluster
 - `deployment/.env.sample.ornn` — ornn-api and ornn-web config. Copy to `deployment/.env.ornn`.
 - `deployment/dependencies/.env.sample.dependencies` — all dependency service config. Copy to `deployment/dependencies/.env.dependencies`.
 
+### Using the NyxID CLI against local cluster
+
+The NyxID CLI (`nyxid`) cannot verify the local ingress TLS cert (mkcert-signed) — the binary is built without `rustls-native-certs` and has no flag to trust custom CAs. Workaround: bypass TLS via `kubectl port-forward` and use `--password` login to skip browser OAuth.
+
+```bash
+# Run in a dedicated terminal and keep alive
+kubectl port-forward -n ornn-cluster svc/nyxid-backend 3001:3001
+
+# In another terminal
+nyxid login --base-url http://localhost:3001 --password --email <your-email>
+```
+
+Notes:
+
+- `kubectl port-forward` opens a TCP tunnel from `localhost:3001` to the `nyxid-backend` service inside the cluster; closing the command closes the tunnel.
+- Tokens are written to `~/.nyxid/` and persist across CLI invocations, but the port-forward must be running for any CLI call that hits the backend.
+- To switch back to staging: `nyxid logout && nyxid login --base-url https://nyx-api.chrono-ai.fun`.
+
 ## gstack
 
 Use the `/browse` skill from gstack for all web browsing. Never use `mcp__claude-in-chrome__*` tools.
