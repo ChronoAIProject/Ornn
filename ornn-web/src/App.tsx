@@ -22,6 +22,7 @@ import { DocsPage } from "@/pages/DocsPage";
 // Protected pages
 import { ExplorePage } from "@/pages/ExplorePage";
 import { SkillDetailPage } from "@/pages/SkillDetailPage";
+import { TopicDetailPage } from "@/pages/TopicDetailPage";
 import { UploadSkillPage } from "@/pages/UploadSkillPage";
 import { CreateSkillGuidedPage } from "@/pages/CreateSkillGuidedPage";
 import { CreateSkillFreePage } from "@/pages/CreateSkillFreePage";
@@ -71,6 +72,7 @@ export function App() {
               <Route path="/docs" element={<DocsPage />} />
               <Route path="/registry" element={<ExplorePage />} />
               <Route path="/skills/:idOrName" element={<SkillDetailPage />} />
+              <Route path="/topics/:idOrName" element={<TopicDetailPage />} />
             </Route>
 
             {/* Protected routes */}
