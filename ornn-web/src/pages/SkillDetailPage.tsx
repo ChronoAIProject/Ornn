@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import JSZip from "jszip";
 import { PageTransition } from "@/components/layout/PageTransition";
 import { Card } from "@/components/ui/Card";
@@ -8,9 +8,19 @@ import { Modal } from "@/components/ui/Modal";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Badge } from "@/components/ui/Badge";
 import { SkillPackagePreview } from "@/components/skill/SkillPackagePreview";
-import { useSkill, useDeleteSkill, useUpdateSkill, useUpdateSkillPackage } from "@/hooks/useSkills";
+import { VersionPicker } from "@/components/skill/VersionPicker";
+import { DeprecationBanner } from "@/components/skill/DeprecationBanner";
+import { SkillVersionList } from "@/components/skill/SkillVersionList";
+import {
+  useSkill,
+  useDeleteSkill,
+  useUpdateSkill,
+  useUpdateSkillPackage,
+  useSkillVersions,
+  useSetVersionDeprecation,
+} from "@/hooks/useSkills";
 import { useSkillPackage } from "@/hooks/useSkillPackage";
-import { useCurrentUser, useIsAuthenticated } from "@/stores/authStore";
+import { useCurrentUser, useIsAuthenticated, isAdmin } from "@/stores/authStore";
 import { useToastStore } from "@/stores/toastStore";
 import { buildFileTreeFromEntries, type FileTreeEntry } from "@/utils/fileTreeBuilder";
 import { buildTrySkillPrompt } from "@/lib/buildTrySkillPrompt";
@@ -35,14 +45,19 @@ import type { FileNode } from "@/components/editor/FileTree";
 export function SkillDetailPage() {
   const { idOrName } = useParams<{ idOrName: string }>();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const addToast = useToastStore((s) => s.addToast);
   const user = useCurrentUser();
   const isAuthenticated = useIsAuthenticated();
   const { t } = useTranslation();
-  const { data: skill, isLoading, error, refetch } = useSkill(idOrName ?? "");
+
+  const versionParam = searchParams.get("version") ?? undefined;
+  const { data: skill, isLoading, error, refetch } = useSkill(idOrName ?? "", versionParam);
+  const { data: versionList = [] } = useSkillVersions(idOrName ?? "");
   const deleteMutation = useDeleteSkill();
   const updateMutation = useUpdateSkill(skill?.guid ?? "");
   const updatePackageMutation = useUpdateSkillPackage(skill?.guid ?? "");
+  const deprecationMutation = useSetVersionDeprecation(idOrName ?? "");
 
   const {
     files: packageFiles,
@@ -53,7 +68,46 @@ export function SkillDetailPage() {
   } = useSkillPackage(skill?.presignedPackageUrl);
 
   const isOwner = isAuthenticated && user?.id && skill?.createdBy === user.id;
+  const isAdminUser = isAdmin(user);
+  const canManageVersions = !!(isOwner || isAdminUser);
   const canTryWithCli = !!skill && (skill.isSystem === true || !skill.isPrivate || !!isOwner);
+
+  const latestVersion = versionList[0]?.version;
+  const viewingLatest = !versionParam || (latestVersion && versionParam === latestVersion);
+
+  const handleVersionChange = useCallback(
+    (versionOrLatest: string | null) => {
+      const next = new URLSearchParams(searchParams);
+      if (versionOrLatest === null) {
+        next.delete("version");
+      } else {
+        next.set("version", versionOrLatest);
+      }
+      setSearchParams(next, { replace: false });
+    },
+    [searchParams, setSearchParams],
+  );
+
+  const handleToggleDeprecation = useCallback(
+    async ({
+      version,
+      isDeprecated,
+      deprecationNote,
+    }: {
+      version: string;
+      isDeprecated: boolean;
+      deprecationNote?: string;
+    }) => {
+      try {
+        await deprecationMutation.mutateAsync({ version, isDeprecated, deprecationNote });
+        addToast({ type: "success", message: t("skillDetail.deprecationUpdated") });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : t("skillDetail.deprecationFailed");
+        addToast({ type: "error", message });
+      }
+    },
+    [deprecationMutation, addToast, t],
+  );
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showSaveConfirm, setShowSaveConfirm] = useState(false);
@@ -272,13 +326,32 @@ export function SkillDetailPage() {
   return (
     <PageTransition>
       <div className="flex flex-col h-full py-2">
+      {skill.isDeprecated && (
+        <DeprecationBanner
+          className="mb-3 shrink-0"
+          version={skill.version}
+          note={skill.deprecationNote}
+          hasNewerVersion={!viewingLatest && !!latestVersion}
+          latestVersion={latestVersion}
+          onViewLatest={() => handleVersionChange(null)}
+        />
+      )}
       <div className="flex-1 min-h-0 grid gap-4 lg:grid-cols-[1fr_300px]">
         {/* Main content — Package Contents (fills available height) */}
         <Card className="flex flex-col min-h-0 overflow-hidden">
-          <div className="mb-3 flex items-center justify-between shrink-0">
-            <h3 className="font-heading text-sm uppercase tracking-wider text-neon-cyan">
-              {t("skillDetail.packageContents")}
-            </h3>
+          <div className="mb-3 flex items-center justify-between gap-3 shrink-0">
+            <div className="flex items-center gap-3 min-w-0">
+              <h3 className="font-heading text-sm uppercase tracking-wider text-neon-cyan truncate">
+                {t("skillDetail.packageContents")}
+              </h3>
+              {versionList.length > 0 && (
+                <VersionPicker
+                  versions={versionList}
+                  currentVersion={skill.version}
+                  onChange={handleVersionChange}
+                />
+              )}
+            </div>
             {isOwner && (
               <Button
                 size="sm"
@@ -454,6 +527,17 @@ export function SkillDetailPage() {
               </>
             )}
           </div>
+
+          {versionList.length > 0 && (
+            <SkillVersionList
+              versions={versionList}
+              currentVersion={skill.version}
+              onSelect={(v) => handleVersionChange(v === latestVersion ? null : v)}
+              canManage={canManageVersions}
+              onToggleDeprecation={handleToggleDeprecation}
+              isMutating={deprecationMutation.isPending}
+            />
+          )}
         </div>
       </div>
 

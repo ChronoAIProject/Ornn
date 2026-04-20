@@ -1,14 +1,65 @@
 import { apiGet, apiPut, apiDelete } from "./apiClient";
 import type { UpdateSkillMetadata } from "@/types/api";
-import type { SkillDetail } from "@/types/domain";
+import type { SkillDetail, SkillVersionEntry } from "@/types/domain";
 import { useAuthStore } from "@/stores/authStore";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
 
-/** Fetch a single skill by GUID or name */
-export async function fetchSkill(idOrName: string): Promise<SkillDetail> {
-  const res = await apiGet<SkillDetail>(`/api/skills/${encodeURIComponent(idOrName)}`);
+/**
+ * Fetch a single skill by GUID or name.
+ * Without `version` → latest. With `version` → that specific version's payload.
+ */
+export async function fetchSkill(idOrName: string, version?: string): Promise<SkillDetail> {
+  const suffix = version ? `?version=${encodeURIComponent(version)}` : "";
+  const res = await apiGet<SkillDetail>(`/api/skills/${encodeURIComponent(idOrName)}${suffix}`);
   return res.data!;
+}
+
+/** List every published version for a skill, newest first. */
+export async function fetchSkillVersions(idOrName: string): Promise<SkillVersionEntry[]> {
+  const res = await apiGet<{ items: SkillVersionEntry[] }>(
+    `/api/skills/${encodeURIComponent(idOrName)}/versions`,
+  );
+  return res.data?.items ?? [];
+}
+
+/** Toggle the deprecation flag on a specific published version. */
+export async function setSkillVersionDeprecation(
+  idOrName: string,
+  version: string,
+  body: { isDeprecated: boolean; deprecationNote?: string },
+): Promise<{
+  skillGuid: string;
+  skillName: string;
+  version: string;
+  isDeprecated: boolean;
+  deprecationNote: string | null;
+}> {
+  const token = useAuthStore.getState().accessToken;
+  const headers: HeadersInit = {
+    "Content-Type": "application/json",
+  };
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+  const response = await fetch(
+    `${API_BASE}/api/skills/${encodeURIComponent(idOrName)}/versions/${encodeURIComponent(version)}`,
+    {
+      method: "PATCH",
+      headers,
+      credentials: "include",
+      body: JSON.stringify(body),
+    },
+  );
+  if (!response.ok) {
+    const json = await response.json().catch(() => null);
+    throw new Error(
+      (json as { error?: { message?: string } })?.error?.message ??
+        `HTTP ${response.status}: ${response.statusText}`,
+    );
+  }
+  const json = await response.json();
+  return json.data;
 }
 
 /**
