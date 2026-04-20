@@ -2,11 +2,10 @@
  * HTTP routes for the Topics domain.
  *
  * All mutation endpoints are gated by existing permission strings
- * (`ornn:skill:create/update/delete`) to avoid inventing new permissions for
- * MVP. Ownership is enforced per-topic by the service's
- * `resolveTopicForManagement` which is in turn called by the
- * `requireOwnerOrAdmin` middleware via a closure that looks up the topic's
- * `createdBy` field.
+ * (`ornn:skill:create/update/delete`) to avoid inventing new permissions
+ * for MVP. Per-topic ownership (author / org admin / platform admin) is
+ * enforced in the service layer via `canManageTopic`, which the routes
+ * delegate to by calling the service's write-path methods directly.
  *
  * @module domains/topics/routes
  */
@@ -19,9 +18,11 @@ import {
   nyxidAuthMiddleware,
   optionalAuthMiddleware,
   requirePermission,
-  requireOwnerOrAdmin,
   getAuth,
+  readUserOrgMemberships,
+  readUserOrgIds,
 } from "../../middleware/nyxidAuth";
+import { isMemberOfOrg } from "../skillCrud/authorize";
 import { AppError } from "../../shared/types/index";
 import {
   topicCreateSchema,
@@ -42,11 +43,15 @@ const listQuerySchema = z.object({
 
 export interface TopicRoutesConfig {
   topicService: TopicService;
-  topicRepo: TopicRepository;
+  /**
+   * Kept for parity with the skills routes config. Unused here — the service
+   * owns all per-topic lookups now that write gates live server-side.
+   */
+  topicRepo?: TopicRepository;
 }
 
 export function createTopicRoutes(config: TopicRoutesConfig): Hono<{ Variables: AuthVariables }> {
-  const { topicService, topicRepo } = config;
+  const { topicService } = config;
   const app = new Hono<{ Variables: AuthVariables }>();
 
   const auth = nyxidAuthMiddleware();
@@ -79,12 +84,38 @@ export function createTopicRoutes(config: TopicRoutesConfig): Hono<{ Variables: 
       const userEmail = c.req.header("X-User-Email") || undefined;
       const userDisplayName = c.req.header("X-User-Display-Name") || undefined;
 
-      const topic = await topicService.createTopic(parsed.data, {
-        userId: authCtx.userId,
-        userEmail,
-        userDisplayName,
-      });
-      logger.info({ guid: topic.guid, name: topic.name, userId: authCtx.userId }, "Topic created via API");
+      // Verify org membership when the caller is trying to create a topic
+      // under a non-self owner. Fail-closed: 403 if we can't prove membership.
+      const targetOrgId = parsed.data.targetOrgId;
+      if (targetOrgId) {
+        const memberships = await readUserOrgMemberships(c);
+        const actor = {
+          userId: authCtx.userId,
+          memberships,
+          isPlatformAdmin: authCtx.permissions.includes("ornn:admin:skill"),
+        };
+        if (!isMemberOfOrg(actor, targetOrgId) && !actor.isPlatformAdmin) {
+          throw AppError.forbidden(
+            "NOT_ORG_MEMBER",
+            `You are not an admin or member of org '${targetOrgId}'`,
+          );
+        }
+      }
+
+      const topic = await topicService.createTopic(
+        {
+          name: parsed.data.name,
+          description: parsed.data.description,
+          isPrivate: parsed.data.isPrivate,
+          targetOrgId,
+        },
+        {
+          userId: authCtx.userId,
+          userEmail,
+          userDisplayName,
+        },
+      );
+      logger.info({ guid: topic.guid, name: topic.name, userId: authCtx.userId, targetOrgId }, "Topic created via API");
       return c.json({ data: topic, error: null });
     },
   );
@@ -115,6 +146,11 @@ export function createTopicRoutes(config: TopicRoutesConfig): Hono<{ Variables: 
       const isAnonymous = !authCtx;
       const scope = isAnonymous ? "public" : parsed.data.scope ?? "mixed";
       const currentUserId = authCtx?.userId ?? "";
+      // Anonymous viewers never see private/org-owned topics, so we can skip
+      // the org lookup entirely. For signed-in users we always resolve the
+      // memberships (lazy + memoized) so both `mine` and `mixed` scopes can
+      // expand into the user's org-owned topics.
+      const userOrgIds = authCtx ? await readUserOrgIds(c) : [];
 
       const response = await topicService.listTopics({
         query: parsed.data.query,
@@ -122,6 +158,7 @@ export function createTopicRoutes(config: TopicRoutesConfig): Hono<{ Variables: 
         page: parsed.data.page,
         pageSize: parsed.data.pageSize,
         currentUserId,
+        userOrgIds,
       });
       return c.json({ data: response, error: null });
     },
@@ -138,8 +175,16 @@ export function createTopicRoutes(config: TopicRoutesConfig): Hono<{ Variables: 
       const authCtx = c.get("auth");
       const currentUserId = authCtx?.userId ?? "";
       const isAdmin = authCtx?.permissions.includes("ornn:admin:skill") ?? false;
+      // Anonymous readers have no org memberships. Signed-in readers resolve
+      // memberships via the request-scoped memoized getter so the lookup
+      // happens at most once per request.
+      const memberships = authCtx ? await readUserOrgMemberships(c) : [];
 
-      const detail = await topicService.getTopic(idOrName, { currentUserId, isAdmin });
+      const detail = await topicService.getTopic(idOrName, {
+        currentUserId,
+        isAdmin,
+        memberships,
+      });
       return c.json({ data: detail, error: null });
     },
   );
@@ -151,14 +196,10 @@ export function createTopicRoutes(config: TopicRoutesConfig): Hono<{ Variables: 
     "/topics/:id",
     auth,
     requirePermission("ornn:skill:update"),
-    requireOwnerOrAdmin(async (c) => {
-      const id = c.req.param("id");
-      const topic = await topicRepo.findByGuid(id);
-      return topic?.createdBy ?? "";
-    }),
     async (c) => {
       const id = c.req.param("id");
       const authCtx = getAuth(c);
+      const memberships = await readUserOrgMemberships(c);
 
       let raw: unknown;
       try {
@@ -174,7 +215,11 @@ export function createTopicRoutes(config: TopicRoutesConfig): Hono<{ Variables: 
         );
       }
 
-      const updated = await topicService.updateTopic(id, parsed.data, authCtx.userId);
+      const updated = await topicService.updateTopic(id, parsed.data, {
+        currentUserId: authCtx.userId,
+        isAdmin: authCtx.permissions.includes("ornn:admin:skill"),
+        memberships,
+      });
       return c.json({ data: updated, error: null });
     },
   );
@@ -186,14 +231,15 @@ export function createTopicRoutes(config: TopicRoutesConfig): Hono<{ Variables: 
     "/topics/:id",
     auth,
     requirePermission("ornn:skill:delete"),
-    requireOwnerOrAdmin(async (c) => {
-      const id = c.req.param("id");
-      const topic = await topicRepo.findByGuid(id);
-      return topic?.createdBy ?? "";
-    }),
     async (c) => {
       const id = c.req.param("id");
-      await topicService.deleteTopic(id);
+      const authCtx = getAuth(c);
+      const memberships = await readUserOrgMemberships(c);
+      await topicService.deleteTopic(id, {
+        currentUserId: authCtx.userId,
+        isAdmin: authCtx.permissions.includes("ornn:admin:skill"),
+        memberships,
+      });
       return c.json({ data: { success: true }, error: null });
     },
   );
@@ -206,15 +252,10 @@ export function createTopicRoutes(config: TopicRoutesConfig): Hono<{ Variables: 
     "/topics/:id/skills",
     auth,
     requirePermission("ornn:skill:update"),
-    requireOwnerOrAdmin(async (c) => {
-      const id = c.req.param("id");
-      const topic = await topicRepo.findByGuid(id);
-      return topic?.createdBy ?? "";
-    }),
     async (c) => {
       const id = c.req.param("id");
       const authCtx = getAuth(c);
-      const isAdmin = authCtx.permissions.includes("ornn:admin:skill");
+      const memberships = await readUserOrgMemberships(c);
 
       let raw: unknown;
       try {
@@ -232,7 +273,8 @@ export function createTopicRoutes(config: TopicRoutesConfig): Hono<{ Variables: 
 
       const result = await topicService.addSkills(id, parsed.data.skillIds, {
         currentUserId: authCtx.userId,
-        isAdmin,
+        isAdmin: authCtx.permissions.includes("ornn:admin:skill"),
+        memberships,
       });
       return c.json({ data: result, error: null });
     },
@@ -246,15 +288,16 @@ export function createTopicRoutes(config: TopicRoutesConfig): Hono<{ Variables: 
     "/topics/:id/skills/:skillGuid",
     auth,
     requirePermission("ornn:skill:update"),
-    requireOwnerOrAdmin(async (c) => {
-      const id = c.req.param("id");
-      const topic = await topicRepo.findByGuid(id);
-      return topic?.createdBy ?? "";
-    }),
     async (c) => {
       const id = c.req.param("id");
       const skillGuid = c.req.param("skillGuid");
-      const result = await topicService.removeSkill(id, skillGuid);
+      const authCtx = getAuth(c);
+      const memberships = await readUserOrgMemberships(c);
+      const result = await topicService.removeSkill(id, skillGuid, {
+        currentUserId: authCtx.userId,
+        isAdmin: authCtx.permissions.includes("ornn:admin:skill"),
+        memberships,
+      });
       return c.json({ data: result, error: null });
     },
   );

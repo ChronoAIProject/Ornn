@@ -20,6 +20,12 @@ export const topicCreateSchema = z.object({
     .regex(TOPIC_NAME_REGEX, "Topic name must be kebab-case (lowercase alphanumeric + hyphens)"),
   description: z.string().max(2048).optional().default(""),
   isPrivate: z.boolean().optional().default(false),
+  /**
+   * Optional org user_id. When present, the topic is owned by that org —
+   * the route verifies the caller is an admin/member of the org before
+   * threading it into the service.
+   */
+  targetOrgId: z.string().min(1).max(128).optional(),
 });
 
 export const topicUpdateSchema = z

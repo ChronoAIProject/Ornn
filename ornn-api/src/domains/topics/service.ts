@@ -1,18 +1,23 @@
 /**
  * TopicService — business logic for skill topics.
  *
- * Ownership / visibility rules (mirrors the existing skill rules):
- *   - Private topic: visible only to its owner + any user with
- *     `ornn:admin:skill`.
+ * Ownership / visibility rules (mirror the skill rules):
  *   - Public topic: visible to anyone. The embedded skill list on the
  *     detail endpoint is still filtered per-viewer — a private skill stays
  *     hidden from users who can't already see it, even if it's been added
  *     to a public topic.
+ *   - Private topic: visible to its author, to admins/members of the owning
+ *     org (when `ownerId` is an org), and to platform admins.
  *
- * Route-level auth (ornn:skill:create / update / delete + requireOwnerOrAdmin)
- * is enforced in `routes.ts`. The service itself only enforces visibility
- * on read paths and enforces "can the actor see this skill" when building
- * edges.
+ * Write (create / update / delete / membership changes):
+ *   - The author (`createdBy === actor`) can always manage.
+ *   - When `ownerId` is an org, admins of that org can manage.
+ *   - Platform admins can manage.
+ *   - Else 403.
+ *
+ * The service enforces the read gate on `getTopic` / `listMemberSkillGuids`
+ * and the write gate on `updateTopic` / `deleteTopic` / membership mutations.
+ * Route-level permission checks (`ornn:skill:*`) live in `routes.ts`.
  *
  * @module domains/topics/service
  */
@@ -29,6 +34,8 @@ import type {
   TopicSummaryItem,
 } from "../../shared/types/index";
 import { AppError } from "../../shared/types/index";
+import type { OrgMembershipFact } from "../../middleware/nyxidAuth";
+import { canReadSkill, canManageSkill } from "../skillCrud/authorize";
 import pino from "pino";
 
 const logger = pino({ level: "info" }).child({ module: "topicService" });
@@ -39,9 +46,19 @@ export interface TopicServiceDeps {
   skillRepo: SkillRepository;
 }
 
+/**
+ * Caller context for topic ops. `memberships` is the actor's filtered org
+ * membership list (viewer role already removed). `userOrgIds` is the list
+ * of org user_ids derived from `memberships` — duplicated here so callers
+ * that only care about "which orgs do I belong to" (scope filtering) don't
+ * have to recompute it.
+ */
 export interface ActorContext {
   currentUserId: string;
+  /** True when caller holds the `ornn:admin:skill` platform permission. */
   isAdmin: boolean;
+  /** Filtered NyxID org memberships (admin/member only). */
+  memberships: OrgMembershipFact[];
 }
 
 export class TopicService {
@@ -60,7 +77,16 @@ export class TopicService {
   // ---------------------------------------------------------------------------
 
   async createTopic(
-    input: { name: string; description: string; isPrivate: boolean },
+    input: {
+      name: string;
+      description: string;
+      isPrivate: boolean;
+      /**
+       * When set, the new topic is owned by this org user_id. Caller MUST
+       * pre-validate org membership — the service trusts this field.
+       */
+      targetOrgId?: string;
+    },
     actor: { userId: string; userEmail?: string; userDisplayName?: string },
   ): Promise<TopicDetailResponse> {
     const guid = randomUUID();
@@ -68,6 +94,7 @@ export class TopicService {
       guid,
       name: input.name,
       description: input.description,
+      ownerId: input.targetOrgId ?? actor.userId,
       createdBy: actor.userId,
       createdByEmail: actor.userEmail,
       createdByDisplayName: actor.userDisplayName,
@@ -79,27 +106,33 @@ export class TopicService {
   async updateTopic(
     guid: string,
     input: { description?: string; isPrivate?: boolean },
-    userId: string,
+    actor: ActorContext,
   ): Promise<TopicDetailResponse> {
-    await this.requireTopic(guid);
+    const existing = await this.requireTopic(guid);
+    if (!this.canManageTopic(existing, actor)) {
+      throw AppError.forbidden("FORBIDDEN", "You do not have permission to update this topic");
+    }
     const updated = await this.topicRepo.update(guid, {
       description: input.description,
       isPrivate: input.isPrivate,
-      updatedBy: userId,
+      updatedBy: actor.currentUserId,
     });
     const skillGuids = await this.topicSkillRepo.listSkillGuidsByTopic(guid);
     const count = skillGuids.length;
-    // For the update response we intentionally do not filter visibility
-    // against the actor — whoever can update a topic can see all of its
-    // edges. Callers fetching the detail endpoint afterwards go through
-    // the visibility-aware getTopic path.
+    // For the update response we intentionally do not re-apply the skill
+    // visibility filter against the actor — whoever can update a topic can
+    // see all of its edges. Callers fetching the detail endpoint afterwards
+    // go through the visibility-aware getTopic path.
     const skills = skillGuids.length > 0 ? await this.skillRepo.findByGuids(skillGuids) : [];
-    const filtered = orderSkillsByGuidList(skills, skillGuids);
-    return this.buildDetailResponse(updated, filtered, count);
+    const ordered = orderSkillsByGuidList(skills, skillGuids);
+    return this.buildDetailResponse(updated, ordered, count);
   }
 
-  async deleteTopic(guid: string): Promise<void> {
-    await this.requireTopic(guid);
+  async deleteTopic(guid: string, actor: ActorContext): Promise<void> {
+    const existing = await this.requireTopic(guid);
+    if (!this.canManageTopic(existing, actor)) {
+      throw AppError.forbidden("FORBIDDEN", "You do not have permission to delete this topic");
+    }
     await this.topicSkillRepo.deleteAllByTopic(guid);
     await this.topicRepo.hardDelete(guid);
     logger.info({ guid }, "Topic deleted");
@@ -115,11 +148,13 @@ export class TopicService {
     page: number;
     pageSize: number;
     currentUserId: string;
+    userOrgIds: string[];
   }): Promise<TopicListResponse> {
     const { topics, total } = await this.topicRepo.list({
       query: params.query,
       scope: params.scope,
       currentUserId: params.currentUserId,
+      userOrgIds: params.userOrgIds,
       page: params.page,
       pageSize: params.pageSize,
     });
@@ -145,7 +180,7 @@ export class TopicService {
     if (!topic) {
       throw AppError.notFound("TOPIC_NOT_FOUND", `Topic '${idOrName}' not found`);
     }
-    if (topic.isPrivate && !this.canManageTopic(topic, actor)) {
+    if (!this.canReadTopic(topic, actor)) {
       // Use 404 rather than 403 to avoid leaking the existence of private topics.
       throw AppError.notFound("TOPIC_NOT_FOUND", `Topic '${idOrName}' not found`);
     }
@@ -153,7 +188,7 @@ export class TopicService {
     const skillGuids = await this.topicSkillRepo.listSkillGuidsByTopic(topic.guid);
     const count = skillGuids.length;
     const rawSkills = skillGuids.length > 0 ? await this.skillRepo.findByGuids(skillGuids) : [];
-    const visible = rawSkills.filter((s) => canSeeSkill(s, actor));
+    const visible = rawSkills.filter((s) => this.canSeeSkill(s, actor));
     const ordered = orderSkillsByGuidList(visible, skillGuids);
 
     return this.buildDetailResponse(topic, ordered, count);
@@ -178,7 +213,7 @@ export class TopicService {
       throw AppError.notFound("TOPIC_NOT_FOUND", `Topic '${idOrName}' not found`);
     }
     if (!this.canManageTopic(topic, actor)) {
-      throw AppError.forbidden("FORBIDDEN", "You can only manage your own topics");
+      throw AppError.forbidden("FORBIDDEN", "You do not have permission to manage this topic");
     }
     return topic;
   }
@@ -193,6 +228,9 @@ export class TopicService {
     actor: ActorContext,
   ): Promise<{ added: string[]; skipped: string[] }> {
     const topic = await this.requireTopic(topicIdOrName);
+    if (!this.canManageTopic(topic, actor)) {
+      throw AppError.forbidden("FORBIDDEN", "You do not have permission to modify this topic");
+    }
 
     const added: string[] = [];
     const skipped: string[] = [];
@@ -202,10 +240,10 @@ export class TopicService {
       if (!skill) {
         throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${ref}' not found`);
       }
-      if (!canSeeSkill(skill, actor)) {
+      if (!this.canSeeSkill(skill, actor)) {
         throw AppError.forbidden(
           "SKILL_NOT_ACCESSIBLE",
-          `Skill '${skill.name}' is private and you do not own it`,
+          `Skill '${skill.name}' is private and you do not have access to it`,
         );
       }
       const result = await this.topicSkillRepo.add({
@@ -227,8 +265,12 @@ export class TopicService {
   async removeSkill(
     topicIdOrName: string,
     skillGuid: string,
+    actor: ActorContext,
   ): Promise<{ success: true }> {
     const topic = await this.requireTopic(topicIdOrName);
+    if (!this.canManageTopic(topic, actor)) {
+      throw AppError.forbidden("FORBIDDEN", "You do not have permission to modify this topic");
+    }
     const removed = await this.topicSkillRepo.remove(topic.guid, skillGuid);
     if (!removed) {
       throw AppError.notFound("NOT_IN_TOPIC", `Skill '${skillGuid}' is not in topic '${topic.name}'`);
@@ -254,7 +296,7 @@ export class TopicService {
     if (!topic) {
       throw AppError.notFound("TOPIC_NOT_FOUND", `Topic '${topicIdOrName}' not found`);
     }
-    if (topic.isPrivate && !this.canManageTopic(topic, actor)) {
+    if (!this.canReadTopic(topic, actor)) {
       throw AppError.notFound("TOPIC_NOT_FOUND", `Topic '${topicIdOrName}' not found`);
     }
     return this.topicSkillRepo.listSkillGuidsByTopic(topic.guid);
@@ -284,8 +326,44 @@ export class TopicService {
     return this.skillRepo.findByName(ref);
   }
 
+  /**
+   * Read gate — can the actor see this topic? Mirrors canReadSkill exactly
+   * so that callers can reason about topic + skill visibility with the same
+   * mental model.
+   */
+  private canReadTopic(topic: TopicDocument, actor: ActorContext): boolean {
+    return canReadSkill(
+      { ownerId: topic.ownerId, createdBy: topic.createdBy, isPrivate: topic.isPrivate },
+      {
+        userId: actor.currentUserId,
+        memberships: actor.memberships,
+        isPlatformAdmin: actor.isAdmin,
+      },
+    );
+  }
+
+  /**
+   * Write gate — can the actor mutate this topic? Author + org admin of the
+   * owning org + platform admin, else denied.
+   */
   private canManageTopic(topic: TopicDocument, actor: ActorContext): boolean {
-    return actor.isAdmin || topic.createdBy === actor.currentUserId;
+    return canManageSkill(
+      { ownerId: topic.ownerId, createdBy: topic.createdBy, isPrivate: topic.isPrivate },
+      {
+        userId: actor.currentUserId,
+        memberships: actor.memberships,
+        isPlatformAdmin: actor.isAdmin,
+      },
+    );
+  }
+
+  /** Read gate for the embedded skill list. Uses the same skill visibility rules. */
+  private canSeeSkill(skill: SkillDocument, actor: ActorContext): boolean {
+    return canReadSkill(skill, {
+      userId: actor.currentUserId,
+      memberships: actor.memberships,
+      isPlatformAdmin: actor.isAdmin,
+    });
   }
 
   private toSummary(topic: TopicDocument, skillCount: number): TopicSummaryItem {
@@ -293,6 +371,7 @@ export class TopicService {
       guid: topic.guid,
       name: topic.name,
       description: topic.description,
+      ownerId: topic.ownerId,
       createdBy: topic.createdBy,
       createdByEmail: topic.createdByEmail,
       createdByDisplayName: topic.createdByDisplayName,
@@ -313,6 +392,7 @@ export class TopicService {
       guid: s.guid,
       name: s.name,
       description: s.description,
+      ownerId: s.ownerId,
       createdBy: s.createdBy,
       createdByEmail: s.createdByEmail,
       createdByDisplayName: s.createdByDisplayName,
@@ -325,12 +405,6 @@ export class TopicService {
     }));
     return { ...summary, skills: items };
   }
-}
-
-function canSeeSkill(skill: SkillDocument, actor: ActorContext): boolean {
-  if (!skill.isPrivate) return true;
-  if (actor.isAdmin) return true;
-  return skill.createdBy === actor.currentUserId;
 }
 
 /**

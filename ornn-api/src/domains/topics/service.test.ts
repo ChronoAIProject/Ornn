@@ -4,6 +4,7 @@ import type { TopicRepository, TopicSkillRepository } from "./repository";
 import type { SkillRepository } from "../skillCrud/repository";
 import type { SkillDocument, TopicDocument } from "../../shared/types/index";
 import { AppError } from "../../shared/types/index";
+import type { OrgMembershipFact } from "../../middleware/nyxidAuth";
 
 /**
  * Unit tests for TopicService. Uses hand-rolled mock repositories so we
@@ -15,12 +16,14 @@ const NOW = new Date("2026-04-20T10:00:00Z");
 const OWNER_ID = "owner-user";
 const OTHER_USER_ID = "other-user";
 const ADMIN_ID = "admin-user";
+const ORG_ID = "org-acme";
 
 function makeTopic(overrides: Partial<TopicDocument> = {}): TopicDocument {
   return {
     guid: "topic-1",
     name: "python-data",
     description: "",
+    ownerId: overrides.ownerId ?? overrides.createdBy ?? OWNER_ID,
     createdBy: OWNER_ID,
     createdOn: NOW,
     updatedBy: OWNER_ID,
@@ -40,6 +43,7 @@ function makeSkill(overrides: Partial<SkillDocument> = {}): SkillDocument {
     metadata: { category: "plain" },
     skillHash: "",
     storageKey: "skills/skill-1/0.1.zip",
+    ownerId: overrides.ownerId ?? overrides.createdBy ?? OWNER_ID,
     createdBy: OWNER_ID,
     createdOn: NOW,
     updatedBy: OWNER_ID,
@@ -50,10 +54,32 @@ function makeSkill(overrides: Partial<SkillDocument> = {}): SkillDocument {
   };
 }
 
+/** Build a caller context. Empty memberships by default — callers override when testing org paths. */
+function makeActor(overrides: {
+  currentUserId?: string;
+  isAdmin?: boolean;
+  memberships?: OrgMembershipFact[];
+} = {}) {
+  return {
+    currentUserId: overrides.currentUserId ?? OWNER_ID,
+    isAdmin: overrides.isAdmin ?? false,
+    memberships: overrides.memberships ?? [],
+  };
+}
+
 function createMockTopicRepo(): TopicRepository {
   return {
     ensureIndexes: mock(async () => {}),
-    create: mock(async (data) => makeTopic({ guid: data.guid, name: data.name, description: data.description ?? "", isPrivate: data.isPrivate ?? false, createdBy: data.createdBy })),
+    create: mock(async (data) =>
+      makeTopic({
+        guid: data.guid,
+        name: data.name,
+        description: data.description ?? "",
+        isPrivate: data.isPrivate ?? false,
+        createdBy: data.createdBy,
+        ownerId: data.ownerId,
+      }),
+    ),
     findByGuid: mock(async () => null),
     findByName: mock(async () => null),
     update: mock(async (guid, data) => makeTopic({ guid, description: data.description ?? "", isPrivate: data.isPrivate ?? false })),
@@ -97,7 +123,7 @@ describe("TopicService", () => {
   });
 
   describe("createTopic", () => {
-    test("passes create args through to the repository", async () => {
+    test("personal topic: ownerId defaults to createdBy", async () => {
       await service.createTopic(
         { name: "my-topic", description: "hello", isPrivate: false },
         { userId: OWNER_ID, userEmail: "o@x", userDisplayName: "Owner" },
@@ -106,11 +132,22 @@ describe("TopicService", () => {
         expect.objectContaining({
           name: "my-topic",
           description: "hello",
+          ownerId: OWNER_ID,
           createdBy: OWNER_ID,
           createdByEmail: "o@x",
           createdByDisplayName: "Owner",
           isPrivate: false,
         }),
+      );
+    });
+
+    test("org topic: ownerId takes targetOrgId, createdBy stays the actor", async () => {
+      await service.createTopic(
+        { name: "org-topic", description: "", isPrivate: true, targetOrgId: ORG_ID },
+        { userId: OWNER_ID },
+      );
+      expect(topicRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ ownerId: ORG_ID, createdBy: OWNER_ID }),
       );
     });
 
@@ -134,7 +171,14 @@ describe("TopicService", () => {
       (topicRepo.list as ReturnType<typeof mock>).mockImplementationOnce(async () => ({ topics: [t1, t2], total: 2 }));
       (topicSkillRepo.countsByTopics as ReturnType<typeof mock>).mockImplementationOnce(async () => new Map([["t1", 3], ["t2", 0]]));
 
-      const res = await service.listTopics({ query: "", scope: "mixed", page: 1, pageSize: 10, currentUserId: OWNER_ID });
+      const res = await service.listTopics({
+        query: "",
+        scope: "mixed",
+        page: 1,
+        pageSize: 10,
+        currentUserId: OWNER_ID,
+        userOrgIds: [],
+      });
 
       expect(res.items).toHaveLength(2);
       expect(res.items[0]).toMatchObject({ guid: "t1", skillCount: 3 });
@@ -142,17 +186,24 @@ describe("TopicService", () => {
       expect(res.total).toBe(2);
     });
 
-    test("passes scope + pagination to the repo unchanged", async () => {
-      await service.listTopics({ query: "python", scope: "public", page: 2, pageSize: 25, currentUserId: OWNER_ID });
+    test("passes scope + pagination + userOrgIds to the repo unchanged", async () => {
+      await service.listTopics({
+        query: "python",
+        scope: "public",
+        page: 2,
+        pageSize: 25,
+        currentUserId: OWNER_ID,
+        userOrgIds: [ORG_ID],
+      });
       expect(topicRepo.list).toHaveBeenCalledWith(
-        expect.objectContaining({ query: "python", scope: "public", page: 2, pageSize: 25 }),
+        expect.objectContaining({ query: "python", scope: "public", page: 2, pageSize: 25, userOrgIds: [ORG_ID] }),
       );
     });
   });
 
   describe("getTopic", () => {
     test("404 when the topic does not exist", async () => {
-      await expect(service.getTopic("missing", { currentUserId: OWNER_ID, isAdmin: false })).rejects.toMatchObject({
+      await expect(service.getTopic("missing", makeActor())).rejects.toMatchObject({
         code: "TOPIC_NOT_FOUND",
         statusCode: 404,
       });
@@ -162,7 +213,7 @@ describe("TopicService", () => {
       const t = makeTopic({ isPrivate: true, createdBy: OWNER_ID });
       (topicRepo.findByGuid as ReturnType<typeof mock>).mockImplementationOnce(async () => t);
       await expect(
-        service.getTopic(t.guid, { currentUserId: OTHER_USER_ID, isAdmin: false }),
+        service.getTopic(t.guid, makeActor({ currentUserId: OTHER_USER_ID })),
       ).rejects.toMatchObject({ code: "TOPIC_NOT_FOUND" });
     });
 
@@ -170,20 +221,34 @@ describe("TopicService", () => {
       const t = makeTopic({ isPrivate: true, createdBy: OWNER_ID });
       (topicRepo.findByGuid as ReturnType<typeof mock>).mockImplementationOnce(async () => t);
       (topicSkillRepo.listSkillGuidsByTopic as ReturnType<typeof mock>).mockImplementationOnce(async () => []);
-      const detail = await service.getTopic(t.guid, { currentUserId: ADMIN_ID, isAdmin: true });
+      const detail = await service.getTopic(t.guid, makeActor({ currentUserId: ADMIN_ID, isAdmin: true }));
+      expect(detail.guid).toBe(t.guid);
+    });
+
+    test("org member can read a private org-owned topic", async () => {
+      const t = makeTopic({ isPrivate: true, createdBy: OWNER_ID, ownerId: ORG_ID });
+      (topicRepo.findByGuid as ReturnType<typeof mock>).mockImplementationOnce(async () => t);
+      (topicSkillRepo.listSkillGuidsByTopic as ReturnType<typeof mock>).mockImplementationOnce(async () => []);
+      const detail = await service.getTopic(
+        t.guid,
+        makeActor({
+          currentUserId: OTHER_USER_ID,
+          memberships: [{ userId: ORG_ID, role: "member" }],
+        }),
+      );
       expect(detail.guid).toBe(t.guid);
     });
 
     test("filters out skills the viewer cannot see (private skill, non-owner, non-admin)", async () => {
       const topic = makeTopic();
-      const publicSkill = makeSkill({ guid: "public-skill", name: "public", isPrivate: false, createdBy: OTHER_USER_ID });
-      const privateSkill = makeSkill({ guid: "private-skill", name: "private", isPrivate: true, createdBy: OTHER_USER_ID });
+      const publicSkill = makeSkill({ guid: "public-skill", name: "public", isPrivate: false, createdBy: OTHER_USER_ID, ownerId: OTHER_USER_ID });
+      const privateSkill = makeSkill({ guid: "private-skill", name: "private", isPrivate: true, createdBy: OTHER_USER_ID, ownerId: OTHER_USER_ID });
 
       (topicRepo.findByGuid as ReturnType<typeof mock>).mockImplementationOnce(async () => topic);
       (topicSkillRepo.listSkillGuidsByTopic as ReturnType<typeof mock>).mockImplementationOnce(async () => ["public-skill", "private-skill"]);
       (skillRepo.findByGuids as ReturnType<typeof mock>).mockImplementationOnce(async () => [publicSkill, privateSkill]);
 
-      const detail = await service.getTopic(topic.guid, { currentUserId: OWNER_ID, isAdmin: false });
+      const detail = await service.getTopic(topic.guid, makeActor());
       const guids = detail.skills.map((s) => s.guid);
       expect(guids).toContain("public-skill");
       expect(guids).not.toContain("private-skill");
@@ -191,26 +256,50 @@ describe("TopicService", () => {
 
     test("includes private skill when viewer is admin", async () => {
       const topic = makeTopic();
-      const privateSkill = makeSkill({ guid: "private-skill", name: "private", isPrivate: true, createdBy: OTHER_USER_ID });
+      const privateSkill = makeSkill({ guid: "private-skill", name: "private", isPrivate: true, createdBy: OTHER_USER_ID, ownerId: OTHER_USER_ID });
       (topicRepo.findByGuid as ReturnType<typeof mock>).mockImplementationOnce(async () => topic);
       (topicSkillRepo.listSkillGuidsByTopic as ReturnType<typeof mock>).mockImplementationOnce(async () => ["private-skill"]);
       (skillRepo.findByGuids as ReturnType<typeof mock>).mockImplementationOnce(async () => [privateSkill]);
 
-      const detail = await service.getTopic(topic.guid, { currentUserId: ADMIN_ID, isAdmin: true });
+      const detail = await service.getTopic(topic.guid, makeActor({ currentUserId: ADMIN_ID, isAdmin: true }));
       expect(detail.skills.map((s) => s.guid)).toContain("private-skill");
     });
   });
 
   describe("updateTopic", () => {
-    test("applies partial update via the repo", async () => {
+    test("author can update their own topic", async () => {
       const t = makeTopic();
       (topicRepo.findByGuid as ReturnType<typeof mock>).mockImplementationOnce(async () => t);
-      await service.updateTopic(t.guid, { description: "new" }, OWNER_ID);
+      await service.updateTopic(t.guid, { description: "new" }, makeActor());
       expect(topicRepo.update).toHaveBeenCalledWith(t.guid, expect.objectContaining({ description: "new", updatedBy: OWNER_ID }));
     });
 
+    test("403 when a non-author tries to update a personal topic", async () => {
+      const t = makeTopic();
+      (topicRepo.findByGuid as ReturnType<typeof mock>).mockImplementationOnce(async () => t);
+      await expect(
+        service.updateTopic(t.guid, { description: "x" }, makeActor({ currentUserId: OTHER_USER_ID })),
+      ).rejects.toMatchObject({ code: "FORBIDDEN", statusCode: 403 });
+    });
+
+    test("org admin can update an org-owned topic even if not the author", async () => {
+      const t = makeTopic({ ownerId: ORG_ID, createdBy: OTHER_USER_ID });
+      (topicRepo.findByGuid as ReturnType<typeof mock>).mockImplementationOnce(async () => t);
+      await service.updateTopic(
+        t.guid,
+        { description: "x" },
+        makeActor({
+          currentUserId: OWNER_ID,
+          memberships: [{ userId: ORG_ID, role: "admin" }],
+        }),
+      );
+      expect(topicRepo.update).toHaveBeenCalled();
+    });
+
     test("404 when the topic does not exist", async () => {
-      await expect(service.updateTopic("missing", { description: "x" }, OWNER_ID)).rejects.toMatchObject({ code: "TOPIC_NOT_FOUND" });
+      await expect(
+        service.updateTopic("missing", { description: "x" }, makeActor()),
+      ).rejects.toMatchObject({ code: "TOPIC_NOT_FOUND" });
     });
   });
 
@@ -218,13 +307,23 @@ describe("TopicService", () => {
     test("cascades membership before hard-deleting the topic doc", async () => {
       const t = makeTopic();
       (topicRepo.findByGuid as ReturnType<typeof mock>).mockImplementationOnce(async () => t);
-      await service.deleteTopic(t.guid);
+      await service.deleteTopic(t.guid, makeActor());
       expect(topicSkillRepo.deleteAllByTopic).toHaveBeenCalledWith(t.guid);
       expect(topicRepo.hardDelete).toHaveBeenCalledWith(t.guid);
     });
 
+    test("403 when a non-author tries to delete", async () => {
+      const t = makeTopic();
+      (topicRepo.findByGuid as ReturnType<typeof mock>).mockImplementationOnce(async () => t);
+      await expect(
+        service.deleteTopic(t.guid, makeActor({ currentUserId: OTHER_USER_ID })),
+      ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    });
+
     test("404 when the topic does not exist", async () => {
-      await expect(service.deleteTopic("missing")).rejects.toMatchObject({ code: "TOPIC_NOT_FOUND" });
+      await expect(
+        service.deleteTopic("missing", makeActor()),
+      ).rejects.toMatchObject({ code: "TOPIC_NOT_FOUND" });
     });
   });
 
@@ -240,11 +339,7 @@ describe("TopicService", () => {
         .mockImplementationOnce(async () => null); // second lookup falls through to findByName
       (skillRepo.findByName as ReturnType<typeof mock>).mockImplementationOnce(async () => skillB);
 
-      const result = await service.addSkills(
-        topic.guid,
-        ["sa", "beta"],
-        { currentUserId: OWNER_ID, isAdmin: false },
-      );
+      const result = await service.addSkills(topic.guid, ["sa", "beta"], makeActor());
 
       expect(result.added).toEqual(["sa", "sb"]);
       expect(result.skipped).toEqual([]);
@@ -253,14 +348,22 @@ describe("TopicService", () => {
 
     test("403 when the actor cannot see a private skill they do not own", async () => {
       const topic = makeTopic({ guid: "t", createdBy: OWNER_ID });
-      const hiddenSkill = makeSkill({ guid: "hidden", name: "hidden", createdBy: OTHER_USER_ID, isPrivate: true });
+      const hiddenSkill = makeSkill({ guid: "hidden", name: "hidden", createdBy: OTHER_USER_ID, ownerId: OTHER_USER_ID, isPrivate: true });
 
       (topicRepo.findByGuid as ReturnType<typeof mock>).mockImplementationOnce(async () => topic);
       (skillRepo.findByGuid as ReturnType<typeof mock>).mockImplementationOnce(async () => hiddenSkill);
 
       await expect(
-        service.addSkills(topic.guid, ["hidden"], { currentUserId: OWNER_ID, isAdmin: false }),
+        service.addSkills(topic.guid, ["hidden"], makeActor()),
       ).rejects.toMatchObject({ code: "SKILL_NOT_ACCESSIBLE", statusCode: 403 });
+    });
+
+    test("403 when the actor cannot manage the topic", async () => {
+      const topic = makeTopic({ guid: "t", createdBy: OWNER_ID });
+      (topicRepo.findByGuid as ReturnType<typeof mock>).mockImplementationOnce(async () => topic);
+      await expect(
+        service.addSkills(topic.guid, ["any"], makeActor({ currentUserId: OTHER_USER_ID })),
+      ).rejects.toMatchObject({ code: "FORBIDDEN" });
     });
 
     test("idempotent: re-adding an already-member skill moves it to skipped", async () => {
@@ -271,7 +374,7 @@ describe("TopicService", () => {
       (skillRepo.findByGuid as ReturnType<typeof mock>).mockImplementationOnce(async () => skill);
       (topicSkillRepo.add as ReturnType<typeof mock>).mockImplementationOnce(async () => ({ inserted: false }));
 
-      const result = await service.addSkills(topic.guid, ["s"], { currentUserId: OWNER_ID, isAdmin: false });
+      const result = await service.addSkills(topic.guid, ["s"], makeActor());
       expect(result.added).toEqual([]);
       expect(result.skipped).toEqual(["s"]);
     });
@@ -280,7 +383,7 @@ describe("TopicService", () => {
       const topic = makeTopic();
       (topicRepo.findByGuid as ReturnType<typeof mock>).mockImplementationOnce(async () => topic);
       await expect(
-        service.addSkills(topic.guid, ["does-not-exist"], { currentUserId: OWNER_ID, isAdmin: false }),
+        service.addSkills(topic.guid, ["does-not-exist"], makeActor()),
       ).rejects.toMatchObject({ code: "SKILL_NOT_FOUND", statusCode: 404 });
     });
   });
@@ -290,7 +393,7 @@ describe("TopicService", () => {
       const topic = makeTopic();
       (topicRepo.findByGuid as ReturnType<typeof mock>).mockImplementationOnce(async () => topic);
       (topicSkillRepo.remove as ReturnType<typeof mock>).mockImplementationOnce(async () => true);
-      const res = await service.removeSkill(topic.guid, "skill-1");
+      const res = await service.removeSkill(topic.guid, "skill-1", makeActor());
       expect(topicSkillRepo.remove).toHaveBeenCalledWith(topic.guid, "skill-1");
       expect(res).toEqual({ success: true });
     });
@@ -299,7 +402,15 @@ describe("TopicService", () => {
       const topic = makeTopic();
       (topicRepo.findByGuid as ReturnType<typeof mock>).mockImplementationOnce(async () => topic);
       (topicSkillRepo.remove as ReturnType<typeof mock>).mockImplementationOnce(async () => false);
-      await expect(service.removeSkill(topic.guid, "skill-1")).rejects.toMatchObject({ code: "NOT_IN_TOPIC" });
+      await expect(service.removeSkill(topic.guid, "skill-1", makeActor())).rejects.toMatchObject({ code: "NOT_IN_TOPIC" });
+    });
+
+    test("403 when the actor cannot manage the topic", async () => {
+      const topic = makeTopic({ createdBy: OWNER_ID });
+      (topicRepo.findByGuid as ReturnType<typeof mock>).mockImplementationOnce(async () => topic);
+      await expect(
+        service.removeSkill(topic.guid, "skill-1", makeActor({ currentUserId: OTHER_USER_ID })),
+      ).rejects.toMatchObject({ code: "FORBIDDEN" });
     });
   });
 
