@@ -40,3 +40,39 @@ Skill versions migration complete:
 ```
 
 On a fresh deploy `migrated == scanned`. On re-runs `alreadyMigrated == scanned`. Any per-skill errors are listed at the end and the process exits non-zero so the run fails loudly.
+
+## `migrate:ownership` — Org-scoped skill ownership
+
+Backfills the `ownerId` field on every `skills` and `topics` document that pre-dates the org-ownership feature. Before that feature, visibility pivoted on `createdBy` alone. We've since split the two:
+
+- `createdBy` — always a person `user_id` (the actual author). Never changes.
+- `ownerId` — the "owner entity": either the same person (personal skill / topic) or an NyxID org `user_id` (org-owned).
+
+All existing documents were personal, so the correct backfill is `ownerId = createdBy`.
+
+### Why DB-direct here instead of HTTP
+
+Unlike `migrate:versions`, this one writes a single scalar that the API doesn't expose. No storage blobs change, no hashes, no validation. A Mongo `updateMany`-style loop is both correct and fast.
+
+### Flow
+
+1. Find every `skills` doc where `ownerId` is missing, `""`, or `null`.
+2. Set `ownerId = createdBy` (skip loudly if `createdBy` is also empty — that indicates a malformed doc upstream).
+3. Repeat for `topics`.
+
+Idempotent: docs that already have a non-empty `ownerId` are matched out of the cursor and never touched.
+
+```bash
+cd ornn-api
+MONGODB_URI=... MONGODB_DB=... bun run migrate:ownership
+```
+
+Expected end-of-run summary:
+
+```
+Ownership backfill complete:
+  skills   scanned=N updated=N skipped=0
+  topics   scanned=M updated=M skipped=0
+```
+
+On a fresh deploy `updated == scanned`. On re-runs `scanned == 0`. A non-zero `skipped` count is a warning that some docs have a blank `createdBy` — inspect them manually; the process exits non-zero in that case.
