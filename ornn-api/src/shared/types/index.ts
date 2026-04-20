@@ -80,6 +80,17 @@ export interface SkillDocument {
   metadata: SkillMetadata;
   skillHash: string;
   storageKey: string;
+  /**
+   * Entity that owns the skill for visibility purposes. Can be a person
+   * user_id OR an org user_id (NyxID's "org = user_type: 'org'" model).
+   * Defaults to `createdBy` for personal skills.
+   */
+  ownerId: string;
+  /**
+   * The actual person who authored the skill. ALWAYS a person user_id —
+   * never an org. Used for "my skills" (things I wrote) and
+   * edit-your-own-work gates.
+   */
   createdBy: string;
   createdByEmail?: string;
   createdByDisplayName?: string;
@@ -163,6 +174,8 @@ export interface SkillDetailResponse {
   isPrivate: boolean;
   isSystem?: boolean;
   nyxidServiceId?: string;
+  /** Owner entity — person user_id or org user_id. */
+  ownerId: string;
   createdBy: string;
   createdByEmail?: string;
   createdByDisplayName?: string;
@@ -183,6 +196,8 @@ export interface SkillSearchItem {
   guid: string;
   name: string;
   description: string;
+  /** Owner entity — person user_id or org user_id. */
+  ownerId: string;
   createdBy: string;
   createdByEmail?: string;
   createdByDisplayName?: string;
@@ -218,6 +233,12 @@ export interface TopicDocument {
   /** Globally unique, kebab-case, 1–64 chars (same shape as skill name). */
   name: string;
   description: string;
+  /**
+   * Entity that owns the topic for visibility purposes. Can be a person
+   * user_id OR an org user_id. Defaults to `createdBy` for personal topics.
+   */
+  ownerId: string;
+  /** ALWAYS a person user_id — the actual author. */
   createdBy: string;
   createdByEmail?: string;
   createdByDisplayName?: string;
@@ -244,6 +265,8 @@ export interface TopicSummaryItem {
   guid: string;
   name: string;
   description: string;
+  /** Owner entity — person user_id or org user_id. */
+  ownerId: string;
   createdBy: string;
   createdByEmail?: string;
   createdByDisplayName?: string;

@@ -16,7 +16,7 @@ const pkg = JSON.parse(readFileSync(join(import.meta.dir, "..", "package.json"),
 
 
 // Auth setup
-import { proxyAuthSetup } from "./middleware/nyxidAuth";
+import { proxyAuthSetup, nyxidOrgLookupMiddleware } from "./middleware/nyxidAuth";
 
 // Infrastructure
 import { connectMongo, type MongoConnection } from "./infra/db/mongodb";
@@ -27,6 +27,7 @@ import { StorageClient } from "./clients/storageClient";
 import { SandboxClient } from "./clients/sandboxClient";
 import { NyxLlmClient } from "./clients/nyxLlmClient";
 import { NyxidServiceClient } from "./clients/nyxidServiceClient";
+import { NyxidOrgsClient } from "./clients/nyxidOrgsClient";
 
 // Domain: Skill CRUD
 import { SkillRepository } from "./domains/skillCrud/repository";
@@ -288,9 +289,16 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
     );
   });
 
+  // ---- NyxID Orgs Client — used by the per-request org-membership lookup ----
+  const nyxidOrgsClient = new NyxidOrgsClient(config.nyxidBaseUrl);
+
   // ---- API routes — all traffic via NyxID proxy, trust proxy headers ----
   const apiApp = new Hono();
   apiApp.use("*", proxyAuthSetup());
+  // Lazy, per-request memoized org lookup. Mounted once here so every domain
+  // route sees the same cached result — avoids re-querying NyxID within a
+  // single request even when multiple routes call `readUserOrgMemberships`.
+  apiApp.use("*", nyxidOrgLookupMiddleware(nyxidOrgsClient));
   apiApp.route("/", skillRoutes);
   apiApp.route("/", topicRoutes);
   apiApp.route("/", searchRoutes);

@@ -18,6 +18,12 @@ export interface SkillConfig {
   readonly nyxidTokenUrl: string;
   readonly nyxidClientId: string;
   readonly nyxidClientSecret: string;
+  /**
+   * NyxID API base URL (no trailing slash, no `/oauth/token` suffix). Derived
+   * from `NYXID_TOKEN_URL` when `NYXID_BASE_URL` is not set explicitly so local
+   * dev works with just the token URL.
+   */
+  readonly nyxidBaseUrl: string;
 
   // Nyx Provider (LLM Gateway)
   readonly nyxLlmGatewayUrl: string;
@@ -57,6 +63,8 @@ function optionalEnv(key: string, fallback: string): string {
 }
 
 export function loadConfig(): SkillConfig {
+  const tokenUrl = requiredEnv("NYXID_TOKEN_URL");
+  const baseUrl = (process.env.NYXID_BASE_URL ?? tokenUrl.replace(/\/oauth\/token\/?$/, "")).replace(/\/+$/, "");
   return {
     // Service
     port: Number(optionalEnv("PORT", "3802")),
@@ -64,9 +72,10 @@ export function loadConfig(): SkillConfig {
     logPretty: optionalEnv("LOG_PRETTY", "false") === "true",
 
     // NyxID
-    nyxidTokenUrl: requiredEnv("NYXID_TOKEN_URL"),
+    nyxidTokenUrl: tokenUrl,
     nyxidClientId: requiredEnv("NYXID_CLIENT_ID"),
     nyxidClientSecret: requiredEnv("NYXID_CLIENT_SECRET"),
+    nyxidBaseUrl: baseUrl,
 
     // Nyx Provider
     nyxLlmGatewayUrl: requiredEnv("NYX_LLM_GATEWAY_URL"),
