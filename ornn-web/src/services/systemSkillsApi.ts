@@ -83,7 +83,7 @@ async function fetchGeneratedSystemSkills(): Promise<SystemSkillInfo[]> {
   const res = await apiGet<{
     items: SystemSkillInfo[];
     total: number;
-  }>("/api/system-skills");
+  }>("/api/system-skills?pageSize=100");
   return res.data?.items ?? [];
 }
 
@@ -115,23 +115,40 @@ export async function getSystemSkills(): Promise<SystemSkillItem[]> {
   });
 }
 
+export interface SystemSkillListItem {
+  guid: string;
+  name: string;
+  description: string;
+  createdOn: string;
+  updatedOn: string;
+  isSystem: boolean;
+  nyxidServiceId: string;
+  tags: string[];
+}
+
+export interface SystemSkillsPage {
+  items: SystemSkillListItem[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
+
 /**
  * List generated system skills (any authenticated user).
+ * Supports keyword search and pagination.
  */
-export async function getPublicSystemSkills() {
-  const res = await apiGet<{
-    items: Array<{
-      guid: string;
-      name: string;
-      description: string;
-      createdOn: string;
-      updatedOn: string;
-      isSystem: boolean;
-      nyxidServiceId: string;
-      tags: string[];
-    }>;
-    total: number;
-  }>("/api/system-skills");
+export async function getPublicSystemSkills(params?: {
+  query?: string;
+  page?: number;
+  pageSize?: number;
+}): Promise<SystemSkillsPage | null> {
+  const qs = new URLSearchParams();
+  if (params?.query) qs.set("query", params.query);
+  if (params?.page) qs.set("page", String(params.page));
+  if (params?.pageSize) qs.set("pageSize", String(params.pageSize));
+  const suffix = qs.toString() ? `?${qs.toString()}` : "";
+  const res = await apiGet<SystemSkillsPage>(`/api/system-skills${suffix}`);
   return res.data;
 }
 

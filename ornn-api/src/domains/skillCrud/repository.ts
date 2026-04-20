@@ -198,6 +198,32 @@ export class SkillRepository {
     const docs = await this.collection.find({ isSystem: true }).sort({ createdOn: -1 }).toArray();
     return docs.map((d) => mapDoc(d)!);
   }
+
+  async searchSystemSkills(
+    query: string | undefined,
+    page: number,
+    pageSize: number,
+  ): Promise<{ skills: SkillDocument[]; total: number }> {
+    const matchStage: Record<string, unknown> = { isSystem: true };
+    if (query && query.length > 0) {
+      matchStage.$or = [
+        { _id: query },
+        { name: { $regex: escapeRegex(query), $options: "i" } },
+        { description: { $regex: escapeRegex(query), $options: "i" } },
+      ];
+    }
+
+    const total = await this.collection.countDocuments(matchStage);
+    const offset = (page - 1) * pageSize;
+    const docs = await this.collection
+      .find(matchStage)
+      .sort({ createdOn: -1 })
+      .skip(offset)
+      .limit(pageSize)
+      .toArray();
+
+    return { skills: docs.map((d) => mapDoc(d)!), total };
+  }
 }
 
 function applyScope(matchStage: Record<string, unknown>, scope: "public" | "private" | "mixed", currentUserId: string): void {

@@ -347,12 +347,18 @@ export function createAdminRoutes(config: AdminRoutesConfig): Hono<{ Variables: 
   /**
    * GET /system-skills
    * List generated system skills. Accessible to any authenticated user.
+   * Supports keyword search and pagination via query params.
    */
   app.get(
     "/system-skills",
     async (c) => {
-      const systemSkills = await skillRepo.findSystemSkills();
-      const items = systemSkills.map((s) => ({
+      const query = c.req.query("query")?.trim() || undefined;
+      const page = Math.max(1, parseInt(c.req.query("page") ?? "1", 10) || 1);
+      const pageSizeRaw = parseInt(c.req.query("pageSize") ?? "20", 10) || 20;
+      const pageSize = Math.min(100, Math.max(1, pageSizeRaw));
+
+      const { skills, total } = await skillRepo.searchSystemSkills(query, page, pageSize);
+      const items = skills.map((s) => ({
         guid: s.guid,
         name: s.name,
         description: s.description,
@@ -369,10 +375,10 @@ export function createAdminRoutes(config: AdminRoutesConfig): Hono<{ Variables: 
       return c.json({
         data: {
           items,
-          total: items.length,
-          page: 1,
-          pageSize: items.length,
-          totalPages: 1,
+          total,
+          page,
+          pageSize,
+          totalPages: Math.max(1, Math.ceil(total / pageSize)),
         },
         error: null,
       });
