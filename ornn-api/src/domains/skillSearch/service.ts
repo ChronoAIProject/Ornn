@@ -6,6 +6,7 @@
  */
 
 import type { SkillRepository } from "../skillCrud/repository";
+import type { TopicService } from "../topics/service";
 import type { NyxLlmClient } from "../../clients/nyxLlmClient";
 import type { SkillDocument, SkillSearchItem, SkillSearchResponse } from "../../shared/types/index";
 import pino from "pino";
@@ -16,17 +17,21 @@ const BATCH_SIZE = 50;
 
 export interface SearchServiceDeps {
   skillRepo: SkillRepository;
+  /** Optional — when wired, enables the `?topic=` search filter. */
+  topicService?: TopicService;
   llmClient: NyxLlmClient;
   defaultModel: string;
 }
 
 export class SearchService {
   private readonly skillRepo: SkillRepository;
+  private readonly topicService?: TopicService;
   private readonly llmClient: NyxLlmClient;
   private readonly defaultModel: string;
 
   constructor(deps: SearchServiceDeps) {
     this.skillRepo = deps.skillRepo;
+    this.topicService = deps.topicService;
     this.llmClient = deps.llmClient;
     this.defaultModel = deps.defaultModel;
   }
@@ -39,24 +44,49 @@ export class SearchService {
     pageSize: number;
     currentUserId: string;
     model?: string;
+    /** Optional topic id-or-name; when set, restrict results to that topic's members. */
+    topic?: string;
+    /** True when the caller holds `ornn:admin:skill`. Only used for topic visibility. */
+    isAdmin?: boolean;
   }): Promise<SkillSearchResponse> {
     const { query, mode, scope, page, pageSize, currentUserId } = params;
     const startTime = Date.now();
+
+    // When a topic filter is supplied, resolve its member GUIDs once and
+    // narrow both keyword and semantic paths through it. The topic service
+    // handles its own visibility (returns 404 if the caller can't see a
+    // private topic).
+    let restrictToGuids: string[] | undefined;
+    if (params.topic) {
+      if (!this.topicService) {
+        // Topic filter requested but service not wired — treat as 400 rather
+        // than silently ignoring so misconfigurations surface loudly.
+        throw new Error("Topic filter requested but TopicService is not wired into SearchService");
+      }
+      restrictToGuids = await this.topicService.listMemberSkillGuids(params.topic, {
+        currentUserId,
+        isAdmin: params.isAdmin ?? false,
+      });
+    }
 
     let skills: SkillDocument[] = [];
     let total = 0;
 
     if (mode === "keyword") {
       if (!query || query.trim() === "") {
-        const result = await this.skillRepo.findByScope(scope, currentUserId, page, pageSize);
+        const result = await this.skillRepo.findByScope(scope, currentUserId, page, pageSize, restrictToGuids);
         skills = result.skills;
         total = result.total;
       } else {
-        const result = await this.skillRepo.keywordSearch(query, scope, currentUserId, page, pageSize);
+        const result = await this.skillRepo.keywordSearch(query, scope, currentUserId, page, pageSize, restrictToGuids);
         skills = result.skills;
         total = result.total;
       }
     } else if (mode === "semantic") {
+      // Semantic search still runs over all skills matching scope, then
+      // post-filters by the topic's member set. The LLM evaluates the same
+      // metadata as before; the topic restriction is applied to the final
+      // candidate list so ranking quality is preserved.
       const result = await this.semanticSearch({
         query,
         scope,
@@ -64,6 +94,7 @@ export class SearchService {
         model: params.model ?? this.defaultModel,
         page,
         pageSize,
+        restrictToGuids,
       });
       skills = result.skills;
       total = result.total;
@@ -110,11 +141,17 @@ export class SearchService {
     model: string;
     page: number;
     pageSize: number;
+    restrictToGuids?: string[];
   }): Promise<{ skills: SkillDocument[]; total: number }> {
-    const { query, scope, currentUserId, model, page, pageSize } = params;
+    const { query, scope, currentUserId, model, page, pageSize, restrictToGuids } = params;
 
-    // Load all skills matching scope (no pagination — we need all of them)
-    const allSkills = await this.skillRepo.findAllByScope(scope, currentUserId);
+    // Load all skills matching scope (no pagination — we need all of them).
+    // When a topic restriction is in effect, filter the scope result by the
+    // member guid set before handing anything to the LLM.
+    const allScoped = await this.skillRepo.findAllByScope(scope, currentUserId);
+    const allSkills = restrictToGuids
+      ? allScoped.filter((s) => restrictToGuids.includes(s.guid))
+      : allScoped;
 
     if (allSkills.length === 0) {
       return { skills: [], total: 0 };

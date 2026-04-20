@@ -136,6 +136,8 @@ export class SkillRepository {
     currentUserId: string,
     page: number,
     pageSize: number,
+    /** Optional additional filter — restrict results to this set of GUIDs. */
+    restrictToGuids?: string[],
   ): Promise<{ skills: SkillDocument[]; total: number }> {
     const matchStage: Record<string, unknown> = {};
     applyScope(matchStage, scope, currentUserId);
@@ -145,6 +147,11 @@ export class SkillRepository {
       { name: { $regex: escapeRegex(query), $options: "i" } },
       { description: { $regex: escapeRegex(query), $options: "i" } },
     ];
+
+    if (restrictToGuids) {
+      if (restrictToGuids.length === 0) return { skills: [], total: 0 };
+      matchStage._id = { $in: restrictToGuids };
+    }
 
     const total = await this.collection.countDocuments(matchStage);
     const offset = (page - 1) * pageSize;
@@ -158,9 +165,16 @@ export class SkillRepository {
     currentUserId: string,
     page: number,
     pageSize: number,
+    /** Optional additional filter — restrict results to this set of GUIDs. */
+    restrictToGuids?: string[],
   ): Promise<{ skills: SkillDocument[]; total: number }> {
     const matchStage: Record<string, unknown> = {};
     applyScope(matchStage, scope, currentUserId);
+
+    if (restrictToGuids) {
+      if (restrictToGuids.length === 0) return { skills: [], total: 0 };
+      matchStage._id = { $in: restrictToGuids };
+    }
 
     const total = await this.collection.countDocuments(matchStage);
     const offset = (page - 1) * pageSize;

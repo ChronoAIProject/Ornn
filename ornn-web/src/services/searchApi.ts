@@ -14,6 +14,7 @@ export async function searchSkills(
     scope: params.scope,
     page: params.page,
     pageSize: params.pageSize,
+    topic: params.topic,
   };
 
   const res = await apiGet<SkillSearchResponse>("/api/skill-search", queryParams);

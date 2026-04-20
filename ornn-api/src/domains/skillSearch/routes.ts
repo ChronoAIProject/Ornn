@@ -23,6 +23,8 @@ const searchQuerySchema = z.object({
   page: z.coerce.number().int().min(1).optional().default(1),
   pageSize: z.coerce.number().int().min(1).max(100).optional().default(9),
   model: z.string().optional(),
+  /** Optional topic id-or-name; restricts results to skills in that topic. */
+  topic: z.string().max(128).optional(),
 });
 
 export interface SearchRoutesConfig {
@@ -52,6 +54,7 @@ export function createSearchRoutes(config: SearchRoutesConfig): Hono<{ Variables
         page: c.req.query("page"),
         pageSize: c.req.query("pageSize"),
         model: c.req.query("model"),
+        topic: c.req.query("topic"),
       };
 
       const parsed = searchQuerySchema.safeParse(raw);
@@ -62,13 +65,14 @@ export function createSearchRoutes(config: SearchRoutesConfig): Hono<{ Variables
         );
       }
 
-      const { query, mode, page, pageSize, model } = parsed.data;
+      const { query, mode, page, pageSize, model, topic } = parsed.data;
       const authCtx = c.get("auth");
       const isAnonymous = !authCtx;
 
       // Anonymous users can only search public scope
       const scope = isAnonymous ? "public" : parsed.data.scope;
       const currentUserId = authCtx?.userId ?? "";
+      const isAdmin = authCtx?.permissions.includes("ornn:admin:skill") ?? false;
 
       if (mode === "semantic") {
         if (!query || query.trim() === "") {
@@ -95,6 +99,8 @@ export function createSearchRoutes(config: SearchRoutesConfig): Hono<{ Variables
         pageSize,
         currentUserId,
         model,
+        topic,
+        isAdmin,
       });
 
       return c.json({ data: response, error: null });

@@ -34,6 +34,11 @@ import { SkillVersionRepository } from "./domains/skillCrud/skillVersionReposito
 import { SkillService } from "./domains/skillCrud/service";
 import { createSkillRoutes } from "./domains/skillCrud/routes";
 
+// Domain: Topics
+import { TopicRepository, TopicSkillRepository } from "./domains/topics/repository";
+import { TopicService } from "./domains/topics/service";
+import { createTopicRoutes } from "./domains/topics/routes";
+
 // Domain: Skill Search
 import { SearchService } from "./domains/skillSearch/service";
 import { createSearchRoutes } from "./domains/skillSearch/routes";
@@ -144,9 +149,17 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   const skillRepo = new SkillRepository(db);
   const skillVersionRepo = new SkillVersionRepository(db);
   await skillVersionRepo.ensureIndexes();
+  const topicRepo = new TopicRepository(db);
+  await topicRepo.ensureIndexes();
+  const topicSkillRepo = new TopicSkillRepository(db);
+  await topicSkillRepo.ensureIndexes();
   const categoryRepo = new CategoryRepository(db);
   const tagRepo = new TagRepository(db);
   const activityRepo = new ActivityRepository(db);
+
+  // ---- Domain: Topics ----
+  // Constructed before SkillService so we can wire the cascade-on-delete hook.
+  const topicService = new TopicService({ topicRepo, topicSkillRepo, skillRepo });
 
   // ---- Domain: Skill CRUD ----
   const skillService = new SkillService({
@@ -154,6 +167,7 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
     skillVersionRepo,
     storageClient,
     storageBucket: config.storageBucket,
+    onSkillDeleted: async (guid: string) => topicService.cascadeOnSkillDelete(guid),
   });
 
   const skillRoutes = createSkillRoutes({
@@ -163,9 +177,12 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
     activityRepo,
   });
 
+  const topicRoutes = createTopicRoutes({ topicService, topicRepo });
+
   // ---- Domain: Skill Search ----
   const searchService = new SearchService({
     skillRepo,
+    topicService,
     llmClient: nyxLlmClient,
     defaultModel: config.defaultLlmModel,
   });
@@ -275,6 +292,7 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   const apiApp = new Hono();
   apiApp.use("*", proxyAuthSetup());
   apiApp.route("/", skillRoutes);
+  apiApp.route("/", topicRoutes);
   apiApp.route("/", searchRoutes);
   apiApp.route("/", generationRoutes);
   apiApp.route("/", playgroundRoutes);

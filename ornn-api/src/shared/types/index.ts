@@ -205,6 +205,72 @@ export interface SkillSearchResponse {
 }
 
 // ---------------------------------------------------------------------------
+// Topic (group of skills)
+// ---------------------------------------------------------------------------
+
+/**
+ * A named, owner-curated group of skills. Many-to-many membership is stored
+ * in a separate `topic_skills` collection so neither topics nor skills carry
+ * back-pointing arrays.
+ */
+export interface TopicDocument {
+  guid: string;
+  /** Globally unique, kebab-case, 1–64 chars (same shape as skill name). */
+  name: string;
+  description: string;
+  createdBy: string;
+  createdByEmail?: string;
+  createdByDisplayName?: string;
+  createdOn: Date;
+  updatedBy: string;
+  updatedOn: Date;
+  isPrivate: boolean;
+}
+
+/**
+ * Edge record linking one topic to one skill. The `_id` is
+ * `${topicGuid}:${skillGuid}` which gives us natural uniqueness on the
+ * pair without a separate compound-unique index.
+ */
+export interface TopicSkillDocument {
+  _id: string;
+  topicGuid: string;
+  skillGuid: string;
+  addedBy: string;
+  addedOn: Date;
+}
+
+export interface TopicSummaryItem {
+  guid: string;
+  name: string;
+  description: string;
+  createdBy: string;
+  createdByEmail?: string;
+  createdByDisplayName?: string;
+  createdOn: string;
+  updatedOn: string;
+  isPrivate: boolean;
+  /** Denormalized count of skills currently in this topic. */
+  skillCount: number;
+}
+
+export interface TopicListResponse {
+  total: number;
+  totalPages: number;
+  page: number;
+  pageSize: number;
+  items: TopicSummaryItem[];
+}
+
+export interface TopicDetailResponse extends TopicSummaryItem {
+  /**
+   * Skills currently in the topic, filtered to those the caller is allowed
+   * to see, sorted newest-added first.
+   */
+  skills: SkillSearchItem[];
+}
+
+// ---------------------------------------------------------------------------
 // Category / Tag
 // ---------------------------------------------------------------------------
 
