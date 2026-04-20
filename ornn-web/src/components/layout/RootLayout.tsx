@@ -17,9 +17,12 @@ function useBreadcrumbs() {
   const tab = new URLSearchParams(location.search).get("tab");
 
   if (path === "/registry") {
-    crumbs.push(tab === "my-skills"
-      ? { label: t("breadcrumb.mySkills"), to: "/registry?tab=my-skills" }
-      : { label: t("breadcrumb.publicSkills"), to: "/registry" }
+    crumbs.push(
+      tab === "system"
+        ? { label: "System Skills", to: "/registry?tab=system" }
+        : tab === "my-skills"
+        ? { label: t("breadcrumb.mySkills"), to: "/registry?tab=my-skills" }
+        : { label: t("breadcrumb.publicSkills"), to: "/registry" }
     );
   } else if (path === "/my-skills") {
     crumbs.push({ label: t("breadcrumb.mySkills"), to: "/my-skills" });

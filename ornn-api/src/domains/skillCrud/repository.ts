@@ -23,6 +23,8 @@ export interface CreateSkillData {
   createdByEmail?: string;
   createdByDisplayName?: string;
   isPrivate?: boolean;
+  isSystem?: boolean;
+  nyxidServiceId?: string;
 }
 
 export interface UpdateSkillData {
@@ -80,6 +82,8 @@ export class SkillRepository {
       updatedBy: data.createdBy,
       updatedOn: now,
       isPrivate: data.isPrivate ?? true,
+      isSystem: data.isSystem ?? false,
+      nyxidServiceId: data.nyxidServiceId ?? null,
     };
 
     try {
@@ -184,6 +188,16 @@ export class SkillRepository {
     const docs = await this.collection.find({ _id: { $in: guids } as any }).toArray();
     return docs.map((d) => mapDoc(d)!);
   }
+
+  async findByNyxidServiceId(nyxidServiceId: string): Promise<SkillDocument | null> {
+    const doc = await this.collection.findOne({ nyxidServiceId, isSystem: true });
+    return mapDoc(doc);
+  }
+
+  async findSystemSkills(): Promise<SkillDocument[]> {
+    const docs = await this.collection.find({ isSystem: true }).sort({ createdOn: -1 }).toArray();
+    return docs.map((d) => mapDoc(d)!);
+  }
 }
 
 function applyScope(matchStage: Record<string, unknown>, scope: "public" | "private" | "mixed", currentUserId: string): void {
@@ -214,6 +228,8 @@ function mapDoc(doc: Document | null): SkillDocument | null {
     updatedBy: doc.updatedBy ?? "",
     updatedOn: doc.updatedOn ?? new Date(),
     isPrivate: doc.isPrivate ?? true,
+    isSystem: doc.isSystem ?? false,
+    nyxidServiceId: doc.nyxidServiceId ?? undefined,
   };
 }
 

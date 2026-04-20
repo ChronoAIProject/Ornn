@@ -40,7 +40,7 @@ export class SkillService {
   async createSkill(
     zipBuffer: Uint8Array,
     userId: string,
-    options?: { skipValidation?: boolean; userEmail?: string; userDisplayName?: string },
+    options?: { skipValidation?: boolean; userEmail?: string; userDisplayName?: string; isSystem?: boolean; nyxidServiceId?: string },
   ): Promise<{ guid: string }> {
     // 1. Validate ZIP format rules
     if (!options?.skipValidation) {
@@ -84,7 +84,9 @@ export class SkillService {
       createdBy: userId,
       createdByEmail: options?.userEmail,
       createdByDisplayName: options?.userDisplayName,
-      isPrivate: true,
+      isPrivate: options?.isSystem ? false : true,
+      isSystem: options?.isSystem,
+      nyxidServiceId: options?.nyxidServiceId,
     });
 
     return { guid };

@@ -26,6 +26,7 @@ import { connectMongo, type MongoConnection } from "./infra/db/mongodb";
 import { StorageClient } from "./clients/storageClient";
 import { SandboxClient } from "./clients/sandboxClient";
 import { NyxLlmClient } from "./clients/nyxLlmClient";
+import { NyxidServiceClient } from "./clients/nyxidServiceClient";
 
 // Domain: Skill CRUD
 import { SkillRepository } from "./domains/skillCrud/repository";
@@ -197,6 +198,10 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
     keepAliveIntervalMs: config.sseKeepAliveIntervalMs,
   });
 
+  // ---- NyxID Service Client (for System Skills) ----
+  const nyxidApiUrl = config.nyxidTokenUrl.replace("/oauth/token", "");
+  const nyxidServiceClient = new NyxidServiceClient(nyxidApiUrl, getSaAccessToken);
+
   // ---- Domain: Admin ----
   const adminService = new AdminService(categoryRepo, tagRepo);
   const adminRoutes = createAdminRoutes({
@@ -204,6 +209,9 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
     activityRepo,
     skillRepo,
     skillService,
+    generationService,
+    nyxidServiceClient,
+    nyxidTokenUrl: config.nyxidTokenUrl,
   });
 
   // ---- Domain: Skill Format ----
