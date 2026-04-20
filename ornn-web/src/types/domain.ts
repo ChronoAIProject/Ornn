@@ -1,3 +1,5 @@
+import type { SkillSearchResult } from "./search";
+
 export interface SkillSummary {
   guid: string;
   name: string;
@@ -34,4 +36,39 @@ export interface SkillVersionEntry {
   createdOn: string;
   isDeprecated: boolean;
   deprecationNote: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// Topic (group of skills)
+// ---------------------------------------------------------------------------
+
+export interface Topic {
+  guid: string;
+  name: string;
+  description: string;
+  createdBy: string;
+  createdByEmail?: string;
+  createdByDisplayName?: string;
+  createdOn: string;
+  updatedOn: string;
+  isPrivate: boolean;
+  /** Denormalized count of skills currently in this topic. */
+  skillCount: number;
+}
+
+export interface TopicListPage {
+  items: Topic[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
+
+/**
+ * Topic detail — summary + the member skills visible to the caller, sorted
+ * newest-added first. Each item is the same shape as a search result so we
+ * can reuse `SkillCard` / `SkillGrid` without transformation.
+ */
+export interface TopicDetail extends Topic {
+  skills: SkillSearchResult[];
 }

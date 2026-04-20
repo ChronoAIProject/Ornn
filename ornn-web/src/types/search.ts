@@ -4,6 +4,8 @@ export interface SkillSearchParams {
   scope?: "public" | "private" | "mixed";
   page?: number;
   pageSize?: number;
+  /** Optional topic id-or-name — restricts results to that topic's members. */
+  topic?: string;
 }
 
 export interface SkillSearchResult {

@@ -22,6 +22,8 @@ export function useSkills(params: {
   mode?: SkillSearchParams["mode"];
   page?: number;
   pageSize?: number;
+  /** Optional topic id-or-name — restricts results to that topic's members. */
+  topic?: string;
 }) {
   const searchParams: SkillSearchParams = {
     query: params.query,
@@ -29,6 +31,7 @@ export function useSkills(params: {
     scope: "public",
     page: params.page,
     pageSize: params.pageSize,
+    topic: params.topic,
   };
 
   return useQuery({
@@ -43,6 +46,8 @@ export function useMySkills(params: {
   mode?: SkillSearchParams["mode"];
   page?: number;
   pageSize?: number;
+  /** Optional topic id-or-name — restricts results to that topic's members. */
+  topic?: string;
 }) {
   const searchParams: SkillSearchParams = {
     query: params.query,
@@ -50,6 +55,7 @@ export function useMySkills(params: {
     scope: "private",
     page: params.page,
     pageSize: params.pageSize,
+    topic: params.topic,
   };
 
   return useQuery({
