@@ -115,7 +115,7 @@ export function AdminLayout() {
         <div className="flex h-28 items-center justify-between px-4 lg:px-8">
           {/* Logo / Back Link */}
           <NavLink to="/" className="flex items-center gap-3">
-            <img src="/logo.png" alt="ORNN" className="h-10 w-10 rounded-lg object-cover" />
+            <img src="/logo.svg" alt="ORNN" className="h-10 w-auto" />
             <span className="font-heading text-lg tracking-wider text-neon-magenta">
               Admin Panel
             </span>

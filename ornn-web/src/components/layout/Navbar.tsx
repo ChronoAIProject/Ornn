@@ -293,11 +293,8 @@ export function Navbar({ className = "" }: NavbarProps) {
         <div className="flex h-24 items-center px-6 sm:px-10">
           {/* Logo + Nav links */}
           <div className="flex items-center gap-8 shrink-0">
-            <Link to="/" className="flex items-center gap-3">
-              <img src="/logo.png" alt="ORNN" className="h-20 w-auto" />
-              <span className="font-heading text-2xl font-bold tracking-widest text-neon-cyan hidden sm:block drop-shadow-[0_0_8px_rgba(255,107,0,0.6)] hover:drop-shadow-[0_0_14px_rgba(255,107,0,0.8)] transition-all duration-300">
-                ORNN
-              </span>
+            <Link to="/" className="flex items-center">
+              <img src="/logo.svg" alt="ORNN" className="h-12 w-auto" />
             </Link>
 
             {/* Nav links */}
