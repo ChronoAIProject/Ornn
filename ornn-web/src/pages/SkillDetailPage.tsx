@@ -11,10 +11,10 @@ import { SkillPackagePreview } from "@/components/skill/SkillPackagePreview";
 import { VersionPicker } from "@/components/skill/VersionPicker";
 import { DeprecationBanner } from "@/components/skill/DeprecationBanner";
 import { SkillVersionList } from "@/components/skill/SkillVersionList";
+import { PermissionsModal } from "@/components/skill/PermissionsModal";
 import {
   useSkill,
   useDeleteSkill,
-  useUpdateSkill,
   useUpdateSkillPackage,
   useSkillVersions,
   useSetVersionDeprecation,
@@ -55,7 +55,6 @@ export function SkillDetailPage() {
   const { data: skill, isLoading, error, refetch } = useSkill(idOrName ?? "", versionParam);
   const { data: versionList = [] } = useSkillVersions(idOrName ?? "");
   const deleteMutation = useDeleteSkill();
-  const updateMutation = useUpdateSkill(skill?.guid ?? "");
   const updatePackageMutation = useUpdateSkillPackage(skill?.guid ?? "");
   const deprecationMutation = useSetVersionDeprecation(idOrName ?? "");
 
@@ -110,6 +109,7 @@ export function SkillDetailPage() {
   );
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showPermissionsModal, setShowPermissionsModal] = useState(false);
   const [showSaveConfirm, setShowSaveConfirm] = useState(false);
   const [editedContents, setEditedContents] = useState<Map<string, string>>(new Map());
   const [addedPaths, setAddedPaths] = useState<FileTreeEntry[]>([]);
@@ -285,20 +285,6 @@ export function SkillDetailPage() {
     }
   };
 
-  const handleToggleVisibility = async () => {
-    if (!skill) return;
-    try {
-      await updateMutation.mutateAsync({ isPrivate: !skill.isPrivate });
-      addToast({
-        type: "success",
-        message: skill.isPrivate ? t("skillDetail.nowPublic") : t("skillDetail.nowPrivate"),
-      });
-      refetch();
-    } catch {
-      addToast({ type: "error", message: t("skillDetail.visibilityFailed") });
-    }
-  };
-
   if (isLoading) {
     return (
       <PageTransition>
@@ -448,6 +434,15 @@ export function SkillDetailPage() {
                 <Badge color={skill.isPrivate ? "cyan" : "green"}>
                   {skill.isPrivate ? t("common.private") : t("common.public")}
                 </Badge>
+                {skill.isPrivate && (skill.sharedWithUsers.length > 0 || skill.sharedWithOrgs.length > 0) && (
+                  <p className="font-body text-[11px] text-text-muted mt-1">
+                    {t("skillDetail.sharedWithSummary", {
+                      defaultValue: "Shared with {{users}} users, {{orgs}} orgs",
+                      users: skill.sharedWithUsers.length,
+                      orgs: skill.sharedWithOrgs.length,
+                    })}
+                  </p>
+                )}
               </div>
             </div>
 
@@ -507,10 +502,9 @@ export function SkillDetailPage() {
                       variant="secondary"
                       size="sm"
                       className="w-full"
-                      onClick={handleToggleVisibility}
-                      loading={updateMutation.isPending}
+                      onClick={() => setShowPermissionsModal(true)}
                     >
-                      {skill.isPrivate ? t("skillDetail.makePublic") : t("skillDetail.makePrivate")}
+                      {t("skillDetail.managePermissions", "Manage permissions")}
                     </Button>
                   )}
                   {isOwner && (
@@ -599,6 +593,16 @@ export function SkillDetailPage() {
           </Button>
         </div>
       </Modal>
+
+      {/* Permissions editor — only for the author (and platform admins
+          via the same gate). Backend re-checks on save. */}
+      {isOwner && (
+        <PermissionsModal
+          isOpen={showPermissionsModal}
+          onClose={() => setShowPermissionsModal(false)}
+          skill={skill}
+        />
+      )}
       </div>
     </PageTransition>
   );

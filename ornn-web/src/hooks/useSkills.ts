@@ -9,6 +9,7 @@ import {
   deleteSkill,
   setSkillVersionDeprecation,
 } from "@/services/skillApi";
+import { updateSkillPermissions, type SkillPermissionsInput } from "@/services/permissionsApi";
 import type { SkillSearchParams } from "@/types/search";
 import type { UpdateSkillMetadata } from "@/types/api";
 
@@ -141,6 +142,23 @@ export function useUpdateSkillPackage(id: string) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [SKILLS_KEY] });
       queryClient.invalidateQueries({ queryKey: [MY_SKILLS_KEY] });
+    },
+  });
+}
+
+/**
+ * Replace the skill's visibility config in one atomic call. Invalidates
+ * the skill detail query so the UI redraws with the new permissions
+ * without needing a manual refetch.
+ */
+export function useUpdateSkillPermissions(idOrName: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: SkillPermissionsInput) => updateSkillPermissions(idOrName, input),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [SKILLS_KEY] });
+      queryClient.invalidateQueries({ queryKey: [MY_SKILLS_KEY] });
+      queryClient.invalidateQueries({ queryKey: [SKILLS_KEY, idOrName] });
     },
   });
 }

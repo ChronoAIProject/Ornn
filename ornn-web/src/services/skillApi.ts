@@ -63,8 +63,9 @@ export async function setSkillVersionDeprecation(
 }
 
 /**
- * Create a new skill from a ZIP file.
- * Sends the ZIP as a raw application/zip body.
+ * Create a new skill from a ZIP file. Sends the ZIP as a raw
+ * application/zip body. New skills are always private — visibility is
+ * managed afterward via the permissions panel on the skill detail page.
  */
 export async function createSkill(zipFile: File, skipValidation = false): Promise<SkillDetail> {
   const { accessToken: token, user } = useAuthStore.getState();
