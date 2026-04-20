@@ -16,4 +16,5 @@ export interface SkillDetail extends SkillSummary {
   updatedOn: string;
   presignedPackageUrl: string;
   metadata: Record<string, unknown>;
+  isSystem?: boolean;
 }

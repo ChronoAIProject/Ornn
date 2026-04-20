@@ -58,13 +58,17 @@ export function ExplorePage() {
     pageSize: DEFAULT_PAGE_SIZE,
   });
 
-  // Fetch generated system skills (plain skill cards, same shape as regular skills)
+  const [systemSkillsPage, setSystemSkillsPage] = useState(1);
+
+  // Fetch generated system skills with keyword search + pagination.
   const { data: systemSkillsData, isLoading: systemLoading } = useQuery({
-    queryKey: ["system-skills-public"],
-    queryFn: async () => {
-      const res = await getPublicSystemSkills();
-      return res?.items ?? [];
-    },
+    queryKey: ["system-skills-public", query, systemSkillsPage],
+    queryFn: () =>
+      getPublicSystemSkills({
+        query: query || undefined,
+        page: systemSkillsPage,
+        pageSize: DEFAULT_PAGE_SIZE,
+      }),
     enabled: activeTab === "system",
   });
 
@@ -74,15 +78,13 @@ export function ExplorePage() {
 
   const data = isPublicTab ? publicData : isMySkillsTab ? mySkillsData : null;
   const isLoading = isPublicTab ? publicLoading : isMySkillsTab ? mySkillsLoading : systemLoading;
-  const currentPage = isPublicTab ? page : mySkillsPage;
-  const totalPages = data?.totalPages ?? 0;
+  const currentPage = isPublicTab ? page : isMySkillsTab ? mySkillsPage : systemSkillsPage;
+  const totalPages = isSystemTab ? systemSkillsData?.totalPages ?? 0 : data?.totalPages ?? 0;
 
   const handlePageChange = (newPage: number) => {
-    if (isPublicTab) {
-      setPage(newPage);
-    } else {
-      setMySkillsPage(newPage);
-    }
+    if (isPublicTab) setPage(newPage);
+    else if (isMySkillsTab) setMySkillsPage(newPage);
+    else setSystemSkillsPage(newPage);
   };
 
   const handleTabChange = (tab: ExploreTab) => {
@@ -94,7 +96,7 @@ export function ExplorePage() {
   };
 
   // Map system skills to SkillSearchResult shape for SkillCard
-  const systemSkills: SkillSearchResult[] = (systemSkillsData ?? []).map((s) => ({
+  const systemSkills: SkillSearchResult[] = (systemSkillsData?.items ?? []).map((s) => ({
     guid: s.guid,
     name: s.name,
     description: s.description,
@@ -152,7 +154,7 @@ export function ExplorePage() {
         </div>
       )}
 
-      {!isSystemTab && <SearchBar className="mb-3 shrink-0" />}
+      <SearchBar className="mb-3 shrink-0" />
 
       {/* Scrollable content */}
       <div className="flex-1 min-h-0 overflow-y-auto px-2 py-1 -mx-2 -my-1">
@@ -223,7 +225,7 @@ export function ExplorePage() {
           </motion.div>
         )}
 
-        {!isSystemTab && <Pagination page={currentPage} totalPages={totalPages} onPageChange={handlePageChange} />}
+        <Pagination page={currentPage} totalPages={totalPages} onPageChange={handlePageChange} />
       </div>
       </div>
     </PageTransition>

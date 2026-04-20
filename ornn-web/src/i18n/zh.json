@@ -99,7 +99,10 @@
     "backToExplore": "返回浏览",
     "failedPackage": "加载包内容失败。",
     "noPackage": "暂无包内容。",
-    "downloadSkill": "下载技能包"
+    "downloadSkill": "下载技能包",
+    "tryWithCli": "在你的 Agent 中试用",
+    "cliPromptCopied": "提示词已复制 —— 粘贴到你的 Agent 中",
+    "cliCopyFailed": "复制提示词到剪贴板失败"
   },
   "playground": {
     "selectSkill": "选择一个技能在试验场中尝试。",
