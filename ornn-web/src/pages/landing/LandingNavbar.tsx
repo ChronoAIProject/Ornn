@@ -22,11 +22,8 @@ export function LandingNavbar() {
     <nav className="glass fixed top-0 right-0 left-0 z-40 border-b border-neon-cyan/10">
       <div className="flex h-28 items-center justify-between px-6 sm:px-10">
         {/* Logo */}
-        <Link to="/" className="flex items-center gap-3 shrink-0">
-          <img src="/logo.png" alt="ORNN" className="h-14 w-14 rounded-xl object-cover" />
-          <span className="neon-cyan font-heading text-2xl font-bold tracking-widest text-neon-cyan">
-            ORNN
-          </span>
+        <Link to="/" className="flex items-center shrink-0">
+          <img src="/logo.svg" alt="ORNN" className="h-12 w-auto" />
         </Link>
 
         {/* Desktop nav links */}
