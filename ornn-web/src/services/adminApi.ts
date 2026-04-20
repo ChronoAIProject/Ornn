@@ -20,7 +20,7 @@ import type {
  * Fetch all categories.
  */
 export async function getCategories(): Promise<Category[]> {
-  const res = await apiGet<Category[]>("/api/web/admin/categories");
+  const res = await apiGet<Category[]>("/api/admin/categories");
   return res.data ?? [];
 }
 
@@ -28,7 +28,7 @@ export async function getCategories(): Promise<Category[]> {
  * Create a new category.
  */
 export async function createCategory(data: CategoryInput): Promise<Category> {
-  const res = await apiPost<Category>("/api/web/admin/categories", data);
+  const res = await apiPost<Category>("/api/admin/categories", data);
   if (!res.data) {
     throw new Error("Failed to create category");
   }
@@ -42,7 +42,7 @@ export async function updateCategory(
   id: string,
   data: Partial<CategoryInput>
 ): Promise<Category> {
-  const res = await apiPut<Category>(`/api/web/admin/categories/${id}`, data);
+  const res = await apiPut<Category>(`/api/admin/categories/${id}`, data);
   if (!res.data) {
     throw new Error("Failed to update category");
   }
@@ -53,7 +53,7 @@ export async function updateCategory(
  * Delete a category.
  */
 export async function deleteCategory(id: string): Promise<void> {
-  await apiDelete(`/api/web/admin/categories/${id}`);
+  await apiDelete(`/api/admin/categories/${id}`);
 }
 
 // ============================================================================
@@ -64,7 +64,7 @@ export async function deleteCategory(id: string): Promise<void> {
  * Fetch all predefined tags.
  */
 export async function getTags(): Promise<Tag[]> {
-  const res = await apiGet<Tag[]>("/api/web/admin/tags");
+  const res = await apiGet<Tag[]>("/api/admin/tags");
   return res.data ?? [];
 }
 
@@ -72,7 +72,7 @@ export async function getTags(): Promise<Tag[]> {
  * Create a predefined tag.
  */
 export async function createTag(name: string): Promise<Tag> {
-  const res = await apiPost<Tag>("/api/web/admin/tags", { name });
+  const res = await apiPost<Tag>("/api/admin/tags", { name });
   if (!res.data) {
     throw new Error("Failed to create tag");
   }
@@ -83,5 +83,5 @@ export async function createTag(name: string): Promise<Tag> {
  * Delete a predefined tag.
  */
 export async function deleteTag(id: string): Promise<void> {
-  await apiDelete(`/api/web/admin/tags/${id}`);
+  await apiDelete(`/api/admin/tags/${id}`);
 }

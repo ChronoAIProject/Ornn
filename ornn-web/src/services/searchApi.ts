@@ -3,7 +3,7 @@ import type { SkillSearchParams, SkillSearchResponse } from "@/types/search";
 
 /**
  * Search skills using the skill-search API.
- * GET /api/web/skill-search with query params.
+ * GET /api/skill-search with query params.
  */
 export async function searchSkills(
   params: SkillSearchParams
@@ -16,7 +16,7 @@ export async function searchSkills(
     pageSize: params.pageSize,
   };
 
-  const res = await apiGet<SkillSearchResponse>("/api/web/skill-search", queryParams);
+  const res = await apiGet<SkillSearchResponse>("/api/skill-search", queryParams);
   return res.data!;
 }
 

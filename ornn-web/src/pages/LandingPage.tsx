@@ -139,7 +139,7 @@ function AnnouncementBanner() {
   const [title, setTitle] = useState("");
 
   useEffect(() => {
-    fetch(`${API_BASE}/api/web/docs/releases?lang=${lang}`)
+    fetch(`${API_BASE}/api/docs/releases?lang=${lang}`)
       .then((r) => r.json())
       .then((json) => {
         if (json.data?.length > 0) {

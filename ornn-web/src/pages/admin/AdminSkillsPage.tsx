@@ -79,14 +79,14 @@ export function AdminSkillsPage() {
       };
       if (search) params.q = search;
       if (userIdFromUrl) params.userId = userIdFromUrl;
-      const res = await apiGet<AdminSkillsResponse>("/api/web/admin/skills", params);
+      const res = await apiGet<AdminSkillsResponse>("/api/admin/skills", params);
       return res.data!;
     },
   });
 
   const deleteMutation = useMutation({
     mutationFn: async (skillId: string) => {
-      await apiDelete(`/api/web/admin/skills/${skillId}`);
+      await apiDelete(`/api/admin/skills/${skillId}`);
     },
     onSuccess: () => {
       addToast({ type: "success", message: "Skill deleted" });

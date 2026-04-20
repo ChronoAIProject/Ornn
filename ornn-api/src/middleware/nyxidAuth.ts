@@ -1,9 +1,8 @@
 /**
  * NyxID authentication middleware.
  *
- * Two auth strategies, selected at mount time in bootstrap.ts:
- *   - jwtAuthSetup()    → web routes: verifies Bearer JWT against NyxID JWKS
- *   - proxyAuthSetup()  → agent routes: trusts X-NyxID-* headers from NyxID proxy
+ * All traffic flows through NyxID proxy; proxyAuthSetup() trusts X-NyxID-*
+ * headers injected by the proxy.
  *
  * Route-level middlewares (nyxidAuthMiddleware / optionalAuthMiddleware) only
  * check whether auth was already set by the setup layer.
@@ -13,7 +12,6 @@
 
 import type { Context, Next } from "hono";
 import { createMiddleware } from "hono/factory";
-import { createRemoteJWKSet, jwtVerify } from "jose";
 import pino from "pino";
 
 const logger = pino({ level: "info" }).child({ module: "nyxidAuth" });
@@ -33,15 +31,6 @@ export type AuthVariables = {
   auth: AuthContext;
 };
 
-export interface JwtAuthConfig {
-  jwksUrl: string;
-  issuer: string;
-  audience: string;
-  introspectionUrl: string;
-  clientId: string;
-  clientSecret: string;
-}
-
 // ---------------------------------------------------------------------------
 // AppError (inlined to avoid circular dependency)
 // ---------------------------------------------------------------------------
@@ -60,87 +49,6 @@ class AppError extends Error {
 // ---------------------------------------------------------------------------
 // Setup middlewares — run once per request prefix to populate auth context
 // ---------------------------------------------------------------------------
-
-/**
- * JWT auth setup for `/api/web` routes.
- * Verifies Bearer token signature against NyxID JWKS for identity (sub),
- * then calls NyxID token introspection to get authoritative roles/permissions.
- * Skips silently when no Authorization header is present (public routes).
- * Throws 401 when a token IS present but invalid/expired.
- */
-export function jwtAuthSetup(config: JwtAuthConfig) {
-  const jwks = createRemoteJWKSet(new URL(config.jwksUrl));
-
-  return createMiddleware<{ Variables: AuthVariables }>(async (c, next) => {
-    const authHeader = c.req.header("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      // No token → anonymous; route-level middleware decides if that's OK
-      await next();
-      return;
-    }
-
-    const token = authHeader.slice(7);
-
-    // Step 1: Verify JWT signature to confirm identity
-    let userId: string;
-    try {
-      const { payload } = await jwtVerify(token, jwks, {
-        issuer: config.issuer,
-        audience: config.audience,
-      });
-      userId = payload.sub!;
-    } catch (err) {
-      logger.warn({ err }, "JWT verification failed");
-      throw new AppError(401, "AUTH_INVALID", "Invalid or expired access token");
-    }
-
-    // Step 2: Call NyxID introspection for authoritative roles/permissions
-    let roles: string[] = [];
-    let permissions: string[] = [];
-
-    try {
-      const body = new URLSearchParams({
-        token,
-        client_id: config.clientId,
-        client_secret: config.clientSecret,
-      });
-
-      const introspectResp = await fetch(config.introspectionUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: body.toString(),
-      });
-
-      if (introspectResp.ok) {
-        const data = await introspectResp.json() as Record<string, unknown>;
-        if (data.active) {
-          if (Array.isArray(data.roles)) roles = data.roles as string[];
-          if (Array.isArray(data.permissions)) permissions = data.permissions as string[];
-        } else {
-          // Token is not active according to NyxID (e.g., revoked)
-          throw new AppError(401, "AUTH_INVALID", "Token is no longer active");
-        }
-      } else {
-        logger.error({ status: introspectResp.status }, "NyxID introspection request failed");
-      }
-    } catch (err) {
-      if (err instanceof AppError) throw err;
-      logger.warn({ err }, "Token introspection failed");
-    }
-
-    const auth: AuthContext = {
-      userId,
-      email: c.req.header("X-User-Email") ?? "",
-      roles,
-      permissions,
-    };
-
-    c.set("auth", auth);
-    logger.debug({ userId: auth.userId }, "Authenticated via JWT + introspection");
-
-    await next();
-  });
-}
 
 /**
  * Proxy header auth setup for `/api/agent` routes.
