@@ -37,11 +37,21 @@ function formatInterfaceChanges(changes: InterfaceChange[]): string {
   return changes.map((c) => `${c.field} ${c.kind} ${c.detail}`).join("; ");
 }
 
+/**
+ * Optional hook invoked when a skill is hard-deleted. Lets other domains
+ * (topics, analytics, ...) cascade their own cleanup without the skill
+ * service having to know about their repositories directly. Injected via
+ * the service constructor; callers pass a no-op if they don't need it.
+ */
+export type SkillDeleteHook = (skillGuid: string) => Promise<void>;
+
 export interface SkillServiceDeps {
   skillRepo: SkillRepository;
   skillVersionRepo: SkillVersionRepository;
   storageClient: IStorageClient;
   storageBucket: string;
+  /** Invoked after the skill doc is deleted so downstream systems can cascade. */
+  onSkillDeleted?: SkillDeleteHook;
 }
 
 export class SkillService {
@@ -49,12 +59,14 @@ export class SkillService {
   private readonly skillVersionRepo: SkillVersionRepository;
   private readonly storageClient: IStorageClient;
   private readonly storageBucket: string;
+  private readonly onSkillDeleted: SkillDeleteHook;
 
   constructor(deps: SkillServiceDeps) {
     this.skillRepo = deps.skillRepo;
     this.skillVersionRepo = deps.skillVersionRepo;
     this.storageClient = deps.storageClient;
     this.storageBucket = deps.storageBucket;
+    this.onSkillDeleted = deps.onSkillDeleted ?? (async () => {});
   }
 
   async createSkill(
@@ -352,6 +364,14 @@ export class SkillService {
     // Cascade-delete version rows first, then the skill doc.
     await this.skillVersionRepo.deleteAllBySkill(guid);
     await this.skillRepo.hardDelete(guid);
+
+    // Notify downstream systems (topics, etc.) to clean up their references.
+    // Swallow errors — the skill is gone; downstream cleanup is best-effort.
+    try {
+      await this.onSkillDeleted(guid);
+    } catch (err) {
+      logger.warn({ guid, err }, "onSkillDeleted hook failed; continuing");
+    }
   }
 
   /**
