@@ -16,12 +16,7 @@ export interface NyxidService {
   slug: string;
   description: string | null;
   service_category: string;
-  connected: boolean;
-  requires_connection: boolean;
-  proxy_url: string;
-  proxy_url_slug: string;
-  openapi_url: string | null;
-  streaming_supported: boolean;
+  hasOpenApiSpec: boolean;
 }
 
 export interface SystemSkillInfo {
@@ -51,20 +46,34 @@ export interface SystemSkillItem {
 const NYXID_API_BASE = import.meta.env.VITE_NYXID_AUTHORIZE_URL?.replace("/oauth/authorize", "") ?? "";
 
 /**
- * Fetch proxyable services from NyxID proxy/services endpoint.
- * This endpoint is available to any authenticated user with proxy scope.
+ * Fetch all platform services from NyxID admin endpoint.
+ * Requires admin user token.
  */
-async function fetchNyxidServices(): Promise<NyxidService[]> {
+async function fetchAdminServices(): Promise<NyxidService[]> {
   const token = useAuthStore.getState().accessToken;
   if (!token) return [];
 
-  const resp = await fetch(`${NYXID_API_BASE}/api/v1/proxy/services`, {
+  const resp = await fetch(`${NYXID_API_BASE}/api/v1/services`, {
     headers: { Authorization: `Bearer ${token}` },
   });
 
-  if (!resp.ok) return [];
+  if (!resp.ok) {
+    console.warn("[systemSkillsApi] Failed to fetch admin services:", resp.status);
+    return [];
+  }
   const data = await resp.json();
-  return data.services ?? [];
+  const services = data.services ?? [];
+
+  return services
+    .filter((s: any) => s.is_active)
+    .map((s: any) => ({
+      id: s.id,
+      name: s.name ?? s.slug ?? "Unknown",
+      slug: s.slug ?? "",
+      description: s.description ?? null,
+      service_category: s.service_category ?? "unknown",
+      hasOpenApiSpec: !!(s.openapi_spec_url || s.api_spec_url),
+    }));
 }
 
 /**
@@ -83,7 +92,7 @@ async function fetchGeneratedSystemSkills(): Promise<SystemSkillInfo[]> {
  */
 export async function getSystemSkills(): Promise<SystemSkillItem[]> {
   const [services, skills] = await Promise.all([
-    fetchNyxidServices(),
+    fetchAdminServices(),
     fetchGeneratedSystemSkills(),
   ]);
 
@@ -96,10 +105,10 @@ export async function getSystemSkills(): Promise<SystemSkillItem[]> {
       serviceName: svc.name,
       serviceSlug: svc.slug,
       serviceDescription: svc.description,
-      baseUrl: svc.proxy_url_slug,
+      baseUrl: "",
       serviceCategory: svc.service_category,
-      hasOpenApiSpec: !!svc.openapi_url,
-      openApiSpecUrl: svc.openapi_url,
+      hasOpenApiSpec: svc.hasOpenApiSpec,
+      openApiSpecUrl: null,
       skillGenerated: !!skill,
       skill,
     };

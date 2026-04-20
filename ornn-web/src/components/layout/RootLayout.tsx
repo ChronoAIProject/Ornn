@@ -43,6 +43,10 @@ function useBreadcrumbs() {
     } else {
       crumbs.push({ label: t("breadcrumb.playground"), to: "/playground" });
     }
+  } else if (path === "/services/my") {
+    crumbs.push({ label: "My NyxID Services", to: "/services/my" });
+  } else if (path === "/services/admin") {
+    crumbs.push({ label: "Admin NyxID Services", to: "/services/admin" });
   } else if (path === "/settings") {
     crumbs.push({ label: t("breadcrumb.settings"), to: "/settings" });
   } else if (path === "/docs") {
