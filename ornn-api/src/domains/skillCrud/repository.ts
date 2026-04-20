@@ -20,8 +20,8 @@ export interface CreateSkillData {
   skillHash: string;
   storageKey: string;
   /**
-   * Owner — person user_id (personal skill) OR org user_id (org-owned skill).
-   * Defaults to `createdBy` when omitted.
+   * Legacy back-compat field. New skills copy `createdBy` here; visibility
+   * logic no longer consults it. Defaults to `createdBy` when omitted.
    */
   ownerId?: string;
   createdBy: string;
@@ -43,6 +43,13 @@ export interface UpdateSkillData {
   skillHash?: string;
   storageKey?: string;
   isPrivate?: boolean;
+  /**
+   * Full replacement of the explicit per-user grant list. When undefined the
+   * existing value on the doc is preserved.
+   */
+  sharedWithUsers?: string[];
+  /** Full replacement of the explicit per-org grant list. */
+  sharedWithOrgs?: string[];
   /** Cached latest-version pointer; update when a new package version is published. */
   latestVersion?: string;
   updatedBy: string;
@@ -94,6 +101,10 @@ export class SkillRepository {
       isPrivate: data.isPrivate ?? true,
       isSystem: data.isSystem ?? false,
       nyxidServiceId: data.nyxidServiceId ?? null,
+      // Explicit ACLs start empty — author + platform admin always have
+      // access; the shared-with lists are an additive allow-list.
+      sharedWithUsers: [],
+      sharedWithOrgs: [],
       latestVersion: data.latestVersion,
     };
 
@@ -124,6 +135,8 @@ export class SkillRepository {
     if (data.skillHash !== undefined) setFields.skillHash = data.skillHash;
     if (data.storageKey !== undefined) setFields.storageKey = data.storageKey;
     if (data.isPrivate !== undefined) setFields.isPrivate = data.isPrivate;
+    if (data.sharedWithUsers !== undefined) setFields.sharedWithUsers = data.sharedWithUsers;
+    if (data.sharedWithOrgs !== undefined) setFields.sharedWithOrgs = data.sharedWithOrgs;
     if (data.latestVersion !== undefined) setFields.latestVersion = data.latestVersion;
 
     await this.collection.updateOne({ _id: guid as any }, { $set: setFields });
@@ -211,7 +224,7 @@ export class SkillRepository {
 
     const docs = await this.collection
       .find(matchStage)
-      .project({ _id: 1, name: 1, description: 1, metadata: 1, isPrivate: 1, ownerId: 1, createdBy: 1, createdByEmail: 1, createdByDisplayName: 1, createdOn: 1, updatedOn: 1, storageKey: 1, skillHash: 1, license: 1, compatibility: 1, updatedBy: 1 })
+      .project({ _id: 1, name: 1, description: 1, metadata: 1, isPrivate: 1, ownerId: 1, sharedWithUsers: 1, sharedWithOrgs: 1, createdBy: 1, createdByEmail: 1, createdByDisplayName: 1, createdOn: 1, updatedOn: 1, storageKey: 1, skillHash: 1, license: 1, compatibility: 1, updatedBy: 1 })
       .sort({ createdOn: -1 })
       .toArray();
 
@@ -264,13 +277,15 @@ export class SkillRepository {
 /**
  * Build the visibility match stage for a scoped query.
  *
- * "Ownership" now includes the caller's orgs (admin/member memberships).
- * `private` means "owned by me or one of my orgs"; `mixed` is "public OR
- * anything I own"; `public` is unchanged.
+ * Visibility model (matches `canReadSkill` in authorize.ts):
+ *   - `public` scope  → `!isPrivate`.
+ *   - `private` scope → every private skill the caller can see: author,
+ *     any skill whose `sharedWithUsers` contains the caller's user_id, or
+ *     any skill whose `sharedWithOrgs` overlaps the caller's org user_ids.
+ *   - `mixed`   scope → union of the two above.
  *
- * Note: we match on `ownerId`, not `createdBy`. An org-owned skill is
- * visible to every org member even though `createdBy` points at one
- * specific author.
+ * Anonymous callers (empty `currentUserId` + empty `userOrgIds`) correctly
+ * match nothing for the private branch.
  */
 function applyScope(
   matchStage: Record<string, unknown>,
@@ -278,17 +293,37 @@ function applyScope(
   currentUserId: string,
   userOrgIds: string[],
 ): void {
-  const ownerIds = [currentUserId, ...userOrgIds];
+  const privateVisibility: Array<Record<string, unknown>> = [];
+  if (currentUserId) {
+    privateVisibility.push({ createdBy: currentUserId });
+    privateVisibility.push({ sharedWithUsers: currentUserId });
+  }
+  if (userOrgIds.length > 0) {
+    privateVisibility.push({ sharedWithOrgs: { $in: userOrgIds } });
+  }
+
   if (scope === "public") {
     matchStage.isPrivate = false;
-  } else if (scope === "private") {
-    matchStage.ownerId = { $in: ownerIds };
-  } else if (scope === "mixed") {
-    matchStage.$or = [
-      { isPrivate: false },
-      { ownerId: { $in: ownerIds } },
-    ];
+    return;
   }
+
+  if (scope === "private") {
+    if (privateVisibility.length === 0) {
+      // Anonymous caller with no orgs — nothing to match.
+      matchStage._id = { $in: [] };
+      return;
+    }
+    matchStage.isPrivate = true;
+    matchStage.$or = privateVisibility;
+    return;
+  }
+
+  // mixed
+  const clauses: Array<Record<string, unknown>> = [{ isPrivate: false }];
+  if (privateVisibility.length > 0) {
+    clauses.push({ isPrivate: true, $or: privateVisibility });
+  }
+  matchStage.$or = clauses;
 }
 
 function mapDoc(doc: Document | null): SkillDocument | null {
@@ -302,8 +337,8 @@ function mapDoc(doc: Document | null): SkillDocument | null {
     metadata: doc.metadata ?? { category: "plain" },
     skillHash: doc.skillHash ?? "",
     storageKey: doc.storageKey ?? doc.s3Url ?? "",
-    // Fallback to createdBy for pre-migration rows; migration backfills this
-    // so runtime reads converge on the field after it ships.
+    // `ownerId` is a legacy field — new skills copy `createdBy` into it.
+    // Fallback keeps pre-migration reads sane.
     ownerId: doc.ownerId ?? doc.createdBy ?? "",
     createdBy: doc.createdBy ?? "",
     createdByEmail: doc.createdByEmail ?? undefined,
@@ -314,6 +349,12 @@ function mapDoc(doc: Document | null): SkillDocument | null {
     isPrivate: doc.isPrivate ?? true,
     isSystem: doc.isSystem ?? false,
     nyxidServiceId: doc.nyxidServiceId ?? undefined,
+    // Shared-with lists default to empty when the field is absent — that's
+    // how every skill predating the ACL feature looks. The migration script
+    // explicitly writes [] so future reads don't need this fallback, but
+    // we keep it here for safety against partial migrations.
+    sharedWithUsers: Array.isArray(doc.sharedWithUsers) ? (doc.sharedWithUsers as string[]) : [],
+    sharedWithOrgs: Array.isArray(doc.sharedWithOrgs) ? (doc.sharedWithOrgs as string[]) : [],
     latestVersion: doc.latestVersion ?? "0.1",
   };
 }

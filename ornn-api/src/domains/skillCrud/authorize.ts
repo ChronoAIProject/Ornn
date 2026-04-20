@@ -1,20 +1,27 @@
 /**
  * Authorization helpers for skill access.
  *
- * Visibility (read) and write rules for a single skill, in one place so the
- * routes / service / topic domain all converge on the same policy.
+ * Single source of truth for read/write gates. Routes, service, and the
+ * topic domain all converge on these so tests only need to exercise the
+ * policy once.
  *
- * Rules:
- *   - PUBLIC skill → anyone can read.
- *   - PRIVATE skill owned by a person → only that person (or platform admin).
- *   - PRIVATE skill owned by an org → any admin + member of that org, plus
- *     the actual author regardless of role, plus platform admin.
+ * Read (visibility):
+ *   - PUBLIC skill → anyone.
+ *   - PRIVATE skill:
+ *     - author (`createdBy === actor.userId`) → yes
+ *     - actor's user_id is in `sharedWithUsers` → yes
+ *     - actor is admin/member of any org in `sharedWithOrgs` → yes
+ *     - platform admin (`ornn:admin:skill`) → yes
+ *     - else → no
  *
- * Write (update / delete / deprecation-toggle):
- *   - Author (`createdBy === actor`) → always allowed.
- *   - `ownerId` is an org AND actor is admin of that org → allowed.
- *   - Platform admin → allowed.
- *   - Else denied.
+ * Write (update / delete / change-permissions / deprecation-toggle):
+ *   - author → yes
+ *   - platform admin → yes
+ *   - else → 403
+ *
+ *   Note: org-admins no longer automatically inherit write access. If an
+ *   author wants collaborators to edit, they can grant the user directly
+ *   (future work — the current ACL is read-only).
  *
  * @module domains/skillCrud/authorize
  */
@@ -22,9 +29,13 @@
 import type { OrgMembershipFact } from "../../middleware/nyxidAuth";
 
 export interface SkillOwnership {
-  ownerId: string;
+  /** Author (person user_id). Always present. */
   createdBy: string;
   isPrivate: boolean;
+  /** Explicit per-user allow-list. Empty = nobody extra beyond author. */
+  sharedWithUsers: string[];
+  /** Explicit per-org allow-list. Empty = nobody extra beyond author. */
+  sharedWithOrgs: string[];
 }
 
 export interface ActorContext {
@@ -38,25 +49,29 @@ export function canReadSkill(skill: SkillOwnership, actor: ActorContext): boolea
   if (!skill.isPrivate) return true;
   if (actor.isPlatformAdmin) return true;
   if (skill.createdBy === actor.userId) return true;
-  // `ownerId` can be either a person user_id (== createdBy for personal
-  // skills) or an org user_id. Match it against the actor's org memberships.
-  return actor.memberships.some((m) => m.userId === skill.ownerId);
+  if (skill.sharedWithUsers.includes(actor.userId)) return true;
+  if (skill.sharedWithOrgs.length > 0) {
+    for (const m of actor.memberships) {
+      if (skill.sharedWithOrgs.includes(m.userId)) return true;
+    }
+  }
+  return false;
 }
 
 /**
- * Returns true when `actor` is allowed to mutate (update / delete /
- * deprecate versions of) the skill.
+ * Returns true when `actor` is allowed to mutate the skill — update
+ * package, change permissions, toggle deprecation, or delete. Author-only
+ * plus platform admin.
  */
 export function canManageSkill(skill: SkillOwnership, actor: ActorContext): boolean {
   if (actor.isPlatformAdmin) return true;
-  if (skill.createdBy === actor.userId) return true;
-  // Org admin of the owning org can manage any skill under that org.
-  return actor.memberships.some(
-    (m) => m.userId === skill.ownerId && m.role === "admin",
-  );
+  return skill.createdBy === actor.userId;
 }
 
-/** True when actor is currently a member (admin or member role) of the given org. */
+/**
+ * True when `actor` is currently a member (admin or member role) of the
+ * given org. Used by the topic create path — not by skill visibility.
+ */
 export function isMemberOfOrg(actor: ActorContext, orgUserId: string): boolean {
   return actor.memberships.some((m) => m.userId === orgUserId);
 }

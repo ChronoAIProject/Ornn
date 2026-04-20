@@ -21,12 +21,24 @@ import {
   readUserOrgMemberships,
 } from "../../middleware/nyxidAuth";
 import { AppError } from "../../shared/types/index";
-import { canReadSkill, canManageSkill, isMemberOfOrg } from "./authorize";
+import { canReadSkill, canManageSkill } from "./authorize";
 import pino from "pino";
 
 const deprecationPatchSchema = z.object({
   isDeprecated: z.boolean(),
   deprecationNote: z.string().max(1024).optional(),
+});
+
+/**
+ * Schema for `PUT /api/skills/:id/permissions`. `isPrivate === false`
+ * means fully public; the shared-with lists are still persisted in that
+ * case (no reason to wipe them — the author can flip back to private
+ * without losing their collaborator list).
+ */
+const permissionsPatchSchema = z.object({
+  isPrivate: z.boolean(),
+  sharedWithUsers: z.array(z.string().min(1).max(128)).max(500).default([]),
+  sharedWithOrgs: z.array(z.string().min(1).max(128)).max(100).default([]),
 });
 
 const logger = pino({ level: "info" }).child({ module: "skillCrudRoutes" });
@@ -75,32 +87,12 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
       const userEmail = c.req.header("X-User-Email") ?? undefined;
       const userDisplayName = c.req.header("X-User-Display-Name") ?? undefined;
 
-      // Org ownership: accepted via ?targetOrgId=. When set, the actor must
-      // be an admin/member of that org (NyxID). Viewers and non-members get
-      // 403. Fail-closed on write paths.
-      const targetOrgId = c.req.query("targetOrgId") || undefined;
-      let ownerId: string | undefined;
-      if (targetOrgId) {
-        const memberships = await readUserOrgMemberships(c);
-        const actor = {
-          userId: authCtx.userId,
-          memberships,
-          isPlatformAdmin: authCtx.permissions.includes("ornn:admin:skill"),
-        };
-        if (!isMemberOfOrg(actor, targetOrgId) && !actor.isPlatformAdmin) {
-          throw AppError.forbidden(
-            "NOT_ORG_MEMBER",
-            `You are not an admin or member of org '${targetOrgId}'`,
-          );
-        }
-        ownerId = targetOrgId;
-      }
-
+      // New skills are always created as private with no shared-with entries.
+      // Visibility is managed afterward via PUT /api/skills/:id/permissions.
       const result = await skillService.createSkill(zipBuffer, authCtx.userId, {
         skipValidation,
         userEmail,
         userDisplayName,
-        ownerId,
       });
       logger.info({ guid: result.guid, userId: authCtx.userId, userEmail }, "Skill created via API");
 
@@ -366,6 +358,71 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
       }).catch((err) => logger.warn({ err }, `Failed to log ${action} activity`));
 
       return c.json({ data: result, error: null });
+    },
+  );
+
+  /**
+   * PUT /skills/:id/permissions — Replace the skill's visibility config.
+   *
+   * Body: `{ isPrivate, sharedWithUsers, sharedWithOrgs }`.
+   * Requires: ornn:skill:update + author (or platform admin).
+   *
+   * Distinct from `PUT /skills/:id` (which updates the package / name /
+   * metadata) because the author workflow for "share this skill" is a
+   * very different UI from "upload a new version".
+   */
+  app.put(
+    "/skills/:id/permissions",
+    auth,
+    requirePermission("ornn:skill:update"),
+    async (c) => {
+      const guid = c.req.param("id");
+      const authCtx = getAuth(c);
+
+      const existing = await skillRepo.findByGuid(guid);
+      if (!existing) {
+        throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${guid}' not found`);
+      }
+      const memberships = await readUserOrgMemberships(c);
+      const actor = {
+        userId: authCtx.userId,
+        memberships,
+        isPlatformAdmin: authCtx.permissions.includes("ornn:admin:skill"),
+      };
+      if (!canManageSkill(existing, actor)) {
+        throw AppError.forbidden(
+          "FORBIDDEN",
+          "You do not have permission to change this skill's visibility",
+        );
+      }
+
+      let body: unknown;
+      try {
+        body = await c.req.json();
+      } catch {
+        throw AppError.badRequest("INVALID_BODY", "Request body must be valid JSON");
+      }
+      const parsed = permissionsPatchSchema.safeParse(body);
+      if (!parsed.success) {
+        throw AppError.badRequest(
+          "INVALID_PERMISSIONS",
+          parsed.error.issues.map((i) => `${i.path.join(".") || "<root>"}: ${i.message}`).join("; "),
+        );
+      }
+
+      const updated = await skillService.setSkillPermissions(guid, authCtx.userId, parsed.data);
+
+      const userEmail = c.req.header("X-User-Email") ?? "";
+      const userDN = c.req.header("X-User-Display-Name") ?? "";
+      activityRepo?.log(authCtx.userId, userEmail, userDN, "skill:permissions_change", {
+        skillId: guid,
+        skillName: updated.name,
+        isPrivate: updated.isPrivate,
+        sharedWithUsers: updated.sharedWithUsers.length,
+        sharedWithOrgs: updated.sharedWithOrgs.length,
+      }).catch((err) => logger.warn({ err }, "Failed to log skill:permissions_change activity"));
+
+      return c.json({ data: updated, error: null });
     },
   );
 

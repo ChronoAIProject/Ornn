@@ -1,21 +1,23 @@
 /**
- * One-shot migration: backfill `ownerId` on every `skills` and `topics`
- * document that pre-dates the org-ownership feature.
+ * Migration: converge `skills` + `topics` on the post-ACL shape.
  *
- * Historical context: before org-scoped skills, visibility pivoted on
- * `createdBy` alone. We've since split the two: `createdBy` is still the
- * author (always a person user_id), while `ownerId` holds the "owner
- * entity" — either the same person or an NyxID org user_id. Existing
- * documents were all personal, so the correct backfill is
- * `ownerId = createdBy`.
+ * Two columns on the `skills` collection need backfilling on pre-feature
+ * rows:
  *
- * Idempotent: documents that already have a non-empty `ownerId` are
- * skipped. Re-runs report `updated=0` once the backfill has landed.
+ *   1. `ownerId` — legacy back-compat field from the earlier
+ *      "org-as-owner" design. Visibility logic no longer consults it, but
+ *      the field is still written on new rows for safety. We set it to
+ *      `createdBy` when absent.
+ *   2. `sharedWithUsers` / `sharedWithOrgs` — the per-skill ACL lists
+ *      introduced by the permissions feature. Pre-feature rows are
+ *      missing both; we initialize them to `[]` so runtime reads don't
+ *      have to fall back.
  *
- * Why DB-direct here (instead of going through the API like the skill-versions
- * migration): we're only writing a single scalar that the API layer doesn't
- * know how to set. No storage blobs change, no hashing, no validation — a
- * Mongo `updateMany` is both correct and fast.
+ * The `topics` collection only needs the `ownerId` backfill — topics
+ * don't carry their own ACL lists (the feature lives on skills only).
+ *
+ * Idempotent: a doc whose target fields are already set is left alone.
+ * Re-runs converge to `updated=0`.
  *
  * Run with (from ornn-api/):
  *   MONGODB_URI=... MONGODB_DB=... bun run migrate:ownership
@@ -32,18 +34,39 @@ function readConfig(): { mongoUri: string; mongoDb: string } {
   };
 }
 
+interface BackfillResult {
+  scanned: number;
+  updated: number;
+  skippedNoCreatedBy: number;
+}
+
+/**
+ * Backfill a single collection. `withAcl` controls whether the two ACL
+ * list fields (`sharedWithUsers`, `sharedWithOrgs`) are also initialized
+ * when absent. Skills get both; topics only get `ownerId`.
+ */
 async function backfillCollection(
   mongo: MongoClient,
   mongoDb: string,
   collectionName: string,
-): Promise<{ scanned: number; updated: number; skippedNoCreatedBy: number }> {
+  withAcl: boolean,
+): Promise<BackfillResult> {
   const collection = mongo.db(mongoDb).collection(collectionName);
 
-  // Skills/topics that have no `ownerId` yet — the ones we need to backfill.
-  // Treat an empty string the same as missing so a re-run on a partially
-  // migrated collection still converges.
-  const needle = {
-    $or: [{ ownerId: { $exists: false } }, { ownerId: "" }, { ownerId: null }],
+  // Any row missing at least one of the target fields. Treats `""`/`null`
+  // on `ownerId` the same as missing so partially migrated docs converge.
+  const needle: Record<string, unknown> = {
+    $or: [
+      { ownerId: { $exists: false } },
+      { ownerId: "" },
+      { ownerId: null },
+      ...(withAcl
+        ? [
+            { sharedWithUsers: { $exists: false } },
+            { sharedWithOrgs: { $exists: false } },
+          ]
+        : []),
+    ],
   };
 
   const cursor = collection.find(needle);
@@ -54,16 +77,27 @@ async function backfillCollection(
   for await (const doc of cursor) {
     scanned += 1;
     const createdBy = (doc.createdBy as string | undefined) ?? "";
-    if (!createdBy) {
-      // Can't infer an owner. Skip loudly — something upstream is malformed
-      // and we don't want to plant an invalid ownerId.
+    const existingOwner = (doc.ownerId as string | undefined) ?? "";
+
+    if (!createdBy && !existingOwner) {
+      // Can't derive an owner for rows missing both fields. Skip loudly
+      // so someone can inspect the doc by hand.
       skippedNoCreatedBy += 1;
       continue;
     }
-    await collection.updateOne(
-      { _id: doc._id },
-      { $set: { ownerId: createdBy } },
-    );
+
+    const set: Record<string, unknown> = {};
+    if (!existingOwner) {
+      set.ownerId = createdBy;
+    }
+    if (withAcl) {
+      if (!Array.isArray(doc.sharedWithUsers)) set.sharedWithUsers = [];
+      if (!Array.isArray(doc.sharedWithOrgs)) set.sharedWithOrgs = [];
+    }
+
+    if (Object.keys(set).length === 0) continue;
+
+    await collection.updateOne({ _id: doc._id }, { $set: set });
     updated += 1;
   }
 
@@ -76,12 +110,12 @@ async function main(): Promise<void> {
   await mongo.connect();
 
   try {
-    const skillsResult = await backfillCollection(mongo, config.mongoDb, "skills");
-    const topicsResult = await backfillCollection(mongo, config.mongoDb, "topics");
+    const skillsResult = await backfillCollection(mongo, config.mongoDb, "skills", true);
+    const topicsResult = await backfillCollection(mongo, config.mongoDb, "topics", false);
 
     console.log(
       [
-        "Ownership backfill complete:",
+        "Ownership + ACL backfill complete:",
         `  skills   scanned=${skillsResult.scanned} updated=${skillsResult.updated} skipped=${skillsResult.skippedNoCreatedBy}`,
         `  topics   scanned=${topicsResult.scanned} updated=${topicsResult.updated} skipped=${topicsResult.skippedNoCreatedBy}`,
       ].join("\n"),

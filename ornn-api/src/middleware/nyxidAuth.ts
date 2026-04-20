@@ -41,10 +41,14 @@ export interface AuthContext {
 /**
  * Minimal org-membership shape Ornn cares about. NyxID's viewer role is
  * filtered out upstream, so `role` is always `admin` or `member`.
+ *
+ * `displayName` is kept here so UI callers (owner pickers, profile
+ * dropdowns) can render a human label without a second round-trip.
  */
 export interface OrgMembershipFact {
   userId: string;
   role: "admin" | "member";
+  displayName: string;
 }
 
 export type AuthVariables = {
@@ -261,7 +265,9 @@ export function getAuth(c: Context<{ Variables: AuthVariables }>): AuthContext {
  * client class inside the middleware module.
  */
 export interface OrgMembershipSource {
-  listUserOrgs(userAccessToken: string): Promise<Array<{ userId: string; role: string }>>;
+  listUserOrgs(
+    userAccessToken: string,
+  ): Promise<Array<{ userId: string; role: string; displayName: string }>>;
 }
 
 /**
@@ -290,7 +296,11 @@ export function nyxidOrgLookupMiddleware(orgs: OrgMembershipSource) {
         const raw = await orgs.listUserOrgs(token);
         cache = raw
           .filter((m) => m.role === "admin" || m.role === "member")
-          .map((m) => ({ userId: m.userId, role: m.role as "admin" | "member" }));
+          .map((m) => ({
+            userId: m.userId,
+            role: m.role as "admin" | "member",
+            displayName: m.displayName,
+          }));
       } catch (err) {
         logger.warn(
           { err: (err as Error).message, userId: auth.userId },

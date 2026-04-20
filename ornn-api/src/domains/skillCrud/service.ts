@@ -78,12 +78,6 @@ export class SkillService {
       userDisplayName?: string;
       isSystem?: boolean;
       nyxidServiceId?: string;
-      /**
-       * When set, the new skill is owned by this entity (org user_id).
-       * The caller is responsible for verifying the actor is a member
-       * of that org BEFORE invoking — service does not re-check.
-       */
-      ownerId?: string;
     },
   ): Promise<{ guid: string }> {
     // 1. Validate ZIP format rules
@@ -126,9 +120,10 @@ export class SkillService {
       metadata,
       skillHash,
       storageKey,
-      // `ownerId` falls back to `userId` (personal skill); when the caller
-      // passes an `ownerId` (org user_id) they've already validated membership.
-      ownerId: options?.ownerId ?? userId,
+      // `ownerId` is retained as a no-op field for back-compat. New skills
+      // always record the author here; visibility is expressed via
+      // sharedWithUsers/sharedWithOrgs on the skill doc.
+      ownerId: userId,
       createdBy: userId,
       createdByEmail: options?.userEmail,
       createdByDisplayName: options?.userDisplayName,
@@ -252,6 +247,48 @@ export class SkillService {
       throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${idOrName}' not found`);
     }
     return skill;
+  }
+
+  /**
+   * Replace the per-skill permission model in a single atomic write. The
+   * route layer has already enforced the write gate (author/admin); the
+   * service just validates the inputs and persists them.
+   *
+   * Ownership (`createdBy`, `ownerId`) is left untouched — permissions
+   * don't change who wrote or "owns" the skill, they just widen who can
+   * read it.
+   */
+  async setSkillPermissions(
+    guid: string,
+    userId: string,
+    permissions: {
+      isPrivate: boolean;
+      sharedWithUsers: string[];
+      sharedWithOrgs: string[];
+    },
+  ): Promise<SkillDetailResponse> {
+    const existing = await this.skillRepo.findByGuid(guid);
+    if (!existing) {
+      throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${guid}' not found`);
+    }
+
+    // Dedupe the lists + drop any self-references. The author always has
+    // access; including their id in `sharedWithUsers` is redundant and
+    // noisy for downstream debugging.
+    const sharedWithUsers = Array.from(
+      new Set(permissions.sharedWithUsers.filter((id) => id && id !== existing.createdBy)),
+    );
+    const sharedWithOrgs = Array.from(
+      new Set(permissions.sharedWithOrgs.filter((id) => !!id)),
+    );
+
+    const updated = await this.skillRepo.update(guid, {
+      isPrivate: permissions.isPrivate,
+      sharedWithUsers,
+      sharedWithOrgs,
+      updatedBy: userId,
+    });
+    return this.buildDetailResponse(updated);
   }
 
   async updateSkill(
@@ -615,6 +652,8 @@ export class SkillService {
       createdByDisplayName: skill.createdByDisplayName,
       createdOn: skill.createdOn instanceof Date ? skill.createdOn.toISOString() : String(skill.createdOn),
       updatedOn: skill.updatedOn instanceof Date ? skill.updatedOn.toISOString() : String(skill.updatedOn),
+      sharedWithUsers: skill.sharedWithUsers,
+      sharedWithOrgs: skill.sharedWithOrgs,
       version,
       isDeprecated,
       deprecationNote,

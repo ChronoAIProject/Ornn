@@ -49,6 +49,8 @@ function makeSkill(overrides: Partial<SkillDocument> = {}): SkillDocument {
     updatedBy: OWNER_ID,
     updatedOn: NOW,
     isPrivate: false,
+    sharedWithUsers: [],
+    sharedWithOrgs: [],
     latestVersion: "0.1",
     ...overrides,
   };
@@ -225,18 +227,21 @@ describe("TopicService", () => {
       expect(detail.guid).toBe(t.guid);
     });
 
-    test("org member can read a private org-owned topic", async () => {
+    test("org member cannot read a private topic they did not author (topics have no ACL)", async () => {
+      // Topics do not carry a per-topic shared-with list the way skills do.
+      // A private topic is therefore strictly author-only + platform admin,
+      // even if it was created under an org the viewer belongs to.
       const t = makeTopic({ isPrivate: true, createdBy: OWNER_ID, ownerId: ORG_ID });
       (topicRepo.findByGuid as ReturnType<typeof mock>).mockImplementationOnce(async () => t);
-      (topicSkillRepo.listSkillGuidsByTopic as ReturnType<typeof mock>).mockImplementationOnce(async () => []);
-      const detail = await service.getTopic(
-        t.guid,
-        makeActor({
-          currentUserId: OTHER_USER_ID,
-          memberships: [{ userId: ORG_ID, role: "member" }],
-        }),
-      );
-      expect(detail.guid).toBe(t.guid);
+      await expect(
+        service.getTopic(
+          t.guid,
+          makeActor({
+            currentUserId: OTHER_USER_ID,
+            memberships: [{ userId: ORG_ID, role: "member", displayName: "ACME" }],
+          }),
+        ),
+      ).rejects.toMatchObject({ code: "TOPIC_NOT_FOUND" });
     });
 
     test("filters out skills the viewer cannot see (private skill, non-owner, non-admin)", async () => {
@@ -282,18 +287,22 @@ describe("TopicService", () => {
       ).rejects.toMatchObject({ code: "FORBIDDEN", statusCode: 403 });
     });
 
-    test("org admin can update an org-owned topic even if not the author", async () => {
+    test("org admin cannot update an org-owned topic if they are not the author", async () => {
+      // The topic write gate is author + platform admin only. Org admins
+      // have no implicit management rights over topics their org owns —
+      // that org-admin shortcut was removed when topics lost their ACL.
       const t = makeTopic({ ownerId: ORG_ID, createdBy: OTHER_USER_ID });
       (topicRepo.findByGuid as ReturnType<typeof mock>).mockImplementationOnce(async () => t);
-      await service.updateTopic(
-        t.guid,
-        { description: "x" },
-        makeActor({
-          currentUserId: OWNER_ID,
-          memberships: [{ userId: ORG_ID, role: "admin" }],
-        }),
-      );
-      expect(topicRepo.update).toHaveBeenCalled();
+      await expect(
+        service.updateTopic(
+          t.guid,
+          { description: "x" },
+          makeActor({
+            currentUserId: OWNER_ID,
+            memberships: [{ userId: ORG_ID, role: "admin", displayName: "ACME" }],
+          }),
+        ),
+      ).rejects.toMatchObject({ code: "FORBIDDEN" });
     });
 
     test("404 when the topic does not exist", async () => {

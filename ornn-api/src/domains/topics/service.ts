@@ -327,13 +327,20 @@ export class TopicService {
   }
 
   /**
-   * Read gate — can the actor see this topic? Mirrors canReadSkill exactly
-   * so that callers can reason about topic + skill visibility with the same
-   * mental model.
+   * Read gate — can the actor see this topic? Reuses canReadSkill so topic
+   * and skill visibility share one mental model. Topics don't currently
+   * carry their own shared-with lists (the feature lives on skills only);
+   * we pass empty arrays, which reduces the check to author + platform
+   * admin for private topics.
    */
   private canReadTopic(topic: TopicDocument, actor: ActorContext): boolean {
     return canReadSkill(
-      { ownerId: topic.ownerId, createdBy: topic.createdBy, isPrivate: topic.isPrivate },
+      {
+        createdBy: topic.createdBy,
+        isPrivate: topic.isPrivate,
+        sharedWithUsers: [],
+        sharedWithOrgs: [],
+      },
       {
         userId: actor.currentUserId,
         memberships: actor.memberships,
@@ -342,13 +349,15 @@ export class TopicService {
     );
   }
 
-  /**
-   * Write gate — can the actor mutate this topic? Author + org admin of the
-   * owning org + platform admin, else denied.
-   */
+  /** Write gate — author or platform admin only. */
   private canManageTopic(topic: TopicDocument, actor: ActorContext): boolean {
     return canManageSkill(
-      { ownerId: topic.ownerId, createdBy: topic.createdBy, isPrivate: topic.isPrivate },
+      {
+        createdBy: topic.createdBy,
+        isPrivate: topic.isPrivate,
+        sharedWithUsers: [],
+        sharedWithOrgs: [],
+      },
       {
         userId: actor.currentUserId,
         memberships: actor.memberships,

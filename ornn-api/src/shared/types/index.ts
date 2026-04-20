@@ -81,15 +81,16 @@ export interface SkillDocument {
   skillHash: string;
   storageKey: string;
   /**
-   * Entity that owns the skill for visibility purposes. Can be a person
-   * user_id OR an org user_id (NyxID's "org = user_type: 'org'" model).
-   * Defaults to `createdBy` for personal skills.
+   * Legacy back-compat field. Was used by an earlier "org-as-owner" design
+   * to drive visibility; visibility logic no longer consults it. New skills
+   * copy `createdBy` into it; safe to drop in a future cleanup migration.
    */
   ownerId: string;
   /**
    * The actual person who authored the skill. ALWAYS a person user_id —
-   * never an org. Used for "my skills" (things I wrote) and
-   * edit-your-own-work gates.
+   * never an org. Authors are the only non-admin principals allowed to
+   * manage their skill (edit package, toggle public, change permissions,
+   * delete).
    */
   createdBy: string;
   createdByEmail?: string;
@@ -97,7 +98,25 @@ export interface SkillDocument {
   createdOn: Date;
   updatedBy: string;
   updatedOn: Date;
+  /**
+   * False = fully public (anyone can read). True = private, with the
+   * `sharedWithUsers` + `sharedWithOrgs` lists acting as an allow-list on
+   * top of author + platform admin.
+   */
   isPrivate: boolean;
+  /**
+   * Explicit per-user grants. Each entry is a NyxID person user_id. An
+   * actor whose `userId` is in this list can read the skill even when
+   * `isPrivate === true`. Author is implicitly included; do not duplicate
+   * the author id in here.
+   */
+  sharedWithUsers: string[];
+  /**
+   * Explicit per-org grants. Each entry is a NyxID org user_id. An actor
+   * who is an admin or member of any listed org can read the skill. Org
+   * membership is resolved per-request via the NyxID lookup middleware.
+   */
+  sharedWithOrgs: string[];
   /** System skills are auto-generated from NyxID service catalog. */
   isSystem?: boolean;
   /** NyxID service ID this system skill was generated from. */
@@ -174,13 +193,17 @@ export interface SkillDetailResponse {
   isPrivate: boolean;
   isSystem?: boolean;
   nyxidServiceId?: string;
-  /** Owner entity — person user_id or org user_id. */
+  /** Legacy back-compat field. Not used for visibility; equals `createdBy` on new skills. */
   ownerId: string;
   createdBy: string;
   createdByEmail?: string;
   createdByDisplayName?: string;
   createdOn: string;
   updatedOn: string;
+  /** Person user_ids granted explicit access. Same semantics as on `SkillDocument`. */
+  sharedWithUsers: string[];
+  /** Org user_ids granted access — every admin/member of these orgs can read the skill. */
+  sharedWithOrgs: string[];
   /**
    * Version of this skill payload: latest when no `?version=` query was
    * passed, otherwise the specifically requested version.
