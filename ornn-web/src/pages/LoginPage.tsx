@@ -45,7 +45,7 @@ export function LoginPage() {
         >
           {/* Logo */}
           <div className="mb-8 text-center">
-            <img src="/logo.png" alt="ORNN" className="mx-auto h-32 w-auto mb-4" />
+            <img src="/logo.svg" alt="ORNN" className="mx-auto h-20 w-auto mb-4" />
             <h1 className="font-heading text-3xl font-bold tracking-widest text-neon-cyan neon-cyan">
               ORNN
             </h1>
