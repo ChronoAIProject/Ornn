@@ -64,6 +64,12 @@ import { createFormatRoutes } from "./domains/skillFormat/routes";
 // Domain: Docs
 import { createDocsRoutes } from "./domains/docs/routes";
 
+// Domain: Me (caller-scoped endpoints)
+import { createMeRoutes } from "./domains/me/routes";
+
+// Domain: Users (directory lookup)
+import { createUserRoutes } from "./domains/users/routes";
+
 // OpenAPI spec
 import { buildSpec } from "./openapi/specBuilder";
 
@@ -307,6 +313,8 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   apiApp.route("/", adminRoutes);
   apiApp.route("/", formatRoutes);
   apiApp.route("/", docsRoutes);
+  apiApp.route("/", createMeRoutes({ nyxidBaseUrl: config.nyxidBaseUrl }));
+  apiApp.route("/", createUserRoutes({ activityRepo }));
   app.route("/api", apiApp);
 
   // OpenAPI spec — auto-generated from Zod schemas
