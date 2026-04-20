@@ -14,6 +14,7 @@ import { AppError } from "../../shared/types/index";
 import { validateSkillFrontmatter } from "../../shared/schemas/skillFrontmatter";
 import { resolveZipRoot } from "../../shared/utils/zip";
 import { parseVersion, isGreater } from "./version";
+import { diffSkillInterface, type InterfaceChange } from "./interfaceDiff";
 import { parse as parseYaml } from "yaml";
 import JSZip from "jszip";
 import pino from "pino";
@@ -30,6 +31,10 @@ const FRONTMATTER_REGEX = /^---\s*\n([\s\S]*?)\n---/;
  */
 function buildVersionedStorageKey(guid: string, version: string): string {
   return `skills/${guid}/${version}.zip`;
+}
+
+function formatInterfaceChanges(changes: InterfaceChange[]): string {
+  return changes.map((c) => `${c.field} ${c.kind} ${c.detail}`).join("; ");
 }
 
 export interface SkillServiceDeps {
@@ -146,7 +151,9 @@ export class SkillService {
   }
 
   /**
-   * List every published version for a skill, newest first.
+   * List every published version for a skill, newest first. Includes the
+   * deprecation flag + note so consumers can render a warning without another
+   * round-trip.
    */
   async listSkillVersions(idOrName: string): Promise<Array<{
     version: string;
@@ -155,6 +162,8 @@ export class SkillService {
     createdByEmail?: string;
     createdByDisplayName?: string;
     createdOn: string;
+    isDeprecated: boolean;
+    deprecationNote: string | null;
   }>> {
     const skill = await this.findSkillByIdOrName(idOrName);
     const versions = await this.skillVersionRepo.listBySkill(skill.guid);
@@ -165,7 +174,46 @@ export class SkillService {
       createdByEmail: v.createdByEmail,
       createdByDisplayName: v.createdByDisplayName,
       createdOn: v.createdOn instanceof Date ? v.createdOn.toISOString() : String(v.createdOn),
+      isDeprecated: v.isDeprecated === true,
+      deprecationNote: v.deprecationNote ?? null,
     }));
+  }
+
+  /**
+   * Mutate the deprecation flag on a single version. Caller is responsible
+   * for the owner/admin auth gate — we only validate the target exists.
+   *
+   * Returns a lightweight view; callers that need the full version doc can
+   * subsequently call `getSkill(idOrName, version)`.
+   */
+  async setVersionDeprecation(
+    idOrName: string,
+    version: string,
+    isDeprecated: boolean,
+    deprecationNote: string | null | undefined,
+  ): Promise<{
+    skillGuid: string;
+    skillName: string;
+    version: string;
+    isDeprecated: boolean;
+    deprecationNote: string | null;
+  }> {
+    // Validate version format up-front so clients get 400 rather than 404.
+    parseVersion(version);
+    const skill = await this.findSkillByIdOrName(idOrName);
+    const updated = await this.skillVersionRepo.setDeprecation(
+      skill.guid,
+      version,
+      isDeprecated,
+      deprecationNote ?? null,
+    );
+    return {
+      skillGuid: skill.guid,
+      skillName: skill.name,
+      version: updated.version,
+      isDeprecated: updated.isDeprecated === true,
+      deprecationNote: updated.deprecationNote ?? null,
+    };
   }
 
   private async findSkillByIdOrName(idOrName: string): Promise<SkillDocument> {
@@ -219,6 +267,16 @@ export class SkillService {
           throw AppError.conflict(
             "VERSION_NOT_INCREMENTED",
             `New version '${version}' must be strictly greater than the current latest '${currentLatest.version}'. Bump the version in SKILL.md.`,
+          );
+        }
+        // Breaking-change check: any interface diff requires a major bump.
+        const changes = diffSkillInterface(currentLatest.metadata, metadata);
+        if (changes.length > 0 && parsedNewVersion.major === parsedCurrent.major) {
+          throw AppError.conflict(
+            "BREAKING_CHANGE_WITHOUT_MAJOR_BUMP",
+            `Detected breaking interface change(s) between ${currentLatest.version} and ${version}. ` +
+              `A major-version bump is required for: ${formatInterfaceChanges(changes)}. ` +
+              `Either revert the change or bump the major version in SKILL.md.`,
           );
         }
       }
@@ -470,12 +528,26 @@ export class SkillService {
     // When reading a specific version, swap in that version's package fields;
     // identity fields (name, createdBy, isPrivate, ...) still come from the
     // skill doc.
-    const storageKey = versionOverlay?.storageKey ?? skill.storageKey;
-    const metadata = versionOverlay?.metadata ?? skill.metadata;
-    const skillHash = versionOverlay?.skillHash ?? skill.skillHash;
-    const license = versionOverlay ? versionOverlay.license : skill.license;
-    const compatibility = versionOverlay ? versionOverlay.compatibility : skill.compatibility;
-    const version = versionOverlay?.version ?? skill.latestVersion;
+    //
+    // For the latest-read path (no overlay), we do one extra lookup against
+    // `skill_versions` so the response can still surface `isDeprecated` /
+    // `deprecationNote` consistently with the versioned path. If this becomes
+    // a hot-path bottleneck we can denormalize those two fields onto the
+    // skill doc later (TODO).
+    let effectiveOverlay = versionOverlay;
+    if (!effectiveOverlay) {
+      effectiveOverlay =
+        (await this.skillVersionRepo.findLatestBySkill(skill.guid)) ?? undefined;
+    }
+
+    const storageKey = effectiveOverlay?.storageKey ?? skill.storageKey;
+    const metadata = effectiveOverlay?.metadata ?? skill.metadata;
+    const skillHash = effectiveOverlay?.skillHash ?? skill.skillHash;
+    const license = effectiveOverlay ? effectiveOverlay.license : skill.license;
+    const compatibility = effectiveOverlay ? effectiveOverlay.compatibility : skill.compatibility;
+    const version = effectiveOverlay?.version ?? skill.latestVersion;
+    const isDeprecated = effectiveOverlay?.isDeprecated === true;
+    const deprecationNote = effectiveOverlay?.deprecationNote ?? null;
 
     let presignedPackageUrl = "";
     if (storageKey) {
@@ -508,6 +580,8 @@ export class SkillService {
       createdOn: skill.createdOn instanceof Date ? skill.createdOn.toISOString() : String(skill.createdOn),
       updatedOn: skill.updatedOn instanceof Date ? skill.updatedOn.toISOString() : String(skill.updatedOn),
       version,
+      isDeprecated,
+      deprecationNote,
     };
   }
 

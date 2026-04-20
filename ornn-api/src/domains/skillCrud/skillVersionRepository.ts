@@ -111,6 +111,42 @@ export class SkillVersionRepository {
     logger.info({ skillGuid, deleted: result.deletedCount }, "Skill versions cascade-deleted");
     return result.deletedCount ?? 0;
   }
+
+  /**
+   * Toggle the deprecation flag on a single version. When `isDeprecated` is
+   * false the `deprecationNote` is cleared (empty note is never sticky).
+   * 404s via AppError if the version row does not exist.
+   */
+  async setDeprecation(
+    skillGuid: string,
+    version: string,
+    isDeprecated: boolean,
+    deprecationNote?: string | null,
+  ): Promise<SkillVersionDocument> {
+    const setFields: Record<string, unknown> = { isDeprecated };
+    if (isDeprecated) {
+      // Keep explicit `null` when the caller wants to drop an old note while
+      // still marking deprecated.
+      setFields.deprecationNote = deprecationNote ?? null;
+    } else {
+      setFields.deprecationNote = null;
+    }
+
+    const result = await this.collection.findOneAndUpdate(
+      { _id: `${skillGuid}@${version}` as never },
+      { $set: setFields },
+      { returnDocument: "after" },
+    );
+    const updated = mapDoc(result);
+    if (!updated) {
+      throw AppError.notFound(
+        "SKILL_VERSION_NOT_FOUND",
+        `Version '${version}' not found for skill '${skillGuid}'`,
+      );
+    }
+    logger.info({ skillGuid, version, isDeprecated }, "Skill version deprecation updated");
+    return updated;
+  }
 }
 
 function mapDoc(doc: Document | null): SkillVersionDocument | null {
@@ -130,5 +166,7 @@ function mapDoc(doc: Document | null): SkillVersionDocument | null {
     createdByEmail: doc.createdByEmail ?? undefined,
     createdByDisplayName: doc.createdByDisplayName ?? undefined,
     createdOn: doc.createdOn ?? new Date(),
+    isDeprecated: doc.isDeprecated === true,
+    deprecationNote: doc.deprecationNote ?? null,
   };
 }

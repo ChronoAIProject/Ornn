@@ -124,6 +124,14 @@ export interface SkillVersionDocument {
   createdByEmail?: string;
   createdByDisplayName?: string;
   createdOn: Date;
+  /**
+   * Mutable deprecation flag (phase 2). Absent/undefined means "not deprecated".
+   * Deprecation only warns consumers — it does not hide the version from
+   * `GET /versions` or exclude it from latest-resolution.
+   */
+  isDeprecated?: boolean;
+  /** Optional human-readable explanation surfaced with the warning. */
+  deprecationNote?: string | null;
 }
 
 export interface SkillMetadata {
@@ -165,6 +173,10 @@ export interface SkillDetailResponse {
    * passed, otherwise the specifically requested version.
    */
   version: string;
+  /** True when the resolved version is marked deprecated by the author. */
+  isDeprecated?: boolean;
+  /** Optional note the author left when deprecating this version. */
+  deprecationNote?: string | null;
 }
 
 export interface SkillSearchItem {
