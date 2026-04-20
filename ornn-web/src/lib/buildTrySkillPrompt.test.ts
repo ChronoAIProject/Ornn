@@ -18,7 +18,22 @@ describe("buildTrySkillPrompt", () => {
     expect(out).toContain(`GUID: ${GUID}`);
     expect(out).toContain(`Ornn URL: ${ORIGIN}/skills/${GUID}`);
     expect(out).toContain("~/.claude/skills/my-skill/");
-    expect(out).toContain(`ornn__getskilljson(id="${GUID}")`);
+    expect(out).toContain(`nyxid proxy request ornn /api/skills/${GUID}/json`);
+  });
+
+  test("prerequisites section embeds actionable CLI check commands", () => {
+    const out = buildTrySkillPrompt({
+      guid: GUID,
+      name: "s",
+      description: "d",
+      metadata: {},
+      ornnOrigin: ORIGIN,
+    });
+    expect(out).toContain("nyxid whoami");
+    expect(out).toContain("nyxid proxy discover");
+    // Should NOT reference MCP tools
+    expect(out).not.toContain("ornn__");
+    expect(out).not.toContain("nyxid__nyx__");
   });
 
   test("renders runtime-dependency list as library@version", () => {
