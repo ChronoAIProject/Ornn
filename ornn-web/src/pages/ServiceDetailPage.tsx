@@ -35,18 +35,15 @@ export function ServiceDetailPage() {
   const source = searchParams.get("source") ?? "admin";
 
   const [service, setService] = useState<ServiceDetail | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const accessToken = useAuthStore((s) => s.accessToken);
+  const [isLoading, setIsLoading] = useState<boolean>(Boolean(accessToken && id));
   const [error, setError] = useState<string | null>(null);
   const [showGenerateModal, setShowGenerateModal] = useState(false);
-  const accessToken = useAuthStore((s) => s.accessToken);
   const user = useCurrentUser();
   const isAdminUser = checkIsAdmin(user);
 
   useEffect(() => {
-    if (!accessToken || !id) {
-      setIsLoading(false);
-      return;
-    }
+    if (!accessToken || !id) return;
 
     fetch(`${NYXID_API_BASE}/api/v1/services/${id}`, {
       headers: { Authorization: `Bearer ${accessToken}` },

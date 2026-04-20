@@ -51,8 +51,7 @@ export interface AdminRoutesConfig {
 }
 
 export function createAdminRoutes(config: AdminRoutesConfig): Hono<{ Variables: AuthVariables }> {
-  const { adminService, activityRepo, skillRepo, skillService, generationService, nyxidServiceClient, nyxidTokenUrl } = config;
-  const nyxidBaseUrl = nyxidTokenUrl?.replace("/oauth/token", "") ?? "";
+  const { adminService, activityRepo, skillRepo, skillService, generationService, nyxidServiceClient } = config;
   const app = new Hono<{ Variables: AuthVariables }>();
 
   const auth = nyxidAuthMiddleware();
@@ -346,63 +345,6 @@ export function createAdminRoutes(config: AdminRoutesConfig): Hono<{ Variables: 
   // =========================================================================
 
   /**
-   * Fetch a service's OpenAPI spec using the user's token.
-   * Calls NyxID /api/v1/proxy/services to list services, finds the target,
-   * then fetches the spec from the openapi_url.
-   */
-  async function fetchServiceSpec(
-    client: NonNullable<typeof nyxidServiceClient>,
-    userToken: string,
-    serviceId: string,
-  ): Promise<{ service: { name: string; description: string | null }; specContent: string }> {
-    // Call NyxID proxy/services with user's token
-    const svcResp = await fetch(`${nyxidBaseUrl}/api/v1/proxy/services`, {
-      headers: { Authorization: `Bearer ${userToken}` },
-    });
-    if (!svcResp.ok) {
-      const body = await svcResp.text().catch(() => "");
-      throw AppError.badRequest("NYXID_FETCH_FAILED", `Failed to fetch NyxID services: ${svcResp.status} ${body.slice(0, 200)}`);
-    }
-    const svcData = await svcResp.json() as { services: Array<{ id: string; name: string; description?: string; openapi_url?: string; proxy_url_slug?: string }> };
-    const service = svcData.services.find((s) => s.id === serviceId);
-    if (!service) {
-      throw AppError.notFound("SERVICE_NOT_FOUND", `NyxID service ${serviceId} not found`);
-    }
-    if (!service.openapi_url) {
-      throw AppError.badRequest("NO_OPENAPI_SPEC", `Service ${service.name} has no OpenAPI spec`);
-    }
-
-    // NyxID's openapi_url proxy endpoint has SSRF protection that blocks internal IPs.
-    // Instead, use the service's proxy_url_slug to fetch the spec through NyxID's
-    // general proxy path, which does allow internal service access.
-    const proxySlugBase = service.proxy_url_slug?.replace("/{path}", "");
-    if (!proxySlugBase) {
-      throw AppError.badRequest("NO_PROXY_URL", `Service ${service.name} has no proxy URL`);
-    }
-    // Resolve to internal NyxID URL
-    const proxySlugParsed = new URL(proxySlugBase);
-    const internalProxyBase = `${nyxidBaseUrl}${proxySlugParsed.pathname}`;
-    // Fetch /api/openapi.json through the proxy (the registered spec path)
-    const specFetchUrl = `${internalProxyBase}/api/openapi.json`;
-    logger.info({ specFetchUrl, serviceId }, "Fetching spec via NyxID proxy");
-
-    const specResp = await fetch(specFetchUrl, {
-      headers: { Authorization: `Bearer ${userToken}` },
-    });
-
-    if (!specResp.ok) {
-      const body = await specResp.text().catch(() => "");
-      throw AppError.badRequest("SPEC_FETCH_FAILED", `Failed to fetch spec (${specResp.status}): ${body.slice(0, 200)}`);
-    }
-    const specJson = await specResp.json();
-    const specContent = JSON.stringify(specJson, null, 2);
-
-    logger.info({ serviceId, serviceName: service.name, specLength: specContent.length }, "Fetched OpenAPI spec for system skill generation");
-
-    return { service: { name: service.name, description: service.description ?? null }, specContent };
-  }
-
-  /**
    * GET /system-skills
    * List generated system skills. Accessible to any authenticated user.
    */
@@ -452,8 +394,6 @@ export function createAdminRoutes(config: AdminRoutesConfig): Hono<{ Variables: 
       const serviceId = c.req.param("serviceId");
       const authCtx = getAuth(c);
       const body = await c.req.json();
-      const userToken = body.userToken as string;
-
       const serviceName = (body.serviceName as string) ?? "unknown";
       const serviceProxyUrl = (body.proxyUrl as string) ?? "";
       const references = (body.references as Array<{ type: string; content: string }>) ?? [];
