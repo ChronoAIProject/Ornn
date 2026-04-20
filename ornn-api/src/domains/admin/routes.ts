@@ -51,8 +51,7 @@ export interface AdminRoutesConfig {
 }
 
 export function createAdminRoutes(config: AdminRoutesConfig): Hono<{ Variables: AuthVariables }> {
-  const { adminService, activityRepo, skillRepo, skillService, generationService, nyxidServiceClient, nyxidTokenUrl } = config;
-  const nyxidBaseUrl = nyxidTokenUrl?.replace("/oauth/token", "") ?? "";
+  const { adminService, activityRepo, skillRepo, skillService, generationService, nyxidServiceClient } = config;
   const app = new Hono<{ Variables: AuthVariables }>();
 
   const auth = nyxidAuthMiddleware();
@@ -346,63 +345,6 @@ export function createAdminRoutes(config: AdminRoutesConfig): Hono<{ Variables: 
   // =========================================================================
 
   /**
-   * Fetch a service's OpenAPI spec using the user's token.
-   * Calls NyxID /api/v1/proxy/services to list services, finds the target,
-   * then fetches the spec from the openapi_url.
-   */
-  async function fetchServiceSpec(
-    client: NonNullable<typeof nyxidServiceClient>,
-    userToken: string,
-    serviceId: string,
-  ): Promise<{ service: { name: string; description: string | null }; specContent: string }> {
-    // Call NyxID proxy/services with user's token
-    const svcResp = await fetch(`${nyxidBaseUrl}/api/v1/proxy/services`, {
-      headers: { Authorization: `Bearer ${userToken}` },
-    });
-    if (!svcResp.ok) {
-      const body = await svcResp.text().catch(() => "");
-      throw AppError.badRequest("NYXID_FETCH_FAILED", `Failed to fetch NyxID services: ${svcResp.status} ${body.slice(0, 200)}`);
-    }
-    const svcData = await svcResp.json() as { services: Array<{ id: string; name: string; description?: string; openapi_url?: string; proxy_url_slug?: string }> };
-    const service = svcData.services.find((s) => s.id === serviceId);
-    if (!service) {
-      throw AppError.notFound("SERVICE_NOT_FOUND", `NyxID service ${serviceId} not found`);
-    }
-    if (!service.openapi_url) {
-      throw AppError.badRequest("NO_OPENAPI_SPEC", `Service ${service.name} has no OpenAPI spec`);
-    }
-
-    // NyxID's openapi_url proxy endpoint has SSRF protection that blocks internal IPs.
-    // Instead, use the service's proxy_url_slug to fetch the spec through NyxID's
-    // general proxy path, which does allow internal service access.
-    const proxySlugBase = service.proxy_url_slug?.replace("/{path}", "");
-    if (!proxySlugBase) {
-      throw AppError.badRequest("NO_PROXY_URL", `Service ${service.name} has no proxy URL`);
-    }
-    // Resolve to internal NyxID URL
-    const proxySlugParsed = new URL(proxySlugBase);
-    const internalProxyBase = `${nyxidBaseUrl}${proxySlugParsed.pathname}`;
-    // Fetch /api/openapi.json through the proxy (the registered spec path)
-    const specFetchUrl = `${internalProxyBase}/api/openapi.json`;
-    logger.info({ specFetchUrl, serviceId }, "Fetching spec via NyxID proxy");
-
-    const specResp = await fetch(specFetchUrl, {
-      headers: { Authorization: `Bearer ${userToken}` },
-    });
-
-    if (!specResp.ok) {
-      const body = await specResp.text().catch(() => "");
-      throw AppError.badRequest("SPEC_FETCH_FAILED", `Failed to fetch spec (${specResp.status}): ${body.slice(0, 200)}`);
-    }
-    const specJson = await specResp.json();
-    const specContent = JSON.stringify(specJson, null, 2);
-
-    logger.info({ serviceId, serviceName: service.name, specLength: specContent.length }, "Fetched OpenAPI spec for system skill generation");
-
-    return { service: { name: service.name, description: service.description ?? null }, specContent };
-  }
-
-  /**
    * GET /system-skills
    * List generated system skills. Accessible to any authenticated user.
    */
@@ -452,11 +394,9 @@ export function createAdminRoutes(config: AdminRoutesConfig): Hono<{ Variables: 
       const serviceId = c.req.param("serviceId");
       const authCtx = getAuth(c);
       const body = await c.req.json();
-      const userToken = body.userToken as string;
-
-      if (!userToken) {
-        throw AppError.badRequest("MISSING_TOKEN", "userToken is required");
-      }
+      const serviceName = (body.serviceName as string) ?? "unknown";
+      const serviceProxyUrl = (body.proxyUrl as string) ?? "";
+      const references = (body.references as Array<{ type: string; content: string }>) ?? [];
 
       // Check if skill already exists for this service
       const existing = await skillRepo.findByNyxidServiceId(serviceId);
@@ -464,13 +404,38 @@ export function createAdminRoutes(config: AdminRoutesConfig): Hono<{ Variables: 
         throw AppError.conflict("SYSTEM_SKILL_EXISTS", `System skill already exists for service ${serviceId}. Use regenerate endpoint.`);
       }
 
-      // Fetch service list from NyxID using user's token
-      const { service, specContent } = await fetchServiceSpec(nyxidServiceClient, userToken, serviceId);
+      // Build generation prompt from references
+      const promptParts: string[] = [];
+      promptParts.push(`Service name: ${serviceName}`);
+      promptParts.push(`NyxID Proxy Base URL (main API entry point): ${serviceProxyUrl}`);
+
+      for (const ref of references) {
+        switch (ref.type) {
+          case "openapi_spec":
+            promptParts.push(`\n## OpenAPI Specification\n\n${ref.content}`);
+            break;
+          case "source_code_url":
+            promptParts.push(`\n## Source Code Repository\nURL: ${ref.content}\nPlease deep dive into this repository to understand what the service does and how it works.`);
+            break;
+          case "homepage_url":
+            promptParts.push(`\n## Service Homepage\nURL: ${ref.content}\nPlease deep dive into this page to understand what the service does and how it works.`);
+            break;
+          case "reference_url":
+            promptParts.push(`\n## Additional Reference\nURL: ${ref.content}\nPlease review this reference for additional context.`);
+            break;
+          case "markdown_content":
+            promptParts.push(`\n## Reference Document\n\n${ref.content}`);
+            break;
+        }
+      }
+
+      const fullPrompt = promptParts.join("\n");
+      logger.info({ serviceId, serviceName, refCount: references.length, promptLength: fullPrompt.length }, "System skill generation with references");
 
       // Generate skill
       let generatedRaw = "";
-      for await (const event of generationService.generateFromOpenApi(specContent, {
-        description: `Skill for ${service.name}: ${service.description ?? ""}`,
+      for await (const event of generationService.generateFromOpenApi(fullPrompt, {
+        description: `Complete API reference skill for ${serviceName}`,
       })) {
         if (event.type === "generation_complete") {
           generatedRaw = (event as any).raw ?? "";
@@ -480,16 +445,26 @@ export function createAdminRoutes(config: AdminRoutesConfig): Hono<{ Variables: 
         }
       }
 
-      // Parse the generated skill
-      const parsed = generationService.parseAndValidate(generatedRaw);
+      // Parse and validate (retry once if validation fails)
+      let parsed = generationService.parseAndValidate(generatedRaw);
       if (!parsed) {
-        throw AppError.internal("Generated skill failed validation");
+        logger.warn("First generation attempt failed validation, retrying...");
+        for await (const event of generationService.generateFromOpenApi(fullPrompt, {
+          description: `Complete API reference skill for ${serviceName}. IMPORTANT: Output ONLY valid JSON.`,
+        })) {
+          if (event.type === "generation_complete") {
+            generatedRaw = (event as any).raw ?? "";
+          }
+        }
+        parsed = generationService.parseAndValidate(generatedRaw);
       }
 
-      // Build SKILL.md content
-      const skillMd = buildSkillMd(parsed);
+      if (!parsed) {
+        throw AppError.internal("Generated skill failed validation after retry");
+      }
 
-      // Build ZIP package
+      // Build SKILL.md and ZIP
+      const skillMd = buildSkillMd(parsed);
       const JSZip = (await import("jszip")).default;
       const zip = new JSZip();
       const folder = zip.folder(parsed.name)!;
@@ -499,14 +474,13 @@ export function createAdminRoutes(config: AdminRoutesConfig): Hono<{ Variables: 
       }
       const zipBuffer = await zip.generateAsync({ type: "uint8array" });
 
-      // Create skill via service (handles storage upload)
       const { guid } = await skillService.createSkill(zipBuffer, authCtx.userId, {
         userEmail: authCtx.email,
         isSystem: true,
         nyxidServiceId: serviceId,
       });
 
-      logger.info({ guid, serviceId, serviceName: service.name }, "System skill generated");
+      logger.info({ guid, serviceId, serviceName }, "System skill generated");
 
       return c.json({ data: { guid, name: parsed.name, serviceId }, error: null }, 201);
     },
@@ -520,18 +494,16 @@ export function createAdminRoutes(config: AdminRoutesConfig): Hono<{ Variables: 
     "/admin/system-skills/:serviceId/regenerate",
     requirePermission("ornn:admin:skill"),
     async (c) => {
-      if (!generationService || !nyxidServiceClient) {
+      if (!generationService) {
         throw AppError.serviceUnavailable("SERVICE_UNAVAILABLE", "Generation service not configured");
       }
 
       const serviceId = c.req.param("serviceId");
       const authCtx = getAuth(c);
       const body = await c.req.json();
-      const userToken = body.userToken as string;
-
-      if (!userToken) {
-        throw AppError.badRequest("MISSING_TOKEN", "userToken is required");
-      }
+      const serviceName = (body.serviceName as string) ?? "unknown";
+      const serviceProxyUrl = (body.proxyUrl as string) ?? "";
+      const references = (body.references as Array<{ type: string; content: string }>) ?? [];
 
       // Delete existing if present
       const existing = await skillRepo.findByNyxidServiceId(serviceId);
@@ -540,12 +512,24 @@ export function createAdminRoutes(config: AdminRoutesConfig): Hono<{ Variables: 
         logger.info({ guid: existing.guid, serviceId }, "Deleted existing system skill for regeneration");
       }
 
-      // Fetch service list from NyxID using user's token
-      const { service, specContent } = await fetchServiceSpec(nyxidServiceClient, userToken, serviceId);
+      // Build prompt from references (same logic as generate)
+      const promptParts: string[] = [];
+      promptParts.push(`Service name: ${serviceName}`);
+      promptParts.push(`NyxID Proxy Base URL (main API entry point): ${serviceProxyUrl}`);
+      for (const ref of references) {
+        switch (ref.type) {
+          case "openapi_spec": promptParts.push(`\n## OpenAPI Specification\n\n${ref.content}`); break;
+          case "source_code_url": promptParts.push(`\n## Source Code Repository\nURL: ${ref.content}\nPlease deep dive into this repository.`); break;
+          case "homepage_url": promptParts.push(`\n## Service Homepage\nURL: ${ref.content}\nPlease deep dive into this page.`); break;
+          case "reference_url": promptParts.push(`\n## Additional Reference\nURL: ${ref.content}`); break;
+          case "markdown_content": promptParts.push(`\n## Reference Document\n\n${ref.content}`); break;
+        }
+      }
+      const fullPrompt = promptParts.join("\n");
 
       let generatedRaw = "";
-      for await (const event of generationService.generateFromOpenApi(specContent, {
-        description: `Skill for ${service.name}: ${service.description ?? ""}`,
+      for await (const event of generationService.generateFromOpenApi(fullPrompt, {
+        description: `Complete API reference skill for ${serviceName}`,
       })) {
         if (event.type === "generation_complete") {
           generatedRaw = (event as any).raw ?? "";
@@ -555,9 +539,18 @@ export function createAdminRoutes(config: AdminRoutesConfig): Hono<{ Variables: 
         }
       }
 
-      const parsed = generationService.parseAndValidate(generatedRaw);
+      let parsed = generationService.parseAndValidate(generatedRaw);
       if (!parsed) {
-        throw AppError.internal("Generated skill failed validation");
+        logger.warn("Regeneration validation failed, retrying...");
+        for await (const event of generationService.generateFromOpenApi(fullPrompt, {
+          description: `Complete API reference skill for ${serviceName}. IMPORTANT: Output ONLY valid JSON.`,
+        })) {
+          if (event.type === "generation_complete") { generatedRaw = (event as any).raw ?? ""; }
+        }
+        parsed = generationService.parseAndValidate(generatedRaw);
+      }
+      if (!parsed) {
+        throw AppError.internal("Generated skill failed validation after retry");
       }
 
       const skillMd = buildSkillMd(parsed);
@@ -576,7 +569,7 @@ export function createAdminRoutes(config: AdminRoutesConfig): Hono<{ Variables: 
         nyxidServiceId: serviceId,
       });
 
-      logger.info({ guid, serviceId, serviceName: service.name }, "System skill regenerated");
+      logger.info({ guid, serviceId, serviceName }, "System skill regenerated");
 
       return c.json({ data: { guid, name: parsed.name, serviceId }, error: null }, 201);
     },
