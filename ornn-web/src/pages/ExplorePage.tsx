@@ -13,13 +13,14 @@ import { Button } from "@/components/ui/Button";
 import { Pagination } from "@/components/ui/Pagination";
 import { useSearchStore } from "@/stores/searchStore";
 import { useSkills, useMySkills } from "@/hooks/useSkills";
-import { useTopicsList } from "@/hooks/useTopics";
-import { TopicsTab } from "@/components/topic/TopicsTab";
 import { useCurrentUser, useIsAuthenticated } from "@/stores/authStore";
 import { getPublicSystemSkills } from "@/services/systemSkillsApi";
 import type { SkillSearchResult } from "@/types/search";
 
-type ExploreTab = "system" | "public" | "my-skills" | "topics";
+// Topics feature is temporarily disabled from the UI. The underlying hooks
+// and components still exist under @/hooks/useTopics and @/components/topic
+// so it can be re-enabled by restoring the removed tab + route.
+type ExploreTab = "system" | "public" | "my-skills";
 
 const containerVariants = {
   hidden: {},
@@ -46,20 +47,8 @@ export function ExplorePage() {
       ? "my-skills"
       : tabParam === "system"
         ? "system"
-        : tabParam === "topics"
-          ? "topics"
-          : "public";
+        : "public";
   const [mySkillsPage, setMySkillsPage] = useState(1);
-
-  // Topic filter applied to Public / My Skills tabs. Empty string = no filter.
-  const [topicFilter, setTopicFilter] = useState("");
-
-  // Options for the topic-filter dropdown. Lazy-loaded (React Query caches).
-  const { data: topicOptionsData } = useTopicsList({
-    scope: isAuthenticated ? "mixed" : "public",
-    page: 1,
-    pageSize: 100,
-  });
 
   const { query, mode, page, setPage } = useSearchStore();
 
@@ -68,7 +57,6 @@ export function ExplorePage() {
     mode,
     page,
     pageSize: DEFAULT_PAGE_SIZE,
-    topic: topicFilter || undefined,
   });
 
   const { data: mySkillsData, isLoading: mySkillsLoading } = useMySkills({
@@ -76,7 +64,6 @@ export function ExplorePage() {
     mode,
     page: mySkillsPage,
     pageSize: DEFAULT_PAGE_SIZE,
-    topic: topicFilter || undefined,
   });
 
   const [systemSkillsPage, setSystemSkillsPage] = useState(1);
@@ -96,8 +83,6 @@ export function ExplorePage() {
   const isPublicTab = activeTab === "public";
   const isSystemTab = activeTab === "system";
   const isMySkillsTab = activeTab === "my-skills";
-  const isTopicsTab = activeTab === "topics";
-  const showTopicFilter = isPublicTab || isMySkillsTab;
 
   const data = isPublicTab ? publicData : isMySkillsTab ? mySkillsData : null;
   const isLoading = isPublicTab ? publicLoading : isMySkillsTab ? mySkillsLoading : systemLoading;
@@ -173,56 +158,19 @@ export function ExplorePage() {
             >
               {t("explore.mySkills")}
             </button>
-            <button
-              onClick={() => handleTabChange("topics")}
-              className={`
-                px-4 py-2 rounded-md font-body text-sm transition-all
-                ${isTopicsTab
-                  ? "bg-neon-cyan/20 text-neon-cyan border border-neon-cyan/50"
-                  : "text-text-muted hover:text-text-primary"
-                }
-              `}
-            >
-              {t("topic.topics")}
-            </button>
           </div>
         </div>
       )}
 
-      {!isTopicsTab && (
-        <div className="mb-3 flex flex-wrap gap-2 items-start shrink-0">
-          <div className="flex-1 min-w-[220px]">
-            <SearchBar />
-          </div>
-          {showTopicFilter && (
-            <select
-              value={topicFilter}
-              onChange={(e) => setTopicFilter(e.target.value)}
-              className="
-                glass rounded-lg border border-neon-cyan/20 bg-bg-elevated
-                px-3 py-2 font-body text-sm text-text-primary cursor-pointer
-                focus:outline-none focus:border-neon-cyan/60
-                hover:border-neon-cyan/40 transition-colors
-              "
-            >
-              <option value="" className="bg-bg-deep">
-                {t("topic.allTopics")}
-              </option>
-              {(topicOptionsData?.items ?? []).map((topic) => (
-                <option key={topic.guid} value={topic.name} className="bg-bg-deep">
-                  {topic.name}
-                </option>
-              ))}
-            </select>
-          )}
+      <div className="mb-3 flex flex-wrap gap-2 items-start shrink-0">
+        <div className="flex-1 min-w-[220px]">
+          <SearchBar />
         </div>
-      )}
+      </div>
 
       {/* Scrollable content */}
       <div className="flex-1 min-h-0 overflow-y-auto px-2 py-1 -mx-2 -my-1">
-        {isTopicsTab ? (
-          <TopicsTab />
-        ) : isSystemTab ? (
+        {isSystemTab ? (
           systemLoading ? (
             <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 pb-4">
               {Array.from({ length: 6 }).map((_, i) => (
@@ -289,9 +237,7 @@ export function ExplorePage() {
           </motion.div>
         )}
 
-        {!isTopicsTab && (
-          <Pagination page={currentPage} totalPages={totalPages} onPageChange={handlePageChange} />
-        )}
+        <Pagination page={currentPage} totalPages={totalPages} onPageChange={handlePageChange} />
       </div>
       </div>
     </PageTransition>
