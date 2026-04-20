@@ -49,6 +49,11 @@ export interface SkillMetadataBlock {
 export interface SkillMetadata {
   name: string;
   description: string;
+  /**
+   * Two-digit version string, e.g. `"0.1"`. Required by the backend on every
+   * publish. Guided / generative creation paths default to `"0.1"`.
+   */
+  version: string;
 
   /** Nested metadata block (new canonical structure) */
   metadata: SkillMetadataBlock;
@@ -75,6 +80,7 @@ export function createDefaultSkillMetadata(
   return {
     name: "",
     description: "",
+    version: "0.1",
     metadata: {
       category: "plain",
       outputType: undefined,

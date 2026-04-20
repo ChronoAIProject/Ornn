@@ -65,6 +65,8 @@ export function buildFrontmatter(meta: SkillMetadata): string {
   // Core fields
   lines.push(`name: ${formatYamlValue(meta.name)}`);
   lines.push(`description: ${formatYamlValue(meta.description)}`);
+  // version is required by the backend; default "0.1" for guided/generative paths.
+  lines.push(`version: ${formatYamlValue(meta.version || "0.1")}`);
 
   // Official Claude fields (only if non-default)
   if (meta.disableModelInvocation) {
