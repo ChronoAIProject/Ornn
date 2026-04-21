@@ -46,7 +46,7 @@ export function LoginPage() {
           {/* Logo */}
           <div className="mb-8 text-center">
             <h1 className="sr-only">ORNN</h1>
-            <img src="/logo.svg" alt="ORNN" className="mx-auto h-20 w-auto mb-4" />
+            <img src="/logo.svg?v=10" alt="ORNN" className="mx-auto h-14 w-auto mb-4" />
             <p className="mt-2 font-body text-text-muted">
               {t("login.tagline")}
             </p>

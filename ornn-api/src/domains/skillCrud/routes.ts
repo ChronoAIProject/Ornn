@@ -17,15 +17,28 @@ import {
   nyxidAuthMiddleware,
   optionalAuthMiddleware,
   requirePermission,
-  requireOwnerOrAdmin,
   getAuth,
+  readUserOrgMemberships,
 } from "../../middleware/nyxidAuth";
 import { AppError } from "../../shared/types/index";
+import { canReadSkill, canManageSkill } from "./authorize";
 import pino from "pino";
 
 const deprecationPatchSchema = z.object({
   isDeprecated: z.boolean(),
   deprecationNote: z.string().max(1024).optional(),
+});
+
+/**
+ * Schema for `PUT /api/skills/:id/permissions`. `isPrivate === false`
+ * means fully public; the shared-with lists are still persisted in that
+ * case (no reason to wipe them — the author can flip back to private
+ * without losing their collaborator list).
+ */
+const permissionsPatchSchema = z.object({
+  isPrivate: z.boolean(),
+  sharedWithUsers: z.array(z.string().min(1).max(128)).max(500).default([]),
+  sharedWithOrgs: z.array(z.string().min(1).max(128)).max(100).default([]),
 });
 
 const logger = pino({ level: "info" }).child({ module: "skillCrudRoutes" });
@@ -73,6 +86,9 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
       const zipBuffer = new Uint8Array(body);
       const userEmail = c.req.header("X-User-Email") ?? undefined;
       const userDisplayName = c.req.header("X-User-Display-Name") ?? undefined;
+
+      // New skills are always created as private with no shared-with entries.
+      // Visibility is managed afterward via PUT /api/skills/:id/permissions.
       const result = await skillService.createSkill(zipBuffer, authCtx.userId, {
         skipValidation,
         userEmail,
@@ -118,14 +134,21 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
       const idOrName = c.req.param("idOrName");
       const authCtx = c.get("auth");
 
-      // Reuse getSkill for the visibility check; we throw SKILL_NOT_FOUND for
-      // unauthenticated readers of private skills, matching the existing rule.
       const skill = await skillService.getSkill(idOrName);
+      // Anonymous viewers only see public skills.
       if (!authCtx && skill.isPrivate) {
         throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${idOrName}' not found`);
       }
-      if (authCtx && skill.isPrivate && skill.createdBy !== authCtx.userId && !authCtx.permissions.includes("ornn:admin:skill")) {
-        throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${idOrName}' not found`);
+      if (authCtx && skill.isPrivate) {
+        const memberships = await readUserOrgMemberships(c);
+        const actor = {
+          userId: authCtx.userId,
+          memberships,
+          isPlatformAdmin: authCtx.permissions.includes("ornn:admin:skill"),
+        };
+        if (!canReadSkill(skill, actor)) {
+          throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${idOrName}' not found`);
+        }
       }
 
       const items = await skillService.listSkillVersions(idOrName);
@@ -149,14 +172,22 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
       const authCtx = c.get("auth");
       const skill = await skillService.getSkill(idOrName, version);
 
-      // Anonymous users can only see public skills
+      // Anonymous users can only see public skills.
       if (!authCtx && skill.isPrivate) {
         throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${idOrName}' not found`);
       }
 
-      // Authenticated non-owner can't see private skills (unless admin)
-      if (authCtx && skill.isPrivate && skill.createdBy !== authCtx.userId && !authCtx.permissions.includes("ornn:admin:skill")) {
-        throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${idOrName}' not found`);
+      // Authenticated users: apply the full ownership/org-visibility rules.
+      if (authCtx && skill.isPrivate) {
+        const memberships = await readUserOrgMemberships(c);
+        const actor = {
+          userId: authCtx.userId,
+          memberships,
+          isPlatformAdmin: authCtx.permissions.includes("ornn:admin:skill"),
+        };
+        if (!canReadSkill(skill, actor)) {
+          throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${idOrName}' not found`);
+        }
       }
 
       // Signal deprecation via response headers so non-JSON-aware clients
@@ -182,17 +213,29 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
     "/skills/:idOrName/versions/:version",
     auth,
     requirePermission("ornn:skill:update"),
-    requireOwnerOrAdmin(async (c) => {
-      const idOrName = c.req.param("idOrName");
-      const skill =
-        (await skillRepo.findByGuid(idOrName)) ??
-        (await skillRepo.findByName(idOrName));
-      return skill?.createdBy ?? "";
-    }),
     async (c) => {
       const idOrName = c.req.param("idOrName");
       const version = c.req.param("version");
       const authCtx = getAuth(c);
+
+      const existing =
+        (await skillRepo.findByGuid(idOrName)) ??
+        (await skillRepo.findByName(idOrName));
+      if (!existing) {
+        throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${idOrName}' not found`);
+      }
+      const memberships = await readUserOrgMemberships(c);
+      const actor = {
+        userId: authCtx.userId,
+        memberships,
+        isPlatformAdmin: authCtx.permissions.includes("ornn:admin:skill"),
+      };
+      if (!canManageSkill(existing, actor)) {
+        throw AppError.forbidden(
+          "FORBIDDEN",
+          "You do not have permission to manage this skill",
+        );
+      }
 
       let body: unknown;
       try {
@@ -238,16 +281,28 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
     "/skills/:id",
     auth,
     requirePermission("ornn:skill:update"),
-    requireOwnerOrAdmin(async (c) => {
-      const guid = c.req.param("id");
-      const skill = await skillRepo.findByGuid(guid);
-      return skill?.createdBy ?? "";
-    }),
     async (c) => {
       const guid = c.req.param("id");
       const authCtx = getAuth(c);
       const contentType = c.req.header("content-type") ?? "";
       const skipValidation = c.req.query("skip_validation") === "true";
+
+      const existing = await skillRepo.findByGuid(guid);
+      if (!existing) {
+        throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${guid}' not found`);
+      }
+      const memberships = await readUserOrgMemberships(c);
+      const actor = {
+        userId: authCtx.userId,
+        memberships,
+        isPlatformAdmin: authCtx.permissions.includes("ornn:admin:skill"),
+      };
+      if (!canManageSkill(existing, actor)) {
+        throw AppError.forbidden(
+          "FORBIDDEN",
+          "You do not have permission to update this skill",
+        );
+      }
 
       let zipBuffer: Uint8Array | undefined;
       let isPrivate: boolean | undefined;
@@ -307,6 +362,71 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
   );
 
   /**
+   * PUT /skills/:id/permissions — Replace the skill's visibility config.
+   *
+   * Body: `{ isPrivate, sharedWithUsers, sharedWithOrgs }`.
+   * Requires: ornn:skill:update + author (or platform admin).
+   *
+   * Distinct from `PUT /skills/:id` (which updates the package / name /
+   * metadata) because the author workflow for "share this skill" is a
+   * very different UI from "upload a new version".
+   */
+  app.put(
+    "/skills/:id/permissions",
+    auth,
+    requirePermission("ornn:skill:update"),
+    async (c) => {
+      const guid = c.req.param("id");
+      const authCtx = getAuth(c);
+
+      const existing = await skillRepo.findByGuid(guid);
+      if (!existing) {
+        throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${guid}' not found`);
+      }
+      const memberships = await readUserOrgMemberships(c);
+      const actor = {
+        userId: authCtx.userId,
+        memberships,
+        isPlatformAdmin: authCtx.permissions.includes("ornn:admin:skill"),
+      };
+      if (!canManageSkill(existing, actor)) {
+        throw AppError.forbidden(
+          "FORBIDDEN",
+          "You do not have permission to change this skill's visibility",
+        );
+      }
+
+      let body: unknown;
+      try {
+        body = await c.req.json();
+      } catch {
+        throw AppError.badRequest("INVALID_BODY", "Request body must be valid JSON");
+      }
+      const parsed = permissionsPatchSchema.safeParse(body);
+      if (!parsed.success) {
+        throw AppError.badRequest(
+          "INVALID_PERMISSIONS",
+          parsed.error.issues.map((i) => `${i.path.join(".") || "<root>"}: ${i.message}`).join("; "),
+        );
+      }
+
+      const updated = await skillService.setSkillPermissions(guid, authCtx.userId, parsed.data);
+
+      const userEmail = c.req.header("X-User-Email") ?? "";
+      const userDN = c.req.header("X-User-Display-Name") ?? "";
+      activityRepo?.log(authCtx.userId, userEmail, userDN, "skill:permissions_change", {
+        skillId: guid,
+        skillName: updated.name,
+        isPrivate: updated.isPrivate,
+        sharedWithUsers: updated.sharedWithUsers.length,
+        sharedWithOrgs: updated.sharedWithOrgs.length,
+      }).catch((err) => logger.warn({ err }, "Failed to log skill:permissions_change activity"));
+
+      return c.json({ data: updated, error: null });
+    },
+  );
+
+  /**
    * DELETE /skills/:id — Hard-delete a skill.
    * Requires: ornn:skill:delete + owner or admin
    */
@@ -314,15 +434,25 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
     "/skills/:id",
     auth,
     requirePermission("ornn:skill:delete"),
-    requireOwnerOrAdmin(async (c) => {
-      const guid = c.req.param("id");
-      const skill = await skillRepo.findByGuid(guid);
-      return skill?.createdBy ?? "";
-    }),
     async (c) => {
       const guid = c.req.param("id");
       const authCtx = getAuth(c);
       const skill = await skillRepo.findByGuid(guid);
+      if (!skill) {
+        throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${guid}' not found`);
+      }
+      const memberships = await readUserOrgMemberships(c);
+      const actor = {
+        userId: authCtx.userId,
+        memberships,
+        isPlatformAdmin: authCtx.permissions.includes("ornn:admin:skill"),
+      };
+      if (!canManageSkill(skill, actor)) {
+        throw AppError.forbidden(
+          "FORBIDDEN",
+          "You do not have permission to delete this skill",
+        );
+      }
       logger.info({ guid }, "Skill delete via API");
       await skillService.deleteSkill(guid);
 

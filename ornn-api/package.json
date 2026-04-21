@@ -7,7 +7,8 @@
     "dev": "bun run --watch src/index.ts",
     "start": "bun run src/index.ts",
     "test": "bun test",
-    "migrate:versions": "bun run scripts/migrate-skill-versions.ts"
+    "migrate:versions": "bun run scripts/migrate-skill-versions.ts",
+    "migrate:ownership": "bun run scripts/migrate-skill-ownership.ts"
   },
   "dependencies": {
     "@xenova/transformers": "^2.17.0",

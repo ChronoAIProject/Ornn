@@ -16,7 +16,7 @@ const pkg = JSON.parse(readFileSync(join(import.meta.dir, "..", "package.json"),
 
 
 // Auth setup
-import { proxyAuthSetup } from "./middleware/nyxidAuth";
+import { proxyAuthSetup, nyxidOrgLookupMiddleware } from "./middleware/nyxidAuth";
 
 // Infrastructure
 import { connectMongo, type MongoConnection } from "./infra/db/mongodb";
@@ -27,6 +27,7 @@ import { StorageClient } from "./clients/storageClient";
 import { SandboxClient } from "./clients/sandboxClient";
 import { NyxLlmClient } from "./clients/nyxLlmClient";
 import { NyxidServiceClient } from "./clients/nyxidServiceClient";
+import { NyxidOrgsClient } from "./clients/nyxidOrgsClient";
 
 // Domain: Skill CRUD
 import { SkillRepository } from "./domains/skillCrud/repository";
@@ -62,6 +63,12 @@ import { createFormatRoutes } from "./domains/skillFormat/routes";
 
 // Domain: Docs
 import { createDocsRoutes } from "./domains/docs/routes";
+
+// Domain: Me (caller-scoped endpoints)
+import { createMeRoutes } from "./domains/me/routes";
+
+// Domain: Users (directory lookup)
+import { createUserRoutes } from "./domains/users/routes";
 
 // OpenAPI spec
 import { buildSpec } from "./openapi/specBuilder";
@@ -288,9 +295,16 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
     );
   });
 
+  // ---- NyxID Orgs Client — used by the per-request org-membership lookup ----
+  const nyxidOrgsClient = new NyxidOrgsClient(config.nyxidBaseUrl);
+
   // ---- API routes — all traffic via NyxID proxy, trust proxy headers ----
   const apiApp = new Hono();
   apiApp.use("*", proxyAuthSetup());
+  // Lazy, per-request memoized org lookup. Mounted once here so every domain
+  // route sees the same cached result — avoids re-querying NyxID within a
+  // single request even when multiple routes call `readUserOrgMemberships`.
+  apiApp.use("*", nyxidOrgLookupMiddleware(nyxidOrgsClient));
   apiApp.route("/", skillRoutes);
   apiApp.route("/", topicRoutes);
   apiApp.route("/", searchRoutes);
@@ -299,6 +313,8 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   apiApp.route("/", adminRoutes);
   apiApp.route("/", formatRoutes);
   apiApp.route("/", docsRoutes);
+  apiApp.route("/", createMeRoutes({ nyxidBaseUrl: config.nyxidBaseUrl }));
+  apiApp.route("/", createUserRoutes({ activityRepo }));
   app.route("/api", apiApp);
 
   // OpenAPI spec — auto-generated from Zod schemas

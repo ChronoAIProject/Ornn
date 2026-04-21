@@ -9,6 +9,7 @@ import type { SkillRepository } from "../skillCrud/repository";
 import type { TopicService } from "../topics/service";
 import type { NyxLlmClient } from "../../clients/nyxLlmClient";
 import type { SkillDocument, SkillSearchItem, SkillSearchResponse } from "../../shared/types/index";
+import type { OrgMembershipFact } from "../../middleware/nyxidAuth";
 import pino from "pino";
 
 const logger = pino({ level: "info" }).child({ module: "skillSearchService" });
@@ -43,13 +44,21 @@ export class SearchService {
     page: number;
     pageSize: number;
     currentUserId: string;
+    /** Org user_ids the caller is admin or member of (viewer-role filtered out). */
+    userOrgIds: string[];
     model?: string;
     /** Optional topic id-or-name; when set, restrict results to that topic's members. */
     topic?: string;
     /** True when the caller holds `ornn:admin:skill`. Only used for topic visibility. */
     isAdmin?: boolean;
+    /**
+     * Full NyxID org memberships for the caller (admin/member rows only).
+     * Required by the topic-visibility gate so org-owned private topics are
+     * reachable to their members via `?topic=`.
+     */
+    memberships?: OrgMembershipFact[];
   }): Promise<SkillSearchResponse> {
-    const { query, mode, scope, page, pageSize, currentUserId } = params;
+    const { query, mode, scope, page, pageSize, currentUserId, userOrgIds } = params;
     const startTime = Date.now();
 
     // When a topic filter is supplied, resolve its member GUIDs once and
@@ -66,6 +75,7 @@ export class SearchService {
       restrictToGuids = await this.topicService.listMemberSkillGuids(params.topic, {
         currentUserId,
         isAdmin: params.isAdmin ?? false,
+        memberships: params.memberships ?? [],
       });
     }
 
@@ -74,11 +84,11 @@ export class SearchService {
 
     if (mode === "keyword") {
       if (!query || query.trim() === "") {
-        const result = await this.skillRepo.findByScope(scope, currentUserId, page, pageSize, restrictToGuids);
+        const result = await this.skillRepo.findByScope(scope, currentUserId, userOrgIds, page, pageSize, restrictToGuids);
         skills = result.skills;
         total = result.total;
       } else {
-        const result = await this.skillRepo.keywordSearch(query, scope, currentUserId, page, pageSize, restrictToGuids);
+        const result = await this.skillRepo.keywordSearch(query, scope, currentUserId, userOrgIds, page, pageSize, restrictToGuids);
         skills = result.skills;
         total = result.total;
       }
@@ -91,6 +101,7 @@ export class SearchService {
         query,
         scope,
         currentUserId,
+        userOrgIds,
         model: params.model ?? this.defaultModel,
         page,
         pageSize,
@@ -109,6 +120,7 @@ export class SearchService {
       guid: s.guid,
       name: s.name,
       description: s.description,
+      ownerId: s.ownerId,
       createdBy: s.createdBy,
       createdByEmail: s.createdByEmail,
       createdByDisplayName: s.createdByDisplayName,
@@ -138,17 +150,18 @@ export class SearchService {
     query: string;
     scope: "public" | "private" | "mixed";
     currentUserId: string;
+    userOrgIds: string[];
     model: string;
     page: number;
     pageSize: number;
     restrictToGuids?: string[];
   }): Promise<{ skills: SkillDocument[]; total: number }> {
-    const { query, scope, currentUserId, model, page, pageSize, restrictToGuids } = params;
+    const { query, scope, currentUserId, userOrgIds, model, page, pageSize, restrictToGuids } = params;
 
     // Load all skills matching scope (no pagination — we need all of them).
     // When a topic restriction is in effect, filter the scope result by the
     // member guid set before handing anything to the LLM.
-    const allScoped = await this.skillRepo.findAllByScope(scope, currentUserId);
+    const allScoped = await this.skillRepo.findAllByScope(scope, currentUserId, userOrgIds);
     const allSkills = restrictToGuids
       ? allScoped.filter((s) => restrictToGuids.includes(s.guid))
       : allScoped;

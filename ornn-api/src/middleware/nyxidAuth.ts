@@ -28,10 +28,44 @@ export interface AuthContext {
   email: string;
   roles: string[];
   permissions: string[];
+  /**
+   * The user's original Bearer access token, when the NyxID proxy forwards
+   * it on the `Authorization` header. Used by `NyxidOrgsClient` to call
+   * NyxID's own `/orgs` endpoint on behalf of the user. Optional — when
+   * absent (e.g. header mode, or proxy strips it), callers fall back to
+   * empty org list (fail-soft on reads).
+   */
+  userAccessToken?: string;
+}
+
+/**
+ * Minimal org-membership shape Ornn cares about. NyxID's viewer role is
+ * filtered out upstream, so `role` is always `admin` or `member`.
+ *
+ * `displayName` is kept here so UI callers (owner pickers, profile
+ * dropdowns) can render a human label without a second round-trip.
+ */
+export interface OrgMembershipFact {
+  userId: string;
+  role: "admin" | "member";
+  displayName: string;
 }
 
 export type AuthVariables = {
   auth: AuthContext;
+  /**
+   * Lazy getter for the caller's organization memberships (admin + member
+   * roles only — viewers are filtered out). Memoized per-request.
+   * Returns `[]` when the caller is anonymous, has no orgs, or NyxID is
+   * unreachable.
+   *
+   * Call sites:
+   *   - Scope-aware repository queries: `readUserOrgIds(c)` reads just the
+   *     user_ids off this list.
+   *   - Write gates: callers inspect `role` to distinguish admin from member
+   *     of a specific org.
+   */
+  getUserOrgMemberships?: () => Promise<OrgMembershipFact[]>;
 };
 
 // ---------------------------------------------------------------------------
@@ -94,6 +128,15 @@ function decodeJwtPayload(token: string): IdentityAssertionPayload | null {
  */
 export function proxyAuthSetup() {
   return createMiddleware<{ Variables: AuthVariables }>(async (c, next) => {
+    // Capture the user's original access token if the proxy forwarded it.
+    // Needed later to call NyxID /orgs on the caller's behalf. Optional —
+    // if the proxy strips it, org lookups fail-soft to empty array.
+    const rawAuthz = c.req.header("Authorization");
+    const userAccessToken =
+      rawAuthz && rawAuthz.toLowerCase().startsWith("bearer ")
+        ? rawAuthz.slice(7).trim() || undefined
+        : undefined;
+
     // Try identity token first (JWT mode or Both mode)
     const identityToken = c.req.header("X-NyxID-Identity-Token");
     if (identityToken) {
@@ -104,6 +147,7 @@ export function proxyAuthSetup() {
           email: payload.email ?? "",
           roles: payload.roles ?? [],
           permissions: payload.permissions ?? [],
+          userAccessToken,
         };
         c.set("auth", auth);
         logger.debug({ userId: auth.userId, roles: auth.roles }, "Authenticated via identity token");
@@ -120,6 +164,7 @@ export function proxyAuthSetup() {
         email: c.req.header("X-NyxID-User-Email") ?? "",
         roles: [],
         permissions: [],
+        userAccessToken,
       };
       c.set("auth", auth);
       logger.debug({ userId: auth.userId }, "Authenticated via proxy headers (no RBAC data)");
@@ -208,4 +253,85 @@ export function getAuth(c: Context<{ Variables: AuthVariables }>): AuthContext {
     throw new AppError(401, "AUTH_MISSING", "Not authenticated");
   }
   return auth;
+}
+
+// ---------------------------------------------------------------------------
+// Org membership lookup
+// ---------------------------------------------------------------------------
+
+/**
+ * Minimal shape the org lookup depends on — extracted as an interface so
+ * tests can inject a fake and we avoid a hard type dependency on the
+ * client class inside the middleware module.
+ */
+export interface OrgMembershipSource {
+  listUserOrgs(
+    userAccessToken: string,
+  ): Promise<Array<{ userId: string; role: string; displayName: string }>>;
+}
+
+/**
+ * Build a middleware that attaches a lazy `getUserOrgMemberships` getter to
+ * the request context. The getter:
+ *   - Memoizes within a single request so multiple downstream calls share
+ *     one NyxID round-trip.
+ *   - Returns `[]` for anonymous callers, callers without a forwarded
+ *     access token, or when the NyxID call errors out (fail-soft).
+ *   - Filters to admin + member roles only (viewers are non-members for Ornn).
+ *
+ * Mount this AFTER `proxyAuthSetup()` so `auth.userAccessToken` is populated.
+ */
+export function nyxidOrgLookupMiddleware(orgs: OrgMembershipSource) {
+  return createMiddleware<{ Variables: AuthVariables }>(async (c, next) => {
+    let cache: OrgMembershipFact[] | null = null;
+    c.set("getUserOrgMemberships", async () => {
+      if (cache) return cache;
+      const auth = c.get("auth");
+      const token = auth?.userAccessToken;
+      if (!token) {
+        cache = [];
+        return cache;
+      }
+      try {
+        const raw = await orgs.listUserOrgs(token);
+        cache = raw
+          .filter((m) => m.role === "admin" || m.role === "member")
+          .map((m) => ({
+            userId: m.userId,
+            role: m.role as "admin" | "member",
+            displayName: m.displayName,
+          }));
+      } catch (err) {
+        logger.warn(
+          { err: (err as Error).message, userId: auth.userId },
+          "Org lookup failed; treating user as no-org",
+        );
+        cache = [];
+      }
+      return cache;
+    });
+    await next();
+  });
+}
+
+/**
+ * Memberships convenience helper — returns an empty array when the middleware
+ * wasn't mounted (tests) or the caller has none.
+ */
+export async function readUserOrgMemberships(
+  c: Context<{ Variables: AuthVariables }>,
+): Promise<OrgMembershipFact[]> {
+  const getter = c.get("getUserOrgMemberships");
+  if (!getter) return [];
+  return getter();
+}
+
+/**
+ * Same, but projects down to just the org user_ids — what scope queries want.
+ */
+export async function readUserOrgIds(
+  c: Context<{ Variables: AuthVariables }>,
+): Promise<string[]> {
+  const ms = await readUserOrgMemberships(c);
+  return ms.map((m) => m.userId);
 }

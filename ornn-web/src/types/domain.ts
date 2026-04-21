@@ -25,6 +25,10 @@ export interface SkillDetail extends SkillSummary {
   isDeprecated?: boolean;
   /** Optional note the author left when deprecating this version. */
   deprecationNote?: string | null;
+  /** Person user_ids this skill has been explicitly shared with. */
+  sharedWithUsers: string[];
+  /** Org user_ids this skill has been explicitly shared with. */
+  sharedWithOrgs: string[];
 }
 
 export interface SkillVersionEntry {

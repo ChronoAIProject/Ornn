@@ -290,15 +290,22 @@ export function Navbar({ className = "" }: NavbarProps) {
       <nav
         className={`glass sticky top-0 z-40 shrink-0 border-b border-neon-cyan/10 ${className}`}
       >
-        <div className="flex h-24 items-center px-6 sm:px-10">
-          {/* Logo + Nav links */}
-          <div className="flex items-center gap-8 shrink-0">
+        <div className="flex h-24 items-center px-3 sm:px-5">
+          {/* Logo */}
+          <div className="flex items-center shrink-0">
             <Link to="/" className="flex items-center">
-              <img src="/logo.svg" alt="ORNN" className="h-12 w-auto" />
+              <img src="/logo.svg?v=10" alt="ORNN" className="h-10 w-auto" />
             </Link>
+          </div>
 
-            {/* Nav links */}
-            <nav className="hidden sm:flex items-center gap-1">
+          <div className="flex-1" />
+
+          {/* Right section: Nav + GitHub + Lang + Theme + User menu */}
+          <div className="flex items-center gap-4 shrink-0">
+
+            {/* Nav links — pushed right, sits just to the left of the
+                GitHub icon with a small visual gap via `mr-2`. */}
+            <nav className="hidden sm:flex items-center gap-1 mr-2">
               {NAV_ITEMS.map((item) => {
                 const isActive = "exact" in item && item.exact
                   ? location.pathname === item.path
@@ -334,12 +341,6 @@ export function Navbar({ className = "" }: NavbarProps) {
                 );
               })}
             </nav>
-          </div>
-
-          <div className="flex-1" />
-
-          {/* Right section: Theme toggle + User menu / Login + Mobile menu button */}
-          <div className="flex items-center gap-4 shrink-0">
 
             {/* GitHub + Lang + Theme */}
             <GitHubLink />
@@ -448,6 +449,36 @@ export function Navbar({ className = "" }: NavbarProps) {
                         >
                           <NyxIdIcon className="h-4 w-4 text-text-muted" />
                           {t("nav.goToNyxId")}
+                        </a>
+                      </div>
+
+                      {/* Organizations — Ornn doesn't manage orgs; these
+                          link straight to NyxID's org management UI. */}
+                      <div className="border-t border-neon-cyan/10 py-1">
+                        <p className="px-4 pt-2 pb-1 font-body text-xs uppercase tracking-wider text-text-muted">
+                          {t("nav.orgsSectionLabel", "Organizations")}
+                        </p>
+                        <a
+                          href={`${getNyxIdUrl()}/orgs`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-3 px-4 py-2.5 font-body text-sm text-text-primary transition-colors hover:bg-neon-cyan/5"
+                        >
+                          <svg className="h-4 w-4 text-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                          </svg>
+                          {t("nav.manageOrgs", "Manage Organizations")}
+                        </a>
+                        <a
+                          href={`${getNyxIdUrl()}/orgs/new`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-3 px-4 py-2.5 font-body text-sm text-text-primary transition-colors hover:bg-neon-cyan/5"
+                        >
+                          <svg className="h-4 w-4 text-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4v16m8-8H4" />
+                          </svg>
+                          {t("nav.createOrg", "Create Organization")}
                         </a>
                       </div>
 

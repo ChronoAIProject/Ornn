@@ -15,7 +15,8 @@ export type ActivityAction =
   | "skill:create"
   | "skill:update"
   | "skill:delete"
-  | "skill:visibility_change";
+  | "skill:visibility_change"
+  | "skill:permissions_change";
 
 export interface ActivityDocument {
   _id: string;
@@ -95,6 +96,47 @@ export class ActivityRepository {
       items: docs as unknown as ActivityDocument[],
       total,
     };
+  }
+
+  /**
+   * Email-prefix search over the aggregated user pool derived from
+   * activities. Used by the permissions panel's "share with users"
+   * typeahead so authors can pick collaborators by email without needing
+   * admin access to NyxID.
+   *
+   * Returns at most `limit` entries, sorted by most-recently-active so
+   * inactive accounts don't clutter the suggestions.
+   */
+  async searchUsersByEmail(
+    emailPrefix: string,
+    limit: number,
+  ): Promise<Array<{ userId: string; email: string; displayName: string }>> {
+    const trimmed = emailPrefix.trim();
+    if (!trimmed) return [];
+
+    const escaped = trimmed.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const pipeline = [
+      { $match: { userEmail: { $regex: `^${escaped}`, $options: "i" } } },
+      {
+        $group: {
+          _id: "$userId",
+          email: { $last: "$userEmail" },
+          displayName: { $last: "$userDisplayName" },
+          lastActiveAt: { $max: "$createdAt" },
+        },
+      },
+      { $sort: { lastActiveAt: -1 as const } },
+      { $limit: limit },
+    ];
+
+    const rows = await this.collection.aggregate(pipeline).toArray();
+    return rows
+      .filter((r) => typeof r._id === "string" && r._id.length > 0)
+      .map((r) => ({
+        userId: r._id as string,
+        email: (r.email as string) ?? "",
+        displayName: (r.displayName as string) ?? "",
+      }));
   }
 
   /**

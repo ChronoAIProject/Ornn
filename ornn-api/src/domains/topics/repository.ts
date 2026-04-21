@@ -25,6 +25,11 @@ export interface CreateTopicData {
   guid: string;
   name: string;
   description: string;
+  /**
+   * Owner entity. For personal topics == `createdBy`. For org-owned topics this
+   * is the org's NyxID user_id. Visibility + write rules both pivot on it.
+   */
+  ownerId: string;
   createdBy: string;
   createdByEmail?: string;
   createdByDisplayName?: string;
@@ -35,12 +40,15 @@ export interface UpdateTopicData {
   description?: string;
   isPrivate?: boolean;
   updatedBy: string;
+  // ownerId is intentionally NOT settable: ownership is immutable after create.
 }
 
 export interface TopicFilters {
   query?: string;
   scope: "public" | "mine" | "mixed";
   currentUserId: string;
+  /** User's admin/member org user_ids. Used for `mine` + `mixed` ownership matching. */
+  userOrgIds: string[];
   page: number;
   pageSize: number;
 }
@@ -53,13 +61,17 @@ function applyScope(
   matchStage: Record<string, unknown>,
   scope: "public" | "mine" | "mixed",
   currentUserId: string,
+  userOrgIds: string[],
 ): void {
+  const ownerIds = [currentUserId, ...userOrgIds];
   if (scope === "public") {
     matchStage.isPrivate = false;
   } else if (scope === "mine") {
-    matchStage.createdBy = currentUserId;
+    // "Mine" now means "topics owned by me OR by an org I'm in". Mirrors the
+    // scope semantics we use for skills.
+    matchStage.ownerId = { $in: ownerIds };
   } else if (scope === "mixed") {
-    matchStage.$or = [{ isPrivate: false }, { createdBy: currentUserId }];
+    matchStage.$or = [{ isPrivate: false }, { ownerId: { $in: ownerIds } }];
   }
 }
 
@@ -82,6 +94,7 @@ export class TopicRepository {
       _id: data.guid as unknown as Document["_id"],
       name: data.name,
       description: data.description,
+      ownerId: data.ownerId,
       createdBy: data.createdBy,
       createdByEmail: data.createdByEmail ?? null,
       createdByDisplayName: data.createdByDisplayName ?? null,
@@ -137,9 +150,9 @@ export class TopicRepository {
    * `total` counts all matching topics (across pages).
    */
   async list(filters: TopicFilters): Promise<{ topics: TopicDocument[]; total: number }> {
-    const { query, scope, currentUserId, page, pageSize } = filters;
+    const { query, scope, currentUserId, userOrgIds, page, pageSize } = filters;
     const matchStage: Record<string, unknown> = {};
-    applyScope(matchStage, scope, currentUserId);
+    applyScope(matchStage, scope, currentUserId, userOrgIds);
 
     if (query && query.trim() !== "") {
       matchStage.$and = [
@@ -175,6 +188,9 @@ function mapDoc(doc: Document | null): TopicDocument | null {
     guid: doc._id as string,
     name: doc.name,
     description: doc.description ?? "",
+    // Legacy documents may have been written before `ownerId` existed — fall
+    // back to `createdBy` so reads stay consistent pre- and post-migration.
+    ownerId: doc.ownerId ?? doc.createdBy ?? "",
     createdBy: doc.createdBy ?? "",
     createdByEmail: doc.createdByEmail ?? undefined,
     createdByDisplayName: doc.createdByDisplayName ?? undefined,
