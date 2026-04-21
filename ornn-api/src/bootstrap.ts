@@ -309,7 +309,11 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   apiApp.route("/", adminRoutes);
   apiApp.route("/", formatRoutes);
   apiApp.route("/", docsRoutes);
-  apiApp.route("/", createMeRoutes({ nyxidBaseUrl: config.nyxidBaseUrl }));
+  apiApp.route("/", createMeRoutes({
+    nyxidBaseUrl: config.nyxidBaseUrl,
+    skillRepo,
+    activityRepo,
+  }));
   apiApp.route("/", createUserRoutes({ activityRepo }));
   app.route("/api", apiApp);
 

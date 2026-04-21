@@ -105,18 +105,29 @@ export class ActivityRepository {
    * admin access to NyxID.
    *
    * Returns at most `limit` entries, sorted by most-recently-active so
-   * inactive accounts don't clutter the suggestions.
+   * inactive accounts don't clutter the suggestions. When `emailPrefix`
+   * is empty the full pool is returned (top-N by recency) — this powers
+   * the on-focus "show everyone" behavior in the picker.
    */
   async searchUsersByEmail(
     emailPrefix: string,
     limit: number,
   ): Promise<Array<{ userId: string; email: string; displayName: string }>> {
     const trimmed = emailPrefix.trim();
-    if (!trimmed) return [];
 
-    const escaped = trimmed.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const matchStage = trimmed
+      ? {
+          $match: {
+            userEmail: {
+              $regex: `^${trimmed.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`,
+              $options: "i",
+            },
+          },
+        }
+      : { $match: { userEmail: { $ne: "" } } };
+
     const pipeline = [
-      { $match: { userEmail: { $regex: `^${escaped}`, $options: "i" } } },
+      matchStage,
       {
         $group: {
           _id: "$userId",
@@ -129,6 +140,37 @@ export class ActivityRepository {
       { $limit: limit },
     ];
 
+    const rows = await this.collection.aggregate(pipeline).toArray();
+    return rows
+      .filter((r) => typeof r._id === "string" && r._id.length > 0)
+      .map((r) => ({
+        userId: r._id as string,
+        email: (r.email as string) ?? "",
+        displayName: (r.displayName as string) ?? "",
+      }));
+  }
+
+  /**
+   * Batch-resolve userIds to their last-known email/displayName. Keyed
+   * on the activity log — a user who never interacted with Ornn won't
+   * be present. Order is not guaranteed; callers should build their
+   * own map if positional ordering matters.
+   */
+  async findByUserIds(
+    userIds: string[],
+  ): Promise<Array<{ userId: string; email: string; displayName: string }>> {
+    if (userIds.length === 0) return [];
+    const pipeline = [
+      { $match: { userId: { $in: userIds } } },
+      {
+        $group: {
+          _id: "$userId",
+          email: { $last: "$userEmail" },
+          displayName: { $last: "$userDisplayName" },
+          lastActiveAt: { $max: "$createdAt" },
+        },
+      },
+    ];
     const rows = await this.collection.aggregate(pipeline).toArray();
     return rows
       .filter((r) => typeof r._id === "string" && r._id.length > 0)

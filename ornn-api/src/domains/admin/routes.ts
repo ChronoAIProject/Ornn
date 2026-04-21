@@ -59,20 +59,20 @@ export function createAdminRoutes(config: AdminRoutesConfig): Hono<{ Variables: 
 
   const auth = nyxidAuthMiddleware();
 
-  // Activity logging endpoint — any authenticated user can log their own login
+  // Activity logging endpoint — any authenticated user can log their own login.
+  // Identity fields come from the decoded NyxID identity token (authCtx) rather
+  // than X-User-* headers, because the NyxID proxy strips custom headers before
+  // forwarding. The identity token is the single source of truth for who the
+  // caller is on this request.
   app.post("/activity/login", auth, async (c) => {
     const authCtx = getAuth(c);
-    const email = c.req.header("X-User-Email") ?? "";
-    const displayName = c.req.header("X-User-Display-Name") ?? "";
-    await activityRepo.log(authCtx.userId, email, displayName, "login");
+    await activityRepo.log(authCtx.userId, authCtx.email, authCtx.displayName, "login");
     return c.json({ data: { success: true }, error: null });
   });
 
   app.post("/activity/logout", auth, async (c) => {
     const authCtx = getAuth(c);
-    const email = c.req.header("X-User-Email") ?? "";
-    const displayName = c.req.header("X-User-Display-Name") ?? "";
-    await activityRepo.log(authCtx.userId, email, displayName, "logout");
+    await activityRepo.log(authCtx.userId, authCtx.email, authCtx.displayName, "logout");
     return c.json({ data: { success: true }, error: null });
   });
 
@@ -228,9 +228,7 @@ export function createAdminRoutes(config: AdminRoutesConfig): Hono<{ Variables: 
       const authCtx = getAuth(c);
       await skillService.deleteSkill(guid);
 
-      const email = c.req.header("X-User-Email") ?? "";
-      const displayName = c.req.header("X-User-Display-Name") ?? "";
-      await activityRepo.log(authCtx.userId, email, displayName, "skill:delete", {
+      await activityRepo.log(authCtx.userId, authCtx.email, authCtx.displayName, "skill:delete", {
         skillId: guid,
         adminAction: true,
       });

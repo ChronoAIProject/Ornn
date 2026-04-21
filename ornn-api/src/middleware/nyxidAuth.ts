@@ -26,6 +26,14 @@ const logger = pino({ level: "info" }).child({ module: "nyxidAuth" });
 export interface AuthContext {
   userId: string;
   email: string;
+  /**
+   * Human name from the identity token's `name` claim (falls back to
+   * email, then userId). Populated so the UI can render a friendly
+   * label when the caller's OAuth id_token lacks the `name` claim —
+   * which happens for admin-created users whose token profile isn't
+   * flushed through the same path as self-registered ones.
+   */
+  displayName: string;
   roles: string[];
   permissions: string[];
   /**
@@ -142,9 +150,11 @@ export function proxyAuthSetup() {
     if (identityToken) {
       const payload = decodeJwtPayload(identityToken);
       if (payload?.sub) {
+        const email = payload.email ?? "";
         const auth: AuthContext = {
           userId: payload.sub,
-          email: payload.email ?? "",
+          email,
+          displayName: payload.name ?? email ?? payload.sub,
           roles: payload.roles ?? [],
           permissions: payload.permissions ?? [],
           userAccessToken,
@@ -159,9 +169,11 @@ export function proxyAuthSetup() {
     // Fallback to plain headers (Headers mode)
     const userId = c.req.header("X-NyxID-User-Id");
     if (userId) {
+      const email = c.req.header("X-NyxID-User-Email") ?? "";
       const auth: AuthContext = {
         userId,
-        email: c.req.header("X-NyxID-User-Email") ?? "",
+        email,
+        displayName: c.req.header("X-NyxID-User-Name") ?? email ?? userId,
         roles: [],
         permissions: [],
         userAccessToken,

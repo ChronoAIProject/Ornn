@@ -84,8 +84,8 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
       }
 
       const zipBuffer = new Uint8Array(body);
-      const userEmail = c.req.header("X-User-Email") ?? undefined;
-      const userDisplayName = c.req.header("X-User-Display-Name") ?? undefined;
+      const userEmail = authCtx.email || undefined;
+      const userDisplayName = authCtx.displayName || undefined;
 
       // New skills are always created as private with no shared-with entries.
       // Visibility is managed afterward via PUT /api/skills/:id/permissions.
@@ -256,10 +256,8 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
         parsed.data.deprecationNote ?? null,
       );
 
-      const userEmail = c.req.header("X-User-Email") ?? "";
-      const userDN = c.req.header("X-User-Display-Name") ?? "";
       activityRepo
-        ?.log(authCtx.userId, userEmail, userDN, "skill:update", {
+        ?.log(authCtx.userId, authCtx.email, authCtx.displayName, "skill:update", {
           skillId: result.skillGuid,
           skillName: result.skillName,
           version: result.version,
@@ -340,18 +338,16 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
       }
 
       logger.info({ guid, userId: authCtx.userId }, "Skill update via API");
-      const userEmail = c.req.header("X-User-Email") ?? "";
-      const userDN = c.req.header("X-User-Display-Name") ?? "";
       const result = await skillService.updateSkill(guid, authCtx.userId, {
         zipBuffer,
         isPrivate,
         skipValidation,
-        userEmail: userEmail || undefined,
-        userDisplayName: userDN || undefined,
+        userEmail: authCtx.email || undefined,
+        userDisplayName: authCtx.displayName || undefined,
       });
 
       const action = isPrivate !== undefined && zipBuffer === undefined ? "skill:visibility_change" : "skill:update";
-      activityRepo?.log(authCtx.userId, userEmail, userDN, action, {
+      activityRepo?.log(authCtx.userId, authCtx.email, authCtx.displayName, action, {
         skillId: guid,
         skillName: result.name,
         ...(isPrivate !== undefined ? { isPrivate } : {}),
@@ -412,9 +408,7 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
 
       const updated = await skillService.setSkillPermissions(guid, authCtx.userId, parsed.data);
 
-      const userEmail = c.req.header("X-User-Email") ?? "";
-      const userDN = c.req.header("X-User-Display-Name") ?? "";
-      activityRepo?.log(authCtx.userId, userEmail, userDN, "skill:permissions_change", {
+      activityRepo?.log(authCtx.userId, authCtx.email, authCtx.displayName, "skill:permissions_change", {
         skillId: guid,
         skillName: updated.name,
         isPrivate: updated.isPrivate,
@@ -456,9 +450,7 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
       logger.info({ guid }, "Skill delete via API");
       await skillService.deleteSkill(guid);
 
-      const userEmail = c.req.header("X-User-Email") ?? "";
-      const userDN = c.req.header("X-User-Display-Name") ?? "";
-      activityRepo?.log(authCtx.userId, userEmail, userDN, "skill:delete", {
+      activityRepo?.log(authCtx.userId, authCtx.email, authCtx.displayName, "skill:delete", {
         skillId: guid,
         skillName: skill?.name ?? guid,
       }).catch((err) => logger.warn({ err }, "Failed to log skill:delete activity"));

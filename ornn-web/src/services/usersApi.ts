@@ -21,6 +21,19 @@ export async function searchUsersByEmail(
   return res.data?.items ?? [];
 }
 
+/**
+ * Batch-resolve a list of user_ids to email + displayName. Unknown ids
+ * (users who never signed into Ornn) are omitted from the response.
+ */
+export async function resolveUsers(ids: string[]): Promise<UserDirectoryEntry[]> {
+  if (ids.length === 0) return [];
+  const params = new URLSearchParams({ ids: ids.join(",") });
+  const res = await apiGet<{ items: UserDirectoryEntry[] }>(
+    `/api/users/resolve?${params.toString()}`,
+  );
+  return res.data?.items ?? [];
+}
+
 export interface OrgDirectoryEntry {
   userId: string;
   displayName: string;
