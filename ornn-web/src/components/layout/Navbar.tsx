@@ -290,7 +290,7 @@ export function Navbar({ className = "" }: NavbarProps) {
       <nav
         className={`glass sticky top-0 z-40 shrink-0 border-b border-neon-cyan/10 ${className}`}
       >
-        <div className="flex h-24 items-center px-3 sm:px-5">
+        <div className="flex h-24 items-center px-6 sm:px-10 lg:px-14">
           {/* Logo */}
           <div className="flex items-center shrink-0">
             <Link to="/" className="flex items-center">
