@@ -3,7 +3,13 @@
  */
 
 import { useQuery } from "@tanstack/react-query";
-import { fetchMyOrgs, type MyOrgMembership } from "@/services/meApi";
+import {
+  fetchMyOrgs,
+  fetchMyNyxidServices,
+  fetchMySkillGrantsSummary,
+  fetchSharedSkillSourcesSummary,
+  type MyOrgMembership,
+} from "@/services/meApi";
 import { useIsAuthenticated } from "@/stores/authStore";
 
 const MY_ORGS_KEY = ["me", "orgs"] as const;
@@ -22,5 +28,38 @@ export function useMyOrgs() {
     queryFn: fetchMyOrgs,
     enabled: isAuthed,
     staleTime: 5 * 60_000,
+  });
+}
+
+/** NyxID user-services accessible to the caller. Used for the System-skill filter label lookup. */
+export function useMyNyxidServices() {
+  const isAuthed = useIsAuthenticated();
+  return useQuery({
+    queryKey: ["me", "nyxid-services"] as const,
+    queryFn: fetchMyNyxidServices,
+    enabled: isAuthed,
+    staleTime: 5 * 60_000,
+  });
+}
+
+/** Aggregated grantees for the caller's own skills — drives the My-Skills filter chips. */
+export function useMySkillGrantsSummary() {
+  const isAuthed = useIsAuthenticated();
+  return useQuery({
+    queryKey: ["me", "skills", "grants-summary"] as const,
+    queryFn: fetchMySkillGrantsSummary,
+    enabled: isAuthed,
+    staleTime: 30_000,
+  });
+}
+
+/** Aggregated sources for skills shared with the caller — drives Shared-with-me filter chips. */
+export function useSharedSkillSources() {
+  const isAuthed = useIsAuthenticated();
+  return useQuery({
+    queryKey: ["me", "shared-skills", "sources-summary"] as const,
+    queryFn: fetchSharedSkillSourcesSummary,
+    enabled: isAuthed,
+    staleTime: 30_000,
   });
 }

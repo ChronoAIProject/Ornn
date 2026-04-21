@@ -81,6 +81,10 @@ export class SearchService {
     callerServices?: UserService[];
     /** Tri-state toggle for the System-skill filter. Default `any`. */
     systemFilter?: SystemFilter;
+    /** Registry filter-chip constraints. Applied at the DB match level. */
+    sharedWithOrgsAny?: string[];
+    sharedWithUsersAny?: string[];
+    createdByAny?: string[];
   }): Promise<SkillSearchResponse> {
     const { query, mode, scope, page, pageSize, currentUserId, userOrgIds } = params;
     const callerServices = params.callerServices ?? [];
@@ -113,13 +117,19 @@ export class SearchService {
     let skills: SkillDocument[] = [];
     let total = 0;
 
+    const extraFilters = {
+      sharedWithOrgsAny: params.sharedWithOrgsAny,
+      sharedWithUsersAny: params.sharedWithUsersAny,
+      createdByAny: params.createdByAny,
+    };
+
     if (mode === "keyword") {
       if (!query || query.trim() === "") {
-        const result = await this.skillRepo.findByScope(scope, currentUserId, userOrgIds, page, pageSize, restrictToGuids);
+        const result = await this.skillRepo.findByScope(scope, currentUserId, userOrgIds, page, pageSize, restrictToGuids, extraFilters);
         skills = result.skills;
         total = result.total;
       } else {
-        const result = await this.skillRepo.keywordSearch(query, scope, currentUserId, userOrgIds, page, pageSize, restrictToGuids);
+        const result = await this.skillRepo.keywordSearch(query, scope, currentUserId, userOrgIds, page, pageSize, restrictToGuids, extraFilters);
         skills = result.skills;
         total = result.total;
       }

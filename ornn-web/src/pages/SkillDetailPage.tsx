@@ -69,7 +69,7 @@ export function SkillDetailPage() {
   const isOwner = isAuthenticated && user?.id && skill?.createdBy === user.id;
   const isAdminUser = isAdmin(user);
   const canManageVersions = !!(isOwner || isAdminUser);
-  const canTryWithCli = !!skill && (skill.isSystem === true || !skill.isPrivate || !!isOwner);
+  const canTryWithCli = !!skill && (!skill.isPrivate || !!isOwner);
 
   const latestVersion = versionList[0]?.version;
   const viewingLatest = !versionParam || (latestVersion && versionParam === latestVersion);

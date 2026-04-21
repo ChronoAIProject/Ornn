@@ -44,6 +44,30 @@ export interface SkillCardProps {
   className?: string;
 }
 
+/**
+ * One-row permission chips derived from the skill's state. Compact:
+ * Public shows a single globe chip; Private/Users/Orgs show in series
+ * so an owner can see all three facets at once. Non-owners see only
+ * the top-level chip (Public or Private). Counts come from
+ * `permissionSummary` which the backend computes per-request.
+ */
+function PermissionBadges({ skill }: { skill: SkillSearchResult }) {
+  if (!skill.isPrivate) {
+    return <Badge color="green">🌐 Public</Badge>;
+  }
+  const ps = skill.permissionSummary;
+  const userCount = ps?.sharedUserCount ?? 0;
+  const orgCount = ps?.sharedOrgCount ?? 0;
+  const hasGrants = userCount > 0 || orgCount > 0;
+  return (
+    <>
+      {!hasGrants && <Badge color="cyan">🔒 Private</Badge>}
+      {userCount > 0 && <Badge color="magenta">👥 {userCount}</Badge>}
+      {orgCount > 0 && <Badge color="cyan">🏢 {orgCount}</Badge>}
+    </>
+  );
+}
+
 export function SkillCard({
   skill,
   showOwnerControls = false,
@@ -81,19 +105,32 @@ export function SkillCard({
       onClick={handleCardClick}
       className={`flex flex-col h-full ${className}`}
     >
-      {/* Title + badge */}
+      {/* Title + permission/system badges */}
       <div className="mb-3 flex items-start justify-between gap-2">
         <h3 className="min-w-0 font-heading text-lg font-semibold text-neon-cyan truncate">
           {skill.name}
         </h3>
-        <div className="flex shrink-0 items-center gap-1.5">
-          {showOwnerControls && (
-            <Badge color={skill.isPrivate ? "cyan" : "green"}>
-              {skill.isPrivate ? "Private" : "Public"}
-            </Badge>
+        <div className="flex shrink-0 items-center gap-1.5 flex-wrap justify-end">
+          <PermissionBadges skill={skill} />
+          {skill.isSystemForMe && skill.systemForService && (
+            <Badge color="yellow">⚙ {skill.systemForService.label}</Badge>
           )}
         </div>
       </div>
+
+      {/* Access-reason sub-line — surfaces WHY the caller can see a
+          non-owned skill. Rendered only when the backend populated
+          `myAccessReason` with a grant-based value. */}
+      {skill.myAccessReason === "shared-via-org" && (
+        <p className="mb-2 font-body text-[11px] uppercase tracking-wider text-text-muted">
+          Via organization
+        </p>
+      )}
+      {skill.myAccessReason === "shared-direct" && (
+        <p className="mb-2 font-body text-[11px] uppercase tracking-wider text-text-muted">
+          Shared by {displayName}
+        </p>
+      )}
 
       {/* Description — fixed 2 lines, break long words */}
       <p className="mb-4 font-body text-sm leading-relaxed text-text-muted line-clamp-2 break-words">
@@ -131,7 +168,6 @@ export function SkillCard({
         <span className="shrink-0">{formatDateSGT(timestamp)}</span>
       </div>
 
-      {/* Owner controls */}
       {showOwnerControls && isOwner && (
         <div className="mt-4 pt-4 border-t border-neon-cyan/10">
           <div className="flex items-center justify-end gap-2">
