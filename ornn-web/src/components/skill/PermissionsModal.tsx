@@ -25,7 +25,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronUp } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { useMyOrgs } from "@/hooks/useMe";
@@ -186,7 +185,17 @@ export function PermissionsModal({ isOpen, onClose, skill }: PermissionsModalPro
       <div className="flex gap-4">
         {/* Left gutter — broader-at-top arrow axis. Decorative only. */}
         <div className="flex flex-col items-center py-1 shrink-0" aria-hidden>
-          <ChevronUp className="h-4 w-4 text-neon-cyan" strokeWidth={2.5} />
+          <svg
+            viewBox="0 0 16 16"
+            className="h-4 w-4 text-neon-cyan"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <polyline points="4 10 8 6 12 10" />
+          </svg>
           <div className="flex-1 w-px my-1 bg-gradient-to-b from-neon-cyan/70 via-neon-cyan/25 to-neon-cyan/5" />
         </div>
 
