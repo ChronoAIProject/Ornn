@@ -291,14 +291,21 @@ export function Navbar({ className = "" }: NavbarProps) {
         className={`glass sticky top-0 z-40 shrink-0 border-b border-neon-cyan/10 ${className}`}
       >
         <div className="flex h-24 items-center px-3 sm:px-5">
-          {/* Logo + Nav links */}
-          <div className="flex items-center gap-3 shrink-0">
-            <Link to="/" className="flex items-center translate-y-1">
-              <img src="/logo.svg" alt="ORNN" className="h-16 w-auto" />
+          {/* Logo */}
+          <div className="flex items-center shrink-0">
+            <Link to="/" className="flex items-center">
+              <img src="/logo.svg?v=10" alt="ORNN" className="h-10 w-auto" />
             </Link>
+          </div>
 
-            {/* Nav links */}
-            <nav className="hidden sm:flex items-center gap-1">
+          <div className="flex-1" />
+
+          {/* Right section: Nav + GitHub + Lang + Theme + User menu */}
+          <div className="flex items-center gap-4 shrink-0">
+
+            {/* Nav links — pushed right, sits just to the left of the
+                GitHub icon with a small visual gap via `mr-2`. */}
+            <nav className="hidden sm:flex items-center gap-1 mr-2">
               {NAV_ITEMS.map((item) => {
                 const isActive = "exact" in item && item.exact
                   ? location.pathname === item.path
@@ -334,12 +341,6 @@ export function Navbar({ className = "" }: NavbarProps) {
                 );
               })}
             </nav>
-          </div>
-
-          <div className="flex-1" />
-
-          {/* Right section: Theme toggle + User menu / Login + Mobile menu button */}
-          <div className="flex items-center gap-4 shrink-0">
 
             {/* GitHub + Lang + Theme */}
             <GitHubLink />
