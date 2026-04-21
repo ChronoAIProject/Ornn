@@ -411,6 +411,17 @@ export function Navbar({ className = "" }: NavbarProps) {
 
                       {/* Section 1 — caller-scoped (every signed-in user). */}
                       <div className="py-1">
+                        <a
+                          href={`${getNyxIdUrl()}/settings`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-3 px-4 py-2.5 font-body text-sm text-text-primary transition-colors hover:bg-neon-cyan/5"
+                        >
+                          <svg className="h-4 w-4 text-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                          </svg>
+                          {t("nav.myProfile", "My Profile")}
+                        </a>
                         <Link
                           to="/services/my"
                           className="flex items-center gap-3 px-4 py-2.5 font-body text-sm text-text-primary transition-colors hover:bg-neon-cyan/5"
@@ -439,17 +450,6 @@ export function Navbar({ className = "" }: NavbarProps) {
                         >
                           <NyxIdIcon className="h-4 w-4 text-text-muted" />
                           {t("nav.goToNyxId")}
-                        </a>
-                        <a
-                          href={`${getNyxIdUrl()}/settings`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center gap-3 px-4 py-2.5 font-body text-sm text-text-primary transition-colors hover:bg-neon-cyan/5"
-                        >
-                          <svg className="h-4 w-4 text-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                          </svg>
-                          {t("nav.myProfile", "My Profile")}
                         </a>
                       </div>
 
