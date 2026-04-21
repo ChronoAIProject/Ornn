@@ -76,8 +76,6 @@ export class SkillService {
       skipValidation?: boolean;
       userEmail?: string;
       userDisplayName?: string;
-      isSystem?: boolean;
-      nyxidServiceId?: string;
     },
   ): Promise<{ guid: string }> {
     // 1. Validate ZIP format rules
@@ -127,9 +125,7 @@ export class SkillService {
       createdBy: userId,
       createdByEmail: options?.userEmail,
       createdByDisplayName: options?.userDisplayName,
-      isPrivate: options?.isSystem ? false : true,
-      isSystem: options?.isSystem,
-      nyxidServiceId: options?.nyxidServiceId,
+      isPrivate: true,
       latestVersion: version,
     });
 
@@ -644,8 +640,6 @@ export class SkillService {
       skillHash,
       presignedPackageUrl,
       isPrivate: skill.isPrivate,
-      isSystem: skill.isSystem,
-      nyxidServiceId: skill.nyxidServiceId,
       ownerId: skill.ownerId,
       createdBy: skill.createdBy,
       createdByEmail: skill.createdByEmail,

@@ -10,7 +10,22 @@ import type { TopicService } from "../topics/service";
 import type { NyxLlmClient } from "../../clients/nyxLlmClient";
 import type { SkillDocument, SkillSearchItem, SkillSearchResponse } from "../../shared/types/index";
 import type { OrgMembershipFact } from "../../middleware/nyxidAuth";
+import type { UserService } from "../../clients/nyxidUserServicesClient";
 import pino from "pino";
+
+/**
+ * Input params for per-item response enrichment. Passed through the
+ * service methods so callers can decide how much context to fetch per
+ * request. Anonymous callers pass empty arrays — the enrichment fields
+ * degrade gracefully to undefined / "public".
+ */
+export interface SearchEnrichmentContext {
+  callerUserId: string;
+  callerOrgIds: string[];
+  callerServices: UserService[];
+}
+
+export type SystemFilter = "any" | "only" | "exclude";
 
 const logger = pino({ level: "info" }).child({ module: "skillSearchService" });
 
@@ -40,7 +55,7 @@ export class SearchService {
   async search(params: {
     query: string;
     mode: "keyword" | "semantic";
-    scope: "public" | "private" | "mixed";
+    scope: "public" | "private" | "mixed" | "shared-with-me";
     page: number;
     pageSize: number;
     currentUserId: string;
@@ -57,9 +72,25 @@ export class SearchService {
      * reachable to their members via `?topic=`.
      */
     memberships?: OrgMembershipFact[];
+    /**
+     * Caller's NyxID services (personal + org-inherited). Used for
+     * system-skill detection and filter: a skill whose tags include one
+     * of these slugs is "system" for the caller. Pass `[]` when
+     * unavailable (anonymous, or when NyxID lookup failed).
+     */
+    callerServices?: UserService[];
+    /** Tri-state toggle for the System-skill filter. Default `any`. */
+    systemFilter?: SystemFilter;
   }): Promise<SkillSearchResponse> {
     const { query, mode, scope, page, pageSize, currentUserId, userOrgIds } = params;
+    const callerServices = params.callerServices ?? [];
+    const systemFilter = params.systemFilter ?? "any";
     const startTime = Date.now();
+
+    // Pre-compute the lookup set once per request. `callerServiceSlugs` is
+    // the source of truth for "is this skill a system skill for me?" —
+    // derived from NyxID service slugs, never from a DB field.
+    const serviceSlugSet = new Set(callerServices.map((s) => s.slug));
 
     // When a topic filter is supplied, resolve its member GUIDs once and
     // narrow both keyword and semantic paths through it. The topic service
@@ -114,21 +145,18 @@ export class SearchService {
     const queryTimeMs = Date.now() - startTime;
     logger.info({ mode, scope, query: query.slice(0, 50), total, queryTimeMs }, "Search completed");
 
+    // System-filter is applied post-query. Acceptable for V1 because
+    // most users have < 20 services; pagination skew is small. Future
+    // optimization: push the tag-match into the DB `$match` stage.
+    const enrichedAll = skills.map((s) =>
+      enrichItem(s, {
+        callerUserId: currentUserId,
+        callerOrgIds: userOrgIds,
+        callerServices,
+      }, serviceSlugSet),
+    );
+    const filtered = applySystemFilter(enrichedAll, systemFilter);
     const totalPages = Math.ceil(total / pageSize);
-
-    const items: SkillSearchItem[] = skills.map((s) => ({
-      guid: s.guid,
-      name: s.name,
-      description: s.description,
-      ownerId: s.ownerId,
-      createdBy: s.createdBy,
-      createdByEmail: s.createdByEmail,
-      createdByDisplayName: s.createdByDisplayName,
-      createdOn: s.createdOn instanceof Date ? s.createdOn.toISOString() : String(s.createdOn),
-      updatedOn: s.updatedOn instanceof Date ? s.updatedOn.toISOString() : String(s.updatedOn),
-      isPrivate: s.isPrivate,
-      tags: s.metadata?.tags ?? [],
-    }));
 
     return {
       searchMode: mode,
@@ -137,7 +165,7 @@ export class SearchService {
       totalPages,
       page,
       pageSize,
-      items,
+      items: filtered,
     };
   }
 
@@ -148,7 +176,7 @@ export class SearchService {
    */
   private async semanticSearch(params: {
     query: string;
-    scope: "public" | "private" | "mixed";
+    scope: "public" | "private" | "mixed" | "shared-with-me";
     currentUserId: string;
     userOrgIds: string[];
     model: string;
@@ -328,4 +356,83 @@ ${JSON.stringify(skillList, null, 2)}`;
       return [];
     }
   }
+}
+
+/**
+ * Compute the per-caller enrichment fields on a skill doc:
+ * `myAccessReason`, `isSystemForMe`, `systemForService`, and the
+ * `permissionSummary` card badges rely on. Values are derived purely
+ * from the caller's identity + services + the skill itself; no extra
+ * queries.
+ *
+ * Ordering of `myAccessReason`:
+ *   - `owner`          — caller authored it; wins over everything else.
+ *   - `public`         — visible to everyone; derived when `!isPrivate`.
+ *   - `shared-direct`  — private, caller listed in `sharedWithUsers`.
+ *   - `shared-via-org` — private, one of caller's orgs in `sharedWithOrgs`.
+ */
+function enrichItem(
+  s: SkillDocument,
+  ctx: { callerUserId: string; callerOrgIds: string[]; callerServices: UserService[] },
+  serviceSlugSet: Set<string>,
+): SkillSearchItem {
+  const tags = s.metadata?.tags ?? [];
+
+  let myAccessReason: SkillSearchItem["myAccessReason"];
+  let sharedViaOrgId: string | undefined;
+  if (ctx.callerUserId && s.createdBy === ctx.callerUserId) {
+    myAccessReason = "owner";
+  } else if (!s.isPrivate) {
+    myAccessReason = "public";
+  } else if (ctx.callerUserId && s.sharedWithUsers.includes(ctx.callerUserId)) {
+    myAccessReason = "shared-direct";
+  } else {
+    const matchedOrg = s.sharedWithOrgs.find((id) => ctx.callerOrgIds.includes(id));
+    if (matchedOrg) {
+      myAccessReason = "shared-via-org";
+      sharedViaOrgId = matchedOrg;
+    }
+  }
+
+  const systemTag = tags.find((t) => serviceSlugSet.has(t));
+  const isSystemForMe = systemTag !== undefined;
+  const systemForService = systemTag
+    ? ctx.callerServices.find((svc) => svc.slug === systemTag)
+    : undefined;
+
+  return {
+    guid: s.guid,
+    name: s.name,
+    description: s.description,
+    ownerId: s.ownerId,
+    createdBy: s.createdBy,
+    createdByEmail: s.createdByEmail,
+    createdByDisplayName: s.createdByDisplayName,
+    createdOn: s.createdOn instanceof Date ? s.createdOn.toISOString() : String(s.createdOn),
+    updatedOn: s.updatedOn instanceof Date ? s.updatedOn.toISOString() : String(s.updatedOn),
+    isPrivate: s.isPrivate,
+    tags,
+    myAccessReason,
+    sharedViaOrgId,
+    isSystemForMe,
+    systemForService: systemForService
+      ? { id: systemForService.id, slug: systemForService.slug, label: systemForService.label }
+      : undefined,
+    permissionSummary: {
+      isPrivate: s.isPrivate,
+      sharedUserCount: s.sharedWithUsers.length,
+      sharedOrgCount: s.sharedWithOrgs.length,
+    },
+  };
+}
+
+/**
+ * Post-query `systemFilter` toggle. Applied client-side in the service
+ * because the detection depends on the caller's service list (not a DB
+ * field). Skew against pagination totals is accepted for V1.
+ */
+function applySystemFilter(items: SkillSearchItem[], filter: SystemFilter): SkillSearchItem[] {
+  if (filter === "any") return items;
+  if (filter === "only") return items.filter((i) => i.isSystemForMe);
+  return items.filter((i) => !i.isSystemForMe);
 }

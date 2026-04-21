@@ -14,6 +14,7 @@ import {
   getAuth,
   readUserOrgMemberships,
 } from "../../middleware/nyxidAuth";
+import { NyxidUserServicesClient } from "../../clients/nyxidUserServicesClient";
 import { AppError } from "../../shared/types/index";
 
 export interface MeRoutesConfig {
@@ -31,6 +32,7 @@ export function createMeRoutes(config: MeRoutesConfig): Hono<{ Variables: AuthVa
   const baseUrl = nyxidBaseUrl.replace(/\/+$/, "");
   const app = new Hono<{ Variables: AuthVariables }>();
   const auth = nyxidAuthMiddleware();
+  const userServicesClient = new NyxidUserServicesClient(baseUrl);
 
   /**
    * GET /me/orgs — caller's NyxID org memberships.
@@ -102,6 +104,30 @@ export function createMeRoutes(config: MeRoutesConfig): Hono<{ Variables: AuthVa
       },
       error: null,
     });
+  });
+
+  /**
+   * GET /me/nyxid-services — caller's NyxID user-services (personal +
+   * org-inherited). Returns `{ items: Array<{ id, slug, label }> }`.
+   *
+   * Powers the System-skill filter: a skill is considered "system" for
+   * the caller when any of its tags matches one of these slugs/labels.
+   * Anonymous/no-token callers short-circuit to an empty list so the
+   * filter silently becomes a no-op rather than erroring.
+   */
+  app.get("/me/nyxid-services", auth, async (c) => {
+    const authCtx = getAuth(c);
+    const token = authCtx.userAccessToken;
+    if (!token) {
+      return c.json({ data: { items: [] }, error: null });
+    }
+    try {
+      const items = await userServicesClient.listUserServices(token);
+      return c.json({ data: { items }, error: null });
+    } catch {
+      // Fail-soft on read — matches the posture of /me/orgs.
+      return c.json({ data: { items: [] }, error: null });
+    }
   });
 
   return app;
