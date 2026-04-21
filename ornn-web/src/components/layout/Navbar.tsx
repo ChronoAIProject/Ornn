@@ -409,17 +409,8 @@ export function Navbar({ className = "" }: NavbarProps) {
                         </p>
                       </div>
 
-                      {/* Menu Items */}
+                      {/* Section 1 — caller-scoped (every signed-in user). */}
                       <div className="py-1">
-                        {isAdmin(user) && (
-                          <Link
-                            to="/admin"
-                            className="flex items-center gap-3 px-4 py-2.5 font-body text-sm text-text-primary transition-colors hover:bg-neon-cyan/5"
-                          >
-                            <AdminIcon className="h-4 w-4 text-text-muted" />
-                            {t("nav.adminPanel")}
-                          </Link>
-                        )}
                         <Link
                           to="/services/my"
                           className="flex items-center gap-3 px-4 py-2.5 font-body text-sm text-text-primary transition-colors hover:bg-neon-cyan/5"
@@ -427,34 +418,8 @@ export function Navbar({ className = "" }: NavbarProps) {
                           <svg className="h-4 w-4 text-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2" />
                           </svg>
-                          My NyxID Services
+                          {t("nav.myServices", "My NyxID Services")}
                         </Link>
-                        {isAdmin(user) && (
-                          <Link
-                            to="/services/admin"
-                            className="flex items-center gap-3 px-4 py-2.5 font-body text-sm text-text-primary transition-colors hover:bg-neon-cyan/5"
-                          >
-                            <svg className="h-4 w-4 text-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                            </svg>
-                            Admin NyxID Services
-                          </Link>
-                        )}
-                        <a
-                          href={getNyxIdUrl()}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center gap-3 px-4 py-2.5 font-body text-sm text-text-primary transition-colors hover:bg-neon-cyan/5"
-                        >
-                          <NyxIdIcon className="h-4 w-4 text-text-muted" />
-                          {t("nav.goToNyxId")}
-                        </a>
-                      </div>
-
-                      {/* Organizations — Ornn doesn't manage orgs; link
-                          out to NyxID's org UI for everything org-related. */}
-                      <div className="border-t border-neon-cyan/10 py-1">
                         <a
                           href={`${getNyxIdUrl()}/orgs`}
                           target="_blank"
@@ -466,9 +431,54 @@ export function Navbar({ className = "" }: NavbarProps) {
                           </svg>
                           {t("nav.myOrgs", "My Organizations")}
                         </a>
+                        <a
+                          href={getNyxIdUrl()}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-3 px-4 py-2.5 font-body text-sm text-text-primary transition-colors hover:bg-neon-cyan/5"
+                        >
+                          <NyxIdIcon className="h-4 w-4 text-text-muted" />
+                          {t("nav.goToNyxId")}
+                        </a>
+                        <a
+                          href={`${getNyxIdUrl()}/settings`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-3 px-4 py-2.5 font-body text-sm text-text-primary transition-colors hover:bg-neon-cyan/5"
+                        >
+                          <svg className="h-4 w-4 text-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                          </svg>
+                          {t("nav.myProfile", "My Profile")}
+                        </a>
                       </div>
 
-                      {/* Logout */}
+                      {/* Section 2 — ornn platform admins only. Rendered as a
+                          separate bordered block so the visual grouping
+                          signals "this group requires elevated access". */}
+                      {isAdmin(user) && (
+                        <div className="border-t border-neon-cyan/10 py-1">
+                          <Link
+                            to="/admin"
+                            className="flex items-center gap-3 px-4 py-2.5 font-body text-sm text-text-primary transition-colors hover:bg-neon-cyan/5"
+                          >
+                            <AdminIcon className="h-4 w-4 text-text-muted" />
+                            {t("nav.adminPanel")}
+                          </Link>
+                          <Link
+                            to="/services/admin"
+                            className="flex items-center gap-3 px-4 py-2.5 font-body text-sm text-text-primary transition-colors hover:bg-neon-cyan/5"
+                          >
+                            <svg className="h-4 w-4 text-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                            </svg>
+                            {t("nav.adminServices", "Admin NyxID Services")}
+                          </Link>
+                        </div>
+                      )}
+
+                      {/* Section 3 — Sign out */}
                       <div className="border-t border-neon-cyan/10 py-1">
                         <button
                           type="button"
