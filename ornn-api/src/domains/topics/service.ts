@@ -408,8 +408,6 @@ export class TopicService {
       createdOn: s.createdOn instanceof Date ? s.createdOn.toISOString() : String(s.createdOn),
       updatedOn: s.updatedOn instanceof Date ? s.updatedOn.toISOString() : String(s.updatedOn),
       isPrivate: s.isPrivate,
-      isSystem: s.isSystem,
-      nyxidServiceId: s.nyxidServiceId,
       tags: s.metadata?.tags ?? [],
     }));
     return { ...summary, skills: items };

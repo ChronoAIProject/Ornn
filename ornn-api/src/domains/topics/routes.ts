@@ -81,8 +81,8 @@ export function createTopicRoutes(config: TopicRoutesConfig): Hono<{ Variables: 
         );
       }
 
-      const userEmail = c.req.header("X-User-Email") || undefined;
-      const userDisplayName = c.req.header("X-User-Display-Name") || undefined;
+      const userEmail = authCtx.email || undefined;
+      const userDisplayName = authCtx.displayName || undefined;
 
       // Verify org membership when the caller is trying to create a topic
       // under a non-self owner. Fail-closed: 403 if we can't prove membership.

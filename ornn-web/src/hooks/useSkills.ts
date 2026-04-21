@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { searchSkills } from "@/services/searchApi";
+import { searchSkills, fetchSkillCounts } from "@/services/searchApi";
 import {
   fetchSkill,
   fetchSkillVersions,
@@ -10,11 +10,13 @@ import {
   setSkillVersionDeprecation,
 } from "@/services/skillApi";
 import { updateSkillPermissions, type SkillPermissionsInput } from "@/services/permissionsApi";
-import type { SkillSearchParams } from "@/types/search";
+import type { SkillSearchParams, SystemFilter } from "@/types/search";
 import type { UpdateSkillMetadata } from "@/types/api";
 
 const SKILLS_KEY = "skills";
 const MY_SKILLS_KEY = "my-skills";
+const SHARED_WITH_ME_KEY = "shared-with-me-skills";
+const SKILL_COUNTS_KEY = "skill-counts";
 const SKILL_VERSIONS_KEY = "skill-versions";
 
 /** Search public skills */
@@ -25,6 +27,7 @@ export function useSkills(params: {
   pageSize?: number;
   /** Optional topic id-or-name — restricts results to that topic's members. */
   topic?: string;
+  systemFilter?: SystemFilter;
 }) {
   const searchParams: SkillSearchParams = {
     query: params.query,
@@ -33,6 +36,7 @@ export function useSkills(params: {
     page: params.page,
     pageSize: params.pageSize,
     topic: params.topic,
+    systemFilter: params.systemFilter,
   };
 
   return useQuery({
@@ -41,27 +45,84 @@ export function useSkills(params: {
   });
 }
 
-/** Search current user's private skills */
+/**
+ * Search skills authored by the caller. Strict "mine" scope — does
+ * NOT include skills shared with me (those live in the dedicated
+ * Shared-with-me tab). Public + private skills I created both appear.
+ */
 export function useMySkills(params: {
   query?: string;
   mode?: SkillSearchParams["mode"];
   page?: number;
   pageSize?: number;
-  /** Optional topic id-or-name — restricts results to that topic's members. */
   topic?: string;
+  systemFilter?: SystemFilter;
+  sharedWithOrgs?: string[];
+  sharedWithUsers?: string[];
 }) {
   const searchParams: SkillSearchParams = {
     query: params.query,
     mode: params.mode ?? "keyword",
-    scope: "private",
+    scope: "mine",
     page: params.page,
     pageSize: params.pageSize,
     topic: params.topic,
+    systemFilter: params.systemFilter,
+    sharedWithOrgs: params.sharedWithOrgs,
+    sharedWithUsers: params.sharedWithUsers,
   };
 
   return useQuery({
     queryKey: [MY_SKILLS_KEY, searchParams],
     queryFn: () => searchSkills(searchParams),
+  });
+}
+
+/**
+ * Search skills that other users or orgs have shared with the caller.
+ * Excludes own-authored skills and public skills; those live in their
+ * dedicated tabs. Gated on auth — anonymous callers get an empty set.
+ */
+export function useSharedWithMeSkills(params: {
+  query?: string;
+  mode?: SkillSearchParams["mode"];
+  page?: number;
+  pageSize?: number;
+  topic?: string;
+  systemFilter?: SystemFilter;
+  sharedWithOrgs?: string[];
+  createdByAny?: string[];
+  enabled?: boolean;
+}) {
+  const searchParams: SkillSearchParams = {
+    query: params.query,
+    mode: params.mode ?? "keyword",
+    scope: "shared-with-me",
+    page: params.page,
+    pageSize: params.pageSize,
+    topic: params.topic,
+    systemFilter: params.systemFilter,
+    sharedWithOrgs: params.sharedWithOrgs,
+    createdByAny: params.createdByAny,
+  };
+
+  return useQuery({
+    queryKey: [SHARED_WITH_ME_KEY, searchParams],
+    queryFn: () => searchSkills(searchParams),
+    enabled: params.enabled ?? true,
+  });
+}
+
+/**
+ * Fetch registry tab counts in one round-trip. `mine` and
+ * `sharedWithMe` are 0 for anonymous callers — the backend doesn't
+ * know who they are. Cached briefly since counts change slowly.
+ */
+export function useSkillCounts() {
+  return useQuery({
+    queryKey: [SKILL_COUNTS_KEY],
+    queryFn: fetchSkillCounts,
+    staleTime: 30_000,
   });
 }
 

@@ -21,7 +21,7 @@ import {
 import { AppError } from "../../shared/types/index";
 
 const searchQuerySchema = z.object({
-  q: z.string().min(1).max(256),
+  q: z.string().max(256).optional().default(""),
   limit: z.coerce.number().int().min(1).max(50).optional().default(10),
 });
 
@@ -56,6 +56,32 @@ export function createUserRoutes(config: UserRoutesConfig): Hono<{ Variables: Au
 
     const results = await activityRepo.searchUsersByEmail(parsed.data.q, parsed.data.limit);
     return c.json({ data: { items: results }, error: null });
+  });
+
+  /**
+   * GET /users/resolve?ids=id1,id2,...
+   *
+   * Batch-resolve a list of user_ids to their email + displayName using
+   * Ornn's activity directory. Used by the permissions panel to render
+   * human labels for `sharedWithUsers` entries that were saved as bare
+   * user_ids — an email-prefix search can't match on a UUID, so we
+   * need a direct id→row lookup.
+   *
+   * Unknown ids (users who never signed into Ornn) are silently dropped
+   * from the response. The UI should fall back to the raw id in that case.
+   */
+  app.get("/users/resolve", auth, async (c) => {
+    const raw = c.req.query("ids") ?? "";
+    const ids = raw
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .slice(0, 100);
+    if (ids.length === 0) {
+      return c.json({ data: { items: [] }, error: null });
+    }
+    const items = await activityRepo.findByUserIds(ids);
+    return c.json({ data: { items }, error: null });
   });
 
   return app;

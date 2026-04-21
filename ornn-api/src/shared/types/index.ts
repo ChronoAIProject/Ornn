@@ -117,10 +117,6 @@ export interface SkillDocument {
    * membership is resolved per-request via the NyxID lookup middleware.
    */
   sharedWithOrgs: string[];
-  /** System skills are auto-generated from NyxID service catalog. */
-  isSystem?: boolean;
-  /** NyxID service ID this system skill was generated from. */
-  nyxidServiceId?: string;
   /**
    * Cached pointer to the highest version published for this skill, e.g. "1.2".
    * The `skill_versions` collection is the source of truth; this field exists
@@ -191,8 +187,6 @@ export interface SkillDetailResponse {
   skillHash: string;
   presignedPackageUrl: string;
   isPrivate: boolean;
-  isSystem?: boolean;
-  nyxidServiceId?: string;
   /** Legacy back-compat field. Not used for visibility; equals `createdBy` on new skills. */
   ownerId: string;
   createdBy: string;
@@ -227,9 +221,41 @@ export interface SkillSearchItem {
   createdOn: string;
   updatedOn: string;
   isPrivate: boolean;
-  isSystem?: boolean;
-  nyxidServiceId?: string;
   tags: string[];
+  /**
+   * Why the current caller can see this skill. Populated on search responses
+   * where the caller is authenticated; omitted for anonymous callers.
+   *   - "owner"          — caller authored it (or is platform admin).
+   *   - "public"         — visible to everyone; caller has no special grant.
+   *   - "shared-direct"  — private skill, caller is in `sharedWithUsers`.
+   *   - "shared-via-org" — private skill, one of caller's orgs is in
+   *                        `sharedWithOrgs`; `sharedViaOrgId` names the org.
+   */
+  myAccessReason?: "owner" | "public" | "shared-direct" | "shared-via-org";
+  /** Present when `myAccessReason === "shared-via-org"`. */
+  sharedViaOrgId?: string;
+  /**
+   * True when any of this skill's tags matches the slug of a NyxID service
+   * the caller can manage (personal or org-inherited). Derived per-request
+   * against `/api/me/nyxid-services`.
+   */
+  isSystemForMe?: boolean;
+  /**
+   * When `isSystemForMe`, the first matching service. Used by the UI to
+   * render a "⚙️ <label>" chip without a second round-trip. Multiple
+   * matches are possible; the first one wins.
+   */
+  systemForService?: { id: string; slug: string; label: string };
+  /**
+   * Compact view of the skill's ACL state. Cheap to compute (lengths
+   * already on the doc) and lets card UIs render permission chips without
+   * re-fetching the full skill.
+   */
+  permissionSummary?: {
+    isPrivate: boolean;
+    sharedUserCount: number;
+    sharedOrgCount: number;
+  };
 }
 
 export interface SkillSearchResponse {

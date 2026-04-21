@@ -1,5 +1,5 @@
 import { apiGet } from "./apiClient";
-import type { SkillSearchParams, SkillSearchResponse } from "@/types/search";
+import type { SkillCounts, SkillSearchParams, SkillSearchResponse } from "@/types/search";
 
 /**
  * Search skills using the skill-search API.
@@ -15,9 +15,23 @@ export async function searchSkills(
     page: params.page,
     pageSize: params.pageSize,
     topic: params.topic,
+    systemFilter: params.systemFilter,
+    sharedWithOrgs: params.sharedWithOrgs?.length ? params.sharedWithOrgs.join(",") : undefined,
+    sharedWithUsers: params.sharedWithUsers?.length ? params.sharedWithUsers.join(",") : undefined,
+    createdByAny: params.createdByAny?.length ? params.createdByAny.join(",") : undefined,
   };
 
   const res = await apiGet<SkillSearchResponse>("/api/skill-search", queryParams);
+  return res.data!;
+}
+
+/**
+ * Fetch per-scope counts for the registry tab badges in a single
+ * round-trip. Returns `{public, mine, sharedWithMe}` for the current
+ * caller. Anonymous callers get `mine` + `sharedWithMe` as 0.
+ */
+export async function fetchSkillCounts(): Promise<SkillCounts> {
+  const res = await apiGet<SkillCounts>("/api/skill-counts");
   return res.data!;
 }
 

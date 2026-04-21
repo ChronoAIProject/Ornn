@@ -28,8 +28,6 @@ export interface CreateSkillData {
   createdByEmail?: string;
   createdByDisplayName?: string;
   isPrivate?: boolean;
-  isSystem?: boolean;
-  nyxidServiceId?: string;
   /** Initial version, e.g. "1.0". Required. */
   latestVersion: string;
 }
@@ -61,6 +59,20 @@ export interface SkillFilters {
   currentUserId?: string;
   page: number;
   pageSize: number;
+}
+
+/**
+ * Additional registry-filter constraints passed by the search route
+ * when the UI chips are active. `sharedWithOrgsAny` requires
+ * `skill.sharedWithOrgs` to intersect the list; `sharedWithUsersAny`
+ * is the analog for direct per-user grants; `createdByAny` narrows
+ * the skill's author (used by the Shared-with-me tab's "from which
+ * user" chip row).
+ */
+export interface ExtraFilters {
+  sharedWithOrgsAny?: string[];
+  sharedWithUsersAny?: string[];
+  createdByAny?: string[];
 }
 
 export class SkillRepository {
@@ -99,8 +111,6 @@ export class SkillRepository {
       updatedBy: data.createdBy,
       updatedOn: now,
       isPrivate: data.isPrivate ?? true,
-      isSystem: data.isSystem ?? false,
-      nyxidServiceId: data.nyxidServiceId ?? null,
       // Explicit ACLs start empty — author + platform admin always have
       // access; the shared-with lists are an additive allow-list.
       sharedWithUsers: [],
@@ -151,13 +161,14 @@ export class SkillRepository {
 
   async keywordSearch(
     query: string,
-    scope: "public" | "private" | "mixed",
+    scope: "public" | "private" | "mixed" | "shared-with-me" | "mine",
     currentUserId: string,
     userOrgIds: string[],
     page: number,
     pageSize: number,
     /** Optional additional filter — restrict results to this set of GUIDs. */
     restrictToGuids?: string[],
+    extraFilters?: ExtraFilters,
   ): Promise<{ skills: SkillDocument[]; total: number }> {
     const matchStage: Record<string, unknown> = {};
     applyScope(matchStage, scope, currentUserId, userOrgIds);
@@ -179,6 +190,8 @@ export class SkillRepository {
       matchStage._id = { $in: restrictToGuids };
     }
 
+    applyExtraFilters(matchStage, extraFilters);
+
     const total = await this.collection.countDocuments(matchStage);
     const offset = (page - 1) * pageSize;
     const docs = await this.collection.find(matchStage).sort({ createdOn: -1 }).skip(offset).limit(pageSize).toArray();
@@ -187,13 +200,14 @@ export class SkillRepository {
   }
 
   async findByScope(
-    scope: "public" | "private" | "mixed",
+    scope: "public" | "private" | "mixed" | "shared-with-me" | "mine",
     currentUserId: string,
     userOrgIds: string[],
     page: number,
     pageSize: number,
     /** Optional additional filter — restrict results to this set of GUIDs. */
     restrictToGuids?: string[],
+    extraFilters?: ExtraFilters,
   ): Promise<{ skills: SkillDocument[]; total: number }> {
     const matchStage: Record<string, unknown> = {};
     applyScope(matchStage, scope, currentUserId, userOrgIds);
@@ -202,6 +216,8 @@ export class SkillRepository {
       if (restrictToGuids.length === 0) return { skills: [], total: 0 };
       matchStage._id = { $in: restrictToGuids };
     }
+
+    applyExtraFilters(matchStage, extraFilters);
 
     const total = await this.collection.countDocuments(matchStage);
     const offset = (page - 1) * pageSize;
@@ -215,7 +231,7 @@ export class SkillRepository {
    * Projects fields needed for semantic evaluation: name, description, metadata, license, compatibility, etc.
    */
   async findAllByScope(
-    scope: "public" | "private" | "mixed",
+    scope: "public" | "private" | "mixed" | "shared-with-me" | "mine",
     currentUserId: string,
     userOrgIds: string[],
   ): Promise<SkillDocument[]> {
@@ -237,40 +253,120 @@ export class SkillRepository {
     return docs.map((d) => mapDoc(d)!);
   }
 
-  async findByNyxidServiceId(nyxidServiceId: string): Promise<SkillDocument | null> {
-    const doc = await this.collection.findOne({ nyxidServiceId, isSystem: true });
+  /**
+   * Aggregate grants on skills owned by `userId` — which orgs and
+   * users show up as grantees, with per-target skill counts. Used by
+   * the registry My-Skills filter row.
+   */
+  async aggregateGrantsByOwner(userId: string): Promise<{
+    orgs: Array<{ id: string; skillCount: number }>;
+    users: Array<{ userId: string; skillCount: number }>;
+  }> {
+    if (!userId) return { orgs: [], users: [] };
+    const docs = await this.collection
+      .find({ createdBy: userId })
+      .project({ sharedWithOrgs: 1, sharedWithUsers: 1 })
+      .toArray();
+    const orgCounts = new Map<string, number>();
+    const userCounts = new Map<string, number>();
+    for (const d of docs) {
+      for (const id of (d.sharedWithOrgs as string[] | undefined) ?? []) {
+        orgCounts.set(id, (orgCounts.get(id) ?? 0) + 1);
+      }
+      for (const id of (d.sharedWithUsers as string[] | undefined) ?? []) {
+        userCounts.set(id, (userCounts.get(id) ?? 0) + 1);
+      }
+    }
+    return {
+      orgs: [...orgCounts].map(([id, skillCount]) => ({ id, skillCount })).sort((a, b) => b.skillCount - a.skillCount),
+      users: [...userCounts].map(([userId, skillCount]) => ({ userId, skillCount })).sort((a, b) => b.skillCount - a.skillCount),
+    };
+  }
+
+  /**
+   * Aggregate sources on skills shared with `userId` (via caller's
+   * orgs or direct per-user grants) — which orgs acted as the
+   * visibility bridge and which authors shared. Used by the registry
+   * Shared-with-me filter row. `userOrgIds` restricts org-based
+   * matching to the caller's memberships (sharing into a foreign org
+   * doesn't make it visible to the caller).
+   */
+  async aggregateSourcesForReader(
+    userId: string,
+    userOrgIds: string[],
+  ): Promise<{
+    orgs: Array<{ id: string; skillCount: number }>;
+    users: Array<{ userId: string; skillCount: number }>;
+  }> {
+    if (!userId) return { orgs: [], users: [] };
+    const orConditions: Array<Record<string, unknown>> = [{ sharedWithUsers: userId }];
+    if (userOrgIds.length > 0) orConditions.push({ sharedWithOrgs: { $in: userOrgIds } });
+    const docs = await this.collection
+      .find({
+        isPrivate: true,
+        createdBy: { $ne: userId },
+        $or: orConditions,
+      })
+      .project({ createdBy: 1, sharedWithOrgs: 1, sharedWithUsers: 1 })
+      .toArray();
+    const orgCounts = new Map<string, number>();
+    const userCounts = new Map<string, number>();
+    const orgSet = new Set(userOrgIds);
+    for (const d of docs) {
+      const grantOrgs = (d.sharedWithOrgs as string[] | undefined) ?? [];
+      const grantUsers = (d.sharedWithUsers as string[] | undefined) ?? [];
+      // Every caller-membership org that this skill was shared into
+      // counts as a visibility bridge for this skill.
+      for (const gid of grantOrgs) {
+        if (orgSet.has(gid)) {
+          orgCounts.set(gid, (orgCounts.get(gid) ?? 0) + 1);
+        }
+      }
+      // Direct per-user grants imply the author shared explicitly with
+      // the caller. Use `createdBy` — "who shared this with me?" —
+      // since the owner is the only party that can mutate ACLs.
+      if (grantUsers.includes(userId)) {
+        const author = d.createdBy as string;
+        if (author) userCounts.set(author, (userCounts.get(author) ?? 0) + 1);
+      }
+    }
+    return {
+      orgs: [...orgCounts].map(([id, skillCount]) => ({ id, skillCount })).sort((a, b) => b.skillCount - a.skillCount),
+      users: [...userCounts].map(([userId, skillCount]) => ({ userId, skillCount })).sort((a, b) => b.skillCount - a.skillCount),
+    };
+  }
+
+  /**
+   * Find the (most recently created) skill whose metadata tags include
+   * any of the given candidates. Used by the admin "generate system
+   * skill" flow to find an existing skill already linked to a NyxID
+   * service — the link is stored as a tag, not a dedicated field, so
+   * detection is purely tag-based.
+   */
+  async findByAnyTag(tags: string[]): Promise<SkillDocument | null> {
+    if (tags.length === 0) return null;
+    const doc = await this.collection
+      .find({ "metadata.tags": { $in: tags } })
+      .sort({ createdOn: -1 })
+      .limit(1)
+      .next();
     return mapDoc(doc);
   }
 
-  async findSystemSkills(): Promise<SkillDocument[]> {
-    const docs = await this.collection.find({ isSystem: true }).sort({ createdOn: -1 }).toArray();
-    return docs.map((d) => mapDoc(d)!);
-  }
-
-  async searchSystemSkills(
-    query: string | undefined,
-    page: number,
-    pageSize: number,
-  ): Promise<{ skills: SkillDocument[]; total: number }> {
-    const matchStage: Record<string, unknown> = { isSystem: true };
-    if (query && query.length > 0) {
-      matchStage.$or = [
-        { _id: query },
-        { name: { $regex: escapeRegex(query), $options: "i" } },
-        { description: { $regex: escapeRegex(query), $options: "i" } },
-      ];
-    }
-
-    const total = await this.collection.countDocuments(matchStage);
-    const offset = (page - 1) * pageSize;
-    const docs = await this.collection
-      .find(matchStage)
-      .sort({ createdOn: -1 })
-      .skip(offset)
-      .limit(pageSize)
-      .toArray();
-
-    return { skills: docs.map((d) => mapDoc(d)!), total };
+  /**
+   * Count visible skills by scope. Used by the registry tab-count
+   * endpoint. Shares the same visibility rules as `findByScope`.
+   */
+  async countByScope(
+    scope: "public" | "private" | "mixed" | "shared-with-me" | "mine",
+    currentUserId: string,
+    userOrgIds: string[],
+  ): Promise<number> {
+    const matchStage: Record<string, unknown> = {};
+    applyScope(matchStage, scope, currentUserId, userOrgIds);
+    // Scope resolved to "match nothing" — short-circuit.
+    if ((matchStage._id as any)?.$in?.length === 0) return 0;
+    return this.collection.countDocuments(matchStage);
   }
 }
 
@@ -289,10 +385,21 @@ export class SkillRepository {
  */
 function applyScope(
   matchStage: Record<string, unknown>,
-  scope: "public" | "private" | "mixed",
+  scope: "public" | "private" | "mixed" | "shared-with-me" | "mine",
   currentUserId: string,
   userOrgIds: string[],
 ): void {
+  if (scope === "mine") {
+    // Skills authored by the caller, regardless of visibility. Strict
+    // "skills I own", distinct from "private skills I can read" which
+    // would also include skills shared with me.
+    if (!currentUserId) {
+      matchStage._id = { $in: [] };
+      return;
+    }
+    matchStage.createdBy = currentUserId;
+    return;
+  }
   const privateVisibility: Array<Record<string, unknown>> = [];
   if (currentUserId) {
     privateVisibility.push({ createdBy: currentUserId });
@@ -318,12 +425,58 @@ function applyScope(
     return;
   }
 
+  if (scope === "shared-with-me") {
+    // Private skills the caller can read but did NOT author.
+    // By construction this excludes anonymous callers (no orgs, no user id).
+    const grants: Array<Record<string, unknown>> = [];
+    if (currentUserId) {
+      grants.push({ sharedWithUsers: currentUserId });
+    }
+    if (userOrgIds.length > 0) {
+      grants.push({ sharedWithOrgs: { $in: userOrgIds } });
+    }
+    if (grants.length === 0) {
+      matchStage._id = { $in: [] };
+      return;
+    }
+    matchStage.isPrivate = true;
+    matchStage.$and = [
+      { $or: grants },
+      // `createdBy` excluded explicitly — a skill the caller authored is
+      // never "shared with" them in the UI sense.
+      ...(currentUserId ? [{ createdBy: { $ne: currentUserId } }] : []),
+    ];
+    return;
+  }
+
   // mixed
   const clauses: Array<Record<string, unknown>> = [{ isPrivate: false }];
   if (privateVisibility.length > 0) {
     clauses.push({ isPrivate: true, $or: privateVisibility });
   }
   matchStage.$or = clauses;
+}
+
+/**
+ * Merge the registry chip filters into an existing match stage.
+ * Appended as additional clauses on `$and` so they compose cleanly
+ * with whatever `applyScope` already set up.
+ */
+function applyExtraFilters(matchStage: Record<string, unknown>, filters: ExtraFilters | undefined): void {
+  if (!filters) return;
+  const extra: Array<Record<string, unknown>> = [];
+  if (filters.sharedWithOrgsAny && filters.sharedWithOrgsAny.length > 0) {
+    extra.push({ sharedWithOrgs: { $in: filters.sharedWithOrgsAny } });
+  }
+  if (filters.sharedWithUsersAny && filters.sharedWithUsersAny.length > 0) {
+    extra.push({ sharedWithUsers: { $in: filters.sharedWithUsersAny } });
+  }
+  if (filters.createdByAny && filters.createdByAny.length > 0) {
+    extra.push({ createdBy: { $in: filters.createdByAny } });
+  }
+  if (extra.length === 0) return;
+  const existingAnd = (matchStage.$and as Array<Record<string, unknown>> | undefined) ?? [];
+  matchStage.$and = [...existingAnd, ...extra];
 }
 
 function mapDoc(doc: Document | null): SkillDocument | null {
@@ -347,8 +500,6 @@ function mapDoc(doc: Document | null): SkillDocument | null {
     updatedBy: doc.updatedBy ?? "",
     updatedOn: doc.updatedOn ?? new Date(),
     isPrivate: doc.isPrivate ?? true,
-    isSystem: doc.isSystem ?? false,
-    nyxidServiceId: doc.nyxidServiceId ?? undefined,
     // Shared-with lists default to empty when the field is absent — that's
     // how every skill predating the ACL feature looks. The migration script
     // explicitly writes [] so future reads don't need this fallback, but

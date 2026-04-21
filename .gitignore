@@ -8,3 +8,5 @@ dist/
 *.key
 credentials.json
 .DS_Store
+.claude/
+ornn-web/public/logo_candidate.jpg

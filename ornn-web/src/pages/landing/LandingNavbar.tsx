@@ -8,6 +8,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import { Logo } from "@/components/brand/Logo";
 
 const NAV_LINKS = [
   { labelKey: "landing.navRegistry", href: "/registry" },
@@ -23,7 +24,7 @@ export function LandingNavbar() {
       <div className="flex h-28 items-center justify-between px-6 sm:px-10">
         {/* Logo */}
         <Link to="/" className="flex items-center shrink-0">
-          <img src="/logo.svg?v=10" alt="ORNN" className="h-10 w-auto" />
+          <Logo className="h-10 w-auto" />
         </Link>
 
         {/* Desktop nav links */}

@@ -12,8 +12,12 @@ import {
   type AuthVariables,
   nyxidAuthMiddleware,
   getAuth,
+  readUserOrgIds,
   readUserOrgMemberships,
 } from "../../middleware/nyxidAuth";
+import { NyxidUserServicesClient } from "../../clients/nyxidUserServicesClient";
+import type { SkillRepository } from "../skillCrud/repository";
+import type { ActivityRepository } from "../admin/activityRepository";
 import { AppError } from "../../shared/types/index";
 
 export interface MeRoutesConfig {
@@ -24,13 +28,16 @@ export interface MeRoutesConfig {
    * skill that was shared with "Org X" but the author since left.
    */
   nyxidBaseUrl: string;
+  skillRepo: SkillRepository;
+  activityRepo: ActivityRepository;
 }
 
 export function createMeRoutes(config: MeRoutesConfig): Hono<{ Variables: AuthVariables }> {
-  const { nyxidBaseUrl } = config;
+  const { nyxidBaseUrl, skillRepo, activityRepo } = config;
   const baseUrl = nyxidBaseUrl.replace(/\/+$/, "");
   const app = new Hono<{ Variables: AuthVariables }>();
   const auth = nyxidAuthMiddleware();
+  const userServicesClient = new NyxidUserServicesClient(baseUrl);
 
   /**
    * GET /me/orgs — caller's NyxID org memberships.
@@ -44,6 +51,28 @@ export function createMeRoutes(config: MeRoutesConfig): Hono<{ Variables: AuthVa
    * the request. Matches the read-path behavior already baked into the
    * middleware's memoized getter.
    */
+  /**
+   * GET /me — caller identity snapshot derived from the NyxID proxy's
+   * identity token. Exists so the web client can recover from a
+   * malformed OAuth id_token (some admin-created NyxID users don't
+   * get `name`/`email` into the id_token but their proxy-forwarded
+   * identity token is complete). Frontend calls this after OAuth
+   * callback to back-fill the auth store.
+   */
+  app.get("/me", auth, async (c) => {
+    const authCtx = getAuth(c);
+    return c.json({
+      data: {
+        userId: authCtx.userId,
+        email: authCtx.email,
+        displayName: authCtx.displayName,
+        roles: authCtx.roles,
+        permissions: authCtx.permissions,
+      },
+      error: null,
+    });
+  });
+
   app.get("/me/orgs", auth, async (c) => {
     // Touch the auth context so `getAuth` can surface a 401 with a clear
     // code before we reach the org-lookup helper.
@@ -104,5 +133,123 @@ export function createMeRoutes(config: MeRoutesConfig): Hono<{ Variables: AuthVa
     });
   });
 
+  /**
+   * GET /me/nyxid-services — caller's NyxID user-services (personal +
+   * org-inherited). Returns `{ items: Array<{ id, slug, label }> }`.
+   *
+   * Powers the System-skill filter: a skill is considered "system" for
+   * the caller when any of its tags matches one of these slugs/labels.
+   * Anonymous/no-token callers short-circuit to an empty list so the
+   * filter silently becomes a no-op rather than erroring.
+   */
+  app.get("/me/nyxid-services", auth, async (c) => {
+    const authCtx = getAuth(c);
+    const token = authCtx.userAccessToken;
+    if (!token) {
+      return c.json({ data: { items: [] }, error: null });
+    }
+    try {
+      const items = await userServicesClient.listUserServices(token);
+      return c.json({ data: { items }, error: null });
+    } catch {
+      // Fail-soft on read — matches the posture of /me/orgs.
+      return c.json({ data: { items: [] }, error: null });
+    }
+  });
+
+  /**
+   * GET /me/skills/grants-summary — aggregate the caller's own skills
+   * into two buckets of grantees (orgs + users) with per-bucket skill
+   * counts. Powers the registry My-Skills filter chip row: "I've
+   * shared N skills with Shining Test Org 1".
+   *
+   * Display names are resolved best-effort on the server — orgs via
+   * NyxID `/orgs/:id`, users via Ornn's activity directory. Failures
+   * fall back to the raw id so the UI never renders nothing.
+   */
+  app.get("/me/skills/grants-summary", auth, async (c) => {
+    const authCtx = getAuth(c);
+    const userId = authCtx.userId;
+    const raw = await skillRepo.aggregateGrantsByOwner(userId);
+    const [orgs, users] = await Promise.all([
+      resolveOrgDisplayNames(raw.orgs, authCtx.userAccessToken, baseUrl),
+      resolveUserDisplayNames(raw.users, activityRepo),
+    ]);
+    return c.json({ data: { orgs, users }, error: null });
+  });
+
+  /**
+   * GET /me/shared-skills/sources-summary — mirror aggregation for the
+   * Shared-with-me tab. `orgs` are bridge memberships (orgs I'm in
+   * where someone granted a private skill); `users` are authors who
+   * shared with me directly.
+   */
+  app.get("/me/shared-skills/sources-summary", auth, async (c) => {
+    const authCtx = getAuth(c);
+    const userId = authCtx.userId;
+    const userOrgIds = await readUserOrgIds(c);
+    const raw = await skillRepo.aggregateSourcesForReader(userId, userOrgIds);
+    const [orgs, users] = await Promise.all([
+      resolveOrgDisplayNames(raw.orgs, authCtx.userAccessToken, baseUrl),
+      resolveUserDisplayNames(raw.users, activityRepo),
+    ]);
+    return c.json({ data: { orgs, users }, error: null });
+  });
+
   return app;
+}
+
+/**
+ * Best-effort name resolution for a list of org ids. Calls NyxID
+ * `GET /orgs/:id` per unique id in parallel; failures are swallowed and
+ * the id is returned as its own display name so the chip row never
+ * renders blank.
+ */
+async function resolveOrgDisplayNames(
+  raw: Array<{ id: string; skillCount: number }>,
+  token: string | undefined,
+  baseUrl: string,
+): Promise<Array<{ id: string; displayName: string; skillCount: number }>> {
+  if (!token || raw.length === 0) {
+    return raw.map((r) => ({ id: r.id, displayName: r.id, skillCount: r.skillCount }));
+  }
+  const results = await Promise.all(
+    raw.map(async (r) => {
+      try {
+        const resp = await fetch(`${baseUrl}/api/v1/orgs/${encodeURIComponent(r.id)}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!resp.ok) return { ...r, displayName: r.id };
+        const body = (await resp.json()) as { display_name?: string | null };
+        return { ...r, displayName: body.display_name ?? r.id };
+      } catch {
+        return { ...r, displayName: r.id };
+      }
+    }),
+  );
+  return results;
+}
+
+/**
+ * Best-effort name resolution for a list of user ids. Hits the
+ * activity collection once per unique id through the existing email
+ * directory. A user who never signed into Ornn returns as their raw
+ * id — which the UI chip displays verbatim.
+ */
+async function resolveUserDisplayNames(
+  raw: Array<{ userId: string; skillCount: number }>,
+  activityRepo: ActivityRepository,
+): Promise<Array<{ userId: string; email: string; displayName: string; skillCount: number }>> {
+  const ids = raw.map((r) => r.userId);
+  const directory = await activityRepo.findByUserIds(ids);
+  const map = new Map(directory.map((d) => [d.userId, d]));
+  return raw.map((r) => {
+    const d = map.get(r.userId);
+    return {
+      userId: r.userId,
+      email: d?.email ?? "",
+      displayName: d?.displayName ?? d?.email ?? r.userId,
+      skillCount: r.skillCount,
+    };
+  });
 }

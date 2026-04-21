@@ -199,6 +199,41 @@ export const useAuthStore = create<AuthState>()(
           });
 
           get().startTokenRefresh();
+
+          // Back-fill from Ornn's /api/me when the OAuth id_token
+          // shipped without email / name claims (happens for
+          // admin-created NyxID users). The backend gets the full
+          // profile via the proxy identity token.
+          if (!user.email || !user.displayName || user.displayName === user.id) {
+            void (async () => {
+              try {
+                const { fetchMe } = await import("@/services/meApi");
+                const me = await fetchMe();
+                if (!me) return;
+                set((prev) => ({
+                  ...prev,
+                  user: prev.user
+                    ? {
+                        ...prev.user,
+                        email: prev.user.email || me.email,
+                        displayName:
+                          prev.user.displayName && prev.user.displayName !== prev.user.id
+                            ? prev.user.displayName
+                            : me.displayName || me.email || prev.user.id,
+                        roles: prev.user.roles?.length ? prev.user.roles : me.roles,
+                        permissions: prev.user.permissions?.length
+                          ? prev.user.permissions
+                          : me.permissions,
+                      }
+                    : prev.user,
+                }));
+              } catch (err) {
+                logger.error("Me backfill failed", {
+                  error: err instanceof Error ? err.message : String(err),
+                });
+              }
+            })();
+          }
         } catch (err) {
           logger.error("NyxID OAuth callback failed", {
             error: err instanceof Error ? err.message : String(err),

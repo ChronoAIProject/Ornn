@@ -34,7 +34,9 @@ interface RawNyxidOrg {
   id?: string;
   display_name?: string | null;
   name?: string | null;
+  /** NyxID `/api/v1/orgs` names the caller's role `your_role`; other endpoints use `role`. Accept either. */
   role?: string;
+  your_role?: string;
 }
 
 interface RawResponse {
@@ -79,7 +81,7 @@ export class NyxidOrgsClient {
     const memberships: OrgMembership[] = [];
     for (const entry of raw) {
       const userId = entry.user_id ?? entry.id;
-      const role = entry.role?.toLowerCase();
+      const role = (entry.role ?? entry.your_role)?.toLowerCase();
       if (!userId) continue;
       if (role !== "admin" && role !== "member") continue;
       memberships.push({

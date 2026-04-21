@@ -7,6 +7,7 @@
 import { Outlet, NavLink, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
 import { ToastContainer } from "@/components/ui/Toast";
+import { Logo } from "@/components/brand/Logo";
 
 interface NavItem {
   path: string;
@@ -52,15 +53,6 @@ const NAV_ITEMS: NavItem[] = [
     ),
   },
   {
-    path: "/admin/system-skills",
-    label: "System Skills",
-    icon: (
-      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" />
-      </svg>
-    ),
-  },
-  {
     path: "/admin/categories",
     label: "Categories",
     icon: (
@@ -91,8 +83,6 @@ function getBreadcrumbs(pathname: string): Array<{ label: string; path?: string 
     breadcrumbs.push({ label: "Activities" });
   } else if (pathname.startsWith("/admin/users")) {
     breadcrumbs.push({ label: "Users" });
-  } else if (pathname.startsWith("/admin/system-skills")) {
-    breadcrumbs.push({ label: "System Skills" });
   } else if (pathname.startsWith("/admin/skills")) {
     breadcrumbs.push({ label: "Skills" });
   } else if (pathname.startsWith("/admin/categories")) {
@@ -115,7 +105,7 @@ export function AdminLayout() {
         <div className="flex h-28 items-center justify-between px-4 lg:px-8">
           {/* Logo / Back Link */}
           <NavLink to="/" className="flex items-center gap-3">
-            <img src="/logo.svg?v=10" alt="ORNN" className="h-8 w-auto" />
+            <Logo className="h-8 w-auto" />
             <span className="font-heading text-lg tracking-wider text-neon-magenta">
               Admin Panel
             </span>
