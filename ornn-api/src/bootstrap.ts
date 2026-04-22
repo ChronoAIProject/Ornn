@@ -17,6 +17,7 @@ const pkg = JSON.parse(readFileSync(join(import.meta.dir, "..", "package.json"),
 
 // Auth setup
 import { proxyAuthSetup, nyxidOrgLookupMiddleware } from "./middleware/nyxidAuth";
+import { requestIdMiddleware, getRequestId } from "./middleware/requestId";
 
 // Infrastructure
 import { connectMongo, type MongoConnection } from "./infra/db/mongodb";
@@ -234,22 +235,31 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   // ---- Hono App ----
   const app = new Hono();
 
-  // CORS — must run before auth so OPTIONS preflights are handled
+  // CORS — must run before auth so OPTIONS preflights are handled.
+  // NOTE: origin reflection + credentials is a security gap that a follow-up
+  // PR replaces with an env-driven allowlist. Deployment env changes are
+  // coordinated separately; until then, the behavior below matches what
+  // shipped previously.
   app.use("*", cors({
     origin: (origin) => origin,
     allowMethods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allowHeaders: ["Content-Type", "Authorization", "X-API-Key", "X-User-Email", "X-User-Display-Name"],
-    exposeHeaders: ["Content-Length"],
+    exposeHeaders: ["Content-Length", "X-Request-ID"],
     credentials: true,
     maxAge: 86400,
   }));
 
-  // Global request logging
+  // Request-ID middleware — generate or echo X-Request-ID per request so
+  // every log line and error response carries the correlation id.
+  app.use("*", requestIdMiddleware());
+
+  // Global request logging (uses requestId set by middleware above)
   app.use("*", async (c, next) => {
     const start = Date.now();
     await next();
     const ms = Date.now() - start;
     logger.info({
+      requestId: getRequestId(c),
       method: c.req.method,
       path: c.req.path,
       status: c.res.status,
@@ -261,13 +271,14 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   // Use duck-typing: nyxidAuth inlines its own AppError class, so instanceof
   // against the shared AppError fails across module boundaries.
   app.onError((err, c) => {
+    const requestId = getRequestId(c);
     const appErr = err as AppError;
     if (appErr.name === "AppError" && typeof appErr.statusCode === "number" && typeof appErr.code === "string") {
-      logger.warn({ code: appErr.code, status: appErr.statusCode }, appErr.message);
+      logger.warn({ requestId, code: appErr.code, status: appErr.statusCode }, appErr.message);
       return c.json({ data: null, error: { code: appErr.code, message: appErr.message } }, appErr.statusCode as any);
     }
 
-    logger.error({ err }, "Unhandled error");
+    logger.error({ requestId, err }, "Unhandled error");
     return c.json(
       { data: null, error: { code: "INTERNAL_ERROR", message: "Internal server error" } },
       500,
@@ -303,15 +314,48 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   const spec = buildSpec();
   app.get("/api/openapi.json", (c) => c.json(spec));
 
-  // Health endpoint
-  app.get("/health", (c) =>
+  // Kubernetes liveness probe — process is alive. No dependency checks.
+  // `/health` kept as an alias for backward compatibility; K8s manifests
+  // should migrate to `/livez`.
+  const livenessHandler = (c: any) =>
     c.json({
       status: "ok",
       service: "ornn-api",
       version: pkg.version,
       timestamp: new Date().toISOString(),
-    }),
-  );
+    });
+  app.get("/livez", livenessHandler);
+  app.get("/health", livenessHandler);
+
+  // Kubernetes readiness probe — pings Mongo with a short timeout. Returns
+  // 503 when the dependency is unreachable so traffic is drained from this
+  // pod until it recovers.
+  app.get("/readyz", async (c) => {
+    const start = Date.now();
+    try {
+      const pingResult = Promise.resolve(db.command({ ping: 1 }));
+      await Promise.race([
+        pingResult,
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("mongo ping timeout")), 2000),
+        ),
+      ]);
+      return c.json(
+        {
+          status: "ready",
+          service: "ornn-api",
+          mongoLatencyMs: Date.now() - start,
+        },
+        200,
+      );
+    } catch (err) {
+      logger.warn({ err: (err as Error).message }, "readyz: Mongo unreachable");
+      return c.json(
+        { status: "not_ready", reason: "mongo_unreachable" },
+        503,
+      );
+    }
+  });
 
   logger.info("ornn-api bootstrap complete");
 

@@ -1,12 +1,14 @@
 /**
  * Environment variable configuration for ornn-api.
- * Fails fast on missing required variables.
+ *
+ * Validation is schema-driven via Zod. Library code throws `ConfigError`
+ * on invalid env; the entry point (`src/index.ts`) decides what to do
+ * with the failure (typically: log and exit 1).
+ *
  * @module infra/config
  */
 
-import pino from "pino";
-
-const logger = pino({ level: "error" });
+import { z } from "zod";
 
 export interface SkillConfig {
   // Service
@@ -19,9 +21,9 @@ export interface SkillConfig {
   readonly nyxidClientId: string;
   readonly nyxidClientSecret: string;
   /**
-   * NyxID API base URL (no trailing slash, no `/oauth/token` suffix). Derived
-   * from `NYXID_TOKEN_URL` when `NYXID_BASE_URL` is not set explicitly so local
-   * dev works with just the token URL.
+   * NyxID API base URL (no trailing slash, no `/oauth/token` suffix).
+   * Derived from `NYXID_TOKEN_URL` when `NYXID_BASE_URL` is not set
+   * explicitly so local dev works with just the token URL.
    */
   readonly nyxidBaseUrl: string;
 
@@ -49,55 +51,96 @@ export interface SkillConfig {
   readonly maxPackageSizeBytes: number;
 }
 
-function requiredEnv(key: string): string {
-  const value = process.env[key];
-  if (!value) {
-    logger.fatal({ key }, `Missing required environment variable: ${key}`);
-    process.exit(1);
-  }
-  return value;
-}
+/** Parses "true"/"false"/"1"/"0" into a real boolean. */
+const booleanFromEnv = z
+  .string()
+  .default("false")
+  .transform((v) => {
+    const s = v.trim().toLowerCase();
+    return s === "true" || s === "1" || s === "yes";
+  });
 
-function optionalEnv(key: string, fallback: string): string {
-  return process.env[key] ?? fallback;
+const envSchema = z.object({
+  PORT: z.coerce.number().int().positive().default(3802),
+  LOG_LEVEL: z.enum(["trace", "debug", "info", "warn", "error", "fatal"]).default("info"),
+  LOG_PRETTY: booleanFromEnv,
+
+  NYXID_TOKEN_URL: z.string().url(),
+  NYXID_BASE_URL: z.string().url().optional(),
+  NYXID_CLIENT_ID: z.string().min(1),
+  NYXID_CLIENT_SECRET: z.string().min(1),
+
+  NYX_LLM_GATEWAY_URL: z.string().url(),
+
+  MONGODB_URI: z.string().min(1),
+  MONGODB_DB: z.string().min(1).default("ornn"),
+
+  STORAGE_SERVICE_URL: z.string().min(1),
+  STORAGE_BUCKET: z.string().min(1).default("ornn"),
+
+  SANDBOX_SERVICE_URL: z.string().min(1),
+
+  DEFAULT_LLM_MODEL: z.string().min(1).default("gpt-4o"),
+  LLM_MAX_OUTPUT_TOKENS: z.coerce.number().int().positive().default(8192),
+  LLM_TEMPERATURE: z.coerce.number().min(0).max(2).default(0.7),
+  SSE_KEEP_ALIVE_INTERVAL_MS: z.coerce.number().int().positive().default(15000),
+
+  MAX_PACKAGE_SIZE_BYTES: z.coerce.number().int().positive().default(52428800),
+});
+
+/**
+ * Thrown when env parsing fails. Caller decides how to surface the
+ * failure (log + exit, throw upward, etc.). The message enumerates
+ * every missing or invalid var so operators don't have to retry.
+ */
+export class ConfigError extends Error {
+  readonly issues: z.ZodIssue[];
+
+  constructor(issues: z.ZodIssue[]) {
+    const summary = issues
+      .map((i) => `${i.path.join(".") || "<root>"}: ${i.message}`)
+      .join("; ");
+    super(`Invalid configuration: ${summary}`);
+    this.name = "ConfigError";
+    this.issues = issues;
+  }
 }
 
 export function loadConfig(): SkillConfig {
-  const tokenUrl = requiredEnv("NYXID_TOKEN_URL");
-  const baseUrl = (process.env.NYXID_BASE_URL ?? tokenUrl.replace(/\/oauth\/token\/?$/, "")).replace(/\/+$/, "");
-  return {
-    // Service
-    port: Number(optionalEnv("PORT", "3802")),
-    logLevel: optionalEnv("LOG_LEVEL", "info"),
-    logPretty: optionalEnv("LOG_PRETTY", "false") === "true",
+  const result = envSchema.safeParse(process.env);
+  if (!result.success) {
+    throw new ConfigError(result.error.issues);
+  }
+  const env = result.data;
 
-    // NyxID
+  const tokenUrl = env.NYXID_TOKEN_URL;
+  const baseUrl = (env.NYXID_BASE_URL ?? tokenUrl.replace(/\/oauth\/token\/?$/, "")).replace(/\/+$/, "");
+
+  return {
+    port: env.PORT,
+    logLevel: env.LOG_LEVEL,
+    logPretty: env.LOG_PRETTY,
+
     nyxidTokenUrl: tokenUrl,
-    nyxidClientId: requiredEnv("NYXID_CLIENT_ID"),
-    nyxidClientSecret: requiredEnv("NYXID_CLIENT_SECRET"),
+    nyxidClientId: env.NYXID_CLIENT_ID,
+    nyxidClientSecret: env.NYXID_CLIENT_SECRET,
     nyxidBaseUrl: baseUrl,
 
-    // Nyx Provider
-    nyxLlmGatewayUrl: requiredEnv("NYX_LLM_GATEWAY_URL"),
+    nyxLlmGatewayUrl: env.NYX_LLM_GATEWAY_URL,
 
-    // MongoDB
-    mongodbUri: requiredEnv("MONGODB_URI"),
-    mongodbDb: optionalEnv("MONGODB_DB", "ornn"),
+    mongodbUri: env.MONGODB_URI,
+    mongodbDb: env.MONGODB_DB,
 
-    // chrono-storage
-    storageServiceUrl: requiredEnv("STORAGE_SERVICE_URL"),
-    storageBucket: optionalEnv("STORAGE_BUCKET", "ornn"),
+    storageServiceUrl: env.STORAGE_SERVICE_URL,
+    storageBucket: env.STORAGE_BUCKET,
 
-    // chrono-sandbox
-    sandboxServiceUrl: requiredEnv("SANDBOX_SERVICE_URL"),
+    sandboxServiceUrl: env.SANDBOX_SERVICE_URL,
 
-    // LLM defaults
-    defaultLlmModel: optionalEnv("DEFAULT_LLM_MODEL", "gpt-4o"),
-    llmMaxOutputTokens: Number(optionalEnv("LLM_MAX_OUTPUT_TOKENS", "8192")),
-    llmTemperature: Number(optionalEnv("LLM_TEMPERATURE", "0.7")),
-    sseKeepAliveIntervalMs: Number(optionalEnv("SSE_KEEP_ALIVE_INTERVAL_MS", "15000")),
+    defaultLlmModel: env.DEFAULT_LLM_MODEL,
+    llmMaxOutputTokens: env.LLM_MAX_OUTPUT_TOKENS,
+    llmTemperature: env.LLM_TEMPERATURE,
+    sseKeepAliveIntervalMs: env.SSE_KEEP_ALIVE_INTERVAL_MS,
 
-    // Skill package
-    maxPackageSizeBytes: Number(optionalEnv("MAX_PACKAGE_SIZE_BYTES", "52428800")),
+    maxPackageSizeBytes: env.MAX_PACKAGE_SIZE_BYTES,
   };
 }
