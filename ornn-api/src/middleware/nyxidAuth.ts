@@ -16,6 +16,7 @@
 import type { Context, Next } from "hono";
 import { createMiddleware } from "hono/factory";
 import pino from "pino";
+import { AppError } from "../shared/types/index";
 
 const logger = pino({ level: "info" }).child({ module: "nyxidAuth" });
 
@@ -75,21 +76,6 @@ export type AuthVariables = {
    */
   getUserOrgMemberships?: () => Promise<OrgMembershipFact[]>;
 };
-
-// ---------------------------------------------------------------------------
-// AppError (inlined to avoid circular dependency)
-// ---------------------------------------------------------------------------
-
-class AppError extends Error {
-  constructor(
-    public readonly statusCode: number,
-    public readonly code: string,
-    message: string,
-  ) {
-    super(message);
-    this.name = "AppError";
-  }
-}
 
 // ---------------------------------------------------------------------------
 // JWT decode (no verification — proxy already verified the token)
