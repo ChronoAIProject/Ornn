@@ -2,17 +2,17 @@
  * Skill format rules and validation routes.
  * GET  /api/skill-format/rules    — public, returns format rules markdown
  * POST /api/skill-format/validate — authenticated, validates ZIP against rules
- * @module domains/skillFormat/routes
+ * @module domains/skills/format/routes
  */
 
 import { Hono } from "hono";
-import type { SkillService } from "../skillCrud/service";
+import type { SkillService } from "../crud/service";
 import {
   type AuthVariables,
   nyxidAuthMiddleware,
   requirePermission,
-} from "../../middleware/nyxidAuth";
-import { AppError } from "../../shared/types/index";
+} from "../../../middleware/nyxidAuth";
+import { AppError } from "../../../shared/types/index";
 
 /** Canonical skill format rules per the ornn platform spec. Updated with output-type. */
 export const SKILL_FORMAT_RULES = `# Ornn Skill Package Format Rules

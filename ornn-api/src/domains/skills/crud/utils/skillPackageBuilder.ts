@@ -5,7 +5,7 @@
  * @module utils/skillPackageBuilder
  */
 
-import { createTarBuffer } from "../../../shared/utils/tarBuilder";
+import { createTarBuffer } from "../../../../shared/utils/tarBuilder";
 
 /** Uploaded file entry with folder path metadata. */
 export interface UploadedFileEntry {

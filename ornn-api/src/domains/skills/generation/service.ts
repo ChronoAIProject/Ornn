@@ -2,12 +2,12 @@
  * Skill generation service using Nyx Provider (Responses API format).
  * Replaces Vercel AI SDK and OpenAI SDK with NyxLlmClient.
  * Streams generation events via SSE. Does NOT auto-persist.
- * @module domains/skillGeneration/service
+ * @module domains/skills/generation/service
  */
 
 import { z } from "zod";
-import type { NyxLlmClient, ResponsesApiStreamEvent, ResponsesApiInputMessage } from "../../clients/nyxLlmClient";
-import type { GeneratedSkill, SkillStreamEvent } from "../../shared/types/index";
+import type { NyxLlmClient, ResponsesApiStreamEvent, ResponsesApiInputMessage } from "../../../clients/nyxLlmClient";
+import type { GeneratedSkill, SkillStreamEvent } from "../../../shared/types/index";
 import { buildDirectGenerationPrompt, buildOpenApiGenerationPrompt, GENERATION_SYSTEM_PROMPT, OPENAPI_GENERATION_SYSTEM_PROMPT } from "./prompts";
 import pino from "pino";
 

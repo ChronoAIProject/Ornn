@@ -1,7 +1,7 @@
 /**
  * Prompt templates for skill generation via Nyx Provider.
  * Updated to include output-type field for runtime-based skills.
- * @module domains/skillGeneration/prompts
+ * @module domains/skills/generation/prompts
  */
 
 export const GENERATION_SYSTEM_PROMPT = `You are a skill generator for the ornn AI skill platform. Output ONLY a single JSON object. No markdown fences, no explanation, no extra text.

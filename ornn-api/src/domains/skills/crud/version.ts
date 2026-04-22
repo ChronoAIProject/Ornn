@@ -6,11 +6,11 @@
  * strings; all version-related operations in the skill CRUD path go
  * through here so the rules stay in one place.
  *
- * @module domains/skillCrud/version
+ * @module domains/skills/crud/version
  */
 
-import { AppError } from "../../shared/types/index";
-import { SKILL_VERSION_REGEX } from "../../shared/schemas/skillFrontmatter";
+import { AppError } from "../../../shared/types/index";
+import { SKILL_VERSION_REGEX } from "../../../shared/schemas/skillFrontmatter";
 
 export interface ParsedVersion {
   major: number;

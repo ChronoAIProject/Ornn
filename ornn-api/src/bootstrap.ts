@@ -1,7 +1,8 @@
 /**
  * Bootstrap for the consolidated ornn-api service.
- * Wires up all domains: skillCrud, skillSearch, skillGeneration, playground, admin, skillFormat.
- * Uses NyxID auth, chrono-storage, chrono-sandbox, Nyx Provider.
+ * Wires up all domains: skills (crud/search/generation/format), playground,
+ * admin, docs, me, users. Uses NyxID auth, chrono-storage, chrono-sandbox,
+ * Nyx Provider.
  * @module bootstrap
  */
 
@@ -30,18 +31,18 @@ import { NyxLlmClient } from "./clients/nyxLlmClient";
 import { NyxidOrgsClient } from "./clients/nyxidOrgsClient";
 
 // Domain: Skill CRUD
-import { SkillRepository } from "./domains/skillCrud/repository";
-import { SkillVersionRepository } from "./domains/skillCrud/skillVersionRepository";
-import { SkillService } from "./domains/skillCrud/service";
-import { createSkillRoutes } from "./domains/skillCrud/routes";
+import { SkillRepository } from "./domains/skills/crud/repository";
+import { SkillVersionRepository } from "./domains/skills/crud/skillVersionRepository";
+import { SkillService } from "./domains/skills/crud/service";
+import { createSkillRoutes } from "./domains/skills/crud/routes";
 
 // Domain: Skill Search
-import { SearchService } from "./domains/skillSearch/service";
-import { createSearchRoutes } from "./domains/skillSearch/routes";
+import { SearchService } from "./domains/skills/search/service";
+import { createSearchRoutes } from "./domains/skills/search/routes";
 
 // Domain: Skill Generation
-import { SkillGenerationService } from "./domains/skillGeneration/service";
-import { createGenerationRoutes } from "./domains/skillGeneration/routes";
+import { SkillGenerationService } from "./domains/skills/generation/service";
+import { createGenerationRoutes } from "./domains/skills/generation/routes";
 
 // Domain: Playground
 import { PlaygroundChatService } from "./domains/playground/chatService";
@@ -54,7 +55,7 @@ import { ActivityRepository } from "./domains/admin/activityRepository";
 import { createAdminRoutes } from "./domains/admin/routes";
 
 // Domain: Skill Format
-import { createFormatRoutes } from "./domains/skillFormat/routes";
+import { createFormatRoutes } from "./domains/skills/format/routes";
 
 // Domain: Docs
 import { createDocsRoutes } from "./domains/docs/routes";
