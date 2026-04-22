@@ -2,7 +2,7 @@ import { describe, test, expect, beforeEach, mock } from "bun:test";
 import { Hono } from "hono";
 import pino from "pino";
 import { createApiKeyMiddleware, getApiKeyUser } from "./apiKeyMiddleware";
-import type { IAuthClient } from "../../../../clients/authClient";
+import type { IAuthClient } from "../../../../clients/nyxid/auth";
 import { createErrorHandler } from "../../../../shared/types/index";
 
 const silentLogger = pino({ level: "silent" });

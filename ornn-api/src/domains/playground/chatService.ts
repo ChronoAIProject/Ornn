@@ -10,7 +10,7 @@ import type {
   NyxLlmClient,
   ResponsesApiInputMessage,
   ResponsesApiTool,
-} from "../../clients/nyxLlmClient";
+} from "../../clients/nyxid/llm";
 import type { SandboxClient } from "../../clients/sandboxClient";
 import type { SkillService } from "../skills/crud/service";
 import type { PlaygroundChatEvent } from "../../shared/types/index";

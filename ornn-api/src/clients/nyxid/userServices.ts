@@ -17,7 +17,7 @@
  * on reads (treat as an empty list) — identical posture to
  * `NyxidOrgsClient`.
  *
- * @module clients/nyxidUserServicesClient
+ * @module clients/nyxid/userServices
  */
 
 import pino from "pino";

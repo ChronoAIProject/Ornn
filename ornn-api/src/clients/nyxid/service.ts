@@ -1,7 +1,7 @@
 /**
  * NyxID Service Registry client.
  * Fetches registered services from NyxID for System Skills feature.
- * @module clients/nyxidServiceClient
+ * @module clients/nyxid/service
  */
 
 import pino from "pino";
