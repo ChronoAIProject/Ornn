@@ -18,8 +18,6 @@ export interface SkillSearchParams {
   scope?: SkillScope;
   page?: number;
   pageSize?: number;
-  /** Optional topic id-or-name — restricts results to that topic's members. */
-  topic?: string;
   /** System-skill tri-state; default "any". */
   systemFilter?: SystemFilter;
   /** Registry chip filters. Comma-joined client-side, parsed back on the server. */

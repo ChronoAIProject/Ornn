@@ -15,7 +15,6 @@ import {
   getAuth,
   optionalAuthMiddleware,
   readUserOrgIds,
-  readUserOrgMemberships,
 } from "../../middleware/nyxidAuth";
 import { AppError } from "../../shared/types/index";
 import pino from "pino";
@@ -29,8 +28,6 @@ const searchQuerySchema = z.object({
   page: z.coerce.number().int().min(1).optional().default(1),
   pageSize: z.coerce.number().int().min(1).max(100).optional().default(9),
   model: z.string().optional(),
-  /** Optional topic id-or-name; restricts results to skills in that topic. */
-  topic: z.string().max(128).optional(),
   /** System-skill tri-state filter. `any` (default) keeps all; `only`
    *  restricts to skills whose tags match any of the caller's NyxID
    *  service slugs; `exclude` drops those. */
@@ -93,7 +90,6 @@ export function createSearchRoutes(config: SearchRoutesConfig): Hono<{ Variables
         page: c.req.query("page"),
         pageSize: c.req.query("pageSize"),
         model: c.req.query("model"),
-        topic: c.req.query("topic"),
         systemFilter: c.req.query("systemFilter"),
         sharedWithOrgs: c.req.query("sharedWithOrgs"),
         sharedWithUsers: c.req.query("sharedWithUsers"),
@@ -108,7 +104,7 @@ export function createSearchRoutes(config: SearchRoutesConfig): Hono<{ Variables
         );
       }
 
-      const { query, mode, page, pageSize, model, topic, systemFilter } = parsed.data;
+      const { query, mode, page, pageSize, model, systemFilter } = parsed.data;
       const authCtx = c.get("auth");
       const isAnonymous = !authCtx;
 
@@ -119,7 +115,6 @@ export function createSearchRoutes(config: SearchRoutesConfig): Hono<{ Variables
         ? "public"
         : requestedScope;
       const currentUserId = authCtx?.userId ?? "";
-      const isAdmin = authCtx?.permissions.includes("ornn:admin:skill") ?? false;
 
       if (mode === "semantic") {
         if (!query || query.trim() === "") {
@@ -139,11 +134,6 @@ export function createSearchRoutes(config: SearchRoutesConfig): Hono<{ Variables
       logger.debug({ mode, scope, query: query.slice(0, 50), userId: currentUserId, anonymous: isAnonymous }, "Search request");
 
       const userOrgIds = await readUserOrgIds(c);
-      // The topic-visibility gate needs full memberships (userId + role) to
-      // decide whether the caller can see a private org-owned topic, not
-      // just the flat list of org user_ids. Anonymous callers end up with
-      // an empty array and can't reach private topics anyway.
-      const memberships = authCtx ? await readUserOrgMemberships(c) : [];
 
       // Only fetch caller services when we actually need them — either
       // for enrichment (any authenticated caller) or for the system
@@ -160,10 +150,7 @@ export function createSearchRoutes(config: SearchRoutesConfig): Hono<{ Variables
         pageSize,
         currentUserId,
         userOrgIds,
-        memberships,
         model,
-        topic,
-        isAdmin,
         callerServices,
         systemFilter,
         sharedWithOrgsAny: parseCsv(parsed.data.sharedWithOrgs),

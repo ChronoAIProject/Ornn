@@ -14,7 +14,6 @@ export async function searchSkills(
     scope: params.scope,
     page: params.page,
     pageSize: params.pageSize,
-    topic: params.topic,
     systemFilter: params.systemFilter,
     sharedWithOrgs: params.sharedWithOrgs?.length ? params.sharedWithOrgs.join(",") : undefined,
     sharedWithUsers: params.sharedWithUsers?.length ? params.sharedWithUsers.join(",") : undefined,
