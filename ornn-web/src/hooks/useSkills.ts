@@ -25,8 +25,6 @@ export function useSkills(params: {
   mode?: SkillSearchParams["mode"];
   page?: number;
   pageSize?: number;
-  /** Optional topic id-or-name — restricts results to that topic's members. */
-  topic?: string;
   systemFilter?: SystemFilter;
 }) {
   const searchParams: SkillSearchParams = {
@@ -35,7 +33,6 @@ export function useSkills(params: {
     scope: "public",
     page: params.page,
     pageSize: params.pageSize,
-    topic: params.topic,
     systemFilter: params.systemFilter,
   };
 
@@ -55,7 +52,6 @@ export function useMySkills(params: {
   mode?: SkillSearchParams["mode"];
   page?: number;
   pageSize?: number;
-  topic?: string;
   systemFilter?: SystemFilter;
   sharedWithOrgs?: string[];
   sharedWithUsers?: string[];
@@ -66,7 +62,6 @@ export function useMySkills(params: {
     scope: "mine",
     page: params.page,
     pageSize: params.pageSize,
-    topic: params.topic,
     systemFilter: params.systemFilter,
     sharedWithOrgs: params.sharedWithOrgs,
     sharedWithUsers: params.sharedWithUsers,
@@ -88,7 +83,6 @@ export function useSharedWithMeSkills(params: {
   mode?: SkillSearchParams["mode"];
   page?: number;
   pageSize?: number;
-  topic?: string;
   systemFilter?: SystemFilter;
   sharedWithOrgs?: string[];
   createdByAny?: string[];
@@ -100,7 +94,6 @@ export function useSharedWithMeSkills(params: {
     scope: "shared-with-me",
     page: params.page,
     pageSize: params.pageSize,
-    topic: params.topic,
     systemFilter: params.systemFilter,
     sharedWithOrgs: params.sharedWithOrgs,
     createdByAny: params.createdByAny,
