@@ -236,14 +236,15 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   const app = new Hono();
 
   // CORS — must run before auth so OPTIONS preflights are handled.
-  // NOTE: origin reflection + credentials is a security gap that a follow-up
-  // PR replaces with an env-driven allowlist. Deployment env changes are
-  // coordinated separately; until then, the behavior below matches what
-  // shipped previously.
+  // Origin allow-list is driven by the `ALLOWED_ORIGINS` env var. Empty
+  // list denies all cross-origin requests (same-origin still works). The
+  // previous `origin: (origin) => origin` reflection combined with
+  // `credentials: true` was a CSRF-class gap.
+  const allowedOrigins = new Set(config.allowedOrigins);
   app.use("*", cors({
-    origin: (origin) => origin,
-    allowMethods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allowHeaders: ["Content-Type", "Authorization", "X-API-Key", "X-User-Email", "X-User-Display-Name"],
+    origin: (origin) => (origin && allowedOrigins.has(origin) ? origin : null),
+    allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowHeaders: ["Content-Type", "Authorization"],
     exposeHeaders: ["Content-Length", "X-Request-ID"],
     credentials: true,
     maxAge: 86400,

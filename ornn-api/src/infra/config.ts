@@ -49,6 +49,14 @@ export interface SkillConfig {
 
   // Skill package
   readonly maxPackageSizeBytes: number;
+
+  // CORS
+  /**
+   * Allow-listed origins for cross-origin requests with credentials.
+   * Parsed from the comma-separated `ALLOWED_ORIGINS` env var. An empty
+   * list denies all cross-origin requests (same-origin still works).
+   */
+  readonly allowedOrigins: readonly string[];
 }
 
 /** Parses "true"/"false"/"1"/"0" into a real boolean. */
@@ -86,6 +94,13 @@ const envSchema = z.object({
   SSE_KEEP_ALIVE_INTERVAL_MS: z.coerce.number().int().positive().default(15000),
 
   MAX_PACKAGE_SIZE_BYTES: z.coerce.number().int().positive().default(52428800),
+
+  /**
+   * Comma-separated list of origins permitted for cross-origin requests
+   * with credentials. Empty = deny all (same-origin only). Example:
+   *   ALLOWED_ORIGINS=https://app.ornn.xyz,http://localhost:5173
+   */
+  ALLOWED_ORIGINS: z.string().default(""),
 });
 
 /**
@@ -142,5 +157,10 @@ export function loadConfig(): SkillConfig {
     sseKeepAliveIntervalMs: env.SSE_KEEP_ALIVE_INTERVAL_MS,
 
     maxPackageSizeBytes: env.MAX_PACKAGE_SIZE_BYTES,
+
+    allowedOrigins: env.ALLOWED_ORIGINS
+      .split(",")
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0),
   };
 }
