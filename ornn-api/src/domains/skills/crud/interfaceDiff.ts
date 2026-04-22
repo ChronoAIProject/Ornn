@@ -14,10 +14,10 @@
  * Description, tags, SKILL.md body, and dependency version bumps are
  * deliberately NOT considered breaking.
  *
- * @module domains/skillCrud/interfaceDiff
+ * @module domains/skills/crud/interfaceDiff
  */
 
-import type { SkillMetadata } from "../../shared/types/index";
+import type { SkillMetadata } from "../../../shared/types/index";
 
 export interface InterfaceChange {
   field: string;

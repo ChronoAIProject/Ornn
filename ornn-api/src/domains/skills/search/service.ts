@@ -2,13 +2,13 @@
  * Skill search service. Supports keyword and semantic (LLM-based) modes.
  * Semantic mode loads all skills in batches and uses LLM to rank relevance
  * based on the full skill frontmatter metadata.
- * @module domains/skillSearch/service
+ * @module domains/skills/search/service
  */
 
-import type { SkillRepository } from "../skillCrud/repository";
-import type { NyxLlmClient } from "../../clients/nyxLlmClient";
-import type { SkillDocument, SkillSearchItem, SkillSearchResponse } from "../../shared/types/index";
-import type { UserService } from "../../clients/nyxidUserServicesClient";
+import type { SkillRepository } from "../crud/repository";
+import type { NyxLlmClient } from "../../../clients/nyxLlmClient";
+import type { SkillDocument, SkillSearchItem, SkillSearchResponse } from "../../../shared/types/index";
+import type { UserService } from "../../../clients/nyxidUserServicesClient";
 import pino from "pino";
 
 /**

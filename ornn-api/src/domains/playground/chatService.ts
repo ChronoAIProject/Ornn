@@ -12,7 +12,7 @@ import type {
   ResponsesApiTool,
 } from "../../clients/nyxLlmClient";
 import type { SandboxClient } from "../../clients/sandboxClient";
-import type { SkillService } from "../skillCrud/service";
+import type { SkillService } from "../skills/crud/service";
 import type { PlaygroundChatEvent } from "../../shared/types/index";
 import pino from "pino";
 

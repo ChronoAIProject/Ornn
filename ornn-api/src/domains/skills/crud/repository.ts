@@ -1,11 +1,11 @@
 /**
  * Skill CRUD repository. Uses storageKey instead of s3Url.
- * @module domains/skillCrud/repository
+ * @module domains/skills/crud/repository
  */
 
 import type { Collection, Db, Document } from "mongodb";
-import type { SkillDocument, SkillMetadata } from "../../shared/types/index";
-import { AppError } from "../../shared/types/index";
+import type { SkillDocument, SkillMetadata } from "../../../shared/types/index";
+import { AppError } from "../../../shared/types/index";
 import pino from "pino";
 
 const logger = pino({ level: "info" }).child({ module: "skillCrudRepository" });

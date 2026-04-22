@@ -1,7 +1,7 @@
 /**
  * Skill generation routes with NyxID auth.
  * POST /api/skills/generate — SSE streaming skill generation via Nyx Provider.
- * @module domains/skillGeneration/routes
+ * @module domains/skills/generation/routes
  */
 
 import { Hono } from "hono";
@@ -12,9 +12,9 @@ import {
   nyxidAuthMiddleware,
   requirePermission,
   getAuth,
-} from "../../middleware/nyxidAuth";
-import { AppError } from "../../shared/types/index";
-import { resolveZipRoot } from "../../shared/utils/zip";
+} from "../../../middleware/nyxidAuth";
+import { AppError } from "../../../shared/types/index";
+import { resolveZipRoot } from "../../../shared/utils/zip";
 import JSZip from "jszip";
 import pino from "pino";
 

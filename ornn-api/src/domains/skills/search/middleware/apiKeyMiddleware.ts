@@ -5,8 +5,8 @@
  */
 
 import { createMiddleware } from "hono/factory";
-import { AppError, type ApiKeyInfo } from "../../../shared/types/index";
-import type { IAuthClient } from "../../../clients/authClient";
+import { AppError, type ApiKeyInfo } from "../../../../shared/types/index";
+import type { IAuthClient } from "../../../../clients/authClient";
 
 /**
  * Type for Hono context variables with API key auth.

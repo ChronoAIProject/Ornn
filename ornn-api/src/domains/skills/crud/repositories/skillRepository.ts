@@ -15,7 +15,7 @@ import type {
   UpdateSkillData,
   SkillFilters,
 } from "./skillRepository.interface";
-import { isDuplicateKeyError, AppError } from "../../../shared/types/index";
+import { isDuplicateKeyError, AppError } from "../../../../shared/types/index";
 
 // Re-export interfaces
 export type { ISkillRepository, SkillDocument, SkillMetadata, CreateSkillData, UpdateSkillData, SkillFilters };

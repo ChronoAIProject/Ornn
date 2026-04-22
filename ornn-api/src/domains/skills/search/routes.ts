@@ -1,23 +1,23 @@
 /**
  * Skill search routes with NyxID auth.
  * GET /api/skill-search — keyword and semantic (LLM) search.
- * @module domains/skillSearch/routes
+ * @module domains/skills/search/routes
  */
 
 import { Hono } from "hono";
 import { z } from "zod";
 import type { SearchService } from "./service";
-import type { SkillRepository } from "../skillCrud/repository";
-import { NyxidUserServicesClient, type UserService } from "../../clients/nyxidUserServicesClient";
+import type { SkillRepository } from "../crud/repository";
+import { NyxidUserServicesClient, type UserService } from "../../../clients/nyxidUserServicesClient";
 import {
   type AuthVariables,
   nyxidAuthMiddleware,
   getAuth,
   optionalAuthMiddleware,
   readUserOrgIds,
-} from "../../middleware/nyxidAuth";
-import { validateQuery, getValidatedQuery } from "../../middleware/validate";
-import { AppError } from "../../shared/types/index";
+} from "../../../middleware/nyxidAuth";
+import { validateQuery, getValidatedQuery } from "../../../middleware/validate";
+import { AppError } from "../../../shared/types/index";
 import pino from "pino";
 
 const logger = pino({ level: "info" }).child({ module: "skillSearchRoutes" });
