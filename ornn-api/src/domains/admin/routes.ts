@@ -19,7 +19,6 @@ import {
   getAuth,
 } from "../../middleware/nyxidAuth";
 import { validateBody, getValidatedBody } from "../../middleware/validate";
-import { AppError } from "../../shared/types/index";
 import pino from "pino";
 
 const logger = pino({ level: "info" }).child({ module: "adminRoutes" });
