@@ -280,6 +280,23 @@ Use the `/browse` skill from gstack for all web browsing. Never use `mcp__claude
 - **Never** force push.
 - Single `.gitignore` at repo root only. Must ignore `.env`, `.env.*`, `*.pem`, `*.key`, `credentials.json`.
 
+## GitHub Issue Rules
+
+Issue tracker: https://github.com/aevatarAI/chrono-ornn/issues
+
+1. **All ornn work lives as GitHub issues.** Every feature, bug, and proposal MUST be created as an issue on the tracker above. Do NOT write proposals, task specs, or tracking docs under `docs/` — use issues.
+2. **Default assignee:** every issue MUST be assigned to `chronoai-shining`.
+3. **Title prefix:** every issue title MUST start with a category tag — one of `[Bug]`, `[Feature]`, `[CI/CD]`, `[Docs]`, `[Misc]`. Example: `[Feature] Skill composition & chaining`.
+4. **No duplicates.** Before creating a new issue, search the existing issue list. If duplicates are found, keep one and close the others with a comment `Duplicate of #N`.
+5. **PR ↔ issue linkage:**
+   - Every PR MUST tag the issue(s) it resolves in the PR body (use `Closes #123` / `Fixes #123`).
+   - When the PR merges, all tagged issues MUST be closed.
+   - If a PR solves something with no existing issue, create the issue first, then tag it in the PR.
+6. **Cross-references:** when issues are related or have an execution order, add explicit references in the issue body (`Depends on #X`, `Blocks #Y`, `Related to #Z`).
+7. **Milestones for large work:** any large feature or code change MUST have a milestone, and all related issues MUST be attached to it.
+8. **Milestone deadlines:** every milestone MUST have a `due_on` date.
+9. **Labels:** every issue MUST carry at least one topic label (e.g., `api`, `dx`, `security`, `infra`, `phase:N`) so the issue's domain is visible at a glance.
+
 ## Design System
 Always read DESIGN.md before making any visual or UI decisions.
 All font choices, colors, spacing, and aesthetic direction are defined there.
