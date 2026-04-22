@@ -40,9 +40,10 @@ TypeScript, Bun workspace monorepo
 ## Branching Strategy
 
 - **`main`** — Production release branch. Protected: no direct push, no force push, PRs only from `develop`.
-- **`develop`** — Active development branch (default). Protected: no direct push, no force push, PRs from any feature branch.
+- **`develop`** — Default branch and active development branch. Contains the latest CI-passing code. Protected: no direct push, no force push, PRs from any feature branch.
 - **Workflow:** `feature/xxx` → PR → `develop` → PR → `main`
 - PR merge auto-deletes the source branch (protected branches excluded).
+- **New work MUST branch from the latest `origin/develop`.** Every feature, bug fix, or any kind of change must start from a freshly fetched `develop` — either a new branch (`git fetch && git checkout develop && git pull && git checkout -b <name>`) or a new worktree created against `origin/develop`. Never branch off a stale local `develop` or another feature branch.
 
 ## Versioning & Releases
 
@@ -279,6 +280,23 @@ Use the `/browse` skill from gstack for all web browsing. Never use `mcp__claude
 - **Never** auto-push without explicit user approval.
 - **Never** force push.
 - Single `.gitignore` at repo root only. Must ignore `.env`, `.env.*`, `*.pem`, `*.key`, `credentials.json`.
+
+## GitHub Issue Rules
+
+Issue tracker: https://github.com/aevatarAI/chrono-ornn/issues
+
+1. **All ornn work lives as GitHub issues.** Every feature, bug, and proposal MUST be created as an issue on the tracker above. Do NOT write proposals, task specs, or tracking docs under `docs/` — use issues.
+2. **Default assignee:** every issue MUST be assigned to `chronoai-shining`.
+3. **Title prefix:** every issue title MUST start with a category tag — one of `[Bug]`, `[Feature]`, `[CI/CD]`, `[Docs]`, `[Misc]`. Example: `[Feature] Skill composition & chaining`.
+4. **No duplicates.** Before creating a new issue, search the existing issue list. If duplicates are found, keep one and close the others with a comment `Duplicate of #N`.
+5. **PR ↔ issue linkage:**
+   - Every PR MUST tag the issue(s) it resolves in the PR body (use `Closes #123` / `Fixes #123`).
+   - When the PR merges, all tagged issues MUST be closed.
+   - If a PR solves something with no existing issue, create the issue first, then tag it in the PR.
+6. **Cross-references:** when issues are related or have an execution order, add explicit references in the issue body (`Depends on #X`, `Blocks #Y`, `Related to #Z`).
+7. **Milestones for large work:** any large feature or code change MUST have a milestone, and all related issues MUST be attached to it.
+8. **Milestone deadlines:** every milestone MUST have a `due_on` date.
+9. **Labels:** every issue MUST carry at least one topic label (e.g., `api`, `dx`, `security`, `infra`, `phase:N`) so the issue's domain is visible at a glance.
 
 ## Design System
 Always read DESIGN.md before making any visual or UI decisions.
