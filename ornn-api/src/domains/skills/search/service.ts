@@ -6,9 +6,9 @@
  */
 
 import type { SkillRepository } from "../crud/repository";
-import type { NyxLlmClient } from "../../../clients/nyxLlmClient";
+import type { NyxLlmClient } from "../../../clients/nyxid/llm";
 import type { SkillDocument, SkillSearchItem, SkillSearchResponse } from "../../../shared/types/index";
-import type { UserService } from "../../../clients/nyxidUserServicesClient";
+import type { UserService } from "../../../clients/nyxid/userServices";
 import pino from "pino";
 
 /**

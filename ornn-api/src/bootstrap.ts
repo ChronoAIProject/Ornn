@@ -27,8 +27,9 @@ import { connectMongo, type MongoConnection } from "./infra/db/mongodb";
 // Clients
 import { StorageClient } from "./clients/storageClient";
 import { SandboxClient } from "./clients/sandboxClient";
-import { NyxLlmClient } from "./clients/nyxLlmClient";
-import { NyxidOrgsClient } from "./clients/nyxidOrgsClient";
+import { NyxLlmClient } from "./clients/nyxid/llm";
+import { NyxidOrgsClient } from "./clients/nyxid/orgs";
+import { NyxidSaTokenProvider } from "./clients/nyxid/base";
 
 // Domain: Skill CRUD
 import { SkillRepository } from "./domains/skills/crud/repository";
@@ -100,35 +101,12 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   logger.info("MongoDB connected");
 
   // ---- SA Token Provider (shared by proxy-authenticated clients) ----
-  let saTokenCache: { accessToken: string; expiresAt: number } | null = null;
-  const getSaAccessToken = async (): Promise<string> => {
-    const now = Date.now();
-    if (saTokenCache && saTokenCache.expiresAt > now + 60_000) {
-      return saTokenCache.accessToken;
-    }
-    logger.info("Acquiring SA access token for proxy-authenticated services");
-    const body = new URLSearchParams({
-      grant_type: "client_credentials",
-      client_id: config.nyxidClientId,
-      client_secret: config.nyxidClientSecret,
-    });
-    const resp = await fetch(config.nyxidTokenUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: body.toString(),
-    });
-    if (!resp.ok) {
-      const errText = await resp.text().catch(() => "");
-      throw new Error(`SA token acquisition failed (${resp.status}): ${errText.slice(0, 200)}`);
-    }
-    const result = (await resp.json()) as { access_token: string; expires_in?: number };
-    if (!result.access_token) throw new Error("SA token response missing access_token");
-    saTokenCache = {
-      accessToken: result.access_token,
-      expiresAt: now + (result.expires_in ?? 900) * 1000,
-    };
-    return saTokenCache.accessToken;
-  };
+  const saTokenProvider = new NyxidSaTokenProvider(
+    config.nyxidTokenUrl,
+    config.nyxidClientId,
+    config.nyxidClientSecret,
+  );
+  const getSaAccessToken = () => saTokenProvider.getAccessToken();
 
   // ---- External Clients ----
   const needsProxyAuth = config.storageServiceUrl.includes("proxy");

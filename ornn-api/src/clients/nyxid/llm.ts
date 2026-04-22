@@ -2,7 +2,7 @@
  * HTTP client for Nyx Provider LLM Gateway (Responses API format).
  * All LLM calls (skill generation + playground chat) go through this client.
  * Authenticates using a Service Account (SA) token obtained via client_credentials grant.
- * @module clients/nyxLlmClient
+ * @module clients/nyxid/llm
  */
 
 import pino from "pino";

@@ -1,5 +1,5 @@
 import { describe, test, expect, mock, afterEach } from "bun:test";
-import { AuthClient } from "./authClient";
+import { AuthClient } from "./auth";
 
 const BASE_URL = "http://auth:3801";
 const SECRET = "test-secret";

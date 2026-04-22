@@ -6,7 +6,7 @@
  */
 
 import { z } from "zod";
-import type { NyxLlmClient, ResponsesApiStreamEvent, ResponsesApiInputMessage } from "../../../clients/nyxLlmClient";
+import type { NyxLlmClient, ResponsesApiStreamEvent, ResponsesApiInputMessage } from "../../../clients/nyxid/llm";
 import type { GeneratedSkill, SkillStreamEvent } from "../../../shared/types/index";
 import { buildDirectGenerationPrompt, buildOpenApiGenerationPrompt, GENERATION_SYSTEM_PROMPT, OPENAPI_GENERATION_SYSTEM_PROMPT } from "./prompts";
 import pino from "pino";
