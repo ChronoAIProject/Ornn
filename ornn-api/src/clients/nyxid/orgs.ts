@@ -8,7 +8,7 @@
  * Ornn treats org viewers as non-members (they appear in NyxID's response
  * with role `"viewer"` and are stripped here before Ornn sees them).
  *
- * @module clients/nyxidOrgsClient
+ * @module clients/nyxid/orgs
  */
 
 import pino from "pino";

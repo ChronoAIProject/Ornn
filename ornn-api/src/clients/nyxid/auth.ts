@@ -1,10 +1,10 @@
 /**
  * HTTP client for calling ornn-auth service.
  * Used for API key validation (search/MCP endpoints).
- * @module clients/authClient
+ * @module clients/nyxid/auth
  */
 
-import { AppError, INTERNAL_AUTH_HEADER, type ApiKeyInfo } from "../shared/types/index";
+import { AppError, INTERNAL_AUTH_HEADER, type ApiKeyInfo } from "../../shared/types/index";
 
 /** Interface for auth operations needed by ornn-api. */
 export interface IAuthClient {

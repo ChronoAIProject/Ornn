@@ -8,7 +8,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import type { SearchService } from "./service";
 import type { SkillRepository } from "../crud/repository";
-import { NyxidUserServicesClient, type UserService } from "../../../clients/nyxidUserServicesClient";
+import { NyxidUserServicesClient, type UserService } from "../../../clients/nyxid/userServices";
 import {
   type AuthVariables,
   nyxidAuthMiddleware,

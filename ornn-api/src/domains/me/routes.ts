@@ -15,7 +15,7 @@ import {
   readUserOrgIds,
   readUserOrgMemberships,
 } from "../../middleware/nyxidAuth";
-import { NyxidUserServicesClient } from "../../clients/nyxidUserServicesClient";
+import { NyxidUserServicesClient } from "../../clients/nyxid/userServices";
 import type { SkillRepository } from "../skills/crud/repository";
 import type { ActivityRepository } from "../admin/activityRepository";
 import { AppError } from "../../shared/types/index";
