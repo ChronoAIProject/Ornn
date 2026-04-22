@@ -89,6 +89,11 @@ function buildUrl(
 
 /**
  * Create headers with auth token.
+ *
+ * `X-User-Email` and `X-User-Display-Name` used to ride along here; they
+ * were stripped by the NyxID proxy and never read by the backend (identity
+ * is sourced from the proxy-forwarded identity token). Dead code removed
+ * in the Epic 1 architecture refactor.
  */
 function createHeaders(includeAuth: boolean = true): HeadersInit {
   const headers: HeadersInit = {
@@ -100,14 +105,6 @@ function createHeaders(includeAuth: boolean = true): HeadersInit {
     if (token) {
       headers["Authorization"] = `Bearer ${token}`;
     }
-  }
-
-  const user = useAuthStore.getState().user;
-  if (user?.email) {
-    headers["X-User-Email"] = user.email;
-  }
-  if (user?.displayName) {
-    headers["X-User-Display-Name"] = user.displayName;
   }
 
   return headers;
@@ -154,8 +151,9 @@ async function fetchWithRetry<T>(
 
   const response = await fetch(url, options);
 
-  // Handle 401/403 — attempt refresh if user was authenticated and not already retried
-  if ((response.status === 401 || response.status === 403) && !retried) {
+  // Handle 401 — attempt token refresh if the user was authenticated and we haven't retried.
+  // 403 means authenticated-but-forbidden: refresh cannot fix that, so we skip it.
+  if (response.status === 401 && !retried) {
     const hadToken = !!getAccessToken();
 
     if (hadToken) {
@@ -271,8 +269,8 @@ export async function apiDelete(path: string): Promise<void> {
     headers: createHeaders(),
   });
 
-  // Handle 401/403
-  if (response.status === 401 || response.status === 403) {
+  // Handle 401 (not 403 — token refresh cannot resolve permission errors).
+  if (response.status === 401) {
     const refreshSuccess = await attemptTokenRefresh();
 
     if (refreshSuccess) {
