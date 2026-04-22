@@ -51,7 +51,7 @@ This project uses **Changesets** (`@changesets/cli`) for versioning.
 
 - Both packages (`ornn-api`, `ornn-web`) share a unified version number (fixed mode).
 - Each package has its own `CHANGELOG.md`, auto-generated with GitHub PR links.
-- Release notes are published on [GitHub Releases](https://github.com/aevatarAI/chrono-ornn/releases).
+- Release notes are published on [GitHub Releases](https://github.com/ChronoAIProject/Ornn/releases).
 
 **Workflow:**
 
@@ -283,7 +283,7 @@ Use the `/browse` skill from gstack for all web browsing. Never use `mcp__claude
 
 ## GitHub Issue Rules
 
-Issue tracker: https://github.com/aevatarAI/chrono-ornn/issues
+Issue tracker: https://github.com/ChronoAIProject/Ornn/issues
 
 1. **All ornn work lives as GitHub issues.** Every feature, bug, and proposal MUST be created as an issue on the tracker above. Do NOT write proposals, task specs, or tracking docs under `docs/` — use issues.
 2. **Default assignee:** every issue MUST be assigned to `chronoai-shining`.
