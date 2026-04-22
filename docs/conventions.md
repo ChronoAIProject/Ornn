@@ -68,7 +68,7 @@ Content-Type: application/problem+json
 X-Request-ID: req_01HXYZ...
 
 {
-  "type": "https://github.com/aevatarAI/chrono-ornn/blob/main/docs/errors.md#validation_error",
+  "type": "https://github.com/ChronoAIProject/Ornn/blob/main/docs/errors.md#validation_error",
   "title": "Validation failed",
   "status": 400,
   "detail": "Request body failed validation",
@@ -112,7 +112,7 @@ New codes require convention-doc update. Handlers MUST NOT invent ad-hoc codes.
 Point to GitHub markdown anchors in this repository:
 
 ```
-https://github.com/aevatarAI/chrono-ornn/blob/main/docs/errors.md#<code>
+https://github.com/ChronoAIProject/Ornn/blob/main/docs/errors.md#<code>
 ```
 
 A matching `docs/errors.md` must exist with `##` headings per error code (GitHub auto-generates anchors). Zero infra cost; resolves day one. Future migration to a docs domain (`docs.ornn.xyz`) is a one-time redirect configuration; no client changes required.
@@ -345,7 +345,7 @@ Per RFC 8594 on deprecated endpoints and representations:
 ```
 Deprecation: true
 Sunset: Wed, 01 Jan 2027 00:00:00 GMT
-Link: <https://github.com/aevatarAI/chrono-ornn/blob/main/docs/deprecations.md#skill-version-v1>; rel="deprecation"
+Link: <https://github.com/ChronoAIProject/Ornn/blob/main/docs/deprecations.md#skill-version-v1>; rel="deprecation"
 ```
 
 Free-form notes go in response body, not custom headers. No `X-Skill-Deprecated` style custom headers.

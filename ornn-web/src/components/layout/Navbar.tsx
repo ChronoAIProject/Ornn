@@ -125,7 +125,7 @@ function GitHubIcon({ className }: { className?: string }) {
 function GitHubLink() {
   return (
     <a
-      href="https://github.com/aevatarAI/chrono-ornn"
+      href="https://github.com/ChronoAIProject/Ornn"
       target="_blank"
       rel="noopener noreferrer"
       className="hidden sm:flex items-center justify-center h-10 w-10 rounded-lg border border-neon-cyan/30 bg-bg-surface/50 text-text-muted transition-all duration-200 hover:text-neon-cyan hover:border-neon-cyan/50"

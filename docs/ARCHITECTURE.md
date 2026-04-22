@@ -1,6 +1,6 @@
 # Architecture — chrono-ornn
 
-> For API v1 and architecture conventions, see [`conventions.md`](./conventions.md). Active refactor work is tracked under the [`Refactor` milestone](https://github.com/aevatarAI/chrono-ornn/milestone/6).
+> For API v1 and architecture conventions, see [`conventions.md`](./conventions.md). Active refactor work is tracked under the [`Refactor` milestone](https://github.com/ChronoAIProject/Ornn/milestone/6).
 
 ## Project Overview
 

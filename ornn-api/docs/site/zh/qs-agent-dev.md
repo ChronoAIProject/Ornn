@@ -15,7 +15,7 @@ Ornn 提供三个**核心技能**，将整个工作流自动化 — 搜索、生
 ### Claude Code
 
 ```
-从 https://github.com/aevatarAI/chrono-ornn/tree/main/.ornn-apis 获取三个 Ornn 核心技能目录 — 每个目录（ornn-search-and-run、ornn-upload、ornn-build）包含一个 SKILL.md 文件。下载每个 SKILL.md 并在我项目的 .claude/skills/ 目录下创建对应的技能文件夹。最终结构应为：
+从 https://github.com/ChronoAIProject/Ornn/tree/main/.ornn-apis 获取三个 Ornn 核心技能目录 — 每个目录（ornn-search-and-run、ornn-upload、ornn-build）包含一个 SKILL.md 文件。下载每个 SKILL.md 并在我项目的 .claude/skills/ 目录下创建对应的技能文件夹。最终结构应为：
 
 .claude/skills/ornn-search-and-run/SKILL.md
 .claude/skills/ornn-upload/SKILL.md
@@ -25,7 +25,7 @@ Ornn 提供三个**核心技能**，将整个工作流自动化 — 搜索、生
 ### OpenAI Codex
 
 ```
-从 https://github.com/aevatarAI/chrono-ornn/tree/main/.ornn-apis 获取三个 Ornn 核心技能文件 — 每个目录（ornn-search-and-run、ornn-upload、ornn-build）包含一个 SKILL.md 文件。下载每个 SKILL.md 并保存到我项目的 codex/skills/ 目录。最终结构应为：
+从 https://github.com/ChronoAIProject/Ornn/tree/main/.ornn-apis 获取三个 Ornn 核心技能文件 — 每个目录（ornn-search-and-run、ornn-upload、ornn-build）包含一个 SKILL.md 文件。下载每个 SKILL.md 并保存到我项目的 codex/skills/ 目录。最终结构应为：
 
 codex/skills/ornn-search-and-run/SKILL.md
 codex/skills/ornn-upload/SKILL.md
@@ -37,7 +37,7 @@ codex/skills/ornn-build/SKILL.md
 ### Cursor
 
 ```
-从 https://github.com/aevatarAI/chrono-ornn/tree/main/.ornn-apis 获取三个 Ornn 核心技能文件 — 每个目录（ornn-search-and-run、ornn-upload、ornn-build）包含一个 SKILL.md 文件。下载每个 SKILL.md 并作为规则文件保存到我项目的 .cursor/rules/ 目录。最终结构应为：
+从 https://github.com/ChronoAIProject/Ornn/tree/main/.ornn-apis 获取三个 Ornn 核心技能文件 — 每个目录（ornn-search-and-run、ornn-upload、ornn-build）包含一个 SKILL.md 文件。下载每个 SKILL.md 并作为规则文件保存到我项目的 .cursor/rules/ 目录。最终结构应为：
 
 .cursor/rules/ornn-search-and-run.md
 .cursor/rules/ornn-upload.md
@@ -47,7 +47,7 @@ codex/skills/ornn-build/SKILL.md
 ### Antigravity
 
 ```
-从 https://github.com/aevatarAI/chrono-ornn/tree/main/.ornn-apis 获取三个 Ornn 核心技能目录 — 每个目录（ornn-search-and-run、ornn-upload、ornn-build）包含一个 SKILL.md 文件。下载每个 SKILL.md 并在我项目的 .antigravity/skills/ 目录下创建对应的技能文件夹。最终结构应为：
+从 https://github.com/ChronoAIProject/Ornn/tree/main/.ornn-apis 获取三个 Ornn 核心技能目录 — 每个目录（ornn-search-and-run、ornn-upload、ornn-build）包含一个 SKILL.md 文件。下载每个 SKILL.md 并在我项目的 .antigravity/skills/ 目录下创建对应的技能文件夹。最终结构应为：
 
 .antigravity/skills/ornn-search-and-run/SKILL.md
 .antigravity/skills/ornn-upload/SKILL.md

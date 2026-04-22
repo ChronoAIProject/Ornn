@@ -15,7 +15,7 @@ Pick the installation prompt for your agent platform, copy it, and paste it into
 ### Claude Code
 
 ```
-Fetch the three Ornn core skill directories from https://github.com/aevatarAI/chrono-ornn/tree/main/.ornn-apis — each directory (ornn-search-and-run, ornn-upload, ornn-build) contains a SKILL.md file. Download each SKILL.md and create the corresponding skill folder in my project's .claude/skills/ directory. The final structure should be:
+Fetch the three Ornn core skill directories from https://github.com/ChronoAIProject/Ornn/tree/main/.ornn-apis — each directory (ornn-search-and-run, ornn-upload, ornn-build) contains a SKILL.md file. Download each SKILL.md and create the corresponding skill folder in my project's .claude/skills/ directory. The final structure should be:
 
 .claude/skills/ornn-search-and-run/SKILL.md
 .claude/skills/ornn-upload/SKILL.md
@@ -25,7 +25,7 @@ Fetch the three Ornn core skill directories from https://github.com/aevatarAI/ch
 ### OpenAI Codex
 
 ```
-Fetch the three Ornn core skill files from https://github.com/aevatarAI/chrono-ornn/tree/main/.ornn-apis — each directory (ornn-search-and-run, ornn-upload, ornn-build) contains a SKILL.md file. Download each SKILL.md and save them into my project's codex/skills/ directory. The final structure should be:
+Fetch the three Ornn core skill files from https://github.com/ChronoAIProject/Ornn/tree/main/.ornn-apis — each directory (ornn-search-and-run, ornn-upload, ornn-build) contains a SKILL.md file. Download each SKILL.md and save them into my project's codex/skills/ directory. The final structure should be:
 
 codex/skills/ornn-search-and-run/SKILL.md
 codex/skills/ornn-upload/SKILL.md
@@ -37,7 +37,7 @@ Then add a reference to these skills in my AGENTS.md file (create it if it doesn
 ### Cursor
 
 ```
-Fetch the three Ornn core skill files from https://github.com/aevatarAI/chrono-ornn/tree/main/.ornn-apis — each directory (ornn-search-and-run, ornn-upload, ornn-build) contains a SKILL.md file. Download each SKILL.md and save them as rule files in my project's .cursor/rules/ directory. The final structure should be:
+Fetch the three Ornn core skill files from https://github.com/ChronoAIProject/Ornn/tree/main/.ornn-apis — each directory (ornn-search-and-run, ornn-upload, ornn-build) contains a SKILL.md file. Download each SKILL.md and save them as rule files in my project's .cursor/rules/ directory. The final structure should be:
 
 .cursor/rules/ornn-search-and-run.md
 .cursor/rules/ornn-upload.md
@@ -47,7 +47,7 @@ Fetch the three Ornn core skill files from https://github.com/aevatarAI/chrono-o
 ### Antigravity
 
 ```
-Fetch the three Ornn core skill directories from https://github.com/aevatarAI/chrono-ornn/tree/main/.ornn-apis — each directory (ornn-search-and-run, ornn-upload, ornn-build) contains a SKILL.md file. Download each SKILL.md and create the corresponding skill folder in my project's .antigravity/skills/ directory. The final structure should be:
+Fetch the three Ornn core skill directories from https://github.com/ChronoAIProject/Ornn/tree/main/.ornn-apis — each directory (ornn-search-and-run, ornn-upload, ornn-build) contains a SKILL.md file. Download each SKILL.md and create the corresponding skill folder in my project's .antigravity/skills/ directory. The final structure should be:
 
 .antigravity/skills/ornn-search-and-run/SKILL.md
 .antigravity/skills/ornn-upload/SKILL.md
