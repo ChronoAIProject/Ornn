@@ -1,5 +1,7 @@
 # Architecture — chrono-ornn
 
+> For API v1 and architecture conventions, see [`conventions.md`](./conventions.md). Active refactor work is tracked under the [`Refactor` milestone](https://github.com/aevatarAI/chrono-ornn/milestone/6).
+
 ## Project Overview
 
 chrono-ornn is an AI skill platform. Users create, publish, search, and execute AI skills (packaged prompts + scripts) via a web UI or API. Authentication and LLM calls go through NyxID. Script execution runs in chrono-sandbox.
