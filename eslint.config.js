@@ -28,4 +28,39 @@ export default tseslint.config(
       "@typescript-eslint/no-explicit-any": "warn",
     },
   },
+  // Architecture boundary: route handlers must not invoke repositories
+  // directly. Routes depend on services; services own data access.
+  //
+  // This rule catches only *runtime* repo imports in route files.
+  // `import type { ... }` is still allowed so route files can type
+  // their Config interfaces off the repository classes (common pattern
+  // while the full service-extraction refactor is pending).
+  //
+  // Catches the easy case. The harder case (runtime method calls via
+  // config-passed repo instances) requires a custom rule; tracked as
+  // follow-up to Epic 4.
+  {
+    files: ["ornn-api/src/domains/**/routes.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["**/repository", "**/repositories/*"],
+              message:
+                "Routes must not import repositories at runtime. Use the service layer instead. `import type` is still allowed.",
+              allowTypeImports: true,
+            },
+            {
+              group: ["**/activityRepository"],
+              message:
+                "Routes must not import ActivityRepository at runtime. Use ActivityService (or the domain service) instead. `import type` is still allowed.",
+              allowTypeImports: true,
+            },
+          ],
+        },
+      ],
+    },
+  },
 );
