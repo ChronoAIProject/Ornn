@@ -1,18 +1,18 @@
 /**
  * Skill CRUD service. Uses chrono-storage via StorageClient (bucket-based API).
  * Replaces direct S3 access. Uses storageKey instead of s3Url.
- * @module domains/skillCrud/service
+ * @module domains/skills/crud/service
  */
 
 import { createHash } from "node:crypto";
 import { randomUUID } from "node:crypto";
 import type { SkillRepository } from "./repository";
 import type { SkillVersionRepository } from "./skillVersionRepository";
-import type { IStorageClient } from "../../clients/storageClient";
-import type { SkillDocument, SkillMetadata, SkillDetailResponse, SkillVersionDocument } from "../../shared/types/index";
-import { AppError } from "../../shared/types/index";
-import { validateSkillFrontmatter } from "../../shared/schemas/skillFrontmatter";
-import { resolveZipRoot } from "../../shared/utils/zip";
+import type { IStorageClient } from "../../../clients/storageClient";
+import type { SkillDocument, SkillMetadata, SkillDetailResponse, SkillVersionDocument } from "../../../shared/types/index";
+import { AppError } from "../../../shared/types/index";
+import { validateSkillFrontmatter } from "../../../shared/schemas/skillFrontmatter";
+import { resolveZipRoot } from "../../../shared/utils/zip";
 import { parseVersion, isGreater } from "./version";
 import { diffSkillInterface, type InterfaceChange } from "./interfaceDiff";
 import { parse as parseYaml } from "yaml";

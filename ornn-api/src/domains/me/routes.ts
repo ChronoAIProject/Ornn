@@ -16,7 +16,7 @@ import {
   readUserOrgMemberships,
 } from "../../middleware/nyxidAuth";
 import { NyxidUserServicesClient } from "../../clients/nyxidUserServicesClient";
-import type { SkillRepository } from "../skillCrud/repository";
+import type { SkillRepository } from "../skills/crud/repository";
 import type { ActivityRepository } from "../admin/activityRepository";
 import { AppError } from "../../shared/types/index";
 
@@ -71,6 +71,32 @@ export function createMeRoutes(config: MeRoutesConfig): Hono<{ Variables: AuthVa
       },
       error: null,
     });
+  });
+
+  /**
+   * POST /activity/login — caller records a session-opened event.
+   * POST /activity/logout — caller records a session-closed event.
+   *
+   * Client-reported telemetry: the frontend fires these fire-and-forget
+   * after OAuth callback success and before sign-out. Identity fields
+   * are pulled from the decoded NyxID identity token (never from
+   * client-supplied headers, which the proxy strips).
+   *
+   * Kept under `/activity/*` for v0 back-compat — Epic 2 promotes these
+   * to `POST /v1/me/events` with a `{ type: "login" | "logout" }` body.
+   * Moved from the `admin` domain in the Epic 1 reorg; "any authed user"
+   * was never an admin operation.
+   */
+  app.post("/activity/login", auth, async (c) => {
+    const authCtx = getAuth(c);
+    await activityRepo.log(authCtx.userId, authCtx.email, authCtx.displayName, "login");
+    return c.json({ data: { success: true }, error: null });
+  });
+
+  app.post("/activity/logout", auth, async (c) => {
+    const authCtx = getAuth(c);
+    await activityRepo.log(authCtx.userId, authCtx.email, authCtx.displayName, "logout");
+    return c.json({ data: { success: true }, error: null });
   });
 
   app.get("/me/orgs", auth, async (c) => {

@@ -4,14 +4,14 @@
  * GET  /api/skills/:idOrName — read  (ornn:skill:read)
  * PUT  /api/skills/:id     — update (ornn:skill:update + owner/admin)
  * DELETE /api/skills/:id   — delete (ornn:skill:delete + owner/admin)
- * @module domains/skillCrud/routes
+ * @module domains/skills/crud/routes
  */
 
 import { Hono } from "hono";
 import { z } from "zod";
 import type { SkillService } from "./service";
 import type { SkillRepository } from "./repository";
-import type { ActivityRepository } from "../admin/activityRepository";
+import type { ActivityRepository } from "../../admin/activityRepository";
 import {
   type AuthVariables,
   nyxidAuthMiddleware,
@@ -19,9 +19,9 @@ import {
   requirePermission,
   getAuth,
   readUserOrgMemberships,
-} from "../../middleware/nyxidAuth";
-import { validateBody, getValidatedBody } from "../../middleware/validate";
-import { AppError } from "../../shared/types/index";
+} from "../../../middleware/nyxidAuth";
+import { validateBody, getValidatedBody } from "../../../middleware/validate";
+import { AppError } from "../../../shared/types/index";
 import { canReadSkill, canManageSkill } from "./authorize";
 import pino from "pino";
 

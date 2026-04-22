@@ -5,12 +5,12 @@
  * `_id` is `${skillGuid}@${version}` which gives us free uniqueness on
  * (skillGuid, version) without a separate compound unique index.
  *
- * @module domains/skillCrud/skillVersionRepository
+ * @module domains/skills/crud/skillVersionRepository
  */
 
 import type { Collection, Db, Document } from "mongodb";
-import type { SkillVersionDocument, SkillMetadata } from "../../shared/types/index";
-import { AppError } from "../../shared/types/index";
+import type { SkillVersionDocument, SkillMetadata } from "../../../shared/types/index";
+import { AppError } from "../../../shared/types/index";
 import pino from "pino";
 
 const logger = pino({ level: "info" }).child({ module: "skillVersionRepository" });

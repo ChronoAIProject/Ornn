@@ -9,9 +9,9 @@ import { Hono } from "hono";
 import { z } from "zod";
 import type { AdminService } from "./service";
 import type { ActivityRepository, ActivityAction } from "./activityRepository";
-import type { SkillRepository } from "../skillCrud/repository";
-import type { SkillService } from "../skillCrud/service";
-import type { SkillGenerationService } from "../skillGeneration/service";
+import type { SkillRepository } from "../skills/crud/repository";
+import type { SkillService } from "../skills/crud/service";
+import type { SkillGenerationService } from "../skills/generation/service";
 import {
   type AuthVariables,
   nyxidAuthMiddleware,
@@ -59,24 +59,10 @@ export function createAdminRoutes(config: AdminRoutesConfig): Hono<{ Variables: 
 
   const auth = nyxidAuthMiddleware();
 
-  // Activity logging endpoint — any authenticated user can log their own login.
-  // Identity fields come from the decoded NyxID identity token (authCtx) rather
-  // than X-User-* headers, because the NyxID proxy strips custom headers before
-  // forwarding. The identity token is the single source of truth for who the
-  // caller is on this request.
-  app.post("/activity/login", auth, async (c) => {
-    const authCtx = getAuth(c);
-    await activityRepo.log(authCtx.userId, authCtx.email, authCtx.displayName, "login");
-    return c.json({ data: { success: true }, error: null });
-  });
-
-  app.post("/activity/logout", auth, async (c) => {
-    const authCtx = getAuth(c);
-    await activityRepo.log(authCtx.userId, authCtx.email, authCtx.displayName, "logout");
-    return c.json({ data: { success: true }, error: null });
-  });
-
-  // All /admin/* routes require auth + admin permission
+  // All /admin/* routes require auth + admin permission.
+  // `/activity/login` and `/activity/logout` now live under the `me`
+  // domain — this is a caller-scoped telemetry event, not an admin
+  // operation.
   app.use("/admin/*", auth);
 
   // =========================================================================

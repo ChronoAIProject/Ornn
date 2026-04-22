@@ -23,10 +23,10 @@
  *   author wants collaborators to edit, they can grant the user directly
  *   (future work — the current ACL is read-only).
  *
- * @module domains/skillCrud/authorize
+ * @module domains/skills/crud/authorize
  */
 
-import type { OrgMembershipFact } from "../../middleware/nyxidAuth";
+import type { OrgMembershipFact } from "../../../middleware/nyxidAuth";
 
 export interface SkillOwnership {
   /** Author (person user_id). Always present. */

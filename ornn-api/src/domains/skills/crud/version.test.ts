@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { AppError } from "../../shared/types/index";
+import { AppError } from "../../../shared/types/index";
 import { parseVersion, compareVersions, isGreater } from "./version";
 
 describe("parseVersion", () => {

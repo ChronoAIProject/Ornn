@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { SkillMetadata } from "../../shared/types/index";
+import type { SkillMetadata } from "../../../shared/types/index";
 import { diffSkillInterface } from "./interfaceDiff";
 
 function meta(overrides: Partial<SkillMetadata> = {}): SkillMetadata {
