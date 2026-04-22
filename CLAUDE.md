@@ -35,7 +35,7 @@ TypeScript, Bun workspace monorepo
 - No hardcoded secrets, credentials, API keys, tokens in code — ever.
 - Backend tests: `bun test`. Frontend tests: not yet wired (see Testing in Tech Stack above).
 - Unit tests colocated with source files. Integration tests in `tests/` directory.
-- Always use Docker to run and test locally. Do not run services directly with `bun run dev`. (Policy; not enforced in CI — CI currently does not build or run Docker.)
+- Always use Docker to run and test locally. Do not run services directly with `bun run dev`. CI builds both `ornn-api` and `ornn-web` images on every PR (`docker-build` job) so Dockerfile breakage surfaces immediately.
 
 ## Branching Strategy
 

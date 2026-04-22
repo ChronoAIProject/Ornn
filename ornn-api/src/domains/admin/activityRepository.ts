@@ -38,10 +38,10 @@ export interface UserSummary {
 }
 
 export class ActivityRepository {
-  private readonly collection: Collection;
+  private readonly collection: Collection<ActivityDocument>;
 
   constructor(db: Db) {
-    this.collection = db.collection("activities");
+    this.collection = db.collection<ActivityDocument>("activities");
     this.ensureIndexes().catch((err) =>
       logger.error({ err }, "Failed to create activity indexes"),
     );
@@ -60,8 +60,8 @@ export class ActivityRepository {
     action: ActivityAction,
     details: Record<string, unknown> = {},
   ): Promise<void> {
-    const doc = {
-      _id: randomUUID(),
+    const doc: ActivityDocument = {
+      _id: randomUUID() as unknown as string,
       userId,
       userEmail,
       userDisplayName,

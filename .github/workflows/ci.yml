@@ -51,3 +51,21 @@ jobs:
           sudo mv gitleaks /usr/local/bin/
       - name: Scan for secrets
         run: gitleaks detect --source . --log-opts="origin/${{ github.base_ref }}..HEAD" --verbose
+
+  docker-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build ornn-api image
+        run: docker build -t ornn-api-ci -f ornn-api/Dockerfile .
+      - name: Build ornn-web image
+        run: |
+          docker build -t ornn-web-ci \
+            --build-arg VITE_API_BASE_URL=https://ci.placeholder.invalid \
+            --build-arg VITE_NYXID_AUTHORIZE_URL=https://ci.placeholder.invalid/authorize \
+            --build-arg VITE_NYXID_TOKEN_URL=https://ci.placeholder.invalid/token \
+            --build-arg VITE_NYXID_CLIENT_ID=ci-placeholder \
+            --build-arg VITE_NYXID_REDIRECT_URI=https://ci.placeholder.invalid/callback \
+            --build-arg VITE_NYXID_LOGOUT_URL=https://ci.placeholder.invalid/logout \
+            -f ornn-web/Dockerfile .
