@@ -18,6 +18,7 @@ import {
   requirePermission,
   getAuth,
 } from "../../middleware/nyxidAuth";
+import { validateBody, getValidatedBody } from "../../middleware/validate";
 import { AppError } from "../../shared/types/index";
 import pino from "pino";
 
@@ -254,18 +255,11 @@ export function createAdminRoutes(config: AdminRoutesConfig): Hono<{ Variables: 
   app.post(
     "/admin/categories",
     requirePermission("ornn:admin:category"),
+    validateBody(createCategorySchema, "VALIDATION_ERROR"),
     async (c) => {
-      const body = await c.req.json();
-      const parsed = createCategorySchema.safeParse(body);
-      if (!parsed.success) {
-        throw AppError.badRequest(
-          "VALIDATION_ERROR",
-          parsed.error.issues.map((i) => i.message).join(", "),
-        );
-      }
-
-      const category = await adminService.createCategory(parsed.data);
-      logger.info({ name: parsed.data.name }, "Category created via admin API");
+      const body = getValidatedBody<z.infer<typeof createCategorySchema>>(c);
+      const category = await adminService.createCategory(body);
+      logger.info({ name: body.name }, "Category created via admin API");
       return c.json({ data: category, error: null }, 201);
     },
   );
@@ -273,18 +267,11 @@ export function createAdminRoutes(config: AdminRoutesConfig): Hono<{ Variables: 
   app.put(
     "/admin/categories/:id",
     requirePermission("ornn:admin:category"),
+    validateBody(updateCategorySchema, "VALIDATION_ERROR"),
     async (c) => {
       const id = c.req.param("id");
-      const body = await c.req.json();
-      const parsed = updateCategorySchema.safeParse(body);
-      if (!parsed.success) {
-        throw AppError.badRequest(
-          "VALIDATION_ERROR",
-          parsed.error.issues.map((i) => i.message).join(", "),
-        );
-      }
-
-      const category = await adminService.updateCategory(id, parsed.data);
+      const body = getValidatedBody<z.infer<typeof updateCategorySchema>>(c);
+      const category = await adminService.updateCategory(id, body);
       return c.json({ data: category, error: null });
     },
   );
@@ -316,17 +303,10 @@ export function createAdminRoutes(config: AdminRoutesConfig): Hono<{ Variables: 
   app.post(
     "/admin/tags",
     requirePermission("ornn:admin:skill"),
+    validateBody(createTagSchema, "VALIDATION_ERROR"),
     async (c) => {
-      const body = await c.req.json();
-      const parsed = createTagSchema.safeParse(body);
-      if (!parsed.success) {
-        throw AppError.badRequest(
-          "VALIDATION_ERROR",
-          parsed.error.issues.map((i) => i.message).join(", "),
-        );
-      }
-
-      const tag = await adminService.createTag(parsed.data.name);
+      const body = getValidatedBody<z.infer<typeof createTagSchema>>(c);
+      const tag = await adminService.createTag(body.name);
       return c.json({ data: tag, error: null }, 201);
     },
   );
