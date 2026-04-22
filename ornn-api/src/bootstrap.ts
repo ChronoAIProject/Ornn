@@ -268,15 +268,16 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
     }, "Request completed");
   });
 
-  // Global error handler
-  // Use duck-typing: nyxidAuth inlines its own AppError class, so instanceof
-  // against the shared AppError fails across module boundaries.
+  // Global error handler — single `AppError` hierarchy across the whole
+  // service, so `instanceof` is sufficient (no more duck-typing).
   app.onError((err, c) => {
     const requestId = getRequestId(c);
-    const appErr = err as AppError;
-    if (appErr.name === "AppError" && typeof appErr.statusCode === "number" && typeof appErr.code === "string") {
-      logger.warn({ requestId, code: appErr.code, status: appErr.statusCode }, appErr.message);
-      return c.json({ data: null, error: { code: appErr.code, message: appErr.message } }, appErr.statusCode as any);
+    if (err instanceof AppError) {
+      logger.warn({ requestId, code: err.code, status: err.statusCode }, err.message);
+      return c.json(
+        { data: null, error: { code: err.code, message: err.message } },
+        err.statusCode as any,
+      );
     }
 
     logger.error({ requestId, err }, "Unhandled error");
