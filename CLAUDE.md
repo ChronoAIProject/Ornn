@@ -40,9 +40,10 @@ TypeScript, Bun workspace monorepo
 ## Branching Strategy
 
 - **`main`** — Production release branch. Protected: no direct push, no force push, PRs only from `develop`.
-- **`develop`** — Active development branch (default). Protected: no direct push, no force push, PRs from any feature branch.
+- **`develop`** — Default branch and active development branch. Contains the latest CI-passing code. Protected: no direct push, no force push, PRs from any feature branch.
 - **Workflow:** `feature/xxx` → PR → `develop` → PR → `main`
 - PR merge auto-deletes the source branch (protected branches excluded).
+- **New work MUST branch from the latest `origin/develop`.** Every feature, bug fix, or any kind of change must start from a freshly fetched `develop` — either a new branch (`git fetch && git checkout develop && git pull && git checkout -b <name>`) or a new worktree created against `origin/develop`. Never branch off a stale local `develop` or another feature branch.
 
 ## Versioning & Releases
 
