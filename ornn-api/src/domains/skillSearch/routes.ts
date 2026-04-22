@@ -16,6 +16,7 @@ import {
   optionalAuthMiddleware,
   readUserOrgIds,
 } from "../../middleware/nyxidAuth";
+import { validateQuery, getValidatedQuery } from "../../middleware/validate";
 import { AppError } from "../../shared/types/index";
 import pino from "pino";
 
@@ -82,38 +83,16 @@ export function createSearchRoutes(config: SearchRoutesConfig): Hono<{ Variables
   app.get(
     "/skill-search",
     optionalAuth,
+    validateQuery(searchQuerySchema, "INVALID_QUERY"),
     async (c) => {
-      const raw = {
-        query: c.req.query("query"),
-        mode: c.req.query("mode"),
-        scope: c.req.query("scope"),
-        page: c.req.query("page"),
-        pageSize: c.req.query("pageSize"),
-        model: c.req.query("model"),
-        systemFilter: c.req.query("systemFilter"),
-        sharedWithOrgs: c.req.query("sharedWithOrgs"),
-        sharedWithUsers: c.req.query("sharedWithUsers"),
-        createdByAny: c.req.query("createdByAny"),
-      };
-
-      const parsed = searchQuerySchema.safeParse(raw);
-      if (!parsed.success) {
-        throw AppError.badRequest(
-          "INVALID_QUERY",
-          parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join(", "),
-        );
-      }
-
-      const { query, mode, page, pageSize, model, systemFilter } = parsed.data;
+      const parsed = getValidatedQuery<z.infer<typeof searchQuerySchema>>(c);
+      const { query, mode, page, pageSize, model, systemFilter } = parsed;
       const authCtx = c.get("auth");
       const isAnonymous = !authCtx;
 
       // Anonymous users can only search public scope.
       // `shared-with-me` implies an identified caller — collapse to public for anonymous.
-      const requestedScope = parsed.data.scope;
-      const scope = isAnonymous
-        ? "public"
-        : requestedScope;
+      const scope = isAnonymous ? "public" : parsed.scope;
       const currentUserId = authCtx?.userId ?? "";
 
       if (mode === "semantic") {
@@ -153,9 +132,9 @@ export function createSearchRoutes(config: SearchRoutesConfig): Hono<{ Variables
         model,
         callerServices,
         systemFilter,
-        sharedWithOrgsAny: parseCsv(parsed.data.sharedWithOrgs),
-        sharedWithUsersAny: parseCsv(parsed.data.sharedWithUsers),
-        createdByAny: parseCsv(parsed.data.createdByAny),
+        sharedWithOrgsAny: parseCsv(parsed.sharedWithOrgs),
+        sharedWithUsersAny: parseCsv(parsed.sharedWithUsers),
+        createdByAny: parseCsv(parsed.createdByAny),
       });
 
       return c.json({ data: response, error: null });

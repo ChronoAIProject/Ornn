@@ -20,6 +20,7 @@ import {
   getAuth,
   readUserOrgMemberships,
 } from "../../middleware/nyxidAuth";
+import { validateBody, getValidatedBody } from "../../middleware/validate";
 import { AppError } from "../../shared/types/index";
 import { canReadSkill, canManageSkill } from "./authorize";
 import pino from "pino";
@@ -213,6 +214,7 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
     "/skills/:idOrName/versions/:version",
     auth,
     requirePermission("ornn:skill:update"),
+    validateBody(deprecationPatchSchema, "INVALID_DEPRECATION_PATCH"),
     async (c) => {
       const idOrName = c.req.param("idOrName");
       const version = c.req.param("version");
@@ -237,23 +239,12 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
         );
       }
 
-      let body: unknown;
-      try {
-        body = await c.req.json();
-      } catch {
-        throw AppError.badRequest("INVALID_BODY", "Request body must be valid JSON");
-      }
-      const parsed = deprecationPatchSchema.safeParse(body);
-      if (!parsed.success) {
-        const msg = parsed.error.issues.map((i) => `${i.path.join(".") || "<root>"}: ${i.message}`).join("; ");
-        throw AppError.badRequest("INVALID_DEPRECATION_PATCH", msg);
-      }
-
+      const body = getValidatedBody<z.infer<typeof deprecationPatchSchema>>(c);
       const result = await skillService.setVersionDeprecation(
         idOrName,
         version,
-        parsed.data.isDeprecated,
-        parsed.data.deprecationNote ?? null,
+        body.isDeprecated,
+        body.deprecationNote ?? null,
       );
 
       activityRepo
@@ -371,6 +362,7 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
     "/skills/:id/permissions",
     auth,
     requirePermission("ornn:skill:update"),
+    validateBody(permissionsPatchSchema, "INVALID_PERMISSIONS"),
     async (c) => {
       const guid = c.req.param("id");
       const authCtx = getAuth(c);
@@ -392,21 +384,8 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
         );
       }
 
-      let body: unknown;
-      try {
-        body = await c.req.json();
-      } catch {
-        throw AppError.badRequest("INVALID_BODY", "Request body must be valid JSON");
-      }
-      const parsed = permissionsPatchSchema.safeParse(body);
-      if (!parsed.success) {
-        throw AppError.badRequest(
-          "INVALID_PERMISSIONS",
-          parsed.error.issues.map((i) => `${i.path.join(".") || "<root>"}: ${i.message}`).join("; "),
-        );
-      }
-
-      const updated = await skillService.setSkillPermissions(guid, authCtx.userId, parsed.data);
+      const body = getValidatedBody<z.infer<typeof permissionsPatchSchema>>(c);
+      const updated = await skillService.setSkillPermissions(guid, authCtx.userId, body);
 
       activityRepo?.log(authCtx.userId, authCtx.email, authCtx.displayName, "skill:permissions_change", {
         skillId: guid,

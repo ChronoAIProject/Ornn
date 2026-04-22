@@ -18,7 +18,7 @@ import {
   type AuthVariables,
   nyxidAuthMiddleware,
 } from "../../middleware/nyxidAuth";
-import { AppError } from "../../shared/types/index";
+import { validateQuery, getValidatedQuery } from "../../middleware/validate";
 
 const searchQuerySchema = z.object({
   q: z.string().max(256).optional().default(""),
@@ -42,21 +42,16 @@ export function createUserRoutes(config: UserRoutesConfig): Hono<{ Variables: Au
    * set is scoped to users who have actually interacted with Ornn
    * (have an activity row).
    */
-  app.get("/users/search", auth, async (c) => {
-    const parsed = searchQuerySchema.safeParse({
-      q: c.req.query("q"),
-      limit: c.req.query("limit"),
-    });
-    if (!parsed.success) {
-      throw AppError.badRequest(
-        "INVALID_QUERY",
-        parsed.error.issues.map((i) => `${i.path.join(".") || "<root>"}: ${i.message}`).join("; "),
-      );
-    }
-
-    const results = await activityRepo.searchUsersByEmail(parsed.data.q, parsed.data.limit);
-    return c.json({ data: { items: results }, error: null });
-  });
+  app.get(
+    "/users/search",
+    auth,
+    validateQuery(searchQuerySchema, "INVALID_QUERY"),
+    async (c) => {
+      const parsed = getValidatedQuery<z.infer<typeof searchQuerySchema>>(c);
+      const results = await activityRepo.searchUsersByEmail(parsed.q, parsed.limit);
+      return c.json({ data: { items: results }, error: null });
+    },
+  );
 
   /**
    * GET /users/resolve?ids=id1,id2,...

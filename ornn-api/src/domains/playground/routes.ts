@@ -14,7 +14,7 @@ import {
   requirePermission,
   getAuth,
 } from "../../middleware/nyxidAuth";
-import { AppError } from "../../shared/types/index";
+import { validateBody, getValidatedBody } from "../../middleware/validate";
 import pino from "pino";
 
 const logger = pino({ level: "info" }).child({ module: "playgroundRoutes" });
@@ -58,18 +58,12 @@ export function createPlaygroundRoutes(config: PlaygroundRoutesConfig): Hono<{ V
   app.post(
     "/playground/chat",
     requirePermission("ornn:playground:use"),
+    validateBody(chatRequestSchema, "VALIDATION_ERROR"),
     async (c) => {
       const authCtx = getAuth(c);
-      const body = await c.req.json();
-      const parsed = chatRequestSchema.safeParse(body);
-      if (!parsed.success) {
-        throw AppError.badRequest(
-          "VALIDATION_ERROR",
-          parsed.error.issues.map((i) => i.message).join(", "),
-        );
-      }
+      const parsed = getValidatedBody<z.infer<typeof chatRequestSchema>>(c);
 
-      logger.info({ userId: authCtx.userId, messageCount: parsed.data.messages.length }, "Chat request");
+      logger.info({ userId: authCtx.userId, messageCount: parsed.messages.length }, "Chat request");
 
       c.header("Cache-Control", "no-cache");
       c.header("Connection", "keep-alive");
@@ -82,7 +76,7 @@ export function createPlaygroundRoutes(config: PlaygroundRoutesConfig): Hono<{ V
 
         try {
           const signal = c.req.raw.signal;
-          const chatRequest: PlaygroundChatRequest = parsed.data;
+          const chatRequest: PlaygroundChatRequest = parsed;
 
           for await (const event of chatService.chat(authCtx.userId, chatRequest, signal)) {
             await stream.writeSSE({ data: JSON.stringify(event) });
