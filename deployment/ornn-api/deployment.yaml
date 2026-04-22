@@ -28,13 +28,15 @@ spec:
                 name: ornn-api-secret
           readinessProbe:
             httpGet:
-              path: /health
+              path: /readyz
               port: 3802
             initialDelaySeconds: 10
             periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
           livenessProbe:
             httpGet:
-              path: /health
+              path: /livez
               port: 3802
             initialDelaySeconds: 20
             periodSeconds: 10
