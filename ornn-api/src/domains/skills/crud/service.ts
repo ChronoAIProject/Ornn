@@ -11,6 +11,7 @@ import type { SkillVersionRepository } from "./skillVersionRepository";
 import type { IStorageClient } from "../../../clients/storageClient";
 import type { SkillDocument, SkillMetadata, SkillDetailResponse, SkillVersionDocument } from "../../../shared/types/index";
 import { AppError } from "../../../shared/types/index";
+import { isReservedVerb } from "../../../shared/reservedVerbs";
 import { validateSkillFrontmatter } from "../../../shared/schemas/skillFrontmatter";
 import { resolveZipRoot } from "../../../shared/utils/zip";
 import { parseVersion, isGreater } from "./version";
@@ -81,7 +82,16 @@ export class SkillService {
     const { name, description, version, license, compatibility, metadata } = await this.extractSkillInfo(zipBuffer);
     const parsedVersion = parseVersion(version);
 
-    // 3. Check name uniqueness
+    // 3a. Reject reserved-verb names — would collide with `/v1/skills/{verb}`
+    //     action paths and make the skill unreachable via the canonical read.
+    if (isReservedVerb("skill", name)) {
+      throw AppError.badRequest(
+        "RESERVED_NAME",
+        `Skill name '${name}' is reserved — pick a different name`,
+      );
+    }
+
+    // 3b. Check name uniqueness
     const existing = await this.skillRepo.findByName(name);
     if (existing) {
       throw AppError.conflict("SKILL_NAME_EXISTS", `Skill '${name}' already exists`);
