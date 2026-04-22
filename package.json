@@ -16,7 +16,9 @@
     "release": "changeset tag",
     "lint": "eslint ornn-api/src ornn-web/src",
     "lint:fix": "eslint ornn-api/src ornn-web/src --fix",
-    "typecheck": "bunx tsc --noEmit -p ornn-web/tsconfig.json",
+    "typecheck:api": "bunx tsc --noEmit -p ornn-api/tsconfig.json",
+    "typecheck:web": "bunx tsc --noEmit -p ornn-web/tsconfig.json",
+    "typecheck": "bun run typecheck:api && bun run typecheck:web",
     "build:web": "bun run --filter ornn-web build"
   },
   "devDependencies": {

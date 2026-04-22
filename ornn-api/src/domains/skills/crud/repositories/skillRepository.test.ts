@@ -19,7 +19,9 @@ function createMockCursor(docs: any[] = []) {
 function createMockCollection() {
   return {
     insertOne: mock(async () => ({ acknowledged: true })),
-    findOne: mock(async () => null),
+    // Explicitly broaden the mock's return type so tests can override with
+    // any shaped document via `.mockResolvedValue(...)`.
+    findOne: mock(async (): Promise<Record<string, unknown> | null> => null),
     find: mock(() => createMockCursor()),
     updateOne: mock(async () => ({ modifiedCount: 1 })),
     deleteOne: mock(async () => ({ deletedCount: 1 })),

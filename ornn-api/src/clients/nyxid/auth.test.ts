@@ -26,7 +26,7 @@ describe("AuthClient", () => {
     expect(result!.userId).toBe("u-123");
     expect(result!.permissions).toEqual(["search:read"]);
 
-    const [url, opts] = mockFetch.mock.calls[0] as [string, RequestInit];
+    const [url, opts] = mockFetch.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toBe(`${BASE_URL}/api/internal/api-keys/validate`);
     expect(opts.method).toBe("POST");
     const headers = opts.headers as Record<string, string>;

@@ -94,7 +94,9 @@ export async function buildVirtualArchive(
   }
 
   const tarBuffer = createTarBuffer(entries);
-  const compressed = Bun.gzipSync(tarBuffer);
+  // Copy into a fresh Uint8Array backed by a plain ArrayBuffer (not
+  // SharedArrayBuffer) so Bun.gzipSync's tightened TS 6 signature accepts it.
+  const compressed = Bun.gzipSync(new Uint8Array(tarBuffer));
 
   return new File([compressed], `${skillName}.tar.gz`, {
     type: "application/gzip",

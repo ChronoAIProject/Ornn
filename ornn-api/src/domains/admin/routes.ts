@@ -181,7 +181,7 @@ export function createAdminRoutes(config: AdminRoutesConfig): Hono<{ Variables: 
         .toArray();
 
       const items = docs.map((d) => ({
-        guid: d._id as string,
+        guid: String(d._id),
         name: d.name as string,
         description: d.description as string,
         createdBy: (d.createdBy as string) ?? "",
