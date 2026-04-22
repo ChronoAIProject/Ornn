@@ -29,16 +29,39 @@ logger.info({ port: config.port }, "ornn-api starting");
 
 const { app, shutdown } = await bootstrap(config);
 
-// Graceful shutdown
-process.on("SIGTERM", async () => {
-  logger.info("Received SIGTERM");
-  await shutdown();
-  process.exit(0);
+// Graceful shutdown with a hard-deadline fallback. K8s sends SIGTERM
+// then SIGKILLs after `terminationGracePeriodSeconds` (default 30s). A
+// stuck Mongo close can hang the service past that window; the timeout
+// here force-exits before K8s notices so pod termination logs stay
+// clean and we get a deterministic exit code we can alert on.
+const SHUTDOWN_TIMEOUT_MS = 25_000;
+
+async function gracefulShutdown(signal: string): Promise<void> {
+  logger.info({ signal }, "Shutdown signal received");
+  const timeout = setTimeout(() => {
+    logger.fatal({ signal, timeoutMs: SHUTDOWN_TIMEOUT_MS }, "Shutdown timed out, forcing exit");
+    process.exit(1);
+  }, SHUTDOWN_TIMEOUT_MS);
+  // Allow Node to exit as soon as shutdown resolves, even if the timer is still active.
+  timeout.unref();
+
+  try {
+    await shutdown();
+    clearTimeout(timeout);
+    logger.info({ signal }, "Graceful shutdown complete");
+    process.exit(0);
+  } catch (err) {
+    clearTimeout(timeout);
+    logger.error({ signal, err }, "Graceful shutdown failed");
+    process.exit(1);
+  }
+}
+
+process.on("SIGTERM", () => {
+  void gracefulShutdown("SIGTERM");
 });
-process.on("SIGINT", async () => {
-  logger.info("Received SIGINT");
-  await shutdown();
-  process.exit(0);
+process.on("SIGINT", () => {
+  void gracefulShutdown("SIGINT");
 });
 
 export default {
