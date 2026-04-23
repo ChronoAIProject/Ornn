@@ -86,7 +86,9 @@ function buildStubFetch(config: {
       const p = href.replace("https://raw.example/", "");
       const content = config.rawFiles[p];
       if (!content) return new Response("raw not found", { status: 404 });
-      return new Response(content);
+      const body: BodyInit =
+        typeof content === "string" ? content : (content.slice().buffer as ArrayBuffer);
+      return new Response(body);
     }
     return new Response("unknown", { status: 404 });
   };
