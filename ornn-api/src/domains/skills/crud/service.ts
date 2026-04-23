@@ -9,8 +9,9 @@ import { randomUUID } from "node:crypto";
 import type { SkillRepository } from "./repository";
 import type { SkillVersionRepository } from "./skillVersionRepository";
 import type { IStorageClient } from "../../../clients/storageClient";
-import type { SkillDocument, SkillMetadata, SkillDetailResponse, SkillVersionDocument } from "../../../shared/types/index";
+import type { SkillDocument, SkillMetadata, SkillDetailResponse, SkillVersionDocument, SkillSource } from "../../../shared/types/index";
 import { AppError } from "../../../shared/types/index";
+import { fetchSkillFromGitHub, type GitHubPullInput } from "./utils/githubPull";
 import { isReservedVerb } from "../../../shared/reservedVerbs";
 import { validateSkillFrontmatter } from "../../../shared/schemas/skillFrontmatter";
 import { resolveZipRoot } from "../../../shared/utils/zip";
@@ -65,6 +66,8 @@ export class SkillService {
       skipValidation?: boolean;
       userEmail?: string;
       userDisplayName?: string;
+      /** Origin metadata stamped on the skill doc when created from an external pull. */
+      source?: import("../../../shared/types/index").SkillSource;
     },
   ): Promise<{ guid: string }> {
     // 1. Validate ZIP format rules
@@ -125,6 +128,7 @@ export class SkillService {
       createdByDisplayName: options?.userDisplayName,
       isPrivate: true,
       latestVersion: version,
+      source: options?.source,
     });
 
     // 7. Record the initial version row.
@@ -294,6 +298,8 @@ export class SkillService {
       skipValidation?: boolean;
       userEmail?: string;
       userDisplayName?: string;
+      /** Refresh-from-source path stamps this so lastSyncedAt/Commit move forward. */
+      source?: import("../../../shared/types/index").SkillSource;
     },
   ): Promise<SkillDetailResponse> {
     const existing = await this.skillRepo.findByGuid(guid);
@@ -378,8 +384,90 @@ export class SkillService {
       updateData.isPrivate = options.isPrivate;
     }
 
+    if (options.source !== undefined) {
+      updateData.source = options.source;
+    }
+
     const updated = await this.skillRepo.update(guid, updateData as any);
     return this.buildDetailResponse(updated);
+  }
+
+  /**
+   * Pull a skill package from a public GitHub repo and publish it as a new
+   * skill. Returns the created skill's GUID + the source manifest that was
+   * stamped on the doc so callers can show "linked to X".
+   *
+   * Distinct from `createSkill` because the caller doesn't provide the ZIP —
+   * this method builds it from the repo contents via
+   * {@link fetchSkillFromGitHub} and then hands off to `createSkill` with
+   * the source stamped.
+   */
+  async createSkillFromGitHub(
+    input: GitHubPullInput,
+    userId: string,
+    options?: { userEmail?: string; userDisplayName?: string; skipValidation?: boolean },
+  ): Promise<{ guid: string; source: SkillSource }> {
+    const pulled = await fetchSkillFromGitHub(input);
+    const source: SkillSource = {
+      type: "github",
+      repo: pulled.source.repo,
+      ref: pulled.source.ref,
+      path: pulled.source.path,
+      lastSyncedAt: new Date(),
+      lastSyncedCommit: pulled.resolvedCommitSha,
+    };
+    const { guid } = await this.createSkill(pulled.zipBuffer, userId, {
+      skipValidation: options?.skipValidation,
+      userEmail: options?.userEmail,
+      userDisplayName: options?.userDisplayName,
+      source,
+    });
+    return { guid, source };
+  }
+
+  /**
+   * Re-pull the skill's stored GitHub source and publish the fetched package
+   * as a new version. Fails if the skill has no `source` or the source is
+   * not of type `github`.
+   */
+  async refreshSkillFromSource(
+    guid: string,
+    userId: string,
+    options?: { userEmail?: string; userDisplayName?: string; skipValidation?: boolean },
+  ): Promise<SkillDetailResponse> {
+    const existing = await this.skillRepo.findByGuid(guid);
+    if (!existing) {
+      throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${guid}' not found`);
+    }
+    if (!existing.source || existing.source.type !== "github") {
+      throw AppError.badRequest(
+        "NO_SOURCE",
+        "Skill has no linked GitHub source; use POST /api/v1/skills/pull to create a new linked skill",
+      );
+    }
+
+    const pulled = await fetchSkillFromGitHub({
+      repo: existing.source.repo,
+      ref: existing.source.ref,
+      path: existing.source.path,
+    });
+
+    const newSource: SkillSource = {
+      type: "github",
+      repo: existing.source.repo,
+      ref: existing.source.ref,
+      path: existing.source.path,
+      lastSyncedAt: new Date(),
+      lastSyncedCommit: pulled.resolvedCommitSha,
+    };
+
+    return this.updateSkill(guid, userId, {
+      zipBuffer: pulled.zipBuffer,
+      skipValidation: options?.skipValidation,
+      userEmail: options?.userEmail,
+      userDisplayName: options?.userDisplayName,
+      source: newSource,
+    });
   }
 
   async deleteSkill(guid: string): Promise<void> {
@@ -641,6 +729,19 @@ export class SkillService {
       version,
       isDeprecated,
       deprecationNote,
+      source: skill.source
+        ? {
+            type: "github",
+            repo: skill.source.repo,
+            ref: skill.source.ref,
+            path: skill.source.path,
+            lastSyncedAt:
+              skill.source.lastSyncedAt instanceof Date
+                ? skill.source.lastSyncedAt.toISOString()
+                : String(skill.source.lastSyncedAt),
+            lastSyncedCommit: skill.source.lastSyncedCommit,
+          }
+        : undefined,
     };
   }
 

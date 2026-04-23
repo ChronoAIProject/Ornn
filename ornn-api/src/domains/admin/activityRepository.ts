@@ -16,7 +16,8 @@ export type ActivityAction =
   | "skill:update"
   | "skill:delete"
   | "skill:visibility_change"
-  | "skill:permissions_change";
+  | "skill:permissions_change"
+  | "skill:refresh";
 
 export interface ActivityDocument {
   _id: string;
