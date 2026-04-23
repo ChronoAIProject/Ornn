@@ -1,8 +1,16 @@
 name: Changeset release
 
+# Runs when something lands on `main`. At that point the Version Packages
+# bump (consume .changeset, update package.json + CHANGELOG) has already
+# happened via `bun run release:prep` on develop. This workflow only
+# handles the tag + GitHub Release half.
+#
+# Hard-guards against a main push that still carries unconsumed changesets
+# — that would mean the release:prep flow was skipped.
+
 on:
   push:
-    branches: [develop]
+    branches: [main]
 
 concurrency:
   group: changeset-release
@@ -13,7 +21,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      pull-requests: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -23,12 +30,22 @@ jobs:
 
       - run: bun install --frozen-lockfile
 
-      - name: Create release PR or tag
+      - name: Guard — no pending changesets on main
+        run: |
+          PENDING=$(find .changeset -name "*.md" ! -name "README.md" 2>/dev/null | wc -l | xargs)
+          if [ "$PENDING" != "0" ]; then
+            echo "::error::Found ${PENDING} unconsumed .changeset/*.md files on main."
+            echo "::error::Run 'bun run release:prep' on develop first, merge that PR, then promote develop → main."
+            exit 1
+          fi
+
+      - name: Create tags + GitHub Releases
         uses: changesets/action@v1
         with:
-          version: bun run version-packages
+          # With no pending changesets (guarded above), the action skips
+          # the Version Packages PR branch entirely and goes straight to
+          # tag + Release creation via `bun run release` (`changeset tag`).
           publish: bun run release
-          title: "chore: version packages"
-          commit: "chore: version packages"
+          createGithubReleases: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
