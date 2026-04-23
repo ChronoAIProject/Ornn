@@ -1,5 +1,11 @@
 # ornn-web
 
+## 0.3.3
+
+### Patch Changes
+
+- [#146](https://github.com/ChronoAIProject/Ornn/pull/146) [`e7e8c18`](https://github.com/ChronoAIProject/Ornn/commit/e7e8c18fd74d708bd7213256f61649297669caaa) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Fix nginx SNI when proxying to an HTTPS NyxID upstream behind a multi-tenant edge (Cloudflare et al). Without `proxy_ssl_server_name on` + a proper `proxy_ssl_name`, the upstream TLS handshake fails with alert 40 and the browser sees 502. Adds a new `NYXID_BACKEND_HOST` env var (hostname part of `NYXID_BACKEND_URL`, e.g. `nyx.chrono-ai.fun`) consumed by `nginx.conf.template` for SNI + Host header; plumbed through `deployment/ornn-web/configmap.yaml` and `deployment/.env.sample.ornn`.
+
 ## 0.3.2
 
 ### Patch Changes
