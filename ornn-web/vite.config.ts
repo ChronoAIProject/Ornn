@@ -19,29 +19,13 @@ export default defineConfig({
   server: {
     port: 5847,
     proxy: {
-      "/api/auth": {
-        target: "http://localhost:3801",
-        changeOrigin: true,
-      },
-      "/api/users": {
-        target: "http://localhost:3801",
-        changeOrigin: true,
-      },
-      "/api/web": {
-        target: "http://localhost:3802",
-        changeOrigin: true,
-        configure: (proxy) => {
-          proxy.on("proxyRes", (proxyRes, _req, res) => {
-            if (proxyRes.headers["content-type"]?.includes("text/event-stream")) {
-              res.setHeader("Content-Type", "text/event-stream");
-              res.setHeader("Cache-Control", "no-cache");
-              res.setHeader("Connection", "keep-alive");
-              res.flushHeaders();
-            }
-          });
-        },
-      },
-      "/api/agent": {
+      // Single canonical proxy rule. All ornn-api traffic goes through
+      // `/api/v1/*`; see `docs/conventions.md` §2.1 (versioning).
+      //
+      // SSE-aware: streaming endpoints (skill generation, playground chat)
+      // require passthrough of `text/event-stream` headers so the browser
+      // sees a live stream rather than a buffered JSON blob.
+      "/api/v1": {
         target: "http://localhost:3802",
         changeOrigin: true,
         configure: (proxy) => {
