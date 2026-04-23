@@ -52,6 +52,11 @@ import { NotificationRepository } from "./domains/notifications/repository";
 import { NotificationService } from "./domains/notifications/service";
 import { createNotificationRoutes } from "./domains/notifications/routes";
 
+// Domain: Analytics
+import { AnalyticsRepository } from "./domains/analytics/repository";
+import { AnalyticsService } from "./domains/analytics/service";
+import { createAnalyticsRoutes } from "./domains/analytics/routes";
+
 // Domain: Skill Search
 import { SearchService } from "./domains/skills/search/service";
 import { createSearchRoutes } from "./domains/skills/search/routes";
@@ -185,6 +190,14 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   );
   const notificationService = new NotificationService({ notificationRepo });
   const notificationRoutes = createNotificationRoutes({ notificationService });
+
+  // ---- Domain: Analytics ----
+  const analyticsRepo = new AnalyticsRepository(db);
+  void analyticsRepo.ensureIndexes().catch((err) =>
+    logger.warn({ err }, "skill_executions indexes ensureIndexes failed — proceeding anyway"),
+  );
+  const analyticsService = new AnalyticsService({ analyticsRepo });
+  const analyticsRoutes = createAnalyticsRoutes({ analyticsService, skillService });
 
   const shareRepo = new ShareRepository(db);
   void shareRepo.ensureIndexes().catch((err) =>
@@ -324,6 +337,7 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   apiApp.route("/", auditRoutes);
   apiApp.route("/", shareRoutes);
   apiApp.route("/", notificationRoutes);
+  apiApp.route("/", analyticsRoutes);
   apiApp.route("/", searchRoutes);
   apiApp.route("/", generationRoutes);
   apiApp.route("/", playgroundRoutes);
