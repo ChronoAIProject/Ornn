@@ -1,5 +1,5 @@
 /**
- * React Query hooks for caller-scoped data (`/api/me/*`).
+ * React Query hooks for caller-scoped data (`/api/v1/me/*`).
  */
 
 import { useQuery } from "@tanstack/react-query";

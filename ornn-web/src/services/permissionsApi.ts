@@ -15,6 +15,6 @@ export async function updateSkillPermissions(
   skillGuid: string,
   body: SkillPermissionsInput,
 ): Promise<SkillDetail> {
-  const res = await apiPut<SkillDetail>(`/api/skills/${encodeURIComponent(skillGuid)}/permissions`, body);
+  const res = await apiPut<SkillDetail>(`/api/v1/skills/${encodeURIComponent(skillGuid)}/permissions`, body);
   return res.data!;
 }

@@ -1,7 +1,7 @@
 /**
  * Toggle component for skill public/private status.
  * Shows confirmation modal before toggling.
- * Uses the PUT /api/skills/{id} endpoint with { isPrivate } body.
+ * Uses the PUT /api/v1/skills/{id} endpoint with { isPrivate } body.
  * @module components/skill/SkillPublicToggle
  */
 

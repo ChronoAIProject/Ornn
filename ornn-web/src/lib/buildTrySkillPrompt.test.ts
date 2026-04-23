@@ -18,7 +18,7 @@ describe("buildTrySkillPrompt", () => {
     expect(out).toContain(`GUID: ${GUID}`);
     expect(out).toContain(`Ornn URL: ${ORIGIN}/skills/${GUID}`);
     expect(out).toContain("~/.claude/skills/my-skill/");
-    expect(out).toContain(`nyxid proxy request ornn /api/skills/${GUID}/json`);
+    expect(out).toContain(`nyxid proxy request ornn /api/v1/skills/${GUID}/json`);
   });
 
   test("prerequisites section embeds actionable CLI check commands", () => {

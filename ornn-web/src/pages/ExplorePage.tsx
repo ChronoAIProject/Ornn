@@ -2,7 +2,7 @@
  * ExplorePage — the skill registry.
  *
  * Three mutually-exclusive tabs filter the same skill search endpoint
- * by scope. Tab counts come from /api/skills/counts in a single
+ * by scope. Tab counts come from /api/v1/skills/counts in a single
  * round-trip. The System-skill control is a tri-state filter (not a
  * tab) so a user can ask "what do I have wired to my NyxID services?"
  * within any tab.

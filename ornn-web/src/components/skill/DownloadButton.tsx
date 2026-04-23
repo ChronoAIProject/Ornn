@@ -10,7 +10,7 @@ export interface DownloadButtonProps {
 
 export function DownloadButton({ skillId, version, downloadCount, className = "" }: DownloadButtonProps) {
   const handleDownload = () => {
-    window.open(`/api/skills/${skillId}/versions/${version}/download`, "_blank");
+    window.open(`/api/v1/skills/${skillId}/versions/${version}/download`, "_blank");
   };
 
   return (
