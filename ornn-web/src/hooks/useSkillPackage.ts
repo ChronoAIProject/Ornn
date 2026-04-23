@@ -46,24 +46,6 @@ function isTextFile(filename: string): boolean {
   return TEXT_EXTENSIONS.has(ext);
 }
 
-/**
- * Rewrite Docker-internal presigned URLs to go through the nginx /s3/ proxy.
- * e.g. http://minio:9000/bucket/key?sig=... → /s3/bucket/key?sig=...
- * Nginx then forwards to minio:9000 with the correct Host header,
- * keeping the presigned signature valid.
- */
-function toBrowserAccessibleUrl(url: string): string {
-  try {
-    const parsed = new URL(url);
-    if (parsed.hostname === "minio" || parsed.hostname === "ornn-storage") {
-      return `/s3${parsed.pathname}${parsed.search}`;
-    }
-    return url;
-  } catch {
-    return url;
-  }
-}
-
 interface UseSkillPackageResult {
   files: FileNode[];
   fileContents: Map<string, string>;
@@ -97,7 +79,7 @@ export function useSkillPackage(
       setError(null);
 
       try {
-        const response = await fetch(toBrowserAccessibleUrl(presignedUrl!));
+        const response = await fetch(presignedUrl!);
         if (!response.ok) {
           throw new Error(`Failed to download package: ${response.status}`);
         }
