@@ -15,6 +15,7 @@ import {
 } from "../../../middleware/nyxidAuth";
 import { AppError } from "../../../shared/types/index";
 import { resolveZipRoot } from "../../../shared/utils/zip";
+import { fetchGithubSourceBundle } from "./githubFetcher";
 import JSZip from "jszip";
 import pino from "pino";
 
@@ -167,6 +168,106 @@ export function createGenerationRoutes(config: GenerationRoutesConfig): Hono<{ V
       return streamGenerationEvents(
         c,
         generationService.generateStream(query, signal),
+        keepAliveIntervalMs,
+      );
+    },
+  );
+
+  /**
+   * POST /skills/generate/from-source
+   * Input: JSON {
+   *   code?: string,         // inline source (concatenated files, "// FILE: <path>" markers optional)
+   *   repoUrl?: string,      // public GitHub URL; backend fetches a small bundle of route files
+   *   path?: string,         // optional subpath to look under when fetching repoUrl
+   *   framework?: string,    // optional hint ("hono"/"express"/...); auto-detected otherwise
+   *   description?: string,  // optional free-form context
+   * }
+   * Exactly one of `code` or `repoUrl` is required.
+   * Response: SSE stream of generation events
+   * Requires: ornn:skill:build
+   */
+  app.post(
+    "/skills/generate/from-source",
+    auth,
+    requirePermission("ornn:skill:build"),
+    async (c) => {
+      const authCtx = getAuth(c);
+      const body = (await c.req.json().catch(() => ({}))) as {
+        code?: unknown;
+        repoUrl?: unknown;
+        path?: unknown;
+        framework?: unknown;
+        description?: unknown;
+      };
+
+      const inlineCode = typeof body.code === "string" ? body.code : undefined;
+      const repoUrl = typeof body.repoUrl === "string" ? body.repoUrl : undefined;
+      const path = typeof body.path === "string" ? body.path : undefined;
+      const framework = typeof body.framework === "string" ? body.framework : undefined;
+      const description = typeof body.description === "string" ? body.description : undefined;
+
+      if (!inlineCode && !repoUrl) {
+        throw AppError.badRequest(
+          "MISSING_SOURCE",
+          "Provide either 'code' (inline source) or 'repoUrl' (public GitHub URL)",
+        );
+      }
+      if (inlineCode && repoUrl) {
+        throw AppError.badRequest(
+          "AMBIGUOUS_SOURCE",
+          "Provide exactly one of 'code' or 'repoUrl', not both",
+        );
+      }
+
+      let code = inlineCode ?? "";
+      let fetchedFramework = framework;
+      let sourceUrl: string | undefined;
+
+      if (repoUrl) {
+        try {
+          const bundle = await fetchGithubSourceBundle(repoUrl, { path });
+          code = bundle.code;
+          fetchedFramework = framework ?? bundle.frameworkHint;
+          sourceUrl = repoUrl;
+          logger.info(
+            {
+              userId: authCtx.userId,
+              repoUrl,
+              fileCount: bundle.files.length,
+              frameworkHint: bundle.frameworkHint,
+            },
+            "Fetched repo bundle for from-source generation",
+          );
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          throw AppError.badRequest("REPO_FETCH_FAILED", `Could not fetch repository: ${message}`);
+        }
+      }
+
+      if (!code.trim()) {
+        throw AppError.badRequest("EMPTY_SOURCE", "Source code is empty — nothing to analyze");
+      }
+
+      logger.info(
+        {
+          userId: authCtx.userId,
+          mode: repoUrl ? "repo" : "inline",
+          codeLength: code.length,
+          framework: fetchedFramework,
+          hasDescription: !!description,
+        },
+        "from-source generation request",
+      );
+
+      const signal = c.req.raw.signal;
+
+      return streamGenerationEvents(
+        c,
+        generationService.generateFromSource(
+          code,
+          { framework: fetchedFramework, description, sourceUrl },
+          signal,
+        ),
         keepAliveIntervalMs,
       );
     },
