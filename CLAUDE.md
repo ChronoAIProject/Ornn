@@ -10,14 +10,16 @@ TypeScript, Bun workspace monorepo
 - **Database:** MongoDB 7
 - **Validation:** Zod
 - **Logging:** Pino
-- **Testing:** Bun test (backend); Vitest + Testing Library + jsdom (frontend). Both packages run in CI via `bun run test`.
+- **Testing:** Bun test (backend); Vitest + Testing Library + jsdom (frontend + TS SDK); pytest + respx (Python SDK). All run in CI — bun packages via `bun run test`, Python via a dedicated `python-sdk-test` job.
 
 **Packages:**
 
-| Package | Description |
-|---------|-------------|
-| `ornn-api` | Backend API |
-| `ornn-web` | React SPA |
+| Package | Path | Description |
+|---------|------|-------------|
+| `ornn-api` | `ornn-api/` | Backend API (Bun + Hono + MongoDB) |
+| `ornn-web` | `ornn-web/` | React SPA (Vite + React 19 + Zustand + TanStack Query) |
+| `@chronoai/ornn-sdk` | `ornn-sdk/` | TypeScript client for `/api/v1/*` |
+| `ornn-sdk` (Python) | `ornn-sdk-python/` | Python client for `/api/v1/*` (httpx) — separate release cadence |
 
 ## Architecture
 

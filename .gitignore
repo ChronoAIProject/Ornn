@@ -10,3 +10,11 @@ credentials.json
 .DS_Store
 .claude/
 ornn-web/public/logo_candidate.jpg
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+build/
