@@ -277,6 +277,46 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
   );
 
   /**
+   * GET /skills/:idOrName/versions/:fromVersion/diff/:toVersion
+   *
+   * Return a structured diff between two versions. File-level
+   * (added/removed/modified) plus text content on both sides for the UI
+   * to render line-level diffs client-side. Visibility rules match
+   * GET /skills/:idOrName.
+   *
+   * Auth: Optional. Anonymous users can only diff public skills.
+   */
+  app.get(
+    "/skills/:idOrName/versions/:fromVersion/diff/:toVersion",
+    optionalAuth,
+    async (c) => {
+      const idOrName = c.req.param("idOrName");
+      const fromVersion = c.req.param("fromVersion");
+      const toVersion = c.req.param("toVersion");
+      const authCtx = c.get("auth");
+
+      const skill = await skillService.getSkill(idOrName);
+      if (!authCtx && skill.isPrivate) {
+        throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${idOrName}' not found`);
+      }
+      if (authCtx && skill.isPrivate) {
+        const memberships = await readUserOrgMemberships(c);
+        const actor = {
+          userId: authCtx.userId,
+          memberships,
+          isPlatformAdmin: authCtx.permissions.includes("ornn:admin:skill"),
+        };
+        if (!canReadSkill(skill, actor)) {
+          throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${idOrName}' not found`);
+        }
+      }
+
+      const result = await skillService.diffVersions(idOrName, fromVersion, toVersion);
+      return c.json({ data: result, error: null });
+    },
+  );
+
+  /**
    * GET /skills/:idOrName — Read a skill by GUID or name.
    * Query params:
    *   - version: optional `<major>.<minor>` — when set, return that version's
