@@ -10,14 +10,16 @@ TypeScript, Bun workspace monorepo
 - **Database:** MongoDB 7
 - **Validation:** Zod
 - **Logging:** Pino
-- **Testing:** Bun test (backend). Frontend has no test framework installed yet — two `.test.ts` files exist under `ornn-web/src/lib/` but do not run in CI. Install Vitest + Testing Library before writing new frontend tests (tracked in `docs/api-refactor.md` Epic 3).
+- **Testing:** Bun test (backend); Vitest + Testing Library + jsdom (frontend + TS SDK); pytest + respx (Python SDK). All run in CI — bun packages via `bun run test`, Python via a dedicated `python-sdk-test` job.
 
 **Packages:**
 
-| Package | Description |
-|---------|-------------|
-| `ornn-api` | Backend API |
-| `ornn-web` | React SPA |
+| Package | Path | Description |
+|---------|------|-------------|
+| `ornn-api` | `ornn-api/` | Backend API (Bun + Hono + MongoDB) |
+| `ornn-web` | `ornn-web/` | React SPA (Vite + React 19 + Zustand + TanStack Query) |
+| `@chronoai/ornn-sdk` | `ornn-sdk/` | TypeScript client for `/api/v1/*` |
+| `ornn-sdk` (Python) | `ornn-sdk-python/` | Python client for `/api/v1/*` (httpx) — separate release cadence |
 
 ## Architecture
 
@@ -33,7 +35,7 @@ TypeScript, Bun workspace monorepo
 - All code MUST include sufficient logging (Pino). `info` for lifecycle events, `debug` for detailed flow, `error` for failures with context.
 - Logs MUST NOT contain plaintext secrets. Mask or redact sensitive values.
 - No hardcoded secrets, credentials, API keys, tokens in code — ever.
-- Backend tests: `bun test`. Frontend tests: not yet wired (see Testing in Tech Stack above).
+- Tests: `bun run test` runs both (backend via Bun, frontend via Vitest).
 - Unit tests colocated with source files. Integration tests in `tests/` directory.
 - Always use Docker to run and test locally. Do not run services directly with `bun run dev`. CI builds both `ornn-api` and `ornn-web` images on every PR (`docker-build` job) so Dockerfile breakage surfaces immediately.
 
@@ -203,21 +205,12 @@ done
 ### Step 6: Build ornn images (run from repo root)
 
 ```bash
-# Source env for build args
-set -a; source deployment/.env.ornn; set +a
-
 # Backend
 docker build -t "${ORNN_API_IMAGE}" -f ornn-api/Dockerfile .
 
-# Frontend (build args baked into static bundle)
-docker build -t "${ORNN_WEB_IMAGE}" \
-  --build-arg VITE_API_BASE_URL="${VITE_API_BASE_URL}" \
-  --build-arg VITE_NYXID_AUTHORIZE_URL="${VITE_NYXID_AUTHORIZE_URL}" \
-  --build-arg VITE_NYXID_TOKEN_URL="${VITE_NYXID_TOKEN_URL}" \
-  --build-arg VITE_NYXID_CLIENT_ID="${VITE_NYXID_CLIENT_ID}" \
-  --build-arg VITE_NYXID_REDIRECT_URI="${VITE_NYXID_REDIRECT_URI}" \
-  --build-arg VITE_NYXID_LOGOUT_URL="${VITE_NYXID_LOGOUT_URL}" \
-  -f ornn-web/Dockerfile .
+# Frontend — no build args. All config (nginx upstreams + Vite env)
+# is injected at container startup via the `ornn-web-config` ConfigMap.
+docker build -t "${ORNN_WEB_IMAGE}" -f ornn-web/Dockerfile .
 ```
 
 ### Step 7: Deploy ornn

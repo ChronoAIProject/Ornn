@@ -30,6 +30,8 @@ export interface CreateSkillData {
   isPrivate?: boolean;
   /** Initial version, e.g. "1.0". Required. */
   latestVersion: string;
+  /** Origin metadata when the skill was created via a pull from an external source. */
+  source?: import("../../../shared/types/index").SkillSource;
 }
 
 export interface UpdateSkillData {
@@ -50,6 +52,8 @@ export interface UpdateSkillData {
   sharedWithOrgs?: string[];
   /** Cached latest-version pointer; update when a new package version is published. */
   latestVersion?: string;
+  /** Origin metadata; bumped by the refresh-from-source path. */
+  source?: import("../../../shared/types/index").SkillSource;
   updatedBy: string;
 }
 
@@ -118,6 +122,10 @@ export class SkillRepository {
       latestVersion: data.latestVersion,
     };
 
+    if (data.source) {
+      doc.source = data.source;
+    }
+
     try {
       await this.collection.insertOne(doc);
       logger.info({ guid: data.guid, name: data.name }, "Skill created");
@@ -147,6 +155,7 @@ export class SkillRepository {
     if (data.isPrivate !== undefined) setFields.isPrivate = data.isPrivate;
     if (data.sharedWithUsers !== undefined) setFields.sharedWithUsers = data.sharedWithUsers;
     if (data.sharedWithOrgs !== undefined) setFields.sharedWithOrgs = data.sharedWithOrgs;
+    if (data.source !== undefined) setFields.source = data.source;
     if (data.latestVersion !== undefined) setFields.latestVersion = data.latestVersion;
 
     await this.collection.updateOne({ _id: guid as any }, { $set: setFields });
@@ -507,6 +516,16 @@ function mapDoc(doc: Document | null): SkillDocument | null {
     sharedWithUsers: Array.isArray(doc.sharedWithUsers) ? (doc.sharedWithUsers as string[]) : [],
     sharedWithOrgs: Array.isArray(doc.sharedWithOrgs) ? (doc.sharedWithOrgs as string[]) : [],
     latestVersion: doc.latestVersion ?? "0.1",
+    source: doc.source
+      ? {
+          type: "github",
+          repo: String(doc.source.repo ?? ""),
+          ref: String(doc.source.ref ?? ""),
+          path: String(doc.source.path ?? ""),
+          lastSyncedAt: doc.source.lastSyncedAt instanceof Date ? doc.source.lastSyncedAt : new Date(doc.source.lastSyncedAt),
+          lastSyncedCommit: String(doc.source.lastSyncedCommit ?? ""),
+        }
+      : undefined,
   };
 }
 

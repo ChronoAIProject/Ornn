@@ -5,8 +5,9 @@
  */
 
 import { useAuthStore } from "@/stores/authStore";
+import { config } from "@/config";
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
+const API_BASE = config.apiBaseUrl;
 
 const logger = {
   info: (msg: string, data?: Record<string, unknown>) =>
@@ -38,7 +39,7 @@ export async function logActivity(action: "login" | "logout"): Promise<void> {
       headers["X-User-Display-Name"] = user.displayName;
     }
 
-    const res = await fetch(`${API_BASE}/api/activity/${action}`, {
+    const res = await fetch(`${API_BASE}/api/v1/activity/${action}`, {
       method: "POST",
       headers,
       credentials: "include",

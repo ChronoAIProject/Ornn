@@ -240,3 +240,51 @@ export function buildOpenApiGenerationPrompt(
 
   return prompt;
 }
+
+// ---------------------------------------------------------------------------
+// Source code → skill generation
+// ---------------------------------------------------------------------------
+
+export const SOURCE_CODE_GENERATION_SYSTEM_PROMPT = `You are a skill generator for the ornn AI skill platform. You generate PLAIN API reference skills from backend source code.
+
+Given raw source code (typically route/controller/handler files from a backend service), you:
+1. Identify the framework (Express / Hono / Fastify / FastAPI / Flask / Spring Boot / etc).
+2. Extract every HTTP endpoint: method, path, request shape, response shape, auth requirements.
+3. Emit a single JSON document matching the ornn skill format. The skill documents the discovered API so that an AI agent could call those endpoints correctly.
+
+Output rules:
+- Respond with ONLY the JSON document. No markdown fences. No prose.
+- Skill category MUST be "plain" (reference / documentation skill, no executable runtime).
+- \`readmeBody\`: markdown describing the API — base URL (if discoverable), auth model, endpoint table, and request/response examples.
+- NO YAML frontmatter in \`readmeBody\`.
+- If the source is incomplete, partial, or ambiguous, extract what you can confidently identify. DO NOT fabricate endpoints the code does not support.
+`;
+
+/**
+ * Builds prompt for source-code → skill generation.
+ *
+ * `code` is typically the concatenation of several route files separated
+ * by "// FILE: <path>" markers. Handler knows what it is because the
+ * system prompt names common frameworks.
+ */
+export function buildSourceCodeGenerationPrompt(
+  code: string,
+  options?: { framework?: string; description?: string; sourceUrl?: string },
+): string {
+  let prompt = "Generate a PLAIN API reference skill from the backend source code below. Document every endpoint you can identify.";
+
+  if (options?.framework) {
+    prompt += `\n\nDetected framework hint: ${options.framework}.`;
+  }
+
+  if (options?.sourceUrl) {
+    prompt += `\n\nSource URL (for context only; do NOT invent additional endpoints not in the code): ${options.sourceUrl}`;
+  }
+
+  if (options?.description) {
+    prompt += `\n\nAdditional context: ${options.description}`;
+  }
+
+  prompt += `\n\n--- SOURCE CODE ---\n${code}\n--- END SOURCE CODE ---`;
+  return prompt;
+}

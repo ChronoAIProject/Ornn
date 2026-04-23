@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ornn-web-config
+  namespace: ${NAMESPACE}
+data:
+  # nginx upstreams — consumed by /etc/nginx/templates/default.conf.template
+  # via the image's built-in 20-envsubst-on-templates.sh. NGINX_ENVSUBST_FILTER
+  # narrows substitution to these two so $host / $remote_addr / $scheme etc.
+  # inside the template stay literal.
+  NYXID_BACKEND_URL: "${NYXID_BACKEND_URL}"
+  ORNN_API_URL: "${ORNN_API_URL}"
+  NGINX_ENVSUBST_FILTER: "^(NYXID_BACKEND_URL|ORNN_API_URL)$"
+
+  # Frontend runtime config — consumed by 40-envsubst-config-js.sh,
+  # injected into window.__ORNN_CONFIG__ via /config.js at page load.
+  # NYXID_TOKEN_URL / NYXID_CLIENT_ID are sourced from NYXID_WEB_* in .env.ornn
+  # because ornn-api wants internal DNS + service-account credentials while
+  # ornn-web needs browser-reachable URL + user-facing OAuth client.
+  API_BASE_URL: "${API_BASE_URL}"
+  NYXID_AUTHORIZE_URL: "${NYXID_AUTHORIZE_URL}"
+  NYXID_TOKEN_URL: "${NYXID_WEB_TOKEN_URL}"
+  NYXID_CLIENT_ID: "${NYXID_WEB_CLIENT_ID}"
+  NYXID_REDIRECT_URI: "${NYXID_REDIRECT_URI}"
+  NYXID_LOGOUT_URL: "${NYXID_LOGOUT_URL}"
+  NYXID_SETTINGS_URL: "${NYXID_SETTINGS_URL}"

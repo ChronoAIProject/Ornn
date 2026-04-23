@@ -9,8 +9,10 @@ import { randomUUID } from "node:crypto";
 import type { SkillRepository } from "./repository";
 import type { SkillVersionRepository } from "./skillVersionRepository";
 import type { IStorageClient } from "../../../clients/storageClient";
-import type { SkillDocument, SkillMetadata, SkillDetailResponse, SkillVersionDocument } from "../../../shared/types/index";
+import type { SkillDocument, SkillMetadata, SkillDetailResponse, SkillVersionDocument, SkillSource } from "../../../shared/types/index";
 import { AppError } from "../../../shared/types/index";
+import { fetchSkillFromGitHub, type GitHubPullInput } from "./utils/githubPull";
+import { computeVersionDiff, type VersionDiffResult } from "./utils/versionDiff";
 import { isReservedVerb } from "../../../shared/reservedVerbs";
 import { validateSkillFrontmatter } from "../../../shared/schemas/skillFrontmatter";
 import { resolveZipRoot } from "../../../shared/utils/zip";
@@ -65,6 +67,8 @@ export class SkillService {
       skipValidation?: boolean;
       userEmail?: string;
       userDisplayName?: string;
+      /** Origin metadata stamped on the skill doc when created from an external pull. */
+      source?: import("../../../shared/types/index").SkillSource;
     },
   ): Promise<{ guid: string }> {
     // 1. Validate ZIP format rules
@@ -79,7 +83,7 @@ export class SkillService {
     }
 
     // 2. Parse SKILL.md from ZIP
-    const { name, description, version, license, compatibility, metadata } = await this.extractSkillInfo(zipBuffer);
+    const { name, description, version, license, compatibility, metadata, releaseNotes } = await this.extractSkillInfo(zipBuffer);
     const parsedVersion = parseVersion(version);
 
     // 3a. Reject reserved-verb names — would collide with `/v1/skills/{verb}`
@@ -125,6 +129,7 @@ export class SkillService {
       createdByDisplayName: options?.userDisplayName,
       isPrivate: true,
       latestVersion: version,
+      source: options?.source,
     });
 
     // 7. Record the initial version row.
@@ -141,6 +146,7 @@ export class SkillService {
       createdBy: userId,
       createdByEmail: options?.userEmail,
       createdByDisplayName: options?.userDisplayName,
+      releaseNotes,
     });
 
     return { guid };
@@ -180,6 +186,7 @@ export class SkillService {
     createdOn: string;
     isDeprecated: boolean;
     deprecationNote: string | null;
+    releaseNotes: string | null;
   }>> {
     const skill = await this.findSkillByIdOrName(idOrName);
     const versions = await this.skillVersionRepo.listBySkill(skill.guid);
@@ -192,6 +199,7 @@ export class SkillService {
       createdOn: v.createdOn instanceof Date ? v.createdOn.toISOString() : String(v.createdOn),
       isDeprecated: v.isDeprecated === true,
       deprecationNote: v.deprecationNote ?? null,
+      releaseNotes: v.releaseNotes ?? null,
     }));
   }
 
@@ -294,6 +302,8 @@ export class SkillService {
       skipValidation?: boolean;
       userEmail?: string;
       userDisplayName?: string;
+      /** Refresh-from-source path stamps this so lastSyncedAt/Commit move forward. */
+      source?: import("../../../shared/types/index").SkillSource;
     },
   ): Promise<SkillDetailResponse> {
     const existing = await this.skillRepo.findByGuid(guid);
@@ -314,7 +324,7 @@ export class SkillService {
         }
       }
 
-      const { name, description, version, license, compatibility, metadata } = await this.extractSkillInfo(options.zipBuffer);
+      const { name, description, version, license, compatibility, metadata, releaseNotes } = await this.extractSkillInfo(options.zipBuffer);
       const parsedNewVersion = parseVersion(version);
 
       // Enforce strictly-incrementing version on every package update.
@@ -360,6 +370,7 @@ export class SkillService {
         createdBy: userId,
         createdByEmail: options.userEmail,
         createdByDisplayName: options.userDisplayName,
+        releaseNotes,
       });
 
       Object.assign(updateData, {
@@ -378,8 +389,188 @@ export class SkillService {
       updateData.isPrivate = options.isPrivate;
     }
 
+    if (options.source !== undefined) {
+      updateData.source = options.source;
+    }
+
     const updated = await this.skillRepo.update(guid, updateData as any);
     return this.buildDetailResponse(updated);
+  }
+
+  /**
+   * Pull a skill package from a public GitHub repo and publish it as a new
+   * skill. Returns the created skill's GUID + the source manifest that was
+   * stamped on the doc so callers can show "linked to X".
+   *
+   * Distinct from `createSkill` because the caller doesn't provide the ZIP —
+   * this method builds it from the repo contents via
+   * {@link fetchSkillFromGitHub} and then hands off to `createSkill` with
+   * the source stamped.
+   */
+  async createSkillFromGitHub(
+    input: GitHubPullInput,
+    userId: string,
+    options?: { userEmail?: string; userDisplayName?: string; skipValidation?: boolean },
+  ): Promise<{ guid: string; source: SkillSource }> {
+    const pulled = await fetchSkillFromGitHub(input);
+    const source: SkillSource = {
+      type: "github",
+      repo: pulled.source.repo,
+      ref: pulled.source.ref,
+      path: pulled.source.path,
+      lastSyncedAt: new Date(),
+      lastSyncedCommit: pulled.resolvedCommitSha,
+    };
+    const { guid } = await this.createSkill(pulled.zipBuffer, userId, {
+      skipValidation: options?.skipValidation,
+      userEmail: options?.userEmail,
+      userDisplayName: options?.userDisplayName,
+      source,
+    });
+    return { guid, source };
+  }
+
+  /**
+   * Re-pull the skill's stored GitHub source and publish the fetched package
+   * as a new version. Fails if the skill has no `source` or the source is
+   * not of type `github`.
+   */
+  async refreshSkillFromSource(
+    guid: string,
+    userId: string,
+    options?: { userEmail?: string; userDisplayName?: string; skipValidation?: boolean },
+  ): Promise<SkillDetailResponse> {
+    const existing = await this.skillRepo.findByGuid(guid);
+    if (!existing) {
+      throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${guid}' not found`);
+    }
+    if (!existing.source || existing.source.type !== "github") {
+      throw AppError.badRequest(
+        "NO_SOURCE",
+        "Skill has no linked GitHub source; use POST /api/v1/skills/pull to create a new linked skill",
+      );
+    }
+
+    const pulled = await fetchSkillFromGitHub({
+      repo: existing.source.repo,
+      ref: existing.source.ref,
+      path: existing.source.path,
+    });
+
+    const newSource: SkillSource = {
+      type: "github",
+      repo: existing.source.repo,
+      ref: existing.source.ref,
+      path: existing.source.path,
+      lastSyncedAt: new Date(),
+      lastSyncedCommit: pulled.resolvedCommitSha,
+    };
+
+    return this.updateSkill(guid, userId, {
+      zipBuffer: pulled.zipBuffer,
+      skipValidation: options?.skipValidation,
+      userEmail: options?.userEmail,
+      userDisplayName: options?.userDisplayName,
+      source: newSource,
+    });
+  }
+
+  /**
+   * Compute a structured diff between two versions of a skill.
+   *
+   * Downloads both version ZIPs from storage, extracts, and compares
+   * file-level (added / removed / modified). For text files the diff
+   * includes both sides' contents so the UI can render side-by-side or
+   * any line-level diff it wants client-side.
+   *
+   * Throws NOT_FOUND when the skill or either version is unknown; throws
+   * BAD_REQUEST when `from` and `to` are the same.
+   */
+  async diffVersions(
+    idOrName: string,
+    fromVersion: string,
+    toVersion: string,
+  ): Promise<{
+    skill: { guid: string; name: string };
+    from: { version: string; hash: string; createdOn: string; isDeprecated: boolean; releaseNotes: string | null };
+    to: { version: string; hash: string; createdOn: string; isDeprecated: boolean; releaseNotes: string | null };
+    diff: VersionDiffResult;
+  }> {
+    if (fromVersion === toVersion) {
+      throw AppError.badRequest(
+        "SAME_VERSION",
+        `'from' and 'to' refer to the same version '${fromVersion}'`,
+      );
+    }
+
+    const skill = await this.findSkillByIdOrName(idOrName);
+
+    parseVersion(fromVersion);
+    parseVersion(toVersion);
+
+    const [fromDoc, toDoc] = await Promise.all([
+      this.skillVersionRepo.findBySkillAndVersion(skill.guid, fromVersion),
+      this.skillVersionRepo.findBySkillAndVersion(skill.guid, toVersion),
+    ]);
+    if (!fromDoc) {
+      throw AppError.notFound(
+        "SKILL_VERSION_NOT_FOUND",
+        `Version '${fromVersion}' not found for skill '${skill.name}'`,
+      );
+    }
+    if (!toDoc) {
+      throw AppError.notFound(
+        "SKILL_VERSION_NOT_FOUND",
+        `Version '${toVersion}' not found for skill '${skill.name}'`,
+      );
+    }
+
+    const [fromZip, toZip] = await Promise.all([
+      this.downloadPackage(fromDoc.storageKey),
+      this.downloadPackage(toDoc.storageKey),
+    ]);
+
+    const diff = await computeVersionDiff(fromZip, toZip);
+
+    return {
+      skill: { guid: skill.guid, name: skill.name },
+      from: {
+        version: fromDoc.version,
+        hash: fromDoc.skillHash,
+        createdOn:
+          fromDoc.createdOn instanceof Date
+            ? fromDoc.createdOn.toISOString()
+            : String(fromDoc.createdOn),
+        isDeprecated: fromDoc.isDeprecated === true,
+        releaseNotes: fromDoc.releaseNotes ?? null,
+      },
+      to: {
+        version: toDoc.version,
+        hash: toDoc.skillHash,
+        createdOn:
+          toDoc.createdOn instanceof Date
+            ? toDoc.createdOn.toISOString()
+            : String(toDoc.createdOn),
+        isDeprecated: toDoc.isDeprecated === true,
+        releaseNotes: toDoc.releaseNotes ?? null,
+      },
+      diff,
+    };
+  }
+
+  private async downloadPackage(storageKey: string): Promise<Uint8Array> {
+    const presigned = await this.storageClient.getPresignedUrl(
+      this.storageBucket,
+      storageKey,
+    );
+    const res = await fetch(presigned.presignedUrl);
+    if (!res.ok) {
+      throw AppError.internalError(
+        "PACKAGE_DOWNLOAD_FAILED",
+        `Failed to download package for key '${storageKey}' (HTTP ${res.status})`,
+      );
+    }
+    return new Uint8Array(await res.arrayBuffer());
   }
 
   async deleteSkill(guid: string): Promise<void> {
@@ -493,6 +684,8 @@ export class SkillService {
     license: string | null;
     compatibility: string | null;
     metadata: SkillMetadata;
+    /** Optional author-supplied changelog. Read from SKILL.md frontmatter `release-notes` or `releaseNotes`. Max 2000 chars. */
+    releaseNotes: string | null;
   }> {
     const zip = await JSZip.loadAsync(zipBuffer);
     const allPaths = Object.keys(zip.files);
@@ -569,6 +762,18 @@ export class SkillService {
       metadata.tags = rawMeta.tag;
     }
 
+    // Author-supplied changelog lives next to the formal frontmatter but isn't
+    // part of the Zod schema — kept permissive so missing/older SKILL.md files
+    // just report null instead of hard-failing. Accepts either `release-notes`
+    // (kebab-case to match other frontmatter fields) or `releaseNotes`.
+    const rawReleaseNotes =
+      rawFrontmatter["release-notes"] ?? rawFrontmatter["releaseNotes"];
+    let releaseNotes: string | null = null;
+    if (typeof rawReleaseNotes === "string" && rawReleaseNotes.trim().length > 0) {
+      const trimmed = rawReleaseNotes.trim();
+      releaseNotes = trimmed.length > 2000 ? trimmed.slice(0, 2000) : trimmed;
+    }
+
     return {
       name: fm.name,
       description: fm.description,
@@ -576,6 +781,7 @@ export class SkillService {
       license: fm.license ?? null,
       compatibility: fm.compatibility ?? null,
       metadata,
+      releaseNotes,
     };
   }
 
@@ -641,6 +847,19 @@ export class SkillService {
       version,
       isDeprecated,
       deprecationNote,
+      source: skill.source
+        ? {
+            type: "github",
+            repo: skill.source.repo,
+            ref: skill.source.ref,
+            path: skill.source.path,
+            lastSyncedAt:
+              skill.source.lastSyncedAt instanceof Date
+                ? skill.source.lastSyncedAt.toISOString()
+                : String(skill.source.lastSyncedAt),
+            lastSyncedCommit: skill.source.lastSyncedCommit,
+          }
+        : undefined,
     };
   }
 

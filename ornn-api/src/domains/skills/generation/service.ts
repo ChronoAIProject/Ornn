@@ -8,7 +8,14 @@
 import { z } from "zod";
 import type { NyxLlmClient, ResponsesApiStreamEvent, ResponsesApiInputMessage } from "../../../clients/nyxid/llm";
 import type { GeneratedSkill, SkillStreamEvent } from "../../../shared/types/index";
-import { buildDirectGenerationPrompt, buildOpenApiGenerationPrompt, GENERATION_SYSTEM_PROMPT, OPENAPI_GENERATION_SYSTEM_PROMPT } from "./prompts";
+import {
+  buildDirectGenerationPrompt,
+  buildOpenApiGenerationPrompt,
+  buildSourceCodeGenerationPrompt,
+  GENERATION_SYSTEM_PROMPT,
+  OPENAPI_GENERATION_SYSTEM_PROMPT,
+  SOURCE_CODE_GENERATION_SYSTEM_PROMPT,
+} from "./prompts";
 import pino from "pino";
 
 const logger = pino({ level: "info" }).child({ module: "skillGenerationService" });
@@ -281,6 +288,71 @@ export class SkillGenerationService {
     const parsed = this.parseAndValidate(accumulated);
     if (!parsed) {
       logger.warn("OpenAPI generation output failed validation");
+      yield { type: "validation_error", message: "Invalid JSON from LLM", retrying: false };
+    }
+
+    yield { type: "generation_complete", raw: accumulated };
+  }
+
+  /**
+   * Generate a skill from raw backend source code (route / controller /
+   * handler files). Streams tokens via the same SSE event vocabulary as
+   * the other generators.
+   *
+   * `code` is typically a concatenation of several source files, each
+   * preceded by a `// FILE: <path>` marker — that's exactly what
+   * {@link fetchGithubSourceBundle} produces.
+   */
+  async *generateFromSource(
+    code: string,
+    options?: { framework?: string; description?: string; sourceUrl?: string },
+    signal?: AbortSignal,
+  ): AsyncIterable<SkillStreamEvent> {
+    if (signal?.aborted) {
+      yield { type: "error", message: "Request aborted" };
+      return;
+    }
+
+    yield { type: "generation_start" };
+
+    const userPrompt = buildSourceCodeGenerationPrompt(code, options);
+    const input: ResponsesApiInputMessage[] = [
+      { role: "developer", content: SOURCE_CODE_GENERATION_SYSTEM_PROMPT },
+      { role: "user", content: userPrompt },
+    ];
+
+    let accumulated = "";
+
+    try {
+      const streamEvents = this.llmClient.stream({
+        model: this.defaultModel,
+        input,
+        max_output_tokens: this.maxOutputTokens,
+        temperature: this.temperature,
+      });
+
+      for await (const event of streamEvents) {
+        if (signal?.aborted) {
+          yield { type: "error", message: "Request aborted" };
+          return;
+        }
+
+        const text = extractTextFromEvent(event);
+        if (text) {
+          accumulated += text;
+          yield { type: "token", content: text };
+        }
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      logger.error({ err: message }, "Source-code generation LLM stream error");
+      yield { type: "error", message: `LLM error: ${message}` };
+      return;
+    }
+
+    const parsed = this.parseAndValidate(accumulated);
+    if (!parsed) {
+      logger.warn("Source-code generation output failed validation");
       yield { type: "validation_error", message: "Invalid JSON from LLM", retrying: false };
     }
 

@@ -14,31 +14,17 @@ import mermaid from "mermaid";
 import { PageTransition } from "@/components/layout/PageTransition";
 import { useTranslation } from "react-i18next";
 import { useThemeStore } from "@/stores/themeStore";
-
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
+import {
+  getDocsTree,
+  getDocContent,
+  getReleases,
+  getRelease,
+  type DocSection,
+} from "@/lib/docsContent";
 
 /* ──────────────── Types ──────────────── */
 
 type Lang = "en" | "zh";
-
-interface DocChild {
-  id: string;
-  label: string;
-  file: string;
-  order: number;
-}
-
-interface DocSection {
-  id: string;
-  label: string;
-  order: number;
-  children: DocChild[];
-}
-
-interface MenuStructure {
-  defaultDoc: string;
-  sections: DocSection[];
-}
 
 interface TocItem {
   id: string;
@@ -98,67 +84,20 @@ function extractToc(md: string): TocItem[] {
 
 /* ──────────────── Release Accordion ──────────────── */
 
-interface ReleaseInfo {
-  version: string;
-  date: string;
-  title: string;
-}
-
 function ReleaseAccordion({ lang }: { lang: Lang }) {
-  const [releases, setReleases] = useState<ReleaseInfo[]>([]);
-  const [expandedVersion, setExpandedVersion] = useState<string | null>(null);
-  const [releaseContent, setReleaseContent] = useState<Record<string, string>>({});
-  const [loadingContent, setLoadingContent] = useState<string | null>(null);
-  const [initialized, setInitialized] = useState(false);
+  const releases = useMemo(() => getReleases(lang), [lang]);
+  const [expandedVersion, setExpandedVersion] = useState<string | null>(
+    () => releases[0]?.version ?? null,
+  );
   const { t } = useTranslation();
 
-  useEffect(() => {
-    fetch(`${API_BASE}/api/docs/releases?lang=${lang}`)
-      .then((r) => r.json())
-      .then((json) => {
-        if (json.data) {
-          setReleases(json.data);
-          // Auto-expand the latest (first) version on initial load
-          if (!initialized && json.data.length > 0) {
-            const latest = json.data[0].version;
-            setExpandedVersion(latest);
-            setInitialized(true);
-            // Pre-fetch its content
-            fetch(`${API_BASE}/api/docs/releases/${latest}?lang=${lang}`)
-              .then((r2) => r2.json())
-              .then((j2) => {
-                if (j2.data?.content) {
-                  setReleaseContent((prev) => ({ ...prev, [latest]: j2.data.content }));
-                }
-              })
-              .catch(() => {});
-          }
-        }
-      })
-      .catch((err) => console.error("[ReleaseAccordion] Failed to load releases:", err));
-  }, [lang]); // eslint-disable-line react-hooks/exhaustive-deps
+  const expandedContent = useMemo(
+    () => (expandedVersion ? getRelease(expandedVersion, lang)?.content ?? null : null),
+    [expandedVersion, lang],
+  );
 
-  const handleToggle = async (version: string) => {
-    if (expandedVersion === version) {
-      setExpandedVersion(null);
-      return;
-    }
-    setExpandedVersion(version);
-
-    if (!releaseContent[version]) {
-      setLoadingContent(version);
-      try {
-        const resp = await fetch(`${API_BASE}/api/docs/releases/${version}?lang=${lang}`);
-        const json = await resp.json();
-        if (json.data?.content) {
-          setReleaseContent((prev) => ({ ...prev, [version]: json.data.content }));
-        }
-      } catch (err) {
-        console.error("[ReleaseAccordion] Failed to load release:", err);
-      } finally {
-        setLoadingContent(null);
-      }
-    }
+  const handleToggle = (version: string) => {
+    setExpandedVersion((prev) => (prev === version ? null : version));
   };
 
   if (releases.length === 0) return null;
@@ -200,15 +139,10 @@ function ReleaseAccordion({ lang }: { lang: Lang }) {
               </button>
               {isOpen && (
                 <div className="px-5 pb-4 border-t border-neon-cyan/10">
-                  {loadingContent === release.version ? (
-                    <div className="py-4 space-y-2 animate-pulse">
-                      <div className="h-4 w-3/4 rounded bg-bg-elevated" />
-                      <div className="h-4 w-1/2 rounded bg-bg-elevated" />
-                    </div>
-                  ) : releaseContent[release.version] ? (
+                  {expandedContent ? (
                     <div className="markdown-body pt-3">
                       <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>
-                        {releaseContent[release.version]}
+                        {expandedContent}
                       </ReactMarkdown>
                     </div>
                   ) : (
@@ -665,63 +599,19 @@ export function DocsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const lang = (i18n.language === "zh" ? "zh" : "en") as Lang;
 
-  const [menu, setMenu] = useState<MenuStructure | null>(null);
-  const [markdown, setMarkdown] = useState<string>("");
-  const [loading, setLoading] = useState(true);
-  const [menuLoading, setMenuLoading] = useState(true);
   const [activeHeadingId, setActiveHeadingId] = useState("");
   const contentRef = useRef<HTMLDivElement>(null);
 
+  const menu = useMemo(() => getDocsTree(lang), [lang]);
   const defaultDocId = menu?.defaultDoc ?? "what-is-ornn";
   const activeId = searchParams.get("section") ?? defaultDocId;
 
+  const markdown = useMemo(() => {
+    const content = getDocContent(lang, activeId);
+    return content ?? `# ${t("docs.notFound")}\n\nCould not load \`${activeId}\`.`;
+  }, [lang, activeId, t]);
+
   const toc = useMemo(() => extractToc(markdown), [markdown]);
-
-  // Fetch menu structure from backend
-  useEffect(() => {
-    let cancelled = false;
-    setMenuLoading(true);
-
-    fetch(`${API_BASE}/api/docs/tree?lang=${lang}`)
-      .then((resp) => resp.json())
-      .then((json) => {
-        if (!cancelled && json.data) {
-          setMenu(json.data);
-        }
-      })
-      .catch((err) => {
-        if (!cancelled) console.error("[DocsPage] Failed to load menu:", err);
-      })
-      .finally(() => {
-        if (!cancelled) setMenuLoading(false);
-      });
-
-    return () => { cancelled = true; };
-  }, [lang]);
-
-  // Fetch doc content from backend
-  const fetchDoc = useCallback(async (slug: string, language: Lang) => {
-    setLoading(true);
-    try {
-      const resp = await fetch(`${API_BASE}/api/docs/content/${language}/${slug}`);
-      const json = await resp.json();
-      if (resp.ok && json.data?.content) {
-        setMarkdown(json.data.content);
-      } else {
-        setMarkdown(`# ${t("docs.notFound")}\n\nCould not load \`${slug}\`.`);
-      }
-    } catch {
-      setMarkdown(`# Error\n\n${t("docs.loadFailed")}`);
-    } finally {
-      setLoading(false);
-    }
-  }, [t]);
-
-  useEffect(() => {
-    if (!menuLoading) {
-      fetchDoc(activeId, lang);
-    }
-  }, [activeId, lang, menuLoading, fetchDoc]);
 
   // Scroll-spy: track which heading is currently in view
   useEffect(() => {
@@ -745,7 +635,7 @@ export function DocsPage() {
     // Initial check
     handleScroll();
     return () => container.removeEventListener("scroll", handleScroll);
-  }, [toc, loading]);
+  }, [toc]);
 
   // Resolve doc label from menu structure
   const resolveLabel = useCallback((docId: string): string | undefined => {
@@ -790,14 +680,7 @@ export function DocsPage() {
         <div className="flex-1 min-w-0 flex min-h-0">
           {/* Main content — scrollable */}
           <div ref={contentRef} className="flex-1 min-w-0 min-h-0 overflow-y-auto px-8 py-6">
-            {(loading || menuLoading) ? (
-              <div className="space-y-3 animate-pulse max-w-4xl mx-auto">
-                <div className="h-8 w-64 rounded bg-bg-elevated" />
-                <div className="h-4 w-full rounded bg-bg-elevated" />
-                <div className="h-4 w-3/4 rounded bg-bg-elevated" />
-                <div className="h-4 w-5/6 rounded bg-bg-elevated" />
-              </div>
-            ) : markdown.includes("<!-- RELEASES -->") ? (
+            {markdown.includes("<!-- RELEASES -->") ? (
               /* Version Roadmap page: split at placeholder and inject accordion */
               <article className="markdown-body max-w-4xl mx-auto">
                 {(() => {
@@ -841,7 +724,7 @@ export function DocsPage() {
           </div>
 
           {/* TOC minimap — sticky right side */}
-          {!loading && !menuLoading && toc.length > 0 && (
+          {toc.length > 0 && (
             <TableOfContents
               items={toc}
               activeHeadingId={activeHeadingId}

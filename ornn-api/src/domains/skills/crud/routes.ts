@@ -109,6 +109,125 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
   );
 
   /**
+   * POST /skills/pull — Create a skill by pulling from a public GitHub repo.
+   * Body: { repo: "owner/name", ref?: string, path?: string }
+   * Requires: ornn:skill:create
+   *
+   * This creates a one-way link GitHub → Ornn: subsequent updates to the
+   * upstream repo can be brought in via POST /skills/:id/refresh without
+   * re-uploading a ZIP.
+   */
+  app.post(
+    "/skills/pull",
+    auth,
+    requirePermission("ornn:skill:create"),
+    async (c) => {
+      const authCtx = getAuth(c);
+      const body = (await c.req.json().catch(() => ({}))) as {
+        repo?: unknown;
+        ref?: unknown;
+        path?: unknown;
+        skip_validation?: unknown;
+      };
+
+      if (typeof body.repo !== "string" || !body.repo) {
+        throw AppError.badRequest("MISSING_REPO", "A 'repo' field (format 'owner/name') is required");
+      }
+
+      const ref = typeof body.ref === "string" && body.ref ? body.ref : undefined;
+      const path = typeof body.path === "string" ? body.path : undefined;
+      const skipValidation = body.skip_validation === true;
+      const userEmail = authCtx.email || undefined;
+      const userDisplayName = authCtx.displayName || undefined;
+
+      try {
+        const { guid } = await skillService.createSkillFromGitHub(
+          { repo: body.repo, ref, path },
+          authCtx.userId,
+          { userEmail, userDisplayName, skipValidation },
+        );
+        const skill = await skillService.getSkill(guid);
+
+        logger.info(
+          { guid, userId: authCtx.userId, repo: body.repo, ref, path },
+          "Skill created via GitHub pull",
+        );
+
+        activityRepo
+          ?.log(authCtx.userId, userEmail ?? "", userDisplayName ?? "", "skill:create", {
+            skillId: guid,
+            skillName: skill.name,
+            source: "github-pull",
+          })
+          .catch((err) => logger.warn({ err }, "Failed to log skill:create activity"));
+
+        return c.json({ data: skill, error: null });
+      } catch (err) {
+        if (err instanceof AppError) throw err;
+        const message = err instanceof Error ? err.message : String(err);
+        throw AppError.badRequest("PULL_FAILED", message);
+      }
+    },
+  );
+
+  /**
+   * POST /skills/:id/refresh — Re-pull a skill's package from its stored
+   * GitHub source and publish as a new version.
+   * Requires: ornn:skill:update, and caller must be the skill's author or a
+   * platform admin.
+   */
+  app.post(
+    "/skills/:id/refresh",
+    auth,
+    requirePermission("ornn:skill:update"),
+    async (c) => {
+      const authCtx = getAuth(c);
+      const guid = c.req.param("id");
+
+      const existing = await skillService.getSkill(guid);
+      const isPlatformAdmin = authCtx.permissions.includes("ornn:admin:skill");
+      if (existing.createdBy !== authCtx.userId && !isPlatformAdmin) {
+        throw AppError.forbidden(
+          "NOT_SKILL_OWNER",
+          "Only the skill's author or a platform admin may refresh it",
+        );
+      }
+
+      try {
+        const refreshed = await skillService.refreshSkillFromSource(guid, authCtx.userId, {
+          userEmail: authCtx.email || undefined,
+          userDisplayName: authCtx.displayName || undefined,
+        });
+
+        logger.info(
+          { guid, userId: authCtx.userId, newCommit: refreshed.source?.lastSyncedCommit },
+          "Skill refreshed from GitHub source",
+        );
+
+        activityRepo
+          ?.log(
+            authCtx.userId,
+            authCtx.email ?? "",
+            authCtx.displayName ?? "",
+            "skill:refresh",
+            {
+              skillId: guid,
+              skillName: refreshed.name,
+              commit: refreshed.source?.lastSyncedCommit,
+            },
+          )
+          .catch((err) => logger.warn({ err }, "Failed to log skill:refresh activity"));
+
+        return c.json({ data: refreshed, error: null });
+      } catch (err) {
+        if (err instanceof AppError) throw err;
+        const message = err instanceof Error ? err.message : String(err);
+        throw AppError.badRequest("REFRESH_FAILED", message);
+      }
+    },
+  );
+
+  /**
    * GET /skills/:idOrName/json — Return skill package as JSON with all file contents.
    * Requires: ornn:skill:read
    */
@@ -154,6 +273,46 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
 
       const items = await skillService.listSkillVersions(idOrName);
       return c.json({ data: { items }, error: null });
+    },
+  );
+
+  /**
+   * GET /skills/:idOrName/versions/:fromVersion/diff/:toVersion
+   *
+   * Return a structured diff between two versions. File-level
+   * (added/removed/modified) plus text content on both sides for the UI
+   * to render line-level diffs client-side. Visibility rules match
+   * GET /skills/:idOrName.
+   *
+   * Auth: Optional. Anonymous users can only diff public skills.
+   */
+  app.get(
+    "/skills/:idOrName/versions/:fromVersion/diff/:toVersion",
+    optionalAuth,
+    async (c) => {
+      const idOrName = c.req.param("idOrName");
+      const fromVersion = c.req.param("fromVersion");
+      const toVersion = c.req.param("toVersion");
+      const authCtx = c.get("auth");
+
+      const skill = await skillService.getSkill(idOrName);
+      if (!authCtx && skill.isPrivate) {
+        throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${idOrName}' not found`);
+      }
+      if (authCtx && skill.isPrivate) {
+        const memberships = await readUserOrgMemberships(c);
+        const actor = {
+          userId: authCtx.userId,
+          memberships,
+          isPlatformAdmin: authCtx.permissions.includes("ornn:admin:skill"),
+        };
+        if (!canReadSkill(skill, actor)) {
+          throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${idOrName}' not found`);
+        }
+      }
+
+      const result = await skillService.diffVersions(idOrName, fromVersion, toVersion);
+      return c.json({ data: result, error: null });
     },
   );
 

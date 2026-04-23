@@ -3,23 +3,27 @@
   "private": true,
   "workspaces": [
     "ornn-api",
-    "ornn-web"
+    "ornn-web",
+    "ornn-sdk"
   ],
   "scripts": {
     "dev": "bun run dev:api",
     "dev:api": "bun run --filter ornn-api dev",
     "dev:web": "bun run --filter ornn-web dev",
-    "test": "bun run test:api",
-    "test:api": "bun test --filter ornn-api",
+    "test": "bun run test:api && bun run test:web && bun run test:sdk",
+    "test:api": "bun run --filter ornn-api test",
+    "test:web": "bun run --filter ornn-web test",
+    "test:sdk": "bun run --filter @chronoai/ornn-sdk test",
     "changeset": "changeset",
     "version-packages": "changeset version",
     "release": "changeset tag",
     "release:prep": "bash scripts/release-prep.sh",
-    "lint": "eslint ornn-api/src ornn-web/src",
-    "lint:fix": "eslint ornn-api/src ornn-web/src --fix",
+    "lint": "eslint ornn-api/src ornn-web/src ornn-sdk/src",
+    "lint:fix": "eslint ornn-api/src ornn-web/src ornn-sdk/src --fix",
     "typecheck:api": "bunx tsc --noEmit -p ornn-api/tsconfig.json",
     "typecheck:web": "bunx tsc --noEmit -p ornn-web/tsconfig.json",
-    "typecheck": "bun run typecheck:api && bun run typecheck:web",
+    "typecheck:sdk": "bunx tsc --noEmit -p ornn-sdk/tsconfig.json",
+    "typecheck": "bun run typecheck:api && bun run typecheck:web && bun run typecheck:sdk",
     "build:web": "bun run --filter ornn-web build"
   },
   "devDependencies": {

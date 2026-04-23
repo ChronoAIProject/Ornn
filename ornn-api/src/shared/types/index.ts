@@ -123,7 +123,36 @@ export interface SkillDocument {
    * for fast default-read access and must be kept in sync by the service layer.
    */
   latestVersion: string;
+  /**
+   * Optional origin metadata. When a skill was created or last refreshed by
+   * pulling from an external source (public GitHub repo today, potentially
+   * other Git hosts later), we record where it came from so the refresh
+   * endpoint knows what to re-fetch.
+   *
+   * Absent for hand-uploaded skills.
+   */
+  source?: SkillSource;
 }
+
+/**
+ * Origin metadata for a skill pulled from an external source. The `type`
+ * discriminator lets future additions (GitLab, Bitbucket, ...) live
+ * alongside `github` without touching callers that only care about one.
+ */
+export type SkillSource =
+  | {
+      type: "github";
+      /** `owner/name`. */
+      repo: string;
+      /** Branch, tag, or commit SHA. The actual commit SHA at pull time lives in `lastSyncedCommit`. */
+      ref: string;
+      /** Subdirectory inside the repo that contains SKILL.md. Empty string = repo root. */
+      path: string;
+      /** ISO timestamp of the most recent successful pull / refresh. */
+      lastSyncedAt: Date;
+      /** Commit SHA that was fetched at `lastSyncedAt`. Allows drift detection. */
+      lastSyncedCommit: string;
+    };
 
 /**
  * Immutable record of a single published version of a skill.
@@ -158,6 +187,13 @@ export interface SkillVersionDocument {
   isDeprecated?: boolean;
   /** Optional human-readable explanation surfaced with the warning. */
   deprecationNote?: string | null;
+  /**
+   * Author-supplied release notes for this specific version. Read at
+   * publish time from SKILL.md frontmatter (`release-notes` or
+   * `releaseNotes`). Plain text, max 2000 chars. Null when the author
+   * omitted it.
+   */
+  releaseNotes?: string | null;
 }
 
 export interface SkillMetadata {
@@ -207,6 +243,20 @@ export interface SkillDetailResponse {
   isDeprecated?: boolean;
   /** Optional note the author left when deprecating this version. */
   deprecationNote?: string | null;
+  /**
+   * Present when the skill was created or refreshed by pulling from an
+   * external source (e.g. a public GitHub repo). Clients use this to
+   * render a "source" link on the detail page and to power "Refresh from
+   * source" actions. Serialized form — `lastSyncedAt` is an ISO string.
+   */
+  source?: {
+    type: "github";
+    repo: string;
+    ref: string;
+    path: string;
+    lastSyncedAt: string;
+    lastSyncedCommit: string;
+  };
 }
 
 export interface SkillSearchItem {

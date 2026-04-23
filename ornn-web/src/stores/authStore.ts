@@ -7,6 +7,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { AuthUser, NyxIDTokenResponse, NyxIDJwtClaims, NyxIDIdTokenClaims } from "@/types/auth";
+import { config } from "@/config";
 
 const logger = {
   info: (msg: string, data?: Record<string, unknown>) =>
@@ -21,13 +22,13 @@ const TOKEN_REFRESH_BUFFER_MS = 60 * 1000;
 /** Consider token expired if less than 30s remaining (for proactive refresh). */
 const TOKEN_EXPIRY_THRESHOLD_MS = 30 * 1000;
 
-/** NyxID OAuth configuration from environment variables. */
+/** NyxID OAuth configuration from runtime config. */
 const NYXID_CONFIG = {
-  authorizeUrl: import.meta.env.VITE_NYXID_AUTHORIZE_URL ?? "",
-  tokenUrl: import.meta.env.VITE_NYXID_TOKEN_URL ?? "",
-  clientId: import.meta.env.VITE_NYXID_CLIENT_ID ?? "",
-  redirectUri: import.meta.env.VITE_NYXID_REDIRECT_URI ?? "",
-  logoutUrl: import.meta.env.VITE_NYXID_LOGOUT_URL ?? "",
+  authorizeUrl: config.nyxidAuthorizeUrl,
+  tokenUrl: config.nyxidTokenUrl,
+  clientId: config.nyxidClientId,
+  redirectUri: config.nyxidRedirectUri,
+  logoutUrl: config.nyxidLogoutUrl,
 };
 
 interface AuthState {
@@ -200,7 +201,7 @@ export const useAuthStore = create<AuthState>()(
 
           get().startTokenRefresh();
 
-          // Back-fill from Ornn's /api/me when the OAuth id_token
+          // Back-fill from Ornn's /api/v1/me when the OAuth id_token
           // shipped without email / name claims (happens for
           // admin-created NyxID users). The backend gets the full
           // profile via the proxy identity token.

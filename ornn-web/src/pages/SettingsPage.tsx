@@ -12,8 +12,9 @@ import { motion } from "framer-motion";
 import { Button } from "@/components/ui/Button";
 import { PageTransition } from "@/components/layout/PageTransition";
 import { useAuthStore } from "@/stores/authStore";
+import { config } from "@/config";
 
-const NYXID_SETTINGS_URL = import.meta.env.VITE_NYXID_SETTINGS_URL ?? "";
+const NYXID_SETTINGS_URL = config.nyxidSettingsUrl;
 
 export function SettingsPage() {
   const { t } = useTranslation();

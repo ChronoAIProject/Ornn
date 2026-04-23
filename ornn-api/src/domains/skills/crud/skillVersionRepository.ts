@@ -29,6 +29,8 @@ export interface CreateSkillVersionData {
   createdByEmail?: string;
   createdByDisplayName?: string;
   createdOn?: Date;
+  /** Author-supplied release notes pulled from SKILL.md frontmatter. */
+  releaseNotes?: string | null;
 }
 
 export class SkillVersionRepository {
@@ -66,6 +68,7 @@ export class SkillVersionRepository {
       createdByEmail: data.createdByEmail ?? null,
       createdByDisplayName: data.createdByDisplayName ?? null,
       createdOn,
+      releaseNotes: data.releaseNotes ?? null,
     };
 
     try {
@@ -168,5 +171,6 @@ function mapDoc(doc: Document | null): SkillVersionDocument | null {
     createdOn: doc.createdOn ?? new Date(),
     isDeprecated: doc.isDeprecated === true,
     deprecationNote: doc.deprecationNote ?? null,
+    releaseNotes: typeof doc.releaseNotes === "string" ? doc.releaseNotes : null,
   };
 }

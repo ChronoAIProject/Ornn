@@ -24,7 +24,7 @@ interface FileTreeResponse {
 /** Fetch the file tree and viewable contents for a skill version. */
 async function fetchFileTree(skillId: string, version: string): Promise<FileTreeResponse> {
   const res = await apiGet<FileTreeResponse>(
-    `/api/skills/${skillId}/versions/${encodeURIComponent(version)}/files`,
+    `/api/v1/skills/${skillId}/versions/${encodeURIComponent(version)}/files`,
   );
   return res.data!;
 }
@@ -37,7 +37,7 @@ async function updateFileContent(
   content: string,
 ): Promise<void> {
   await apiPut(
-    `/api/skills/${skillId}/versions/${encodeURIComponent(version)}/files/${filePath}`,
+    `/api/v1/skills/${skillId}/versions/${encodeURIComponent(version)}/files/${filePath}`,
     { content },
   );
 }

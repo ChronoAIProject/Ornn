@@ -2,8 +2,9 @@ import { apiGet, apiPut, apiDelete } from "./apiClient";
 import type { UpdateSkillMetadata } from "@/types/api";
 import type { SkillDetail, SkillVersionEntry } from "@/types/domain";
 import { useAuthStore } from "@/stores/authStore";
+import { config } from "@/config";
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
+const API_BASE = config.apiBaseUrl;
 
 /**
  * Fetch a single skill by GUID or name.
@@ -11,14 +12,14 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
  */
 export async function fetchSkill(idOrName: string, version?: string): Promise<SkillDetail> {
   const suffix = version ? `?version=${encodeURIComponent(version)}` : "";
-  const res = await apiGet<SkillDetail>(`/api/skills/${encodeURIComponent(idOrName)}${suffix}`);
+  const res = await apiGet<SkillDetail>(`/api/v1/skills/${encodeURIComponent(idOrName)}${suffix}`);
   return res.data!;
 }
 
 /** List every published version for a skill, newest first. */
 export async function fetchSkillVersions(idOrName: string): Promise<SkillVersionEntry[]> {
   const res = await apiGet<{ items: SkillVersionEntry[] }>(
-    `/api/skills/${encodeURIComponent(idOrName)}/versions`,
+    `/api/v1/skills/${encodeURIComponent(idOrName)}/versions`,
   );
   return res.data?.items ?? [];
 }
@@ -43,7 +44,7 @@ export async function setSkillVersionDeprecation(
     headers["Authorization"] = `Bearer ${token}`;
   }
   const response = await fetch(
-    `${API_BASE}/api/skills/${encodeURIComponent(idOrName)}/versions/${encodeURIComponent(version)}`,
+    `${API_BASE}/api/v1/skills/${encodeURIComponent(idOrName)}/versions/${encodeURIComponent(version)}`,
     {
       method: "PATCH",
       headers,
@@ -83,7 +84,7 @@ export async function createSkill(zipFile: File, skipValidation = false): Promis
   }
 
   const params = skipValidation ? "?skip_validation=true" : "";
-  const response = await fetch(`${API_BASE}/api/skills${params}`, {
+  const response = await fetch(`${API_BASE}/api/v1/skills${params}`, {
     method: "POST",
     headers,
     body: zipFile,
@@ -106,7 +107,7 @@ export async function createSkill(zipFile: File, skipValidation = false): Promis
  * Update skill metadata (e.g. isPrivate) via JSON body.
  */
 export async function updateSkill(id: string, data: UpdateSkillMetadata): Promise<SkillDetail> {
-  const res = await apiPut<SkillDetail>(`/api/skills/${id}`, data);
+  const res = await apiPut<SkillDetail>(`/api/v1/skills/${id}`, data);
   return res.data!;
 }
 
@@ -123,7 +124,7 @@ export async function updateSkillPackage(id: string, zipFile: File, skipValidati
   }
 
   const params = skipValidation ? "?skip_validation=true" : "";
-  const response = await fetch(`${API_BASE}/api/skills/${id}${params}`, {
+  const response = await fetch(`${API_BASE}/api/v1/skills/${id}${params}`, {
     method: "PUT",
     headers,
     body: zipFile,
@@ -144,5 +145,5 @@ export async function updateSkillPackage(id: string, zipFile: File, skipValidati
 
 /** Hard-delete a skill */
 export async function deleteSkill(id: string): Promise<void> {
-  await apiDelete(`/api/skills/${id}`);
+  await apiDelete(`/api/v1/skills/${id}`);
 }

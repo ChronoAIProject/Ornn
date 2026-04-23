@@ -7,8 +7,9 @@
 import type { GenerationStreamEvent } from "@/types/streaming";
 import { parseSseChunk } from "@/utils/sseParser";
 import { useAuthStore } from "@/stores/authStore";
+import { config } from "@/config";
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
+const API_BASE = config.apiBaseUrl;
 
 export interface GenerateStreamParams {
   messages: Array<{ role: string; content: string }>;
@@ -27,7 +28,7 @@ function getAuthHeaders(): Record<string, string> {
 
 /**
  * Connect to the generation SSE endpoint.
- * POST /api/skills/generate
+ * POST /api/v1/skills/generate
  */
 export function generateSkillStream(
   params: GenerateStreamParams,
@@ -36,7 +37,7 @@ export function generateSkillStream(
   const controller = new AbortController();
 
   const url = new URL(
-    `${API_BASE}/api/skills/generate`,
+    `${API_BASE}/api/v1/skills/generate`,
     window.location.origin,
   );
 

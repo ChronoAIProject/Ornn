@@ -1,14 +1,15 @@
 /**
  * SSE streaming client for the playground chat endpoint.
- * POST /api/playground/chat with Responses API format body, receives SSE response.
+ * POST /api/v1/playground/chat with Responses API format body, receives SSE response.
  * @module services/playgroundStreamApi
  */
 
 import { parseSseChunk } from "@/utils/sseParser";
 import { useAuthStore } from "@/stores/authStore";
 import { PLAYGROUND_EVENT_TYPES, type PlaygroundChatEvent } from "@/types/playground";
+import { config } from "@/config";
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
+const API_BASE = config.apiBaseUrl;
 
 export interface ChatStreamParams {
   messages: Array<{ role: string; content: string }>;
@@ -47,7 +48,7 @@ export function streamChat(
   onEvent: (event: PlaygroundChatEvent) => void,
 ): StreamHandle {
   const controller = new AbortController();
-  const url = new URL(`${API_BASE}/api/playground/chat`, window.location.origin);
+  const url = new URL(`${API_BASE}/api/v1/playground/chat`, window.location.origin);
 
   (async () => {
     try {

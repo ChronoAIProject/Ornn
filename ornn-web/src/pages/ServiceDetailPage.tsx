@@ -12,8 +12,9 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { useAuthStore, isAdmin as checkIsAdmin, useCurrentUser } from "@/stores/authStore";
 import { GenerateSkillModal } from "@/components/skill/GenerateSkillModal";
+import { config } from "@/config";
 
-const NYXID_API_BASE = import.meta.env.VITE_NYXID_AUTHORIZE_URL?.replace("/oauth/authorize", "") ?? "";
+const NYXID_API_BASE = config.nyxidAuthorizeUrl.replace("/oauth/authorize", "");
 
 interface ServiceDetail {
   id: string;

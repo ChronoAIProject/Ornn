@@ -127,7 +127,7 @@ export function buildTrySkillPrompt(input: BuildTrySkillPromptInput): string {
     "## Step 2: Fetch the skill package",
     "Get the full package as JSON (SKILL.md + scripts + references + assets):",
     "```",
-    `nyxid proxy request ornn /api/skills/${guid}/json --output json`,
+    `nyxid proxy request ornn /api/v1/skills/${guid}/json --output json`,
     "```",
     "The response body contains `{ name, description, metadata, files: { ... } }`.",
     "If the user said yes in step 1, write each entry of `files` to the local",

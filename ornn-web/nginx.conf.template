@@ -20,6 +20,14 @@ server {
         application/xml
         image/svg+xml;
 
+    # ── Runtime config — MUST NOT be cached. window.__ORNN_CONFIG__ varies
+    #    per environment; matched ahead of the generic .js rule below.
+    location = /config.js {
+        expires -1;
+        add_header Cache-Control "no-store, no-cache, must-revalidate";
+        try_files $uri =404;
+    }
+
     # ── Static asset caching ──────────────────────────────────────────────
     location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
         expires 1y;
@@ -34,24 +42,10 @@ server {
         add_header Content-Type text/plain;
     }
 
-    # ── Public API routes → direct to ornn-api (no auth required) ────
-    location /api/docs/ {
-        proxy_pass http://ornn-api:3802/api/docs/;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-
-    location = /api/openapi.json {
-        proxy_pass http://ornn-api:3802/api/openapi.json;
-        proxy_set_header Host $host;
-    }
-
     # ── Authenticated API routes → NyxID proxy → ornn-api ─────────
-    # /api/X → NyxID proxy /api/v1/proxy/s/ornn-api/api/X → ornn-api /api/X
-    location /api/ {
-        proxy_pass http://nyxid-backend:3001/api/v1/proxy/s/ornn-api/api/;
+    # /api/v1/X → NyxID proxy /api/v1/proxy/s/ornn-api/api/v1/X → ornn-api /api/v1/X
+    location /api/v1/ {
+        proxy_pass ${NYXID_BACKEND_URL}/api/v1/proxy/s/ornn-api/api/v1/;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -65,15 +59,6 @@ server {
         chunked_transfer_encoding off;
         proxy_buffering off;
         proxy_cache off;
-    }
-
-    # ── S3/MinIO proxy for presigned URLs ────────────────────────────────
-    # Rewrites browser requests from /s3/<path> to minio:9000/<path>
-    # preserving the Host header so presigned URL signatures remain valid.
-    location /s3/ {
-        rewrite ^/s3/(.*)$ /$1 break;
-        proxy_pass http://minio:9000;
-        proxy_set_header Host minio:9000;
     }
 
     # ── SPA fallback ──────────────────────────────────────────────────────

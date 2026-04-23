@@ -1,7 +1,7 @@
 /**
  * Bootstrap for the consolidated ornn-api service.
  * Wires up all domains: skills (crud/search/generation/format), playground,
- * admin, docs, me, users. Uses NyxID auth, chrono-storage, chrono-sandbox,
+ * admin, me, users. Uses NyxID auth, chrono-storage, chrono-sandbox,
  * Nyx Provider.
  * @module bootstrap
  */
@@ -37,6 +37,26 @@ import { SkillVersionRepository } from "./domains/skills/crud/skillVersionReposi
 import { SkillService } from "./domains/skills/crud/service";
 import { createSkillRoutes } from "./domains/skills/crud/routes";
 
+// Domain: Skill Audit
+import { AuditRepository } from "./domains/skills/audit/repository";
+import { AuditService } from "./domains/skills/audit/service";
+import { createAuditRoutes } from "./domains/skills/audit/routes";
+
+// Domain: Shares (audit-gated sharing)
+import { ShareRepository } from "./domains/shares/repository";
+import { ShareService } from "./domains/shares/service";
+import { createShareRoutes } from "./domains/shares/routes";
+
+// Domain: Notifications
+import { NotificationRepository } from "./domains/notifications/repository";
+import { NotificationService } from "./domains/notifications/service";
+import { createNotificationRoutes } from "./domains/notifications/routes";
+
+// Domain: Analytics
+import { AnalyticsRepository } from "./domains/analytics/repository";
+import { AnalyticsService } from "./domains/analytics/service";
+import { createAnalyticsRoutes } from "./domains/analytics/routes";
+
 // Domain: Skill Search
 import { SearchService } from "./domains/skills/search/service";
 import { createSearchRoutes } from "./domains/skills/search/routes";
@@ -57,9 +77,6 @@ import { createAdminRoutes } from "./domains/admin/routes";
 
 // Domain: Skill Format
 import { createFormatRoutes } from "./domains/skills/format/routes";
-
-// Domain: Docs
-import { createDocsRoutes } from "./domains/docs/routes";
 
 // Domain: Me (caller-scoped endpoints)
 import { createMeRoutes } from "./domains/me/routes";
@@ -149,6 +166,51 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
     activityRepo,
   });
 
+  // ---- Domain: Skill Audit ----
+  const auditRepo = new AuditRepository(db);
+  void auditRepo.ensureIndexes().catch((err) =>
+    logger.warn({ err }, "Audit indexes ensureIndexes failed — proceeding anyway"),
+  );
+  const auditService = new AuditService({
+    auditRepo,
+    skillService,
+    storageClient,
+    storageBucket: config.storageBucket,
+    llmClient: nyxLlmClient,
+    model: config.defaultLlmModel,
+    cacheTtlMs: 7 * 24 * 60 * 60 * 1000, // 7 days
+  });
+  const auditRoutes = createAuditRoutes({ auditService, skillService });
+
+  // ---- Domain: Shares (audit-gated sharing) ----
+  // ---- Domain: Notifications ----
+  const notificationRepo = new NotificationRepository(db);
+  void notificationRepo.ensureIndexes().catch((err) =>
+    logger.warn({ err }, "notifications indexes ensureIndexes failed — proceeding anyway"),
+  );
+  const notificationService = new NotificationService({ notificationRepo });
+  const notificationRoutes = createNotificationRoutes({ notificationService });
+
+  // ---- Domain: Analytics ----
+  const analyticsRepo = new AnalyticsRepository(db);
+  void analyticsRepo.ensureIndexes().catch((err) =>
+    logger.warn({ err }, "skill_executions indexes ensureIndexes failed — proceeding anyway"),
+  );
+  const analyticsService = new AnalyticsService({ analyticsRepo });
+  const analyticsRoutes = createAnalyticsRoutes({ analyticsService, skillService });
+
+  const shareRepo = new ShareRepository(db);
+  void shareRepo.ensureIndexes().catch((err) =>
+    logger.warn({ err }, "share_requests indexes ensureIndexes failed — proceeding anyway"),
+  );
+  const shareService = new ShareService({
+    shareRepo,
+    auditService,
+    skillService,
+    notificationService,
+  });
+  const shareRoutes = createShareRoutes({ shareService });
+
   // ---- Domain: Skill Search ----
   const searchService = new SearchService({
     skillRepo,
@@ -204,11 +266,6 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   // ---- Domain: Skill Format ----
   const formatRoutes = createFormatRoutes({
     skillService,
-  });
-
-  // ---- Domain: Docs ----
-  const docsRoutes = createDocsRoutes({
-    docsBasePath: join(import.meta.dir, "..", "docs", "site"),
   });
 
   // ---- Hono App ----
@@ -277,23 +334,26 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   // single request even when multiple routes call `readUserOrgMemberships`.
   apiApp.use("*", nyxidOrgLookupMiddleware(nyxidOrgsClient));
   apiApp.route("/", skillRoutes);
+  apiApp.route("/", auditRoutes);
+  apiApp.route("/", shareRoutes);
+  apiApp.route("/", notificationRoutes);
+  apiApp.route("/", analyticsRoutes);
   apiApp.route("/", searchRoutes);
   apiApp.route("/", generationRoutes);
   apiApp.route("/", playgroundRoutes);
   apiApp.route("/", adminRoutes);
   apiApp.route("/", formatRoutes);
-  apiApp.route("/", docsRoutes);
   apiApp.route("/", createMeRoutes({
     nyxidBaseUrl: config.nyxidBaseUrl,
     skillRepo,
     activityRepo,
   }));
   apiApp.route("/", createUserRoutes({ activityRepo }));
-  app.route("/api", apiApp);
+  app.route("/api/v1", apiApp);
 
   // OpenAPI spec — auto-generated from Zod schemas
   const spec = buildSpec();
-  app.get("/api/openapi.json", (c) => c.json(spec));
+  app.get("/api/v1/openapi.json", (c) => c.json(spec));
 
   // Kubernetes liveness probe — process is alive. No dependency checks.
   // `/health` kept as an alias for backward compatibility; K8s manifests
