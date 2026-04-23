@@ -5,11 +5,10 @@
  * @module pages/LandingPage
  */
 
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useEffect, useRef, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
+import { getReleases } from "@/lib/docsContent";
 
 /** Decorative skill names that float in the background */
 const SKILL_NAMES = [
@@ -135,24 +134,11 @@ function FloatingBackground() {
 function AnnouncementBanner() {
   const { t, i18n } = useTranslation();
   const lang = i18n.language === "zh" ? "zh" : "en";
-  const [version, setVersion] = useState("");
-  const [title, setTitle] = useState("");
+  const latest = useMemo(() => getReleases(lang)[0], [lang]);
 
-  useEffect(() => {
-    fetch(`${API_BASE}/api/docs/releases?lang=${lang}`)
-      .then((r) => r.json())
-      .then((json) => {
-        if (json.data?.length > 0) {
-          setVersion(json.data[0].version);
-          setTitle(json.data[0].title);
-        }
-      })
-      .catch(() => {});
-  }, [lang]);
+  if (!latest) return null;
 
-  if (!version) return null;
-
-  const text = `${t("landing.bannerNew")}  Ornn v${version} — ${title}`;
+  const text = `${t("landing.bannerNew")}  Ornn v${latest.version} — ${latest.title}`;
 
   return (
     <div className="shrink-0 relative z-10 overflow-hidden border-b border-neon-cyan/15 bg-neon-cyan/5">

@@ -1,7 +1,7 @@
 /**
  * Bootstrap for the consolidated ornn-api service.
  * Wires up all domains: skills (crud/search/generation/format), playground,
- * admin, docs, me, users. Uses NyxID auth, chrono-storage, chrono-sandbox,
+ * admin, me, users. Uses NyxID auth, chrono-storage, chrono-sandbox,
  * Nyx Provider.
  * @module bootstrap
  */
@@ -57,9 +57,6 @@ import { createAdminRoutes } from "./domains/admin/routes";
 
 // Domain: Skill Format
 import { createFormatRoutes } from "./domains/skills/format/routes";
-
-// Domain: Docs
-import { createDocsRoutes } from "./domains/docs/routes";
 
 // Domain: Me (caller-scoped endpoints)
 import { createMeRoutes } from "./domains/me/routes";
@@ -206,11 +203,6 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
     skillService,
   });
 
-  // ---- Domain: Docs ----
-  const docsRoutes = createDocsRoutes({
-    docsBasePath: join(import.meta.dir, "..", "docs", "site"),
-  });
-
   // ---- Hono App ----
   const app = new Hono();
 
@@ -282,7 +274,6 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   apiApp.route("/", playgroundRoutes);
   apiApp.route("/", adminRoutes);
   apiApp.route("/", formatRoutes);
-  apiApp.route("/", docsRoutes);
   apiApp.route("/", createMeRoutes({
     nyxidBaseUrl: config.nyxidBaseUrl,
     skillRepo,
