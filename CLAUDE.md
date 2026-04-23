@@ -10,7 +10,7 @@ TypeScript, Bun workspace monorepo
 - **Database:** MongoDB 7
 - **Validation:** Zod
 - **Logging:** Pino
-- **Testing:** Bun test (backend). Frontend has no test framework installed yet — two `.test.ts` files exist under `ornn-web/src/lib/` but do not run in CI. Install Vitest + Testing Library before writing new frontend tests (see `docs/conventions.md` §11.7).
+- **Testing:** Bun test (backend); Vitest + Testing Library + jsdom (frontend). Both packages run in CI via `bun run test`.
 
 **Packages:**
 
@@ -33,7 +33,7 @@ TypeScript, Bun workspace monorepo
 - All code MUST include sufficient logging (Pino). `info` for lifecycle events, `debug` for detailed flow, `error` for failures with context.
 - Logs MUST NOT contain plaintext secrets. Mask or redact sensitive values.
 - No hardcoded secrets, credentials, API keys, tokens in code — ever.
-- Backend tests: `bun test`. Frontend tests: not yet wired (see Testing in Tech Stack above).
+- Tests: `bun run test` runs both (backend via Bun, frontend via Vitest).
 - Unit tests colocated with source files. Integration tests in `tests/` directory.
 - Always use Docker to run and test locally. Do not run services directly with `bun run dev`. CI builds both `ornn-api` and `ornn-web` images on every PR (`docker-build` job) so Dockerfile breakage surfaces immediately.
 
