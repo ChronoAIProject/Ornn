@@ -1,5 +1,5 @@
 /**
- * Caller-scoped endpoints — /api/me/*.
+ * Caller-scoped endpoints — /api/v1/me/*.
  *
  * The me/orgs endpoint returns the user's NyxID org memberships (admin +
  * member only; viewer rows are filtered server-side). Used by the skill
@@ -23,7 +23,7 @@ export interface MeIdentity {
  */
 export async function fetchMe(): Promise<MeIdentity | null> {
   try {
-    const res = await apiGet<MeIdentity>("/api/me");
+    const res = await apiGet<MeIdentity>("/api/v1/me");
     return res.data ?? null;
   } catch {
     return null;
@@ -40,7 +40,7 @@ export interface MyOrgMembership {
 }
 
 export async function fetchMyOrgs(): Promise<MyOrgMembership[]> {
-  const res = await apiGet<{ items: MyOrgMembership[] }>("/api/me/orgs");
+  const res = await apiGet<{ items: MyOrgMembership[] }>("/api/v1/me/orgs");
   return res.data?.items ?? [];
 }
 
@@ -52,7 +52,7 @@ export interface MyNyxidService {
 }
 
 export async function fetchMyNyxidServices(): Promise<MyNyxidService[]> {
-  const res = await apiGet<{ items: MyNyxidService[] }>("/api/me/nyxid-services");
+  const res = await apiGet<{ items: MyNyxidService[] }>("/api/v1/me/nyxid-services");
   return res.data?.items ?? [];
 }
 
@@ -77,12 +77,12 @@ export interface GrantsSummary {
 
 /** "Which orgs/users have I shared my skills with?" */
 export async function fetchMySkillGrantsSummary(): Promise<GrantsSummary> {
-  const res = await apiGet<GrantsSummary>("/api/me/skills/grants-summary");
+  const res = await apiGet<GrantsSummary>("/api/v1/me/skills/grants-summary");
   return res.data ?? { orgs: [], users: [] };
 }
 
 /** "Which orgs/users gave me access to their skills?" */
 export async function fetchSharedSkillSourcesSummary(): Promise<GrantsSummary> {
-  const res = await apiGet<GrantsSummary>("/api/me/shared-skills/sources-summary");
+  const res = await apiGet<GrantsSummary>("/api/v1/me/shared-skills/sources-summary");
   return res.data ?? { orgs: [], users: [] };
 }

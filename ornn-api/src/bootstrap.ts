@@ -280,11 +280,11 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
     activityRepo,
   }));
   apiApp.route("/", createUserRoutes({ activityRepo }));
-  app.route("/api", apiApp);
+  app.route("/api/v1", apiApp);
 
   // OpenAPI spec — auto-generated from Zod schemas
   const spec = buildSpec();
-  app.get("/api/openapi.json", (c) => c.json(spec));
+  app.get("/api/v1/openapi.json", (c) => c.json(spec));
 
   // Kubernetes liveness probe — process is alive. No dependency checks.
   // `/health` kept as an alias for backward compatibility; K8s manifests

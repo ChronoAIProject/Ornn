@@ -17,7 +17,7 @@ export async function searchUsersByEmail(
   limit = 10,
 ): Promise<UserDirectoryEntry[]> {
   const params = new URLSearchParams({ q: query, limit: String(limit) });
-  const res = await apiGet<{ items: UserDirectoryEntry[] }>(`/api/users/search?${params.toString()}`);
+  const res = await apiGet<{ items: UserDirectoryEntry[] }>(`/api/v1/users/search?${params.toString()}`);
   return res.data?.items ?? [];
 }
 
@@ -29,7 +29,7 @@ export async function resolveUsers(ids: string[]): Promise<UserDirectoryEntry[]>
   if (ids.length === 0) return [];
   const params = new URLSearchParams({ ids: ids.join(",") });
   const res = await apiGet<{ items: UserDirectoryEntry[] }>(
-    `/api/users/resolve?${params.toString()}`,
+    `/api/v1/users/resolve?${params.toString()}`,
   );
   return res.data?.items ?? [];
 }
@@ -48,7 +48,7 @@ export interface OrgDirectoryEntry {
  */
 export async function fetchOrgSummary(orgId: string): Promise<OrgDirectoryEntry | null> {
   try {
-    const res = await apiGet<OrgDirectoryEntry>(`/api/me/orgs/${encodeURIComponent(orgId)}`);
+    const res = await apiGet<OrgDirectoryEntry>(`/api/v1/me/orgs/${encodeURIComponent(orgId)}`);
     return res.data ?? null;
   } catch {
     return null;

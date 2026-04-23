@@ -124,7 +124,7 @@ export function DashboardPage() {
   } = useQuery({
     queryKey: ["admin", "stats"],
     queryFn: async () => {
-      const res = await apiGet<AdminStats>("/api/admin/stats");
+      const res = await apiGet<AdminStats>("/api/v1/admin/stats");
       return res.data!;
     },
   });
@@ -136,7 +136,7 @@ export function DashboardPage() {
   } = useQuery({
     queryKey: ["admin", "activities", "recent"],
     queryFn: async () => {
-      const res = await apiGet<ActivitiesResponse>("/api/admin/activities", {
+      const res = await apiGet<ActivitiesResponse>("/api/v1/admin/activities", {
         pageSize: 5,
       });
       return res.data!;

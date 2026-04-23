@@ -200,7 +200,7 @@ export const useAuthStore = create<AuthState>()(
 
           get().startTokenRefresh();
 
-          // Back-fill from Ornn's /api/me when the OAuth id_token
+          // Back-fill from Ornn's /api/v1/me when the OAuth id_token
           // shipped without email / name claims (happens for
           // admin-created NyxID users). The backend gets the full
           // profile via the proxy identity token.

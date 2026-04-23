@@ -3,7 +3,7 @@ import type { SkillCounts, SkillSearchParams, SkillSearchResponse } from "@/type
 
 /**
  * Search skills using the skill-search API.
- * GET /api/skill-search with query params.
+ * GET /api/v1/skill-search with query params.
  */
 export async function searchSkills(
   params: SkillSearchParams
@@ -20,7 +20,7 @@ export async function searchSkills(
     createdByAny: params.createdByAny?.length ? params.createdByAny.join(",") : undefined,
   };
 
-  const res = await apiGet<SkillSearchResponse>("/api/skill-search", queryParams);
+  const res = await apiGet<SkillSearchResponse>("/api/v1/skill-search", queryParams);
   return res.data!;
 }
 
@@ -30,7 +30,7 @@ export async function searchSkills(
  * caller. Anonymous callers get `mine` + `sharedWithMe` as 0.
  */
 export async function fetchSkillCounts(): Promise<SkillCounts> {
-  const res = await apiGet<SkillCounts>("/api/skill-counts");
+  const res = await apiGet<SkillCounts>("/api/v1/skill-counts");
   return res.data!;
 }
 

@@ -183,7 +183,7 @@ export function GenerateSkillModal({
       setCurrentStepMsg(STEP_MESSAGES.generating);
 
       const res = await apiPost<{ guid: string; name: string; serviceId: string }>(
-        `/api/admin/system-skills/${serviceId}/generate`,
+        `/api/v1/admin/system-skills/${serviceId}/generate`,
         {
           userToken: accessToken,
           proxyUrl,

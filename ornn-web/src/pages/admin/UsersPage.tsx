@@ -56,7 +56,7 @@ export function UsersPage() {
   const { data, isLoading, error } = useQuery({
     queryKey: ["admin", "users", page],
     queryFn: async () => {
-      const res = await apiGet<UsersResponse>("/api/admin/users", {
+      const res = await apiGet<UsersResponse>("/api/v1/admin/users", {
         page,
         pageSize: PAGE_SIZE,
       });

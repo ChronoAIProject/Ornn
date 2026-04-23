@@ -94,7 +94,7 @@ export function ActivitiesPage() {
       if (actionFilter) {
         params.action = actionFilter;
       }
-      const res = await apiGet<ActivitiesResponse>("/api/admin/activities", params);
+      const res = await apiGet<ActivitiesResponse>("/api/v1/admin/activities", params);
       return res.data!;
     },
   });
