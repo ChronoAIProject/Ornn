@@ -30,6 +30,22 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bun run test
 
+  python-sdk-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: ornn-sdk-python/pyproject.toml
+      - name: Install ornn-sdk-python
+        working-directory: ornn-sdk-python
+        run: pip install -e ".[dev]"
+      - name: Run pytest
+        working-directory: ornn-sdk-python
+        run: pytest -q
+
   build:
     runs-on: ubuntu-latest
     steps:
