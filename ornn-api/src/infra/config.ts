@@ -22,7 +22,7 @@ export interface SkillConfig {
   readonly nyxidClientSecret: string;
   /**
    * NyxID API base URL (no trailing slash, no `/oauth/token` suffix).
-   * Derived from `NYXID_TOKEN_URL` when `NYXID_BASE_URL` is not set
+   * Derived from `NYXID_SA_TOKEN_URL` when `NYXID_BASE_URL` is not set
    * explicitly so local dev works with just the token URL.
    */
   readonly nyxidBaseUrl: string;
@@ -73,10 +73,10 @@ const envSchema = z.object({
   LOG_LEVEL: z.enum(["trace", "debug", "info", "warn", "error", "fatal"]).default("info"),
   LOG_PRETTY: booleanFromEnv,
 
-  NYXID_TOKEN_URL: z.string().url(),
+  NYXID_SA_TOKEN_URL: z.string().url(),
   NYXID_BASE_URL: z.string().url().optional(),
-  NYXID_CLIENT_ID: z.string().min(1),
-  NYXID_CLIENT_SECRET: z.string().min(1),
+  NYXID_SA_CLIENT_ID: z.string().min(1),
+  NYXID_SA_CLIENT_SECRET: z.string().min(1),
 
   NYX_LLM_GATEWAY_URL: z.string().url(),
 
@@ -128,7 +128,7 @@ export function loadConfig(): SkillConfig {
   }
   const env = result.data;
 
-  const tokenUrl = env.NYXID_TOKEN_URL;
+  const tokenUrl = env.NYXID_SA_TOKEN_URL;
   const baseUrl = (env.NYXID_BASE_URL ?? tokenUrl.replace(/\/oauth\/token\/?$/, "")).replace(/\/+$/, "");
 
   return {
@@ -137,8 +137,8 @@ export function loadConfig(): SkillConfig {
     logPretty: env.LOG_PRETTY,
 
     nyxidTokenUrl: tokenUrl,
-    nyxidClientId: env.NYXID_CLIENT_ID,
-    nyxidClientSecret: env.NYXID_CLIENT_SECRET,
+    nyxidClientId: env.NYXID_SA_CLIENT_ID,
+    nyxidClientSecret: env.NYXID_SA_CLIENT_SECRET,
     nyxidBaseUrl: baseUrl,
 
     nyxLlmGatewayUrl: env.NYX_LLM_GATEWAY_URL,

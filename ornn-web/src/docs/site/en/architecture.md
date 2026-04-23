@@ -361,8 +361,8 @@ NYXID_JWKS_URL=https://nyxid.example.com/.well-known/jwks.json
 NYXID_ISSUER=https://nyxid.example.com
 NYXID_AUDIENCE=https://ornn.example.com
 NYXID_INTROSPECTION_URL=https://nyxid.example.com/oauth/introspect
-NYXID_CLIENT_ID=ornn-api
-NYXID_CLIENT_SECRET=<secret>
+NYXID_SA_CLIENT_ID=ornn-api
+NYXID_SA_CLIENT_SECRET=<secret>
 
 # Nyx Provider (LLM Gateway)
 NYX_LLM_GATEWAY_URL=https://nyxid.example.com/llm

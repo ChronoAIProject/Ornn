@@ -24,10 +24,10 @@ const TOKEN_EXPIRY_THRESHOLD_MS = 30 * 1000;
 
 /** NyxID OAuth configuration from runtime config. */
 const NYXID_CONFIG = {
-  authorizeUrl: config.nyxidAuthorizeUrl,
-  tokenUrl: config.nyxidTokenUrl,
-  clientId: config.nyxidClientId,
-  redirectUri: config.nyxidRedirectUri,
+  authorizeUrl: config.nyxidOauthAuthorizeUrl,
+  tokenUrl: config.nyxidOauthTokenUrl,
+  clientId: config.nyxidOauthClientId,
+  redirectUri: config.nyxidOauthRedirectUri,
   logoutUrl: config.nyxidLogoutUrl,
 };
 

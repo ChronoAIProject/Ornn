@@ -14,7 +14,7 @@ import { useAuthStore, isAdmin as checkIsAdmin, useCurrentUser } from "@/stores/
 import { GenerateSkillModal } from "@/components/skill/GenerateSkillModal";
 import { config } from "@/config";
 
-const NYXID_API_BASE = config.nyxidAuthorizeUrl.replace("/oauth/authorize", "");
+const NYXID_API_BASE = config.nyxidOauthAuthorizeUrl.replace("/oauth/authorize", "");
 
 interface ServiceDetail {
   id: string;

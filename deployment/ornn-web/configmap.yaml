@@ -20,13 +20,13 @@ data:
 
   # Frontend runtime config — consumed by 40-envsubst-config-js.sh,
   # injected into window.__ORNN_CONFIG__ via /config.js at page load.
-  # NYXID_TOKEN_URL / NYXID_CLIENT_ID are sourced from NYXID_WEB_* in .env.ornn
-  # because ornn-api wants internal DNS + service-account credentials while
-  # ornn-web needs browser-reachable URL + user-facing OAuth client.
+  # NYXID_OAUTH_* are the browser-facing public-client credentials
+  # (authorization_code + PKCE). ornn-api uses a different set — the
+  # NYXID_SA_* service-account credentials — for machine-to-machine calls.
   API_BASE_URL: "${API_BASE_URL}"
-  NYXID_AUTHORIZE_URL: "${NYXID_AUTHORIZE_URL}"
-  NYXID_TOKEN_URL: "${NYXID_WEB_TOKEN_URL}"
-  NYXID_CLIENT_ID: "${NYXID_WEB_CLIENT_ID}"
-  NYXID_REDIRECT_URI: "${NYXID_REDIRECT_URI}"
+  NYXID_OAUTH_AUTHORIZE_URL: "${NYXID_OAUTH_AUTHORIZE_URL}"
+  NYXID_OAUTH_TOKEN_URL: "${NYXID_OAUTH_TOKEN_URL}"
+  NYXID_OAUTH_CLIENT_ID: "${NYXID_OAUTH_CLIENT_ID}"
+  NYXID_OAUTH_REDIRECT_URI: "${NYXID_OAUTH_REDIRECT_URI}"
   NYXID_LOGOUT_URL: "${NYXID_LOGOUT_URL}"
   NYXID_SETTINGS_URL: "${NYXID_SETTINGS_URL}"

@@ -15,10 +15,10 @@
 
 export interface OrnnConfig {
   apiBaseUrl: string;
-  nyxidAuthorizeUrl: string;
-  nyxidTokenUrl: string;
-  nyxidClientId: string;
-  nyxidRedirectUri: string;
+  nyxidOauthAuthorizeUrl: string;
+  nyxidOauthTokenUrl: string;
+  nyxidOauthClientId: string;
+  nyxidOauthRedirectUri: string;
   nyxidLogoutUrl: string;
   nyxidSettingsUrl: string;
 }
@@ -36,17 +36,21 @@ const runtime =
 
 export const config: OrnnConfig = {
   apiBaseUrl: runtime.apiBaseUrl ?? import.meta.env.VITE_API_BASE_URL ?? "",
-  nyxidAuthorizeUrl:
-    runtime.nyxidAuthorizeUrl ??
-    import.meta.env.VITE_NYXID_AUTHORIZE_URL ??
+  nyxidOauthAuthorizeUrl:
+    runtime.nyxidOauthAuthorizeUrl ??
+    import.meta.env.VITE_NYXID_OAUTH_AUTHORIZE_URL ??
     "",
-  nyxidTokenUrl:
-    runtime.nyxidTokenUrl ?? import.meta.env.VITE_NYXID_TOKEN_URL ?? "",
-  nyxidClientId:
-    runtime.nyxidClientId ?? import.meta.env.VITE_NYXID_CLIENT_ID ?? "",
-  nyxidRedirectUri:
-    runtime.nyxidRedirectUri ??
-    import.meta.env.VITE_NYXID_REDIRECT_URI ??
+  nyxidOauthTokenUrl:
+    runtime.nyxidOauthTokenUrl ??
+    import.meta.env.VITE_NYXID_OAUTH_TOKEN_URL ??
+    "",
+  nyxidOauthClientId:
+    runtime.nyxidOauthClientId ??
+    import.meta.env.VITE_NYXID_OAUTH_CLIENT_ID ??
+    "",
+  nyxidOauthRedirectUri:
+    runtime.nyxidOauthRedirectUri ??
+    import.meta.env.VITE_NYXID_OAUTH_REDIRECT_URI ??
     "",
   nyxidLogoutUrl:
     runtime.nyxidLogoutUrl ?? import.meta.env.VITE_NYXID_LOGOUT_URL ?? "",
