@@ -37,6 +37,11 @@ import { SkillVersionRepository } from "./domains/skills/crud/skillVersionReposi
 import { SkillService } from "./domains/skills/crud/service";
 import { createSkillRoutes } from "./domains/skills/crud/routes";
 
+// Domain: Skill Audit
+import { AuditRepository } from "./domains/skills/audit/repository";
+import { AuditService } from "./domains/skills/audit/service";
+import { createAuditRoutes } from "./domains/skills/audit/routes";
+
 // Domain: Skill Search
 import { SearchService } from "./domains/skills/search/service";
 import { createSearchRoutes } from "./domains/skills/search/routes";
@@ -145,6 +150,22 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
     maxFileSize: config.maxPackageSizeBytes,
     activityRepo,
   });
+
+  // ---- Domain: Skill Audit ----
+  const auditRepo = new AuditRepository(db);
+  void auditRepo.ensureIndexes().catch((err) =>
+    logger.warn({ err }, "Audit indexes ensureIndexes failed — proceeding anyway"),
+  );
+  const auditService = new AuditService({
+    auditRepo,
+    skillService,
+    storageClient,
+    storageBucket: config.storageBucket,
+    llmClient: nyxLlmClient,
+    model: config.defaultLlmModel,
+    cacheTtlMs: 7 * 24 * 60 * 60 * 1000, // 7 days
+  });
+  const auditRoutes = createAuditRoutes({ auditService, skillService });
 
   // ---- Domain: Skill Search ----
   const searchService = new SearchService({
@@ -269,6 +290,7 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   // single request even when multiple routes call `readUserOrgMemberships`.
   apiApp.use("*", nyxidOrgLookupMiddleware(nyxidOrgsClient));
   apiApp.route("/", skillRoutes);
+  apiApp.route("/", auditRoutes);
   apiApp.route("/", searchRoutes);
   apiApp.route("/", generationRoutes);
   apiApp.route("/", playgroundRoutes);
