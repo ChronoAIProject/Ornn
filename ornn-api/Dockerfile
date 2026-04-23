@@ -23,9 +23,6 @@ COPY --from=install /app /app
 # Copy source code
 COPY ornn-api/src/ /app/ornn-api/src/
 
-# Copy docs for OpenAPI spec
-COPY ornn-api/docs/ /app/ornn-api/docs/
-
 WORKDIR /app/ornn-api
 
 # Create data directory for SQLite
