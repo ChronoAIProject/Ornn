@@ -2,14 +2,33 @@
   "name": "chrono-ornn",
   "private": true,
   "workspaces": [
-    "ornn-skill",
-    "ornn-frontend"
+    "ornn-api",
+    "ornn-web"
   ],
   "scripts": {
-    "dev": "bun run dev:skill",
-    "dev:skill": "bun run --filter ornn-skill dev",
-    "dev:frontend": "bun run --filter ornn-frontend dev",
-    "test": "bun run test:skill",
-    "test:skill": "bun test --filter ornn-skill"
+    "dev": "bun run dev:api",
+    "dev:api": "bun run --filter ornn-api dev",
+    "dev:web": "bun run --filter ornn-web dev",
+    "test": "bun run test:api",
+    "test:api": "bun test --filter ornn-api",
+    "changeset": "changeset",
+    "version-packages": "changeset version",
+    "release": "changeset tag",
+    "release:prep": "bash scripts/release-prep.sh",
+    "lint": "eslint ornn-api/src ornn-web/src",
+    "lint:fix": "eslint ornn-api/src ornn-web/src --fix",
+    "typecheck:api": "bunx tsc --noEmit -p ornn-api/tsconfig.json",
+    "typecheck:web": "bunx tsc --noEmit -p ornn-web/tsconfig.json",
+    "typecheck": "bun run typecheck:api && bun run typecheck:web",
+    "build:web": "bun run --filter ornn-web build"
+  },
+  "devDependencies": {
+    "@changesets/changelog-github": "^0.6.0",
+    "@changesets/cli": "^2.30.0",
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.2.0",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "eslint-plugin-react-refresh": "^0.5.2",
+    "typescript-eslint": "^8.58.1"
   }
 }

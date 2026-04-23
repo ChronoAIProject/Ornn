@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nyxid-frontend-config
+  namespace: ${NAMESPACE}
+data:
+  BACKEND_URL: ${NYXID_FRONTEND_BACKEND_URL}
