@@ -6,11 +6,17 @@ metadata:
 data:
   # nginx upstreams — consumed by /etc/nginx/templates/default.conf.template
   # via the image's built-in 20-envsubst-on-templates.sh. NGINX_ENVSUBST_FILTER
-  # narrows substitution to these two so $host / $remote_addr / $scheme etc.
-  # inside the template stay literal.
+  # narrows substitution so $host / $remote_addr / $scheme etc. inside the
+  # template stay literal.
   NYXID_BACKEND_URL: "${NYXID_BACKEND_URL}"
+  # Hostname portion of NYXID_BACKEND_URL — used for Host header + SNI when
+  # the upstream is a multi-tenant HTTPS edge (Cloudflare, Vercel, etc.).
+  # e.g. "nyx.chrono-ai.fun" when NYXID_BACKEND_URL is "https://nyx.chrono-ai.fun".
+  # For in-cluster plain-HTTP upstreams this MAY be set to $host (the nginx
+  # built-in) to fall back to standard behavior.
+  NYXID_BACKEND_HOST: "${NYXID_BACKEND_HOST}"
   ORNN_API_URL: "${ORNN_API_URL}"
-  NGINX_ENVSUBST_FILTER: "^(NYXID_BACKEND_URL|ORNN_API_URL)$"
+  NGINX_ENVSUBST_FILTER: "^(NYXID_BACKEND_URL|NYXID_BACKEND_HOST|ORNN_API_URL)$"
 
   # Frontend runtime config — consumed by 40-envsubst-config-js.sh,
   # injected into window.__ORNN_CONFIG__ via /config.js at page load.
