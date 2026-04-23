@@ -1,16 +1,29 @@
 name: Changeset release
 
-# Runs when something lands on `main`. The Version Packages bump (consume
-# .changeset, update package.json + CHANGELOG) has already happened via
-# `bun run release:prep` on develop. This workflow only handles the tag
-# + GitHub Release half.
+# State machine triggered on every push to `main`. Three cases:
 #
-# Hard-guards against a main push that still carries unconsumed
-# changesets — would mean the release:prep flow was skipped.
+#   A) `.changeset/*.md` files exist on main — someone just merged a
+#      develop → main PR that carried unconsumed changesets. Bot
+#      creates a `release/v<next>` branch off main, runs
+#      `changeset version` (consumes .changeset, bumps package.json +
+#      CHANGELOG), pushes, opens a PR `release/v<next> → main`. That
+#      PR is what the developer reviews + merges.
 #
-# Note: `@changesets/cli tag` silently no-ops on monorepos where every
-# workspace package is `"private": true`, so we tag + release manually
-# rather than relying on `changesets/action` for that step.
+#   B) No pending changesets, and the version in
+#      `ornn-api/package.json` does NOT yet have a matching
+#      `v<version>` git tag — i.e. the release-bump PR from case A
+#      was just merged. Bot creates the tag, cuts a GitHub Release
+#      with the combined CHANGELOG sections, and opens a
+#      `sync/post-release-v<version> → develop` PR so develop catches
+#      up with main's new version state.
+#
+#   C) No pending changesets and the tag already exists — a normal
+#      hotfix / docs / CI push that shouldn't release anything. No-op.
+#
+# The bot needs `contents: write` + `pull-requests: write` so it can
+# push branches and open PRs. The org-level "Allow GitHub Actions to
+# create and approve pull requests" must be enabled for the PR-create
+# step to succeed (confirmed April 2026).
 
 on:
   push:
@@ -25,23 +38,16 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      pull-requests: write
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Guard — no pending changesets on main
+      - name: Detect state
+        id: state
         run: |
           PENDING=$(find .changeset -name "*.md" ! -name "README.md" 2>/dev/null | wc -l | xargs)
-          if [ "$PENDING" != "0" ]; then
-            echo "::error::Found ${PENDING} unconsumed .changeset/*.md files on main."
-            echo "::error::Run 'bun run release:prep' on develop first, merge that PR, then promote develop → main."
-            exit 1
-          fi
-
-      - name: Read version from package.json
-        id: v
-        run: |
           VERSION=$(node -p "require('./ornn-api/package.json').version")
           WEB_VERSION=$(node -p "require('./ornn-web/package.json').version")
           if [ "$VERSION" != "$WEB_VERSION" ]; then
@@ -49,39 +55,73 @@ jobs:
             exit 1
           fi
           TAG="v${VERSION}"
+          if git rev-parse "${TAG}" >/dev/null 2>&1; then
+            TAG_EXISTS=true
+          else
+            TAG_EXISTS=false
+          fi
+          echo "pending=${PENDING}" >> "$GITHUB_OUTPUT"
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
-          echo "Detected version: ${TAG}"
+          echo "tag_exists=${TAG_EXISTS}" >> "$GITHUB_OUTPUT"
+          echo "Detected: pending=${PENDING} version=${VERSION} tag=${TAG} tag_exists=${TAG_EXISTS}"
 
-      - name: Check whether tag already exists
-        id: tag_check
-        run: |
-          if git rev-parse "${{ steps.v.outputs.tag }}" >/dev/null 2>&1; then
-            echo "Tag ${{ steps.v.outputs.tag }} already exists — skipping release (main push didn't bump the version)."
-            echo "should_release=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "should_release=true" >> "$GITHUB_OUTPUT"
-          fi
+      # ─────────────────────────── State A ─────────────────────────── #
+      - name: Setup Bun (A)
+        if: steps.state.outputs.pending != '0'
+        uses: oven-sh/setup-bun@v2
 
-      - name: Create and push tag
-        if: steps.tag_check.outputs.should_release == 'true'
+      - name: Install deps (A)
+        if: steps.state.outputs.pending != '0'
+        run: bun install --frozen-lockfile
+
+      - name: Create release-bump PR (A)
+        if: steps.state.outputs.pending != '0'
         env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GIT_AUTHOR_NAME: github-actions[bot]
           GIT_AUTHOR_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
           GIT_COMMITTER_NAME: github-actions[bot]
           GIT_COMMITTER_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
         run: |
-          TAG="${{ steps.v.outputs.tag }}"
-          git tag -a "$TAG" -m "Release $TAG"
-          git push origin "$TAG"
+          bun run version-packages
+          NEW_VERSION=$(node -p "require('./ornn-api/package.json').version")
+          BRANCH="release/v${NEW_VERSION}"
+          git checkout -B "${BRANCH}"
+          git add -A
+          git commit -m "chore: version packages → v${NEW_VERSION}"
+          git push -fu origin "${BRANCH}"
 
-      - name: Create GitHub Release
-        if: steps.tag_check.outputs.should_release == 'true'
+          # Re-open or replace the PR for this version if one already
+          # exists (e.g. a prior workflow run that failed mid-way).
+          EXISTING=$(gh pr list --head "${BRANCH}" --base main --state open --json number --jq '.[0].number // empty')
+          if [ -n "$EXISTING" ]; then
+            echo "PR #${EXISTING} already open for ${BRANCH} — force-pushed latest."
+          else
+            gh pr create \
+              --base main \
+              --head "${BRANCH}" \
+              --title "chore: version packages → v${NEW_VERSION}" \
+              --body "Auto-opened after a develop → main merge dropped unconsumed \`.changeset/*.md\` on main.
+
+          Consumed changesets, bumped \`ornn-api\` + \`ornn-web\` to \`v${NEW_VERSION}\`, appended CHANGELOG entries. Merging this PR triggers the next \`changeset-release\` run which will tag \`v${NEW_VERSION}\` + create the GitHub Release + open a \`sync/post-release-v${NEW_VERSION} → develop\` PR to bring the bump back to \`develop\`."
+          fi
+
+      # ─────────────────────────── State B ─────────────────────────── #
+      - name: Create tag + GitHub Release (B)
+        if: steps.state.outputs.pending == '0' && steps.state.outputs.tag_exists == 'false'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GIT_AUTHOR_NAME: github-actions[bot]
+          GIT_AUTHOR_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+          GIT_COMMITTER_NAME: github-actions[bot]
+          GIT_COMMITTER_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
         run: |
-          VERSION="${{ steps.v.outputs.version }}"
-          TAG="${{ steps.v.outputs.tag }}"
+          VERSION="${{ steps.state.outputs.version }}"
+          TAG="${{ steps.state.outputs.tag }}"
+          git tag -a "${TAG}" -m "Release ${TAG}"
+          git push origin "${TAG}"
 
           extract_section() {
             awk -v v="$1" '
@@ -92,9 +132,8 @@ jobs:
               found { print }
             ' "$2"
           }
-
-          API_NOTES=$(extract_section "$VERSION" ornn-api/CHANGELOG.md)
-          WEB_NOTES=$(extract_section "$VERSION" ornn-web/CHANGELOG.md)
+          API_NOTES=$(extract_section "${VERSION}" ornn-api/CHANGELOG.md)
+          WEB_NOTES=$(extract_section "${VERSION}" ornn-web/CHANGELOG.md)
 
           BODY=$(cat <<EOF
           ## \`ornn-api\` ${VERSION}
@@ -104,4 +143,57 @@ jobs:
           EOF
           )
 
-          gh release create "$TAG" --title "$TAG" --notes "$BODY"
+          gh release create "${TAG}" --title "${TAG}" --notes "${BODY}"
+
+      - name: Open sync PR main → develop (B)
+        if: steps.state.outputs.pending == '0' && steps.state.outputs.tag_exists == 'false'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GIT_AUTHOR_NAME: github-actions[bot]
+          GIT_AUTHOR_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+          GIT_COMMITTER_NAME: github-actions[bot]
+          GIT_COMMITTER_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+        run: |
+          VERSION="${{ steps.state.outputs.version }}"
+          SYNC_BRANCH="sync/post-release-v${VERSION}"
+
+          # Branch off the just-released main commit so the sync PR
+          # carries only the version bump + consumed-changesets delta
+          # relative to develop.
+          git checkout -B "${SYNC_BRANCH}"
+          git push -fu origin "${SYNC_BRANCH}"
+
+          SYNC_PR=$(gh pr list --head "${SYNC_BRANCH}" --base develop --state open --json number --jq '.[0].number // empty')
+          if [ -n "$SYNC_PR" ]; then
+            echo "Sync PR #${SYNC_PR} already open — skipping create."
+          else
+            SYNC_PR=$(gh pr create \
+              --base develop \
+              --head "${SYNC_BRANCH}" \
+              --title "chore: sync main → develop after v${VERSION}" \
+              --body "Auto-opened + auto-merged after \`v${VERSION}\` was tagged on \`main\`.
+
+          Brings the version bump + consumed CHANGELOG entries back to \`develop\` so subsequent work starts from the right version. Only delta vs \`develop\` is the release-bump commit." \
+              | tail -1 | grep -oE '[0-9]+$')
+            echo "Opened sync PR #${SYNC_PR}"
+          fi
+
+          # Auto-approve + auto-merge: the sync PR is a deterministic
+          # replay of a commit that already passed CI on main. No human
+          # review adds value here. Requires the org-level
+          # "Allow GitHub Actions to create and approve pull requests"
+          # setting to be on; otherwise approve is rejected and the PR
+          # waits for manual action.
+          if [ -n "$SYNC_PR" ]; then
+            gh pr review "$SYNC_PR" --approve \
+              --body "Auto-approved: sync PR carrying the release-bump commit that was already on main." || true
+            gh pr merge "$SYNC_PR" --auto --merge || \
+              gh pr merge "$SYNC_PR" --merge || true
+          fi
+
+      # ─────────────────────────── State C ─────────────────────────── #
+      - name: No-op (C)
+        if: steps.state.outputs.pending == '0' && steps.state.outputs.tag_exists == 'true'
+        run: |
+          echo "v${{ steps.state.outputs.version }} is already tagged — nothing to do."

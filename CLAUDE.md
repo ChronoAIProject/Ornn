@@ -67,41 +67,43 @@ Select affected package(s), semver bump level (`patch` / `minor` / `major`), wri
 
 ### Cutting a release
 
-Done in two PRs. Everything scriptable is in `scripts/release-prep.sh` (`bun run release:prep`).
+Fully automated on the `main` side. No local script to run — developer action is "open a PR, review a PR". `.github/workflows/changeset-release.yml` is a state machine driven by `push: main`.
 
-**Step 1 — Version-bump PR (on develop).** Run locally:
+**Step 1 — Promote `develop` → `main`.** Open a PR `develop → main` and merge it. Regular PR; it carries whatever features + unconsumed `.changeset/*.md` files have piled up on `develop` since the last release.
 
-```bash
-bun run release:prep
-```
+**Step 2 — Review the bot's release-bump PR.** On the `main` push from Step 1, the workflow sees pending `.changeset/*.md` files, so it:
 
-The script:
-1. Fetches + fast-forwards local `develop`.
-2. Confirms there are pending `.changeset/*.md` to consume.
-3. Creates branch `release/version-packages` off `develop`.
-4. Runs `bun run version-packages` — consumes changesets, bumps `package.json` in both packages, appends to `CHANGELOG.md`.
-5. Commits `chore: version packages → v<next>`.
-6. Force-pushes the branch.
-7. Opens (or updates) the PR: `release/version-packages → develop`.
+1. Creates branch `release/v<next>` off `main`.
+2. Runs `bun run version-packages` — consumes `.changeset/*.md`, bumps both `package.json` files, appends to each `CHANGELOG.md`.
+3. Commits `chore: version packages → v<next>`, force-pushes the branch.
+4. Opens PR `release/v<next> → main`.
 
-Review the PR. Merge it into `develop`. `develop` now has the bumped versions + CHANGELOG entries, and the `.changeset/*.md` files that were consumed are deleted.
+Review that PR. Merge with **Squash and merge** (keeps history linear; `main` ends up with exactly one `chore: version packages → v<next>` commit).
 
-**Step 2 — Promote to main.** Open a PR `develop → main`. When it merges, `.github/workflows/changeset-release.yml` runs on the `main` push and:
+**Step 3 — Tag + GitHub Release + sync back to `develop`.** On the `main` push from Step 2, the workflow sees no pending changesets + `ornn-api/package.json`'s version has no matching `v<version>` tag, so it:
 
-- Hard-guards against unconsumed `.changeset/*.md` on `main` (fails loudly — means Step 1 was skipped).
-- Runs `bun run release` (`changeset tag`) to tag each package at the new version.
-- Pushes tags.
-- Creates GitHub Releases per tag with the corresponding CHANGELOG section as the body.
+1. Creates an annotated `v<version>` tag and pushes it.
+2. Extracts the `## <version>` section from each package's `CHANGELOG.md`, builds a combined body, and calls `gh release create`.
+3. Creates branch `sync/post-release-v<version>` from `main`.
+4. Opens PR `sync/post-release-v<version> → develop` — **auto-approved + auto-merged** by the same workflow (merge-commit strategy). No human action required for the sync step; the PR is a deterministic replay of a commit that already passed CI on `main`.
 
-### Why this shape
+If branch protection blocks the auto-approve (e.g. stricter required-reviewer rules added later), the PR waits for manual merge instead of failing the workflow.
 
-- No bot pushes to `main` — the bump commit comes in via the Step-1 PR through `develop`. `main`'s branch protection stays strict.
-- No bot creates PRs — `release:prep` runs from your local `gh` auth, so the org's "Allow GitHub Actions to create and approve pull requests" policy doesn't block anything.
-- `develop` and `main` stay in sync version-wise after each release — no back-merge needed because Step 1 lands the bump on `develop` before `main`.
+### State summary (what the workflow does on every `main` push)
+
+| pending `.changeset/*.md` | `v<version>` tag exists | action |
+|---|---|---|
+| > 0 | — | open `release/v<next> → main` |
+| 0 | no | tag, create GH Release, open `sync/post-release-v<version> → develop` |
+| 0 | yes | no-op (hotfix / docs / CI push without changeset) |
+
+### Permissions
+
+The workflow needs `contents: write` + `pull-requests: write`. At the org level, "Allow GitHub Actions to create and approve pull requests" must be enabled (set April 2026).
 
 ### Hotfixes directly to main
 
-If something goes straight to `main` without a changeset (e.g. emergency patch), the release workflow's guard just exits cleanly (no unconsumed changesets = no tag work to do). No versions bump. Make a proper changeset-carrying PR via `develop` afterward to stamp the version.
+If something lands on `main` without a changeset (emergency patch), state is "0 pending + tag exists" → no-op. No version bump. When you're back on the normal flow, add a proper changeset-carrying PR through `develop` to stamp the next version.
 
 ## Scripts
 
