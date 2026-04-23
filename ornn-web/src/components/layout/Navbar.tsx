@@ -13,6 +13,7 @@ import { logActivity } from "@/services/activityApi";
 import { useThemeStore } from "@/stores/themeStore";
 import { useTranslation } from "react-i18next";
 import { Logo } from "@/components/brand/Logo";
+import { config } from "@/config";
 
 /** Admin icon */
 function AdminIcon({ className }: { className?: string }) {
@@ -44,7 +45,7 @@ function NyxIdIcon({ className }: { className?: string }) {
 /** Derive NyxID home URL from the authorize URL env var */
 function getNyxIdUrl(): string {
   try {
-    const authorizeUrl = import.meta.env.VITE_NYXID_AUTHORIZE_URL ?? "";
+    const authorizeUrl = config.nyxidAuthorizeUrl;
     if (authorizeUrl) {
       const url = new URL(authorizeUrl);
       return url.origin;

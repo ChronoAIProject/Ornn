@@ -2,8 +2,9 @@ import { apiGet, apiPut, apiDelete } from "./apiClient";
 import type { UpdateSkillMetadata } from "@/types/api";
 import type { SkillDetail, SkillVersionEntry } from "@/types/domain";
 import { useAuthStore } from "@/stores/authStore";
+import { config } from "@/config";
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
+const API_BASE = config.apiBaseUrl;
 
 /**
  * Fetch a single skill by GUID or name.

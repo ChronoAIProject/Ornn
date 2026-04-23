@@ -7,8 +7,9 @@
 import { parseSseChunk } from "@/utils/sseParser";
 import { useAuthStore } from "@/stores/authStore";
 import { PLAYGROUND_EVENT_TYPES, type PlaygroundChatEvent } from "@/types/playground";
+import { config } from "@/config";
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
+const API_BASE = config.apiBaseUrl;
 
 export interface ChatStreamParams {
   messages: Array<{ role: string; content: string }>;
