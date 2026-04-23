@@ -47,6 +47,11 @@ import { ShareRepository } from "./domains/shares/repository";
 import { ShareService } from "./domains/shares/service";
 import { createShareRoutes } from "./domains/shares/routes";
 
+// Domain: Notifications
+import { NotificationRepository } from "./domains/notifications/repository";
+import { NotificationService } from "./domains/notifications/service";
+import { createNotificationRoutes } from "./domains/notifications/routes";
+
 // Domain: Skill Search
 import { SearchService } from "./domains/skills/search/service";
 import { createSearchRoutes } from "./domains/skills/search/routes";
@@ -173,11 +178,24 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   const auditRoutes = createAuditRoutes({ auditService, skillService });
 
   // ---- Domain: Shares (audit-gated sharing) ----
+  // ---- Domain: Notifications ----
+  const notificationRepo = new NotificationRepository(db);
+  void notificationRepo.ensureIndexes().catch((err) =>
+    logger.warn({ err }, "notifications indexes ensureIndexes failed — proceeding anyway"),
+  );
+  const notificationService = new NotificationService({ notificationRepo });
+  const notificationRoutes = createNotificationRoutes({ notificationService });
+
   const shareRepo = new ShareRepository(db);
   void shareRepo.ensureIndexes().catch((err) =>
     logger.warn({ err }, "share_requests indexes ensureIndexes failed — proceeding anyway"),
   );
-  const shareService = new ShareService({ shareRepo, auditService, skillService });
+  const shareService = new ShareService({
+    shareRepo,
+    auditService,
+    skillService,
+    notificationService,
+  });
   const shareRoutes = createShareRoutes({ shareService });
 
   // ---- Domain: Skill Search ----
@@ -305,6 +323,7 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   apiApp.route("/", skillRoutes);
   apiApp.route("/", auditRoutes);
   apiApp.route("/", shareRoutes);
+  apiApp.route("/", notificationRoutes);
   apiApp.route("/", searchRoutes);
   apiApp.route("/", generationRoutes);
   apiApp.route("/", playgroundRoutes);

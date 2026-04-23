@@ -20,6 +20,7 @@ import pino from "pino";
 import { AppError } from "../../shared/types/index";
 import type { AuditService } from "../skills/audit/service";
 import type { SkillService } from "../skills/crud/service";
+import type { NotificationService } from "../notifications/service";
 import type { ShareRepository } from "./repository";
 import type {
   ShareJustifications,
@@ -35,6 +36,8 @@ export interface ShareServiceDeps {
   readonly shareRepo: ShareRepository;
   readonly auditService: AuditService;
   readonly skillService: SkillService;
+  /** Optional — when provided, emits audit/share-flow notifications to the relevant users. */
+  readonly notificationService?: NotificationService;
 }
 
 export interface InitiateShareInput {
@@ -53,11 +56,13 @@ export class ShareService {
   private readonly shareRepo: ShareRepository;
   private readonly auditService: AuditService;
   private readonly skillService: SkillService;
+  private readonly notificationService: NotificationService | undefined;
 
   constructor(deps: ShareServiceDeps) {
     this.shareRepo = deps.shareRepo;
     this.auditService = deps.auditService;
     this.skillService = deps.skillService;
+    this.notificationService = deps.notificationService;
   }
 
   /**
@@ -101,6 +106,23 @@ export class ShareService {
 
     if (initialStatus === "green") {
       await this.applyAcceptedShare(skill.guid, input.target, input.ownerUserId);
+    }
+
+    // Owner always hears about the audit outcome.
+    await this.notificationService?.notifyAuditCompleted({
+      ownerUserId: input.ownerUserId,
+      skillGuid: skill.guid,
+      skillName: skill.name,
+      version: skill.version,
+      verdict: audit.verdict,
+      shareRequestId: request._id,
+    });
+    if (initialStatus === "needs-justification") {
+      await this.notificationService?.notifyNeedsJustification({
+        ownerUserId: input.ownerUserId,
+        shareRequestId: request._id,
+        skillName: skill.name,
+      });
     }
 
     logger.info(
@@ -154,6 +176,20 @@ export class ShareService {
     if (!updated) {
       throw AppError.internalError("SHARE_UPDATE_FAILED", "Failed to persist share transition");
     }
+
+    // Direct-to-user share target → notify the recipient right away.
+    // Org / public targets: reviewers find the request via the
+    // review-queue endpoint until we have a fan-out service (future PR).
+    if (updated.target.type === "user" && updated.target.id) {
+      const skill = await this.skillService.getSkill(updated.skillGuid);
+      await this.notificationService?.notifyReviewRequested({
+        reviewerUserId: updated.target.id,
+        shareRequestId: updated._id,
+        skillName: skill.name,
+        ownerDisplayName: skill.createdByDisplayName ?? skill.createdByEmail ?? skill.createdBy,
+        targetType: updated.target.type,
+      });
+    }
     return updated;
   }
 
@@ -197,6 +233,16 @@ export class ShareService {
         request.ownerUserId,
       );
     }
+
+    // Tell the owner the outcome.
+    const skill = await this.skillService.getSkill(request.skillGuid);
+    await this.notificationService?.notifyShareDecision({
+      ownerUserId: request.ownerUserId,
+      shareRequestId: requestId,
+      skillName: skill.name,
+      decision,
+    });
+
     logger.info(
       { shareRequestId: requestId, reviewerUserId, decision, finalStatus },
       "Share reviewed",
@@ -220,6 +266,14 @@ export class ShareService {
       );
     }
     const updated = await this.shareRepo.transitionStatus(requestId, "cancelled");
+    if (updated) {
+      const skill = await this.skillService.getSkill(updated.skillGuid);
+      await this.notificationService?.notifyShareCancelled({
+        ownerUserId,
+        shareRequestId: requestId,
+        skillName: skill.name,
+      });
+    }
     return updated!;
   }
 
