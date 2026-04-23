@@ -85,9 +85,11 @@ Review that PR. Merge with **Squash and merge** (keeps history linear; `main` en
 1. Creates an annotated `v<version>` tag and pushes it.
 2. Extracts the `## <version>` section from each package's `CHANGELOG.md`, builds a combined body, and calls `gh release create`.
 3. Creates branch `sync/post-release-v<version>` from `main`.
-4. Opens PR `sync/post-release-v<version> → develop` — **auto-approved + auto-merged** by the same workflow (merge-commit strategy). No human action required for the sync step; the PR is a deterministic replay of a commit that already passed CI on `main`.
+4. Opens PR `sync/post-release-v<version> → develop` — **auto-approved + auto-merged** by the same workflow via a direct `PUT /repos/.../pulls/:n/merge` API call with `merge_method: merge`. No human action for the sync step; the PR is a deterministic replay of a commit that already passed CI on `main`.
 
-If branch protection blocks the auto-approve (e.g. stricter required-reviewer rules added later), the PR waits for manual merge instead of failing the workflow.
+**Load-bearing:** the sync PR **must** land as a merge commit, not a squash. A squash-merge creates an orphan commit on `develop` whose parent is the pre-bump `develop` tip, not `main`'s bump commit. Subsequent `develop → main` PRs then show a phantom version bump because `git merge-base` walks back past the orphan. A merge commit gives `develop` two parents (previous `develop` HEAD + `main`'s bump), making `merge-base(main, develop)` = `main`'s HEAD after the sync. The workflow calls the API directly so it doesn't fall back to the repo-default merge strategy (often squash).
+
+If branch protection blocks the auto-merge (e.g. stricter required-reviewer rules added later), the PR stays open with a warning log entry — **merge it manually via "Create a merge commit", never "Squash and merge"**.
 
 ### State summary (what the workflow does on every `main` push)
 
