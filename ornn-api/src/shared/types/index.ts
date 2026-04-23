@@ -187,6 +187,13 @@ export interface SkillVersionDocument {
   isDeprecated?: boolean;
   /** Optional human-readable explanation surfaced with the warning. */
   deprecationNote?: string | null;
+  /**
+   * Author-supplied release notes for this specific version. Read at
+   * publish time from SKILL.md frontmatter (`release-notes` or
+   * `releaseNotes`). Plain text, max 2000 chars. Null when the author
+   * omitted it.
+   */
+  releaseNotes?: string | null;
 }
 
 export interface SkillMetadata {

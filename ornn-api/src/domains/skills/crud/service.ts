@@ -83,7 +83,7 @@ export class SkillService {
     }
 
     // 2. Parse SKILL.md from ZIP
-    const { name, description, version, license, compatibility, metadata } = await this.extractSkillInfo(zipBuffer);
+    const { name, description, version, license, compatibility, metadata, releaseNotes } = await this.extractSkillInfo(zipBuffer);
     const parsedVersion = parseVersion(version);
 
     // 3a. Reject reserved-verb names — would collide with `/v1/skills/{verb}`
@@ -146,6 +146,7 @@ export class SkillService {
       createdBy: userId,
       createdByEmail: options?.userEmail,
       createdByDisplayName: options?.userDisplayName,
+      releaseNotes,
     });
 
     return { guid };
@@ -185,6 +186,7 @@ export class SkillService {
     createdOn: string;
     isDeprecated: boolean;
     deprecationNote: string | null;
+    releaseNotes: string | null;
   }>> {
     const skill = await this.findSkillByIdOrName(idOrName);
     const versions = await this.skillVersionRepo.listBySkill(skill.guid);
@@ -197,6 +199,7 @@ export class SkillService {
       createdOn: v.createdOn instanceof Date ? v.createdOn.toISOString() : String(v.createdOn),
       isDeprecated: v.isDeprecated === true,
       deprecationNote: v.deprecationNote ?? null,
+      releaseNotes: v.releaseNotes ?? null,
     }));
   }
 
@@ -321,7 +324,7 @@ export class SkillService {
         }
       }
 
-      const { name, description, version, license, compatibility, metadata } = await this.extractSkillInfo(options.zipBuffer);
+      const { name, description, version, license, compatibility, metadata, releaseNotes } = await this.extractSkillInfo(options.zipBuffer);
       const parsedNewVersion = parseVersion(version);
 
       // Enforce strictly-incrementing version on every package update.
@@ -367,6 +370,7 @@ export class SkillService {
         createdBy: userId,
         createdByEmail: options.userEmail,
         createdByDisplayName: options.userDisplayName,
+        releaseNotes,
       });
 
       Object.assign(updateData, {
@@ -488,8 +492,8 @@ export class SkillService {
     toVersion: string,
   ): Promise<{
     skill: { guid: string; name: string };
-    from: { version: string; hash: string; createdOn: string; isDeprecated: boolean };
-    to: { version: string; hash: string; createdOn: string; isDeprecated: boolean };
+    from: { version: string; hash: string; createdOn: string; isDeprecated: boolean; releaseNotes: string | null };
+    to: { version: string; hash: string; createdOn: string; isDeprecated: boolean; releaseNotes: string | null };
     diff: VersionDiffResult;
   }> {
     if (fromVersion === toVersion) {
@@ -538,6 +542,7 @@ export class SkillService {
             ? fromDoc.createdOn.toISOString()
             : String(fromDoc.createdOn),
         isDeprecated: fromDoc.isDeprecated === true,
+        releaseNotes: fromDoc.releaseNotes ?? null,
       },
       to: {
         version: toDoc.version,
@@ -547,6 +552,7 @@ export class SkillService {
             ? toDoc.createdOn.toISOString()
             : String(toDoc.createdOn),
         isDeprecated: toDoc.isDeprecated === true,
+        releaseNotes: toDoc.releaseNotes ?? null,
       },
       diff,
     };
@@ -678,6 +684,8 @@ export class SkillService {
     license: string | null;
     compatibility: string | null;
     metadata: SkillMetadata;
+    /** Optional author-supplied changelog. Read from SKILL.md frontmatter `release-notes` or `releaseNotes`. Max 2000 chars. */
+    releaseNotes: string | null;
   }> {
     const zip = await JSZip.loadAsync(zipBuffer);
     const allPaths = Object.keys(zip.files);
@@ -754,6 +762,18 @@ export class SkillService {
       metadata.tags = rawMeta.tag;
     }
 
+    // Author-supplied changelog lives next to the formal frontmatter but isn't
+    // part of the Zod schema — kept permissive so missing/older SKILL.md files
+    // just report null instead of hard-failing. Accepts either `release-notes`
+    // (kebab-case to match other frontmatter fields) or `releaseNotes`.
+    const rawReleaseNotes =
+      rawFrontmatter["release-notes"] ?? rawFrontmatter["releaseNotes"];
+    let releaseNotes: string | null = null;
+    if (typeof rawReleaseNotes === "string" && rawReleaseNotes.trim().length > 0) {
+      const trimmed = rawReleaseNotes.trim();
+      releaseNotes = trimmed.length > 2000 ? trimmed.slice(0, 2000) : trimmed;
+    }
+
     return {
       name: fm.name,
       description: fm.description,
@@ -761,6 +781,7 @@ export class SkillService {
       license: fm.license ?? null,
       compatibility: fm.compatibility ?? null,
       metadata,
+      releaseNotes,
     };
   }
 
