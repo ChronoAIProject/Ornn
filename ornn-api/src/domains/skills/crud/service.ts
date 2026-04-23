@@ -12,6 +12,7 @@ import type { IStorageClient } from "../../../clients/storageClient";
 import type { SkillDocument, SkillMetadata, SkillDetailResponse, SkillVersionDocument, SkillSource } from "../../../shared/types/index";
 import { AppError } from "../../../shared/types/index";
 import { fetchSkillFromGitHub, type GitHubPullInput } from "./utils/githubPull";
+import { computeVersionDiff, type VersionDiffResult } from "./utils/versionDiff";
 import { isReservedVerb } from "../../../shared/reservedVerbs";
 import { validateSkillFrontmatter } from "../../../shared/schemas/skillFrontmatter";
 import { resolveZipRoot } from "../../../shared/utils/zip";
@@ -468,6 +469,102 @@ export class SkillService {
       userDisplayName: options?.userDisplayName,
       source: newSource,
     });
+  }
+
+  /**
+   * Compute a structured diff between two versions of a skill.
+   *
+   * Downloads both version ZIPs from storage, extracts, and compares
+   * file-level (added / removed / modified). For text files the diff
+   * includes both sides' contents so the UI can render side-by-side or
+   * any line-level diff it wants client-side.
+   *
+   * Throws NOT_FOUND when the skill or either version is unknown; throws
+   * BAD_REQUEST when `from` and `to` are the same.
+   */
+  async diffVersions(
+    idOrName: string,
+    fromVersion: string,
+    toVersion: string,
+  ): Promise<{
+    skill: { guid: string; name: string };
+    from: { version: string; hash: string; createdOn: string; isDeprecated: boolean };
+    to: { version: string; hash: string; createdOn: string; isDeprecated: boolean };
+    diff: VersionDiffResult;
+  }> {
+    if (fromVersion === toVersion) {
+      throw AppError.badRequest(
+        "SAME_VERSION",
+        `'from' and 'to' refer to the same version '${fromVersion}'`,
+      );
+    }
+
+    const skill = await this.findSkillByIdOrName(idOrName);
+
+    parseVersion(fromVersion);
+    parseVersion(toVersion);
+
+    const [fromDoc, toDoc] = await Promise.all([
+      this.skillVersionRepo.findBySkillAndVersion(skill.guid, fromVersion),
+      this.skillVersionRepo.findBySkillAndVersion(skill.guid, toVersion),
+    ]);
+    if (!fromDoc) {
+      throw AppError.notFound(
+        "SKILL_VERSION_NOT_FOUND",
+        `Version '${fromVersion}' not found for skill '${skill.name}'`,
+      );
+    }
+    if (!toDoc) {
+      throw AppError.notFound(
+        "SKILL_VERSION_NOT_FOUND",
+        `Version '${toVersion}' not found for skill '${skill.name}'`,
+      );
+    }
+
+    const [fromZip, toZip] = await Promise.all([
+      this.downloadPackage(fromDoc.storageKey),
+      this.downloadPackage(toDoc.storageKey),
+    ]);
+
+    const diff = await computeVersionDiff(fromZip, toZip);
+
+    return {
+      skill: { guid: skill.guid, name: skill.name },
+      from: {
+        version: fromDoc.version,
+        hash: fromDoc.skillHash,
+        createdOn:
+          fromDoc.createdOn instanceof Date
+            ? fromDoc.createdOn.toISOString()
+            : String(fromDoc.createdOn),
+        isDeprecated: fromDoc.isDeprecated === true,
+      },
+      to: {
+        version: toDoc.version,
+        hash: toDoc.skillHash,
+        createdOn:
+          toDoc.createdOn instanceof Date
+            ? toDoc.createdOn.toISOString()
+            : String(toDoc.createdOn),
+        isDeprecated: toDoc.isDeprecated === true,
+      },
+      diff,
+    };
+  }
+
+  private async downloadPackage(storageKey: string): Promise<Uint8Array> {
+    const presigned = await this.storageClient.getPresignedUrl(
+      this.storageBucket,
+      storageKey,
+    );
+    const res = await fetch(presigned.presignedUrl);
+    if (!res.ok) {
+      throw AppError.internalError(
+        "PACKAGE_DOWNLOAD_FAILED",
+        `Failed to download package for key '${storageKey}' (HTTP ${res.status})`,
+      );
+    }
+    return new Uint8Array(await res.arrayBuffer());
   }
 
   async deleteSkill(guid: string): Promise<void> {
