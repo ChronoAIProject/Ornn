@@ -1,12 +1,16 @@
 name: Changeset release
 
-# Runs when something lands on `main`. At that point the Version Packages
-# bump (consume .changeset, update package.json + CHANGELOG) has already
-# happened via `bun run release:prep` on develop. This workflow only
-# handles the tag + GitHub Release half.
+# Runs when something lands on `main`. The Version Packages bump (consume
+# .changeset, update package.json + CHANGELOG) has already happened via
+# `bun run release:prep` on develop. This workflow only handles the tag
+# + GitHub Release half.
 #
-# Hard-guards against a main push that still carries unconsumed changesets
-# — that would mean the release:prep flow was skipped.
+# Hard-guards against a main push that still carries unconsumed
+# changesets — would mean the release:prep flow was skipped.
+#
+# Note: `@changesets/cli tag` silently no-ops on monorepos where every
+# workspace package is `"private": true`, so we tag + release manually
+# rather than relying on `changesets/action` for that step.
 
 on:
   push:
@@ -26,10 +30,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: oven-sh/setup-bun@v2
-
-      - run: bun install --frozen-lockfile
-
       - name: Guard — no pending changesets on main
         run: |
           PENDING=$(find .changeset -name "*.md" ! -name "README.md" 2>/dev/null | wc -l | xargs)
@@ -39,13 +39,69 @@ jobs:
             exit 1
           fi
 
-      - name: Create tags + GitHub Releases
-        uses: changesets/action@v1
-        with:
-          # With no pending changesets (guarded above), the action skips
-          # the Version Packages PR branch entirely and goes straight to
-          # tag + Release creation via `bun run release` (`changeset tag`).
-          publish: bun run release
-          createGithubReleases: true
+      - name: Read version from package.json
+        id: v
+        run: |
+          VERSION=$(node -p "require('./ornn-api/package.json').version")
+          WEB_VERSION=$(node -p "require('./ornn-web/package.json').version")
+          if [ "$VERSION" != "$WEB_VERSION" ]; then
+            echo "::error::ornn-api (${VERSION}) and ornn-web (${WEB_VERSION}) versions must match — they are fixed-linked."
+            exit 1
+          fi
+          TAG="v${VERSION}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "Detected version: ${TAG}"
+
+      - name: Check whether tag already exists
+        id: tag_check
+        run: |
+          if git rev-parse "${{ steps.v.outputs.tag }}" >/dev/null 2>&1; then
+            echo "Tag ${{ steps.v.outputs.tag }} already exists — skipping release (main push didn't bump the version)."
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_release=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create and push tag
+        if: steps.tag_check.outputs.should_release == 'true'
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GIT_AUTHOR_NAME: github-actions[bot]
+          GIT_AUTHOR_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+          GIT_COMMITTER_NAME: github-actions[bot]
+          GIT_COMMITTER_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+        run: |
+          TAG="${{ steps.v.outputs.tag }}"
+          git tag -a "$TAG" -m "Release $TAG"
+          git push origin "$TAG"
+
+      - name: Create GitHub Release
+        if: steps.tag_check.outputs.should_release == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ steps.v.outputs.version }}"
+          TAG="${{ steps.v.outputs.tag }}"
+
+          extract_section() {
+            awk -v v="$1" '
+              /^## / {
+                if (found) { exit }
+                if ($0 ~ "^## " v "$") { found=1; next }
+              }
+              found { print }
+            ' "$2"
+          }
+
+          API_NOTES=$(extract_section "$VERSION" ornn-api/CHANGELOG.md)
+          WEB_NOTES=$(extract_section "$VERSION" ornn-web/CHANGELOG.md)
+
+          BODY=$(cat <<EOF
+          ## \`ornn-api\` ${VERSION}
+          ${API_NOTES}
+          ## \`ornn-web\` ${VERSION}
+          ${WEB_NOTES}
+          EOF
+          )
+
+          gh release create "$TAG" --title "$TAG" --notes "$BODY"
