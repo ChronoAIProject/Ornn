@@ -172,11 +172,54 @@ jobs:
               --base develop \
               --head "${SYNC_BRANCH}" \
               --title "chore: sync main → develop after v${VERSION}" \
-              --body "Auto-opened + auto-merged after \`v${VERSION}\` was tagged on \`main\`.
+              --body "⚠️ **MUST be merged as a merge commit**, not squash.
 
-          Brings the version bump + consumed CHANGELOG entries back to \`develop\` so subsequent work starts from the right version. Only delta vs \`develop\` is the release-bump commit." \
+          Auto-opened + auto-merged after \`v${VERSION}\` was tagged on \`main\`.
+          Brings the version bump + consumed CHANGELOG entries back to \`develop\` so subsequent work starts from the right version. Only delta vs \`develop\` is the release-bump commit.
+
+          ### Why merge commit (not squash)
+
+          A merge commit gives this PR two parents: the current \`develop\` tip **and main's version-bump commit**. That makes \`git merge-base(main, develop)\` = main's HEAD, so the next \`develop → main\` PR diff is clean (no \"version change\" that's already on both sides).
+
+          A squash-merge creates a brand-new commit on \`develop\` that has no parent link to main's bump commit. The two branches then carry the same file contents but diverged histories — every subsequent \`develop → main\` PR shows a phantom version bump until the histories rejoin.
+
+          The workflow's auto-merge step calls the GitHub merge API directly with \`merge_method: merge\` to enforce this. If you're ever merging this PR manually, click **Create a merge commit**, never **Squash and merge**." \
               | tail -1 | grep -oE '[0-9]+$')
             echo "Opened sync PR #${SYNC_PR}"
+          fi
+
+          # ── Hard safety rail on auto-merge ────────────────────────
+          # Code-level guarantee that this path only ever auto-merges a
+          # PR whose:
+          #   - head branch matches `sync/post-release-v*`
+          #   - base branch is `develop`
+          #   - author is github-actions[bot]
+          # even if a future edit introduces a new auto-merge call site
+          # by mistake.
+          if [ -n "$SYNC_PR" ]; then
+            PR_META=$(gh pr view "$SYNC_PR" --json headRefName,baseRefName,author --jq '.headRefName + "|" + .baseRefName + "|" + .author.login')
+            PR_HEAD="${PR_META%%|*}"
+            REST="${PR_META#*|}"
+            PR_BASE="${REST%%|*}"
+            PR_AUTHOR="${REST#*|}"
+            case "$PR_HEAD" in
+              sync/post-release-v*) ;;
+              *)
+                echo "::error::refusing to auto-merge: head '$PR_HEAD' does not match sync/post-release-v*"
+                exit 1
+                ;;
+            esac
+            if [ "$PR_BASE" != "develop" ]; then
+              echo "::error::refusing to auto-merge: base '$PR_BASE' is not 'develop'"
+              exit 1
+            fi
+            case "$PR_AUTHOR" in
+              github-actions|app/github-actions|github-actions\[bot\]) ;;
+              *)
+                echo "::error::refusing to auto-merge: author '$PR_AUTHOR' is not the github-actions bot"
+                exit 1
+                ;;
+            esac
           fi
 
           # Auto-approve + auto-merge: the sync PR is a deterministic
@@ -185,11 +228,36 @@ jobs:
           # "Allow GitHub Actions to create and approve pull requests"
           # setting to be on; otherwise approve is rejected and the PR
           # waits for manual action.
+          #
+          # IMPORTANT — merge_method: merge is load-bearing.
+          # Squash-merging creates a new orphan commit on develop whose
+          # parent is the pre-bump develop tip, not main's bump commit.
+          # Subsequent develop → main PRs then show a phantom version
+          # bump diff because git merge-base walks back past the orphan.
+          # A proper merge commit gives develop two parents — previous
+          # develop HEAD + main's bump commit — making merge-base(main,
+          # develop) = main's HEAD after the sync. That keeps the
+          # histories joined.
           if [ -n "$SYNC_PR" ]; then
             gh pr review "$SYNC_PR" --approve \
               --body "Auto-approved: sync PR carrying the release-bump commit that was already on main." || true
-            gh pr merge "$SYNC_PR" --auto --merge || \
-              gh pr merge "$SYNC_PR" --merge || true
+
+            # Call the GitHub merge API directly with merge_method: merge.
+            # Bypasses `gh pr merge`'s auto-detection that can otherwise
+            # fall back to the repo's default strategy (often squash).
+            REPO_FULL="${GITHUB_REPOSITORY:-$(gh repo view --json nameWithOwner --jq .nameWithOwner)}"
+            MERGE_RESULT=$(gh api \
+              --method PUT \
+              "repos/${REPO_FULL}/pulls/${SYNC_PR}/merge" \
+              -f merge_method=merge \
+              -f commit_title="chore: sync main → develop after v${VERSION} (#${SYNC_PR})" \
+              -f commit_message="Auto-merged sync PR carrying main's v${VERSION} bump commit back onto develop." 2>&1) || {
+                echo "::warning::Direct API merge failed — sync PR left open for manual action. Output:"
+                echo "$MERGE_RESULT"
+                echo "$MERGE_RESULT" | grep -qi "Branch not mergeable\|Required status check\|pending review" && \
+                  echo "::warning::Looks like a branch-protection rule is gating the merge. Merge manually with 'Create a merge commit' (NOT squash)." || true
+              }
+            echo "$MERGE_RESULT"
           fi
 
       # ─────────────────────────── State C ─────────────────────────── #
