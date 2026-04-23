@@ -42,6 +42,11 @@ import { AuditRepository } from "./domains/skills/audit/repository";
 import { AuditService } from "./domains/skills/audit/service";
 import { createAuditRoutes } from "./domains/skills/audit/routes";
 
+// Domain: Shares (audit-gated sharing)
+import { ShareRepository } from "./domains/shares/repository";
+import { ShareService } from "./domains/shares/service";
+import { createShareRoutes } from "./domains/shares/routes";
+
 // Domain: Skill Search
 import { SearchService } from "./domains/skills/search/service";
 import { createSearchRoutes } from "./domains/skills/search/routes";
@@ -167,6 +172,14 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   });
   const auditRoutes = createAuditRoutes({ auditService, skillService });
 
+  // ---- Domain: Shares (audit-gated sharing) ----
+  const shareRepo = new ShareRepository(db);
+  void shareRepo.ensureIndexes().catch((err) =>
+    logger.warn({ err }, "share_requests indexes ensureIndexes failed — proceeding anyway"),
+  );
+  const shareService = new ShareService({ shareRepo, auditService, skillService });
+  const shareRoutes = createShareRoutes({ shareService });
+
   // ---- Domain: Skill Search ----
   const searchService = new SearchService({
     skillRepo,
@@ -291,6 +304,7 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   apiApp.use("*", nyxidOrgLookupMiddleware(nyxidOrgsClient));
   apiApp.route("/", skillRoutes);
   apiApp.route("/", auditRoutes);
+  apiApp.route("/", shareRoutes);
   apiApp.route("/", searchRoutes);
   apiApp.route("/", generationRoutes);
   apiApp.route("/", playgroundRoutes);
