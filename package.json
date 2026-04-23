@@ -14,6 +14,7 @@
     "changeset": "changeset",
     "version-packages": "changeset version",
     "release": "changeset tag",
+    "release:prep": "bash scripts/release-prep.sh",
     "lint": "eslint ornn-api/src ornn-web/src",
     "lint:fix": "eslint ornn-api/src ornn-web/src --fix",
     "typecheck:api": "bunx tsc --noEmit -p ornn-api/tsconfig.json",

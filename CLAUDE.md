@@ -53,26 +53,53 @@ This project uses **Changesets** (`@changesets/cli`) for versioning.
 - Each package has its own `CHANGELOG.md`, auto-generated with GitHub PR links.
 - Release notes are published on [GitHub Releases](https://github.com/ChronoAIProject/Ornn/releases).
 
-**Workflow:**
+### During development
 
-1. After completing a feature or fix, create a changeset:
-   ```bash
-   bun changeset
-   ```
-   Select affected package(s), semver bump level (`patch`/`minor`/`major`), and write a short description. Commit the generated `.changeset/*.md` file with the PR.
+Every feature PR targeting `develop` MUST include a changeset:
 
-2. When preparing a release, consume all pending changesets:
-   ```bash
-   bun run version-packages
-   ```
-   This updates `package.json` versions, appends to `CHANGELOG.md`, and deletes consumed changeset files.
+```bash
+bun changeset
+```
 
-3. Tag the release:
-   ```bash
-   bun run release
-   ```
+Select affected package(s), semver bump level (`patch` / `minor` / `major`), write a short description. Commit the generated `.changeset/*.md` file with the PR. CI (`check-changeset.yml`) blocks PRs that don't include one — use `bun changeset --empty` for docs-only / CI-only PRs.
 
-4. Merge `develop` → `main` via PR, then create a GitHub Release with release notes.
+### Cutting a release
+
+Done in two PRs. Everything scriptable is in `scripts/release-prep.sh` (`bun run release:prep`).
+
+**Step 1 — Version-bump PR (on develop).** Run locally:
+
+```bash
+bun run release:prep
+```
+
+The script:
+1. Fetches + fast-forwards local `develop`.
+2. Confirms there are pending `.changeset/*.md` to consume.
+3. Creates branch `release/version-packages` off `develop`.
+4. Runs `bun run version-packages` — consumes changesets, bumps `package.json` in both packages, appends to `CHANGELOG.md`.
+5. Commits `chore: version packages → v<next>`.
+6. Force-pushes the branch.
+7. Opens (or updates) the PR: `release/version-packages → develop`.
+
+Review the PR. Merge it into `develop`. `develop` now has the bumped versions + CHANGELOG entries, and the `.changeset/*.md` files that were consumed are deleted.
+
+**Step 2 — Promote to main.** Open a PR `develop → main`. When it merges, `.github/workflows/changeset-release.yml` runs on the `main` push and:
+
+- Hard-guards against unconsumed `.changeset/*.md` on `main` (fails loudly — means Step 1 was skipped).
+- Runs `bun run release` (`changeset tag`) to tag each package at the new version.
+- Pushes tags.
+- Creates GitHub Releases per tag with the corresponding CHANGELOG section as the body.
+
+### Why this shape
+
+- No bot pushes to `main` — the bump commit comes in via the Step-1 PR through `develop`. `main`'s branch protection stays strict.
+- No bot creates PRs — `release:prep` runs from your local `gh` auth, so the org's "Allow GitHub Actions to create and approve pull requests" policy doesn't block anything.
+- `develop` and `main` stay in sync version-wise after each release — no back-merge needed because Step 1 lands the bump on `develop` before `main`.
+
+### Hotfixes directly to main
+
+If something goes straight to `main` without a changeset (e.g. emergency patch), the release workflow's guard just exits cleanly (no unconsumed changesets = no tag work to do). No versions bump. Make a proper changeset-carrying PR via `develop` afterward to stamp the version.
 
 ## Scripts
 
