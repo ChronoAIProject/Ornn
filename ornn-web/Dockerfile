@@ -14,8 +14,10 @@ COPY package.json bun.lock ./
 # Copy frontend package
 COPY ornn-web/package.json ornn-web/
 
-# Stub backend workspace (required by bun workspace resolution)
+# Stub sibling workspaces (required by bun workspace resolution) —
+# only ornn-web's dep graph is actually needed for the frontend build.
 RUN mkdir -p ornn-api && echo '{"name":"ornn-api","version":"2.0.0","private":true}' > ornn-api/package.json
+RUN mkdir -p ornn-sdk && echo '{"name":"@chronoai/ornn-sdk","version":"1.0.0","private":true}' > ornn-sdk/package.json
 
 RUN bun install
 
