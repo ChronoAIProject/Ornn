@@ -76,12 +76,8 @@ jobs:
       - name: Build ornn-api image
         run: docker build -t ornn-api-ci -f ornn-api/Dockerfile .
       - name: Build ornn-web image
-        run: |
-          docker build -t ornn-web-ci \
-            --build-arg VITE_API_BASE_URL=https://ci.placeholder.invalid \
-            --build-arg VITE_NYXID_AUTHORIZE_URL=https://ci.placeholder.invalid/authorize \
-            --build-arg VITE_NYXID_TOKEN_URL=https://ci.placeholder.invalid/token \
-            --build-arg VITE_NYXID_CLIENT_ID=ci-placeholder \
-            --build-arg VITE_NYXID_REDIRECT_URI=https://ci.placeholder.invalid/callback \
-            --build-arg VITE_NYXID_LOGOUT_URL=https://ci.placeholder.invalid/logout \
-            -f ornn-web/Dockerfile .
+        # Runtime-config (PR #117) dropped all VITE_* build args — the image
+        # is environment-agnostic, config.js is rendered from its template at
+        # container startup via envsubst. CI just verifies the Dockerfile
+        # builds cleanly.
+        run: docker build -t ornn-web-ci -f ornn-web/Dockerfile .

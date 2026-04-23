@@ -45,7 +45,7 @@ function NyxIdIcon({ className }: { className?: string }) {
 /** Derive NyxID home URL from the authorize URL env var */
 function getNyxIdUrl(): string {
   try {
-    const authorizeUrl = config.nyxidAuthorizeUrl;
+    const authorizeUrl = config.nyxidOauthAuthorizeUrl;
     if (authorizeUrl) {
       const url = new URL(authorizeUrl);
       return url.origin;

@@ -1,9 +1,9 @@
 window.__ORNN_CONFIG__ = {
   apiBaseUrl: "${API_BASE_URL}",
-  nyxidAuthorizeUrl: "${NYXID_AUTHORIZE_URL}",
-  nyxidTokenUrl: "${NYXID_TOKEN_URL}",
-  nyxidClientId: "${NYXID_CLIENT_ID}",
-  nyxidRedirectUri: "${NYXID_REDIRECT_URI}",
+  nyxidOauthAuthorizeUrl: "${NYXID_OAUTH_AUTHORIZE_URL}",
+  nyxidOauthTokenUrl: "${NYXID_OAUTH_TOKEN_URL}",
+  nyxidOauthClientId: "${NYXID_OAUTH_CLIENT_ID}",
+  nyxidOauthRedirectUri: "${NYXID_OAUTH_REDIRECT_URI}",
   nyxidLogoutUrl: "${NYXID_LOGOUT_URL}",
   nyxidSettingsUrl: "${NYXID_SETTINGS_URL}"
 };
