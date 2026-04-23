@@ -179,6 +179,40 @@ jobs:
             echo "Opened sync PR #${SYNC_PR}"
           fi
 
+          # ── Hard safety rail on auto-merge ────────────────────────
+          # Code-level guarantee that this path only ever auto-merges a
+          # PR whose:
+          #   - head branch matches `sync/post-release-v*`
+          #   - base branch is `develop`
+          #   - author is github-actions[bot]
+          # even if a future edit introduces a new auto-merge call site
+          # by mistake.
+          if [ -n "$SYNC_PR" ]; then
+            PR_META=$(gh pr view "$SYNC_PR" --json headRefName,baseRefName,author --jq '.headRefName + "|" + .baseRefName + "|" + .author.login')
+            PR_HEAD="${PR_META%%|*}"
+            REST="${PR_META#*|}"
+            PR_BASE="${REST%%|*}"
+            PR_AUTHOR="${REST#*|}"
+            case "$PR_HEAD" in
+              sync/post-release-v*) ;;
+              *)
+                echo "::error::refusing to auto-merge: head '$PR_HEAD' does not match sync/post-release-v*"
+                exit 1
+                ;;
+            esac
+            if [ "$PR_BASE" != "develop" ]; then
+              echo "::error::refusing to auto-merge: base '$PR_BASE' is not 'develop'"
+              exit 1
+            fi
+            case "$PR_AUTHOR" in
+              github-actions|app/github-actions|github-actions\[bot\]) ;;
+              *)
+                echo "::error::refusing to auto-merge: author '$PR_AUTHOR' is not the github-actions bot"
+                exit 1
+                ;;
+            esac
+          fi
+
           # Auto-approve + auto-merge: the sync PR is a deterministic
           # replay of a commit that already passed CI on main. No human
           # review adds value here. Requires the org-level
