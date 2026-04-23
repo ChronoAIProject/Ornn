@@ -10,7 +10,7 @@ TypeScript, Bun workspace monorepo
 - **Database:** MongoDB 7
 - **Validation:** Zod
 - **Logging:** Pino
-- **Testing:** Bun test (backend). Frontend has no test framework installed yet — two `.test.ts` files exist under `ornn-web/src/lib/` but do not run in CI. Install Vitest + Testing Library before writing new frontend tests (tracked in `docs/api-refactor.md` Epic 3).
+- **Testing:** Bun test (backend). Frontend has no test framework installed yet — two `.test.ts` files exist under `ornn-web/src/lib/` but do not run in CI. Install Vitest + Testing Library before writing new frontend tests (see `docs/conventions.md` §11.7).
 
 **Packages:**
 
