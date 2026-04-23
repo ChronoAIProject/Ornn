@@ -19,39 +19,25 @@ jobs:
             const pr = context.payload.pull_request;
             const author = pr.user.login;
 
-            // Owner can self-merge without approval
-            if (author === 'chronoai-shining') {
+            // Trusted authors can self-merge without external approval:
+            //   - chronoai-shining (maintainer)
+            //   - github-actions[bot] (release-bump + sync PRs opened by
+            //     the changeset-release workflow state machine)
+            const TRUSTED_AUTHORS = new Set([
+              'chronoai-shining',
+              'github-actions[bot]',
+              'app/github-actions',
+            ]);
+            if (TRUSTED_AUTHORS.has(author)) {
               console.log(`PR author is ${author} — no approval required`);
               return;
             }
 
-            // For other contributors, check for Aevatarians team approval
-            const reviews = await github.rest.pulls.listReviews({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: pr.number,
-            });
-
-            // Get Aevatarians team members
-            let teamMembers;
-            try {
-              const members = await github.rest.teams.listMembersInOrg({
-                org: 'aevatarAI',
-                team_slug: 'Aevatarians',
-              });
-              teamMembers = members.data.map(m => m.login);
-            } catch (e) {
-              core.setFailed('Could not fetch Aevatarians team members. Ensure the GITHUB_TOKEN has org:read scope.');
-              return;
-            }
-
-            // Check if any team member approved
-            const approved = reviews.data.some(
-              r => r.state === 'APPROVED' && teamMembers.includes(r.user.login)
+            // External contributors: placeholder. The original team-based
+            // gate (aevatarAI/Aevatarians) pointed at the pre-transfer org
+            // and was removed when the repo moved to ChronoAIProject. Until
+            // a ChronoAIProject team exists + there are actual external
+            // contributors to gate, fail explicitly so nothing slips through.
+            core.setFailed(
+              `PRs from '${author}' require maintainer approval — no team-review gate is configured yet for the ChronoAIProject org.`,
             );
-
-            if (!approved) {
-              core.setFailed(`PRs from external contributors require at least 1 approval from the Aevatarians team. Author: ${author}`);
-            } else {
-              console.log('Aevatarians team approval found — OK');
-            }

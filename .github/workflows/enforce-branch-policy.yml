@@ -9,10 +9,24 @@ jobs:
   check-source-branch:
     runs-on: ubuntu-latest
     steps:
-      - name: Verify PR source branch is develop
+      - name: Verify PR source branch is develop or release/*
+        env:
+          HEAD_REF: ${{ github.head_ref }}
         run: |
-          if [ "${{ github.head_ref }}" != "develop" ]; then
-            echo "::error::PRs targeting main must come from the develop branch. Got: ${{ github.head_ref }}"
-            exit 1
+          # Two legal paths to main:
+          #   1. develop → main          (normal feature promote)
+          #   2. release/* → main        (bot-opened version-bump PR
+          #                               from the changeset-release
+          #                               workflow state machine)
+          if [ "$HEAD_REF" = "develop" ]; then
+            echo "Source branch is develop — OK"
+            exit 0
           fi
-          echo "Source branch is develop — OK"
+          case "$HEAD_REF" in
+            release/*)
+              echo "Source branch is $HEAD_REF (release-bump PR) — OK"
+              exit 0
+              ;;
+          esac
+          echo "::error::PRs targeting main must come from 'develop' or 'release/*'. Got: $HEAD_REF"
+          exit 1
