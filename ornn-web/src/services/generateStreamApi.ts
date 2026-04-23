@@ -7,8 +7,9 @@
 import type { GenerationStreamEvent } from "@/types/streaming";
 import { parseSseChunk } from "@/utils/sseParser";
 import { useAuthStore } from "@/stores/authStore";
+import { config } from "@/config";
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
+const API_BASE = config.apiBaseUrl;
 
 export interface GenerateStreamParams {
   messages: Array<{ role: string; content: string }>;

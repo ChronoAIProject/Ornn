@@ -7,13 +7,14 @@
 
 import type { ApiResponse } from "@/types/api";
 import { useAuthStore } from "@/stores/authStore";
+import { config } from "@/config";
 
 const logger = {
   error: (msg: string, data?: Record<string, unknown>) =>
     console.error(`[apiClient] ${msg}`, data ?? ""),
 };
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
+const API_BASE = config.apiBaseUrl;
 
 /**
  * Custom error class for API failures.

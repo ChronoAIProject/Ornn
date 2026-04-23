@@ -205,21 +205,12 @@ done
 ### Step 6: Build ornn images (run from repo root)
 
 ```bash
-# Source env for build args
-set -a; source deployment/.env.ornn; set +a
-
 # Backend
 docker build -t "${ORNN_API_IMAGE}" -f ornn-api/Dockerfile .
 
-# Frontend (build args baked into static bundle)
-docker build -t "${ORNN_WEB_IMAGE}" \
-  --build-arg VITE_API_BASE_URL="${VITE_API_BASE_URL}" \
-  --build-arg VITE_NYXID_AUTHORIZE_URL="${VITE_NYXID_AUTHORIZE_URL}" \
-  --build-arg VITE_NYXID_TOKEN_URL="${VITE_NYXID_TOKEN_URL}" \
-  --build-arg VITE_NYXID_CLIENT_ID="${VITE_NYXID_CLIENT_ID}" \
-  --build-arg VITE_NYXID_REDIRECT_URI="${VITE_NYXID_REDIRECT_URI}" \
-  --build-arg VITE_NYXID_LOGOUT_URL="${VITE_NYXID_LOGOUT_URL}" \
-  -f ornn-web/Dockerfile .
+# Frontend — no build args. All config (nginx upstreams + Vite env)
+# is injected at container startup via the `ornn-web-config` ConfigMap.
+docker build -t "${ORNN_WEB_IMAGE}" -f ornn-web/Dockerfile .
 ```
 
 ### Step 7: Deploy ornn

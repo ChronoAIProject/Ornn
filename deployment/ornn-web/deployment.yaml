@@ -21,6 +21,9 @@ spec:
           imagePullPolicy: ${IMAGE_PULL_POLICY}
           ports:
             - containerPort: 80
+          envFrom:
+            - configMapRef:
+                name: ornn-web-config
           readinessProbe:
             httpGet:
               path: /

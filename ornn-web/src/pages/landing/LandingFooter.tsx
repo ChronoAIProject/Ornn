@@ -6,8 +6,9 @@
  */
 
 import { useState, useEffect } from "react";
+import { config } from "@/config";
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
+const API_BASE = config.apiBaseUrl;
 
 export function LandingFooter() {
   const year = new Date().getFullYear();

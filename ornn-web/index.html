@@ -14,6 +14,11 @@
   </head>
   <body class="bg-[#0a0a0f] text-[#e8e8e8] antialiased">
     <div id="root"></div>
+    <!-- Runtime config, generated per-environment at container startup
+         by /docker-entrypoint.d/40-envsubst-config-js.sh. Must load before
+         the main bundle so window.__ORNN_CONFIG__ is set when src/config.ts
+         evaluates. -->
+    <script src="/config.js"></script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
