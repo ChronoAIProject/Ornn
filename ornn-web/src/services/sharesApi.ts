@@ -7,27 +7,16 @@
 
 import { apiGet, apiPost } from "./apiClient";
 import type {
-  InitiateShareInput,
   ReviewDecisionInput,
   ShareRequest,
   SubmitJustificationInput,
 } from "@/types/shares";
 
-export async function initiateShare(
-  skillIdOrName: string,
-  input: InitiateShareInput,
-): Promise<ShareRequest> {
-  const body: { targetType: string; targetId?: string } = {
-    targetType: input.targetType,
-  };
-  if (input.targetId) body.targetId = input.targetId;
-  const res = await apiPost<ShareRequest>(
-    `/api/v1/skills/${encodeURIComponent(skillIdOrName)}/share`,
-    body,
-  );
-  if (!res.data) throw new Error("initiateShare returned no data");
-  return res.data;
-}
+// NOTE: there is no longer a client-side "initiate share" helper.
+// The audit-gated share lifecycle is created as a side-effect of
+// `PUT /api/v1/skills/:id/permissions` — see services/permissionsApi.ts.
+// Everything below is the lifecycle (justify / review / cancel / list)
+// that the backend `GET/POST /api/v1/shares/*` routes still serve.
 
 export async function fetchShareRequest(requestId: string): Promise<ShareRequest | null> {
   const res = await apiGet<ShareRequest>(

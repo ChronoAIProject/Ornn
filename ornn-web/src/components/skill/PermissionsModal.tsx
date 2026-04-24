@@ -9,19 +9,26 @@
  *   Users     — explicit per-user grants (email typeahead, additive)
  *   Private   — only the author + platform admin
  *
- * Org-level and user-level grants are **orthogonal** — the owner can
- * enable either, both, or neither. The owner flips to Public to open
- * the floodgates; with Public off, whatever grants are set are the
- * skill's ACL. An empty ACL (no orgs + no users) is the pure-Private
- * state — surfaced as the bottom card "active" so there's no invisible
- * default to puzzle over.
+ * Save flow is audit-gated. The modal posts the desired state to
+ * `PUT /api/v1/skills/:id/permissions` in one call; the backend:
+ *   - applies any removals immediately (revoking access never needs audit)
+ *   - runs a cached audit (30-day TTL) once for this skill version
+ *   - for each NEW grant, returns a `ShareRequest` — either `green`
+ *     (auto-applied because `overallScore >= platform threshold`) or
+ *     `needs-justification` (a waiver request the owner must justify,
+ *     reviewed by the target user / org admin / ornn admin).
  *
- * Data model unchanged: isPrivate + sharedWithOrgs + sharedWithUsers.
- * Public clears both grant lists on save so the persisted state
- * reflects exactly one intent.
+ * The modal shows three phases during the save:
+ *   1. `form` — the picker (default)
+ *   2. `running` — spinner + "Running audit…" label while the backend call is in flight
+ *   3. `results` — per-target outcomes when at least one target needs follow-up;
+ *                  all-green saves skip this and just toast + close
+ *
+ * @module components/skill/PermissionsModal
  */
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
 import { Modal } from "@/components/ui/Modal";
@@ -29,8 +36,22 @@ import { Button } from "@/components/ui/Button";
 import { useMyOrgs } from "@/hooks/useMe";
 import { useUpdateSkillPermissions } from "@/hooks/useSkills";
 import { useToastStore } from "@/stores/toastStore";
-import { searchUsersByEmail, resolveUsers, fetchOrgSummary, type UserDirectoryEntry } from "@/services/usersApi";
+import {
+  searchUsersByEmail,
+  resolveUsers,
+  fetchOrgSummary,
+  type UserDirectoryEntry,
+} from "@/services/usersApi";
 import type { SkillDetail } from "@/types/domain";
+import type { ShareRequest } from "@/types/shares";
+
+type SavePhase = "form" | "running" | "results";
+
+interface SaveResultEntry {
+  label: string;
+  kind: "share-green" | "share-needs-justification" | "share-failed-audit";
+  shareRequestId: string;
+}
 
 interface PermissionsModalProps {
   isOpen: boolean;
@@ -38,7 +59,6 @@ interface PermissionsModalProps {
   skill: SkillDetail;
 }
 
-/** Debounce hook — keeps the typeahead API call rate reasonable. */
 function useDebouncedValue<T>(value: T, delayMs: number): T {
   const [debounced, setDebounced] = useState(value);
   useEffect(() => {
@@ -54,15 +74,14 @@ export function PermissionsModal({ isOpen, onClose, skill }: PermissionsModalPro
   const { data: myOrgs = [] } = useMyOrgs();
   const permissionsMutation = useUpdateSkillPermissions(skill.guid);
 
-  // Primary state: Public is the top-level override, grants are the
-  // two orthogonal additive channels. All three persist in local state
-  // across edits so a flipped-then-unflipped Public doesn't lose the
-  // user's in-progress selections.
   const [isPublic, setIsPublic] = useState<boolean>(!skill.isPrivate);
   const [sharedUsers, setSharedUsers] = useState<UserDirectoryEntry[]>([]);
   const [sharedOrgIds, setSharedOrgIds] = useState<string[]>(skill.sharedWithOrgs);
   const [userQuery, setUserQuery] = useState("");
   const [userInputFocused, setUserInputFocused] = useState(false);
+  const [phase, setPhase] = useState<SavePhase>("form");
+  const [saveResults, setSaveResults] = useState<SaveResultEntry[]>([]);
+  const [hadRemoves, setHadRemoves] = useState(false);
   const userInputRef = useRef<HTMLInputElement>(null);
 
   // Reset form whenever the modal re-opens on a different skill version.
@@ -78,12 +97,13 @@ export function PermissionsModal({ isOpen, onClose, skill }: PermissionsModalPro
         displayName: id,
       })),
     );
+    setPhase("form");
+    setSaveResults([]);
+    setHadRemoves(false);
   }, [isOpen, skill]);
 
   // Resolve saved user_ids into email/displayName so the chip list
-  // renders something human. Runs once per modal open. Uses a dedicated
-  // batch-by-id endpoint because the email-prefix search can't match on
-  // a UUID — that was the bug where chips showed raw GUIDs on reopen.
+  // renders something human. Runs once per modal open.
   useEffect(() => {
     const needResolve = sharedUsers.filter((u) => !u.email).map((u) => u.userId);
     if (needResolve.length === 0) return;
@@ -103,10 +123,6 @@ export function PermissionsModal({ isOpen, onClose, skill }: PermissionsModalPro
   }, [isOpen]);
 
   const debouncedQuery = useDebouncedValue(userQuery.trim(), 200);
-  // Fire whenever the user is interacting with the picker — on focus
-  // (empty query → show all), and as they type (prefix filter). The
-  // backend returns the top-N-by-recency for an empty query so the
-  // dropdown is useful the instant the field is focused.
   const shouldSearch = !isPublic && (userInputFocused || debouncedQuery.length > 0);
   const { data: suggestions = [] } = useQuery({
     queryKey: ["users-search", debouncedQuery],
@@ -115,10 +131,6 @@ export function PermissionsModal({ isOpen, onClose, skill }: PermissionsModalPro
     staleTime: 10_000,
   });
 
-  // Back-fill display names for orgs the caller no longer belongs to.
-  // Same-org ids show up in both `myOrgs` (membership) and on the
-  // skill's `sharedWithOrgs`; we only need to resolve the ones not in
-  // the membership set.
   const unknownOrgIds = useMemo(
     () => sharedOrgIds.filter((id) => !myOrgs.some((o) => o.userId === id)),
     [sharedOrgIds, myOrgs],
@@ -128,7 +140,10 @@ export function PermissionsModal({ isOpen, onClose, skill }: PermissionsModalPro
     queryFn: async () => {
       const resolved = await Promise.all(unknownOrgIds.map((id) => fetchOrgSummary(id)));
       return resolved
-        .map((entry, i) => entry ?? { userId: unknownOrgIds[i], displayName: unknownOrgIds[i], avatarUrl: null })
+        .map(
+          (entry, i) =>
+            entry ?? { userId: unknownOrgIds[i], displayName: unknownOrgIds[i], avatarUrl: null },
+        )
         .filter((e) => !!e);
     },
     enabled: isOpen && unknownOrgIds.length > 0,
@@ -148,6 +163,16 @@ export function PermissionsModal({ isOpen, onClose, skill }: PermissionsModalPro
     return Array.from(map.values());
   }, [myOrgs, fetchedUnknownOrgs]);
 
+  const labelForWaiverTarget = (w: ShareRequest): string => {
+    if (w.target.type === "public") return t("permissions.targetPublic", "Public");
+    if (w.target.type === "org") {
+      const hit = allOrgOptions.find((o) => o.userId === w.target.id);
+      return hit?.displayName ?? `Org ${w.target.id ?? ""}`.trim();
+    }
+    const hit = sharedUsers.find((u) => u.userId === w.target.id);
+    return hit?.displayName || hit?.email || `User ${w.target.id ?? ""}`.trim();
+  };
+
   const toggleOrg = (orgId: string) => {
     setSharedOrgIds((prev) =>
       prev.includes(orgId) ? prev.filter((id) => id !== orgId) : [...prev, orgId],
@@ -158,8 +183,6 @@ export function PermissionsModal({ isOpen, onClose, skill }: PermissionsModalPro
     if (sharedUsers.some((u) => u.userId === entry.userId)) return;
     setSharedUsers((prev) => [...prev, entry]);
     setUserQuery("");
-    // Close the dropdown after a pick so the newly-added chip isn't
-    // occluded by the suggestion list. The user can refocus to add more.
     setUserInputFocused(false);
     userInputRef.current?.blur();
   };
@@ -168,42 +191,241 @@ export function PermissionsModal({ isOpen, onClose, skill }: PermissionsModalPro
     setSharedUsers((prev) => prev.filter((u) => u.userId !== userId));
   };
 
-  // Derived "active" flags drive each card's highlight. Orgs + Users
-  // can be simultaneously active — they're orthogonal grant channels.
-  // Private is active only when nothing else is.
   const orgsActive = !isPublic && sharedOrgIds.length > 0;
   const usersActive = !isPublic && sharedUsers.length > 0;
   const privateActive = !isPublic && !orgsActive && !usersActive;
 
   const handleSave = async () => {
-    const payload = isPublic
-      ? { isPrivate: false, sharedWithOrgs: [], sharedWithUsers: [] }
-      : {
-        isPrivate: true,
-        sharedWithOrgs: sharedOrgIds,
-        sharedWithUsers: sharedUsers.map((u) => u.userId),
-      };
-    try {
-      await permissionsMutation.mutateAsync(payload);
-      addToast({ type: "success", message: t("permissions.saveSuccess", "Permissions updated") });
+    // Quick client-side "nothing changed" short-circuit.
+    const beforePrivate = skill.isPrivate;
+    const beforeUsers = new Set(skill.sharedWithUsers);
+    const beforeOrgs = new Set(skill.sharedWithOrgs);
+    const afterPrivate = !isPublic;
+    const afterUsers = new Set(sharedUsers.map((u) => u.userId));
+    const afterOrgs = new Set(sharedOrgIds);
+
+    const privateChanged = beforePrivate !== afterPrivate;
+    const usersChanged =
+      sharedUsers.length !== beforeUsers.size ||
+      sharedUsers.some((u) => !beforeUsers.has(u.userId));
+    const orgsChanged =
+      sharedOrgIds.length !== beforeOrgs.size ||
+      sharedOrgIds.some((id) => !beforeOrgs.has(id));
+
+    if (!privateChanged && !usersChanged && !orgsChanged) {
+      addToast({
+        type: "info",
+        message: t("permissions.noChanges", "No changes to save."),
+      });
       onClose();
+      return;
+    }
+
+    const someRemoved =
+      skill.sharedWithUsers.some((id) => !afterUsers.has(id)) ||
+      skill.sharedWithOrgs.some((id) => !afterOrgs.has(id)) ||
+      (!beforePrivate && afterPrivate);
+
+    setPhase("running");
+    setSaveResults([]);
+    setHadRemoves(someRemoved);
+
+    try {
+      const result = await permissionsMutation.mutateAsync({
+        isPrivate: !isPublic,
+        sharedWithUsers: sharedUsers.map((u) => u.userId),
+        sharedWithOrgs: sharedOrgIds,
+      });
+
+      const waivers = result.waivers ?? [];
+      const needsFollowup = waivers.some((w) => w.status !== "green");
+
+      if (!needsFollowup) {
+        // Clean path — toast what happened and close.
+        const ok = waivers.filter((w) => w.status === "green").length;
+        const parts: string[] = [];
+        if (someRemoved) parts.push(t("permissions.partRemoves", "permissions updated"));
+        if (ok > 0) {
+          parts.push(
+            t("permissions.partSharesAccepted", "{{n}} share(s) auto-approved (audit above threshold)", { n: ok }),
+          );
+        }
+        addToast({
+          type: "success",
+          message: parts.length > 0 ? parts.join(" · ") : t("permissions.saveSuccess", "Permissions updated"),
+        });
+        onClose();
+        return;
+      }
+
+      // At least one target needs justification — render the results view.
+      setSaveResults(
+        waivers.map((w) => ({
+          label: labelForWaiverTarget(w),
+          shareRequestId: w._id,
+          kind:
+            w.status === "green"
+              ? "share-green"
+              : w.status === "needs-justification"
+                ? "share-needs-justification"
+                : "share-failed-audit",
+        })),
+      );
+      setPhase("results");
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       addToast({ type: "error", message });
+      setPhase("form");
     }
   };
+
+  // ---------- running view -------------------------------------------------
+
+  if (phase === "running") {
+    return (
+      <Modal
+        isOpen={isOpen}
+        onClose={onClose}
+        title={t("permissions.runningTitle", "Running audit…") as string}
+        className="!max-w-xl"
+      >
+        <div className="flex flex-col items-center gap-4 py-10 text-center">
+          <div
+            className="h-10 w-10 animate-spin rounded-full border-2 border-neon-cyan/20 border-t-neon-cyan"
+            aria-hidden
+          />
+          <div className="space-y-1">
+            <p className="font-heading text-sm uppercase tracking-wider text-text-primary">
+              {t("permissions.runningHeading", "Auditing new share targets")}
+            </p>
+            <p className="font-body text-sm text-text-muted">
+              {t(
+                "permissions.runningSub",
+                "Applying removals and scoring the skill against the audit engine.",
+              )}
+            </p>
+          </div>
+          <p className="max-w-md font-body text-xs text-text-muted">
+            {t(
+              "permissions.runningHint",
+              "The audit engine reviews the skill across security, code quality, documentation, reliability, and permission scope. Cached for 30 days per skill version.",
+            )}
+          </p>
+        </div>
+      </Modal>
+    );
+  }
+
+  // ---------- results view -------------------------------------------------
+
+  if (phase === "results") {
+    const flaggedCount = saveResults.filter(
+      (r) => r.kind === "share-needs-justification" || r.kind === "share-failed-audit",
+    ).length;
+    return (
+      <Modal
+        isOpen={isOpen}
+        onClose={onClose}
+        title={t("permissions.resultsTitle", "Audit results") as string}
+        className="!max-w-xl"
+      >
+        <div className="space-y-4">
+          <p className="font-body text-sm text-text-muted">
+            {t(
+              "permissions.resultsHeading",
+              "{{n}} target(s) scored below the audit threshold and need a waiver before access is granted.",
+              { n: flaggedCount },
+            )}
+          </p>
+          {hadRemoves && (
+            <div className="rounded-lg border border-neon-cyan/20 bg-neon-cyan/5 px-3 py-2 font-body text-sm text-text-muted">
+              {t("permissions.partRemovesApplied", "Existing grants you removed were applied immediately.")}
+            </div>
+          )}
+          <ul className="space-y-2">
+            {saveResults.map((r) => {
+              const iconBase =
+                "h-6 w-6 shrink-0 rounded-full border flex items-center justify-center font-mono text-xs";
+              const rowBase = "flex items-start gap-3 rounded-lg border px-3 py-2";
+              if (r.kind === "share-green") {
+                return (
+                  <li key={r.shareRequestId} className={`${rowBase} border-neon-cyan/30 bg-neon-cyan/5`}>
+                    <span aria-hidden className={`${iconBase} border-neon-cyan/40 text-neon-cyan`}>
+                      ✓
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-body text-sm text-text-primary">{r.label}</p>
+                      <p className="font-body text-xs text-text-muted">
+                        {t("permissions.resultGreen", "Audit passed — access granted.")}
+                      </p>
+                    </div>
+                  </li>
+                );
+              }
+              if (r.kind === "share-needs-justification") {
+                return (
+                  <li
+                    key={r.shareRequestId}
+                    className={`${rowBase} border-neon-yellow/30 bg-neon-yellow/5`}
+                  >
+                    <span aria-hidden className={`${iconBase} border-neon-yellow/40 text-neon-yellow`}>
+                      ⚠
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-body text-sm text-text-primary">{r.label}</p>
+                      <p className="font-body text-xs text-text-muted">
+                        {t(
+                          "permissions.resultNeedsJustification",
+                          "Audit flagged findings. Submit a justification for a reviewer to consider.",
+                        )}
+                      </p>
+                    </div>
+                    <Link
+                      to={`/shares/${encodeURIComponent(r.shareRequestId)}`}
+                      onClick={onClose}
+                      className="shrink-0 rounded-md border border-neon-yellow/30 px-3 py-1 font-body text-xs text-neon-yellow transition-colors hover:bg-neon-yellow/10"
+                    >
+                      {t("permissions.addJustification", "Add justification →")}
+                    </Link>
+                  </li>
+                );
+              }
+              return (
+                <li key={r.shareRequestId} className={`${rowBase} border-neon-red/30 bg-neon-red/5`}>
+                  <span aria-hidden className={`${iconBase} border-neon-red/40 text-neon-red`}>
+                    ✗
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-body text-sm text-text-primary">{r.label}</p>
+                    <p className="font-body text-xs text-text-muted">
+                      {t(
+                        "permissions.resultFailedAudit",
+                        "Audit failed outright — contact a platform admin.",
+                      )}
+                    </p>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+          <div className="flex justify-end pt-2">
+            <Button onClick={onClose}>{t("common.close", "Close")}</Button>
+          </div>
+        </div>
+      </Modal>
+    );
+  }
+
+  // ---------- form view ----------------------------------------------------
 
   return (
     <Modal
       isOpen={isOpen}
       onClose={onClose}
       title={t("permissions.title", "Permissions") as string}
-      // Two parallel grant columns need breathing room on desktop;
-      // default modal width (max-w-lg) wraps the org + user cards.
       className="!max-w-3xl"
     >
       <div className="flex gap-4">
-        {/* Left gutter — broader-at-top arrow axis. Decorative only. */}
         <div className="flex flex-col items-center py-1 shrink-0" aria-hidden>
           <svg
             viewBox="0 0 16 16"
@@ -219,156 +441,184 @@ export function PermissionsModal({ isOpen, onClose, skill }: PermissionsModalPro
           <div className="flex-1 w-px my-1 bg-gradient-to-b from-neon-cyan/70 via-neon-cyan/25 to-neon-cyan/5" />
         </div>
 
-        {/* Three access tiers separated by labelled dividers. The
-            middle tier wraps two co-equal channels (orgs + users) so
-            the visual grouping matches the semantic model. */}
         <div className="flex-1">
-          <SectionHeader label={t("permissions.level.public", "Public access")} />
+          <SectionHeader label={t("permissions.levelPublic", "Public access") as string} />
           <TierCard
             active={isPublic}
-            interactive
+            accent="cyan"
             onToggle={() => setIsPublic((v) => !v)}
-            control={
+          >
+            <label className="flex items-start gap-3 cursor-pointer w-full">
               <input
                 type="checkbox"
                 checked={isPublic}
                 onChange={(e) => setIsPublic(e.target.checked)}
-                className="mt-1 h-4 w-4 accent-neon-green cursor-pointer"
+                className="mt-1 h-4 w-4 shrink-0 rounded border-neon-cyan/40 accent-neon-cyan"
               />
-            }
-            title={t("permissions.publicLabel", "Public")}
-            subtitle={t("permissions.publicHint", "Anyone on Ornn can find and use this skill, including unauthenticated visitors.")}
-          />
+              <div className="flex-1">
+                <p className="font-heading text-base text-text-primary">
+                  {t("permissions.publicTitle", "Public")}
+                </p>
+                <p className="mt-0.5 font-body text-sm text-text-muted">
+                  {t(
+                    "permissions.publicDesc",
+                    "Anyone on Ornn can find and use this skill, including unauthenticated visitors.",
+                  )}
+                </p>
+              </div>
+            </label>
+          </TierCard>
 
-          <SectionHeader label={t("permissions.level.limited", "Limited access")} />
-          {/* Org and User grants sit at the same semantic level —
-              they're two orthogonal additive channels, not a priority
-              ladder. Put them side-by-side so the parity is obvious
-              and neither feels like the primary option. */}
-          <div className="grid gap-3 sm:grid-cols-2">
+          <SectionHeader
+            label={t("permissions.levelLimited", "Limited access") as string}
+          />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <TierCard
               active={orgsActive}
-              // Greyed + inert when Public overrides, since any grant
-              // here is ignored at that point.
               dimmed={isPublic}
-              title={t("permissions.sharedOrgsLabel", "Shared with organizations")}
-              subtitle={t("permissions.sharedOrgsHint", "Every admin and member of a checked org can see and use this skill.")}
+              accent="cyan"
+              className="p-4"
             >
-              {allOrgOptions.length === 0 ? (
-                <p className="font-body text-xs text-text-muted italic">
-                  {t("permissions.noOrgs", "You are not in any organizations yet.")}
-                </p>
-              ) : (
-                <div className="space-y-2 max-h-40 overflow-y-auto">
-                  {allOrgOptions.map((org) => (
-                    <label key={org.userId} className="flex items-center gap-3 cursor-pointer">
+              <p className="font-heading text-base text-text-primary">
+                {t("permissions.orgsTitle", "Shared with organizations")}
+              </p>
+              <p className="mt-0.5 font-body text-sm text-text-muted">
+                {t(
+                  "permissions.orgsDesc",
+                  "Every admin and member of a checked org can see and use this skill.",
+                )}
+              </p>
+              <div
+                className={`mt-3 max-h-48 overflow-y-auto space-y-1.5 pr-1 ${
+                  isPublic ? "opacity-60 pointer-events-none" : ""
+                }`}
+              >
+                {allOrgOptions.length === 0 && (
+                  <p className="font-body text-xs text-text-muted italic">
+                    {t("permissions.noOrgs", "No organizations to choose from.")}
+                  </p>
+                )}
+                {allOrgOptions.map((org) => {
+                  const checked = sharedOrgIds.includes(org.userId);
+                  return (
+                    <label
+                      key={org.userId}
+                      className="flex items-center gap-2 cursor-pointer py-1 px-2 rounded hover:bg-neon-cyan/5"
+                    >
                       <input
                         type="checkbox"
-                        checked={sharedOrgIds.includes(org.userId)}
+                        checked={checked}
                         onChange={() => toggleOrg(org.userId)}
-                        className="h-4 w-4 accent-neon-cyan cursor-pointer"
+                        className="h-4 w-4 rounded border-neon-cyan/40 accent-neon-cyan"
                       />
-                      <span className="font-body text-sm text-text-primary">
+                      <span className="font-body text-sm text-text-primary truncate">
                         {org.displayName}
-                        {!org.isMember && (
-                          <span className="ml-2 text-xs text-text-muted italic">
-                            {t("permissions.notAMember", "(not a member)")}
-                          </span>
-                        )}
                       </span>
+                      {!org.isMember && (
+                        <span className="font-mono text-[10px] text-text-muted ml-auto">
+                          {t("permissions.notMember", "not member")}
+                        </span>
+                      )}
                     </label>
-                  ))}
-                </div>
-              )}
+                  );
+                })}
+              </div>
             </TierCard>
 
             <TierCard
               active={usersActive}
               dimmed={isPublic}
-              title={t("permissions.sharedUsersLabel", "Shared with specific users")}
-              subtitle={t("permissions.sharedUsersHint", "Search by email. Only users who have signed into Ornn appear here.")}
+              accent="cyan"
+              className="p-4"
             >
-            {/* Reserved-height chip area: always rendered at a fixed
-                size so adding or removing chips never moves the search
-                input below it. Overflow scrolls internally. */}
-            <div className="flex flex-wrap gap-2 mb-3 h-40 overflow-y-auto content-start">
-              {sharedUsers.map((u) => (
-                <span
-                  key={u.userId}
-                  className="inline-flex items-center gap-2 px-2 py-1 rounded-full border border-neon-cyan/30 bg-neon-cyan/5 font-mono text-xs text-text-primary h-fit"
-                >
-                  <span>{u.email || u.displayName || u.userId}</span>
-                  <button
-                    type="button"
-                    onClick={() => removeUser(u.userId)}
-                    className="text-neon-red hover:text-neon-red/80 cursor-pointer"
-                    aria-label={t("permissions.removeUser", "Remove") as string}
+              <p className="font-heading text-base text-text-primary">
+                {t("permissions.usersTitle", "Shared with specific users")}
+              </p>
+              <p className="mt-0.5 font-body text-sm text-text-muted">
+                {t(
+                  "permissions.usersDesc",
+                  "Search by email. Only users who have signed into Ornn appear here.",
+                )}
+              </p>
+              <div
+                className={`mt-3 flex flex-wrap gap-1.5 min-h-[2rem] ${
+                  isPublic ? "opacity-60 pointer-events-none" : ""
+                }`}
+              >
+                {sharedUsers.map((u) => (
+                  <span
+                    key={u.userId}
+                    className="inline-flex items-center gap-2 px-2 py-1 rounded-full border border-neon-cyan/30 bg-neon-cyan/5 font-mono text-xs text-text-primary h-fit"
                   >
-                    ×
-                  </button>
-                </span>
-              ))}
-              {sharedUsers.length === 0 && (
-                <p className="font-body text-xs text-text-muted italic w-full">
-                  {t("permissions.noUsersYet", "No users added yet.")}
-                </p>
-              )}
-            </div>
-            {/* Search input sits at the bottom of the card so the
-                dropdown has room to open upward-free and the running
-                list of added users reads top-down from the card
-                header — additions don't shift the input position. */}
-            <div className="relative">
-              <input
-                ref={userInputRef}
-                type="text"
-                value={userQuery}
-                onChange={(e) => setUserQuery(e.target.value)}
-                onFocus={() => setUserInputFocused(true)}
-                // Delay blur so a click on a suggestion still registers
-                // before the dropdown unmounts.
-                onBlur={() => setTimeout(() => setUserInputFocused(false), 150)}
-                placeholder={t("permissions.searchPlaceholder", "type an email to find a user...") as string}
-                className="w-full glass rounded-lg border border-neon-cyan/20 bg-bg-elevated px-3 py-2 font-body text-sm text-text-primary focus:outline-none focus:border-neon-cyan/60"
-              />
-              {userInputFocused && suggestions.length > 0 && (
-                <div className="absolute left-0 right-0 top-full mt-1 z-10 max-h-48 overflow-y-auto glass rounded-lg border border-neon-cyan/30 shadow-lg shadow-neon-cyan/10">
-                  {suggestions.map((s) => {
-                    const alreadyAdded = sharedUsers.some((u) => u.userId === s.userId);
-                    return (
+                    <span>{u.email || u.displayName || u.userId}</span>
+                    <button
+                      type="button"
+                      onClick={() => removeUser(u.userId)}
+                      className="text-neon-red hover:text-neon-red/80 cursor-pointer"
+                      aria-label={t("permissions.removeUser", "Remove") as string}
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+                {sharedUsers.length === 0 && (
+                  <p className="font-body text-xs text-text-muted italic w-full">
+                    {t("permissions.noUsersYet", "No users added yet.")}
+                  </p>
+                )}
+              </div>
+              <div className="relative mt-3">
+                <input
+                  ref={userInputRef}
+                  type="text"
+                  value={userQuery}
+                  onChange={(e) => setUserQuery(e.target.value)}
+                  onFocus={() => setUserInputFocused(true)}
+                  onBlur={() => setTimeout(() => setUserInputFocused(false), 150)}
+                  placeholder={
+                    t("permissions.searchPlaceholder", "type an email to find a user...") as string
+                  }
+                  className="w-full glass rounded-lg border border-neon-cyan/20 bg-bg-elevated px-3 py-2 font-body text-sm text-text-primary focus:outline-none focus:border-neon-cyan/60"
+                  disabled={isPublic}
+                />
+                {userInputFocused && suggestions.length > 0 && (
+                  <div className="absolute left-0 right-0 bottom-full mb-1 z-10 rounded-lg glass border border-neon-cyan/20 shadow-lg max-h-52 overflow-y-auto">
+                    {suggestions.map((s) => (
                       <button
                         key={s.userId}
                         type="button"
-                        disabled={alreadyAdded}
-                        onMouseDown={(e) => e.preventDefault()}
-                        onClick={() => addUser(s)}
-                        className={`w-full text-left px-3 py-2 font-body text-sm transition-colors ${alreadyAdded ? "text-text-muted cursor-not-allowed" : "text-text-primary cursor-pointer hover:bg-neon-cyan/10"}`}
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          addUser(s);
+                        }}
+                        className="flex w-full items-center gap-2 px-3 py-2 text-left font-body text-sm hover:bg-neon-cyan/10 cursor-pointer"
                       >
-                        <div className="truncate">{s.email}</div>
-                        {s.displayName && (
-                          <div className="text-xs text-text-muted truncate">{s.displayName}</div>
-                        )}
+                        <span className="text-text-primary truncate">
+                          {s.displayName || s.email}
+                        </span>
+                        <span className="ml-auto font-mono text-xs text-text-muted truncate">
+                          {s.email}
+                        </span>
                       </button>
-                    );
-                  })}
-                </div>
-              )}
-              {userInputFocused && debouncedQuery.length > 0 && suggestions.length === 0 && (
-                <p className="font-body text-xs text-text-muted mt-2">
-                  {t("permissions.noUserMatches", "No user matches that email. They may need to sign in to Ornn once before you can share with them.")}
-                </p>
-              )}
-            </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </TierCard>
           </div>
 
-          <SectionHeader label={t("permissions.level.private", "Private access")} />
-          <TierCard
-            active={privateActive}
-            dimmed={isPublic}
-            title={t("permissions.privateLabel", "Private")}
-            subtitle={t("permissions.privateHint", "Only you and platform admins can see this skill. Active when nothing above is set.")}
-          />
+          <SectionHeader label={t("permissions.levelPrivate", "Private access") as string} />
+          <TierCard active={privateActive} dimmed={isPublic} accent="cyan">
+            <p className="font-heading text-base text-text-primary">
+              {t("permissions.privateTitle", "Private")}
+            </p>
+            <p className="mt-0.5 font-body text-sm text-text-muted">
+              {t(
+                "permissions.privateDesc",
+                "Only you and platform admins can see this skill. Active when nothing above is set.",
+              )}
+            </p>
+          </TierCard>
         </div>
       </div>
 
@@ -376,7 +626,10 @@ export function PermissionsModal({ isOpen, onClose, skill }: PermissionsModalPro
         <Button variant="secondary" onClick={onClose}>
           {t("common.cancel", "Cancel")}
         </Button>
-        <Button onClick={handleSave} loading={permissionsMutation.isPending}>
+        <Button
+          onClick={handleSave}
+          loading={permissionsMutation.isPending}
+        >
           {t("common.save", "Save")}
         </Button>
       </div>
@@ -384,11 +637,7 @@ export function PermissionsModal({ isOpen, onClose, skill }: PermissionsModalPro
   );
 }
 
-/**
- * Horizontal divider with a small uppercase level label centered on
- * top — the visual anchor between the three access tiers. Consistent
- * spacing above + below so successive sections share a rhythm.
- */
+/** Section divider with a small uppercase label centered on top. */
 function SectionHeader({ label }: { label: string }) {
   return (
     <div className="mt-5 mb-3 first:mt-0 flex items-center gap-3" aria-hidden>
@@ -402,72 +651,37 @@ function SectionHeader({ label }: { label: string }) {
 }
 
 interface TierCardProps {
-  /** Visually emphasised when true — the tier is contributing to the current ACL. */
   active: boolean;
-  /**
-   * Overrides `active` by greying out the card regardless of state.
-   * Used by the Public override — once Public is on, sub-tiers are
-   * ignored so they render as inert-looking.
-   */
+  /** Overrides `active` visually — greyed out when Public is on for sub-tiers. */
   dimmed?: boolean;
-  /**
-   * Makes the whole card a clickable toggle — used for the Public row
-   * so clicking anywhere flips the checkbox. Middle sub-tiers are NOT
-   * interactive at the card level; their inner controls handle their
-   * own state independently.
-   */
-  interactive?: boolean;
+  accent: "cyan" | "yellow";
   onToggle?: () => void;
-  /** Optional inline control rendered next to the title (checkbox for Public). */
-  control?: ReactNode;
-  title: string;
-  subtitle: string;
-  children?: ReactNode;
+  className?: string;
+  children: ReactNode;
 }
 
 function TierCard({
   active,
   dimmed = false,
-  interactive = false,
+  accent,
   onToggle,
-  control,
-  title,
-  subtitle,
+  className = "",
   children,
 }: TierCardProps) {
-  const highlightTone = dimmed
-    ? "border-neon-cyan/10 opacity-40"
-    : active
-      ? "border-neon-cyan/50 bg-neon-cyan/5 shadow-md shadow-neon-cyan/10"
-      : "border-neon-cyan/15";
+  const ringClass = active
+    ? accent === "cyan"
+      ? "border-neon-cyan/50 bg-neon-cyan/5"
+      : "border-neon-yellow/50 bg-neon-yellow/5"
+    : "border-neon-cyan/15 bg-bg-elevated/40";
+  const dimmedClass = dimmed ? "opacity-60" : "";
   return (
     <div
-      role={interactive ? "button" : undefined}
-      tabIndex={interactive && !dimmed ? 0 : -1}
-      aria-pressed={interactive ? active : undefined}
-      onClick={interactive && !dimmed ? onToggle : undefined}
-      onKeyDown={(e) => {
-        if (interactive && !dimmed && (e.key === "Enter" || e.key === " ")) {
-          e.preventDefault();
-          onToggle?.();
-        }
-      }}
-      className={`
-        border rounded-lg p-4 transition-all
-        ${interactive && !dimmed ? "cursor-pointer" : "cursor-default"}
-        ${highlightTone}
-      `}
+      onClick={onToggle}
+      className={`rounded-lg border p-4 transition-colors ${ringClass} ${dimmedClass} ${className} ${
+        onToggle ? "cursor-pointer" : ""
+      }`}
     >
-      <div className="flex items-start gap-3">
-        {control}
-        <div className="flex-1">
-          <p className="font-body text-sm font-semibold text-text-primary">{title}</p>
-          <p className="font-body text-xs text-text-muted mt-0.5">{subtitle}</p>
-          {children && (
-            <div className={`mt-3 ${dimmed ? "pointer-events-none" : ""}`}>{children}</div>
-          )}
-        </div>
-      </div>
+      {children}
     </div>
   );
 }

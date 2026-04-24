@@ -11,12 +11,10 @@ import {
   fetchMyShareRequests,
   fetchShareRequest,
   fetchShareReviewQueue,
-  initiateShare,
   reviewShareRequest,
   submitShareJustification,
 } from "@/services/sharesApi";
 import type {
-  InitiateShareInput,
   ReviewDecisionInput,
   ShareRequest,
   SubmitJustificationInput,
@@ -65,19 +63,6 @@ export function useShareRequest(requestId: string | undefined) {
     queryFn: () => fetchShareRequest(requestId!),
     enabled: Boolean(requestId),
     staleTime: 15_000,
-  });
-}
-
-export function useInitiateShare() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (vars: { skillIdOrName: string; input: InitiateShareInput }) =>
-      initiateShare(vars.skillIdOrName, vars.input),
-    onSuccess: (created) => {
-      queryClient.setQueryData(shareKey(created._id), created);
-      queryClient.invalidateQueries({ queryKey: MY_SHARES_KEY });
-      queryClient.invalidateQueries({ queryKey: ["notifications"] });
-    },
   });
 }
 

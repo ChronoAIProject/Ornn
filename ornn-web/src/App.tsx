@@ -103,6 +103,9 @@ const AdminTagsPage = lazy(() =>
 const AdminReviewHistoryPage = lazy(() =>
   import("@/pages/admin").then((m) => ({ default: m.ReviewHistoryPage })),
 );
+const AdminPlatformSettingsPage = lazy(() =>
+  import("@/pages/admin").then((m) => ({ default: m.PlatformSettingsPage })),
+);
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -168,6 +171,7 @@ export function App() {
                     <Route path="/admin/categories" element={<AdminCategoriesPage />} />
                     <Route path="/admin/tags" element={<AdminTagsPage />} />
                     <Route path="/admin/review-history" element={<AdminReviewHistoryPage />} />
+                    <Route path="/admin/settings" element={<AdminPlatformSettingsPage />} />
                   </Route>
                 </Route>
               </Route>
