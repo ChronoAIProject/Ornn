@@ -12,6 +12,26 @@ export interface SkillSummary {
   updatedOn?: string;
 }
 
+/**
+ * Origin metadata for a skill that was pulled from an external source.
+ * Absent on hand-uploaded skills. `type` is a discriminator that keeps the
+ * door open for GitLab / Bitbucket variants without touching callers.
+ */
+export type SkillSource =
+  | {
+      type: "github";
+      /** `owner/name`. */
+      repo: string;
+      /** Branch, tag, or commit SHA originally requested. */
+      ref: string;
+      /** Subdirectory inside the repo that contains SKILL.md. Empty = repo root. */
+      path: string;
+      /** ISO timestamp of the most recent successful pull / refresh. */
+      lastSyncedAt: string;
+      /** Commit SHA fetched at `lastSyncedAt`. */
+      lastSyncedCommit: string;
+    };
+
 export interface SkillDetail extends SkillSummary {
   updatedOn: string;
   presignedPackageUrl: string;
@@ -26,6 +46,8 @@ export interface SkillDetail extends SkillSummary {
   sharedWithUsers: string[];
   /** Org user_ids this skill has been explicitly shared with. */
   sharedWithOrgs: string[];
+  /** Present when the skill was created (or last refreshed) by pulling from an external source. */
+  source?: SkillSource;
 }
 
 export interface SkillVersionEntry {

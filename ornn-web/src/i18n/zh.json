@@ -145,7 +145,11 @@
     "genTitle": "生成模式",
     "genDesc": "描述你的需求，让 AI 为你生成完整的技能。支持对话优化。",
     "genBullets": ["AI 驱动生成", "实时流式传输", "对话式优化", "自动结构化输出"],
-    "startGen": "开始生成模式"
+    "startGen": "开始生成模式",
+    "githubTitle": "从 GitHub 导入",
+    "githubDesc": "从公开的 GitHub 仓库拉取技能。后续更新可一键同步。",
+    "githubBullets": ["仅限公开仓库", "支持分支 / 标签 / commit", "一键重新同步", "无需手动打包"],
+    "startGithub": "从 GitHub 导入"
   },
   "guided": {
     "header": "创建技能",

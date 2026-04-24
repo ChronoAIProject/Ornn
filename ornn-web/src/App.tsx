@@ -52,6 +52,9 @@ const CreateSkillFreePage = lazy(() =>
 const CreateSkillGenerativePage = lazy(() =>
   import("@/pages/CreateSkillGenerativePage").then((m) => ({ default: m.CreateSkillGenerativePage })),
 );
+const CreateSkillFromGitHubPage = lazy(() =>
+  import("@/pages/CreateSkillFromGitHubPage").then((m) => ({ default: m.CreateSkillFromGitHubPage })),
+);
 const EditSkillPage = lazy(() =>
   import("@/pages/EditSkillPage").then((m) => ({ default: m.EditSkillPage })),
 );
@@ -130,6 +133,7 @@ export function App() {
                   <Route path="/skills/new/guided" element={<CreateSkillGuidedPage />} />
                   <Route path="/skills/new/free" element={<CreateSkillFreePage />} />
                   <Route path="/skills/new/generate" element={<CreateSkillGenerativePage />} />
+                  <Route path="/skills/new/from-github" element={<CreateSkillFromGitHubPage />} />
                   <Route path="/skills/:id/edit" element={<EditSkillPage />} />
                   <Route path="/playground" element={<PlaygroundPage />} />
 
