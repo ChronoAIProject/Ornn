@@ -84,6 +84,11 @@ import { createMeRoutes } from "./domains/me/routes";
 // Domain: Users (directory lookup)
 import { createUserRoutes } from "./domains/users/routes";
 
+// Domain: Platform settings (admin-editable thresholds, etc.)
+import { PlatformSettingsRepository } from "./domains/platform/repository";
+import { PlatformSettingsService } from "./domains/platform/service";
+import { createPlatformSettingsRoutes } from "./domains/platform/routes";
+
 // OpenAPI spec
 import { buildSpec } from "./openapi/specBuilder";
 
@@ -159,14 +164,9 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
     storageBucket: config.storageBucket,
   });
 
-  const skillRoutes = createSkillRoutes({
-    skillService,
-    skillRepo,
-    maxFileSize: config.maxPackageSizeBytes,
-    activityRepo,
-  });
-
   // ---- Domain: Skill Audit ----
+  // Built ahead of skillRoutes because the permissions handler now runs
+  // audit-gated waiver creation via shareService, which depends on it.
   const auditRepo = new AuditRepository(db);
   void auditRepo.ensureIndexes().catch((err) =>
     logger.warn({ err }, "Audit indexes ensureIndexes failed — proceeding anyway"),
@@ -178,11 +178,14 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
     storageBucket: config.storageBucket,
     llmClient: nyxLlmClient,
     model: config.defaultLlmModel,
-    cacheTtlMs: 7 * 24 * 60 * 60 * 1000, // 7 days
+    // Audits are re-run automatically when the cached record ages past
+    // this TTL, even if the skill bytes haven't changed. 30 days keeps
+    // LLM spend reasonable while still catching drift in the audit
+    // prompt / model over time.
+    cacheTtlMs: 30 * 24 * 60 * 60 * 1000,
   });
   const auditRoutes = createAuditRoutes({ auditService, skillService });
 
-  // ---- Domain: Shares (audit-gated sharing) ----
   // ---- Domain: Notifications ----
   const notificationRepo = new NotificationRepository(db);
   void notificationRepo.ensureIndexes().catch((err) =>
@@ -199,6 +202,12 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   const analyticsService = new AnalyticsService({ analyticsRepo });
   const analyticsRoutes = createAnalyticsRoutes({ analyticsService, skillService });
 
+  // ---- Domain: Platform settings (admin-editable thresholds) ----
+  const platformSettingsRepo = new PlatformSettingsRepository(db);
+  const platformSettingsService = new PlatformSettingsService(platformSettingsRepo);
+  const platformSettingsRoutes = createPlatformSettingsRoutes({ platformSettingsService });
+
+  // ---- Domain: Shares (audit-gated sharing lifecycle) ----
   const shareRepo = new ShareRepository(db);
   void shareRepo.ensureIndexes().catch((err) =>
     logger.warn({ err }, "share_requests indexes ensureIndexes failed — proceeding anyway"),
@@ -207,9 +216,20 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
     shareRepo,
     auditService,
     skillService,
+    platformSettings: platformSettingsService,
     notificationService,
   });
   const shareRoutes = createShareRoutes({ shareService });
+
+  // Skill routes come last because the permissions handler now depends
+  // on shareService for its audit + waiver side-effect path.
+  const skillRoutes = createSkillRoutes({
+    skillService,
+    skillRepo,
+    shareService,
+    maxFileSize: config.maxPackageSizeBytes,
+    activityRepo,
+  });
 
   // ---- Domain: Skill Search ----
   const searchService = new SearchService({
@@ -342,6 +362,7 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   apiApp.route("/", generationRoutes);
   apiApp.route("/", playgroundRoutes);
   apiApp.route("/", adminRoutes);
+  apiApp.route("/", platformSettingsRoutes);
   apiApp.route("/", formatRoutes);
   apiApp.route("/", createMeRoutes({
     nyxidBaseUrl: config.nyxidBaseUrl,

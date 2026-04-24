@@ -24,6 +24,8 @@
     "build": "Build",
     "reviews": "Reviews",
     "docs": "Docs",
+    "mySharingRequests": "My Sharing Requests",
+    "reviewQueue": "Review Queue",
     "signIn": "Sign In",
     "signOut": "Sign Out",
     "settings": "Settings",

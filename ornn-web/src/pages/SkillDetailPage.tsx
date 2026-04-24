@@ -16,7 +16,6 @@ import { AnalyticsCard } from "@/components/skill/AnalyticsCard";
 import { useRefreshSkillFromSource } from "@/hooks/useSkills";
 import { SkillVersionList } from "@/components/skill/SkillVersionList";
 import { PermissionsModal } from "@/components/skill/PermissionsModal";
-import { ShareModal } from "@/components/skill/ShareModal";
 import { InFlightShareRequests } from "@/components/skill/InFlightShareRequests";
 import {
   useSkill,
@@ -117,7 +116,6 @@ export function SkillDetailPage() {
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showPermissionsModal, setShowPermissionsModal] = useState(false);
-  const [showShareModal, setShowShareModal] = useState(false);
   const [showSaveConfirm, setShowSaveConfirm] = useState(false);
   const [editedContents, setEditedContents] = useState<Map<string, string>>(new Map());
   const [addedPaths, setAddedPaths] = useState<FileTreeEntry[]>([]);
@@ -533,16 +531,6 @@ export function SkillDetailPage() {
                   )}
                   {isOwner && (
                     <Button
-                      variant="secondary"
-                      size="sm"
-                      className="w-full"
-                      onClick={() => setShowShareModal(true)}
-                    >
-                      {t("skillDetail.shareSkill", "Share (audit-gated)")}
-                    </Button>
-                  )}
-                  {isOwner && (
-                    <Button
                       variant="danger"
                       size="sm"
                       className="w-full"
@@ -642,15 +630,6 @@ export function SkillDetailPage() {
         />
       )}
 
-      {/* Share modal — owner-initiated audit-gated share request. */}
-      {isOwner && (
-        <ShareModal
-          isOpen={showShareModal}
-          onClose={() => setShowShareModal(false)}
-          skillIdOrName={skill.name || skill.guid}
-          skillName={skill.name}
-        />
-      )}
       </div>
     </PageTransition>
   );

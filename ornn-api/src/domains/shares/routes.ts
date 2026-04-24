@@ -1,13 +1,16 @@
 /**
- * Share-request HTTP routes.
+ * Share-request HTTP routes — lifecycle only. Initiation now happens
+ * as a side-effect of `PUT /api/v1/skills/:id/permissions` (see skill
+ * CRUD routes); there is no longer a dedicated `POST /skills/:id/share`
+ * endpoint.
  *
- *   POST /api/v1/skills/:idOrName/share          — initiate share
+ *   GET  /api/v1/shares                          — caller's own share requests
+ *   GET  /api/v1/shares/review-queue             — pending reviews the caller can act on
+ *   GET  /api/v1/shares/reviewed-history         — past review decisions by the caller
  *   GET  /api/v1/shares/:requestId               — status + findings
  *   POST /api/v1/shares/:requestId/justification — owner submits justifications
  *   POST /api/v1/shares/:requestId/review        — reviewer accept/reject
  *   POST /api/v1/shares/:requestId/cancel        — owner cancels
- *   GET  /api/v1/shares                          — caller's own share requests
- *   GET  /api/v1/shares/review-queue             — pending reviews the caller can act on
  *
  * @module domains/shares/routes
  */
@@ -22,7 +25,6 @@ import {
 } from "../../middleware/nyxidAuth";
 import { AppError } from "../../shared/types/index";
 import type { ShareService } from "./service";
-import type { ShareTarget } from "./types";
 
 const logger = pino({ level: "info" }).child({ module: "shareRoutes" });
 
@@ -34,31 +36,6 @@ export function createShareRoutes(config: ShareRoutesConfig): Hono<{ Variables: 
   const { shareService } = config;
   const app = new Hono<{ Variables: AuthVariables }>();
   const auth = nyxidAuthMiddleware();
-
-  // ---- Initiate share -----------------------------------------------------
-  app.post(
-    "/skills/:idOrName/share",
-    auth,
-    async (c) => {
-      const idOrName = c.req.param("idOrName");
-      const authCtx = getAuth(c);
-      const body = (await c.req.json().catch(() => ({}))) as {
-        targetType?: unknown;
-        targetId?: unknown;
-      };
-      const target = parseTarget(body);
-      const request = await shareService.initiateShare({
-        skillIdOrName: idOrName,
-        ownerUserId: authCtx.userId,
-        target,
-      });
-      logger.info(
-        { shareRequestId: request._id, skillIdOrName: idOrName, ownerUserId: authCtx.userId },
-        "Share initiated via API",
-      );
-      return c.json({ data: request, error: null });
-    },
-  );
 
   // Order matters: the specific paths (`/shares`, `/shares/review-queue`)
   // MUST be registered before the wildcard `/shares/:requestId`. Hono
@@ -89,6 +66,17 @@ export function createShareRoutes(config: ShareRoutesConfig): Hono<{ Variables: 
         reviewerOrgIds,
         isPlatformAdmin,
       });
+      return c.json({ data: { items }, error: null });
+    },
+  );
+
+  // ---- Reviewer history — past decisions the caller has made -------------
+  app.get(
+    "/shares/reviewed-history",
+    auth,
+    async (c) => {
+      const authCtx = getAuth(c);
+      const items = await shareService.listReviewedHistory(authCtx.userId);
       return c.json({ data: { items }, error: null });
     },
   );
@@ -173,23 +161,8 @@ export function createShareRoutes(config: ShareRoutesConfig): Hono<{ Variables: 
   return app;
 }
 
-function parseTarget(body: { targetType?: unknown; targetId?: unknown }): ShareTarget {
-  const targetType = body.targetType;
-  if (targetType !== "user" && targetType !== "org" && targetType !== "public") {
-    throw AppError.badRequest(
-      "INVALID_SHARE_TARGET",
-      "'targetType' must be 'user', 'org', or 'public'",
-    );
-  }
-  if (targetType === "public") {
-    return { type: "public" };
-  }
-  const id = body.targetId;
-  if (typeof id !== "string" || !id) {
-    throw AppError.badRequest(
-      "INVALID_SHARE_TARGET",
-      `'targetId' is required for targetType '${targetType}'`,
-    );
-  }
-  return { type: targetType, id };
-}
+// `parseTarget` used to live here for the removed POST /share handler;
+// share initiation now happens server-side from the permissions route,
+// which already has typed target objects from its diff computation.
+// Keep the log to silence unused-import lint in case we re-add a route.
+void logger;

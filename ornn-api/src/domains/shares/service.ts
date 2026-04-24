@@ -21,6 +21,7 @@ import { AppError } from "../../shared/types/index";
 import type { AuditService } from "../skills/audit/service";
 import type { SkillService } from "../skills/crud/service";
 import type { NotificationService } from "../notifications/service";
+import type { PlatformSettingsService } from "../platform/service";
 import type { ShareRepository } from "./repository";
 import type {
   ShareJustifications,
@@ -36,6 +37,8 @@ export interface ShareServiceDeps {
   readonly shareRepo: ShareRepository;
   readonly auditService: AuditService;
   readonly skillService: SkillService;
+  /** Admin-editable platform settings; the audit threshold lives here. */
+  readonly platformSettings: PlatformSettingsService;
   /** Optional — when provided, emits audit/share-flow notifications to the relevant users. */
   readonly notificationService?: NotificationService;
 }
@@ -56,22 +59,28 @@ export class ShareService {
   private readonly shareRepo: ShareRepository;
   private readonly auditService: AuditService;
   private readonly skillService: SkillService;
+  private readonly platformSettings: PlatformSettingsService;
   private readonly notificationService: NotificationService | undefined;
 
   constructor(deps: ShareServiceDeps) {
     this.shareRepo = deps.shareRepo;
     this.auditService = deps.auditService;
     this.skillService = deps.skillService;
+    this.platformSettings = deps.platformSettings;
     this.notificationService = deps.notificationService;
   }
 
   /**
    * Initiate a share — run audit, decide initial status.
    *
-   * - Green verdict → the share is granted immediately and the request
-   *   lands in status `green`.
-   * - Anything else → the request sits at `needs-justification` waiting
-   *   for the owner.
+   * Threshold logic: the skill's cached audit is reused if it is younger
+   * than the AuditService TTL (30 days); otherwise a fresh audit runs.
+   * The resulting `overallScore` is compared against the
+   * admin-configurable `auditWaiverThreshold` (platform settings) —
+   *
+   *   overallScore >= threshold → status `green`, ACL applied immediately
+   *   overallScore <  threshold → status `needs-justification`, waiting
+   *                               on the owner to provide a waiver
    */
   async initiateShare(input: InitiateShareInput): Promise<ShareRequest> {
     const skill = await this.skillService.getSkill(input.skillIdOrName);
@@ -83,14 +92,17 @@ export class ShareService {
     }
     validateTarget(input.target);
 
-    // Run (or reuse cached) audit for this specific package.
+    // Run (or reuse cached) audit for this specific package. The TTL on
+    // AuditService (30 days) means stale audits trigger a fresh run
+    // automatically even when the skill bytes haven't changed.
     const audit = await this.auditService.runAudit(skill.guid, {
       triggeredBy: input.ownerUserId,
       force: false,
     });
 
+    const threshold = await this.platformSettings.getAuditWaiverThreshold();
     const initialStatus: ShareStatus =
-      audit.verdict === "green" ? "green" : "needs-justification";
+      audit.overallScore >= threshold ? "green" : "needs-justification";
 
     const request = await this.shareRepo.create({
       skillGuid: skill.guid,
@@ -308,6 +320,11 @@ export class ShareService {
       includePublic: params.isPlatformAdmin,
       limit: params.limit ?? 50,
     });
+  }
+
+  /** Past review decisions made by this user. Terminal states only. */
+  async listReviewedHistory(reviewerUserId: string, limit = 100): Promise<ShareRequest[]> {
+    return this.shareRepo.listByReviewer(reviewerUserId, limit);
   }
 
   // ---- Internals ---------------------------------------------------------

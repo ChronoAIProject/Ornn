@@ -135,6 +135,20 @@ export class ShareRepository {
       .toArray();
     return docs.map((d) => mapDoc(d)!);
   }
+
+  /**
+   * Historical review log — every share request where the caller is the
+   * recorded reviewer. Used by the "Review History" admin page so a
+   * reviewer can see their past decisions.
+   */
+  async listByReviewer(reviewerUserId: string, limit = 100): Promise<ShareRequest[]> {
+    const docs = await this.collection
+      .find({ "reviewerDecision.reviewerUserId": reviewerUserId })
+      .sort({ "reviewerDecision.reviewedAt": -1 })
+      .limit(limit)
+      .toArray();
+    return docs.map((d) => mapDoc(d)!);
+  }
 }
 
 function mapDoc(doc: Document | null): ShareRequest | null {
