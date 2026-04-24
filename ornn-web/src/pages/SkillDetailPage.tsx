@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/Badge";
 import { SkillPackagePreview } from "@/components/skill/SkillPackagePreview";
 import { VersionPicker } from "@/components/skill/VersionPicker";
 import { DeprecationBanner } from "@/components/skill/DeprecationBanner";
+import { AuditBanner } from "@/components/skill/AuditBanner";
 import { SkillVersionList } from "@/components/skill/SkillVersionList";
 import { PermissionsModal } from "@/components/skill/PermissionsModal";
 import {
@@ -322,6 +323,13 @@ export function SkillDetailPage() {
           onViewLatest={() => handleVersionChange(null)}
         />
       )}
+      <AuditBanner
+        className="mb-3 shrink-0"
+        idOrName={skill.name || skill.guid}
+        version={skill.version}
+        isAdmin={isAdminUser}
+      />
+
       <div className="flex-1 min-h-0 grid gap-4 lg:grid-cols-[1fr_300px]">
         {/* Main content — Package Contents (fills available height) */}
         <Card className="flex flex-col min-h-0 overflow-hidden">
