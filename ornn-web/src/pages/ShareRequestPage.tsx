@@ -1,10 +1,14 @@
 /**
- * /shares/:requestId — share-request detail + justification form.
+ * /shares/:requestId — share-request detail + justification form +
+ * reviewer accept/reject controls.
  *
- * Accessible to the owner and to reviewers authorised by the backend
- * (the `GET /shares/:requestId` endpoint does the access check). This PR
- * renders the full state + audit findings + justification flow; reviewer
- * accept/reject controls are added by PR #160c.
+ * Access-controlled by the backend (`GET /shares/:requestId` rejects
+ * non-owners / non-reviewers). The page shows:
+ *   - Audit findings from the cached audit record
+ *   - Owner's justification form (while `needs-justification`) → read-only
+ *     once submitted
+ *   - Reviewer's accept/reject controls (while `pending-review` and the
+ *     caller isn't the owner) → read-only decision once recorded
  *
  * @module pages/ShareRequestPage
  */
@@ -19,6 +23,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { ArrowLeftIcon } from "@/components/icons";
 import {
   useCancelShareRequest,
+  useReviewShareRequest,
   useShareRequest,
   useSubmitShareJustification,
 } from "@/hooks/useShares";
@@ -292,6 +297,96 @@ function JustificationForm({ request }: { request: ShareRequest }) {
   );
 }
 
+function ReviewerActions({ request }: { request: ShareRequest }) {
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+  const addToast = useToastStore((s) => s.addToast);
+  const review = useReviewShareRequest();
+
+  const [note, setNote] = useState("");
+
+  const handleDecision = async (decision: "accept" | "reject") => {
+    try {
+      await review.mutateAsync({
+        requestId: request._id,
+        input: { decision, note: note.trim() || undefined },
+      });
+      addToast({
+        type: "success",
+        message:
+          decision === "accept"
+            ? t("shareDetail.acceptedToast", "Share accepted.")
+            : t("shareDetail.rejectedToast", "Share rejected."),
+      });
+      // Kick the caller back to their queue; the request will no longer
+      // be pending-review there.
+      navigate("/reviews");
+    } catch (err) {
+      addToast({
+        type: "error",
+        message:
+          err instanceof Error
+            ? err.message
+            : t("shareDetail.reviewFailed", "Review failed."),
+      });
+    }
+  };
+
+  return (
+    <Card className="space-y-4 p-5">
+      <div>
+        <h3 className="font-heading text-sm uppercase tracking-wider text-text-primary">
+          {t("shareDetail.reviewHeading", "Your decision")}
+        </h3>
+        <p className="mt-1 font-body text-sm text-text-muted">
+          {t(
+            "shareDetail.reviewHint",
+            "Accept grants access to the target. Reject keeps the skill private. Either decision notifies the owner.",
+          )}
+        </p>
+      </div>
+      <div>
+        <label
+          htmlFor="review-note"
+          className="mb-1 block font-heading text-[11px] uppercase tracking-wider text-text-muted"
+        >
+          {t("shareDetail.reviewNote", "Note (optional)")}
+        </label>
+        <textarea
+          id="review-note"
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          rows={3}
+          className="w-full rounded-lg border border-neon-cyan/20 bg-bg-surface px-3 py-2 font-body text-sm text-text-primary focus:outline-none focus:border-neon-cyan/60 focus:ring-2 focus:ring-neon-cyan/30"
+          placeholder={
+            t(
+              "shareDetail.reviewNotePlaceholder",
+              "Short explanation shared with the owner.",
+            ) as string
+          }
+        />
+      </div>
+      <div className="flex flex-wrap items-center justify-end gap-3">
+        <Button
+          variant="danger"
+          onClick={() => handleDecision("reject")}
+          disabled={review.isPending}
+          loading={review.isPending && review.variables?.input.decision === "reject"}
+        >
+          {t("shareDetail.reject", "Reject")}
+        </Button>
+        <Button
+          onClick={() => handleDecision("accept")}
+          disabled={review.isPending}
+          loading={review.isPending && review.variables?.input.decision === "accept"}
+        >
+          {t("shareDetail.accept", "Accept")}
+        </Button>
+      </div>
+    </Card>
+  );
+}
+
 function ReviewerDecisionReadonly({
   decision,
 }: {
@@ -513,7 +608,15 @@ export function ShareRequestPage() {
           <JustificationReadonly j={request.justifications} />
         ) : null}
 
-        {/* Reviewer decision */}
+        {/* Reviewer controls — shown for non-owners when the request is
+            pending review. The backend re-checks authorization; we just
+            gate on obvious signals client-side to avoid showing controls
+            to the owner. */}
+        {request.status === "pending-review" && !isOwner && (
+          <ReviewerActions request={request} />
+        )}
+
+        {/* Reviewer decision (read-only once recorded) */}
         {request.reviewerDecision && (
           <ReviewerDecisionReadonly decision={request.reviewerDecision} />
         )}
