@@ -11,6 +11,8 @@ import { SkillPackagePreview } from "@/components/skill/SkillPackagePreview";
 import { VersionPicker } from "@/components/skill/VersionPicker";
 import { DeprecationBanner } from "@/components/skill/DeprecationBanner";
 import { AuditBanner } from "@/components/skill/AuditBanner";
+import { GitHubOriginChip } from "@/components/skill/GitHubOriginChip";
+import { useRefreshSkillFromSource } from "@/hooks/useSkills";
 import { SkillVersionList } from "@/components/skill/SkillVersionList";
 import { PermissionsModal } from "@/components/skill/PermissionsModal";
 import {
@@ -58,6 +60,7 @@ export function SkillDetailPage() {
   const deleteMutation = useDeleteSkill();
   const updatePackageMutation = useUpdateSkillPackage(skill?.guid ?? "");
   const deprecationMutation = useSetVersionDeprecation(idOrName ?? "");
+  const refreshMutation = useRefreshSkillFromSource(idOrName ?? "");
 
   const {
     files: packageFiles,
@@ -329,6 +332,15 @@ export function SkillDetailPage() {
         version={skill.version}
         isAdmin={isAdminUser}
       />
+      {skill.source && (
+        <GitHubOriginChip
+          className="mb-3 shrink-0"
+          source={skill.source}
+          canRefresh={!!(isOwner || isAdminUser)}
+          isRefreshing={refreshMutation.isPending}
+          onRefresh={() => refreshMutation.mutate(skill.guid)}
+        />
+      )}
 
       <div className="flex-1 min-h-0 grid gap-4 lg:grid-cols-[1fr_300px]">
         {/* Main content — Package Contents (fills available height) */}

@@ -1,4 +1,4 @@
-import { apiGet, apiPut, apiDelete } from "./apiClient";
+import { apiGet, apiPost, apiPut, apiDelete } from "./apiClient";
 import type { UpdateSkillMetadata } from "@/types/api";
 import type { SkillDetail, SkillVersionEntry } from "@/types/domain";
 import { useAuthStore } from "@/stores/authStore";
@@ -146,4 +146,39 @@ export async function updateSkillPackage(id: string, zipFile: File, skipValidati
 /** Hard-delete a skill */
 export async function deleteSkill(id: string): Promise<void> {
   await apiDelete(`/api/v1/skills/${id}`);
+}
+
+export interface PullFromGitHubInput {
+  /** `owner/name`. */
+  repo: string;
+  /** Branch / tag / commit SHA. Omit for the repo default. */
+  ref?: string;
+  /** Subdirectory that contains `SKILL.md`. Omit for repo root. */
+  path?: string;
+  /** Skip the format-validation pass on the generated ZIP. */
+  skipValidation?: boolean;
+}
+
+/**
+ * Create a skill by cloning a public GitHub repo. Backend zips the tree,
+ * records the source pointer, and publishes as v1. Subsequent updates
+ * come via `refreshSkillFromSource`.
+ */
+export async function pullSkillFromGitHub(input: PullFromGitHubInput): Promise<SkillDetail> {
+  const res = await apiPost<SkillDetail>("/api/v1/skills/pull", {
+    repo: input.repo,
+    ref: input.ref,
+    path: input.path,
+    skip_validation: input.skipValidation ?? false,
+  });
+  return res.data!;
+}
+
+/**
+ * Re-pull the skill's GitHub source at the current ref HEAD and publish as
+ * a new version. Requires owner or platform admin.
+ */
+export async function refreshSkillFromSource(id: string): Promise<SkillDetail> {
+  const res = await apiPost<SkillDetail>(`/api/v1/skills/${id}/refresh`, {});
+  return res.data!;
 }

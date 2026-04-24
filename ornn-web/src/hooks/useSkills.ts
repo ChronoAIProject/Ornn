@@ -8,6 +8,9 @@ import {
   updateSkillPackage,
   deleteSkill,
   setSkillVersionDeprecation,
+  pullSkillFromGitHub,
+  refreshSkillFromSource,
+  type PullFromGitHubInput,
 } from "@/services/skillApi";
 import { updateSkillPermissions, type SkillPermissionsInput } from "@/services/permissionsApi";
 import type { SkillSearchParams, SystemFilter } from "@/types/search";
@@ -170,6 +173,34 @@ export function useCreateSkill() {
       createSkill(zipFile, skipValidation),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [SKILLS_KEY] });
+      queryClient.invalidateQueries({ queryKey: [MY_SKILLS_KEY] });
+    },
+  });
+}
+
+/** Pull a new skill from a public GitHub repo. */
+export function usePullSkillFromGitHub() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: PullFromGitHubInput) => pullSkillFromGitHub(input),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [SKILLS_KEY] });
+      queryClient.invalidateQueries({ queryKey: [MY_SKILLS_KEY] });
+    },
+  });
+}
+
+/** Re-pull the skill's GitHub source and publish a fresh version. */
+export function useRefreshSkillFromSource(idOrName: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (guid: string) => refreshSkillFromSource(guid),
+    onSuccess: (updated) => {
+      // Prime the detail cache with the refreshed payload so the chip
+      // updates in place.
+      queryClient.setQueryData([SKILLS_KEY, idOrName, undefined], updated);
+      queryClient.invalidateQueries({ queryKey: [SKILLS_KEY] });
+      queryClient.invalidateQueries({ queryKey: [SKILL_VERSIONS_KEY, idOrName] });
       queryClient.invalidateQueries({ queryKey: [MY_SKILLS_KEY] });
     },
   });
