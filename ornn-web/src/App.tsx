@@ -64,6 +64,9 @@ const MySkillsPage = lazy(() =>
 const ServiceDetailPage = lazy(() =>
   import("@/pages/ServiceDetailPage").then((m) => ({ default: m.ServiceDetailPage })),
 );
+const NotificationsPage = lazy(() =>
+  import("@/pages/NotificationsPage").then((m) => ({ default: m.NotificationsPage })),
+);
 
 // Admin pages — bundled into one chunk by virtue of sharing the barrel
 // import path; only loaded when an /admin route activates.
@@ -132,6 +135,7 @@ export function App() {
 
                   <Route path="/my-skills" element={<MySkillsPage />} />
                   <Route path="/services/:id" element={<ServiceDetailPage />} />
+                  <Route path="/notifications" element={<NotificationsPage />} />
                 </Route>
 
                 {/* Admin routes - separate layout */}
