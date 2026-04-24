@@ -12,6 +12,7 @@ import { VersionPicker } from "@/components/skill/VersionPicker";
 import { DeprecationBanner } from "@/components/skill/DeprecationBanner";
 import { AuditBanner } from "@/components/skill/AuditBanner";
 import { GitHubOriginChip } from "@/components/skill/GitHubOriginChip";
+import { AnalyticsCard } from "@/components/skill/AnalyticsCard";
 import { useRefreshSkillFromSource } from "@/hooks/useSkills";
 import { SkillVersionList } from "@/components/skill/SkillVersionList";
 import { PermissionsModal } from "@/components/skill/PermissionsModal";
@@ -552,6 +553,8 @@ export function SkillDetailPage() {
               isMutating={deprecationMutation.isPending}
             />
           )}
+
+          <AnalyticsCard idOrName={skill.name || skill.guid} />
         </div>
       </div>
 
