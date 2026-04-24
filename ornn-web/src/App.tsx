@@ -73,6 +73,9 @@ const NotificationsPage = lazy(() =>
 const ShareRequestPage = lazy(() =>
   import("@/pages/ShareRequestPage").then((m) => ({ default: m.ShareRequestPage })),
 );
+const ReviewsPage = lazy(() =>
+  import("@/pages/ReviewsPage").then((m) => ({ default: m.ReviewsPage })),
+);
 
 // Admin pages — bundled into one chunk by virtue of sharing the barrel
 // import path; only loaded when an /admin route activates.
@@ -144,6 +147,7 @@ export function App() {
                   <Route path="/services/:id" element={<ServiceDetailPage />} />
                   <Route path="/notifications" element={<NotificationsPage />} />
                   <Route path="/shares/:requestId" element={<ShareRequestPage />} />
+                  <Route path="/reviews" element={<ReviewsPage />} />
                 </Route>
 
                 {/* Admin routes - separate layout */}
