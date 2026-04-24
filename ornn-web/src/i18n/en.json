@@ -24,6 +24,7 @@
     "build": "Build",
     "reviews": "Reviews",
     "docs": "Docs",
+    "mySharingRequests": "My Sharing Requests",
     "signIn": "Sign In",
     "signOut": "Sign Out",
     "settings": "Settings",
