@@ -15,6 +15,16 @@ spec:
       labels:
         app: chrono-storage
     spec:
+      # Make `minio.ornn-cluster.local` resolvable in-cluster so
+      # chrono-storage can sign presigned URLs with the same hostname
+      # the browser uses. Without this, presigned URLs point to an
+      # in-cluster hostname (`minio:9000`) the browser can't reach.
+      # The alias target IP comes from the cluster's minio Service
+      # ClusterIP at deploy time; update if the service is recreated.
+      hostAliases:
+        - ip: ${MINIO_HOST_ALIAS_IP}
+          hostnames:
+            - minio.ornn-cluster.local
       initContainers:
         - name: wait-for-minio
           image: busybox:1.37
