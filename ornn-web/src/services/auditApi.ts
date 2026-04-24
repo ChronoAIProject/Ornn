@@ -44,15 +44,20 @@ export interface RerunAuditInput {
   force?: boolean;
 }
 
-/** Admin-only: force a fresh audit run. Returns the new record. */
+/**
+ * Trigger an audit for a skill. Backend accepts the skill's author OR a
+ * platform admin; in both cases it hits the owner-facing endpoint. The
+ * admin-only `/admin/skills/:idOrName/audit` path is reserved for
+ * any-skill admin reach and isn't needed by the UI today.
+ */
 export async function rerunAudit({
   idOrName,
   force = true,
 }: RerunAuditInput): Promise<AuditRecord> {
   const res = await apiPost<AuditRecord>(
-    `/api/v1/admin/skills/${encodeURIComponent(idOrName)}/audit`,
+    `/api/v1/skills/${encodeURIComponent(idOrName)}/audit`,
     { force },
   );
-  if (!res.data) throw new Error("Audit rerun returned no data");
+  if (!res.data) throw new Error("Audit trigger returned no data");
   return res.data;
 }

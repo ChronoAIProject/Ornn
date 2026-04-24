@@ -332,7 +332,7 @@ export function SkillDetailPage() {
         className="mb-3 shrink-0"
         idOrName={skill.name || skill.guid}
         version={skill.version}
-        isAdmin={isAdminUser}
+        canTriggerAudit={!!(isOwner || isAdminUser)}
       />
       {skill.source && (
         <GitHubOriginChip

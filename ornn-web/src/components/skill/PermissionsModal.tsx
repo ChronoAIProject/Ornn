@@ -28,9 +28,11 @@ import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { useMyOrgs } from "@/hooks/useMe";
 import { useUpdateSkillPermissions } from "@/hooks/useSkills";
+import { useInitiateShare } from "@/hooks/useShares";
 import { useToastStore } from "@/stores/toastStore";
 import { searchUsersByEmail, resolveUsers, fetchOrgSummary, type UserDirectoryEntry } from "@/services/usersApi";
 import type { SkillDetail } from "@/types/domain";
+import type { InitiateShareInput } from "@/types/shares";
 
 interface PermissionsModalProps {
   isOpen: boolean;
@@ -63,7 +65,9 @@ export function PermissionsModal({ isOpen, onClose, skill }: PermissionsModalPro
   const [sharedOrgIds, setSharedOrgIds] = useState<string[]>(skill.sharedWithOrgs);
   const [userQuery, setUserQuery] = useState("");
   const [userInputFocused, setUserInputFocused] = useState(false);
+  const [savingShares, setSavingShares] = useState(false);
   const userInputRef = useRef<HTMLInputElement>(null);
+  const initiateShareMutation = useInitiateShare();
 
   // Reset form whenever the modal re-opens on a different skill version.
   useEffect(() => {
@@ -176,20 +180,117 @@ export function PermissionsModal({ isOpen, onClose, skill }: PermissionsModalPro
   const privateActive = !isPublic && !orgsActive && !usersActive;
 
   const handleSave = async () => {
-    const payload = isPublic
-      ? { isPrivate: false, sharedWithOrgs: [], sharedWithUsers: [] }
-      : {
-        isPrivate: true,
-        sharedWithOrgs: sharedOrgIds,
-        sharedWithUsers: sharedUsers.map((u) => u.userId),
-      };
+    // Diff between current skill state and form state.
+    // New grants (user / org adds + flip-to-public) are audit-gated and
+    // routed through `POST /api/v1/skills/:idOrName/share`. The actual
+    // ACL only moves once the audit lands green or a reviewer accepts,
+    // so we don't include new grants in the direct PUT below.
+    // Removes + flip-to-private don't need audit — access is being taken
+    // away — so they go through `PUT /api/v1/skills/:id/permissions` as
+    // before.
+    const beforePrivate = skill.isPrivate;
+    const beforeUsers = new Set(skill.sharedWithUsers);
+    const beforeOrgs = new Set(skill.sharedWithOrgs);
+    const afterPrivate = !isPublic;
+    const afterUsers = new Set(sharedUsers.map((u) => u.userId));
+    const afterOrgs = new Set(sharedOrgIds);
+
+    const goingPublic = beforePrivate && !afterPrivate;
+    const goingPrivate = !beforePrivate && afterPrivate;
+
+    // When flipping to public, skip per-user / per-org share requests —
+    // public supersedes them and creating redundant requests is noise.
+    const addedUsers = goingPublic
+      ? []
+      : sharedUsers.map((u) => u.userId).filter((id) => !beforeUsers.has(id));
+    const addedOrgs = goingPublic
+      ? []
+      : sharedOrgIds.filter((id) => !beforeOrgs.has(id));
+
+    const removedUsers = skill.sharedWithUsers.filter((id) => !afterUsers.has(id));
+    const removedOrgs = skill.sharedWithOrgs.filter((id) => !afterOrgs.has(id));
+
+    const shareTargets: InitiateShareInput[] = [
+      ...(goingPublic ? [{ targetType: "public" as const }] : []),
+      ...addedUsers.map((id) => ({ targetType: "user" as const, targetId: id })),
+      ...addedOrgs.map((id) => ({ targetType: "org" as const, targetId: id })),
+    ];
+
+    const needsPut =
+      removedUsers.length > 0 || removedOrgs.length > 0 || goingPrivate;
+
+    if (!needsPut && shareTargets.length === 0) {
+      addToast({
+        type: "info",
+        message: t("permissions.noChanges", "No changes to save."),
+      });
+      onClose();
+      return;
+    }
+
+    setSavingShares(true);
     try {
-      await permissionsMutation.mutateAsync(payload);
-      addToast({ type: "success", message: t("permissions.saveSuccess", "Permissions updated") });
+      // 1. Removes (or flip-to-private) — immediate effect, no audit.
+      if (needsPut) {
+        await permissionsMutation.mutateAsync({
+          isPrivate: goingPrivate ? true : beforePrivate,
+          sharedWithUsers: skill.sharedWithUsers.filter(
+            (id) => !removedUsers.includes(id),
+          ),
+          sharedWithOrgs: skill.sharedWithOrgs.filter(
+            (id) => !removedOrgs.includes(id),
+          ),
+        });
+      }
+
+      // 2. Adds — each one opens an audit-gated share request. Sequential
+      //    rather than Promise.all so the backend's audit cache (shared
+      //    per skill version) only runs once and later targets reuse.
+      let shareOk = 0;
+      let shareFail = 0;
+      for (const input of shareTargets) {
+        try {
+          await initiateShareMutation.mutateAsync({
+            skillIdOrName: skill.guid,
+            input,
+          });
+          shareOk += 1;
+        } catch (err) {
+          shareFail += 1;
+          console.warn("Share request failed", input, err);
+        }
+      }
+
+      const parts: string[] = [];
+      if (needsPut) {
+        parts.push(t("permissions.partRemoves", "permissions updated"));
+      }
+      if (shareOk > 0) {
+        parts.push(
+          t("permissions.partSharesOk", "{{n}} share request(s) submitted for audit", {
+            n: shareOk,
+          }),
+        );
+      }
+      if (shareFail > 0) {
+        parts.push(
+          t("permissions.partSharesFail", "{{n}} share request(s) failed", {
+            n: shareFail,
+          }),
+        );
+      }
+      addToast({
+        type: shareFail > 0 ? "warning" : "success",
+        message: parts.length > 0
+          ? parts.join(" · ")
+          : t("permissions.saveSuccess", "Permissions updated"),
+      });
       onClose();
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       addToast({ type: "error", message });
+    } finally {
+      setSavingShares(false);
     }
   };
 
@@ -376,7 +477,10 @@ export function PermissionsModal({ isOpen, onClose, skill }: PermissionsModalPro
         <Button variant="secondary" onClick={onClose}>
           {t("common.cancel", "Cancel")}
         </Button>
-        <Button onClick={handleSave} loading={permissionsMutation.isPending}>
+        <Button
+          onClick={handleSave}
+          loading={permissionsMutation.isPending || savingShares}
+        >
           {t("common.save", "Save")}
         </Button>
       </div>

@@ -82,8 +82,45 @@ export function createAuditRoutes(config: AuditRoutesConfig): Hono<{ Variables: 
   );
 
   /**
+   * POST /skills/:idOrName/audit
+   * Owner-triggered audit. The skill's author (or a platform admin) can
+   * kick off an audit ahead of initiating a share so they see the
+   * verdict before committing to a share request. Same service path as
+   * the admin endpoint below; differs only in auth gate.
+   * Body: `{ force?: boolean }` — `force=true` bypasses the cache.
+   */
+  app.post(
+    "/skills/:idOrName/audit",
+    auth,
+    requirePermission("ornn:skill:update"),
+    async (c) => {
+      const idOrName = c.req.param("idOrName");
+      const authCtx = getAuth(c);
+      const body = (await c.req.json().catch(() => ({}))) as { force?: unknown };
+      const force = body.force === true;
+
+      const skill = await skillService.getSkill(idOrName);
+      const isPlatformAdmin = authCtx.permissions.includes("ornn:admin:skill");
+      if (skill.createdBy !== authCtx.userId && !isPlatformAdmin) {
+        throw AppError.forbidden(
+          "NOT_SKILL_OWNER",
+          "Only the skill's author or a platform admin can trigger an audit",
+        );
+      }
+
+      logger.info({ idOrName, triggeredBy: authCtx.userId, force }, "Owner audit triggered");
+      const record = await auditService.runAudit(idOrName, {
+        triggeredBy: authCtx.userId,
+        force,
+      });
+      return c.json({ data: record, error: null });
+    },
+  );
+
+  /**
    * POST /admin/skills/:idOrName/audit
-   * Force a fresh audit. Admin only.
+   * Force a fresh audit. Admin only. Same underlying path as the owner
+   * endpoint above but keyed on the admin permission for any-skill reach.
    * Body: `{ force?: boolean }` — `force=true` bypasses the cache.
    */
   app.post(

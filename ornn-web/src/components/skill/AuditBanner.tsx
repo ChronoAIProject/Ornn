@@ -1,11 +1,12 @@
 /**
  * Banner on `SkillDetailPage` showing the skill's audit verdict.
  *
- * - No audit yet → hidden (or a tiny "Run audit" CTA for admins).
+ * - No audit yet → hidden for readers; compact "Run audit" CTA for
+ *   anyone with `canTriggerAudit` (owners + platform admins).
  * - Audit exists → verdict pill, overall score, timestamp; expandable to
- *   show per-dimension scores and findings.
- * - Admin viewers get a "Rerun" button; the mutation sync-updates the
- *   banner state via query-cache priming in `useRerunAudit`.
+ *   show per-dimension scores and findings. Triggerers get a "Rerun"
+ *   button; the mutation sync-updates the banner state via query-cache
+ *   priming in `useRerunAudit`.
  *
  * @module components/skill/AuditBanner
  */
@@ -26,7 +27,7 @@ interface AuditBannerProps {
   /** Optional pin; omit for latest. */
   version?: string;
   /** Caller can rerun / trigger initial audits. */
-  isAdmin: boolean;
+  canTriggerAudit: boolean;
   className?: string;
 }
 
@@ -117,13 +118,13 @@ function AuditBannerInner({
   record,
   idOrName,
   version,
-  isAdmin,
+  canTriggerAudit,
   className,
 }: {
   record: AuditRecord;
   idOrName: string;
   version?: string;
-  isAdmin: boolean;
+  canTriggerAudit: boolean;
   className?: string;
 }) {
   const { t } = useTranslation();
@@ -162,7 +163,7 @@ function AuditBannerInner({
           · v{record.version} · {timestampLabel}
         </span>
         <div className="flex-1" />
-        {isAdmin && (
+        {canTriggerAudit && (
           <span
             role="button"
             tabIndex={0}
@@ -240,7 +241,7 @@ function AuditBannerInner({
   );
 }
 
-export function AuditBanner({ idOrName, version, isAdmin, className }: AuditBannerProps) {
+export function AuditBanner({ idOrName, version, canTriggerAudit, className }: AuditBannerProps) {
   const { t } = useTranslation();
   const { data: record, isLoading, isError } = useSkillAudit(idOrName, { version });
   const rerun = useRerunAudit();
@@ -249,7 +250,7 @@ export function AuditBanner({ idOrName, version, isAdmin, className }: AuditBann
 
   if (!record) {
     // Not audited yet. Only admins get an affordance to kick off the first run.
-    if (!isAdmin) return null;
+    if (!canTriggerAudit) return null;
     return (
       <div
         className={`glass flex items-center gap-3 rounded-xl border border-neon-cyan/15 bg-bg-surface/40 px-4 py-3 ${
@@ -280,7 +281,7 @@ export function AuditBanner({ idOrName, version, isAdmin, className }: AuditBann
       record={record}
       idOrName={idOrName}
       version={version}
-      isAdmin={isAdmin}
+      canTriggerAudit={canTriggerAudit}
       className={className}
     />
   );
