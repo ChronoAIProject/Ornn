@@ -60,6 +60,39 @@ export function createShareRoutes(config: ShareRoutesConfig): Hono<{ Variables: 
     },
   );
 
+  // Order matters: the specific paths (`/shares`, `/shares/review-queue`)
+  // MUST be registered before the wildcard `/shares/:requestId`. Hono
+  // matches in definition order, so putting the dynamic one first makes
+  // it swallow `review-queue` as if it were a requestId and 404.
+
+  // ---- Caller's own share requests ---------------------------------------
+  app.get(
+    "/shares",
+    auth,
+    async (c) => {
+      const authCtx = getAuth(c);
+      const items = await shareService.listMine(authCtx.userId);
+      return c.json({ data: { items }, error: null });
+    },
+  );
+
+  // ---- Reviewer queue -----------------------------------------------------
+  app.get(
+    "/shares/review-queue",
+    auth,
+    async (c) => {
+      const authCtx = getAuth(c);
+      const reviewerOrgIds = await readUserOrgIds(c);
+      const isPlatformAdmin = authCtx.permissions.includes("ornn:admin:skill");
+      const items = await shareService.listReviewQueue({
+        reviewerUserId: authCtx.userId,
+        reviewerOrgIds,
+        isPlatformAdmin,
+      });
+      return c.json({ data: { items }, error: null });
+    },
+  );
+
   // ---- Read a single request ---------------------------------------------
   app.get(
     "/shares/:requestId",
@@ -134,34 +167,6 @@ export function createShareRoutes(config: ShareRoutesConfig): Hono<{ Variables: 
       const authCtx = getAuth(c);
       const updated = await shareService.cancel(requestId, authCtx.userId);
       return c.json({ data: updated, error: null });
-    },
-  );
-
-  // ---- Caller's own share requests ---------------------------------------
-  app.get(
-    "/shares",
-    auth,
-    async (c) => {
-      const authCtx = getAuth(c);
-      const items = await shareService.listMine(authCtx.userId);
-      return c.json({ data: { items }, error: null });
-    },
-  );
-
-  // ---- Reviewer queue -----------------------------------------------------
-  app.get(
-    "/shares/review-queue",
-    auth,
-    async (c) => {
-      const authCtx = getAuth(c);
-      const reviewerOrgIds = await readUserOrgIds(c);
-      const isPlatformAdmin = authCtx.permissions.includes("ornn:admin:skill");
-      const items = await shareService.listReviewQueue({
-        reviewerUserId: authCtx.userId,
-        reviewerOrgIds,
-        isPlatformAdmin,
-      });
-      return c.json({ data: { items }, error: null });
     },
   );
 
