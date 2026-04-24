@@ -76,6 +76,9 @@ const ShareRequestPage = lazy(() =>
 const ReviewsPage = lazy(() =>
   import("@/pages/ReviewsPage").then((m) => ({ default: m.ReviewsPage })),
 );
+const MySharesPage = lazy(() =>
+  import("@/pages/MySharesPage").then((m) => ({ default: m.MySharesPage })),
+);
 
 // Admin pages — bundled into one chunk by virtue of sharing the barrel
 // import path; only loaded when an /admin route activates.
@@ -96,6 +99,9 @@ const AdminCategoriesPage = lazy(() =>
 );
 const AdminTagsPage = lazy(() =>
   import("@/pages/admin").then((m) => ({ default: m.TagsPage })),
+);
+const AdminReviewHistoryPage = lazy(() =>
+  import("@/pages/admin").then((m) => ({ default: m.ReviewHistoryPage })),
 );
 
 const queryClient = new QueryClient({
@@ -148,6 +154,7 @@ export function App() {
                   <Route path="/notifications" element={<NotificationsPage />} />
                   <Route path="/shares/:requestId" element={<ShareRequestPage />} />
                   <Route path="/reviews" element={<ReviewsPage />} />
+                  <Route path="/my-shares" element={<MySharesPage />} />
                 </Route>
 
                 {/* Admin routes - separate layout */}
@@ -160,6 +167,7 @@ export function App() {
                     <Route path="/admin/skills" element={<AdminSkillsPage />} />
                     <Route path="/admin/categories" element={<AdminCategoriesPage />} />
                     <Route path="/admin/tags" element={<AdminTagsPage />} />
+                    <Route path="/admin/review-history" element={<AdminReviewHistoryPage />} />
                   </Route>
                 </Route>
               </Route>

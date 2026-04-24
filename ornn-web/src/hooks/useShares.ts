@@ -7,6 +7,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   cancelShareRequest,
+  fetchMyReviewedShareHistory,
   fetchMyShareRequests,
   fetchShareRequest,
   fetchShareReviewQueue,
@@ -24,6 +25,7 @@ import { useIsAuthenticated } from "@/stores/authStore";
 
 const MY_SHARES_KEY = ["shares", "mine"] as const;
 const REVIEW_QUEUE_KEY = ["shares", "review-queue"] as const;
+const REVIEWED_HISTORY_KEY = ["shares", "reviewed-history"] as const;
 const shareKey = (requestId: string) => ["shares", "one", requestId] as const;
 
 export function useMyShareRequests() {
@@ -43,6 +45,17 @@ export function useShareReviewQueue() {
     queryFn: fetchShareReviewQueue,
     enabled: isAuthed,
     staleTime: 15_000,
+  });
+}
+
+/** Past decisions by the caller — feeds the admin "Review history" page. */
+export function useMyReviewedShareHistory() {
+  const isAuthed = useIsAuthenticated();
+  return useQuery<ShareRequest[]>({
+    queryKey: REVIEWED_HISTORY_KEY,
+    queryFn: fetchMyReviewedShareHistory,
+    enabled: isAuthed,
+    staleTime: 60_000,
   });
 }
 
@@ -76,6 +89,7 @@ export function useCancelShareRequest() {
       queryClient.setQueryData(shareKey(updated._id), updated);
       queryClient.invalidateQueries({ queryKey: MY_SHARES_KEY });
       queryClient.invalidateQueries({ queryKey: REVIEW_QUEUE_KEY });
+      queryClient.invalidateQueries({ queryKey: REVIEWED_HISTORY_KEY });
       queryClient.invalidateQueries({ queryKey: ["notifications"] });
     },
   });

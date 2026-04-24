@@ -310,6 +310,11 @@ export class ShareService {
     });
   }
 
+  /** Past review decisions made by this user. Terminal states only. */
+  async listReviewedHistory(reviewerUserId: string, limit = 100): Promise<ShareRequest[]> {
+    return this.shareRepo.listByReviewer(reviewerUserId, limit);
+  }
+
   // ---- Internals ---------------------------------------------------------
 
   private async mustFind(requestId: string): Promise<ShareRequest> {

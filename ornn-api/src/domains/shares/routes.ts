@@ -8,6 +8,7 @@
  *   POST /api/v1/shares/:requestId/cancel        — owner cancels
  *   GET  /api/v1/shares                          — caller's own share requests
  *   GET  /api/v1/shares/review-queue             — pending reviews the caller can act on
+ *   GET  /api/v1/shares/reviewed-history         — past review decisions by the caller
  *
  * @module domains/shares/routes
  */
@@ -89,6 +90,17 @@ export function createShareRoutes(config: ShareRoutesConfig): Hono<{ Variables: 
         reviewerOrgIds,
         isPlatformAdmin,
       });
+      return c.json({ data: { items }, error: null });
+    },
+  );
+
+  // ---- Reviewer history — past decisions the caller has made -------------
+  app.get(
+    "/shares/reviewed-history",
+    auth,
+    async (c) => {
+      const authCtx = getAuth(c);
+      const items = await shareService.listReviewedHistory(authCtx.userId);
       return c.json({ data: { items }, error: null });
     },
   );
