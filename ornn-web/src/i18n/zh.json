@@ -24,6 +24,8 @@
     "build": "构建",
     "reviews": "审核",
     "docs": "文档",
+    "mySharingRequests": "我的分享申请",
+    "reviewQueue": "审核队列",
     "signIn": "登录",
     "signOut": "退出",
     "settings": "设置",

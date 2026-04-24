@@ -78,3 +78,8 @@ export async function fetchShareReviewQueue(): Promise<ShareRequest[]> {
   const res = await apiGet<{ items: ShareRequest[] }>("/api/v1/shares/review-queue");
   return res.data?.items ?? [];
 }
+
+export async function fetchMyReviewedShareHistory(): Promise<ShareRequest[]> {
+  const res = await apiGet<{ items: ShareRequest[] }>("/api/v1/shares/reviewed-history");
+  return res.data?.items ?? [];
+}
