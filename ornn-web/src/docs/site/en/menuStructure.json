@@ -3,11 +3,10 @@
   "sections": [
     {
       "id": "about",
-      "label": "About Ornn",
+      "label": "About",
       "order": 1,
       "children": [
-        { "id": "what-is-ornn", "label": "What is Ornn", "file": "what-is-ornn.md", "order": 1 },
-        { "id": "version-roadmap", "label": "Version Roadmap", "file": "version-roadmap.md", "order": 2 }
+        { "id": "what-is-ornn", "label": "What is Ornn", "file": "what-is-ornn.md", "order": 1 }
       ]
     },
     {
@@ -16,29 +15,16 @@
       "order": 2,
       "children": [
         { "id": "qs-web-user", "label": "Quick Start as a Web User", "file": "qs-web-user.md", "order": 1 },
-        { "id": "qs-agent-dev", "label": "Quick Start as an AI Agent Developer", "file": "qs-agent-dev.md", "order": 2 }
-      ]
-    },
-    {
-      "id": "faq",
-      "label": "FAQs",
-      "order": 3,
-      "children": [
-        { "id": "faq-product", "label": "Product FAQs", "file": "faq-product.md", "order": 1 },
-        { "id": "faq-performance", "label": "Performance FAQs", "file": "faq-performance.md", "order": 2 }
+        { "id": "agent-manual", "label": "Agent Manual", "file": "agent-manual.md", "order": 2 }
       ]
     },
     {
       "id": "reference",
       "label": "Technical References",
-      "order": 4,
+      "order": 3,
       "children": [
-        { "id": "arch-overview", "label": "Ornn Architecture Overview", "file": "arch-overview.md", "order": 1 },
-        { "id": "integration-overview", "label": "Ornn Integration Overview", "file": "integration-overview.md", "order": 2 },
-        { "id": "chrono-storage", "label": "chrono-storage", "file": "chrono-storage.md", "order": 3 },
-        { "id": "chrono-sandbox", "label": "chrono-sandbox", "file": "chrono-sandbox.md", "order": 4 },
-        { "id": "nyxid", "label": "NyxID", "file": "nyxid.md", "order": 5 },
-        { "id": "nyxid-mcp-integration", "label": "NyxID MCP Integration", "file": "nyxid-mcp-integration.md", "order": 6 }
+        { "id": "system-architecture", "label": "System Architecture", "file": "system-architecture.md", "order": 1 },
+        { "id": "external-integrations", "label": "External Integrations", "file": "external-integrations.md", "order": 2 }
       ]
     }
   ]

@@ -158,6 +158,29 @@ function ReleaseAccordion({ lang }: { lang: Lang }) {
   );
 }
 
+/* ──────────────── Version Badge ──────────────── */
+
+function VersionBadge() {
+  const releasesUrl = "https://github.com/ChronoAIProject/Ornn/releases";
+  return (
+    <div className="my-6 inline-flex flex-wrap items-center gap-3 rounded-lg border border-neon-cyan/20 bg-bg-elevated px-4 py-2">
+      <span className="font-heading text-xs uppercase tracking-wider text-text-muted">
+        Current version
+      </span>
+      <span className="font-mono text-base text-neon-cyan">v{__APP_VERSION__}</span>
+      <span className="text-text-muted">·</span>
+      <a
+        href={releasesUrl}
+        target="_blank"
+        rel="noreferrer"
+        className="font-body text-sm text-text-muted transition-colors hover:text-text-primary"
+      >
+        Release history on GitHub →
+      </a>
+    </div>
+  );
+}
+
 /* ──────────────── Mermaid theme configs ──────────────── */
 
 const MERMAID_DARK = {
@@ -681,7 +704,7 @@ export function DocsPage() {
           {/* Main content — scrollable */}
           <div ref={contentRef} className="flex-1 min-w-0 min-h-0 overflow-y-auto px-8 py-6">
             {markdown.includes("<!-- RELEASES -->") ? (
-              /* Version Roadmap page: split at placeholder and inject accordion */
+              /* Release-history pages: split at placeholder and inject accordion */
               <article className="markdown-body max-w-4xl mx-auto">
                 {(() => {
                   const [before, after] = markdown.split("<!-- RELEASES -->");
@@ -695,6 +718,32 @@ export function DocsPage() {
                         {before}
                       </ReactMarkdown>
                       <ReleaseAccordion lang={lang} />
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
+                        rehypePlugins={[rehypeHighlight]}
+                        components={{ code: CodeBlock as never, pre: PreBlock as never, ...headingComponents }}
+                      >
+                        {after}
+                      </ReactMarkdown>
+                    </>
+                  );
+                })()}
+              </article>
+            ) : markdown.includes("<!-- VERSION_BADGE -->") ? (
+              /* What is Ornn: inject dynamic version badge linking to GitHub Releases */
+              <article className="markdown-body max-w-4xl mx-auto">
+                {(() => {
+                  const [before, after] = markdown.split("<!-- VERSION_BADGE -->");
+                  return (
+                    <>
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
+                        rehypePlugins={[rehypeHighlight]}
+                        components={{ code: CodeBlock as never, pre: PreBlock as never, ...headingComponents }}
+                      >
+                        {before}
+                      </ReactMarkdown>
+                      <VersionBadge />
                       <ReactMarkdown
                         remarkPlugins={[remarkGfm]}
                         rehypePlugins={[rehypeHighlight]}
