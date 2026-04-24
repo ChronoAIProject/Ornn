@@ -239,7 +239,6 @@ const NAV_ITEMS = [
   { i18nKey: "nav.home", path: "/", requiresAuth: false, exact: true },
   { i18nKey: "nav.registry", path: "/registry", requiresAuth: false, exact: true },
   { i18nKey: "nav.build", path: "/skills/new", requiresAuth: true },
-  { i18nKey: "nav.reviews", path: "/reviews", requiresAuth: true },
   { i18nKey: "nav.docs", path: "/docs", requiresAuth: false },
 ] as const;
 
@@ -463,6 +462,15 @@ export function Navbar({ className = "" }: NavbarProps) {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
                           </svg>
                           {t("nav.mySharingRequests", "My Sharing Requests")}
+                        </Link>
+                        <Link
+                          to="/reviews"
+                          className="flex items-center gap-3 px-4 py-2.5 font-body text-sm text-text-primary transition-colors hover:bg-neon-cyan/5"
+                        >
+                          <svg className="h-4 w-4 text-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5 13l4 4L19 7" />
+                          </svg>
+                          {t("nav.reviewQueue", "Review Queue")}
                         </Link>
                         <a
                           href={getNyxIdUrl()}
