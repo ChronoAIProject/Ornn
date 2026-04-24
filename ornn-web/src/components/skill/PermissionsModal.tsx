@@ -22,6 +22,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
 import { Modal } from "@/components/ui/Modal";
@@ -32,7 +33,21 @@ import { useInitiateShare } from "@/hooks/useShares";
 import { useToastStore } from "@/stores/toastStore";
 import { searchUsersByEmail, resolveUsers, fetchOrgSummary, type UserDirectoryEntry } from "@/services/usersApi";
 import type { SkillDetail } from "@/types/domain";
-import type { InitiateShareInput } from "@/types/shares";
+import type { InitiateShareInput, ShareRequest } from "@/types/shares";
+
+type SavePhase = "form" | "running" | "results";
+
+interface SaveResult {
+  label: string;
+  kind:
+    | "direct-remove"
+    | "share-green"
+    | "share-needs-justification"
+    | "share-failed-audit"
+    | "share-failed";
+  shareRequestId?: string;
+  errorMessage?: string;
+}
 
 interface PermissionsModalProps {
   isOpen: boolean;
@@ -65,7 +80,9 @@ export function PermissionsModal({ isOpen, onClose, skill }: PermissionsModalPro
   const [sharedOrgIds, setSharedOrgIds] = useState<string[]>(skill.sharedWithOrgs);
   const [userQuery, setUserQuery] = useState("");
   const [userInputFocused, setUserInputFocused] = useState(false);
-  const [savingShares, setSavingShares] = useState(false);
+  const [phase, setPhase] = useState<SavePhase>("form");
+  const [progressLabel, setProgressLabel] = useState<string>("");
+  const [saveResults, setSaveResults] = useState<SaveResult[]>([]);
   const userInputRef = useRef<HTMLInputElement>(null);
   const initiateShareMutation = useInitiateShare();
 
@@ -82,6 +99,9 @@ export function PermissionsModal({ isOpen, onClose, skill }: PermissionsModalPro
         displayName: id,
       })),
     );
+    setPhase("form");
+    setProgressLabel("");
+    setSaveResults([]);
   }, [isOpen, skill]);
 
   // Resolve saved user_ids into email/displayName so the chip list
@@ -179,6 +199,15 @@ export function PermissionsModal({ isOpen, onClose, skill }: PermissionsModalPro
   const usersActive = !isPublic && sharedUsers.length > 0;
   const privateActive = !isPublic && !orgsActive && !usersActive;
 
+  const labelForOrg = (orgId: string): string => {
+    const hit = allOrgOptions.find((o) => o.userId === orgId);
+    return hit?.displayName || orgId;
+  };
+  const labelForUser = (userId: string): string => {
+    const hit = sharedUsers.find((u) => u.userId === userId);
+    return hit?.displayName || hit?.email || userId;
+  };
+
   const handleSave = async () => {
     // Diff between current skill state and form state.
     // New grants (user / org adds + flip-to-public) are audit-gated and
@@ -186,8 +215,7 @@ export function PermissionsModal({ isOpen, onClose, skill }: PermissionsModalPro
     // ACL only moves once the audit lands green or a reviewer accepts,
     // so we don't include new grants in the direct PUT below.
     // Removes + flip-to-private don't need audit — access is being taken
-    // away — so they go through `PUT /api/v1/skills/:id/permissions` as
-    // before.
+    // away — so they go through `PUT /api/v1/skills/:id/permissions`.
     const beforePrivate = skill.isPrivate;
     const beforeUsers = new Set(skill.sharedWithUsers);
     const beforeOrgs = new Set(skill.sharedWithOrgs);
@@ -210,10 +238,19 @@ export function PermissionsModal({ isOpen, onClose, skill }: PermissionsModalPro
     const removedUsers = skill.sharedWithUsers.filter((id) => !afterUsers.has(id));
     const removedOrgs = skill.sharedWithOrgs.filter((id) => !afterOrgs.has(id));
 
-    const shareTargets: InitiateShareInput[] = [
-      ...(goingPublic ? [{ targetType: "public" as const }] : []),
-      ...addedUsers.map((id) => ({ targetType: "user" as const, targetId: id })),
-      ...addedOrgs.map((id) => ({ targetType: "org" as const, targetId: id })),
+    type LabeledTarget = { label: string; input: InitiateShareInput };
+    const shareTargets: LabeledTarget[] = [
+      ...(goingPublic
+        ? [{ label: t("permissions.targetPublic", "Public"), input: { targetType: "public" as const } }]
+        : []),
+      ...addedUsers.map((id) => ({
+        label: labelForUser(id),
+        input: { targetType: "user" as const, targetId: id },
+      })),
+      ...addedOrgs.map((id) => ({
+        label: labelForOrg(id),
+        input: { targetType: "org" as const, targetId: id },
+      })),
     ];
 
     const needsPut =
@@ -228,10 +265,16 @@ export function PermissionsModal({ isOpen, onClose, skill }: PermissionsModalPro
       return;
     }
 
-    setSavingShares(true);
+    setPhase("running");
+    setSaveResults([]);
+    const collected: SaveResult[] = [];
+
     try {
       // 1. Removes (or flip-to-private) — immediate effect, no audit.
       if (needsPut) {
+        setProgressLabel(
+          t("permissions.progressApplying", "Applying permission changes…"),
+        );
         await permissionsMutation.mutateAsync({
           isPrivate: goingPrivate ? true : beforePrivate,
           sharedWithUsers: skill.sharedWithUsers.filter(
@@ -241,58 +284,238 @@ export function PermissionsModal({ isOpen, onClose, skill }: PermissionsModalPro
             (id) => !removedOrgs.includes(id),
           ),
         });
-      }
-
-      // 2. Adds — each one opens an audit-gated share request. Sequential
-      //    rather than Promise.all so the backend's audit cache (shared
-      //    per skill version) only runs once and later targets reuse.
-      let shareOk = 0;
-      let shareFail = 0;
-      for (const input of shareTargets) {
-        try {
-          await initiateShareMutation.mutateAsync({
-            skillIdOrName: skill.guid,
-            input,
+        const removedCount = removedUsers.length + removedOrgs.length + (goingPrivate ? 1 : 0);
+        if (removedCount > 0) {
+          collected.push({
+            kind: "direct-remove",
+            label: t("permissions.revokedSummary", "{{n}} grant(s) revoked", {
+              n: removedCount,
+            }),
           });
-          shareOk += 1;
-        } catch (err) {
-          shareFail += 1;
-          console.warn("Share request failed", input, err);
         }
       }
 
-      const parts: string[] = [];
-      if (needsPut) {
-        parts.push(t("permissions.partRemoves", "permissions updated"));
-      }
-      if (shareOk > 0) {
-        parts.push(
-          t("permissions.partSharesOk", "{{n}} share request(s) submitted for audit", {
-            n: shareOk,
+      // 2. Adds — each one opens an audit-gated share request. Sequential
+      //    rather than Promise.all so the backend's audit cache (per skill
+      //    version) only runs once and subsequent targets reuse it.
+      for (let i = 0; i < shareTargets.length; i++) {
+        const t0 = shareTargets[i];
+        setProgressLabel(
+          t("permissions.progressAuditing", "Running audit for {{label}} ({{i}}/{{total}})…", {
+            label: t0.label,
+            i: i + 1,
+            total: shareTargets.length,
           }),
         );
+        try {
+          const result: ShareRequest = await initiateShareMutation.mutateAsync({
+            skillIdOrName: skill.guid,
+            input: t0.input,
+          });
+          let kind: SaveResult["kind"];
+          if (result.status === "green") kind = "share-green";
+          else if (result.status === "needs-justification") kind = "share-needs-justification";
+          else kind = "share-failed-audit";
+          collected.push({
+            kind,
+            label: t0.label,
+            shareRequestId: result._id,
+          });
+        } catch (err) {
+          collected.push({
+            kind: "share-failed",
+            label: t0.label,
+            errorMessage: err instanceof Error ? err.message : String(err),
+          });
+        }
       }
-      if (shareFail > 0) {
-        parts.push(
-          t("permissions.partSharesFail", "{{n}} share request(s) failed", {
-            n: shareFail,
-          }),
-        );
+
+      // Decide: if any target needs further action, stay in modal and
+      // show the results view. Otherwise toast + close (current flow).
+      const needsFollowup = collected.some(
+        (r) => r.kind === "share-needs-justification" || r.kind === "share-failed-audit" || r.kind === "share-failed",
+      );
+
+      if (needsFollowup) {
+        setSaveResults(collected);
+        setPhase("results");
+      } else {
+        const ok = collected.filter((r) => r.kind === "share-green").length;
+        const parts: string[] = [];
+        if (needsPut) parts.push(t("permissions.partRemoves", "permissions updated"));
+        if (ok > 0) {
+          parts.push(
+            t("permissions.partSharesAccepted", "{{n}} share(s) auto-approved (audit green)", {
+              n: ok,
+            }),
+          );
+        }
+        addToast({
+          type: "success",
+          message: parts.length > 0
+            ? parts.join(" · ")
+            : t("permissions.saveSuccess", "Permissions updated"),
+        });
+        onClose();
       }
-      addToast({
-        type: shareFail > 0 ? "warning" : "success",
-        message: parts.length > 0
-          ? parts.join(" · ")
-          : t("permissions.saveSuccess", "Permissions updated"),
-      });
-      onClose();
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       addToast({ type: "error", message });
-    } finally {
-      setSavingShares(false);
+      setPhase("form");
     }
   };
+
+  if (phase === "running") {
+    return (
+      <Modal
+        isOpen={isOpen}
+        onClose={onClose}
+        title={t("permissions.runningTitle", "Running audit…") as string}
+        className="!max-w-xl"
+      >
+        <div className="flex flex-col items-center gap-4 py-10 text-center">
+          <div className="h-10 w-10 animate-spin rounded-full border-2 border-neon-cyan/20 border-t-neon-cyan" aria-hidden />
+          <div className="space-y-1">
+            <p className="font-heading text-sm uppercase tracking-wider text-text-primary">
+              {t("permissions.runningHeading", "Auditing new share targets")}
+            </p>
+            <p className="font-body text-sm text-text-muted min-h-5">
+              {progressLabel}
+            </p>
+          </div>
+          <p className="max-w-md font-body text-xs text-text-muted">
+            {t(
+              "permissions.runningHint",
+              "The audit engine reviews the skill against security, quality, documentation, reliability, and permission-scope dimensions. Keep this window open — it typically takes 20–60 seconds per target.",
+            )}
+          </p>
+        </div>
+      </Modal>
+    );
+  }
+
+  if (phase === "results") {
+    const allOk = saveResults.every((r) => r.kind === "direct-remove" || r.kind === "share-green");
+    const flaggedCount = saveResults.filter(
+      (r) => r.kind === "share-needs-justification" || r.kind === "share-failed-audit" || r.kind === "share-failed",
+    ).length;
+    return (
+      <Modal
+        isOpen={isOpen}
+        onClose={onClose}
+        title={t("permissions.resultsTitle", "Audit results") as string}
+        className="!max-w-xl"
+      >
+        <div className="space-y-4">
+          <p className="font-body text-sm text-text-muted">
+            {allOk
+              ? t(
+                  "permissions.resultsAllOk",
+                  "All changes applied cleanly. You can close this dialog.",
+                )
+              : t(
+                  "permissions.resultsHeading",
+                  "{{n}} target(s) need your attention — the audit flagged findings that require a justification before a reviewer can decide.",
+                  { n: flaggedCount },
+                )}
+          </p>
+          <ul className="space-y-2">
+            {saveResults.map((r, idx) => {
+              const iconBase = "h-6 w-6 shrink-0 rounded-full border flex items-center justify-center font-mono text-xs";
+              const rowBase = "flex items-start gap-3 rounded-lg border px-3 py-2";
+              if (r.kind === "direct-remove" || r.kind === "share-green") {
+                return (
+                  <li
+                    key={idx}
+                    className={`${rowBase} border-neon-cyan/30 bg-neon-cyan/5`}
+                  >
+                    <span
+                      aria-hidden
+                      className={`${iconBase} border-neon-cyan/40 text-neon-cyan`}
+                    >
+                      ✓
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-body text-sm text-text-primary">
+                        {r.label}
+                      </p>
+                      <p className="font-body text-xs text-text-muted">
+                        {r.kind === "direct-remove"
+                          ? t("permissions.resultDirect", "Applied immediately.")
+                          : t("permissions.resultGreen", "Audit passed — access granted.")}
+                      </p>
+                    </div>
+                  </li>
+                );
+              }
+              if (r.kind === "share-needs-justification") {
+                return (
+                  <li
+                    key={idx}
+                    className={`${rowBase} border-neon-yellow/30 bg-neon-yellow/5`}
+                  >
+                    <span
+                      aria-hidden
+                      className={`${iconBase} border-neon-yellow/40 text-neon-yellow`}
+                    >
+                      ⚠
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-body text-sm text-text-primary">
+                        {r.label}
+                      </p>
+                      <p className="font-body text-xs text-text-muted">
+                        {t(
+                          "permissions.resultNeedsJustification",
+                          "Audit flagged findings. Submit a justification for a reviewer to consider.",
+                        )}
+                      </p>
+                    </div>
+                    {r.shareRequestId && (
+                      <Link
+                        to={`/shares/${encodeURIComponent(r.shareRequestId)}`}
+                        onClick={onClose}
+                        className="shrink-0 rounded-md border border-neon-yellow/30 px-3 py-1 font-body text-xs text-neon-yellow transition-colors hover:bg-neon-yellow/10"
+                      >
+                        {t("permissions.addJustification", "Add justification →")}
+                      </Link>
+                    )}
+                  </li>
+                );
+              }
+              // failed-audit or failed (HTTP error)
+              return (
+                <li
+                  key={idx}
+                  className={`${rowBase} border-neon-red/30 bg-neon-red/5`}
+                >
+                  <span
+                    aria-hidden
+                    className={`${iconBase} border-neon-red/40 text-neon-red`}
+                  >
+                    ✗
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-body text-sm text-text-primary">{r.label}</p>
+                    <p className="font-body text-xs text-text-muted">
+                      {r.errorMessage ??
+                        t(
+                          "permissions.resultFailedAudit",
+                          "Audit failed outright — contact a platform admin.",
+                        )}
+                    </p>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+          <div className="flex justify-end pt-2">
+            <Button onClick={onClose}>{t("common.close", "Close")}</Button>
+          </div>
+        </div>
+      </Modal>
+    );
+  }
 
   return (
     <Modal
@@ -479,7 +702,7 @@ export function PermissionsModal({ isOpen, onClose, skill }: PermissionsModalPro
         </Button>
         <Button
           onClick={handleSave}
-          loading={permissionsMutation.isPending || savingShares}
+          loading={permissionsMutation.isPending || initiateShareMutation.isPending}
         >
           {t("common.save", "Save")}
         </Button>
