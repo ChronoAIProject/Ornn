@@ -244,6 +244,11 @@ export function useUpdateSkillPermissions(idOrName: string) {
       queryClient.invalidateQueries({ queryKey: [SKILLS_KEY] });
       queryClient.invalidateQueries({ queryKey: [MY_SKILLS_KEY] });
       queryClient.invalidateQueries({ queryKey: [SKILLS_KEY, idOrName] });
+      // Any new grants route through the audit-gated share flow → the
+      // call produced one or more ShareRequest records that our "my
+      // shares" + InFlightShareRequests views need to see.
+      queryClient.invalidateQueries({ queryKey: ["shares", "mine"] });
+      queryClient.invalidateQueries({ queryKey: ["notifications"] });
     },
   });
 }
