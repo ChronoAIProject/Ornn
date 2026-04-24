@@ -13,6 +13,7 @@ import { logActivity } from "@/services/activityApi";
 import { useThemeStore } from "@/stores/themeStore";
 import { useTranslation } from "react-i18next";
 import { Logo } from "@/components/brand/Logo";
+import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { config } from "@/config";
 
 /** Admin icon */
@@ -348,6 +349,13 @@ export function Navbar({ className = "" }: NavbarProps) {
             <GitHubLink />
             <LangDropdown />
             <ThemeToggle />
+
+            {/* Notifications — authenticated users only. */}
+            {isAuthenticated && (
+              <div className="hidden sm:block">
+                <NotificationBell />
+              </div>
+            )}
 
             {/* User Menu (Desktop) */}
             {isAuthenticated && user && (
