@@ -37,7 +37,8 @@ export function createPlatformSettingsRoutes(
     const body = (await c.req.json().catch(() => ({}))) as Partial<
       Record<keyof PlatformSettings, unknown>
     >;
-    const patch: Partial<PlatformSettings> = {};
+    type MutablePatch = { -readonly [K in keyof PlatformSettings]?: PlatformSettings[K] };
+    const patch: MutablePatch = {};
 
     if ("auditWaiverThreshold" in body) {
       const n = Number(body.auditWaiverThreshold);
