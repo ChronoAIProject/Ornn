@@ -3,11 +3,10 @@
   "sections": [
     {
       "id": "about",
-      "label": "关于 Ornn",
+      "label": "关于",
       "order": 1,
       "children": [
-        { "id": "what-is-ornn", "label": "什么是 Ornn", "file": "what-is-ornn.md", "order": 1 },
-        { "id": "version-roadmap", "label": "版本路线图", "file": "version-roadmap.md", "order": 2 }
+        { "id": "what-is-ornn", "label": "什么是 Ornn", "file": "what-is-ornn.md", "order": 1 }
       ]
     },
     {
@@ -15,30 +14,7 @@
       "label": "快速开始",
       "order": 2,
       "children": [
-        { "id": "qs-web-user", "label": "Web 用户快速入门", "file": "qs-web-user.md", "order": 1 },
-        { "id": "qs-agent-dev", "label": "AI Agent 开发者快速入门", "file": "qs-agent-dev.md", "order": 2 }
-      ]
-    },
-    {
-      "id": "faq",
-      "label": "常见问题",
-      "order": 3,
-      "children": [
-        { "id": "faq-product", "label": "产品常见问题", "file": "faq-product.md", "order": 1 },
-        { "id": "faq-performance", "label": "性能常见问题", "file": "faq-performance.md", "order": 2 }
-      ]
-    },
-    {
-      "id": "reference",
-      "label": "技术参考",
-      "order": 4,
-      "children": [
-        { "id": "arch-overview", "label": "Ornn 架构概览", "file": "arch-overview.md", "order": 1 },
-        { "id": "integration-overview", "label": "Ornn 集成概览", "file": "integration-overview.md", "order": 2 },
-        { "id": "chrono-storage", "label": "chrono-storage", "file": "chrono-storage.md", "order": 3 },
-        { "id": "chrono-sandbox", "label": "chrono-sandbox", "file": "chrono-sandbox.md", "order": 4 },
-        { "id": "nyxid", "label": "NyxID", "file": "nyxid.md", "order": 5 },
-        { "id": "nyxid-mcp-integration", "label": "NyxID MCP 集成", "file": "nyxid-mcp-integration.md", "order": 6 }
+        { "id": "qs-web-user", "label": "Web 用户快速入门", "file": "qs-web-user.md", "order": 1 }
       ]
     }
   ]
