@@ -4,11 +4,23 @@
  * route-level code-split via React.lazy so the initial bundle stays
  * lean — admin / editor / playground chunks only load when their
  * routes are visited.
+ *
+ * Routing uses RR7's data router (`createBrowserRouter`) — the route
+ * tree itself is still authored as JSX through `createRoutesFromElements`
+ * so the migration stays minimal-risk; loaders / actions can be added
+ * per-route later as wins surface (#103).
+ *
  * @module App
  */
 
 import { lazy, Suspense } from "react";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import {
+  createBrowserRouter,
+  createRoutesFromElements,
+  Navigate,
+  Route,
+  RouterProvider,
+} from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { RootLayout } from "@/components/layout/RootLayout";
 import { AdminLayout } from "@/components/layout/AdminLayout";
@@ -125,69 +137,75 @@ function RouteFallback() {
   return <div className="p-8 text-text-muted text-sm">Loading…</div>;
 }
 
+// Created once at module scope — `createBrowserRouter` is intentionally
+// stable across renders.
+const router = createBrowserRouter(
+  createRoutesFromElements(
+    <Route>
+      {/* Public routes (no auth) */}
+      <Route path="/login" element={<LoginPage />} />
+      <Route path="/oauth/callback" element={<OAuthCallbackPage />} />
+
+      {/* Public routes with RootLayout */}
+      <Route element={<RootLayout />}>
+        <Route path="/" element={<LandingPage />} />
+        <Route path="/docs" element={<DocsPage />} />
+        <Route path="/registry" element={<ExplorePage />} />
+        <Route path="/skills/:idOrName" element={<SkillDetailPage />} />
+        <Route
+          path="/skills/:idOrName/audits"
+          element={<SkillAuditHistoryPage />}
+        />
+      </Route>
+
+      {/* Protected routes */}
+      <Route element={<AuthGuard />}>
+        <Route element={<RootLayout />}>
+          <Route path="/skills/new" element={<UploadSkillPage />} />
+          <Route path="/skills/new/guided" element={<CreateSkillGuidedPage />} />
+          <Route path="/skills/new/free" element={<CreateSkillFreePage />} />
+          <Route path="/skills/new/generate" element={<CreateSkillGenerativePage />} />
+          <Route path="/skills/new/from-github" element={<CreateSkillFromGitHubPage />} />
+          <Route path="/skills/:id/edit" element={<EditSkillPage />} />
+          <Route path="/playground" element={<PlaygroundPage />} />
+
+          <Route path="/my-skills" element={<MySkillsPage />} />
+          <Route path="/services/:id" element={<ServiceDetailPage />} />
+          <Route path="/notifications" element={<NotificationsPage />} />
+          <Route path="/shares/:requestId" element={<ShareRequestPage />} />
+          <Route path="/reviews" element={<ReviewsPage />} />
+          <Route path="/my-shares" element={<MySharesPage />} />
+        </Route>
+
+        {/* Admin routes - separate layout */}
+        <Route element={<AdminGuard />}>
+          <Route element={<AdminLayout />}>
+            <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
+            <Route path="/admin/dashboard" element={<AdminDashboardPage />} />
+            <Route path="/admin/activities" element={<AdminActivitiesPage />} />
+            <Route path="/admin/users" element={<AdminUsersPage />} />
+            <Route path="/admin/skills" element={<AdminSkillsPage />} />
+            <Route path="/admin/categories" element={<AdminCategoriesPage />} />
+            <Route path="/admin/tags" element={<AdminTagsPage />} />
+            <Route path="/admin/review-history" element={<AdminReviewHistoryPage />} />
+            <Route path="/admin/settings" element={<AdminPlatformSettingsPage />} />
+          </Route>
+        </Route>
+      </Route>
+
+      {/* 404 */}
+      <Route path="*" element={<NotFoundPage />} />
+    </Route>,
+  ),
+);
+
 export function App() {
   return (
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
-        <BrowserRouter>
-          <Suspense fallback={<RouteFallback />}>
-            <Routes>
-              {/* Public routes (no auth) */}
-              <Route path="/login" element={<LoginPage />} />
-              <Route path="/oauth/callback" element={<OAuthCallbackPage />} />
-
-              {/* Public routes with RootLayout */}
-              <Route element={<RootLayout />}>
-                <Route path="/" element={<LandingPage />} />
-                <Route path="/docs" element={<DocsPage />} />
-                <Route path="/registry" element={<ExplorePage />} />
-                <Route path="/skills/:idOrName" element={<SkillDetailPage />} />
-                <Route
-                  path="/skills/:idOrName/audits"
-                  element={<SkillAuditHistoryPage />}
-                />
-              </Route>
-
-              {/* Protected routes */}
-              <Route element={<AuthGuard />}>
-                <Route element={<RootLayout />}>
-                  <Route path="/skills/new" element={<UploadSkillPage />} />
-                  <Route path="/skills/new/guided" element={<CreateSkillGuidedPage />} />
-                  <Route path="/skills/new/free" element={<CreateSkillFreePage />} />
-                  <Route path="/skills/new/generate" element={<CreateSkillGenerativePage />} />
-                  <Route path="/skills/new/from-github" element={<CreateSkillFromGitHubPage />} />
-                  <Route path="/skills/:id/edit" element={<EditSkillPage />} />
-                  <Route path="/playground" element={<PlaygroundPage />} />
-
-                  <Route path="/my-skills" element={<MySkillsPage />} />
-                  <Route path="/services/:id" element={<ServiceDetailPage />} />
-                  <Route path="/notifications" element={<NotificationsPage />} />
-                  <Route path="/shares/:requestId" element={<ShareRequestPage />} />
-                  <Route path="/reviews" element={<ReviewsPage />} />
-                  <Route path="/my-shares" element={<MySharesPage />} />
-                </Route>
-
-                {/* Admin routes - separate layout */}
-                <Route element={<AdminGuard />}>
-                  <Route element={<AdminLayout />}>
-                    <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
-                    <Route path="/admin/dashboard" element={<AdminDashboardPage />} />
-                    <Route path="/admin/activities" element={<AdminActivitiesPage />} />
-                    <Route path="/admin/users" element={<AdminUsersPage />} />
-                    <Route path="/admin/skills" element={<AdminSkillsPage />} />
-                    <Route path="/admin/categories" element={<AdminCategoriesPage />} />
-                    <Route path="/admin/tags" element={<AdminTagsPage />} />
-                    <Route path="/admin/review-history" element={<AdminReviewHistoryPage />} />
-                    <Route path="/admin/settings" element={<AdminPlatformSettingsPage />} />
-                  </Route>
-                </Route>
-              </Route>
-
-              {/* 404 */}
-              <Route path="*" element={<NotFoundPage />} />
-            </Routes>
-          </Suspense>
-        </BrowserRouter>
+        <Suspense fallback={<RouteFallback />}>
+          <RouterProvider router={router} />
+        </Suspense>
       </QueryClientProvider>
     </ErrorBoundary>
   );
