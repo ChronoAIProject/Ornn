@@ -14,6 +14,7 @@ import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { PageTransition } from "@/components/layout/PageTransition";
+import { BackLink } from "@/components/layout/BackLink";
 import { useShareReviewQueue } from "@/hooks/useShares";
 import type { ShareRequest } from "@/types/shares";
 
@@ -53,6 +54,9 @@ export function ReviewsPage() {
   return (
     <PageTransition>
       <div className="mx-auto w-full max-w-4xl px-6 py-10">
+        <nav className="mb-4">
+          <BackLink label={t("common.back", "Back")} />
+        </nav>
         <header className="mb-6">
           <h1 className="font-heading text-3xl text-text-primary">
             {t("reviews.title", "Review queue")}

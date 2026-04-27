@@ -67,15 +67,43 @@ export class AuditService {
     this.cacheTtlMs = deps.cacheTtlMs;
   }
 
-  /** Fetch the most recent audit for (skill, version) without triggering a new one. */
+  /**
+   * Fetch the most recent *completed* audit for (skill, version). Running
+   * rows are ignored so callers (e.g. the share path) see only final
+   * scores. The history endpoint returns everything for the UI.
+   */
   async getAudit(idOrName: string, version?: string): Promise<AuditRecord | null> {
     const skill = await this.skillService.getSkill(idOrName, version);
-    return this.auditRepo.findBySkillAndVersion(skill.guid, skill.version);
+    const latest = await this.auditRepo.findLatestBySkillAndVersion(skill.guid, skill.version);
+    if (!latest || latest.status !== "completed") return null;
+    return latest;
   }
 
   /**
-   * Run an audit. Cache-first unless `options.force`. Persists the
-   * result and returns it.
+   * Return audit records for a skill, newest first. When `version` is
+   * provided, only records for that version are returned; otherwise every
+   * record across versions is included.
+   */
+  async listHistory(
+    idOrName: string,
+    version?: string,
+  ): Promise<ReadonlyArray<AuditRecord>> {
+    const skill = await this.skillService.getSkill(idOrName);
+    const all = await this.auditRepo.listBySkillGuid(skill.guid);
+    if (!version) return all;
+    return all.filter((r) => r.version === version);
+  }
+
+  /**
+   * Kick off an audit. Inserts a `running` row immediately so the UI sees
+   * it, runs the LLM pipeline in the background, then marks the row as
+   * `completed`/`failed`. The returned record is always the initial
+   * `running` row (unless the cache short-circuits) — callers poll
+   * `listHistory` / `getAudit` for the final verdict.
+   *
+   * Cache path: with `force: false`, if there's a completed audit for the
+   * same bytes younger than the TTL, we just return that without
+   * creating a new row.
    */
   async runAudit(idOrName: string, options: AuditOptions): Promise<AuditRecord> {
     const skill = await this.skillService.getSkill(idOrName);
@@ -89,62 +117,93 @@ export class AuditService {
       }
     }
 
-    // Pull package bytes + build a readable file bundle the LLM can score.
-    const { filesBundle, metadataSummary } = await this.buildAuditContext(guid);
-
-    const input: ResponsesApiInputMessage[] = [
-      { role: "developer", content: AUDIT_SYSTEM_PROMPT },
-      {
-        role: "user",
-        content: buildAuditUserPrompt({
-          skillName: name,
-          version,
-          metadataSummary,
-          filesBundle,
-        }),
-      },
-    ];
-
-    const outputs = await this.llmClient.complete({
-      model: this.model,
-      input,
-      max_output_tokens: 4000,
-      temperature: 0.1,
-    });
-
-    let rawText = "";
-    for (const output of outputs) {
-      if (output.content) {
-        for (const part of output.content) {
-          if (part.text) rawText += part.text;
-        }
-      }
-    }
-
-    const parsed = parseAuditJson(rawText);
-    if (!parsed) {
-      logger.warn({ guid, version, first200: rawText.slice(0, 200) }, "Audit LLM output failed to parse");
-      throw AppError.internalError(
-        "AUDIT_PARSE_FAILED",
-        "Audit LLM did not return a valid scoring JSON. Try again.",
-      );
-    }
-
-    const { scores, findings } = parsed;
-    const overallScore = computeOverallScore(scores);
-    const verdict = computeVerdict(scores, findings);
-
-    return this.auditRepo.upsert({
+    const running = await this.auditRepo.createRunning({
       skillGuid: guid,
       version,
       skillHash,
-      verdict,
-      overallScore,
-      scores,
-      findings,
       model: this.model,
       triggeredBy: options.triggeredBy,
     });
+
+    // Run the LLM pipeline as a background task. The response returns
+    // the `running` row immediately so the UI can render a pending
+    // entry; this promise updates the same row when the pipeline is
+    // done (or fails). We never re-throw here — errors are surfaced on
+    // the record itself as `status: "failed"`.
+    void this.finalizeAudit(running._id, guid, name, version).catch((err) => {
+      logger.error({ err, auditId: running._id }, "Background audit task threw unexpectedly");
+    });
+
+    return running;
+  }
+
+  private async finalizeAudit(
+    auditId: string,
+    guid: string,
+    name: string,
+    version: string,
+  ): Promise<void> {
+    try {
+      const { filesBundle, metadataSummary } = await this.buildAuditContext(guid);
+
+      const input: ResponsesApiInputMessage[] = [
+        { role: "developer", content: AUDIT_SYSTEM_PROMPT },
+        {
+          role: "user",
+          content: buildAuditUserPrompt({
+            skillName: name,
+            version,
+            metadataSummary,
+            filesBundle,
+          }),
+        },
+      ];
+
+      const outputs = await this.llmClient.complete({
+        model: this.model,
+        input,
+        max_output_tokens: 4000,
+        temperature: 0.1,
+      });
+
+      let rawText = "";
+      for (const output of outputs) {
+        if (output.content) {
+          for (const part of output.content) {
+            if (part.text) rawText += part.text;
+          }
+        }
+      }
+
+      const parsed = parseAuditJson(rawText);
+      if (!parsed) {
+        logger.warn(
+          { guid, version, first200: rawText.slice(0, 200) },
+          "Audit LLM output failed to parse",
+        );
+        await this.auditRepo.markFailed(
+          auditId,
+          "Audit LLM did not return a valid scoring JSON",
+        );
+        return;
+      }
+
+      const { scores, findings } = parsed;
+      const overallScore = computeOverallScore(scores);
+      const verdict = computeVerdict(scores, findings);
+
+      await this.auditRepo.markCompleted(auditId, {
+        verdict,
+        overallScore,
+        scores,
+        findings,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      await this.auditRepo.markFailed(auditId, message).catch((inner) => {
+        logger.error({ inner, auditId }, "markFailed threw");
+      });
+    }
   }
 
   private async buildAuditContext(

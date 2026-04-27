@@ -2,10 +2,13 @@
  * Skill-audit HTTP routes.
  *
  * - GET  /api/v1/skills/:idOrName/audit                — latest audit (cache; does NOT trigger)
- * - POST /api/v1/admin/skills/:idOrName/audit          — manual re-audit (admin only)
+ * - GET  /api/v1/skills/:idOrName/audit/history        — list audit records across versions
+ * - POST /api/v1/skills/:idOrName/audit                — owner or admin trigger (Start Auditing)
+ * - POST /api/v1/admin/skills/:idOrName/audit          — force fresh audit as platform admin
  *
- * The audit-on-share trigger lands in a later PR (#95). For now, only
- * explicit admin calls run the LLM pipeline.
+ * Sharing never runs an audit implicitly — `PUT /skills/:id/permissions`
+ * reads the existing audit record and throws `AUDIT_REQUIRED` when none
+ * exists, forcing owners to call one of the POST endpoints first.
  *
  * @module domains/skills/audit/routes
  */
@@ -82,9 +85,77 @@ export function createAuditRoutes(config: AuditRoutesConfig): Hono<{ Variables: 
   );
 
   /**
+   * GET /skills/:idOrName/audit/history
+   * Returns every audit record stored for the skill (one per audited
+   * version, newest first). Shares the same visibility rules as the
+   * single-audit GET above.
+   */
+  app.get(
+    "/skills/:idOrName/audit/history",
+    optionalAuth,
+    async (c) => {
+      const idOrName = c.req.param("idOrName");
+      const authCtx = c.get("auth");
+
+      const skill = await skillService.getSkill(idOrName);
+
+      if (!authCtx && skill.isPrivate) {
+        throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${idOrName}' not found`);
+      }
+      if (authCtx && skill.isPrivate) {
+        const memberships = await readUserOrgMemberships(c);
+        const actor = {
+          userId: authCtx.userId,
+          memberships,
+          isPlatformAdmin: authCtx.permissions.includes("ornn:admin:skill"),
+        };
+        if (!canReadSkill(skill, actor)) {
+          throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${idOrName}' not found`);
+        }
+      }
+
+      const items = await auditService.listHistory(idOrName);
+      return c.json({ data: { items }, error: null });
+    },
+  );
+
+  /**
+   * POST /skills/:idOrName/audit
+   * Owner-triggerable "Start Auditing". Platform admins can call it on
+   * any skill; regular users only on skills they authored. Obeys the
+   * AuditService cache (30-day TTL) unless `force=true`.
+   */
+  app.post(
+    "/skills/:idOrName/audit",
+    auth,
+    async (c) => {
+      const idOrName = c.req.param("idOrName");
+      const authCtx = getAuth(c);
+      const body = (await c.req.json().catch(() => ({}))) as { force?: unknown };
+      const force = body.force === true;
+
+      const skill = await skillService.getSkill(idOrName);
+      const isPlatformAdmin = authCtx.permissions.includes("ornn:admin:skill");
+      if (skill.createdBy !== authCtx.userId && !isPlatformAdmin) {
+        throw AppError.forbidden(
+          "NOT_SKILL_OWNER",
+          "Only the skill's author or a platform admin can start an audit",
+        );
+      }
+
+      logger.info({ idOrName, triggeredBy: authCtx.userId, force }, "Audit triggered by owner/admin");
+      const record = await auditService.runAudit(idOrName, {
+        triggeredBy: authCtx.userId,
+        force,
+      });
+      return c.json({ data: record, error: null });
+    },
+  );
+
+  /**
    * POST /admin/skills/:idOrName/audit
-   * Force a fresh audit. Admin only.
-   * Body: `{ force?: boolean }` — `force=true` bypasses the cache.
+   * Platform-admin force path — bypasses ownership check entirely. Still
+   * honours `force` the same way.
    */
   app.post(
     "/admin/skills/:idOrName/audit",
@@ -96,7 +167,7 @@ export function createAuditRoutes(config: AuditRoutesConfig): Hono<{ Variables: 
       const body = (await c.req.json().catch(() => ({}))) as { force?: unknown };
       const force = body.force === true;
 
-      logger.info({ idOrName, triggeredBy: authCtx.userId, force }, "Manual audit triggered");
+      logger.info({ idOrName, triggeredBy: authCtx.userId, force }, "Admin audit triggered");
       const record = await auditService.runAudit(idOrName, {
         triggeredBy: authCtx.userId,
         force,

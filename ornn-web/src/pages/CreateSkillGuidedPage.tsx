@@ -11,6 +11,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { AnimatePresence } from "framer-motion";
 import { PageTransition } from "@/components/layout/PageTransition";
+import { BackLink } from "@/components/layout/BackLink";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { StepIndicator, CompactStepIndicator } from "@/components/form/StepIndicator";
@@ -305,6 +306,12 @@ export function CreateSkillGuidedPage() {
     <PageTransition>
       <div className="h-full overflow-y-auto py-4">
       <div className="max-w-4xl mx-auto">
+        <nav className="mb-4">
+          <BackLink
+            label={t("guided.backToModes", "Back to mode selection")}
+            to="/skills/new"
+          />
+        </nav>
         {/* Header */}
         <div className="mb-8">
           <h1 className="neon-cyan mb-2 font-heading text-2xl font-bold tracking-wider text-neon-cyan sm:text-3xl">

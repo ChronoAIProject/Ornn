@@ -40,6 +40,9 @@ const ExplorePage = lazy(() =>
 const SkillDetailPage = lazy(() =>
   import("@/pages/SkillDetailPage").then((m) => ({ default: m.SkillDetailPage })),
 );
+const SkillAuditHistoryPage = lazy(() =>
+  import("@/pages/SkillAuditHistoryPage").then((m) => ({ default: m.SkillAuditHistoryPage })),
+);
 const UploadSkillPage = lazy(() =>
   import("@/pages/UploadSkillPage").then((m) => ({ default: m.UploadSkillPage })),
 );
@@ -139,6 +142,10 @@ export function App() {
                 <Route path="/docs" element={<DocsPage />} />
                 <Route path="/registry" element={<ExplorePage />} />
                 <Route path="/skills/:idOrName" element={<SkillDetailPage />} />
+                <Route
+                  path="/skills/:idOrName/audits"
+                  element={<SkillAuditHistoryPage />}
+                />
               </Route>
 
               {/* Protected routes */}

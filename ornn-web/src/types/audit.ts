@@ -22,6 +22,8 @@ export const AUDIT_DIMENSIONS: readonly AuditDimension[] = [
 
 export type AuditVerdict = "green" | "yellow" | "red";
 
+export type AuditStatus = "running" | "completed" | "failed";
+
 export type AuditSeverity = "info" | "warning" | "critical";
 
 export interface AuditScore {
@@ -45,6 +47,8 @@ export interface AuditRecord {
   skillGuid: string;
   version: string;
   skillHash: string;
+  /** Lifecycle state. Running rows have placeholder verdict/score. */
+  status: AuditStatus;
   verdict: AuditVerdict;
   /** 0–10 weighted average. */
   overallScore: number;
@@ -52,5 +56,7 @@ export interface AuditRecord {
   findings: AuditFinding[];
   model: string;
   createdAt: string;
+  completedAt?: string;
+  errorMessage?: string;
   triggeredBy: string;
 }

@@ -71,16 +71,14 @@ export class ShareService {
   }
 
   /**
-   * Initiate a share — run audit, decide initial status.
+   * Initiate a share — use the existing audit record to decide initial
+   * status. Does NOT trigger a new audit. Owners kick audits off manually
+   * from the skill detail page; sharing just reads the latest score.
    *
-   * Threshold logic: the skill's cached audit is reused if it is younger
-   * than the AuditService TTL (30 days); otherwise a fresh audit runs.
-   * The resulting `overallScore` is compared against the
-   * admin-configurable `auditWaiverThreshold` (platform settings) —
-   *
-   *   overallScore >= threshold → status `green`, ACL applied immediately
-   *   overallScore <  threshold → status `needs-justification`, waiting
-   *                               on the owner to provide a waiver
+   *   no audit exists for this (skill, version) → throw AUDIT_REQUIRED
+   *   overallScore >= threshold                  → status `green`, ACL applied
+   *   overallScore <  threshold                  → status `needs-justification`,
+   *                                                 owner must provide a waiver
    */
   async initiateShare(input: InitiateShareInput): Promise<ShareRequest> {
     const skill = await this.skillService.getSkill(input.skillIdOrName);
@@ -92,13 +90,15 @@ export class ShareService {
     }
     validateTarget(input.target);
 
-    // Run (or reuse cached) audit for this specific package. The TTL on
-    // AuditService (30 days) means stale audits trigger a fresh run
-    // automatically even when the skill bytes haven't changed.
-    const audit = await this.auditService.runAudit(skill.guid, {
-      triggeredBy: input.ownerUserId,
-      force: false,
-    });
+    // Require a pre-existing audit. Sharing never runs one — owners must
+    // audit first (separate "Start Auditing" affordance on the skill page).
+    const audit = await this.auditService.getAudit(skill.guid, skill.version);
+    if (!audit) {
+      throw AppError.badRequest(
+        "AUDIT_REQUIRED",
+        "Cannot share: no audit has been run for this skill version. Run Start Auditing first.",
+      );
+    }
 
     const threshold = await this.platformSettings.getAuditWaiverThreshold();
     const initialStatus: ShareStatus =
@@ -120,15 +120,6 @@ export class ShareService {
       await this.applyAcceptedShare(skill.guid, input.target, input.ownerUserId);
     }
 
-    // Owner always hears about the audit outcome.
-    await this.notificationService?.notifyAuditCompleted({
-      ownerUserId: input.ownerUserId,
-      skillGuid: skill.guid,
-      skillName: skill.name,
-      version: skill.version,
-      verdict: audit.verdict,
-      shareRequestId: request._id,
-    });
     if (initialStatus === "needs-justification") {
       await this.notificationService?.notifyNeedsJustification({
         ownerUserId: input.ownerUserId,
@@ -289,16 +280,21 @@ export class ShareService {
     return updated!;
   }
 
-  async get(requestId: string, callerUserId: string, isPlatformAdmin: boolean): Promise<ShareRequest> {
+  async get(
+    requestId: string,
+    callerUserId: string,
+    callerOrgIds: string[],
+    isPlatformAdmin: boolean,
+  ): Promise<ShareRequest> {
     const request = await this.mustFind(requestId);
     const isOwner = request.ownerUserId === callerUserId;
     const isDirectRecipient =
       request.target.type === "user" && request.target.id === callerUserId;
-    if (!isOwner && !isDirectRecipient && !isPlatformAdmin) {
-      // Org-admin case is handled at the route level via reviewerOrgIds. For
-      // get-by-id we fall back to owner / recipient / platform admin. Org
-      // admins who aren't in one of those roles can still see the request
-      // via the review-queue listing.
+    const isOrgReviewer =
+      request.target.type === "org" && callerOrgIds.includes(request.target.id ?? "");
+    // Public targets are reviewable only by platform admins, which is
+    // already covered by `isPlatformAdmin` below.
+    if (!isOwner && !isDirectRecipient && !isOrgReviewer && !isPlatformAdmin) {
       throw AppError.notFound("SHARE_NOT_FOUND", "Share request not found");
     }
     return request;
