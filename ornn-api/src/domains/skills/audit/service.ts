@@ -95,6 +95,22 @@ export class AuditService {
   }
 
   /**
+   * Per-version summary of the most recent completed audit. Powers the
+   * audit badge next to each row on the version picker. Versions that
+   * never had a completed audit are absent from the returned object;
+   * the caller treats absence as "not audited yet".
+   */
+  async summaryByVersion(
+    idOrName: string,
+  ): Promise<Record<string, AuditRecord>> {
+    const skill = await this.skillService.getSkill(idOrName);
+    const records = await this.auditRepo.findLatestCompletedPerVersion(skill.guid);
+    const out: Record<string, AuditRecord> = {};
+    for (const r of records) out[r.version] = r;
+    return out;
+  }
+
+  /**
    * Kick off an audit. Inserts a `running` row immediately so the UI sees
    * it, runs the LLM pipeline in the background, then marks the row as
    * `completed`/`failed`. The returned record is always the initial

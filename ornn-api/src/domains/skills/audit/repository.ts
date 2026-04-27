@@ -164,6 +164,32 @@ export class AuditRepository {
   }
 
   /**
+   * For each version of a skill, return the most recent *completed* audit
+   * (one row per version). Drives the per-version audit badges on
+   * SkillDetailPage. Versions that have never had a completed audit are
+   * omitted; callers treat the missing key as "not audited yet".
+   */
+  async findLatestCompletedPerVersion(
+    skillGuid: string,
+  ): Promise<ReadonlyArray<AuditRecord>> {
+    const pipeline: Document[] = [
+      { $match: { skillGuid, status: "completed" } },
+      { $sort: { createdAt: -1 } },
+      // After sorting newest-first, $first per group keeps that version's
+      // latest completed audit and discards older ones in the same group.
+      {
+        $group: {
+          _id: "$version",
+          doc: { $first: "$$ROOT" },
+        },
+      },
+      { $replaceRoot: { newRoot: "$doc" } },
+    ];
+    const docs = await this.collection.aggregate(pipeline).toArray();
+    return docs.map((d) => mapDoc(d)!).filter((r): r is AuditRecord => r !== null);
+  }
+
+  /**
    * Cache hit check — returns the most recent *completed* audit when the
    * skill bytes match. Running rows are ignored (they can't serve as a
    * gate for sharing, and they might end up failed).
