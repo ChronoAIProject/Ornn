@@ -13,13 +13,15 @@ import { useSkillAuditHistory } from "@/hooks/useAudit";
 
 interface AuditHistoryCardProps {
   idOrName: string | undefined;
+  /** When set, the card lists audits only for this version. */
+  version?: string;
   className?: string;
 }
 
-export function AuditHistoryCard({ idOrName, className }: AuditHistoryCardProps) {
+export function AuditHistoryCard({ idOrName, version, className }: AuditHistoryCardProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const { data: items, isLoading, isError } = useSkillAuditHistory(idOrName);
+  const { data: items, isLoading, isError } = useSkillAuditHistory(idOrName, { version });
 
   if (!idOrName) return null;
 
@@ -29,7 +31,10 @@ export function AuditHistoryCard({ idOrName, className }: AuditHistoryCardProps)
 
   const handleClick = () => {
     if (disabled) return;
-    navigate(`/skills/${encodeURIComponent(idOrName)}/audits`);
+    const target = `/skills/${encodeURIComponent(idOrName)}/audits${
+      version ? `?version=${encodeURIComponent(version)}` : ""
+    }`;
+    navigate(target);
   };
 
   const secondaryLine = isLoading
@@ -37,16 +42,23 @@ export function AuditHistoryCard({ idOrName, className }: AuditHistoryCardProps)
     : isError
       ? t("audit.historyError", "Could not load audit history.")
       : count === 0
-        ? t("audit.historyEmpty", "No audits recorded yet.")
+        ? version
+          ? t("audit.historyEmptyForVersion", "No audits for v{{v}} yet.", { v: version })
+          : t("audit.historyEmpty", "No audits recorded yet.")
         : runningCount > 0
           ? t(
               "audit.historyCountWithRunning",
               "{{n}} record(s) — {{r}} running",
               { n: count, r: runningCount },
             )
-          : count === 1
-            ? t("audit.versionOne", "1 audited version")
-            : t("audit.versionMany", "{{n}} audited versions", { n: count });
+          : version
+            ? t("audit.historyForVersion", "{{n}} audit(s) for v{{v}}", {
+                n: count,
+                v: version,
+              })
+            : count === 1
+              ? t("audit.versionOne", "1 audited version")
+              : t("audit.versionMany", "{{n}} audited versions", { n: count });
 
   return (
     <button

@@ -227,6 +227,7 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
     skillService,
     skillRepo,
     shareService,
+    analyticsService,
     maxFileSize: config.maxPackageSizeBytes,
     activityRepo,
   });
@@ -270,6 +271,8 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   const playgroundRoutes = createPlaygroundRoutes({
     chatService,
     keepAliveIntervalMs: config.sseKeepAliveIntervalMs,
+    analyticsService,
+    skillService,
   });
 
   // ---- Domain: Admin ----

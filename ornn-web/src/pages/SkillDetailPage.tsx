@@ -593,9 +593,12 @@ export function SkillDetailPage() {
             />
           )}
 
-          <AnalyticsCard idOrName={skill.name || skill.guid} />
+          <AnalyticsCard idOrName={skill.name || skill.guid} version={skill.version} />
 
-          <AuditHistoryCard idOrName={skill.name || skill.guid} />
+          <AuditHistoryCard
+            idOrName={skill.name || skill.guid}
+            version={skill.version}
+          />
         </div>
       </div>
 

@@ -15,6 +15,8 @@ export interface SkillAnalyticsLatency {
 export interface SkillAnalyticsSummary {
   skillGuid: string;
   window: AnalyticsWindow;
+  /** When set, the summary was filtered to this version. */
+  version?: string;
   executionCount: number;
   successCount: number;
   failureCount: number;
@@ -24,4 +26,14 @@ export interface SkillAnalyticsSummary {
   latencyMs: SkillAnalyticsLatency;
   uniqueUsers: number;
   topErrorCodes: Array<{ code: string; count: number }>;
+}
+
+/** Granularity of a pull-time-series query. */
+export type PullBucket = "hour" | "day" | "month";
+
+/** One bucket of the pull time series. `bucket` is an ISO-8601 timestamp. */
+export interface PullBucketCount {
+  bucket: string;
+  total: number;
+  bySource: { api: number; web: number; playground: number };
 }

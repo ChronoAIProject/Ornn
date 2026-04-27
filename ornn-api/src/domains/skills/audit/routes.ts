@@ -85,16 +85,18 @@ export function createAuditRoutes(config: AuditRoutesConfig): Hono<{ Variables: 
   );
 
   /**
-   * GET /skills/:idOrName/audit/history
+   * GET /skills/:idOrName/audit/history[?version=]
    * Returns every audit record stored for the skill (one per audited
-   * version, newest first). Shares the same visibility rules as the
-   * single-audit GET above.
+   * version, newest first). When `?version=` is present the result is
+   * narrowed to that single version. Shares the same visibility rules as
+   * the single-audit GET above.
    */
   app.get(
     "/skills/:idOrName/audit/history",
     optionalAuth,
     async (c) => {
       const idOrName = c.req.param("idOrName");
+      const versionParam = c.req.query("version") || undefined;
       const authCtx = c.get("auth");
 
       const skill = await skillService.getSkill(idOrName);
@@ -114,7 +116,7 @@ export function createAuditRoutes(config: AuditRoutesConfig): Hono<{ Variables: 
         }
       }
 
-      const items = await auditService.listHistory(idOrName);
+      const items = await auditService.listHistory(idOrName, versionParam);
       return c.json({ data: { items }, error: null });
     },
   );

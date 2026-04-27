@@ -53,13 +53,18 @@ function Stat({
 
 interface AnalyticsCardProps {
   idOrName: string | undefined;
+  /** When set, narrows the summary to a single skill version. */
+  version?: string;
   className?: string;
 }
 
-export function AnalyticsCard({ idOrName, className }: AnalyticsCardProps) {
+export function AnalyticsCard({ idOrName, version, className }: AnalyticsCardProps) {
   const { t } = useTranslation();
   const [windowChoice, setWindowChoice] = useState<AnalyticsWindow>("30d");
-  const { data, isLoading, isError } = useSkillAnalytics(idOrName, windowChoice);
+  const { data, isLoading, isError } = useSkillAnalytics(idOrName, {
+    window: windowChoice,
+    version,
+  });
 
   if (!idOrName) return null;
 

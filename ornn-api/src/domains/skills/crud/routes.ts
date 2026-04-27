@@ -14,6 +14,7 @@ import type { SkillRepository } from "./repository";
 import type { ActivityRepository } from "../../admin/activityRepository";
 import type { ShareService } from "../../shares/service";
 import type { ShareRequest } from "../../shares/types";
+import type { AnalyticsService } from "../../analytics/service";
 import {
   type AuthVariables,
   nyxidAuthMiddleware,
@@ -57,12 +58,18 @@ export interface SkillRoutesConfig {
    * platform threshold.
    */
   shareService: ShareService;
+  /**
+   * Optional. When provided, GET routes fire-and-forget pull events into
+   * `skill_pulls` so the usage chart on `SkillDetailPage` has data.
+   * Errors are swallowed in the service layer, never surfaced to clients.
+   */
+  analyticsService?: AnalyticsService;
   maxFileSize: number;
   activityRepo?: ActivityRepository;
 }
 
 export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: AuthVariables }> {
-  const { skillService, skillRepo, shareService, maxFileSize, activityRepo } = config;
+  const { skillService, skillRepo, shareService, analyticsService, maxFileSize, activityRepo } = config;
   const app = new Hono<{ Variables: AuthVariables }>();
 
   const auth = nyxidAuthMiddleware();
@@ -249,6 +256,25 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
       const idOrName = c.req.param("idOrName");
       logger.info({ idOrName }, "Skill jsonize request");
       const result = await skillService.getSkillJson(idOrName);
+      // Programmatic pull — closest signal to the north-star metric.
+      // Fire-and-forget; the analytics service swallows its own errors.
+      const authCtx = c.get("auth");
+      if (analyticsService && authCtx) {
+        void skillService
+          .getSkill(idOrName)
+          .then((skill) =>
+            analyticsService.recordPull({
+              skillGuid: skill.guid,
+              skillName: skill.name,
+              skillVersion: skill.version,
+              userId: authCtx.userId,
+              source: "api",
+            }),
+          )
+          .catch(() => {
+            /* analytics failures must not surface to the caller */
+          });
+      }
       return c.json({ data: result, error: null });
     },
   );
@@ -368,6 +394,20 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
         if (skill.deprecationNote) {
           c.header("X-Skill-Deprecation-Note", encodeURIComponent(skill.deprecationNote));
         }
+      }
+
+      // Web-side pull. The detail endpoint is what the SkillDetailPage
+      // hits to mint the presigned URL the browser then downloads from
+      // — recording the GET here is a reasonable proxy for "user pulled
+      // via the web UI". Fire-and-forget.
+      if (analyticsService && authCtx) {
+        void analyticsService.recordPull({
+          skillGuid: skill.guid,
+          skillName: skill.name,
+          skillVersion: skill.version,
+          userId: authCtx.userId,
+          source: "web",
+        });
       }
 
       return c.json({ data: skill, error: null });

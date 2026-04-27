@@ -7,7 +7,7 @@
  */
 
 import { useState } from "react";
-import { useParams, Link, useNavigate } from "react-router-dom";
+import { useParams, Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { PageTransition } from "@/components/layout/PageTransition";
 import { Card } from "@/components/ui/Card";
@@ -261,8 +261,13 @@ export function SkillAuditHistoryPage() {
   const user = useAuthStore((s) => s.user);
   const isAdminUser = isAdmin(user);
 
+  const [searchParams] = useSearchParams();
+  const versionFilter = searchParams.get("version") ?? undefined;
+
   const { data: skill } = useSkill(idOrName ?? "");
-  const { data: items, isLoading, isError } = useSkillAuditHistory(idOrName);
+  const { data: items, isLoading, isError } = useSkillAuditHistory(idOrName, {
+    version: versionFilter,
+  });
   const startAuditMutation = useStartAudit();
 
   if (!idOrName) return null;
@@ -288,7 +293,11 @@ export function SkillAuditHistoryPage() {
               {displayName}
             </h1>
             <p className="mt-1 font-heading text-xs uppercase tracking-wider text-text-muted">
-              {t("audit.historyHeading", "Audit history")}
+              {versionFilter
+                ? t("audit.historyHeadingForVersion", "Audit history · v{{v}}", {
+                    v: versionFilter,
+                  })
+                : t("audit.historyHeading", "Audit history")}
             </p>
           </div>
           {isAdminUser && (
