@@ -730,5 +730,58 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
     },
   );
 
+  /**
+   * DELETE /skills/:idOrName/versions/:version — Delete one non-latest
+   * version of a skill. The skill itself + every other version are
+   * preserved. Cannot remove the only remaining version (use
+   * DELETE /skills/:id) or the current latest (publish a newer one first).
+   * Requires: ornn:skill:delete + owner or admin.
+   */
+  app.delete(
+    "/skills/:idOrName/versions/:version",
+    auth,
+    requirePermission("ornn:skill:delete"),
+    async (c) => {
+      const idOrName = c.req.param("idOrName");
+      const version = c.req.param("version");
+      const authCtx = getAuth(c);
+
+      let skill = await skillRepo.findByGuid(idOrName);
+      if (!skill) skill = await skillRepo.findByName(idOrName);
+      if (!skill) {
+        throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${idOrName}' not found`);
+      }
+      const memberships = await readUserOrgMemberships(c);
+      const actor = {
+        userId: authCtx.userId,
+        memberships,
+        isPlatformAdmin: authCtx.permissions.includes("ornn:admin:skill"),
+      };
+      if (!canManageSkill(skill, actor)) {
+        throw AppError.forbidden(
+          "FORBIDDEN",
+          "You do not have permission to delete this skill version",
+        );
+      }
+      logger.info(
+        { skillGuid: skill.guid, version, userId: authCtx.userId },
+        "Skill version delete via API",
+      );
+      await skillService.deleteVersion(skill.guid, version);
+
+      activityRepo
+        ?.log(authCtx.userId, authCtx.email, authCtx.displayName, "skill:version_delete", {
+          skillId: skill.guid,
+          skillName: skill.name,
+          version,
+        })
+        .catch((err) =>
+          logger.warn({ err }, "Failed to log skill:version_delete activity"),
+        );
+
+      return c.json({ data: { success: true }, error: null });
+    },
+  );
+
   return app;
 }

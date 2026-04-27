@@ -24,7 +24,7 @@ export interface SkillVersionListProps {
   currentVersion: string;
   /** Fire when the user clicks a version row to switch to it. */
   onSelect: (version: string) => void;
-  /** Show owner-only controls (deprecation toggle). */
+  /** Show owner-only controls (deprecation toggle, delete). */
   canManage: boolean;
   /** Fire when the deprecation flag changes; receives the target version. */
   onToggleDeprecation?: (args: {
@@ -34,6 +34,10 @@ export interface SkillVersionListProps {
   }) => Promise<void> | void;
   /** Whether a deprecation mutation is currently in flight (for loading state). */
   isMutating?: boolean;
+  /** Fire when the user confirms a non-latest version delete. */
+  onDeleteVersion?: (version: string) => Promise<void> | void;
+  /** Whether a delete mutation is currently in flight (for loading state). */
+  isDeleting?: boolean;
   className?: string;
 }
 
@@ -50,11 +54,14 @@ export function SkillVersionList({
   canManage,
   onToggleDeprecation,
   isMutating = false,
+  onDeleteVersion,
+  isDeleting = false,
   className = "",
 }: SkillVersionListProps) {
   const { t } = useTranslation();
   const [modalTarget, setModalTarget] = useState<SkillVersionEntry | null>(null);
   const [noteDraft, setNoteDraft] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState<SkillVersionEntry | null>(null);
   const latestVersion = versions[0]?.version;
 
   const openDeprecationModal = (entry: SkillVersionEntry) => {
@@ -74,6 +81,12 @@ export function SkillVersionList({
       deprecationNote: modalTarget.isDeprecated ? undefined : noteDraft.trim() || undefined,
     });
     closeModal();
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget || !onDeleteVersion) return;
+    await onDeleteVersion(deleteTarget.version);
+    setDeleteTarget(null);
   };
 
   if (versions.length === 0) {
@@ -147,6 +160,26 @@ export function SkillVersionList({
                       : t("skillDetail.markDeprecated")}
                   </button>
                 )}
+                {canManage &&
+                  onDeleteVersion &&
+                  !isLatest &&
+                  versions.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => setDeleteTarget(v)}
+                      disabled={isDeleting}
+                      title={t("skillDetail.deleteVersion", "Delete this version")}
+                      className="
+                        shrink-0 rounded border border-transparent px-2 py-1
+                        font-body text-xs text-text-muted
+                        hover:text-neon-red hover:border-neon-red/40
+                        disabled:opacity-50 disabled:cursor-not-allowed
+                        transition-colors cursor-pointer
+                      "
+                    >
+                      {t("common.delete")}
+                    </button>
+                  )}
               </div>
             </li>
           );
@@ -193,6 +226,42 @@ export function SkillVersionList({
             {modalTarget?.isDeprecated
               ? t("skillDetail.unmarkDeprecated")
               : t("skillDetail.markDeprecated")}
+          </Button>
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={deleteTarget !== null}
+        onClose={() => setDeleteTarget(null)}
+        title={
+          t("skillDetail.deleteVersionTitle", {
+            defaultValue: "Delete v{{version}}?",
+            version: deleteTarget?.version ?? "",
+          }) as string
+        }
+      >
+        <p className="font-body text-sm text-text-muted">
+          {t("skillDetail.deleteVersionConfirm", {
+            defaultValue:
+              "Are you sure you want to delete v{{version}}? The version's package zip and audit history are removed and this cannot be undone.",
+            version: deleteTarget?.version ?? "",
+          })}
+        </p>
+        <div className="mt-6 flex justify-end gap-3">
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => setDeleteTarget(null)}
+          >
+            {t("common.cancel")}
+          </Button>
+          <Button
+            variant="danger"
+            size="sm"
+            loading={isDeleting}
+            onClick={confirmDelete}
+          >
+            {t("common.delete")}
           </Button>
         </div>
       </Modal>

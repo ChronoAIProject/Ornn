@@ -135,7 +135,12 @@
     "deprecationNoteLabel": "说明（可选）",
     "deprecationNotePlaceholder": "原因、迁移路径或替代版本…",
     "deprecationUpdated": "废弃状态已更新",
-    "deprecationFailed": "更新废弃状态失败"
+    "deprecationFailed": "更新废弃状态失败",
+    "deleteVersion": "删除此版本",
+    "deleteVersionTitle": "删除 v{{version}}？",
+    "deleteVersionConfirm": "确定要删除 v{{version}} 吗？该版本的安装包和审计历史会一并移除，此操作不可撤销。",
+    "versionDeleted": "版本 v{{version}} 已删除",
+    "versionDeleteFailed": "删除版本失败"
   },
   "editSkill": {
     "backToSkill": "返回 {{name}}",

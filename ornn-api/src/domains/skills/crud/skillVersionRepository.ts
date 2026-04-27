@@ -115,6 +115,18 @@ export class SkillVersionRepository {
     return result.deletedCount ?? 0;
   }
 
+  /** Delete one version row. Returns true when the row existed. */
+  async deleteOne(skillGuid: string, version: string): Promise<boolean> {
+    const result = await this.collection.deleteOne({
+      _id: `${skillGuid}@${version}` as never,
+    });
+    const deleted = (result.deletedCount ?? 0) > 0;
+    if (deleted) {
+      logger.info({ skillGuid, version }, "Skill version deleted");
+    }
+    return deleted;
+  }
+
   /**
    * Toggle the deprecation flag on a single version. When `isDeprecated` is
    * false the `deprecationNote` is cleared (empty note is never sticky).

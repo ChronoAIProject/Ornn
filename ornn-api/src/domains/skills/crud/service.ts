@@ -573,6 +573,63 @@ export class SkillService {
     return new Uint8Array(await res.arrayBuffer());
   }
 
+  /**
+   * Delete a single non-latest version. Constraints:
+   *   - The version must exist.
+   *   - Cannot delete the **only** version on the skill — the caller should
+   *     use `DELETE /skills/:id` for that.
+   *   - Cannot delete the **current latest** version — moving the latest
+   *     pointer is a write that touches the skill doc and isn't worth the
+   *     complexity for a UI prune; ask the owner to publish a new latest
+   *     first if they really need to remove what's currently latest.
+   * Storage is best-effort cleaned up; failures are logged but do not roll
+   * back the version row deletion.
+   */
+  async deleteVersion(idOrName: string, version: string): Promise<void> {
+    let skill = await this.skillRepo.findByGuid(idOrName);
+    if (!skill) skill = await this.skillRepo.findByName(idOrName);
+    if (!skill) {
+      throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${idOrName}' not found`);
+    }
+    const versionDoc = await this.skillVersionRepo.findBySkillAndVersion(skill.guid, version);
+    if (!versionDoc) {
+      throw AppError.notFound(
+        "SKILL_VERSION_NOT_FOUND",
+        `Version '${version}' not found for skill '${skill.name}'`,
+      );
+    }
+    const allVersions = await this.skillVersionRepo.listBySkill(skill.guid);
+    if (allVersions.length <= 1) {
+      throw AppError.conflict(
+        "SKILL_VERSION_LAST",
+        `Cannot delete the only remaining version of '${skill.name}'. Delete the whole skill instead.`,
+      );
+    }
+    // `listBySkill` returns versions sorted latest-first, so index 0 is the
+    // current latest pointer. Forbid deleting it; owner must publish a
+    // newer version first.
+    const latest = allVersions[0]!;
+    if (latest.version === version) {
+      throw AppError.conflict(
+        "SKILL_VERSION_LATEST",
+        `Cannot delete v${version}: it is the current latest. Publish a newer version first, then delete v${version}.`,
+      );
+    }
+
+    if (versionDoc.storageKey) {
+      try {
+        await this.storageClient.delete(this.storageBucket, versionDoc.storageKey);
+      } catch (err) {
+        logger.warn(
+          { skillGuid: skill.guid, version, storageKey: versionDoc.storageKey, err },
+          "Best-effort version-storage cleanup failed",
+        );
+      }
+    }
+    await this.skillVersionRepo.deleteOne(skill.guid, version);
+    logger.info({ skillGuid: skill.guid, version }, "Skill version deleted");
+  }
+
   async deleteSkill(guid: string): Promise<void> {
     const existing = await this.skillRepo.findByGuid(guid);
     if (!existing) {
