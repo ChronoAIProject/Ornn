@@ -148,6 +148,20 @@ export async function deleteSkill(id: string): Promise<void> {
   await apiDelete(`/api/v1/skills/${id}`);
 }
 
+/**
+ * Hard-delete one non-latest version of a skill. Backend forbids deleting
+ * the only version (use `deleteSkill`) or the current latest (publish a
+ * newer version first).
+ */
+export async function deleteSkillVersion(
+  idOrName: string,
+  version: string,
+): Promise<void> {
+  await apiDelete(
+    `/api/v1/skills/${encodeURIComponent(idOrName)}/versions/${encodeURIComponent(version)}`,
+  );
+}
+
 export interface PullFromGitHubInput {
   /** `owner/name`. */
   repo: string;

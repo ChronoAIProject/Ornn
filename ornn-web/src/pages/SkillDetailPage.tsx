@@ -21,6 +21,7 @@ import { PermissionsModal } from "@/components/skill/PermissionsModal";
 import {
   useSkill,
   useDeleteSkill,
+  useDeleteSkillVersion,
   useUpdateSkillPackage,
   useSkillVersions,
   useSetVersionDeprecation,
@@ -63,6 +64,7 @@ export function SkillDetailPage() {
   const deleteMutation = useDeleteSkill();
   const updatePackageMutation = useUpdateSkillPackage(skill?.guid ?? "");
   const deprecationMutation = useSetVersionDeprecation(idOrName ?? "");
+  const deleteVersionMutation = useDeleteSkillVersion(idOrName ?? "");
   const refreshMutation = useRefreshSkillFromSource(idOrName ?? "");
   const startAuditMutation = useStartAudit();
 
@@ -590,6 +592,36 @@ export function SkillDetailPage() {
               canManage={canManageVersions}
               onToggleDeprecation={handleToggleDeprecation}
               isMutating={deprecationMutation.isPending}
+              isDeleting={deleteVersionMutation.isPending}
+              onDeleteVersion={async (version) => {
+                try {
+                  await deleteVersionMutation.mutateAsync(version);
+                  // If the user was viewing the now-deleted version, snap
+                  // back to latest so the page doesn't 404.
+                  if (skill.version === version) {
+                    handleVersionChange(null);
+                  }
+                  addToast({
+                    type: "success",
+                    message: t(
+                      "skillDetail.versionDeleted",
+                      "Version v{{version}} deleted",
+                      { version },
+                    ),
+                  });
+                } catch (err) {
+                  addToast({
+                    type: "error",
+                    message:
+                      err instanceof Error
+                        ? err.message
+                        : t(
+                            "skillDetail.versionDeleteFailed",
+                            "Failed to delete version",
+                          ),
+                  });
+                }
+              }}
             />
           )}
 

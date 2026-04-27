@@ -7,6 +7,7 @@ import {
   updateSkill,
   updateSkillPackage,
   deleteSkill,
+  deleteSkillVersion,
   setSkillVersionDeprecation,
   pullSkillFromGitHub,
   refreshSkillFromSource,
@@ -261,6 +262,28 @@ export function useDeleteSkill() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [SKILLS_KEY] });
       queryClient.invalidateQueries({ queryKey: [MY_SKILLS_KEY] });
+    },
+  });
+}
+
+/**
+ * Delete one non-latest version of a skill. Refreshes the skill itself,
+ * its versions list, and the audit history (which is keyed per version).
+ */
+export function useDeleteSkillVersion(idOrName: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (version: string) => deleteSkillVersion(idOrName, version),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [SKILLS_KEY, idOrName] });
+      queryClient.invalidateQueries({ queryKey: [SKILLS_KEY] });
+      queryClient.invalidateQueries({ queryKey: [MY_SKILLS_KEY] });
+      queryClient.invalidateQueries({
+        predicate: (q) =>
+          Array.isArray(q.queryKey) &&
+          q.queryKey[0] === "audit" &&
+          q.queryKey[1] === idOrName,
+      });
     },
   });
 }

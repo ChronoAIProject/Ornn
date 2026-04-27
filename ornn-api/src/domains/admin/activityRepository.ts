@@ -15,6 +15,7 @@ export type ActivityAction =
   | "skill:create"
   | "skill:update"
   | "skill:delete"
+  | "skill:version_delete"
   | "skill:visibility_change"
   | "skill:permissions_change"
   | "skill:refresh";
