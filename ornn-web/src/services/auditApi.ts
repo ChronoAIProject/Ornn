@@ -38,21 +38,37 @@ export async function fetchAudit(
   }
 }
 
-export interface RerunAuditInput {
+/**
+ * List every stored audit record for a skill (one row per audited version,
+ * newest first). Returns empty array for skills that have never been audited.
+ */
+export async function fetchAuditHistory(
+  idOrName: string,
+): Promise<AuditRecord[]> {
+  const res = await apiGet<{ items: AuditRecord[] }>(
+    `/api/v1/skills/${encodeURIComponent(idOrName)}/audit/history`,
+  );
+  return res.data?.items ?? [];
+}
+
+export interface StartAuditInput {
   idOrName: string;
-  /** Force cache bypass (default true — if someone clicks rerun they want a fresh run). */
+  /** Bypass the 30-day audit cache. Default false — most callers want the cache. */
   force?: boolean;
 }
 
-/** Admin-only: force a fresh audit run. Returns the new record. */
-export async function rerunAudit({
+/**
+ * Owner- or admin-triggerable audit run. Backend honours the cache unless
+ * `force=true`. Returns the resulting audit record.
+ */
+export async function startAudit({
   idOrName,
-  force = true,
-}: RerunAuditInput): Promise<AuditRecord> {
+  force = false,
+}: StartAuditInput): Promise<AuditRecord> {
   const res = await apiPost<AuditRecord>(
-    `/api/v1/admin/skills/${encodeURIComponent(idOrName)}/audit`,
+    `/api/v1/skills/${encodeURIComponent(idOrName)}/audit`,
     { force },
   );
-  if (!res.data) throw new Error("Audit rerun returned no data");
+  if (!res.data) throw new Error("Audit returned no data");
   return res.data;
 }

@@ -15,6 +15,14 @@ spec:
       labels:
         app: ornn-api
     spec:
+      # Audit path downloads skill zips via presigned URLs signed by
+      # chrono-storage. Those URLs use `minio.ornn-cluster.local` (the
+      # browser-facing hostname) so signatures match whoever GETs them.
+      # Resolve that hostname in-cluster so ornn-api can also fetch.
+      hostAliases:
+        - ip: ${MINIO_HOST_ALIAS_IP}
+          hostnames:
+            - minio.ornn-cluster.local
       containers:
         - name: ornn-api
           image: ${ORNN_API_IMAGE}

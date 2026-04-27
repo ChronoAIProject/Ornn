@@ -5,11 +5,19 @@
  */
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { fetchAudit, rerunAudit, type FetchAuditOptions } from "@/services/auditApi";
+import {
+  fetchAudit,
+  fetchAuditHistory,
+  startAudit,
+  type FetchAuditOptions,
+} from "@/services/auditApi";
 import type { AuditRecord } from "@/types/audit";
 
 const auditKey = (idOrName: string, version?: string) =>
   ["audit", idOrName, version ?? "__latest__"] as const;
+
+const auditHistoryKey = (idOrName: string) =>
+  ["audit", idOrName, "__history__"] as const;
 
 export function useSkillAudit(idOrName: string | undefined, opts: FetchAuditOptions = {}) {
   return useQuery<AuditRecord | null>({
@@ -20,17 +28,34 @@ export function useSkillAudit(idOrName: string | undefined, opts: FetchAuditOpti
   });
 }
 
-export function useRerunAudit() {
+export function useSkillAuditHistory(idOrName: string | undefined) {
+  return useQuery<AuditRecord[]>({
+    queryKey: auditHistoryKey(idOrName ?? ""),
+    queryFn: () => fetchAuditHistory(idOrName!),
+    enabled: Boolean(idOrName),
+    staleTime: 60_000,
+    // Poll while any audit is still running so the UI flips to completed
+    // without the user reloading. Once all rows are terminal, polling
+    // stops and we fall back to the 60s staleTime.
+    refetchInterval: (query) => {
+      const items = query.state.data;
+      if (items && items.some((r) => r.status === "running")) return 3000;
+      return false;
+    },
+  });
+}
+
+export function useStartAudit() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (vars: { idOrName: string; version?: string; force?: boolean }) =>
-      rerunAudit({ idOrName: vars.idOrName, force: vars.force }),
+      startAudit({ idOrName: vars.idOrName, force: vars.force }),
     onSuccess: (record, vars) => {
-      // The server returns the fresh record synchronously — prime the
-      // cache so the banner updates immediately instead of waiting for
+      // Server returns the fresh record synchronously — prime the cache
+      // so the history card updates immediately instead of waiting for
       // the next refetch.
       queryClient.setQueryData(auditKey(vars.idOrName, vars.version), record);
-      // Invalidate any related keys (notifications may reference audit events).
+      queryClient.invalidateQueries({ queryKey: auditHistoryKey(vars.idOrName) });
       queryClient.invalidateQueries({ queryKey: ["notifications"] });
     },
   });

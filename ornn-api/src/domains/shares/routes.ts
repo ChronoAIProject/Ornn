@@ -88,8 +88,14 @@ export function createShareRoutes(config: ShareRoutesConfig): Hono<{ Variables: 
     async (c) => {
       const requestId = c.req.param("requestId");
       const authCtx = getAuth(c);
+      const reviewerOrgIds = await readUserOrgIds(c);
       const isPlatformAdmin = authCtx.permissions.includes("ornn:admin:skill");
-      const request = await shareService.get(requestId, authCtx.userId, isPlatformAdmin);
+      const request = await shareService.get(
+        requestId,
+        authCtx.userId,
+        reviewerOrgIds,
+        isPlatformAdmin,
+      );
       return c.json({ data: request, error: null });
     },
   );

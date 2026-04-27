@@ -10,13 +10,14 @@ import { Badge } from "@/components/ui/Badge";
 import { SkillPackagePreview } from "@/components/skill/SkillPackagePreview";
 import { VersionPicker } from "@/components/skill/VersionPicker";
 import { DeprecationBanner } from "@/components/skill/DeprecationBanner";
-import { AuditBanner } from "@/components/skill/AuditBanner";
 import { GitHubOriginChip } from "@/components/skill/GitHubOriginChip";
 import { AnalyticsCard } from "@/components/skill/AnalyticsCard";
+import { AuditHistoryCard } from "@/components/skill/AuditHistoryCard";
+import { BackLink } from "@/components/layout/BackLink";
 import { useRefreshSkillFromSource } from "@/hooks/useSkills";
+import { useStartAudit } from "@/hooks/useAudit";
 import { SkillVersionList } from "@/components/skill/SkillVersionList";
 import { PermissionsModal } from "@/components/skill/PermissionsModal";
-import { InFlightShareRequests } from "@/components/skill/InFlightShareRequests";
 import {
   useSkill,
   useDeleteSkill,
@@ -63,6 +64,7 @@ export function SkillDetailPage() {
   const updatePackageMutation = useUpdateSkillPackage(skill?.guid ?? "");
   const deprecationMutation = useSetVersionDeprecation(idOrName ?? "");
   const refreshMutation = useRefreshSkillFromSource(idOrName ?? "");
+  const startAuditMutation = useStartAudit();
 
   const {
     files: packageFiles,
@@ -117,6 +119,7 @@ export function SkillDetailPage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showPermissionsModal, setShowPermissionsModal] = useState(false);
   const [showSaveConfirm, setShowSaveConfirm] = useState(false);
+  const [showAuditStartedModal, setShowAuditStartedModal] = useState(false);
   const [editedContents, setEditedContents] = useState<Map<string, string>>(new Map());
   const [addedPaths, setAddedPaths] = useState<FileTreeEntry[]>([]);
   const [deletedPaths, setDeletedPaths] = useState<Set<string>>(new Set());
@@ -318,6 +321,9 @@ export function SkillDetailPage() {
   return (
     <PageTransition>
       <div className="flex flex-col h-full py-2">
+      <nav className="mb-2 shrink-0">
+        <BackLink label={t("common.back", "Back")} />
+      </nav>
       {skill.isDeprecated && (
         <DeprecationBanner
           className="mb-3 shrink-0"
@@ -328,12 +334,6 @@ export function SkillDetailPage() {
           onViewLatest={() => handleVersionChange(null)}
         />
       )}
-      <AuditBanner
-        className="mb-3 shrink-0"
-        idOrName={skill.name || skill.guid}
-        version={skill.version}
-        isAdmin={isAdminUser}
-      />
       {skill.source && (
         <GitHubOriginChip
           className="mb-3 shrink-0"
@@ -344,7 +344,7 @@ export function SkillDetailPage() {
         />
       )}
 
-      <div className="flex-1 min-h-0 grid gap-4 lg:grid-cols-[1fr_300px]">
+      <div className="flex-1 min-h-0 grid gap-4 lg:grid-cols-[minmax(0,1fr)_380px] xl:grid-cols-[minmax(0,1fr)_440px]">
         {/* Main content — Package Contents (fills available height) */}
         <Card className="flex flex-col min-h-0 overflow-hidden">
           <div className="mb-3 flex items-center justify-between gap-3 shrink-0">
@@ -529,6 +529,44 @@ export function SkillDetailPage() {
                       {t("skillDetail.managePermissions", "Manage permissions")}
                     </Button>
                   )}
+                  {(isOwner || isAdminUser) && (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      className="w-full"
+                      onClick={() => {
+                        setShowAuditStartedModal(true);
+                        startAuditMutation.mutate(
+                          { idOrName: skill.name || skill.guid, force: true },
+                          {
+                            onSuccess: (record) => {
+                              addToast({
+                                type: "success",
+                                message: t(
+                                  "skillDetail.auditDone",
+                                  "Audit complete — verdict {{v}}, score {{s}}/10",
+                                  {
+                                    v: record.verdict,
+                                    s: record.overallScore.toFixed(1),
+                                  },
+                                ),
+                              });
+                            },
+                            onError: (err) => {
+                              addToast({
+                                type: "error",
+                                message:
+                                  err instanceof Error ? err.message : String(err),
+                              });
+                            },
+                          },
+                        );
+                      }}
+                      disabled={startAuditMutation.isPending}
+                    >
+                      {t("skillDetail.startAuditing", "Start Auditing")}
+                    </Button>
+                  )}
                   {isOwner && (
                     <Button
                       variant="danger"
@@ -557,7 +595,7 @@ export function SkillDetailPage() {
 
           <AnalyticsCard idOrName={skill.name || skill.guid} />
 
-          {isOwner && <InFlightShareRequests skillGuid={skill.guid} />}
+          <AuditHistoryCard idOrName={skill.name || skill.guid} />
         </div>
       </div>
 
@@ -629,6 +667,27 @@ export function SkillDetailPage() {
           skill={skill}
         />
       )}
+
+      {/* Start Auditing — fire-and-forget popup. The mutation runs in the
+          background; user closes the popup and finds the new row in
+          Audit history when it lands. */}
+      <Modal
+        isOpen={showAuditStartedModal}
+        onClose={() => setShowAuditStartedModal(false)}
+        title={t("skillDetail.auditStartedTitle", "Audit started") as string}
+      >
+        <p className="font-body text-sm text-text-muted">
+          {t(
+            "skillDetail.auditStartedBody",
+            "We're running the audit in the background. It takes around 20–30 seconds — when it's done, a new entry will appear in the Audit history card below. You can close this dialog and keep working.",
+          )}
+        </p>
+        <div className="mt-6 flex justify-end">
+          <Button size="sm" onClick={() => setShowAuditStartedModal(false)}>
+            {t("common.gotIt", "Got it")}
+          </Button>
+        </div>
+      </Modal>
 
       </div>
     </PageTransition>

@@ -8,6 +8,7 @@ import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { motion } from "framer-motion";
 import { PageTransition } from "@/components/layout/PageTransition";
+import { BackLink } from "@/components/layout/BackLink";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 
@@ -143,6 +144,9 @@ export function UploadSkillPage() {
   return (
     <PageTransition>
       <div className="flex flex-col h-full py-2">
+      <nav className="mb-2 max-w-5xl w-full mx-auto">
+        <BackLink label={t("common.back", "Back")} />
+      </nav>
       <div className="max-w-5xl mx-auto flex-1 flex flex-col justify-center">
         <p className="font-body text-base text-text-muted text-center mb-6">
           {t("upload.chooseMode")}

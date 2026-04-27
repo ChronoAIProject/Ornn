@@ -36,6 +36,7 @@ import { Button } from "@/components/ui/Button";
 import { useMyOrgs } from "@/hooks/useMe";
 import { useUpdateSkillPermissions } from "@/hooks/useSkills";
 import { useToastStore } from "@/stores/toastStore";
+import { ApiClientError } from "@/services/apiClient";
 import {
   searchUsersByEmail,
   resolveUsers,
@@ -273,8 +274,18 @@ export function PermissionsModal({ isOpen, onClose, skill }: PermissionsModalPro
       );
       setPhase("results");
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      addToast({ type: "error", message });
+      if (err instanceof ApiClientError && err.code === "AUDIT_REQUIRED") {
+        addToast({
+          type: "error",
+          message: t(
+            "permissions.auditRequiredToast",
+            "This skill has not been audited yet. Close this modal and click Start Auditing before sharing.",
+          ),
+        });
+      } else {
+        const message = err instanceof Error ? err.message : String(err);
+        addToast({ type: "error", message });
+      }
       setPhase("form");
     }
   };
