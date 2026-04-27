@@ -17,11 +17,7 @@ import { PageTransition } from "@/components/layout/PageTransition";
 
 const CATEGORY_LABEL: Record<NotificationCategory, string> = {
   "audit.completed": "Audit",
-  "share.needs_justification": "Share",
-  "share.review_requested": "Share",
-  "share.accepted": "Share",
-  "share.rejected": "Share",
-  "share.cancelled": "Share",
+  "audit.risky_for_consumer": "Audit",
 };
 
 function formatTimestamp(iso: string): string {

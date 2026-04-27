@@ -85,15 +85,6 @@ const ServiceDetailPage = lazy(() =>
 const NotificationsPage = lazy(() =>
   import("@/pages/NotificationsPage").then((m) => ({ default: m.NotificationsPage })),
 );
-const ShareRequestPage = lazy(() =>
-  import("@/pages/ShareRequestPage").then((m) => ({ default: m.ShareRequestPage })),
-);
-const ReviewsPage = lazy(() =>
-  import("@/pages/ReviewsPage").then((m) => ({ default: m.ReviewsPage })),
-);
-const MySharesPage = lazy(() =>
-  import("@/pages/MySharesPage").then((m) => ({ default: m.MySharesPage })),
-);
 
 // Admin pages — bundled into one chunk by virtue of sharing the barrel
 // import path; only loaded when an /admin route activates.
@@ -114,9 +105,6 @@ const AdminCategoriesPage = lazy(() =>
 );
 const AdminTagsPage = lazy(() =>
   import("@/pages/admin").then((m) => ({ default: m.TagsPage })),
-);
-const AdminReviewHistoryPage = lazy(() =>
-  import("@/pages/admin").then((m) => ({ default: m.ReviewHistoryPage })),
 );
 const AdminPlatformSettingsPage = lazy(() =>
   import("@/pages/admin").then((m) => ({ default: m.PlatformSettingsPage })),
@@ -172,9 +160,6 @@ const router = createBrowserRouter(
           <Route path="/my-skills" element={<MySkillsPage />} />
           <Route path="/services/:id" element={<ServiceDetailPage />} />
           <Route path="/notifications" element={<NotificationsPage />} />
-          <Route path="/shares/:requestId" element={<ShareRequestPage />} />
-          <Route path="/reviews" element={<ReviewsPage />} />
-          <Route path="/my-shares" element={<MySharesPage />} />
         </Route>
 
         {/* Admin routes - separate layout */}
@@ -187,7 +172,6 @@ const router = createBrowserRouter(
             <Route path="/admin/skills" element={<AdminSkillsPage />} />
             <Route path="/admin/categories" element={<AdminCategoriesPage />} />
             <Route path="/admin/tags" element={<AdminTagsPage />} />
-            <Route path="/admin/review-history" element={<AdminReviewHistoryPage />} />
             <Route path="/admin/settings" element={<AdminPlatformSettingsPage />} />
           </Route>
         </Route>

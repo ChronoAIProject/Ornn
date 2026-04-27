@@ -6,9 +6,11 @@
  * - POST /api/v1/skills/:idOrName/audit                — owner or admin trigger (Start Auditing)
  * - POST /api/v1/admin/skills/:idOrName/audit          — force fresh audit as platform admin
  *
- * Sharing never runs an audit implicitly — `PUT /skills/:id/permissions`
- * reads the existing audit record and throws `AUDIT_REQUIRED` when none
- * exists, forcing owners to call one of the POST endpoints first.
+ * Audit is decoupled from sharing — `PUT /skills/:id/permissions` never
+ * triggers, requires, or blocks on an audit. Owners (or admins) call
+ * one of the POST endpoints to produce a fresh verdict; the result is
+ * delivered as a passive risk label on the skill plus a notification
+ * fan-out (owner always; consumers only on yellow/red).
  *
  * @module domains/skills/audit/routes
  */

@@ -12,8 +12,6 @@ import { z } from "zod";
 import type { SkillService } from "./service";
 import type { SkillRepository } from "./repository";
 import type { ActivityRepository } from "../../admin/activityRepository";
-import type { ShareService } from "../../shares/service";
-import type { ShareRequest } from "../../shares/types";
 import type { AnalyticsService } from "../../analytics/service";
 import {
   type AuthVariables,
@@ -51,14 +49,6 @@ export interface SkillRoutesConfig {
   skillService: SkillService;
   skillRepo: SkillRepository;
   /**
-   * Owns the audit-gated share lifecycle. Invoked from the permissions
-   * handler when the owner adds a new grant — `initiateShare` runs the
-   * audit, decides green/needs-justification, and either applies the
-   * grant or creates a waiver request depending on the configurable
-   * platform threshold.
-   */
-  shareService: ShareService;
-  /**
    * Optional. When provided, GET routes fire-and-forget pull events into
    * `skill_pulls` so the usage chart on `SkillDetailPage` has data.
    * Errors are swallowed in the service layer, never surfaced to clients.
@@ -69,7 +59,7 @@ export interface SkillRoutesConfig {
 }
 
 export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: AuthVariables }> {
-  const { skillService, skillRepo, shareService, analyticsService, maxFileSize, activityRepo } = config;
+  const { skillService, skillRepo, analyticsService, maxFileSize, activityRepo } = config;
   const app = new Hono<{ Variables: AuthVariables }>();
 
   const auth = nyxidAuthMiddleware();
@@ -558,31 +548,16 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
   );
 
   /**
-   * PUT /skills/:id/permissions — audit-gated visibility change.
+   * PUT /skills/:id/permissions — apply a new ACL state directly.
    *
    * Body: `{ isPrivate, sharedWithUsers, sharedWithOrgs }`.
    * Requires: ornn:skill:update + author (or platform admin).
    *
-   * The handler diffs the posted state against the current ACL and splits
-   * the save into two halves:
-   *
-   * 1. Removals (user / org grants taken away, flip-to-private) → applied
-   *    immediately via `setSkillPermissions`. No audit; access is being
-   *    revoked.
-   * 2. Additions (new user grant, new org grant, flip-to-public) → each
-   *    target goes through `shareService.initiateShare`, which runs a
-   *    cached audit (30-day TTL) and either:
-   *      - `overallScore >= platformSettings.auditWaiverThreshold` →
-   *        status `green`; ACL entry applied synchronously.
-   *      - `overallScore <  threshold` → status `needs-justification`;
-   *        waiver request created for the owner to justify + a reviewer
-   *        to decide.
-   *
-   * Response: `{ skill, waivers }` — skill reflects any immediately-applied
-   * changes; `waivers` carries the per-target `ShareRequest` for anything
-   * that needs follow-up. A flip-to-public with any added user / org is
-   * de-duped: public supersedes per-target grants, so only one waiver is
-   * created for the public target.
+   * Sharing is unconditional: there is no audit gate, no waiver flow.
+   * The audit signal travels separately as a per-version label
+   * (`GET /audit/summary-by-version`) and the audit pipeline notifies
+   * the owner + everyone the skill has been shared with whenever a
+   * `risky` audit completes (see `audit/service.ts:finalizeAudit`).
    */
   app.put(
     "/skills/:id/permissions",
@@ -612,61 +587,11 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
 
       const body = getValidatedBody<z.infer<typeof permissionsPatchSchema>>(c);
 
-      const beforePrivate = existing.isPrivate;
-      const beforeUsers = new Set(existing.sharedWithUsers);
-      const beforeOrgs = new Set(existing.sharedWithOrgs);
-      const afterPrivate = body.isPrivate;
-      const afterUsers = new Set(body.sharedWithUsers);
-      const afterOrgs = new Set(body.sharedWithOrgs);
-
-      const goingPublic = beforePrivate && !afterPrivate;
-      const goingPrivate = !beforePrivate && afterPrivate;
-
-      // Public supersedes per-target grants — skip per-user / per-org
-      // waivers when flipping public on in the same save.
-      const addedUsers = goingPublic
-        ? []
-        : body.sharedWithUsers.filter((id) => !beforeUsers.has(id));
-      const addedOrgs = goingPublic
-        ? []
-        : body.sharedWithOrgs.filter((id) => !beforeOrgs.has(id));
-
-      const removedUsers = existing.sharedWithUsers.filter((id) => !afterUsers.has(id));
-      const removedOrgs = existing.sharedWithOrgs.filter((id) => !afterOrgs.has(id));
-
-      const needsPut =
-        removedUsers.length > 0 || removedOrgs.length > 0 || goingPrivate;
-
-      // 1. Removals first. Strip only — adds stay out until audit decides.
-      if (needsPut) {
-        await skillService.setSkillPermissions(guid, authCtx.userId, {
-          isPrivate: goingPrivate ? true : beforePrivate,
-          sharedWithUsers: existing.sharedWithUsers.filter(
-            (id) => !removedUsers.includes(id),
-          ),
-          sharedWithOrgs: existing.sharedWithOrgs.filter(
-            (id) => !removedOrgs.includes(id),
-          ),
-        });
-      }
-
-      // 2. Additions → audit-gated share requests. Sequential so the
-      // per-skill audit cache warms once and subsequent targets reuse.
-      const waivers: ShareRequest[] = [];
-      const shareTargets: Array<{ type: "user" | "org" | "public"; id?: string }> = [
-        ...(goingPublic ? [{ type: "public" as const }] : []),
-        ...addedUsers.map((id) => ({ type: "user" as const, id })),
-        ...addedOrgs.map((id) => ({ type: "org" as const, id })),
-      ];
-
-      for (const target of shareTargets) {
-        const result = await shareService.initiateShare({
-          skillIdOrName: guid,
-          ownerUserId: authCtx.userId,
-          target,
-        });
-        waivers.push(result);
-      }
+      await skillService.setSkillPermissions(guid, authCtx.userId, {
+        isPrivate: body.isPrivate,
+        sharedWithUsers: body.sharedWithUsers,
+        sharedWithOrgs: body.sharedWithOrgs,
+      });
 
       const updated = await skillService.getSkill(guid);
 
@@ -677,17 +602,10 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
           isPrivate: updated.isPrivate,
           sharedWithUsers: updated.sharedWithUsers.length,
           sharedWithOrgs: updated.sharedWithOrgs.length,
-          waiverCount: waivers.length,
         })
         .catch((err) => logger.warn({ err }, "Failed to log skill:permissions_change activity"));
 
-      return c.json({
-        data: {
-          skill: updated,
-          waivers,
-        },
-        error: null,
-      });
+      return c.json({ data: { skill: updated }, error: null });
     },
   );
 

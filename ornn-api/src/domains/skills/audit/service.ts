@@ -14,7 +14,9 @@
 import pino from "pino";
 import type { NyxLlmClient, ResponsesApiInputMessage } from "../../../clients/nyxid/llm";
 import type { IStorageClient } from "../../../clients/storageClient";
+import type { NyxidOrgsClient } from "../../../clients/nyxid/orgs";
 import type { SkillService } from "../crud/service";
+import type { NotificationService } from "../../notifications/service";
 import { AppError } from "../../../shared/types/index";
 import type { AuditRepository } from "./repository";
 import {
@@ -40,6 +42,11 @@ export interface AuditServiceDeps {
   readonly llmClient: NyxLlmClient;
   readonly model: string;
   readonly cacheTtlMs: number;
+  /** Optional. When wired, the finalize step fans out audit-result notifications. */
+  readonly notificationService?: NotificationService;
+  /** Optional. When wired together with `notificationService`, org targets are
+   *  expanded to their admin/member roster so every consumer gets notified. */
+  readonly nyxidOrgsClient?: NyxidOrgsClient;
 }
 
 export interface AuditOptions {
@@ -56,6 +63,8 @@ export class AuditService {
   private readonly llmClient: NyxLlmClient;
   private readonly model: string;
   private readonly cacheTtlMs: number;
+  private readonly notificationService?: NotificationService;
+  private readonly nyxidOrgsClient?: NyxidOrgsClient;
 
   constructor(deps: AuditServiceDeps) {
     this.auditRepo = deps.auditRepo;
@@ -65,6 +74,8 @@ export class AuditService {
     this.llmClient = deps.llmClient;
     this.model = deps.model;
     this.cacheTtlMs = deps.cacheTtlMs;
+    this.notificationService = deps.notificationService;
+    this.nyxidOrgsClient = deps.nyxidOrgsClient;
   }
 
   /**
@@ -214,12 +225,83 @@ export class AuditService {
         scores,
         findings,
       });
+
+      // Fan out notifications. Owner always; consumers only on yellow/red.
+      // Failures here are best-effort — the audit row is already saved
+      // and the agent can read the verdict via the polling endpoints.
+      void this.fanOutNotifications({
+        guid,
+        name,
+        version,
+        verdict,
+        overallScore,
+      }).catch((err) => {
+        logger.warn({ err, auditId }, "Audit-completed notification fan-out failed");
+      });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       await this.auditRepo.markFailed(auditId, message).catch((inner) => {
         logger.error({ inner, auditId }, "markFailed threw");
       });
     }
+  }
+
+  /**
+   * Notify the owner (always) and every consumer (only on yellow/red).
+   * Consumer = anyone in `skill.sharedWithUsers` plus every admin/member
+   * of any org in `skill.sharedWithOrgs`. The owner is de-duped if they
+   * happen to also be in the consumer set.
+   */
+  private async fanOutNotifications(params: {
+    guid: string;
+    name: string;
+    version: string;
+    verdict: "green" | "yellow" | "red";
+    overallScore: number;
+  }): Promise<void> {
+    if (!this.notificationService) return;
+    const skill = await this.skillService.getSkill(params.guid);
+    const ownerUserId = skill.createdBy;
+
+    await this.notificationService.notifyAuditCompleted({
+      ownerUserId,
+      skillGuid: params.guid,
+      skillName: params.name,
+      version: params.version,
+      verdict: params.verdict,
+      overallScore: params.overallScore,
+    });
+
+    // Consumers only see this when the audit flagged risk.
+    if (params.verdict === "green") return;
+
+    const consumers = new Set<string>(skill.sharedWithUsers);
+    if (this.nyxidOrgsClient && skill.sharedWithOrgs.length > 0) {
+      // Expand each org to its admin/member roster. NyxID lookup is
+      // best-effort; missing orgs / failures yield empty member lists.
+      const memberLists = await Promise.all(
+        skill.sharedWithOrgs.map((orgId) =>
+          this.nyxidOrgsClient!.listOrgMembers(orgId).catch(() => []),
+        ),
+      );
+      for (const list of memberLists) {
+        for (const m of list) consumers.add(m.userId);
+      }
+    }
+    consumers.delete(ownerUserId);
+
+    await Promise.all(
+      Array.from(consumers).map((consumerUserId) =>
+        this.notificationService!.notifyAuditRiskyForConsumer({
+          consumerUserId,
+          skillGuid: params.guid,
+          skillName: params.name,
+          version: params.version,
+          verdict: params.verdict as "yellow" | "red",
+          overallScore: params.overallScore,
+        }),
+      ),
+    );
   }
 
   private async buildAuditContext(

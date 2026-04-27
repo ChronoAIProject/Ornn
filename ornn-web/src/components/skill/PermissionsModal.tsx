@@ -9,26 +9,15 @@
  *   Users     — explicit per-user grants (email typeahead, additive)
  *   Private   — only the author + platform admin
  *
- * Save flow is audit-gated. The modal posts the desired state to
- * `PUT /api/v1/skills/:id/permissions` in one call; the backend:
- *   - applies any removals immediately (revoking access never needs audit)
- *   - runs a cached audit (30-day TTL) once for this skill version
- *   - for each NEW grant, returns a `ShareRequest` — either `green`
- *     (auto-applied because `overallScore >= platform threshold`) or
- *     `needs-justification` (a waiver request the owner must justify,
- *     reviewed by the target user / org admin / ornn admin).
- *
- * The modal shows three phases during the save:
- *   1. `form` — the picker (default)
- *   2. `running` — spinner + "Running audit…" label while the backend call is in flight
- *   3. `results` — per-target outcomes when at least one target needs follow-up;
- *                  all-green saves skip this and just toast + close
+ * Saving is unconditional — `PUT /api/v1/skills/:id/permissions` applies
+ * the desired state directly. Audit runs out-of-band; if it later flags
+ * risk, the owner and every consumer receive a notification, but the
+ * share itself is never blocked.
  *
  * @module components/skill/PermissionsModal
  */
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
 import { Modal } from "@/components/ui/Modal";
@@ -36,7 +25,6 @@ import { Button } from "@/components/ui/Button";
 import { useMyOrgs } from "@/hooks/useMe";
 import { useUpdateSkillPermissions } from "@/hooks/useSkills";
 import { useToastStore } from "@/stores/toastStore";
-import { ApiClientError } from "@/services/apiClient";
 import {
   searchUsersByEmail,
   resolveUsers,
@@ -44,15 +32,6 @@ import {
   type UserDirectoryEntry,
 } from "@/services/usersApi";
 import type { SkillDetail } from "@/types/domain";
-import type { ShareRequest } from "@/types/shares";
-
-type SavePhase = "form" | "running" | "results";
-
-interface SaveResultEntry {
-  label: string;
-  kind: "share-green" | "share-needs-justification" | "share-failed-audit";
-  shareRequestId: string;
-}
 
 interface PermissionsModalProps {
   isOpen: boolean;
@@ -80,9 +59,6 @@ export function PermissionsModal({ isOpen, onClose, skill }: PermissionsModalPro
   const [sharedOrgIds, setSharedOrgIds] = useState<string[]>(skill.sharedWithOrgs);
   const [userQuery, setUserQuery] = useState("");
   const [userInputFocused, setUserInputFocused] = useState(false);
-  const [phase, setPhase] = useState<SavePhase>("form");
-  const [saveResults, setSaveResults] = useState<SaveResultEntry[]>([]);
-  const [hadRemoves, setHadRemoves] = useState(false);
   const userInputRef = useRef<HTMLInputElement>(null);
 
   // Reset form whenever the modal re-opens on a different skill version.
@@ -98,9 +74,6 @@ export function PermissionsModal({ isOpen, onClose, skill }: PermissionsModalPro
         displayName: id,
       })),
     );
-    setPhase("form");
-    setSaveResults([]);
-    setHadRemoves(false);
   }, [isOpen, skill]);
 
   // Resolve saved user_ids into email/displayName so the chip list
@@ -164,16 +137,6 @@ export function PermissionsModal({ isOpen, onClose, skill }: PermissionsModalPro
     return Array.from(map.values());
   }, [myOrgs, fetchedUnknownOrgs]);
 
-  const labelForWaiverTarget = (w: ShareRequest): string => {
-    if (w.target.type === "public") return t("permissions.targetPublic", "Public");
-    if (w.target.type === "org") {
-      const hit = allOrgOptions.find((o) => o.userId === w.target.id);
-      return hit?.displayName ?? `Org ${w.target.id ?? ""}`.trim();
-    }
-    const hit = sharedUsers.find((u) => u.userId === w.target.id);
-    return hit?.displayName || hit?.email || `User ${w.target.id ?? ""}`.trim();
-  };
-
   const toggleOrg = (orgId: string) => {
     setSharedOrgIds((prev) =>
       prev.includes(orgId) ? prev.filter((id) => id !== orgId) : [...prev, orgId],
@@ -202,8 +165,6 @@ export function PermissionsModal({ isOpen, onClose, skill }: PermissionsModalPro
     const beforeUsers = new Set(skill.sharedWithUsers);
     const beforeOrgs = new Set(skill.sharedWithOrgs);
     const afterPrivate = !isPublic;
-    const afterUsers = new Set(sharedUsers.map((u) => u.userId));
-    const afterOrgs = new Set(sharedOrgIds);
 
     const privateChanged = beforePrivate !== afterPrivate;
     const usersChanged =
@@ -222,212 +183,22 @@ export function PermissionsModal({ isOpen, onClose, skill }: PermissionsModalPro
       return;
     }
 
-    const someRemoved =
-      skill.sharedWithUsers.some((id) => !afterUsers.has(id)) ||
-      skill.sharedWithOrgs.some((id) => !afterOrgs.has(id)) ||
-      (!beforePrivate && afterPrivate);
-
-    setPhase("running");
-    setSaveResults([]);
-    setHadRemoves(someRemoved);
-
     try {
-      const result = await permissionsMutation.mutateAsync({
+      await permissionsMutation.mutateAsync({
         isPrivate: !isPublic,
         sharedWithUsers: sharedUsers.map((u) => u.userId),
         sharedWithOrgs: sharedOrgIds,
       });
-
-      const waivers = result.waivers ?? [];
-      const needsFollowup = waivers.some((w) => w.status !== "green");
-
-      if (!needsFollowup) {
-        // Clean path — toast what happened and close.
-        const ok = waivers.filter((w) => w.status === "green").length;
-        const parts: string[] = [];
-        if (someRemoved) parts.push(t("permissions.partRemoves", "permissions updated"));
-        if (ok > 0) {
-          parts.push(
-            t("permissions.partSharesAccepted", "{{n}} share(s) auto-approved (audit above threshold)", { n: ok }),
-          );
-        }
-        addToast({
-          type: "success",
-          message: parts.length > 0 ? parts.join(" · ") : t("permissions.saveSuccess", "Permissions updated"),
-        });
-        onClose();
-        return;
-      }
-
-      // At least one target needs justification — render the results view.
-      setSaveResults(
-        waivers.map((w) => ({
-          label: labelForWaiverTarget(w),
-          shareRequestId: w._id,
-          kind:
-            w.status === "green"
-              ? "share-green"
-              : w.status === "needs-justification"
-                ? "share-needs-justification"
-                : "share-failed-audit",
-        })),
-      );
-      setPhase("results");
+      addToast({
+        type: "success",
+        message: t("permissions.saveSuccess", "Permissions updated"),
+      });
+      onClose();
     } catch (err) {
-      if (err instanceof ApiClientError && err.code === "AUDIT_REQUIRED") {
-        addToast({
-          type: "error",
-          message: t(
-            "permissions.auditRequiredToast",
-            "This skill has not been audited yet. Close this modal and click Start Auditing before sharing.",
-          ),
-        });
-      } else {
-        const message = err instanceof Error ? err.message : String(err);
-        addToast({ type: "error", message });
-      }
-      setPhase("form");
+      const message = err instanceof Error ? err.message : String(err);
+      addToast({ type: "error", message });
     }
   };
-
-  // ---------- running view -------------------------------------------------
-
-  if (phase === "running") {
-    return (
-      <Modal
-        isOpen={isOpen}
-        onClose={onClose}
-        title={t("permissions.runningTitle", "Running audit…") as string}
-        className="!max-w-xl"
-      >
-        <div className="flex flex-col items-center gap-4 py-10 text-center">
-          <div
-            className="h-10 w-10 animate-spin rounded-full border-2 border-neon-cyan/20 border-t-neon-cyan"
-            aria-hidden
-          />
-          <div className="space-y-1">
-            <p className="font-heading text-sm uppercase tracking-wider text-text-primary">
-              {t("permissions.runningHeading", "Auditing new share targets")}
-            </p>
-            <p className="font-body text-sm text-text-muted">
-              {t(
-                "permissions.runningSub",
-                "Applying removals and scoring the skill against the audit engine.",
-              )}
-            </p>
-          </div>
-          <p className="max-w-md font-body text-xs text-text-muted">
-            {t(
-              "permissions.runningHint",
-              "The audit engine reviews the skill across security, code quality, documentation, reliability, and permission scope. Cached for 30 days per skill version.",
-            )}
-          </p>
-        </div>
-      </Modal>
-    );
-  }
-
-  // ---------- results view -------------------------------------------------
-
-  if (phase === "results") {
-    const flaggedCount = saveResults.filter(
-      (r) => r.kind === "share-needs-justification" || r.kind === "share-failed-audit",
-    ).length;
-    return (
-      <Modal
-        isOpen={isOpen}
-        onClose={onClose}
-        title={t("permissions.resultsTitle", "Audit results") as string}
-        className="!max-w-xl"
-      >
-        <div className="space-y-4">
-          <p className="font-body text-sm text-text-muted">
-            {t(
-              "permissions.resultsHeading",
-              "{{n}} target(s) scored below the audit threshold and need a waiver before access is granted.",
-              { n: flaggedCount },
-            )}
-          </p>
-          {hadRemoves && (
-            <div className="rounded-lg border border-neon-cyan/20 bg-neon-cyan/5 px-3 py-2 font-body text-sm text-text-muted">
-              {t("permissions.partRemovesApplied", "Existing grants you removed were applied immediately.")}
-            </div>
-          )}
-          <ul className="space-y-2">
-            {saveResults.map((r) => {
-              const iconBase =
-                "h-6 w-6 shrink-0 rounded-full border flex items-center justify-center font-mono text-xs";
-              const rowBase = "flex items-start gap-3 rounded-lg border px-3 py-2";
-              if (r.kind === "share-green") {
-                return (
-                  <li key={r.shareRequestId} className={`${rowBase} border-neon-cyan/30 bg-neon-cyan/5`}>
-                    <span aria-hidden className={`${iconBase} border-neon-cyan/40 text-neon-cyan`}>
-                      ✓
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <p className="font-body text-sm text-text-primary">{r.label}</p>
-                      <p className="font-body text-xs text-text-muted">
-                        {t("permissions.resultGreen", "Audit passed — access granted.")}
-                      </p>
-                    </div>
-                  </li>
-                );
-              }
-              if (r.kind === "share-needs-justification") {
-                return (
-                  <li
-                    key={r.shareRequestId}
-                    className={`${rowBase} border-neon-yellow/30 bg-neon-yellow/5`}
-                  >
-                    <span aria-hidden className={`${iconBase} border-neon-yellow/40 text-neon-yellow`}>
-                      ⚠
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <p className="font-body text-sm text-text-primary">{r.label}</p>
-                      <p className="font-body text-xs text-text-muted">
-                        {t(
-                          "permissions.resultNeedsJustification",
-                          "Audit flagged findings. Submit a justification for a reviewer to consider.",
-                        )}
-                      </p>
-                    </div>
-                    <Link
-                      to={`/shares/${encodeURIComponent(r.shareRequestId)}`}
-                      onClick={onClose}
-                      className="shrink-0 rounded-md border border-neon-yellow/30 px-3 py-1 font-body text-xs text-neon-yellow transition-colors hover:bg-neon-yellow/10"
-                    >
-                      {t("permissions.addJustification", "Add justification →")}
-                    </Link>
-                  </li>
-                );
-              }
-              return (
-                <li key={r.shareRequestId} className={`${rowBase} border-neon-red/30 bg-neon-red/5`}>
-                  <span aria-hidden className={`${iconBase} border-neon-red/40 text-neon-red`}>
-                    ✗
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="font-body text-sm text-text-primary">{r.label}</p>
-                    <p className="font-body text-xs text-text-muted">
-                      {t(
-                        "permissions.resultFailedAudit",
-                        "Audit failed outright — contact a platform admin.",
-                      )}
-                    </p>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-          <div className="flex justify-end pt-2">
-            <Button onClick={onClose}>{t("common.close", "Close")}</Button>
-          </div>
-        </div>
-      </Modal>
-    );
-  }
-
-  // ---------- form view ----------------------------------------------------
 
   return (
     <Modal

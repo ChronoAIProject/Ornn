@@ -8,11 +8,7 @@
 
 export type NotificationCategory =
   | "audit.completed"
-  | "share.needs_justification"
-  | "share.review_requested"
-  | "share.accepted"
-  | "share.rejected"
-  | "share.cancelled";
+  | "audit.risky_for_consumer";
 
 export interface Notification {
   _id: string;
@@ -22,9 +18,9 @@ export interface Notification {
   title: string;
   /** Optional longer body rendered on the detail view. Plain text. */
   body?: string;
-  /** Deep-link path within the web UI, e.g. `/shares/abc`. */
+  /** Deep-link path within the web UI, e.g. `/skills/abc/audits?version=1.0.0`. */
   link?: string;
-  /** Arbitrary structured payload the UI can lean on (e.g. `{ shareRequestId, verdict }`). */
+  /** Arbitrary structured payload the UI can lean on (e.g. `{ skillGuid, version, verdict }`). */
   data: Record<string, unknown>;
   /** ISO timestamp set when the recipient read this notification; `null`/`undefined` = unread. */
   readAt?: string | null;

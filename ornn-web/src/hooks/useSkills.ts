@@ -233,9 +233,10 @@ export function useUpdateSkillPackage(id: string) {
 }
 
 /**
- * Replace the skill's visibility config in one atomic call. Invalidates
- * the skill detail query so the UI redraws with the new permissions
- * without needing a manual refetch.
+ * Replace the skill's visibility config in one atomic call. The save is
+ * unconditional; audit runs out-of-band. Invalidates the skill detail
+ * query so the UI redraws with the new permissions without needing a
+ * manual refetch.
  */
 export function useUpdateSkillPermissions(idOrName: string) {
   const queryClient = useQueryClient();
@@ -245,11 +246,6 @@ export function useUpdateSkillPermissions(idOrName: string) {
       queryClient.invalidateQueries({ queryKey: [SKILLS_KEY] });
       queryClient.invalidateQueries({ queryKey: [MY_SKILLS_KEY] });
       queryClient.invalidateQueries({ queryKey: [SKILLS_KEY, idOrName] });
-      // Any new grants route through the audit-gated share flow → the
-      // call produced one or more ShareRequest records that our "my
-      // shares" + InFlightShareRequests views need to see.
-      queryClient.invalidateQueries({ queryKey: ["shares", "mine"] });
-      queryClient.invalidateQueries({ queryKey: ["notifications"] });
     },
   });
 }

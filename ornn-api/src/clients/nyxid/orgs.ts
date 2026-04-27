@@ -12,6 +12,7 @@
  */
 
 import pino from "pino";
+import type { NyxidSaTokenProvider } from "./base";
 
 const logger = pino({ level: "info" }).child({ module: "nyxidOrgsClient" });
 
@@ -46,9 +47,11 @@ interface RawResponse {
 
 export class NyxidOrgsClient {
   private readonly baseUrl: string;
+  private readonly saTokenProvider?: NyxidSaTokenProvider;
 
-  constructor(baseUrl: string) {
+  constructor(baseUrl: string, saTokenProvider?: NyxidSaTokenProvider) {
     this.baseUrl = baseUrl.replace(/\/+$/, "");
+    this.saTokenProvider = saTokenProvider;
   }
 
   /**
@@ -91,5 +94,72 @@ export class NyxidOrgsClient {
       });
     }
     return memberships;
+  }
+
+  /**
+   * Inverse of `listUserOrgs` — for a given org, return every user who is
+   * an admin or member of it. Authenticated with a service-account token
+   * (this is a fan-out-to-many path from the audit pipeline; no caller
+   * user is in scope). Viewer entries are dropped.
+   *
+   * Fail-soft: returns `[]` and logs on any failure (network, missing SA
+   * provider, NyxID error). The callers (notification fan-out) treat
+   * this as best-effort.
+   */
+  async listOrgMembers(orgUserId: string): Promise<OrgMembership[]> {
+    if (!this.saTokenProvider) {
+      logger.warn(
+        { orgUserId },
+        "listOrgMembers called but no SA token provider configured; returning empty",
+      );
+      return [];
+    }
+    let token: string;
+    try {
+      token = await this.saTokenProvider.getAccessToken();
+    } catch (err) {
+      logger.warn({ err, orgUserId }, "SA token fetch for org-member listing failed");
+      return [];
+    }
+
+    const url = `${this.baseUrl}/api/v1/orgs/${encodeURIComponent(orgUserId)}/members`;
+    let resp: Response;
+    try {
+      resp = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    } catch (err) {
+      logger.warn({ err, orgUserId }, "NyxID listOrgMembers fetch threw");
+      return [];
+    }
+    if (!resp.ok) {
+      const body = await resp.text().catch(() => "");
+      logger.warn(
+        { orgUserId, status: resp.status, body: body.slice(0, 200) },
+        "NyxID listOrgMembers returned non-2xx; returning empty",
+      );
+      return [];
+    }
+
+    const json = (await resp.json().catch(() => null)) as
+      | { members?: RawNyxidOrg[]; items?: RawNyxidOrg[] }
+      | RawNyxidOrg[]
+      | null;
+    if (!json) return [];
+    const raw: RawNyxidOrg[] = Array.isArray(json)
+      ? json
+      : json.members ?? json.items ?? [];
+
+    const out: OrgMembership[] = [];
+    for (const entry of raw) {
+      const userId = entry.user_id ?? entry.id;
+      const role = (entry.role ?? entry.your_role)?.toLowerCase();
+      if (!userId) continue;
+      if (role !== "admin" && role !== "member") continue;
+      out.push({
+        userId,
+        displayName: entry.display_name ?? entry.name ?? userId,
+        role,
+      });
+    }
+    return out;
   }
 }
