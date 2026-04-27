@@ -1,11 +1,14 @@
 /**
  * Notification service.
  *
- * Thin wrapper around the repository with typed helpers for the specific
- * categories the audit/share flow emits. Keeping helpers here (not in
- * `ShareService`) means the share service takes only a
- * `NotificationService` dependency — no knowledge of the wire format or
- * deep-link paths.
+ * Two notification categories today:
+ *   - `audit.completed`         — every audit run, sent to the owner only.
+ *   - `audit.risky_for_consumer` — yellow/red audit, sent to every user the
+ *                                  skill has been shared with (so they
+ *                                  know what they have access to is risky).
+ *
+ * Sharing is unconditional in v2 — there is no waiver / review flow, so
+ * no share-lifecycle notifications.
  *
  * @module domains/notifications/service
  */
@@ -52,119 +55,69 @@ export class NotificationService {
 
   // ---- Emitter helpers ---------------------------------------------------
 
+  /**
+   * Owner-side notification fired every time an audit completes.
+   * Green → "passed"; yellow/red → "flagged risk, review findings".
+   */
   async notifyAuditCompleted(params: {
     ownerUserId: string;
     skillGuid: string;
     skillName: string;
     version: string;
     verdict: "green" | "yellow" | "red";
-    shareRequestId?: string;
+    overallScore: number;
   }): Promise<void> {
+    const score = params.overallScore.toFixed(1);
     const title =
       params.verdict === "green"
-        ? `Audit passed — ${params.skillName} v${params.version}`
-        : `Audit did not pass — ${params.skillName} v${params.version}`;
+        ? `Skill audit passed — ${params.skillName} v${params.version} · score ${score}/10`
+        : `Skill audit flagged risk — ${params.skillName} v${params.version} · score ${score}/10`;
     const body =
       params.verdict === "green"
-        ? "Your skill passed audit and can be shared without review."
-        : "Your skill did not pass audit. Submit justifications to request review.";
-    const link = params.shareRequestId ? `/shares/${params.shareRequestId}` : `/skills/${params.skillGuid}`;
+        ? "Audit verdict was green. No follow-up required."
+        : "Audit found one or more flagged areas. Review the findings before continuing to share.";
     await this.emit(params.ownerUserId, {
       category: "audit.completed",
       title,
       body,
-      link,
+      link: `/skills/${encodeURIComponent(params.skillGuid)}/audits?version=${encodeURIComponent(params.version)}`,
       data: {
         skillGuid: params.skillGuid,
         skillName: params.skillName,
         version: params.version,
         verdict: params.verdict,
-        shareRequestId: params.shareRequestId,
+        overallScore: params.overallScore,
       },
     });
   }
 
-  async notifyNeedsJustification(params: {
-    ownerUserId: string;
-    shareRequestId: string;
+  /**
+   * Consumer-side notification — fired only on yellow/red verdicts, sent
+   * to every user the skill is currently shared with (orgs are expanded
+   * to their members at the call site).
+   */
+  async notifyAuditRiskyForConsumer(params: {
+    consumerUserId: string;
+    skillGuid: string;
     skillName: string;
+    version: string;
+    verdict: "yellow" | "red";
+    overallScore: number;
   }): Promise<void> {
-    await this.emit(params.ownerUserId, {
-      category: "share.needs_justification",
-      title: `Justification needed to share ${params.skillName}`,
-      body: "Answer three short questions so a reviewer can decide.",
-      link: `/shares/${params.shareRequestId}`,
-      data: { shareRequestId: params.shareRequestId, skillName: params.skillName },
-    });
-  }
-
-  async notifyReviewRequested(params: {
-    reviewerUserId: string;
-    shareRequestId: string;
-    skillName: string;
-    ownerDisplayName: string;
-    targetType: "user" | "org" | "public";
-  }): Promise<void> {
-    const scopeWord =
-      params.targetType === "public"
-        ? "publicly"
-        : params.targetType === "org"
-          ? "in this org"
-          : "with you";
-    await this.emit(params.reviewerUserId, {
-      category: "share.review_requested",
-      title: `Review: ${params.ownerDisplayName} wants to share ${params.skillName}`,
-      body: `${params.ownerDisplayName} tried to share a skill ${scopeWord}, but it did not pass audit. Review their justifications.`,
-      link: `/shares/${params.shareRequestId}`,
-      data: {
-        shareRequestId: params.shareRequestId,
-        skillName: params.skillName,
-        ownerDisplayName: params.ownerDisplayName,
-        targetType: params.targetType,
-      },
-    });
-  }
-
-  async notifyShareDecision(params: {
-    ownerUserId: string;
-    shareRequestId: string;
-    skillName: string;
-    decision: "accept" | "reject";
-    reviewerDisplayName?: string;
-  }): Promise<void> {
-    const category = params.decision === "accept" ? "share.accepted" : "share.rejected";
-    const title =
-      params.decision === "accept"
-        ? `Share accepted — ${params.skillName}`
-        : `Share rejected — ${params.skillName}`;
-    const body = params.reviewerDisplayName
-      ? `${params.reviewerDisplayName} ${params.decision}ed your share request.`
-      : undefined;
-    await this.emit(params.ownerUserId, {
-      category,
+    const score = params.overallScore.toFixed(1);
+    const title = `Skill "${params.skillName}" v${params.version} you have access to was flagged risky in audit`;
+    const body = `Verdict: ${params.verdict} · score ${score}/10. Use with caution.`;
+    await this.emit(params.consumerUserId, {
+      category: "audit.risky_for_consumer",
       title,
       body,
-      link: `/shares/${params.shareRequestId}`,
+      link: `/skills/${encodeURIComponent(params.skillGuid)}/audits?version=${encodeURIComponent(params.version)}`,
       data: {
-        shareRequestId: params.shareRequestId,
+        skillGuid: params.skillGuid,
         skillName: params.skillName,
-        decision: params.decision,
-      },
-    });
-  }
-
-  async notifyShareCancelled(params: {
-    ownerUserId: string;
-    shareRequestId: string;
-    skillName: string;
-  }): Promise<void> {
-    await this.emit(params.ownerUserId, {
-      category: "share.cancelled",
-      title: `Share cancelled — ${params.skillName}`,
-      link: `/shares/${params.shareRequestId}`,
-      data: {
-        shareRequestId: params.shareRequestId,
-        skillName: params.skillName,
+        version: params.version,
+        verdict: params.verdict,
+        overallScore: params.overallScore,
       },
     });
   }

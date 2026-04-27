@@ -96,26 +96,24 @@ The `/json` variant returns the skill as a `{ name, description, metadata, files
 
 See §6.1 for the full upload recipe and §6.7 for the AI-generation recipe.
 
-### 2.3 Try → Share → Review
+### 2.3 Try → Share → Audit-aware
 
-**Intent:** after building a skill, test it interactively, run an audit, then open its access up to a user, an org, or the public.
+**Intent:** after building a skill, test it interactively, share it with a user / org / the public, and let the audit verdict travel as a passive label + notification rather than as a gate.
 
 | Step | Action | API |
 |------|--------|-----|
 | 1 | Test in the playground with real inputs | `POST /api/v1/playground/chat` (SSE) |
-| 2 | Owner runs an audit on the current version | `POST /api/v1/skills/:idOrName/audit` |
-| 3 | Owner edits the sharing allow-list (this is what "shares" the skill) | `PUT /api/v1/skills/:id/permissions` |
-| 4 | *If overallScore < threshold:* owner submits justifications on the auto-created waiver | `POST /api/v1/shares/:requestId/justification` |
-| 5 | Reviewer accepts or rejects | `POST /api/v1/shares/:requestId/review` |
-| 6 | Watch the notifications feed for the outcome | `GET /api/v1/notifications` |
+| 2 | Owner edits the sharing allow-list (this is what "shares" the skill) | `PUT /api/v1/skills/:id/permissions` |
+| 3 | Owner (or any consumer) triggers an audit on the current version | `POST /api/v1/skills/:idOrName/audit` |
+| 4 | Watch the notifications feed for the audit verdict | `GET /api/v1/notifications` |
 
-Sharing is **audit-gated** (see §3.5 + §3.6). There is **no separate share endpoint** — sharing happens as a side-effect of `PUT /skills/:id/permissions`. Each new grant the owner adds (a user_id, an org_id, or `isPrivate=false`) is checked against the latest *completed* audit:
+Sharing is **unconditional**. There is **no separate share endpoint** — sharing happens as a side-effect of `PUT /skills/:id/permissions`. The backend stores the desired allow-list as-is, with no audit gate, no waiver, no reviewer.
 
-- No audit recorded yet → `PUT /permissions` returns `AUDIT_REQUIRED`. Run step 2 first.
-- `overallScore >= platform threshold` → grant auto-applies; backend records a `green` share request as an audit trail.
-- `overallScore <  platform threshold` → grant is **not** applied yet; backend creates a `needs-justification` share request. Owner submits justifications, reviewer decides.
+Audit is a **passive risk label**:
 
-Removing grants (and flipping `isPrivate` true) never needs an audit — those happen immediately.
+- A skill that has never been audited is shown as *not yet audited*.
+- A completed audit produces a verdict — `green` (low risk), `yellow` (some findings), or `red` (serious findings) — that decorates the skill in the UI/API.
+- When an audit completes, the **owner** is always notified. When the verdict is `yellow` or `red`, **every consumer** (everyone in `sharedWithUsers`, plus every member of every org in `sharedWithOrgs`) is also notified so they can decide whether to keep using the skill.
 
 ---
 
@@ -249,33 +247,17 @@ Audits are **owner-triggered**, not auto-produced. Run one before sharing — th
 
 **Polling pattern for agents.** When you trigger an audit, poll `GET /audit/history?version=` every few seconds until your row's status is no longer `running`. The web UI uses 3-second poll while running, then stops.
 
-### 3.6 Shares *(audit-gated sharing workflow)*
+### 3.6 Sharing
 
-There is **no `POST /skills/:idOrName/share` endpoint.** Sharing is a side-effect of `PUT /skills/:id/permissions` (§3.1). The backend diffs the new allow-list against the old one and, for each *added* grant (`sharedWithUsers` / `sharedWithOrgs` / `isPrivate=false`), creates a share request whose `status` is determined by the latest *completed* audit:
+There is **no `POST /skills/:idOrName/share` endpoint, no waiver flow, and no review queue.** Sharing is a side-effect of `PUT /skills/:id/permissions` (§3.1). The backend stores the requested `isPrivate` / `sharedWithUsers` / `sharedWithOrgs` as-is and the response shape is:
 
-- No completed audit → `PUT /permissions` returns `AUDIT_REQUIRED` and applies nothing.
-- `audit.overallScore >= platform threshold` → grant auto-applies; `green` share request recorded as audit trail.
-- `audit.overallScore <  platform threshold` → grant withheld; `needs-justification` share request created. Owner must justify and a reviewer must accept.
+```jsonc
+{ "data": { "skill": <SkillDetail> }, "error": null }
+```
 
-Removing grants and switching `isPrivate` from `false` → `true` skip this gate (revoking access never needs audit) and apply immediately.
+No audit check, no waiver list, no reviewer. Whoever the owner names in the allow-list immediately gains access; whoever the owner removes immediately loses it.
 
-A **share request** then evolves through this lifecycle once created:
-
-| Method | Path | Role | Use when |
-|--------|------|------|----------|
-| GET    | `/api/v1/shares` | Self (owner) | List share requests *you* initiated |
-| GET    | `/api/v1/shares/review-queue` | Self | List requests waiting for *your* review (you are the target user, an admin of a target org, or platform admin for public targets) |
-| GET    | `/api/v1/shares/reviewed-history` | Self | Past requests *you've already reviewed* (terminal states only) |
-| GET    | `/api/v1/shares/:requestId` | Owner / reviewer / target / platform admin | Read the full request + audit findings + justifications |
-| POST   | `/api/v1/shares/:requestId/justification` | Owner | Answer audit findings (`whyCannotPass`, `whySafe`, `whyShare`). Pushes status to `pending-review`. |
-| POST   | `/api/v1/shares/:requestId/review` | Reviewer | `{ "decision": "accept" \| "reject", "note"?: "..." }`. Terminal: `accepted` or `rejected`. |
-| POST   | `/api/v1/shares/:requestId/cancel` | Owner | Abort a request before it's been decided. |
-
-**Reviewer routing** (server-side):
-
-- `target.type = "user"` — only the target user reviews.
-- `target.type = "org"` — admins/members of that org review (read via `readUserOrgMemberships`).
-- `target.type = "public"` — only platform admins review.
+The audit pipeline (§3.5) runs independently and surfaces its verdict via the notifications feed (§3.7). It never blocks a share.
 
 ### 3.7 Notifications
 
@@ -286,7 +268,12 @@ A **share request** then evolves through this lifecycle once created:
 | POST | `/api/v1/notifications/:id/read` | Mark one read |
 | POST | `/api/v1/notifications/mark-all-read` | Mark all read |
 
-All endpoints authenticated. Notifications are emitted by the share workflow and by admin actions against your skills.
+All endpoints authenticated. Two notification categories are emitted today:
+
+| Category | Sent to | Trigger |
+|----------|---------|---------|
+| `audit.completed`            | Skill owner    | Every audit completion. The body distinguishes `green` (passed) from `yellow`/`red` (flagged risk) and links to the audit history page. |
+| `audit.risky_for_consumer`   | Every consumer of a `yellow`/`red` audited skill — i.e. each user in `sharedWithUsers`, plus the membership of each org in `sharedWithOrgs` (resolved via NyxID) | Same audit completion. Skipped for `green`. |
 
 ### 3.8 Analytics
 
@@ -576,9 +563,9 @@ nyxid proxy request ornn \
 
 The version remains in `/versions` listings and is still resolvable, but `GET /skills/<idOrName>?version=1.2` now returns the deprecation banner headers. `isDeprecated: false` un-deprecates.
 
-### 6.5 Run an audit *(prerequisite for sharing)*
+### 6.5 Run an audit *(label, not a gate)*
 
-**When:** you want to share, or you've published a new version and want to refresh the audit signal. There's no auto-publish trigger — owner clicks "Start Auditing" / hits this endpoint deliberately.
+**When:** you've published a new version and want to refresh the public risk verdict, or a consumer asked you to. There's no auto-publish trigger — owner clicks "Start Auditing" / hits this endpoint deliberately. Sharing does not require an audit; this is purely about producing a label and a notification.
 
 ```bash
 # Trigger an audit. Returns immediately at status: "running".
@@ -604,15 +591,12 @@ nyxid proxy request ornn "/api/v1/skills/<idOrName>/audit" \
 
 Pass `"force": true` if you want to bypass the 30-day cache (re-audit even if the same skill bytes were just scored).
 
-### 6.6 Share a skill *(audit-gated, side-effect of permissions)*
+### 6.6 Share a skill *(unconditional)*
 
-**When:** you've audited a skill and now want to grant another user, an org, or the public access.
+**When:** you want to grant another user, an org, or the public access. Audit verdict — if any — is purely informational and never blocks the call.
 
 ```bash
-# 1. (Audit must have completed — see §6.5.)
-
-# 2. Edit the allow-list. Backend diffs old vs new and either auto-applies
-#    (audit ≥ threshold) or creates a needs-justification share request.
+# Edit the allow-list. The backend stores it as-is.
 nyxid proxy request ornn "/api/v1/skills/<id>/permissions" \
   --method PUT \
   --data '{
@@ -621,39 +605,12 @@ nyxid proxy request ornn "/api/v1/skills/<id>/permissions" \
     "sharedWithOrgs": ["org_xyz"]
   }' \
   --output json
-# Response: { skill: <updated>, waivers: [<ShareRequest>, ...] }
-# Each ShareRequest has status:
-#   "green"                 — already applied
-#   "needs-justification"   — audit failed; you must justify
-#   "failed-audit"          — audit returned outright failure (admin help)
+# Response: { "data": { "skill": <updated> }, "error": null }
 ```
 
-If `error.code === "AUDIT_REQUIRED"`, run §6.5 first.
+To revoke, send the same request with the targets removed. To make a skill public, send `"isPrivate": false`. To make it private again, send `"isPrivate": true` with empty allow-lists.
 
-```bash
-# 3. For each "needs-justification" waiver, owner submits the three answers.
-nyxid proxy request ornn "/api/v1/shares/<requestId>/justification" \
-  --method POST \
-  --data '{
-    "whyCannotPass": "No real risk — the pattern flagged is a false positive because ...",
-    "whySafe":       "Inputs are all validated upstream; no secrets are logged.",
-    "whyShare":      "This skill is broadly useful; the org has requested it."
-  }' \
-  --output json
-
-# 4. The right reviewer (target user / org admin / platform admin)
-#    accepts or rejects:
-nyxid proxy request ornn "/api/v1/shares/<requestId>/review" \
-  --method POST \
-  --data '{"decision":"accept","note":"LGTM"}' \
-  --output json
-
-# 5. Owner can cancel before a decision:
-nyxid proxy request ornn "/api/v1/shares/<requestId>/cancel" \
-  --method POST --data '{}' --output json
-```
-
-Removing grants (or setting `"isPrivate": true`) skips the audit gate and applies immediately.
+If you also want a fresh risk verdict for the version you just shared, trigger an audit (§6.5). The owner will receive an `audit.completed` notification on completion, and any `yellow`/`red` verdict additionally fans out an `audit.risky_for_consumer` notification to everyone you shared with.
 
 ### 6.6.1 Delete a non-latest version
 
@@ -815,29 +772,26 @@ nyxid proxy request ornn "/api/v1/notifications/mark-all-read" \
   --method POST --data '{}' --output json
 ```
 
-Share-workflow events (`ShareRequestCreated`, `ShareDecided`, etc.) and admin actions against your skills land here.
+The two audit notification categories above (§3.7) and admin actions against your skills land here.
 
-### 6.15 Review a share request assigned to you
+### 6.15 React to an audit risk notification
 
-**When:** you're an org admin and someone in the org (or a guest) shared a skill awaiting your decision.
+**When:** you received an `audit.risky_for_consumer` notification for a skill someone shared with you, and you want to inspect the findings before continuing to use it.
 
 ```bash
-# 1. What's in my queue?
-nyxid proxy request ornn "/api/v1/shares/review-queue" \
+# 1. Get the notification's deep-link (the bell + /notifications page exposes it).
+#    The link points at /skills/<idOrName>/audits?version=<v>.
+
+# 2. Read the audit history for that version.
+nyxid proxy request ornn "/api/v1/skills/<idOrName>/audit/history?version=<v>" \
   --method GET --output json
 
-# 2. Read the request + audit findings + owner's justifications.
-nyxid proxy request ornn "/api/v1/shares/<requestId>" \
-  --method GET --output json
-
-# 3. Decide.
-nyxid proxy request ornn "/api/v1/shares/<requestId>/review" \
-  --method POST \
-  --data '{"decision":"accept"}' \
-  --output json
+# 3. Mark the notification read.
+nyxid proxy request ornn "/api/v1/notifications/<id>/read" \
+  --method POST --data '{}' --output json
 ```
 
-After acceptance, the skill's `sharedWithUsers` / `sharedWithOrgs` / `isPrivate` fields are updated server-side and the original owner is notified via `/notifications`.
+If you decide to stop using the skill, ask the owner to drop you from `sharedWithUsers` or unshare the org you're a member of (§6.6). Consumers can't self-revoke today — that's an owner-side edit.
 
 ---
 
@@ -848,17 +802,8 @@ After acceptance, the skill's `sharedWithUsers` / `sharedWithOrgs` / `isPrivate`
 - **ZIPs must have exactly one root folder**, named after the skill (`my-skill/SKILL.md`, not a flat `SKILL.md` at the archive root). Validation will reject either mistake.
 - **Version pinning** on `GET /skills/:idOrName[?version=]` accepts `X.Y` semver — it matches the version strings in `SKILL.md` frontmatter.
 - **Skill name vs guid.** Most GETs accept either, but writes (PUT `/skills/:id`, DELETE `/skills/:id`) require the guid. `POST /skills` returns the guid at creation; keep it for later writes.
-- **Share request lifecycle statuses** (observable on `GET /shares/:requestId`):
-  - `green`               — applied immediately because audit passed the threshold
-  - `needs-justification` — audit failed the threshold; owner must answer the three justification fields
-  - `pending-review`      — owner submitted; reviewer must accept / reject
-  - `accepted`            — terminal, grant applied
-  - `rejected`            — terminal, grant denied
-  - `cancelled`           — terminal, owner aborted
-  - `failed-audit`        — terminal, audit verdict was outright failure; needs platform-admin escalation
-  
-  Your polling / notification handlers should key off these.
-- **Audit record statuses** (observable on `GET /audit/history`): `running`, `completed`, `failed`. Sharing only consumes `completed` rows; running rows are visible in history for UI feedback. See §3.5 for the full lifecycle.
+- **Audit record statuses** (observable on `GET /audit/history`): `running`, `completed`, `failed`. Sharing is unconditional and does not depend on audit status; the audit verdict is purely informational. See §3.5 for the lifecycle.
+- **Audit verdicts**: `green`, `yellow`, `red`. Only `yellow`/`red` triggers a fan-out notification to consumers (see §3.7).
 - **403 on read but 404 on write.** If a private skill is hidden from you, you get 404 (not 403) from `GET` so the existence of the skill isn't leaked. Writes use 403 when you're authed but lack ownership / admin.
 
 ---
