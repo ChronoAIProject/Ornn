@@ -8,6 +8,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   fetchAudit,
   fetchAuditHistory,
+  fetchAuditSummaryByVersion,
   startAudit,
   type FetchAuditOptions,
 } from "@/services/auditApi";
@@ -18,6 +19,9 @@ const auditKey = (idOrName: string, version?: string) =>
 
 const auditHistoryKey = (idOrName: string, version?: string) =>
   ["audit", idOrName, "__history__", version ?? "__all__"] as const;
+
+const auditSummaryByVersionKey = (idOrName: string) =>
+  ["audit", idOrName, "__summary-by-version__"] as const;
 
 export function useSkillAudit(idOrName: string | undefined, opts: FetchAuditOptions = {}) {
   return useQuery<AuditRecord | null>({
@@ -48,6 +52,20 @@ export function useSkillAuditHistory(
   });
 }
 
+/**
+ * Per-version audit badge data. One row per skill version that ever had
+ * a completed audit; versions absent from the result render as "not
+ * audited yet" pills.
+ */
+export function useAuditSummaryByVersion(idOrName: string | undefined) {
+  return useQuery<Record<string, AuditRecord>>({
+    queryKey: auditSummaryByVersionKey(idOrName ?? ""),
+    queryFn: () => fetchAuditSummaryByVersion(idOrName!),
+    enabled: Boolean(idOrName),
+    staleTime: 60_000,
+  });
+}
+
 export function useStartAudit() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -67,7 +85,7 @@ export function useStartAudit() {
             Array.isArray(key) &&
             key[0] === "audit" &&
             key[1] === vars.idOrName &&
-            key[2] === "__history__"
+            (key[2] === "__history__" || key[2] === "__summary-by-version__")
           );
         },
       });

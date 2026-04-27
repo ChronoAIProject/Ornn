@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import type { SkillVersionEntry } from "@/types/domain";
+import type { AuditRecord, AuditVerdict } from "@/types/audit";
 
 /** Format a date string to exact SGT (Asia/Singapore) timestamp. */
 function formatDateSGT(dateStr: string): string {
@@ -38,6 +39,13 @@ export interface SkillVersionListProps {
   onDeleteVersion?: (version: string) => Promise<void> | void;
   /** Whether a delete mutation is currently in flight (for loading state). */
   isDeleting?: boolean;
+  /**
+   * Optional per-version audit summary. Versions present render their
+   * verdict pill (green / yellow / red); versions absent render a
+   * neutral "not audited" pill. Pass `undefined` to suppress audit
+   * pills entirely (e.g. on the explore page).
+   */
+  auditSummary?: Record<string, AuditRecord>;
   className?: string;
 }
 
@@ -47,6 +55,48 @@ export interface SkillVersionListProps {
  * "mark deprecated / undeprecate" action per row; clicking it opens a modal
  * that optionally captures a note before confirming.
  */
+function AuditPill({
+  audit,
+  notAuditedLabel,
+}: {
+  audit?: AuditRecord;
+  notAuditedLabel: string;
+}) {
+  if (!audit) {
+    return (
+      <span
+        className="inline-flex items-center gap-1 rounded-full border border-text-muted/30 bg-text-muted/10 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-text-muted"
+        title={notAuditedLabel}
+      >
+        <span className="h-1.5 w-1.5 rounded-full bg-text-muted/60" aria-hidden />
+        ?
+      </span>
+    );
+  }
+  const cls: Record<AuditVerdict, string> = {
+    green:
+      "border-neon-cyan/40 bg-neon-cyan/10 text-neon-cyan",
+    yellow:
+      "border-neon-yellow/40 bg-neon-yellow/10 text-neon-yellow",
+    red:
+      "border-neon-red/40 bg-neon-red/10 text-neon-red",
+  };
+  const dotCls: Record<AuditVerdict, string> = {
+    green: "bg-neon-cyan",
+    yellow: "bg-neon-yellow",
+    red: "bg-neon-red",
+  };
+  return (
+    <span
+      className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider ${cls[audit.verdict]}`}
+      title={`Audit ${audit.verdict} · ${audit.overallScore.toFixed(1)}/10`}
+    >
+      <span className={`h-1.5 w-1.5 rounded-full ${dotCls[audit.verdict]}`} aria-hidden />
+      {audit.overallScore.toFixed(1)}
+    </span>
+  );
+}
+
 export function SkillVersionList({
   versions,
   currentVersion,
@@ -56,6 +106,7 @@ export function SkillVersionList({
   isMutating = false,
   onDeleteVersion,
   isDeleting = false,
+  auditSummary,
   className = "",
 }: SkillVersionListProps) {
   const { t } = useTranslation();
@@ -135,6 +186,14 @@ export function SkillVersionList({
                       <Badge color="yellow" className="text-[10px]">
                         {t("skillDetail.deprecated")}
                       </Badge>
+                    )}
+                    {auditSummary && (
+                      <AuditPill
+                        audit={auditSummary[v.version]}
+                        notAuditedLabel={
+                          t("audit.notAuditedYet", "Not audited yet") as string
+                        }
+                      />
                     )}
                   </div>
                   <div className="mt-0.5 font-body text-xs text-text-muted truncate">

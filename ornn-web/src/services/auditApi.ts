@@ -39,6 +39,21 @@ export async function fetchAudit(
 }
 
 /**
+ * Per-version audit badges. Returns the most recent *completed* audit
+ * for each version of the skill. Versions absent from the returned
+ * object have never had a completed audit; the UI renders them as
+ * "not audited yet". Drives the pills next to the version picker.
+ */
+export async function fetchAuditSummaryByVersion(
+  idOrName: string,
+): Promise<Record<string, AuditRecord>> {
+  const res = await apiGet<{ byVersion: Record<string, AuditRecord> }>(
+    `/api/v1/skills/${encodeURIComponent(idOrName)}/audit/summary-by-version`,
+  );
+  return res.data?.byVersion ?? {};
+}
+
+/**
  * List audit records for a skill (one row per audited version, newest
  * first). When `version` is provided the result is narrowed to that
  * version. Returns empty array for skills with no matching records.

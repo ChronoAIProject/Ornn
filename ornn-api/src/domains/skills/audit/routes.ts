@@ -85,6 +85,41 @@ export function createAuditRoutes(config: AuditRoutesConfig): Hono<{ Variables: 
   );
 
   /**
+   * GET /skills/:idOrName/audit/summary-by-version
+   * For each version of the skill, returns the most recent *completed*
+   * audit record. Versions without any completed audit are omitted;
+   * callers treat missing keys as "not audited yet". Drives the
+   * per-version audit badges next to the version picker.
+   */
+  app.get(
+    "/skills/:idOrName/audit/summary-by-version",
+    optionalAuth,
+    async (c) => {
+      const idOrName = c.req.param("idOrName");
+      const authCtx = c.get("auth");
+
+      const skill = await skillService.getSkill(idOrName);
+      if (!authCtx && skill.isPrivate) {
+        throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${idOrName}' not found`);
+      }
+      if (authCtx && skill.isPrivate) {
+        const memberships = await readUserOrgMemberships(c);
+        const actor = {
+          userId: authCtx.userId,
+          memberships,
+          isPlatformAdmin: authCtx.permissions.includes("ornn:admin:skill"),
+        };
+        if (!canReadSkill(skill, actor)) {
+          throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${idOrName}' not found`);
+        }
+      }
+
+      const byVersion = await auditService.summaryByVersion(idOrName);
+      return c.json({ data: { byVersion }, error: null });
+    },
+  );
+
+  /**
    * GET /skills/:idOrName/audit/history[?version=]
    * Returns every audit record stored for the skill (one per audited
    * version, newest first). When `?version=` is present the result is

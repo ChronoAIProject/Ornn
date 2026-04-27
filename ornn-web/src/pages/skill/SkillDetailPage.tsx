@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo } from "react";
-import { useParams, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useParams, useNavigate, useSearchParams } from "react-router-dom";
 import JSZip from "jszip";
 import { PageTransition } from "@/components/layout/PageTransition";
 import { Card } from "@/components/ui/Card";
@@ -15,7 +15,7 @@ import { AnalyticsCard } from "@/components/skill/AnalyticsCard";
 import { AuditHistoryCard } from "@/components/skill/AuditHistoryCard";
 import { BackLink } from "@/components/layout/BackLink";
 import { useRefreshSkillFromSource } from "@/hooks/useSkills";
-import { useStartAudit } from "@/hooks/useAudit";
+import { useStartAudit, useAuditSummaryByVersion } from "@/hooks/useAudit";
 import { SkillVersionList } from "@/components/skill/SkillVersionList";
 import { PermissionsModal } from "@/components/skill/PermissionsModal";
 import {
@@ -65,6 +65,7 @@ export function SkillDetailPage() {
   const updatePackageMutation = useUpdateSkillPackage(skill?.guid ?? "");
   const deprecationMutation = useSetVersionDeprecation(idOrName ?? "");
   const deleteVersionMutation = useDeleteSkillVersion(idOrName ?? "");
+  const { data: auditSummaryByVersion } = useAuditSummaryByVersion(idOrName);
   const refreshMutation = useRefreshSkillFromSource(idOrName ?? "");
   const startAuditMutation = useStartAudit();
 
@@ -345,6 +346,54 @@ export function SkillDetailPage() {
           onRefresh={() => refreshMutation.mutate(skill.guid)}
         />
       )}
+      {(() => {
+        // Version-context audit banner: green is silent; yellow/red/missing
+        // surface a one-line cautionary note pointing at the audit history.
+        const v = auditSummaryByVersion?.[skill.version];
+        if (v && v.verdict === "green") return null;
+        const tone =
+          !v
+            ? "neutral"
+            : v.verdict === "red"
+              ? "red"
+              : "yellow";
+        const ringCls =
+          tone === "neutral"
+            ? "border-text-muted/30 bg-bg-elevated/40 text-text-muted"
+            : tone === "red"
+              ? "border-neon-red/30 bg-neon-red/5 text-neon-red"
+              : "border-neon-yellow/30 bg-neon-yellow/5 text-neon-yellow";
+        const message = !v
+          ? t(
+              "skillDetail.auditBannerNotAudited",
+              "v{{v}} has not been audited yet. Owners share with permission gates that read this audit.",
+              { v: skill.version },
+            )
+          : v.verdict === "red"
+            ? t(
+                "skillDetail.auditBannerRed",
+                "Audit verdict for v{{v}} is RED ({{score}}/10). Use with caution.",
+                { v: skill.version, score: v.overallScore.toFixed(1) },
+              )
+            : t(
+                "skillDetail.auditBannerYellow",
+                "Audit verdict for v{{v}} is YELLOW ({{score}}/10). Some findings flagged.",
+                { v: skill.version, score: v.overallScore.toFixed(1) },
+              );
+        return (
+          <div
+            className={`mb-3 shrink-0 flex items-center justify-between gap-3 rounded-lg border px-4 py-2 font-body text-xs ${ringCls}`}
+          >
+            <span className="min-w-0 truncate">{message}</span>
+            <Link
+              to={`/skills/${encodeURIComponent(skill.name || skill.guid)}/audits?version=${encodeURIComponent(skill.version)}`}
+              className="shrink-0 rounded border border-current px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider hover:opacity-80"
+            >
+              {t("audit.viewHistory", "View history")}
+            </Link>
+          </div>
+        );
+      })()}
 
       <div className="flex-1 min-h-0 grid gap-4 lg:grid-cols-[minmax(0,1fr)_380px] xl:grid-cols-[minmax(0,1fr)_440px]">
         {/* Main content — Package Contents (fills available height) */}
@@ -593,6 +642,7 @@ export function SkillDetailPage() {
               onToggleDeprecation={handleToggleDeprecation}
               isMutating={deprecationMutation.isPending}
               isDeleting={deleteVersionMutation.isPending}
+              auditSummary={auditSummaryByVersion}
               onDeleteVersion={async (version) => {
                 try {
                   await deleteVersionMutation.mutateAsync(version);
