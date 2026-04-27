@@ -12,6 +12,7 @@ import { VersionPicker } from "@/components/skill/VersionPicker";
 import { DeprecationBanner } from "@/components/skill/DeprecationBanner";
 import { GitHubOriginChip } from "@/components/skill/GitHubOriginChip";
 import { AnalyticsCard } from "@/components/skill/AnalyticsCard";
+import { UsagePullsCard } from "@/components/skill/UsagePullsCard";
 import { AuditHistoryCard } from "@/components/skill/AuditHistoryCard";
 import { BackLink } from "@/components/layout/BackLink";
 import { useRefreshSkillFromSource } from "@/hooks/useSkills";
@@ -394,6 +395,13 @@ export function SkillDetailPage() {
           </div>
         );
       })()}
+
+      {/* Usage row — full-width chart at the top, ahead of Package Contents. */}
+      <UsagePullsCard
+        idOrName={skill.name || skill.guid}
+        version={skill.version}
+        className="mb-4 shrink-0"
+      />
 
       <div className="flex-1 min-h-0 grid gap-4 lg:grid-cols-[minmax(0,1fr)_380px] xl:grid-cols-[minmax(0,1fr)_440px]">
         {/* Main content — Package Contents (fills available height) */}
