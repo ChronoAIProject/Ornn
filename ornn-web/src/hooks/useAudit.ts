@@ -16,8 +16,8 @@ import type { AuditRecord } from "@/types/audit";
 const auditKey = (idOrName: string, version?: string) =>
   ["audit", idOrName, version ?? "__latest__"] as const;
 
-const auditHistoryKey = (idOrName: string) =>
-  ["audit", idOrName, "__history__"] as const;
+const auditHistoryKey = (idOrName: string, version?: string) =>
+  ["audit", idOrName, "__history__", version ?? "__all__"] as const;
 
 export function useSkillAudit(idOrName: string | undefined, opts: FetchAuditOptions = {}) {
   return useQuery<AuditRecord | null>({
@@ -28,10 +28,13 @@ export function useSkillAudit(idOrName: string | undefined, opts: FetchAuditOpti
   });
 }
 
-export function useSkillAuditHistory(idOrName: string | undefined) {
+export function useSkillAuditHistory(
+  idOrName: string | undefined,
+  options: { version?: string } = {},
+) {
   return useQuery<AuditRecord[]>({
-    queryKey: auditHistoryKey(idOrName ?? ""),
-    queryFn: () => fetchAuditHistory(idOrName!),
+    queryKey: auditHistoryKey(idOrName ?? "", options.version),
+    queryFn: () => fetchAuditHistory(idOrName!, { version: options.version }),
     enabled: Boolean(idOrName),
     staleTime: 60_000,
     // Poll while any audit is still running so the UI flips to completed
@@ -55,7 +58,19 @@ export function useStartAudit() {
       // so the history card updates immediately instead of waiting for
       // the next refetch.
       queryClient.setQueryData(auditKey(vars.idOrName, vars.version), record);
-      queryClient.invalidateQueries({ queryKey: auditHistoryKey(vars.idOrName) });
+      // Invalidate every history-by-version variant for this skill —
+      // includes the "all versions" key plus any specific-version keys.
+      queryClient.invalidateQueries({
+        predicate: (query) => {
+          const key = query.queryKey;
+          return (
+            Array.isArray(key) &&
+            key[0] === "audit" &&
+            key[1] === vars.idOrName &&
+            key[2] === "__history__"
+          );
+        },
+      });
       queryClient.invalidateQueries({ queryKey: ["notifications"] });
     },
   });

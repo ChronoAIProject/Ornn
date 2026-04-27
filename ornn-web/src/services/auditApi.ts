@@ -39,14 +39,19 @@ export async function fetchAudit(
 }
 
 /**
- * List every stored audit record for a skill (one row per audited version,
- * newest first). Returns empty array for skills that have never been audited.
+ * List audit records for a skill (one row per audited version, newest
+ * first). When `version` is provided the result is narrowed to that
+ * version. Returns empty array for skills with no matching records.
  */
 export async function fetchAuditHistory(
   idOrName: string,
+  options: { version?: string } = {},
 ): Promise<AuditRecord[]> {
+  const params: Record<string, string | undefined> = {};
+  if (options.version) params.version = options.version;
   const res = await apiGet<{ items: AuditRecord[] }>(
     `/api/v1/skills/${encodeURIComponent(idOrName)}/audit/history`,
+    params,
   );
   return res.data?.items ?? [];
 }
