@@ -38,34 +38,34 @@ const ExplorePage = lazy(() =>
   import("@/pages/ExplorePage").then((m) => ({ default: m.ExplorePage })),
 );
 const SkillDetailPage = lazy(() =>
-  import("@/pages/SkillDetailPage").then((m) => ({ default: m.SkillDetailPage })),
+  import("@/pages/skill/SkillDetailPage").then((m) => ({ default: m.SkillDetailPage })),
 );
 const SkillAuditHistoryPage = lazy(() =>
-  import("@/pages/SkillAuditHistoryPage").then((m) => ({ default: m.SkillAuditHistoryPage })),
+  import("@/pages/skill/SkillAuditHistoryPage").then((m) => ({ default: m.SkillAuditHistoryPage })),
 );
 const UploadSkillPage = lazy(() =>
-  import("@/pages/UploadSkillPage").then((m) => ({ default: m.UploadSkillPage })),
+  import("@/pages/skill/UploadSkillPage").then((m) => ({ default: m.UploadSkillPage })),
 );
 const CreateSkillGuidedPage = lazy(() =>
-  import("@/pages/CreateSkillGuidedPage").then((m) => ({ default: m.CreateSkillGuidedPage })),
+  import("@/pages/skill/CreateSkillGuidedPage").then((m) => ({ default: m.CreateSkillGuidedPage })),
 );
 const CreateSkillFreePage = lazy(() =>
-  import("@/pages/CreateSkillFreePage").then((m) => ({ default: m.CreateSkillFreePage })),
+  import("@/pages/skill/CreateSkillFreePage").then((m) => ({ default: m.CreateSkillFreePage })),
 );
 const CreateSkillGenerativePage = lazy(() =>
-  import("@/pages/CreateSkillGenerativePage").then((m) => ({ default: m.CreateSkillGenerativePage })),
+  import("@/pages/skill/CreateSkillGenerativePage").then((m) => ({ default: m.CreateSkillGenerativePage })),
 );
 const CreateSkillFromGitHubPage = lazy(() =>
-  import("@/pages/CreateSkillFromGitHubPage").then((m) => ({ default: m.CreateSkillFromGitHubPage })),
+  import("@/pages/skill/CreateSkillFromGitHubPage").then((m) => ({ default: m.CreateSkillFromGitHubPage })),
 );
 const EditSkillPage = lazy(() =>
-  import("@/pages/EditSkillPage").then((m) => ({ default: m.EditSkillPage })),
+  import("@/pages/skill/EditSkillPage").then((m) => ({ default: m.EditSkillPage })),
 );
 const PlaygroundPage = lazy(() =>
   import("@/pages/PlaygroundPage").then((m) => ({ default: m.PlaygroundPage })),
 );
 const MySkillsPage = lazy(() =>
-  import("@/pages/MySkillsPage").then((m) => ({ default: m.MySkillsPage })),
+  import("@/pages/skill/MySkillsPage").then((m) => ({ default: m.MySkillsPage })),
 );
 const ServiceDetailPage = lazy(() =>
   import("@/pages/ServiceDetailPage").then((m) => ({ default: m.ServiceDetailPage })),
