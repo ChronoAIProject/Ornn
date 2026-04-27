@@ -14,7 +14,8 @@
       "label": "快速开始",
       "order": 2,
       "children": [
-        { "id": "qs-web-user", "label": "Web 用户快速入门", "file": "qs-web-user.md", "order": 1 }
+        { "id": "qs-web-user", "label": "Web 用户快速入门", "file": "qs-web-user.md", "order": 1 },
+        { "id": "agent-manual", "label": "Agent 操作手册", "file": "agent-manual.md", "order": 2 }
       ]
     }
   ]
