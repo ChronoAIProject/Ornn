@@ -1,5 +1,17 @@
 # CLAUDE.md — chrono-ornn
 
+## Product Positioning
+
+**Ornn is an agent-facing skill-lifecycle API, not a human marketplace.**
+
+The primary customer is the AI agent developer / agentic-system builder. Agents call Ornn directly — over HTTP or MCP — to manage their own skill lifecycle: search → pull → install → execute → build → upload → share. Closest analog: **npm registry + npm CLI fused, model-agnostic** (works for Claude / GPT / Gemini / custom — not locked to one model runtime).
+
+Implications when proposing or building features:
+
+- Lead with the **agent-API contract** (REST / MCP ergonomics, stable schemas, model-agnostic guarantees) before any human-UX angle.
+- `ornn-web` is a *secondary* surface for skill owners and platform admins — it is not the primary product. UI features that don't translate into agent-API value are deprioritized.
+- Avoid feature framing that drifts toward "another skill marketplace" (social ranking, browse-style discovery, recommendation feeds, leaderboards) unless we deliberately decide to. When a feature looks marketplace-shaped, surface that tension before building.
+
 ## Tech Stack
 
 TypeScript, Bun workspace monorepo

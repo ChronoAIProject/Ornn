@@ -459,7 +459,7 @@
     "bannerSkills": "Core Skills for Claude Code, Codex, Cursor & Antigravity",
     "heroTitle1": "Forge the Future of",
     "heroTitle2": "AI Capabilities",
-    "heroDesc": "Ornn is the industry-standard skill registry for AI agents. Standardized, verifiable, and executable capabilities for the next generation of autonomous intelligence.",
+    "heroDesc": "The skill-lifecycle API your AI agent calls. Search, pull, run, build, and share skills through one HTTP / MCP surface — npm for agents, model-agnostic by design.",
     "exploreBtn": "Explore Skills",
     "registerBtn": "Register Agent",
     "navRegistry": "Registry",

@@ -459,7 +459,7 @@
     "bannerSkills": "为 Claude Code、Codex、Cursor、Antigravity 准备的核心技能",
     "heroTitle1": "锻造",
     "heroTitle2": "AI 能力的未来",
-    "heroDesc": "Ornn 是面向 AI agent 的工业级技能注册中心，为下一代自主智能提供标准化、可验证、可执行的能力。",
+    "heroDesc": "为 AI agent 准备的技能生命周期 API。一个 HTTP / MCP 接口，让你的 agent 完成搜索、拉取、运行、构建、分享的全过程 —— 面向 agent 的 npm，model-agnostic。",
     "exploreBtn": "浏览技能",
     "registerBtn": "注册 Agent",
     "navRegistry": "Registry",
