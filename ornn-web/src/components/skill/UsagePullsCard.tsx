@@ -1,11 +1,17 @@
 /**
  * UsagePullsCard — primary "how much is this skill being used" visual on
- * `SkillDetailPage`. Renders a stacked bar chart of skill-pull counts
- * over a user-controlled time range and bucket size, broken down by
+ * `SkillDetailPage`. Renders a multi-line chart of skill-pull counts
+ * over a fixed time range driven by the bucket size, broken down by
  * source (api / web / playground).
  *
+ * The bucket selector also pins the visible window — there is no
+ * custom date picker:
+ *   - hour  → last 24 hours
+ *   - day   → last 7 days
+ *   - month → last 12 months
+ *
  * Data shape is fed by `useSkillPulls(idOrName, { bucket, from, to,
- * version })`. Empty result → muted "no pulls in this range" empty state.
+ * version })`. Empty result → muted "no usage in this range" empty state.
  *
  * @module components/skill/UsagePullsCard
  */
@@ -13,8 +19,8 @@
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
-  BarChart,
-  Bar,
+  LineChart,
+  Line,
   XAxis,
   YAxis,
   Tooltip,
@@ -38,30 +44,21 @@ const BUCKETS: ReadonlyArray<{ key: PullBucket; labelKey: string; fallback: stri
   { key: "month", labelKey: "analytics.bucketMonth", fallback: "Month" },
 ];
 
-/** ISO-truncate a Date to `YYYY-MM-DDTHH:mm` so an `<input type=datetime-local>` accepts it. */
-function toLocalInput(d: Date): string {
-  const pad = (n: number) => String(n).padStart(2, "0");
-  const y = d.getFullYear();
-  const m = pad(d.getMonth() + 1);
-  const day = pad(d.getDate());
-  const h = pad(d.getHours());
-  const min = pad(d.getMinutes());
-  return `${y}-${m}-${day}T${h}:${min}`;
-}
-
-/** Convert the local-input string back into an ISO-8601 instant. */
-function fromLocalInput(value: string): string | undefined {
-  if (!value) return undefined;
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return undefined;
-  return d.toISOString();
-}
-
-/** Default range: last 7 days, ending now. */
-function defaultRange(): { from: string; to: string } {
+/**
+ * Compute the canned date range for a given bucket. Each bucket pins
+ * its own window — the user no longer picks from/to.
+ */
+function rangeFor(bucket: PullBucket): { from: string; to: string } {
   const now = new Date();
-  const from = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-  return { from: toLocalInput(from), to: toLocalInput(now) };
+  let fromMs: number;
+  if (bucket === "hour") {
+    fromMs = now.getTime() - 24 * 60 * 60 * 1000;
+  } else if (bucket === "day") {
+    fromMs = now.getTime() - 7 * 24 * 60 * 60 * 1000;
+  } else {
+    fromMs = now.getTime() - 365 * 24 * 60 * 60 * 1000;
+  }
+  return { from: new Date(fromMs).toISOString(), to: now.toISOString() };
 }
 
 /** Pretty-print bucket timestamp based on the chosen bucket size. */
@@ -82,17 +79,99 @@ function formatBucket(iso: string, bucket: PullBucket): string {
   return d.toLocaleDateString(undefined, { year: "numeric", month: "short" });
 }
 
-/** Project the wire shape into recharts-friendly rows: { bucketLabel, api, web, playground }. */
-function rowsFor(items: ReadonlyArray<PullBucketCount>, bucket: PullBucket) {
-  return items.map((p) => ({
-    bucketLabel: formatBucket(p.bucket, bucket),
-    bucketRaw: p.bucket,
-    api: p.bySource.api ?? 0,
-    web: p.bySource.web ?? 0,
-    playground: p.bySource.playground ?? 0,
-    total: p.total,
-  }));
+/**
+ * Round an instant down to the start of its bucket in UTC. Used to
+ * key both server-returned buckets and the client-generated tick
+ * sequence so empty buckets line up cleanly.
+ */
+function bucketKey(d: Date, bucket: PullBucket): string {
+  if (bucket === "hour") {
+    return new Date(Date.UTC(
+      d.getUTCFullYear(),
+      d.getUTCMonth(),
+      d.getUTCDate(),
+      d.getUTCHours(),
+    )).toISOString();
+  }
+  if (bucket === "day") {
+    return new Date(Date.UTC(
+      d.getUTCFullYear(),
+      d.getUTCMonth(),
+      d.getUTCDate(),
+    )).toISOString();
+  }
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1)).toISOString();
 }
+
+/**
+ * Build the full sequence of bucket starts spanning `[from, to]`,
+ * inclusive at the bucket-rounded edges. The tail (`to`) is included
+ * even if it's strictly less than the next bucket boundary, so "now"
+ * is always visible on the axis.
+ */
+function expectedBuckets(bucket: PullBucket, fromIso: string, toIso: string): string[] {
+  const buckets: string[] = [];
+  const start = new Date(bucketKey(new Date(fromIso), bucket));
+  const endKey = bucketKey(new Date(toIso), bucket);
+  let cur = start;
+  // Hard cap to keep us safe from runaway loops if the inputs go sideways.
+  for (let i = 0; i < 4000; i++) {
+    buckets.push(cur.toISOString());
+    if (cur.toISOString() === endKey) break;
+    if (bucket === "hour") {
+      cur = new Date(cur.getTime() + 60 * 60 * 1000);
+    } else if (bucket === "day") {
+      cur = new Date(cur.getTime() + 24 * 60 * 60 * 1000);
+    } else {
+      cur = new Date(Date.UTC(cur.getUTCFullYear(), cur.getUTCMonth() + 1, 1));
+    }
+  }
+  return buckets;
+}
+
+/**
+ * Project the wire shape into recharts-friendly rows. Empty buckets
+ * are padded with zeros so the x-axis spans the full window even on
+ * quiet days — the user explicitly asked for "all entries present"
+ * regardless of activity.
+ */
+function rowsFor(
+  items: ReadonlyArray<PullBucketCount>,
+  bucket: PullBucket,
+  fromIso: string,
+  toIso: string,
+) {
+  const byKey = new Map<string, PullBucketCount>();
+  for (const p of items) {
+    byKey.set(bucketKey(new Date(p.bucket), bucket), p);
+  }
+  return expectedBuckets(bucket, fromIso, toIso).map((iso) => {
+    const p = byKey.get(iso);
+    return {
+      bucketLabel: formatBucket(iso, bucket),
+      bucketRaw: iso,
+      api: p?.bySource.api ?? 0,
+      web: p?.bySource.web ?? 0,
+      playground: p?.bySource.playground ?? 0,
+      total: p?.total ?? 0,
+    };
+  });
+}
+
+/**
+ * Series colors — sourced from the editorial-forge palette in
+ * `DESIGN.md`. We pull live CSS custom properties so the chart re-tints
+ * with the bright/dark theme switch instead of being hard-coded to one
+ * mode.
+ *   api        → primary accent (ember)        — north-star series
+ *   web        → support accent (mustard)      — secondary visibility
+ *   playground → state-info (mineral grey-blue) — neutral
+ */
+const SERIES_COLORS = {
+  api: "var(--color-accent-primary)",
+  web: "var(--color-accent-support)",
+  playground: "var(--color-state-info)",
+} as const;
 
 export function UsagePullsCard({
   idOrName,
@@ -101,22 +180,20 @@ export function UsagePullsCard({
 }: UsagePullsCardProps) {
   const { t } = useTranslation();
   const [bucket, setBucket] = useState<PullBucket>("day");
-  const [{ from, to }, setRange] = useState<{ from: string; to: string }>(
-    defaultRange,
-  );
 
-  const fromIso = fromLocalInput(from);
-  const toIso = fromLocalInput(to);
-  const valid = !!fromIso && !!toIso && new Date(fromIso) < new Date(toIso);
+  // Bucket pins the window. Recompute lazily so the component doesn't
+  // tick every render — only when the bucket changes (or the user opens
+  // the page).
+  const { from, to } = useMemo(() => rangeFor(bucket), [bucket]);
 
   const { data: items = [], isLoading, isError } = useSkillPulls(idOrName, {
     bucket,
-    from: valid ? fromIso : undefined,
-    to: valid ? toIso : undefined,
+    from,
+    to,
     version,
   });
 
-  const rows = useMemo(() => rowsFor(items, bucket), [items, bucket]);
+  const rows = useMemo(() => rowsFor(items, bucket, from, to), [items, bucket, from, to]);
   const totals = useMemo(() => {
     let api = 0;
     let web = 0;
@@ -133,122 +210,124 @@ export function UsagePullsCard({
 
   return (
     <section
-      className={`glass rounded-xl border border-neon-cyan/15 p-4 ${className ?? ""}`}
+      className={`rounded-xl border border-subtle bg-card p-4 ${className ?? ""}`}
     >
       <header className="mb-3 flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h3 className="font-heading text-sm uppercase tracking-wider text-text-primary">
-            {t("analytics.pullsHeading", "Skill pulls")}
+          <h3 className="font-heading text-sm uppercase tracking-wider text-strong">
+            {t("analytics.usageHeading", "Skill Usage")}
           </h3>
-          <p className="mt-0.5 font-body text-xs text-text-muted">
+          <p className="mt-0.5 font-body text-xs text-meta">
             {t(
-              "analytics.pullsSubtitle",
-              "Stacked by source. api = SDK / CLI / agent · web = detail-page download · playground = in-product trial.",
+              "analytics.usageSubtitle",
+              "Pulls over time. api = SDK / CLI / agent · web = detail-page download · playground = in-product trial.",
             )}
           </p>
         </div>
-        <div className="flex flex-wrap items-end gap-3">
-          <div className="flex overflow-hidden rounded-md border border-neon-cyan/20">
-            {BUCKETS.map((b) => (
-              <button
-                key={b.key}
-                type="button"
-                onClick={() => setBucket(b.key)}
-                className={`px-3 py-1 font-mono text-xs uppercase tracking-wider transition-colors ${
-                  bucket === b.key
-                    ? "bg-neon-cyan/15 text-neon-cyan"
-                    : "text-text-muted hover:bg-neon-cyan/5"
-                }`}
-              >
-                {t(b.labelKey, b.fallback)}
-              </button>
-            ))}
-          </div>
-          <label className="flex flex-col gap-1">
-            <span className="font-heading text-[10px] uppercase tracking-wider text-text-muted">
-              {t("analytics.from", "From")}
-            </span>
-            <input
-              type="datetime-local"
-              value={from}
-              onChange={(e) => setRange((r) => ({ ...r, from: e.target.value }))}
-              className="rounded border border-neon-cyan/20 bg-bg-surface px-2 py-1 font-mono text-xs text-text-primary focus:outline-none focus:border-neon-cyan/60"
-            />
-          </label>
-          <label className="flex flex-col gap-1">
-            <span className="font-heading text-[10px] uppercase tracking-wider text-text-muted">
-              {t("analytics.to", "To")}
-            </span>
-            <input
-              type="datetime-local"
-              value={to}
-              onChange={(e) => setRange((r) => ({ ...r, to: e.target.value }))}
-              className="rounded border border-neon-cyan/20 bg-bg-surface px-2 py-1 font-mono text-xs text-text-primary focus:outline-none focus:border-neon-cyan/60"
-            />
-          </label>
+        <div className="flex overflow-hidden rounded-md border border-subtle">
+          {BUCKETS.map((b) => (
+            <button
+              key={b.key}
+              type="button"
+              onClick={() => setBucket(b.key)}
+              className={`px-3 py-1 font-mono text-xs uppercase tracking-wider transition-colors ${
+                bucket === b.key
+                  ? "bg-accent-soft text-accent"
+                  : "text-meta hover:bg-elevated"
+              }`}
+            >
+              {t(b.labelKey, b.fallback)}
+            </button>
+          ))}
         </div>
       </header>
 
       <div className="mb-3 flex flex-wrap gap-x-6 gap-y-1 font-mono text-xs">
-        <span className="text-text-muted">
+        <span className="text-meta">
           {t("analytics.totalPulls", "Total")}:{" "}
-          <span className="text-text-primary">{totals.total}</span>
+          <span className="text-strong">{totals.total}</span>
         </span>
-        <span className="text-text-muted">api: <span className="text-neon-cyan">{totals.api}</span></span>
-        <span className="text-text-muted">web: <span className="text-neon-yellow">{totals.web}</span></span>
-        <span className="text-text-muted">playground: <span className="text-neon-magenta">{totals.playground}</span></span>
+        <span className="text-meta">
+          api: <span style={{ color: SERIES_COLORS.api }}>{totals.api}</span>
+        </span>
+        <span className="text-meta">
+          web: <span style={{ color: SERIES_COLORS.web }}>{totals.web}</span>
+        </span>
+        <span className="text-meta">
+          playground:{" "}
+          <span style={{ color: SERIES_COLORS.playground }}>{totals.playground}</span>
+        </span>
       </div>
 
-      {!valid ? (
-        <p className="py-12 text-center font-body text-xs text-neon-red">
-          {t("analytics.invalidRange", "Invalid range — 'from' must be earlier than 'to'.")}
-        </p>
-      ) : isLoading ? (
-        <p className="py-12 text-center font-body text-xs text-text-muted">
+      {isLoading ? (
+        <p className="py-12 text-center font-body text-xs text-meta">
           {t("analytics.loading", "Loading analytics…")}
         </p>
       ) : isError ? (
-        <p className="py-12 text-center font-body text-xs text-neon-red">
+        <p className="py-12 text-center font-body text-xs text-danger">
           {t("analytics.loadFailed", "Could not load analytics.")}
         </p>
       ) : rows.length === 0 ? (
-        <p className="py-12 text-center font-body text-xs text-text-muted">
-          {t("analytics.noPulls", "No pulls recorded in this range.")}
+        <p className="py-12 text-center font-body text-xs text-meta">
+          {t("analytics.noUsage", "No usage in this range.")}
         </p>
       ) : (
         <div className="h-64 w-full">
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={rows} margin={{ top: 10, right: 12, bottom: 10, left: 0 }}>
-              <CartesianGrid stroke="rgba(255,255,255,0.04)" vertical={false} />
+            <LineChart data={rows} margin={{ top: 10, right: 12, bottom: 10, left: 0 }}>
+              <CartesianGrid stroke="var(--color-border-subtle)" vertical={false} />
               <XAxis
                 dataKey="bucketLabel"
-                tick={{ fontSize: 11, fill: "currentColor" }}
-                axisLine={{ stroke: "rgba(255,255,255,0.1)" }}
+                tick={{ fontSize: 11, fill: "var(--color-text-meta)" }}
+                axisLine={{ stroke: "var(--color-border-subtle)" }}
                 tickLine={false}
-                className="text-text-muted"
               />
               <YAxis
                 allowDecimals={false}
-                tick={{ fontSize: 11, fill: "currentColor" }}
-                axisLine={{ stroke: "rgba(255,255,255,0.1)" }}
+                tick={{ fontSize: 11, fill: "var(--color-text-meta)" }}
+                axisLine={{ stroke: "var(--color-border-subtle)" }}
                 tickLine={false}
-                className="text-text-muted"
               />
               <Tooltip
-                cursor={{ fill: "rgba(255,255,255,0.04)" }}
+                cursor={{ stroke: "var(--color-border-strong)", strokeWidth: 1 }}
                 contentStyle={{
-                  background: "rgba(20, 24, 32, 0.96)",
-                  border: "1px solid rgba(0, 255, 255, 0.25)",
+                  background: "var(--color-surface-card)",
+                  border: "1px solid var(--color-border-strong)",
                   borderRadius: 6,
                   fontSize: 12,
+                  color: "var(--color-text-strong)",
                 }}
-                labelStyle={{ color: "#cbd5e1" }}
+                labelStyle={{ color: "var(--color-text-meta)" }}
               />
               <Legend wrapperStyle={{ fontSize: 12 }} />
-              <Bar dataKey="api" name="api" stackId="src" fill="#22d3ee" />
-              <Bar dataKey="web" name="web" stackId="src" fill="#facc15" />
-              <Bar dataKey="playground" name="playground" stackId="src" fill="#f472b6" />
-            </BarChart>
+              <Line
+                type="monotone"
+                dataKey="api"
+                name="api"
+                stroke={SERIES_COLORS.api}
+                strokeWidth={2}
+                dot={{ r: 3, fill: SERIES_COLORS.api }}
+                activeDot={{ r: 5 }}
+              />
+              <Line
+                type="monotone"
+                dataKey="web"
+                name="web"
+                stroke={SERIES_COLORS.web}
+                strokeWidth={2}
+                dot={{ r: 3, fill: SERIES_COLORS.web }}
+                activeDot={{ r: 5 }}
+              />
+              <Line
+                type="monotone"
+                dataKey="playground"
+                name="playground"
+                stroke={SERIES_COLORS.playground}
+                strokeWidth={2}
+                dot={{ r: 3, fill: SERIES_COLORS.playground }}
+                activeDot={{ r: 5 }}
+              />
+            </LineChart>
           </ResponsiveContainer>
         </div>
       )}

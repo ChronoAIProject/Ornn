@@ -196,3 +196,19 @@ export async function refreshSkillFromSource(id: string): Promise<SkillDetail> {
   const res = await apiPost<SkillDetail>(`/api/v1/skills/${id}/refresh`, {});
   return res.data!;
 }
+
+/**
+ * Tie or untie a skill to a NyxID catalog service. `nyxidServiceId: null`
+ * untie; a string ties to that service. Tying to an admin-tier service
+ * forces `isPrivate: false` (system skills are always public). Returns
+ * the refreshed skill detail.
+ */
+export async function tieSkillToNyxidService(
+  id: string,
+  nyxidServiceId: string | null,
+): Promise<SkillDetail> {
+  const res = await apiPut<{ skill: SkillDetail }>(`/api/v1/skills/${id}/nyxid-service`, {
+    nyxidServiceId,
+  });
+  return res.data!.skill;
+}

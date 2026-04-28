@@ -44,11 +44,19 @@ export async function fetchMyOrgs(): Promise<MyOrgMembership[]> {
   return res.data?.items ?? [];
 }
 
-/** NyxID user-service the caller can manage (personal or org-inherited). */
+/**
+ * NyxID catalog service the caller can tie a skill to:
+ *   - `tier: "admin"`  → public/platform-wide service. Tying a skill
+ *     here marks it a system skill and forces `isPrivate: false`.
+ *   - `tier: "personal"` → private service the caller created.
+ *     Tying here does not change the skill's privacy.
+ */
 export interface MyNyxidService {
   id: string;
   slug: string;
   label: string;
+  description?: string | null;
+  tier: "admin" | "personal";
 }
 
 export async function fetchMyNyxidServices(): Promise<MyNyxidService[]> {

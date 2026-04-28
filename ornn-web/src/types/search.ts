@@ -6,8 +6,8 @@
 export type AccessReason = "owner" | "public" | "shared-direct" | "shared-via-org";
 
 /** Tri-state System-skill filter. `any` shows everything; `only`
- *  restricts to skills whose tags match the caller's NyxID service
- *  slugs; `exclude` drops those. */
+ *  restricts to skills tied to an admin/platform NyxID service
+ *  (`isSystemSkill: true`); `exclude` drops those. */
 export type SystemFilter = "any" | "only" | "exclude";
 
 export type SkillScope = "public" | "private" | "mixed" | "shared-with-me" | "mine";
@@ -24,6 +24,10 @@ export interface SkillSearchParams {
   sharedWithOrgs?: string[];
   sharedWithUsers?: string[];
   createdByAny?: string[];
+  /** Restrict to skills tied to this NyxID service (system-tab filter). */
+  nyxidServiceId?: string;
+  /** Skill must have ALL listed tags (AND match). */
+  tags?: string[];
 }
 
 export interface SkillSearchResult {
@@ -54,6 +58,12 @@ export interface SkillSearchResult {
     sharedUserCount: number;
     sharedOrgCount: number;
   };
+  /** NyxID service tie surfaced on cards. `null` when untied. */
+  nyxidServiceId?: string | null;
+  nyxidServiceSlug?: string | null;
+  nyxidServiceLabel?: string | null;
+  /** True iff tied to an admin/platform NyxID service. */
+  isSystemSkill?: boolean;
 }
 
 export interface SkillSearchResponse {

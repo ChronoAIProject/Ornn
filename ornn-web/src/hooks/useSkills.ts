@@ -11,6 +11,7 @@ import {
   setSkillVersionDeprecation,
   pullSkillFromGitHub,
   refreshSkillFromSource,
+  tieSkillToNyxidService,
   type PullFromGitHubInput,
 } from "@/services/skillApi";
 import { updateSkillPermissions, type SkillPermissionsInput } from "@/services/permissionsApi";
@@ -23,6 +24,35 @@ const SHARED_WITH_ME_KEY = "shared-with-me-skills";
 const SKILL_COUNTS_KEY = "skill-counts";
 const SKILL_VERSIONS_KEY = "skill-versions";
 
+/**
+ * Search platform-wide system skills. System skills are always public,
+ * so `scope: "public"` + `systemFilter: "only"` is the right query.
+ * Visible to anonymous + authed callers; the System tab itself is the
+ * primary consumer.
+ */
+export function useSystemSkills(params: {
+  query?: string;
+  mode?: SkillSearchParams["mode"];
+  page?: number;
+  pageSize?: number;
+  /** Filter to skills tied to a specific NyxID service id. */
+  nyxidServiceId?: string;
+}) {
+  const searchParams: SkillSearchParams = {
+    query: params.query,
+    mode: params.mode ?? "keyword",
+    scope: "public",
+    page: params.page,
+    pageSize: params.pageSize,
+    systemFilter: "only",
+    nyxidServiceId: params.nyxidServiceId,
+  };
+  return useQuery({
+    queryKey: ["system-skills", searchParams],
+    queryFn: () => searchSkills(searchParams),
+  });
+}
+
 /** Search public skills */
 export function useSkills(params: {
   query?: string;
@@ -30,6 +60,10 @@ export function useSkills(params: {
   page?: number;
   pageSize?: number;
   systemFilter?: SystemFilter;
+  /** Tag filter (AND match). */
+  tags?: string[];
+  /** Author user_ids — filter to skills authored by these users. */
+  createdByAny?: string[];
 }) {
   const searchParams: SkillSearchParams = {
     query: params.query,
@@ -38,6 +72,8 @@ export function useSkills(params: {
     page: params.page,
     pageSize: params.pageSize,
     systemFilter: params.systemFilter,
+    tags: params.tags,
+    createdByAny: params.createdByAny,
   };
 
   return useQuery({
@@ -59,6 +95,8 @@ export function useMySkills(params: {
   systemFilter?: SystemFilter;
   sharedWithOrgs?: string[];
   sharedWithUsers?: string[];
+  /** Tag filter (AND match). */
+  tags?: string[];
 }) {
   const searchParams: SkillSearchParams = {
     query: params.query,
@@ -69,6 +107,7 @@ export function useMySkills(params: {
     systemFilter: params.systemFilter,
     sharedWithOrgs: params.sharedWithOrgs,
     sharedWithUsers: params.sharedWithUsers,
+    tags: params.tags,
   };
 
   return useQuery({
@@ -246,6 +285,26 @@ export function useUpdateSkillPermissions(idOrName: string) {
       queryClient.invalidateQueries({ queryKey: [SKILLS_KEY] });
       queryClient.invalidateQueries({ queryKey: [MY_SKILLS_KEY] });
       queryClient.invalidateQueries({ queryKey: [SKILLS_KEY, idOrName] });
+    },
+  });
+}
+
+/**
+ * Tie or untie a skill to a NyxID catalog service. Invalidates the
+ * registry tabs (especially System) and the skill detail cache so the
+ * tied chip + privacy flag both redraw without a manual refetch.
+ */
+export function useTieSkillToNyxidService(idOrName: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { skillId: string; nyxidServiceId: string | null }) =>
+      tieSkillToNyxidService(input.skillId, input.nyxidServiceId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [SKILLS_KEY, idOrName] });
+      queryClient.invalidateQueries({ queryKey: [SKILLS_KEY] });
+      queryClient.invalidateQueries({ queryKey: [MY_SKILLS_KEY] });
+      queryClient.invalidateQueries({ queryKey: ["system-skills"] });
+      queryClient.invalidateQueries({ queryKey: [SKILL_COUNTS_KEY] });
     },
   });
 }

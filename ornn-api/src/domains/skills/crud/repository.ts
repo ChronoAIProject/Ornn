@@ -77,6 +77,17 @@ export interface ExtraFilters {
   sharedWithOrgsAny?: string[];
   sharedWithUsersAny?: string[];
   createdByAny?: string[];
+  /**
+   * Tri-state system-skill filter applied at the DB match level.
+   * `"only"`    → `isSystemSkill: true`.
+   * `"exclude"` → `isSystemSkill !== true` (covers absent / false / null).
+   * `"any"` / undefined → no constraint.
+   */
+  systemFilter?: "any" | "only" | "exclude";
+  /** Restrict to skills tied to this exact NyxID service id. */
+  nyxidServiceId?: string;
+  /** Skills must have ALL listed tags (AND match against `metadata.tags`). */
+  tagsAll?: string[];
 }
 
 export class SkillRepository {
@@ -166,6 +177,72 @@ export class SkillRepository {
   async hardDelete(guid: string): Promise<void> {
     await this.collection.deleteOne({ _id: guid as any });
     logger.info({ guid }, "Skill hard-deleted");
+  }
+
+  /**
+   * Set or clear a NyxID-service tie. When `data.nyxidServiceId` is `null`
+   * we wipe all four cached fields. Caller must have already validated
+   * eligibility + decided whether to flip `isPrivate` (admin tie forces
+   * public — passed via `data.isPrivate`).
+   */
+  async setNyxidService(
+    guid: string,
+    data: {
+      nyxidServiceId: string | null;
+      nyxidServiceSlug: string | null;
+      nyxidServiceLabel: string | null;
+      isSystemSkill: boolean;
+      /** Optional override of the privacy flag — used when forcing public on admin ties. */
+      isPrivate?: boolean;
+      updatedBy: string;
+    },
+  ): Promise<SkillDocument> {
+    const setFields: Record<string, unknown> = {
+      nyxidServiceId: data.nyxidServiceId,
+      nyxidServiceSlug: data.nyxidServiceSlug,
+      nyxidServiceLabel: data.nyxidServiceLabel,
+      isSystemSkill: data.isSystemSkill,
+      updatedBy: data.updatedBy,
+      updatedOn: new Date(),
+    };
+    if (data.isPrivate !== undefined) {
+      setFields.isPrivate = data.isPrivate;
+    }
+    await this.collection.updateOne({ _id: guid as any }, { $set: setFields });
+    logger.info(
+      { guid, nyxidServiceId: data.nyxidServiceId, isSystemSkill: data.isSystemSkill },
+      "Skill NyxID service tie updated",
+    );
+    return (await this.findByGuid(guid))!;
+  }
+
+  /**
+   * List skills tied to a specific NyxID service id, scoped by visibility.
+   * `scope=public` returns only public skills (the system-skill case);
+   * `scope=mixed` lets the caller see private skills they have access to
+   * (the personal-service case where the caller owns the service).
+   */
+  async findByNyxidService(
+    serviceId: string,
+    scope: "public" | "mixed",
+    currentUserId: string,
+    userOrgIds: string[],
+    page: number,
+    pageSize: number,
+  ): Promise<{ skills: SkillDocument[]; total: number }> {
+    const matchStage: Record<string, unknown> = {};
+    applyScope(matchStage, scope, currentUserId, userOrgIds);
+    applyExtraFilters(matchStage, { nyxidServiceId: serviceId });
+
+    const total = await this.collection.countDocuments(matchStage);
+    const offset = (page - 1) * pageSize;
+    const docs = await this.collection
+      .find(matchStage)
+      .sort({ createdOn: -1 })
+      .skip(offset)
+      .limit(pageSize)
+      .toArray();
+    return { skills: docs.map((d) => mapDoc(d)!), total };
   }
 
   async keywordSearch(
@@ -363,6 +440,103 @@ export class SkillRepository {
   }
 
   /**
+   * Aggregate distinct tags across skills visible to the caller within
+   * the given scope. Drives the per-tab tag-filter chip row. Sorted by
+   * count desc so the most-used tags surface first.
+   */
+  async aggregateTagsByScope(
+    scope: "public" | "private" | "mixed" | "shared-with-me" | "mine" | "system",
+    currentUserId: string,
+    userOrgIds: string[],
+  ): Promise<Array<{ name: string; count: number }>> {
+    const matchStage: Record<string, unknown> = {};
+    if (scope === "system") {
+      matchStage.isSystemSkill = true;
+    } else {
+      applyScope(matchStage, scope, currentUserId, userOrgIds);
+    }
+    const pipeline = [
+      { $match: matchStage },
+      { $unwind: "$metadata.tags" },
+      { $group: { _id: "$metadata.tags", count: { $sum: 1 } } },
+      { $sort: { count: -1 as const, _id: 1 as const } },
+      { $limit: 200 },
+    ];
+    const docs = await this.collection.aggregate(pipeline).toArray();
+    return docs.map((d) => ({ name: String(d._id ?? ""), count: d.count as number }));
+  }
+
+  /**
+   * Aggregate distinct authors across skills visible to the caller
+   * within the given scope. Returns per-author counts + cached email /
+   * displayName for label rendering. Drives the public-tab author
+   * filter chip row.
+   */
+  async aggregateAuthorsByScope(
+    scope: "public" | "private" | "mixed" | "shared-with-me" | "mine" | "system",
+    currentUserId: string,
+    userOrgIds: string[],
+  ): Promise<Array<{ userId: string; email: string; displayName: string; count: number }>> {
+    const matchStage: Record<string, unknown> = {};
+    if (scope === "system") {
+      matchStage.isSystemSkill = true;
+    } else {
+      applyScope(matchStage, scope, currentUserId, userOrgIds);
+    }
+    const pipeline = [
+      { $match: matchStage },
+      {
+        $group: {
+          _id: "$createdBy",
+          count: { $sum: 1 },
+          email: { $last: "$createdByEmail" },
+          displayName: { $last: "$createdByDisplayName" },
+        },
+      },
+      { $sort: { count: -1 as const, _id: 1 as const } },
+      { $limit: 200 },
+    ];
+    const docs = await this.collection.aggregate(pipeline).toArray();
+    return docs.map((d) => ({
+      userId: String(d._id ?? ""),
+      email: typeof d.email === "string" ? d.email : "",
+      displayName: typeof d.displayName === "string" ? d.displayName : "",
+      count: d.count as number,
+    }));
+  }
+
+  /**
+   * Aggregate the NyxID services that have at least one tied system
+   * skill (`isSystemSkill: true`). Returns per-service counts + the
+   * cached slug/label so the frontend can render filter chips without a
+   * second NyxID round-trip.
+   */
+  async aggregateSystemServices(): Promise<
+    Array<{ id: string; slug: string; label: string; count: number }>
+  > {
+    const pipeline = [
+      { $match: { isSystemSkill: true, nyxidServiceId: { $ne: null } } },
+      {
+        $group: {
+          _id: "$nyxidServiceId",
+          count: { $sum: 1 },
+          slug: { $last: "$nyxidServiceSlug" },
+          label: { $last: "$nyxidServiceLabel" },
+        },
+      },
+      { $sort: { count: -1 as const, _id: 1 as const } },
+      { $limit: 100 },
+    ];
+    const docs = await this.collection.aggregate(pipeline).toArray();
+    return docs.map((d) => ({
+      id: String(d._id ?? ""),
+      slug: typeof d.slug === "string" ? d.slug : "",
+      label: typeof d.label === "string" ? d.label : (typeof d.slug === "string" ? d.slug : ""),
+      count: d.count as number,
+    }));
+  }
+
+  /**
    * Count visible skills by scope. Used by the registry tab-count
    * endpoint. Shares the same visibility rules as `findByScope`.
    */
@@ -483,6 +657,21 @@ function applyExtraFilters(matchStage: Record<string, unknown>, filters: ExtraFi
   if (filters.createdByAny && filters.createdByAny.length > 0) {
     extra.push({ createdBy: { $in: filters.createdByAny } });
   }
+  if (filters.systemFilter === "only") {
+    extra.push({ isSystemSkill: true });
+  } else if (filters.systemFilter === "exclude") {
+    // Treat absent / null as "not a system skill" — that's how every
+    // pre-feature skill in the registry looks.
+    extra.push({ isSystemSkill: { $ne: true } });
+  }
+  if (filters.nyxidServiceId) {
+    extra.push({ nyxidServiceId: filters.nyxidServiceId });
+  }
+  if (filters.tagsAll && filters.tagsAll.length > 0) {
+    // AND-match: every requested tag must be in `metadata.tags`. Mongo's
+    // `$all` is the right shape here.
+    extra.push({ "metadata.tags": { $all: filters.tagsAll } });
+  }
   if (extra.length === 0) return;
   const existingAnd = (matchStage.$and as Array<Record<string, unknown>> | undefined) ?? [];
   matchStage.$and = [...existingAnd, ...extra];
@@ -526,6 +715,10 @@ function mapDoc(doc: Document | null): SkillDocument | null {
           lastSyncedCommit: String(doc.source.lastSyncedCommit ?? ""),
         }
       : undefined,
+    nyxidServiceId: typeof doc.nyxidServiceId === "string" ? doc.nyxidServiceId : null,
+    nyxidServiceSlug: typeof doc.nyxidServiceSlug === "string" ? doc.nyxidServiceSlug : null,
+    nyxidServiceLabel: typeof doc.nyxidServiceLabel === "string" ? doc.nyxidServiceLabel : null,
+    isSystemSkill: doc.isSystemSkill === true,
   };
 }
 

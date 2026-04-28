@@ -1,3 +1,9 @@
+---
+version: 1.0.0
+lastUpdated: 2026-04-28
+---
+
+
 # External Integrations
 
 Ornn relies on three external platforms to do its job: **NyxID** for identity and LLM access, **chrono-storage** for skill package binaries, and **chrono-sandbox** for runtime skill execution. This page explains how each is wired, what contract Ornn expects, and how to reason about failures at each seam.

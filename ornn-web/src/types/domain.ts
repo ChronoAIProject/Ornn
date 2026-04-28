@@ -48,6 +48,18 @@ export interface SkillDetail extends SkillSummary {
   sharedWithOrgs: string[];
   /** Present when the skill was created (or last refreshed) by pulling from an external source. */
   source?: SkillSource;
+  /**
+   * NyxID service this skill is tied to. `null` when untied.
+   * Tying to an admin (`tier: "admin"`) service marks the skill as a
+   * system skill (`isSystemSkill: true`) and forces `isPrivate: false`.
+   */
+  nyxidServiceId?: string | null;
+  /** Cached service slug for chip rendering — falls back to `nyxidServiceId` when absent. */
+  nyxidServiceSlug?: string | null;
+  /** Cached service label for chip rendering — falls back to slug when absent. */
+  nyxidServiceLabel?: string | null;
+  /** True iff tied to an admin/platform NyxID service. System skills are always public. */
+  isSystemSkill?: boolean;
 }
 
 export interface SkillVersionEntry {

@@ -18,6 +18,8 @@ export async function searchSkills(
     sharedWithOrgs: params.sharedWithOrgs?.length ? params.sharedWithOrgs.join(",") : undefined,
     sharedWithUsers: params.sharedWithUsers?.length ? params.sharedWithUsers.join(",") : undefined,
     createdByAny: params.createdByAny?.length ? params.createdByAny.join(",") : undefined,
+    nyxidServiceId: params.nyxidServiceId,
+    tags: params.tags?.length ? params.tags.join(",") : undefined,
   };
 
   const res = await apiGet<SkillSearchResponse>("/api/v1/skill-search", queryParams);

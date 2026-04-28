@@ -132,6 +132,25 @@ export interface SkillDocument {
    * Absent for hand-uploaded skills.
    */
   source?: SkillSource;
+  /**
+   * NyxID service this skill is tied to. Null/undefined when untied.
+   * The tied service determines whether the skill is a "system" skill:
+   * tying to a service with `visibility: "public"` (admin/platform-wide)
+   * sets `isSystemSkill: true` and forces `isPrivate: false`; tying to a
+   * private service the caller owns leaves privacy alone.
+   */
+  nyxidServiceId?: string | null;
+  /** Cached service slug for cheap card/list rendering. */
+  nyxidServiceSlug?: string | null;
+  /** Cached service label for cheap card/list rendering. */
+  nyxidServiceLabel?: string | null;
+  /**
+   * Cached: true iff `nyxidServiceId` points at an admin/platform-wide
+   * service (NyxID `visibility: "public"`). System skills are always
+   * `isPrivate: false`. Maintained at tie-time; slight staleness is
+   * accepted if NyxID flips a service's visibility — re-tie refreshes.
+   */
+  isSystemSkill?: boolean;
 }
 
 /**
@@ -257,6 +276,12 @@ export interface SkillDetailResponse {
     lastSyncedAt: string;
     lastSyncedCommit: string;
   };
+  /** NyxID service tie (null when untied). See `SkillDocument.nyxidServiceId`. */
+  nyxidServiceId?: string | null;
+  nyxidServiceSlug?: string | null;
+  nyxidServiceLabel?: string | null;
+  /** Cached: true iff tied to an admin/platform-wide NyxID service. */
+  isSystemSkill?: boolean;
 }
 
 export interface SkillSearchItem {
@@ -306,6 +331,16 @@ export interface SkillSearchItem {
     sharedUserCount: number;
     sharedOrgCount: number;
   };
+  /**
+   * NyxID service tie surfaced on the search row so cards can render the
+   * "⚙ <serviceLabel>" chip without a second round-trip. `null` when
+   * untied.
+   */
+  nyxidServiceId?: string | null;
+  nyxidServiceSlug?: string | null;
+  nyxidServiceLabel?: string | null;
+  /** Cached: true iff tied to an admin/platform-wide NyxID service. */
+  isSystemSkill?: boolean;
 }
 
 export interface SkillSearchResponse {

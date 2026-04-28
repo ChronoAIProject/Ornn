@@ -1,3 +1,9 @@
+---
+version: 1.0.0
+lastUpdated: 2026-04-28
+---
+
+
 # Ornn vs. raw GitHub
 
 Plenty of teams already host their AI agent skills as `SKILL.md` files in a GitHub repo. That works. It's free, you already know how to use it, and your agent can curl the raw URL. This page is about the line where "just use GitHub" stops scaling and Ornn starts paying for itself.

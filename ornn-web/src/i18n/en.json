@@ -56,6 +56,7 @@
     "tags": "tags"
   },
   "explore": {
+    "systemSkills": "System Skills",
     "publicSkills": "Public Skills",
     "mySkills": "My Skills",
     "sharedWithMe": "Shared With Me",
@@ -236,16 +237,13 @@
     "loading": "Loading analytics…",
     "loadFailed": "Could not load analytics.",
     "unavailable": "Usage analytics are not available yet.",
-    "pullsHeading": "Skill pulls",
-    "pullsSubtitle": "Stacked by source. api = SDK / CLI / agent · web = detail-page download · playground = in-product trial.",
+    "usageHeading": "Skill Usage",
+    "usageSubtitle": "Pulls over time. api = SDK / CLI / agent · web = detail-page download · playground = in-product trial.",
     "bucketHour": "Hour",
     "bucketDay": "Day",
     "bucketMonth": "Month",
-    "from": "From",
-    "to": "To",
     "totalPulls": "Total",
-    "invalidRange": "Invalid range — 'from' must be earlier than 'to'.",
-    "noPulls": "No pulls recorded in this range."
+    "noUsage": "No usage in this range."
   },
   "notifications": {
     "bellAria": "Notifications",

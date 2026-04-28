@@ -13,6 +13,7 @@ import type { SkillService } from "./service";
 import type { SkillRepository } from "./repository";
 import type { ActivityRepository } from "../../admin/activityRepository";
 import type { AnalyticsService } from "../../analytics/service";
+import type { NyxidServiceClient } from "../../../clients/nyxid/service";
 import {
   type AuthVariables,
   nyxidAuthMiddleware,
@@ -20,6 +21,7 @@ import {
   requirePermission,
   getAuth,
   readUserOrgMemberships,
+  readUserOrgIds,
 } from "../../../middleware/nyxidAuth";
 import { validateBody, getValidatedBody } from "../../../middleware/validate";
 import { AppError } from "../../../shared/types/index";
@@ -43,6 +45,15 @@ const permissionsPatchSchema = z.object({
   sharedWithOrgs: z.array(z.string().min(1).max(128)).max(100).default([]),
 });
 
+/**
+ * Body for `PUT /api/v1/skills/:id/nyxid-service`. `nyxidServiceId: null`
+ * untie; a string ties to that catalog row. The service is validated +
+ * resolved server-side (visibility, owner, label).
+ */
+const nyxidServicePatchSchema = z.object({
+  nyxidServiceId: z.string().min(1).max(128).nullable(),
+});
+
 const logger = pino({ level: "info" }).child({ module: "skillCrudRoutes" });
 
 export interface SkillRoutesConfig {
@@ -56,10 +67,17 @@ export interface SkillRoutesConfig {
   analyticsService?: AnalyticsService;
   maxFileSize: number;
   activityRepo?: ActivityRepository;
+  /**
+   * NyxID catalog client. Used by `PUT /skills/:id/nyxid-service` to
+   * resolve the target service (visibility, owner, label) and by
+   * `GET /nyxid-services/:serviceId/skills` to validate the service id
+   * before listing skills tied to it.
+   */
+  nyxidServiceClient: NyxidServiceClient;
 }
 
 export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: AuthVariables }> {
-  const { skillService, skillRepo, analyticsService, maxFileSize, activityRepo } = config;
+  const { skillService, skillRepo, analyticsService, maxFileSize, activityRepo, nyxidServiceClient } = config;
   const app = new Hono<{ Variables: AuthVariables }>();
 
   const auth = nyxidAuthMiddleware();
@@ -606,6 +624,184 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
         .catch((err) => logger.warn({ err }, "Failed to log skill:permissions_change activity"));
 
       return c.json({ data: { skill: updated }, error: null });
+    },
+  );
+
+  /**
+   * PUT /skills/:id/nyxid-service — Tie or untie the skill to a NyxID
+   * catalog service.
+   *
+   * Body: `{ "nyxidServiceId": "<id>" | null }`.
+   *
+   * Authz:
+   *   - Caller must `canManageSkill` (author or platform admin).
+   *   - The target service must be visible to the caller AND eligible:
+   *     either an admin service (`visibility: "public"`) OR a personal
+   *     service the caller created. Tying to *another* user's personal
+   *     service is rejected (even for platform admins).
+   *
+   * Side effect: tying to an admin service flips `isPrivate: false`
+   * atomically — system skills are always public.
+   */
+  app.put(
+    "/skills/:id/nyxid-service",
+    auth,
+    requirePermission("ornn:skill:update"),
+    validateBody(nyxidServicePatchSchema, "INVALID_NYXID_SERVICE_PATCH"),
+    async (c) => {
+      const guid = c.req.param("id");
+      const authCtx = getAuth(c);
+
+      const existing = await skillRepo.findByGuid(guid);
+      if (!existing) {
+        throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${guid}' not found`);
+      }
+      const memberships = await readUserOrgMemberships(c);
+      const isPlatformAdmin = authCtx.permissions.includes("ornn:admin:skill");
+      const actor = { userId: authCtx.userId, memberships, isPlatformAdmin };
+      if (!canManageSkill(existing, actor)) {
+        throw AppError.forbidden(
+          "FORBIDDEN",
+          "You do not have permission to change this skill's NyxID service tie",
+        );
+      }
+
+      const body = getValidatedBody<z.infer<typeof nyxidServicePatchSchema>>(c);
+      const token = authCtx.userAccessToken;
+
+      const updated = await skillService.tieToNyxidService(
+        guid,
+        body.nyxidServiceId,
+        { userId: authCtx.userId, isPlatformAdmin },
+        async (id) => {
+          if (!token) return null;
+          const svc = await nyxidServiceClient.findVisibleToCaller(token, id);
+          if (!svc) return null;
+          return {
+            id: svc.id,
+            slug: svc.slug,
+            label: svc.label,
+            visibility: svc.visibility,
+            createdBy: svc.createdBy,
+          };
+        },
+      );
+
+      activityRepo
+        ?.log(authCtx.userId, authCtx.email, authCtx.displayName, "skill:nyxid_service_tie", {
+          skillId: guid,
+          skillName: updated.name,
+          nyxidServiceId: updated.nyxidServiceId,
+          isSystemSkill: updated.isSystemSkill === true,
+        })
+        .catch((err) => logger.warn({ err }, "Failed to log skill:nyxid_service_tie activity"));
+
+      return c.json({ data: { skill: updated }, error: null });
+    },
+  );
+
+  /**
+   * GET /nyxid-services/:serviceId/skills — List the skills tied to a
+   * given NyxID service.
+   *
+   * Visibility:
+   *   - Admin/system service (caller-visible & `visibility: "public"`):
+   *     returns every public skill tied to it (any authed caller).
+   *   - Personal service (caller-visible & `visibility: "private"`):
+   *     returns the caller's accessible skills tied to it. Only the
+   *     service owner / platform admin will see anything meaningful here.
+   *
+   * Service ids the caller cannot see (private + not owner) collapse to
+   * 404 to avoid leaking existence.
+   */
+  app.get(
+    "/nyxid-services/:serviceId/skills",
+    auth,
+    async (c) => {
+      const serviceId = c.req.param("serviceId");
+      const authCtx = getAuth(c);
+      const token = authCtx.userAccessToken;
+      if (!token) {
+        throw AppError.notFound(
+          "NYXID_SERVICE_NOT_FOUND",
+          `NyxID service '${serviceId}' not found`,
+        );
+      }
+
+      const service = await nyxidServiceClient.findVisibleToCaller(token, serviceId);
+      if (!service) {
+        throw AppError.notFound(
+          "NYXID_SERVICE_NOT_FOUND",
+          `NyxID service '${serviceId}' not found`,
+        );
+      }
+
+      const isAdminService = service.visibility === "public";
+      const isOwnerOfPersonal =
+        service.visibility === "private" && service.createdBy === authCtx.userId;
+      const isPlatformAdmin = authCtx.permissions.includes("ornn:admin:skill");
+
+      // Personal services: only the owner or a platform admin can browse
+      // the skill list. Anyone else gets a 404 (parity with the visibility
+      // gate above — existence not leaked).
+      if (!isAdminService && !isOwnerOfPersonal && !isPlatformAdmin) {
+        throw AppError.notFound(
+          "NYXID_SERVICE_NOT_FOUND",
+          `NyxID service '${serviceId}' not found`,
+        );
+      }
+
+      const page = Math.max(1, Number(c.req.query("page")) || 1);
+      const pageSize = Math.min(100, Math.max(1, Number(c.req.query("pageSize")) || 20));
+      const userOrgIds = await readUserOrgIds(c);
+      // Admin service → only public skills will match (system skills are
+      // forced public). Personal service → caller's `mixed` scope.
+      const scope = isAdminService ? "public" : "mixed";
+      const result = await skillRepo.findByNyxidService(
+        serviceId,
+        scope,
+        authCtx.userId,
+        userOrgIds,
+        page,
+        pageSize,
+      );
+
+      const items = result.skills.map((s) => ({
+        guid: s.guid,
+        name: s.name,
+        description: s.description,
+        ownerId: s.ownerId,
+        createdBy: s.createdBy,
+        createdByEmail: s.createdByEmail,
+        createdByDisplayName: s.createdByDisplayName,
+        createdOn:
+          s.createdOn instanceof Date ? s.createdOn.toISOString() : String(s.createdOn),
+        updatedOn:
+          s.updatedOn instanceof Date ? s.updatedOn.toISOString() : String(s.updatedOn),
+        isPrivate: s.isPrivate,
+        tags: s.metadata?.tags ?? [],
+        nyxidServiceId: s.nyxidServiceId ?? null,
+        nyxidServiceSlug: s.nyxidServiceSlug ?? null,
+        nyxidServiceLabel: s.nyxidServiceLabel ?? null,
+        isSystemSkill: s.isSystemSkill === true,
+      }));
+
+      return c.json({
+        data: {
+          service: {
+            id: service.id,
+            slug: service.slug,
+            label: service.label,
+            tier: isAdminService ? ("admin" as const) : ("personal" as const),
+          },
+          items,
+          total: result.total,
+          page,
+          pageSize,
+          totalPages: Math.ceil(result.total / pageSize),
+        },
+        error: null,
+      });
     },
   );
 

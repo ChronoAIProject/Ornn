@@ -274,6 +274,17 @@ export class SkillService {
       throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${guid}' not found`);
     }
 
+    // System-skill invariant: a skill tied to an admin NyxID service is
+    // always public. Reject attempts to flip it back to private without
+    // first untying — keeps the "system skill ⇒ visible to everyone"
+    // mental model tight.
+    if (existing.isSystemSkill === true && permissions.isPrivate === true) {
+      throw AppError.badRequest(
+        "SYSTEM_SKILL_MUST_BE_PUBLIC",
+        "This skill is tied to an admin NyxID service and must remain public. Untie the service before making it private.",
+      );
+    }
+
     // Dedupe the lists + drop any self-references. The author always has
     // access; including their id in `sharedWithUsers` is redundant and
     // noisy for downstream debugging.
@@ -309,6 +320,18 @@ export class SkillService {
     const existing = await this.skillRepo.findByGuid(guid);
     if (!existing) {
       throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${guid}' not found`);
+    }
+
+    // System-skill invariant — same as setSkillPermissions. Block
+    // `PUT /skills/:id` body that flips a system skill private.
+    if (
+      existing.isSystemSkill === true &&
+      options.isPrivate === true
+    ) {
+      throw AppError.badRequest(
+        "SYSTEM_SKILL_MUST_BE_PUBLIC",
+        "This skill is tied to an admin NyxID service and must remain public. Untie the service before making it private.",
+      );
     }
 
     const updateData: Record<string, unknown> = { updatedBy: userId };
@@ -630,6 +653,87 @@ export class SkillService {
     logger.info({ skillGuid: skill.guid, version }, "Skill version deleted");
   }
 
+  /**
+   * Tie or untie a skill to a NyxID service. `serviceId === null` clears
+   * the tie and leaves `isPrivate` alone. When tying to a service:
+   *
+   * - The route layer has already verified the caller can manage the
+   *   skill (author or platform admin).
+   * - This method validates that the caller is **eligible** to use the
+   *   target service: either it's an admin/platform service
+   *   (`visibility: "public"`) the caller can see, or it's a private
+   *   service the caller created (`created_by === caller.userId`).
+   * - If the target is an admin service, `isPrivate` is forced to
+   *   `false` atomically. Personal ties leave `isPrivate` alone.
+   *
+   * The `lookupService` callback is passed in so the route layer can
+   * inject a `NyxidServiceClient` without the service module taking a
+   * direct dependency on it. Returns the refreshed `SkillDetailResponse`.
+   */
+  async tieToNyxidService(
+    guid: string,
+    serviceId: string | null,
+    actor: { userId: string; isPlatformAdmin: boolean },
+    lookupService: (id: string) => Promise<{
+      id: string;
+      slug: string;
+      label: string;
+      visibility: "public" | "private";
+      createdBy: string;
+    } | null>,
+  ): Promise<SkillDetailResponse> {
+    const existing = await this.skillRepo.findByGuid(guid);
+    if (!existing) {
+      throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${guid}' not found`);
+    }
+
+    // Untie path — wipe all four cached fields, leave `isPrivate` alone.
+    if (serviceId === null) {
+      const updated = await this.skillRepo.setNyxidService(guid, {
+        nyxidServiceId: null,
+        nyxidServiceSlug: null,
+        nyxidServiceLabel: null,
+        isSystemSkill: false,
+        updatedBy: actor.userId,
+      });
+      return this.buildDetailResponse(updated);
+    }
+
+    const service = await lookupService(serviceId);
+    if (!service) {
+      throw AppError.notFound(
+        "NYXID_SERVICE_NOT_FOUND",
+        `NyxID service '${serviceId}' not found or not visible to caller`,
+      );
+    }
+
+    const isAdminService = service.visibility === "public";
+    const isCallerOwnedPersonal =
+      service.visibility === "private" && service.createdBy === actor.userId;
+
+    // Eligibility: admin service (anyone can tie) OR own personal service.
+    // Tying to *another user's* personal service is rejected even for
+    // platform admins — the spec's #4 explicitly limits admins to "his
+    // own personal nyxid service or any admin nyxid services".
+    if (!isAdminService && !isCallerOwnedPersonal) {
+      throw AppError.forbidden(
+        "NYXID_SERVICE_NOT_ELIGIBLE",
+        "Caller is not eligible to tie this skill to that NyxID service",
+      );
+    }
+
+    const updated = await this.skillRepo.setNyxidService(guid, {
+      nyxidServiceId: service.id,
+      nyxidServiceSlug: service.slug,
+      nyxidServiceLabel: service.label,
+      isSystemSkill: isAdminService,
+      // Admin tie forces public; personal tie leaves privacy alone.
+      isPrivate: isAdminService ? false : undefined,
+      updatedBy: actor.userId,
+    });
+    return this.buildDetailResponse(updated);
+  }
+
   async deleteSkill(guid: string): Promise<void> {
     const existing = await this.skillRepo.findByGuid(guid);
     if (!existing) {
@@ -917,6 +1021,10 @@ export class SkillService {
             lastSyncedCommit: skill.source.lastSyncedCommit,
           }
         : undefined,
+      nyxidServiceId: skill.nyxidServiceId ?? null,
+      nyxidServiceSlug: skill.nyxidServiceSlug ?? null,
+      nyxidServiceLabel: skill.nyxidServiceLabel ?? null,
+      isSystemSkill: skill.isSystemSkill === true,
     };
   }
 

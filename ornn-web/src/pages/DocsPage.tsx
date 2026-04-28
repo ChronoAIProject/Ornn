@@ -635,10 +635,28 @@ export function DocsPage() {
     return content ?? `# ${t("docs.notFound")}\n\nCould not load \`${activeId}\`.`;
   }, [lang, activeId, t]);
 
-  // The Agent Manual is intentionally a paste-installable skill (see its
-  // SKILL.md frontmatter). Every doc is copyable for parity, but the
-  // button matters most on agent-manual where the recipient is the agent
-  // itself.
+  // Parse a single leading YAML frontmatter block (`---\n...\n---`).
+  // - `displayMarkdown` strips the block so it doesn't render as bold prose.
+  // - `frontmatter` is the parsed key/value object — used to render a
+  //   small version badge (and `lastUpdated`) at the top of the article.
+  // - The raw `markdown` (with frontmatter intact) is what the Copy-as-
+  //   markdown button copies, so the doc stays paste-installable elsewhere.
+  const { displayMarkdown, frontmatter } = useMemo(() => {
+    const m = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/m.exec(markdown);
+    if (!m || m.index !== 0) {
+      return { displayMarkdown: markdown, frontmatter: {} as Record<string, string> };
+    }
+    const fm: Record<string, string> = {};
+    for (const raw of m[1].split(/\r?\n/)) {
+      const kv = /^\s*([A-Za-z][\w-]*)\s*:\s*(.+?)\s*$/.exec(raw);
+      if (kv) fm[kv[1]] = kv[2].replace(/^['"]|['"]$/g, "");
+    }
+    return { displayMarkdown: markdown.slice(m[0].length), frontmatter: fm };
+  }, [markdown]);
+
+  // Every doc is copyable; nothing on the docs site today is paste-
+  // installable as a skill (the agent manual was retired and now lives
+  // as the `ornn-agent-manual` Ornn system skill, fetched via API).
   const handleCopyDoc = useCallback(async () => {
     try {
       await navigator.clipboard.writeText(markdown);
@@ -649,7 +667,7 @@ export function DocsPage() {
     }
   }, [markdown]);
 
-  const toc = useMemo(() => extractToc(markdown), [markdown]);
+  const toc = useMemo(() => extractToc(displayMarkdown), [displayMarkdown]);
 
   // Scroll-spy: track which heading is currently in view
   useEffect(() => {
@@ -718,11 +736,11 @@ export function DocsPage() {
         <div className="flex-1 min-w-0 flex min-h-0">
           {/* Main content — scrollable */}
           <div ref={contentRef} className="flex-1 min-w-0 min-h-0 overflow-y-auto px-8 py-6">
-            {markdown.includes("<!-- RELEASES -->") ? (
+            {displayMarkdown.includes("<!-- RELEASES -->") ? (
               /* Release-history pages: split at placeholder and inject accordion */
               <article className="markdown-body max-w-4xl mx-auto">
                 {(() => {
-                  const [before, after] = markdown.split("<!-- RELEASES -->");
+                  const [before, after] = displayMarkdown.split("<!-- RELEASES -->");
                   return (
                     <>
                       <ReactMarkdown
@@ -744,11 +762,11 @@ export function DocsPage() {
                   );
                 })()}
               </article>
-            ) : markdown.includes("<!-- VERSION_BADGE -->") ? (
+            ) : displayMarkdown.includes("<!-- VERSION_BADGE -->") ? (
               /* What is Ornn: inject dynamic version badge linking to GitHub Releases */
               <article className="markdown-body max-w-4xl mx-auto">
                 {(() => {
-                  const [before, after] = markdown.split("<!-- VERSION_BADGE -->");
+                  const [before, after] = displayMarkdown.split("<!-- VERSION_BADGE -->");
                   return (
                     <>
                       <ReactMarkdown
@@ -772,7 +790,14 @@ export function DocsPage() {
               </article>
             ) : (
               <article className="markdown-body max-w-4xl mx-auto">
-                <div className="not-prose mb-6 flex justify-end">
+                <div className="not-prose mb-6 flex flex-wrap items-center justify-between gap-3">
+                  <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
+                    {frontmatter.version && <span>v{frontmatter.version}</span>}
+                    {frontmatter.version && frontmatter.lastUpdated && (
+                      <span className="opacity-50"> · </span>
+                    )}
+                    {frontmatter.lastUpdated && <span>updated {frontmatter.lastUpdated}</span>}
+                  </div>
                   <button
                     type="button"
                     onClick={handleCopyDoc}
@@ -811,7 +836,7 @@ export function DocsPage() {
                     ...headingComponents,
                   }}
                 >
-                  {markdown}
+                  {displayMarkdown}
                 </ReactMarkdown>
               </article>
             )}
