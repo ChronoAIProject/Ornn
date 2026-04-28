@@ -65,7 +65,7 @@ function ScoreCell({ score }: { score: AuditScore }) {
       }`}
     >
       <div className="flex items-center justify-between">
-        <span className="font-heading text-[11px] uppercase tracking-wider text-text-muted">
+        <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-text-muted">
           {prettyDim(score.dimension)}
         </span>
         <span
@@ -91,8 +91,8 @@ function FindingRow({ f }: { f: AuditFinding }) {
   return (
     <div className={`flex flex-col gap-1 rounded-lg border px-3 py-2 ${severityStyle}`}>
       <div className="flex items-center gap-2">
-        <span className="font-heading text-[10px] uppercase tracking-wider">{f.severity}</span>
-        <span className="font-heading text-[10px] uppercase tracking-wider text-text-muted">
+        <span className="font-mono text-[10px] uppercase tracking-[0.14em]">{f.severity}</span>
+        <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-text-muted">
           {prettyDim(f.dimension)}
         </span>
         {f.file && (
@@ -119,7 +119,7 @@ function RunningRow({ record }: { record: AuditRecord }) {
         aria-hidden
         className="h-3 w-3 shrink-0 animate-spin rounded-full border-2 border-neon-cyan/30 border-t-neon-cyan"
       />
-      <span className="font-heading text-xs uppercase tracking-wider text-neon-cyan">
+      <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-neon-cyan">
         {t("audit.statusRunning", "Running")}
       </span>
       <span className="font-mono text-xs text-text-muted">v{record.version}</span>
@@ -144,7 +144,7 @@ function FailedRow({ record }: { record: AuditRecord }) {
     <div className="flex flex-col gap-1 rounded-lg border border-neon-red/30 bg-neon-red/5 px-4 py-3">
       <div className="flex items-center gap-3">
         <span aria-hidden className="h-2.5 w-2.5 shrink-0 rounded-full bg-neon-red" />
-        <span className="font-heading text-xs uppercase tracking-wider text-neon-red">
+        <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-neon-red">
           {t("audit.statusFailed", "Failed")}
         </span>
         <span className="font-mono text-xs text-text-muted">v{record.version}</span>
@@ -180,7 +180,7 @@ function HistoryRow({ record, defaultOpen }: { record: AuditRecord; defaultOpen:
         className="flex w-full items-center gap-3 px-4 py-3 cursor-pointer"
       >
         <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${style.dot}`} />
-        <span className={`font-heading text-xs uppercase tracking-wider ${style.text}`}>
+        <span className={`font-mono text-[10px] uppercase tracking-[0.14em] ${style.text}`}>
           {style.label}
         </span>
         <span className="font-mono text-sm text-text-primary">
@@ -212,7 +212,7 @@ function HistoryRow({ record, defaultOpen }: { record: AuditRecord; defaultOpen:
       {expanded && (
         <div className="border-t border-neon-cyan/10 px-4 py-4 space-y-4">
           <section>
-            <h4 className="mb-2 font-heading text-[11px] uppercase tracking-wider text-text-muted">
+            <h4 className="mb-2 font-mono text-[10px] uppercase tracking-[0.14em] text-text-muted">
               {t("audit.scoresHeading", "Scores by dimension")}
             </h4>
             <div className="grid gap-2 sm:grid-cols-2">
@@ -223,7 +223,7 @@ function HistoryRow({ record, defaultOpen }: { record: AuditRecord; defaultOpen:
           </section>
 
           <section>
-            <h4 className="mb-2 font-heading text-[11px] uppercase tracking-wider text-text-muted">
+            <h4 className="mb-2 font-mono text-[10px] uppercase tracking-[0.14em] text-text-muted">
               {t("audit.findingsHeading", "Findings")}
               <span className="ml-2 font-mono text-text-muted normal-case tracking-normal">
                 ({record.findings.length})
@@ -292,7 +292,7 @@ export function SkillAuditHistoryPage() {
             <h1 className="font-heading text-2xl text-text-primary truncate">
               {displayName}
             </h1>
-            <p className="mt-1 font-heading text-xs uppercase tracking-wider text-text-muted">
+            <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.14em] text-text-muted">
               {versionFilter
                 ? t("audit.historyHeadingForVersion", "Audit history · v{{v}}", {
                     v: versionFilter,
