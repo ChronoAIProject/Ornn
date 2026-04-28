@@ -2,6 +2,7 @@
 @import "highlight.js/styles/tokyo-night-dark.css";
 
 @theme {
+  /* ── Legacy neon-* tokens (do not extend; migrate per page) ── */
   --color-neon-cyan: #FF6B00;
   --color-neon-magenta: #FF8C38;
   --color-neon-yellow: #FFB800;
@@ -16,6 +17,41 @@
   --font-heading: "Orbitron", sans-serif;
   --font-body: "Rajdhani", sans-serif;
   --font-mono: "JetBrains Mono", monospace;
+
+  /* ── Editorial Forge tokens (DESIGN.md, light-first) ──
+   * Defaults below are the dark-mode values; light-mode overrides
+   * sit in [data-theme="light"]. New UI work uses these:
+   *   bg-page, bg-panel, bg-card, bg-elevated
+   *   text-strong, text-body, text-meta
+   *   text-accent, bg-accent, border-accent
+   *   text-success / warning / danger / info
+   *   border-subtle, border-strong
+   * Plus Fraunces / Inter via font-display, font-reading.
+   */
+  --color-page: #0A0907;
+  --color-panel: #17150F;
+  --color-card: #17150F;
+  --color-elevated: #26221B;
+  --color-strong: #F1ECDE;
+  --color-body: #C9BFAD;
+  --color-meta: #6B6254;
+  --color-accent: #FF6A1A;
+  --color-accent-muted: #C94A0E;
+  --color-accent-support: #E8B341;
+  --color-subtle: rgba(201, 191, 173, 0.12);
+  --color-strong-edge: rgba(201, 191, 173, 0.22);
+  --color-success: #7FA06A;
+  --color-success-soft: rgba(127, 160, 106, 0.12);
+  --color-warning: #E8B341;
+  --color-warning-soft: rgba(232, 179, 65, 0.12);
+  --color-danger: #C96B5A;
+  --color-danger-soft: rgba(201, 107, 90, 0.12);
+  --color-info: #8A97A3;
+  --color-info-soft: rgba(138, 151, 163, 0.12);
+  --color-code-bg: #0A0907;
+
+  --font-display: "Fraunces", Georgia, serif;
+  --font-reading: "Inter", system-ui, sans-serif;
 }
 
 /* ──────── Light mode overrides ──────── */
@@ -30,6 +66,29 @@
   --color-neon-yellow: #b38200;
   --color-neon-green: #1a8c0a;
   --color-neon-red: #d42020;
+
+  /* Editorial Forge — bright (flagship) */
+  --color-page: #F5EFE1;
+  --color-panel: #EBE4D3;
+  --color-card: #FFFBF0;
+  --color-elevated: #E9E2CE;
+  --color-strong: #1A1812;
+  --color-body: #5E5544;
+  --color-meta: #8A7F6C;
+  --color-accent: #C94A0E;
+  --color-accent-muted: #A33A08;
+  --color-accent-support: #B8861A;
+  --color-subtle: rgba(26, 24, 18, 0.10);
+  --color-strong-edge: rgba(26, 24, 18, 0.22);
+  --color-success: #5F7A46;
+  --color-success-soft: rgba(95, 122, 70, 0.10);
+  --color-warning: #A97818;
+  --color-warning-soft: rgba(169, 120, 24, 0.10);
+  --color-danger: #9E4E42;
+  --color-danger-soft: rgba(158, 78, 66, 0.10);
+  --color-info: #5D6973;
+  --color-info-soft: rgba(93, 105, 115, 0.10);
+  --color-code-bg: #1A1612;
 }
 
 /* Base */
