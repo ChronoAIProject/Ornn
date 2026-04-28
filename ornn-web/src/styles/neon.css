@@ -2,21 +2,27 @@
 @import "highlight.js/styles/tokyo-night-dark.css";
 
 @theme {
-  /* ── Legacy neon-* tokens (do not extend; migrate per page) ── */
-  --color-neon-cyan: #FF6B00;
-  --color-neon-magenta: #FF8C38;
-  --color-neon-yellow: #FFB800;
-  --color-neon-green: #39ff14;
-  --color-neon-red: #ff003c;
-  --color-bg-deep: #0a0a0f;
-  --color-bg-surface: #131313;
-  --color-bg-elevated: #1e1e1e;
-  --color-text-primary: #e8e8e8;
-  --color-text-muted: #7a7a7a;
+  /* ── Legacy neon-* tokens — REMAPPED to Editorial Forge values during
+   *    the design migration. Component code that still references
+   *    `bg-neon-cyan`, `text-text-primary`, `font-heading`, etc. now
+   *    automatically picks up the Editorial Forge palette + typography
+   *    without touching component source. New work should use the
+   *    semantic tokens below (bg-page / text-strong / text-accent /
+   *    font-display / font-reading). ── */
+  --color-neon-cyan: #FF6A1A;     /* was Orbitron-era #FF6B00 — now matches accent */
+  --color-neon-magenta: #E8B341;  /* was #FF8C38 — now accent-support */
+  --color-neon-yellow: #E8B341;   /* was #FFB800 — now warning */
+  --color-neon-green: #7FA06A;    /* was #39ff14 — now mineral success */
+  --color-neon-red: #C96B5A;      /* was #ff003c — now kiln danger */
+  --color-bg-deep: #0A0907;       /* was #0a0a0f — now page */
+  --color-bg-surface: #17150F;    /* was #131313 — now panel/card */
+  --color-bg-elevated: #26221B;   /* was #1e1e1e — now elevated */
+  --color-text-primary: #F1ECDE;  /* was #e8e8e8 — now strong */
+  --color-text-muted: #6B6254;    /* was #7a7a7a — now meta */
 
-  --font-heading: "Orbitron", sans-serif;
-  --font-body: "Rajdhani", sans-serif;
-  --font-mono: "JetBrains Mono", monospace;
+  --font-heading: "Fraunces", Georgia, serif;          /* was Orbitron */
+  --font-body: "Inter", system-ui, sans-serif;         /* was Rajdhani */
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
 
   /* ── Editorial Forge tokens (DESIGN.md, light-first) ──
    * Defaults below are the dark-mode values; light-mode overrides
@@ -54,18 +60,19 @@
   --font-reading: "Inter", system-ui, sans-serif;
 }
 
-/* ──────── Light mode overrides ──────── */
+/* ──────── Light mode overrides — Editorial Forge bright (flagship) ──────── */
 [data-theme="light"] {
-  --color-bg-deep: #fafafa;
-  --color-bg-surface: #ffffff;
-  --color-bg-elevated: #f3f3f5;
-  --color-text-primary: #2d2d2d;
-  --color-text-muted: #888888;
-  --color-neon-cyan: #d45a00;
-  --color-neon-magenta: #c06000;
-  --color-neon-yellow: #b38200;
-  --color-neon-green: #1a8c0a;
-  --color-neon-red: #d42020;
+  /* Legacy aliases mapped to bright Editorial Forge values */
+  --color-bg-deep: #F5EFE1;       /* parchment page */
+  --color-bg-surface: #EBE4D3;    /* warm panel */
+  --color-bg-elevated: #E9E2CE;   /* elevated paper */
+  --color-text-primary: #1A1812;  /* ink */
+  --color-text-muted: #8A7F6C;    /* meta */
+  --color-neon-cyan: #C94A0E;     /* ember (deeper for paper contrast) */
+  --color-neon-magenta: #B8861A;  /* accent-support (brass) */
+  --color-neon-yellow: #A97818;   /* warning (brass deeper) */
+  --color-neon-green: #5F7A46;    /* success (oxidized) */
+  --color-neon-red: #9E4E42;      /* danger (kiln) */
 
   /* Editorial Forge — bright (flagship) */
   --color-page: #F5EFE1;
@@ -104,106 +111,73 @@ code, pre {
   font-family: var(--font-mono);
 }
 
-/* Forge glow text — subtle single-layer glow */
-.neon-cyan {
-  text-shadow: 0 0 8px rgba(255, 107, 0, 0.5);
+/* Editorial Forge — accent text emphasis (no glow, restrained per DESIGN.md) */
+.neon-cyan, .neon-magenta, .neon-yellow {
+  font-weight: 600;
 }
 
-.neon-magenta {
-  text-shadow: 0 0 8px rgba(255, 140, 56, 0.5);
-}
-
-.neon-yellow {
-  text-shadow: 0 0 8px rgba(255, 184, 0, 0.5);
-}
-
-[data-theme="light"] .neon-cyan,
-[data-theme="light"] .neon-magenta,
-[data-theme="light"] .neon-yellow {
-  text-shadow: none;
-}
-
-/* Forge border glow */
+/* Editorial Forge edge — for legacy `.neon-border-cyan` / `.neon-border-magenta`
+ * usages still in the codebase. Hairline border, no glow. */
 .neon-border-cyan {
-  border: 1px solid #FF6B00;
-  box-shadow: 0 0 5px #FF6B0044, inset 0 0 5px #FF6B0022;
+  border: 1px solid var(--color-accent);
 }
 
 .neon-border-magenta {
-  border: 1px solid #FF8C38;
-  box-shadow: 0 0 5px #FF8C3844, inset 0 0 5px #FF8C3822;
+  border: 1px solid var(--color-accent-support);
 }
 
-/* Glass morphism */
+/* Glass morphism — re-cast as a paper / forged-metal card surface.
+ * Drop the backdrop blur (DESIGN.md: "no generic glassmorphism as the
+ * default surface treatment"). Kept the class so existing markup
+ * compiles, but it now resolves to an Editorial Forge card. */
 .glass {
-  background: rgba(19, 19, 19, 0.7);
-  backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 107, 0, 0.12);
+  background: var(--color-card);
+  border: 1px solid var(--color-subtle);
 }
 
 .glass-hover:hover {
-  border-color: rgba(255, 107, 0, 0.35);
-  box-shadow: 0 0 15px rgba(255, 107, 0, 0.15);
+  border-color: var(--color-strong-edge);
 }
 
 [data-theme="light"] .glass {
-  background: rgba(255, 255, 255, 0.92);
-  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: var(--color-card);
+  border: 1px solid var(--color-subtle);
 }
 
 [data-theme="light"] .glass-hover:hover {
-  border-color: rgba(212, 90, 0, 0.35);
-  box-shadow: 0 2px 12px rgba(212, 90, 0, 0.08);
+  border-color: var(--color-strong-edge);
 }
 
-/* Scanline overlay */
+/* Scanline overlay — no-op. Class kept so legacy markup compiles. */
 .scanlines {
   position: relative;
 }
 
-.scanlines::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: repeating-linear-gradient(
-    0deg,
-    transparent,
-    transparent 2px,
-    rgba(0, 0, 0, 0.08) 2px,
-    rgba(0, 0, 0, 0.08) 4px
-  );
-  pointer-events: none;
-}
-
-/* Forge scrollbar */
+/* Editorial Forge scrollbar — ember thumb on transparent track. */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #0a0a0f;
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #FF6B0044;
-  border-radius: 3px;
+  background: rgba(201, 74, 14, 0.28);
+  border-radius: 2px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #FF6B0088;
-}
-
-[data-theme="light"] ::-webkit-scrollbar-track {
-  background: #f3f3f5;
+  background: rgba(201, 74, 14, 0.55);
 }
 
 [data-theme="light"] ::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.15);
+  background: rgba(201, 74, 14, 0.22);
 }
 
 [data-theme="light"] ::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 0, 0, 0.25);
+  background: rgba(201, 74, 14, 0.45);
 }
 
 /* Blinking cursor for streaming token display */
@@ -266,11 +240,11 @@ code, pre {
   100% { transform: translateX(-50%); }
 }
 
-/* Background grid pattern */
+/* Background grid pattern — restrained dot grid in ember tone. */
 .bg-grid {
   background-image: radial-gradient(
     circle,
-    rgba(255, 107, 0, 0.06) 1px,
+    rgba(201, 74, 14, 0.06) 1px,
     transparent 1px
   );
   background-size: 32px 32px;
@@ -280,57 +254,59 @@ code, pre {
 [data-theme="light"] .bg-grid {
   background-image: radial-gradient(
     circle,
-    rgba(0, 0, 0, 0.04) 1px,
+    rgba(26, 24, 18, 0.05) 1px,
     transparent 1px
   );
 }
 
-/* Focus ring */
+/* Focus ring — Editorial Forge ember edge, no glow halo. */
 .neon-focus:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 2px #FF6B00, 0 0 10px #FF6B0044;
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+  box-shadow: none;
 }
 
-/* Forge input */
+/* Forge input — drafted, instrument-like. Hairline edge, focus tightens. */
 .neon-input {
-  background: rgba(10, 10, 15, 0.8);
-  border: none;
-  border-bottom: 2px solid rgba(255, 107, 0, 0.3);
-  transition: border-color 0.2s, box-shadow 0.2s;
+  background: var(--color-elevated);
+  border: 1px solid var(--color-subtle);
+  border-radius: 2px;
+  transition: border-color 0.2s;
 }
 
 .neon-input:focus {
   outline: none;
-  border-bottom-color: #FF6B00;
-  box-shadow: 0 2px 10px rgba(255, 107, 0, 0.2);
+  border-color: var(--color-accent);
 }
 
 [data-theme="light"] .neon-input {
-  background: rgba(255, 255, 255, 0.95);
-  border-bottom: 2px solid rgba(0, 0, 0, 0.12);
+  background: var(--color-card);
+  border: 1px solid var(--color-subtle);
 }
 
 [data-theme="light"] .neon-input:focus {
-  border-bottom-color: #d45a00;
-  box-shadow: 0 2px 8px rgba(212, 90, 0, 0.1);
+  border-color: var(--color-accent);
 }
 
-/* Markdown content styling */
+/* Markdown content styling — Editorial Forge editorial reading surface. */
 .markdown-body {
-  color: #e8e8e8;
+  color: var(--color-body);
+  font-family: var(--font-reading, "Inter", system-ui, sans-serif);
   line-height: 1.7;
 }
 
 .markdown-body h1,
 .markdown-body h2,
 .markdown-body h3 {
-  font-family: var(--font-heading);
-  color: #FF6B00;
+  font-family: var(--font-display, "Fraunces", Georgia, serif);
+  color: var(--color-strong);
+  font-weight: 600;
+  letter-spacing: -0.01em;
   margin-top: 1.5em;
   margin-bottom: 0.5em;
 }
 
-.markdown-body h1 { font-size: 1.75rem; }
+.markdown-body h1 { font-size: 1.875rem; }
 .markdown-body h2 { font-size: 1.5rem; }
 .markdown-body h3 { font-size: 1.25rem; }
 
@@ -340,16 +316,17 @@ code, pre {
 
 .markdown-body code {
   font-family: var(--font-mono);
-  background: rgba(255, 107, 0, 0.08);
-  padding: 0.15em 0.4em;
-  border-radius: 4px;
+  background: var(--color-elevated);
+  border: 1px solid var(--color-subtle);
+  padding: 0.1em 0.4em;
+  border-radius: 2px;
   font-size: 0.9em;
 }
 
 .markdown-body pre {
-  background: #0a0a0f !important;
-  border: 1px solid rgba(255, 107, 0, 0.15);
-  border-radius: 8px;
+  background: var(--color-code-bg) !important;
+  border: 1px solid var(--color-subtle);
+  border-radius: 4px;
   padding: 1rem;
   overflow-x: auto;
   margin-bottom: 1em;
@@ -357,13 +334,18 @@ code, pre {
 
 .markdown-body pre code {
   background: none;
+  border: none;
   padding: 0;
 }
 
 .markdown-body a {
-  color: #FF6B00;
+  color: var(--color-accent);
   text-decoration: underline;
   text-underline-offset: 2px;
+}
+
+.markdown-body a:hover {
+  color: var(--color-accent-muted);
 }
 
 .markdown-body ul,
@@ -377,9 +359,10 @@ code, pre {
 }
 
 .markdown-body blockquote {
-  border-left: 3px solid #FF8C38;
+  border-left: 2px solid var(--color-accent);
   padding-left: 1em;
-  color: #7a7a7a;
+  color: var(--color-meta);
+  font-style: italic;
   margin-bottom: 1em;
 }
 
@@ -391,154 +374,77 @@ code, pre {
 
 .markdown-body th,
 .markdown-body td {
-  border: 1px solid rgba(255, 107, 0, 0.15);
+  border: 1px solid var(--color-subtle);
   padding: 0.5em 0.75em;
   text-align: left;
 }
 
 .markdown-body th {
-  background: rgba(255, 107, 0, 0.08);
-  font-family: var(--font-heading);
-  font-size: 0.85em;
-}
-
-/* ──────── Markdown light mode ──────── */
-[data-theme="light"] .markdown-body {
-  color: #2d2d2d;
-}
-
-[data-theme="light"] .markdown-body h1,
-[data-theme="light"] .markdown-body h2,
-[data-theme="light"] .markdown-body h3 {
-  color: #b34a00;
-}
-
-[data-theme="light"] .markdown-body code {
-  background: rgba(0, 0, 0, 0.05);
-  color: #c04000;
-}
-
-[data-theme="light"] .markdown-body pre {
-  background: #f6f6f8 !important;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-}
-
-[data-theme="light"] .markdown-body pre code {
-  color: inherit;
-}
-
-[data-theme="light"] .markdown-body a {
-  color: #c04000;
-}
-
-[data-theme="light"] .markdown-body blockquote {
-  color: #888888;
-  border-left-color: #d45a00;
-}
-
-[data-theme="light"] .markdown-body th,
-[data-theme="light"] .markdown-body td {
-  border: 1px solid rgba(0, 0, 0, 0.08);
-}
-
-[data-theme="light"] .markdown-body th {
-  background: rgba(0, 0, 0, 0.03);
+  background: var(--color-elevated);
+  font-family: var(--font-mono);
+  font-size: 0.8em;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-meta);
+  font-weight: 600;
 }
 
 /* ──────── Mermaid diagram theme adaptation ──────── */
 
-/* Dark mode: ensure mermaid SVGs have proper text color */
 .markdown-body .mermaid-container text,
 .markdown-body .mermaid-container .nodeLabel,
 .markdown-body .mermaid-container .edgeLabel,
 .markdown-body .mermaid-container .label,
 .markdown-body .mermaid-container .cluster-label {
-  fill: #e8e8e8 !important;
+  fill: var(--color-strong) !important;
 }
 
 .markdown-body .mermaid-container .messageText,
 .markdown-body .mermaid-container .loopText,
 .markdown-body .mermaid-container .labelText {
-  fill: #e8e8e8 !important;
+  fill: var(--color-strong) !important;
 }
 
-/* Light mode: override mermaid SVG colors */
-[data-theme="light"] .markdown-body .mermaid-container text,
-[data-theme="light"] .markdown-body .mermaid-container .nodeLabel,
-[data-theme="light"] .markdown-body .mermaid-container .edgeLabel,
-[data-theme="light"] .markdown-body .mermaid-container .label,
-[data-theme="light"] .markdown-body .mermaid-container .cluster-label {
-  fill: #2d2d2d !important;
-}
-
-[data-theme="light"] .markdown-body .mermaid-container .messageText,
-[data-theme="light"] .markdown-body .mermaid-container .loopText,
-[data-theme="light"] .markdown-body .mermaid-container .labelText {
-  fill: #2d2d2d !important;
-}
-
-/* Light mode code syntax highlighting overrides */
-[data-theme="light"] .markdown-body pre {
-  color: #2d2d2d;
-}
-
+/* Code syntax highlighting — Editorial Forge code chrome.
+ * Code surfaces stay deliberately dark in both themes (DESIGN.md
+ * "Terminal and Install Surfaces"); foreground tokens use editorial
+ * mineral colors. */
+[data-theme="light"] .markdown-body pre,
 [data-theme="light"] .hljs {
-  background: #f6f6f8 !important;
-  color: #2d2d2d !important;
+  background: var(--color-code-bg) !important;
+  color: #C9BFAD !important;
 }
 
-[data-theme="light"] .hljs-keyword,
-[data-theme="light"] .hljs-selector-tag,
-[data-theme="light"] .hljs-built_in {
-  color: #8b3fbd !important;
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-built_in {
+  color: #E8B341 !important;
 }
 
-[data-theme="light"] .hljs-string,
-[data-theme="light"] .hljs-title.class_,
-[data-theme="light"] .hljs-section {
-  color: #0d7c3b !important;
+.hljs-string,
+.hljs-title.class_,
+.hljs-section {
+  color: #7FA06A !important;
 }
 
-[data-theme="light"] .hljs-attr,
-[data-theme="light"] .hljs-attribute {
-  color: #c04000 !important;
+.hljs-attr,
+.hljs-attribute,
+.hljs-name,
+.hljs-tag {
+  color: #FF6A1A !important;
 }
 
-[data-theme="light"] .hljs-number,
-[data-theme="light"] .hljs-literal {
-  color: #0b69a3 !important;
+.hljs-number,
+.hljs-literal {
+  color: #8A97A3 !important;
 }
 
-[data-theme="light"] .hljs-comment {
-  color: #888888 !important;
+.hljs-comment {
+  color: #6B6254 !important;
+  font-style: italic;
 }
 
-[data-theme="light"] .hljs-type,
-[data-theme="light"] .hljs-title {
-  color: #b34a00 !important;
-}
-
-[data-theme="light"] .hljs-name,
-[data-theme="light"] .hljs-tag {
-  color: #d42020 !important;
-}
-
-/* Forge border glow — light mode */
-[data-theme="light"] .neon-border-cyan {
-  box-shadow: none;
-}
-
-[data-theme="light"] .neon-border-magenta {
-  box-shadow: none;
-}
-
-/* Skeleton shimmer — light mode */
-[data-theme="light"] .skeleton-shimmer {
-  background: linear-gradient(
-    90deg,
-    rgba(255, 107, 0, 0.04) 25%,
-    rgba(255, 107, 0, 0.08) 50%,
-    rgba(255, 107, 0, 0.04) 75%
-  );
-  background-size: 200% 100%;
+.hljs-type,
+.hljs-title {
+  color: #E8B341 !important;
 }

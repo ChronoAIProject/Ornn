@@ -79,27 +79,27 @@ export function RootLayout() {
   const crumbs = useBreadcrumbs();
 
   return (
-    <div className="flex flex-col h-screen bg-bg-deep bg-grid overflow-hidden">
+    <div className="flex flex-col h-screen bg-page bg-grid overflow-hidden">
       <Navbar />
       {/* Breadcrumb navigation — hide when only root crumb */}
       {crumbs.length > 1 && (
       <div className="shrink-0 px-6 sm:px-10 pt-3 pb-2">
-        <nav className="flex items-center gap-2.5 font-heading text-base tracking-wide">
+        <nav className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.08em]">
           {crumbs.map((crumb, i) => {
             const isLast = i === crumbs.length - 1;
             return (
-              <span key={i} className="flex items-center gap-2.5">
+              <span key={i} className="flex items-center gap-2">
                 {i > 0 && (
-                  <span className="text-neon-cyan/50 text-xs select-none">/</span>
+                  <span className="text-meta opacity-50 select-none">/</span>
                 )}
                 {isLast ? (
-                  <span className="text-neon-cyan font-semibold">
+                  <span className="text-accent font-medium">
                     {crumb.label}
                   </span>
                 ) : (
                   <Link
                     to={crumb.to ?? "#"}
-                    className="text-text-muted hover:text-neon-cyan transition-colors duration-200"
+                    className="text-meta hover:text-strong transition-colors duration-150"
                   >
                     {crumb.label}
                   </Link>
