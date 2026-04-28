@@ -130,7 +130,7 @@ function ReleaseAccordion({ lang }: { lang: Lang }) {
                     — {release.title}
                   </span>
                   {isLatest && (
-                    <span className="ml-2 inline-block px-2 py-0.5 rounded text-xs font-heading bg-neon-cyan/10 text-neon-cyan border border-neon-cyan/30">
+                    <span className="ml-2 inline-block px-2 py-0.5 rounded-sm text-[10px] font-mono uppercase tracking-[0.12em] bg-accent/10 text-accent border border-accent/40">
                       {lang === "zh" ? "当前版本" : "Current"}
                     </span>
                   )}
@@ -164,7 +164,7 @@ function VersionBadge() {
   const releasesUrl = "https://github.com/ChronoAIProject/Ornn/releases";
   return (
     <div className="my-6 inline-flex flex-wrap items-center gap-3 rounded-lg border border-neon-cyan/20 bg-bg-elevated px-4 py-2">
-      <span className="font-heading text-xs uppercase tracking-wider text-text-muted">
+      <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
         Current version
       </span>
       <span className="font-mono text-base text-neon-cyan">v{__APP_VERSION__}</span>
@@ -530,7 +530,7 @@ function Sidebar({
                 open={isExpanded}
                 className="h-4 w-4 shrink-0 text-text-muted group-hover:text-text-primary transition-colors"
               />
-              <span className="font-heading text-sm uppercase tracking-wider text-text-muted group-hover:text-text-primary transition-colors">
+              <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-meta group-hover:text-strong transition-colors">
                 {section.label}
               </span>
             </button>
@@ -585,7 +585,7 @@ function TableOfContents({
 
   return (
     <nav className="w-56 shrink-0 sticky top-0 self-start overflow-y-auto max-h-[calc(100vh-8rem)] py-4 pl-4">
-      <h4 className="font-heading text-sm uppercase tracking-wider text-text-muted px-2 py-1.5 mb-2">
+      <h4 className="font-mono text-[10px] uppercase tracking-[0.16em] text-meta px-2 py-1.5 mb-2">
         {t("docs.onThisPage")}
       </h4>
       <div className="space-y-0.5 border-l border-neon-cyan/10">
