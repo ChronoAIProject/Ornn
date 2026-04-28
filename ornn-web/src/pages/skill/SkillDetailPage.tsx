@@ -387,8 +387,8 @@ export function SkillDetailPage() {
 
   return (
     <PageTransition>
-      <div className="bg-page text-body min-h-full">
-      <div className="mx-auto flex max-w-[1280px] flex-col gap-4 px-4 py-4 sm:px-6 lg:px-8">
+      <div className="bg-page text-body h-full overflow-y-auto">
+      <div className="mx-auto flex max-w-[1280px] flex-col gap-4 px-4 py-4 pb-16 sm:px-6 lg:px-8">
 
         {/* ── Breadcrumbs ── */}
         <nav className="shrink-0">
@@ -480,10 +480,10 @@ export function SkillDetailPage() {
         />
 
         {/* ── Main grid ── */}
-        <main className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+        <main className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
 
           {/* Left: tabs + content */}
-          <section className="flex min-h-0 flex-col overflow-hidden rounded-md border border-subtle bg-card shadow-[0_2px_8px_-4px_rgba(26,24,18,0.06)] dark:shadow-[0_2px_12px_-6px_rgba(0,0,0,0.45)]">
+          <section className="flex min-h-[640px] flex-col overflow-hidden rounded-md border border-subtle bg-card shadow-[0_2px_8px_-4px_rgba(26,24,18,0.06)] dark:shadow-[0_2px_12px_-6px_rgba(0,0,0,0.45)]">
             <div className="flex shrink-0 border-b border-subtle px-3" role="tablist">
               <button
                 type="button"
