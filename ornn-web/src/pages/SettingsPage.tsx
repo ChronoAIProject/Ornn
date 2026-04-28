@@ -112,7 +112,7 @@ export function SettingsPage() {
             transition={{ duration: 0.3, delay: 0.1 }}
             className="glass rounded-xl border border-neon-cyan/20 p-6"
           >
-            <h3 className="font-heading text-sm uppercase tracking-wider text-text-primary mb-3">
+            <h3 className="font-mono text-[11px] uppercase tracking-[0.16em] text-text-primary mb-3">
               {t("settings.accountMgmt")}
             </h3>
             <p className="font-body text-sm text-text-muted mb-4">

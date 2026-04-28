@@ -235,7 +235,7 @@ export function PlaygroundPage() {
             {/* Env vars form (only for runtime-based skills with env vars) */}
             {needsEnvVars && (
               <Card>
-                <h3 className="font-heading text-sm uppercase tracking-wider text-neon-cyan mb-3">
+                <h3 className="font-mono text-[11px] uppercase tracking-[0.16em] text-neon-cyan mb-3">
                   {t("playground.envVars")}
                 </h3>
                 <p className="font-body text-xs text-text-muted mb-3">

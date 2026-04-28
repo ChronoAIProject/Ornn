@@ -118,7 +118,7 @@ export function ActivitiesPage() {
 
       {/* Filter */}
       <div className="flex items-center gap-4">
-        <label className="font-heading text-xs uppercase tracking-wider text-text-muted">
+        <label className="font-mono text-[10px] uppercase tracking-[0.14em] text-text-muted">
           Filter by Action
         </label>
         <select
@@ -158,16 +158,16 @@ export function ActivitiesPage() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-neon-cyan/20">
-                    <th className="px-4 py-3 text-left font-heading text-xs uppercase tracking-wider text-text-muted">
+                    <th className="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-[0.14em] text-text-muted">
                       Time
                     </th>
-                    <th className="px-4 py-3 text-left font-heading text-xs uppercase tracking-wider text-text-muted">
+                    <th className="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-[0.14em] text-text-muted">
                       User
                     </th>
-                    <th className="px-4 py-3 text-left font-heading text-xs uppercase tracking-wider text-text-muted">
+                    <th className="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-[0.14em] text-text-muted">
                       Action
                     </th>
-                    <th className="px-4 py-3 text-left font-heading text-xs uppercase tracking-wider text-text-muted">
+                    <th className="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-[0.14em] text-text-muted">
                       Details
                     </th>
                   </tr>

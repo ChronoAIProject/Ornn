@@ -191,22 +191,22 @@ export function AdminSkillsPage() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-neon-cyan/20">
-                    <th className="px-4 py-3 text-left font-heading text-xs uppercase tracking-wider text-text-muted">
+                    <th className="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-[0.14em] text-text-muted">
                       Name
                     </th>
-                    <th className="px-4 py-3 text-left font-heading text-xs uppercase tracking-wider text-text-muted">
+                    <th className="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-[0.14em] text-text-muted">
                       Author
                     </th>
-                    <th className="px-4 py-3 text-left font-heading text-xs uppercase tracking-wider text-text-muted">
+                    <th className="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-[0.14em] text-text-muted">
                       Visibility
                     </th>
-                    <th className="px-4 py-3 text-left font-heading text-xs uppercase tracking-wider text-text-muted">
+                    <th className="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-[0.14em] text-text-muted">
                       Tags
                     </th>
-                    <th className="px-4 py-3 text-left font-heading text-xs uppercase tracking-wider text-text-muted">
+                    <th className="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-[0.14em] text-text-muted">
                       Created
                     </th>
-                    <th className="px-4 py-3 text-left font-heading text-xs uppercase tracking-wider text-text-muted">
+                    <th className="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-[0.14em] text-text-muted">
                       Actions
                     </th>
                   </tr>
