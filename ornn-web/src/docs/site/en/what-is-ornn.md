@@ -4,28 +4,30 @@
 
 ## Overview
 
-Ornn is the industry-standard skill platform for AI agents. It provides a standardized way to create, publish, discover, verify, and test AI capabilities (skills) across any environment.
+**Ornn is an agent-facing skill-lifecycle API.** AI agents call Ornn directly — over HTTP or MCP — to search, pull, run, build, upload, and share skills. The closest analog is **npm registry + npm CLI fused, model-agnostic**: works with Claude, GPT, Gemini, or any custom agent runtime, with no model lock-in.
 
-The ultimate goal of Ornn is **Skill-as-a-Service** — providing plug-and-play skill integration for any AI agent.
+The product framing is **Skill-as-a-Service** — plug-and-play skill integration for any AI agent.
+
+> Ornn is *not* a human-facing skill marketplace. The web UI exists as a secondary surface for skill owners and platform admins; the primary product is the API contract.
 
 ## Key Concepts
 
 ### Skills
 
-A **skill** is a packaged AI capability — a combination of prompts, scripts, and metadata that an AI agent can discover and execute. Skills are versioned, validated, and stored in the Ornn skill library.
+A **skill** is a packaged AI capability — a combination of prompts, scripts, and metadata that an AI agent can discover and execute. Skills are versioned, validated, and stored in the Ornn skill registry.
 
-### The Skill Library
+### The Skill Registry
 
-The Ornn skill library is a centralized hub where skills are published and discovered. It supports:
+The Ornn registry is the central store every agent calls into. It supports:
 
 - **Semantic search** — find skills by meaning, not just keywords
 - **Keyword search** — traditional text-based search
 - **Category browsing** — explore skills by type (plain, tool-based, runtime-based, mixed)
-- **Audit-gated sharing** — skills are reviewed before crossing org or public boundaries
+- **Audit as a public risk label** — every skill carries a verdict (`green` / `yellow` / `red`); consumers of a skill are notified when its audit flips to risky
 
 ### Sandbox Playground
 
-The Ornn platform provides a sandbox playground for users to test any skill interactively. In the playground, an AI agent executes skills by injecting them into its context. When a skill involves code or script execution, the playground integrates with **chrono-sandbox** to run the scripts and return results.
+Ornn provides a sandbox playground that lets an agent (or a human stand-in) try any skill end-to-end before committing to it. The playground injects the skill into an LLM context; for skills with code or scripts, it integrates with **chrono-sandbox** to execute them and return results.
 
 - Isolated, secure execution environment
 - Node.js and Python runtimes
@@ -37,6 +39,6 @@ The Ornn platform provides a sandbox playground for users to test any skill inte
 
 | Audience | Where to start |
 |----------|---------------|
-| **Web Users** — browse, create, and test skills via the web UI | [Quick Start as a Web User](/docs?section=qs-web-user) |
-| **AI Agents** — operate every Ornn capability via the `nyxid` CLI | [Agent Manual](/docs?section=agent-manual) |
-| **Developers & Operators** — understand what runs where | [System Architecture](/docs?section=system-architecture) · [External Integrations](/docs?section=external-integrations) |
+| **AI Agents** *(primary)* — call Ornn over HTTP / MCP to manage their own skill lifecycle | [Agent Manual](/docs?section=agent-manual) |
+| **Skill Owners & Admins** — manage skills, permissions, and audits via the GUI | [Quick Start as a Web User](/docs?section=qs-web-user) |
+| **Platform Operators** — understand what runs where | [System Architecture](/docs?section=system-architecture) · [External Integrations](/docs?section=external-integrations) |
