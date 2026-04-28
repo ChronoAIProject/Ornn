@@ -6,16 +6,41 @@
       "label": "关于",
       "order": 1,
       "children": [
-        { "id": "what-is-ornn", "label": "什么是 Ornn", "file": "what-is-ornn.md", "order": 1 }
+        { "id": "what-is-ornn", "label": "什么是 Ornn", "file": "what-is-ornn.md", "order": 1 },
+        { "id": "why-ornn", "label": "为什么是 Ornn", "file": "why-ornn.md", "order": 2 },
+        { "id": "vs-vercel-skills-sh", "label": "Ornn vs. Vercel skills.sh", "file": "vs-vercel-skills-sh.md", "order": 3 },
+        { "id": "vs-skillmp", "label": "Ornn vs. SkillMP", "file": "vs-skillmp.md", "order": 4 },
+        { "id": "vs-github", "label": "Ornn vs. GitHub", "file": "vs-github.md", "order": 5 }
       ]
     },
     {
-      "id": "get-started",
+      "id": "quick-start",
       "label": "快速开始",
       "order": 2,
       "children": [
         { "id": "qs-web-user", "label": "Web 用户快速入门", "file": "qs-web-user.md", "order": 1 },
         { "id": "agent-manual", "label": "Agent 操作手册", "file": "agent-manual.md", "order": 2 }
+      ]
+    },
+    {
+      "id": "reference",
+      "label": "技术参考",
+      "order": 3,
+      "children": [
+        { "id": "api-overview", "label": "API Reference — Overview", "file": "api-overview.md", "order": 1 },
+        { "id": "api-out-of-band", "label": "API Reference — Out-of-band", "file": "api-out-of-band.md", "order": 2 },
+        { "id": "api-skills", "label": "API Reference — Skills CRUD", "file": "api-skills.md", "order": 3 },
+        { "id": "api-audit", "label": "API Reference — Skill Audit", "file": "api-audit.md", "order": 4 },
+        { "id": "api-search", "label": "API Reference — Skill Search", "file": "api-search.md", "order": 5 },
+        { "id": "api-format", "label": "API Reference — Skill Format", "file": "api-format.md", "order": 6 },
+        { "id": "api-generation", "label": "API Reference — Skill Generation (SSE)", "file": "api-generation.md", "order": 7 },
+        { "id": "api-playground", "label": "API Reference — Playground (SSE)", "file": "api-playground.md", "order": 8 },
+        { "id": "api-notifications", "label": "API Reference — Notifications", "file": "api-notifications.md", "order": 9 },
+        { "id": "api-analytics", "label": "API Reference — Analytics", "file": "api-analytics.md", "order": 10 },
+        { "id": "api-me", "label": "API Reference — Me / Caller scope", "file": "api-me.md", "order": 11 },
+        { "id": "api-users", "label": "API Reference — Users Directory", "file": "api-users.md", "order": 12 },
+        { "id": "api-admin", "label": "API Reference — Admin", "file": "api-admin.md", "order": 13 },
+        { "id": "api-platform-settings", "label": "API Reference — Platform Settings", "file": "api-platform-settings.md", "order": 14 }
       ]
     }
   ]

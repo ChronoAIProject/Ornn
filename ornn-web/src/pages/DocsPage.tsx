@@ -623,6 +623,7 @@ export function DocsPage() {
   const lang = (i18n.language === "zh" ? "zh" : "en") as Lang;
 
   const [activeHeadingId, setActiveHeadingId] = useState("");
+  const [docCopied, setDocCopied] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
 
   const menu = useMemo(() => getDocsTree(lang), [lang]);
@@ -633,6 +634,20 @@ export function DocsPage() {
     const content = getDocContent(lang, activeId);
     return content ?? `# ${t("docs.notFound")}\n\nCould not load \`${activeId}\`.`;
   }, [lang, activeId, t]);
+
+  // The Agent Manual is intentionally a paste-installable skill (see its
+  // SKILL.md frontmatter). Every doc is copyable for parity, but the
+  // button matters most on agent-manual where the recipient is the agent
+  // itself.
+  const handleCopyDoc = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(markdown);
+      setDocCopied(true);
+      setTimeout(() => setDocCopied(false), 1800);
+    } catch {
+      /* ignore clipboard errors — older browsers, sandboxed iframes, etc. */
+    }
+  }, [markdown]);
 
   const toc = useMemo(() => extractToc(markdown), [markdown]);
 
@@ -757,6 +772,36 @@ export function DocsPage() {
               </article>
             ) : (
               <article className="markdown-body max-w-4xl mx-auto">
+                <div className="not-prose mb-6 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={handleCopyDoc}
+                    className={`inline-flex items-center gap-2 rounded-sm border px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.14em] transition-colors duration-150 cursor-pointer ${
+                      docCopied
+                        ? "border-success/60 bg-success-soft text-success"
+                        : "border-strong-edge text-meta hover:border-strong hover:text-strong"
+                    }`}
+                    aria-label={t("docs.copyMarkdown", "Copy as markdown")}
+                    title={t("docs.copyMarkdownHint", "Copy this whole document as markdown — paste into your AI agent to install it as a skill") as string}
+                  >
+                    {docCopied ? (
+                      <>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden>
+                          <polyline points="20 6 9 17 4 12" />
+                        </svg>
+                        {t("docs.copied", "Copied")}
+                      </>
+                    ) : (
+                      <>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                          <rect x="9" y="9" width="13" height="13" rx="1" />
+                          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                        </svg>
+                        {t("docs.copyMarkdown", "Copy as markdown")}
+                      </>
+                    )}
+                  </button>
+                </div>
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}
                   rehypePlugins={[rehypeHighlight]}
