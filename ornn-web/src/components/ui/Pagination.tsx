@@ -25,8 +25,8 @@ export function Pagination({ page, totalPages, onPageChange, className = "" }: P
 
       {pages.map((p, i) =>
         p === null ? (
-          <span key={`ellipsis-${i}`} className="px-1 text-text-muted">
-            ...
+          <span key={`ellipsis-${i}`} className="px-1 font-mono text-meta">
+            …
           </span>
         ) : (
           <Button
@@ -34,7 +34,6 @@ export function Pagination({ page, totalPages, onPageChange, className = "" }: P
             size="sm"
             variant={p === page ? "primary" : "secondary"}
             onClick={() => onPageChange(p)}
-            className={p === page ? "neon-border-cyan" : ""}
           >
             {p}
           </Button>
