@@ -1,8 +1,20 @@
+---
+name: ornn-agent-manual
+description: Operational manual for AI agents using the Ornn skill-lifecycle API. Loads as a skill so that, once installed, the host agent can search / pull / execute / build / upload / share skills via the NyxID CLI without further setup. Authoritative contract between Ornn and the agent.
+metadata:
+  category: plain
+  tags:
+    - ornn
+    - agent
+    - manual
+    - skill-lifecycle
+---
+
 # Agent Manual
 
-> **This document is designed to be loaded as context into an AI agent.** Once loaded, the agent can operate every Ornn capability end-to-end via the `nyxid` CLI — discover skills, pull skills, execute skills, create new skills, manage its own skill library, and participate in the sharing workflow. No SDK. No MCP. Just the CLI.
+> **Paste this whole document into an AI agent's system context.** It is structured as an Ornn skill (`category: plain`) — the `SKILL.md` frontmatter above + the body below are the entire skill. Once loaded, the agent can operate every Ornn capability end-to-end via the `nyxid` CLI — discover skills, pull skills, execute skills, create new skills, manage its own skill library, and participate in the sharing workflow. No SDK. No MCP. Just the CLI.
 >
-> Ornn's core product is **Skill-as-a-Service for AI agents.** Skills are packaged AI capabilities (a `SKILL.md` prompt + optional scripts + YAML metadata) that any agent can pull and execute. This manual is the contract between Ornn and you.
+> Ornn's product is **Skill-as-a-Service for AI agents.** Skills are packaged AI capabilities (a `SKILL.md` prompt + optional scripts + YAML metadata) that any agent can pull and execute. This manual is the contract between Ornn and you.
 
 ## §1. Prerequisites
 

@@ -1,8 +1,20 @@
+---
+name: ornn-agent-manual
+description: 面向 AI agent 的 Ornn 技能生命周期 API 操作手册。以 skill 形式装载 —— 一旦安装，宿主 agent 即可通过 NyxID CLI 完成 skill 的搜索 / 拉取 / 执行 / 构建 / 上传 / 分享，无需额外配置。Ornn 与 agent 的权威契约。
+metadata:
+  category: plain
+  tags:
+    - ornn
+    - agent
+    - 手册
+    - skill-lifecycle
+---
+
 # Agent 操作手册
 
-> **本文档面向 AI agent 设计：作为上下文加载后，agent 即可通过 `nyxid` CLI 完整操作 Ornn 的所有能力** —— 发现 skill、拉 skill、执行 skill、创建 skill、管理自己的 skill 库、参与分享流程。不需要 SDK，不需要 MCP，只需要 CLI。
+> **请将本文档完整粘贴到 AI agent 的 system context 中。** 它本身就是一份 Ornn skill（`category: plain`）—— 上方 `SKILL.md` frontmatter + 下方正文构成整份 skill。一旦加载，agent 即可通过 `nyxid` CLI 完整操作 Ornn 的所有能力 —— 发现 skill、拉 skill、执行 skill、创建 skill、管理自己的 skill 库、参与分享流程。不需要 SDK，不需要 MCP，只需要 CLI。
 >
-> Ornn 的核心产品是 **面向 AI agent 的 Skill-as-a-Service**。Skill 是打包好的 AI 能力（一份 `SKILL.md` prompt + 可选脚本 + YAML 元数据），任何 agent 都能拉下来执行。本手册即 Ornn 与 agent 之间的契约。
+> Ornn 的产品是 **面向 AI agent 的 Skill-as-a-Service**。Skill 是打包好的 AI 能力（一份 `SKILL.md` prompt + 可选脚本 + YAML 元数据），任何 agent 都能拉下来执行。本手册即 Ornn 与 agent 之间的契约。
 
 ## §1. 前置条件
 

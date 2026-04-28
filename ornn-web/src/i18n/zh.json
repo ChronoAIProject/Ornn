@@ -439,7 +439,10 @@
   "docs": {
     "onThisPage": "本页目录",
     "notFound": "未找到",
-    "loadFailed": "获取文档失败。"
+    "loadFailed": "获取文档失败。",
+    "copyMarkdown": "复制 Markdown",
+    "copyMarkdownHint": "把整篇文档复制为 markdown —— 粘贴到你的 AI agent 中即可作为 skill 安装",
+    "copied": "已复制"
   },
   "skillToggle": {
     "makePrivateTitle": "设为私有?",

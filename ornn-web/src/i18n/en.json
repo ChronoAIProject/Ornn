@@ -439,7 +439,10 @@
   "docs": {
     "onThisPage": "On this page",
     "notFound": "Not Found",
-    "loadFailed": "Failed to fetch documentation."
+    "loadFailed": "Failed to fetch documentation.",
+    "copyMarkdown": "Copy as markdown",
+    "copyMarkdownHint": "Copy this whole document as markdown — paste it into your AI agent to install as a skill",
+    "copied": "Copied"
   },
   "skillToggle": {
     "makePrivateTitle": "Make Skill Private?",
