@@ -141,12 +141,12 @@ function AnnouncementBanner() {
   const text = `${t("landing.bannerNew")}  Ornn v${latest.version} — ${latest.title}`;
 
   return (
-    <div className="shrink-0 relative z-10 overflow-hidden border-b border-neon-cyan/15 bg-neon-cyan/5">
+    <div className="shrink-0 relative z-10 overflow-hidden border-b border-subtle bg-elevated/40">
       <div className="inline-flex whitespace-nowrap" style={{ animation: "marquee 30s linear infinite" }}>
         {[0, 1].map((g) => (
           <span key={g} className="inline-flex items-center py-1.5 shrink-0 min-w-[100vw] justify-around">
-            <span className="font-mono text-xs text-neon-cyan/80">{text}</span>
-            <span className="font-mono text-xs text-neon-cyan/80">{text}</span>
+            <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-accent/80">{text}</span>
+            <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-accent/80">{text}</span>
           </span>
         ))}
       </div>
@@ -168,14 +168,14 @@ export function LandingPage() {
       {/* Center content */}
       <div className="flex-1 flex items-center justify-center relative z-10">
         <div className="text-center max-w-3xl px-6">
-          <h1 className="font-heading text-4xl sm:text-5xl lg:text-6xl font-bold tracking-wide leading-tight mb-6">
-            <span className="text-text-primary">{t("landing.heroTitle1")} </span>
-            <span className="text-neon-cyan">{t("landing.heroTitle2")}</span>
+          <h1 className="font-display text-5xl sm:text-6xl lg:text-7xl font-semibold tracking-tight leading-[1.05] mb-5">
+            <span className="text-strong">{t("landing.heroTitle1")} </span>
+            <span className="text-accent italic">{t("landing.heroTitle2")}</span>
           </h1>
-          <p className="font-heading text-xl sm:text-2xl font-bold text-neon-cyan tracking-widest uppercase mb-6 drop-shadow-[0_0_10px_rgba(255,107,0,0.6)]">
-            Skill-as-a-Service
+          <p className="font-mono text-xs sm:text-sm font-semibold text-accent tracking-[0.24em] uppercase mb-7">
+            · Skill-as-a-Service ·
           </p>
-          <p className="font-body text-lg sm:text-xl text-text-muted max-w-2xl mx-auto leading-relaxed mb-10">
+          <p className="font-reading text-lg sm:text-xl text-body max-w-2xl mx-auto leading-relaxed mb-10">
             {t("landing.heroDesc")}
           </p>
 
@@ -183,7 +183,7 @@ export function LandingPage() {
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <Link
               to="/registry"
-              className="inline-flex items-center gap-2 rounded-lg bg-neon-cyan/15 border border-neon-cyan px-6 py-3 font-body text-base font-semibold text-neon-cyan transition-all duration-200 hover:bg-neon-cyan/25 hover:shadow-[0_0_20px_rgba(255,107,0,0.3)]"
+              className="inline-flex items-center gap-2 rounded-sm bg-accent px-6 py-3 font-mono text-xs font-semibold uppercase tracking-[0.14em] text-page transition-colors duration-150 hover:bg-accent-muted"
             >
               {t("landing.exploreBtn")}
               <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -192,7 +192,7 @@ export function LandingPage() {
             </Link>
             <Link
               to="/docs"
-              className="inline-flex items-center gap-2 rounded-lg border border-text-muted/30 bg-bg-surface/50 px-6 py-3 font-body text-base font-semibold text-text-primary transition-all duration-200 hover:border-text-muted/60 hover:bg-bg-elevated"
+              className="inline-flex items-center gap-2 rounded-sm border border-strong-edge bg-elevated/40 px-6 py-3 font-mono text-xs font-semibold uppercase tracking-[0.14em] text-strong transition-colors duration-150 hover:bg-elevated hover:border-strong"
             >
               {t("landing.viewDocs")}
             </Link>
@@ -202,8 +202,8 @@ export function LandingPage() {
 
       {/* Footer */}
       <div className="shrink-0 text-center py-4 relative z-10">
-        <p className="font-body text-xs text-text-muted/50">
-          &copy; 2026 Ornn. All rights reserved.
+        <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-meta opacity-60">
+          &copy; 2026 Ornn · All rights reserved
         </p>
       </div>
     </div>
