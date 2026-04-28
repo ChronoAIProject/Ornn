@@ -93,14 +93,17 @@ export function EditSkillPage() {
           />
         </nav>
 
-        <h1 className="neon-cyan mb-8 font-heading text-2xl font-bold tracking-wider text-neon-cyan sm:text-3xl">
-          {t("editSkill.titlePrefix", "EDIT")}: {skill.name}
+        <h1 className="mb-8 font-display text-3xl font-semibold tracking-tight text-strong sm:text-4xl">
+          <span className="font-mono text-xs uppercase tracking-[0.18em] text-accent block mb-1.5">
+            {t("editSkill.titlePrefix", "EDIT")}
+          </span>
+          {skill.name}
         </h1>
 
         <div className="mx-auto max-w-2xl space-y-6">
           {/* Visibility toggle */}
           <Card>
-            <h3 className="mb-4 font-heading text-sm uppercase tracking-wider text-neon-cyan">
+            <h3 className="mb-4 font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-meta border-b border-dashed border-subtle pb-3">
               {t("editSkill.visibilityHeading", "Visibility")}
             </h3>
             <div className="flex items-center justify-between">
@@ -140,7 +143,7 @@ export function EditSkillPage() {
 
           {/* Upload new package */}
           <Card>
-            <h3 className="mb-4 font-heading text-sm uppercase tracking-wider text-neon-cyan">
+            <h3 className="mb-4 font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-meta border-b border-dashed border-subtle pb-3">
               {t("editSkill.updatePackageHeading", "Update Package")}
             </h3>
             <p className="mb-4 font-body text-xs text-text-muted">
