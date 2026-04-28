@@ -1,3 +1,9 @@
+---
+version: 1.0.0
+lastUpdated: 2026-04-28
+---
+
+
 # Ornn 与 Vercel `skills.sh` 的对比
 
 两个项目都在托管 AI agent skill。它们解决的问题不一样。这一页讲清什么时候用谁。

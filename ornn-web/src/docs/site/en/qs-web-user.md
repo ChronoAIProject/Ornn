@@ -1,3 +1,9 @@
+---
+version: 1.0.0
+lastUpdated: 2026-04-28
+---
+
+
 # Quick Start as a Web User
 
 ## 1. Sign In

@@ -56,6 +56,7 @@
     "tags": "标签"
   },
   "explore": {
+    "systemSkills": "系统技能",
     "publicSkills": "公共技能",
     "mySkills": "我的技能",
     "sharedWithMe": "分享给我的",
@@ -236,16 +237,13 @@
     "loading": "加载分析数据…",
     "loadFailed": "无法加载使用分析。",
     "unavailable": "使用分析暂不可用。",
-    "pullsHeading": "Skill 拉取数",
-    "pullsSubtitle": "按来源堆叠：api = SDK / CLI / agent · web = 详情页下载 · playground = 平台内试用。",
+    "usageHeading": "技能使用情况",
+    "usageSubtitle": "随时间变化的拉取数：api = SDK / CLI / agent · web = 详情页下载 · playground = 平台内试用。",
     "bucketHour": "小时",
     "bucketDay": "天",
     "bucketMonth": "月",
-    "from": "从",
-    "to": "到",
     "totalPulls": "总计",
-    "invalidRange": "区间不合法 —— 起始时间必须早于结束时间。",
-    "noPulls": "此区间内没有拉取记录。"
+    "noUsage": "此区间内没有使用记录。"
   },
   "notifications": {
     "bellAria": "通知",

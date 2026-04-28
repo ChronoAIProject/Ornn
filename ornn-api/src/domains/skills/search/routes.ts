@@ -8,7 +8,6 @@ import { Hono } from "hono";
 import { z } from "zod";
 import type { SearchService } from "./service";
 import type { SkillRepository } from "../crud/repository";
-import { NyxidUserServicesClient, type UserService } from "../../../clients/nyxid/userServices";
 import {
   type AuthVariables,
   nyxidAuthMiddleware,
@@ -30,13 +29,17 @@ const searchQuerySchema = z.object({
   pageSize: z.coerce.number().int().min(1).max(100).optional().default(9),
   model: z.string().optional(),
   /** System-skill tri-state filter. `any` (default) keeps all; `only`
-   *  restricts to skills whose tags match any of the caller's NyxID
-   *  service slugs; `exclude` drops those. */
+   *  restricts to skills tied to an admin/platform NyxID service
+   *  (`isSystemSkill: true`); `exclude` drops those. */
   systemFilter: z.enum(["any", "only", "exclude"]).optional().default("any"),
   /** Comma-separated filters for the registry filter chips. */
   sharedWithOrgs: z.string().optional(),
   sharedWithUsers: z.string().optional(),
   createdByAny: z.string().optional(),
+  /** Restrict to skills tied to this NyxID service id. Single id (not CSV). */
+  nyxidServiceId: z.string().optional(),
+  /** Comma-separated tag list. Skills must have ALL of the listed tags (AND match). */
+  tags: z.string().optional(),
 });
 
 function parseCsv(raw: string | undefined): string[] | undefined {
@@ -50,29 +53,15 @@ function parseCsv(raw: string | undefined): string[] | undefined {
 
 export interface SearchRoutesConfig {
   searchService: SearchService;
-  /** Caller's NyxID services used for system-skill enrichment + filter. */
-  nyxidBaseUrl: string;
   skillRepo: SkillRepository;
 }
 
 export function createSearchRoutes(config: SearchRoutesConfig): Hono<{ Variables: AuthVariables }> {
   const { searchService, skillRepo } = config;
-  const userServicesClient = new NyxidUserServicesClient(config.nyxidBaseUrl);
   const app = new Hono<{ Variables: AuthVariables }>();
 
   const optionalAuth = optionalAuthMiddleware();
   const requireAuth = nyxidAuthMiddleware();
-
-  /** Fetch caller's NyxID services, fail-soft to empty list. */
-  async function loadCallerServices(token: string | undefined): Promise<UserService[]> {
-    if (!token) return [];
-    try {
-      return await userServicesClient.listUserServices(token);
-    } catch (err) {
-      logger.warn({ err: (err as Error).message }, "Caller NyxID service lookup failed; system-skill detection disabled");
-      return [];
-    }
-  }
 
   /**
    * GET /skill-search — Unified search endpoint.
@@ -114,13 +103,6 @@ export function createSearchRoutes(config: SearchRoutesConfig): Hono<{ Variables
 
       const userOrgIds = await readUserOrgIds(c);
 
-      // Only fetch caller services when we actually need them — either
-      // for enrichment (any authenticated caller) or for the system
-      // filter.
-      const callerServices = authCtx
-        ? await loadCallerServices(authCtx.userAccessToken)
-        : [];
-
       const response = await searchService.search({
         query,
         mode,
@@ -130,11 +112,12 @@ export function createSearchRoutes(config: SearchRoutesConfig): Hono<{ Variables
         currentUserId,
         userOrgIds,
         model,
-        callerServices,
         systemFilter,
         sharedWithOrgsAny: parseCsv(parsed.sharedWithOrgs),
         sharedWithUsersAny: parseCsv(parsed.sharedWithUsers),
         createdByAny: parseCsv(parsed.createdByAny),
+        nyxidServiceId: parsed.nyxidServiceId || undefined,
+        tagsAll: parseCsv(parsed.tags),
       });
 
       return c.json({ data: response, error: null });
@@ -151,6 +134,78 @@ export function createSearchRoutes(config: SearchRoutesConfig): Hono<{ Variables
    * `GET /skills/:id` (which is registered from skillCrud and would
    * otherwise capture `id="counts"`).
    */
+  /**
+   * GET /skill-facets/tags?scope=public|mine|shared-with-me|system|mixed
+   *
+   * Aggregate distinct skill tags within the caller's visibility for the
+   * given scope. Drives the per-tab tag filter chip row.
+   *
+   * Auth: required for `mine` / `shared-with-me`; optional for `public`
+   *       and `system` (anonymous can see public + system facets).
+   */
+  app.get("/skill-facets/tags", optionalAuth, async (c) => {
+    const authCtx = c.get("auth");
+    const scopeRaw = (c.req.query("scope") || "public") as string;
+    const allowed = ["public", "private", "mixed", "shared-with-me", "mine", "system"] as const;
+    if (!(allowed as readonly string[]).includes(scopeRaw)) {
+      throw AppError.badRequest("INVALID_SCOPE", `Unknown scope '${scopeRaw}'`);
+    }
+    const scope = scopeRaw as (typeof allowed)[number];
+    if ((scope === "mine" || scope === "shared-with-me") && !authCtx) {
+      throw AppError.unauthorized(
+        "AUTH_REQUIRED",
+        `Scope '${scope}' requires authentication`,
+      );
+    }
+    const currentUserId = authCtx?.userId ?? "";
+    const userOrgIds = authCtx ? await readUserOrgIds(c) : [];
+    const items = await skillRepo.aggregateTagsByScope(scope, currentUserId, userOrgIds);
+    return c.json({ data: { items }, error: null });
+  });
+
+  /**
+   * GET /skill-facets/authors?scope=public|mine|shared-with-me|system
+   *
+   * Aggregate distinct skill authors within the caller's visibility for
+   * the given scope. Returns per-author counts + display name. Powers
+   * the Public-tab "filter by author" chip row. (My-Skills doesn't need
+   * this — every skill there has the same author.)
+   */
+  app.get("/skill-facets/authors", optionalAuth, async (c) => {
+    const authCtx = c.get("auth");
+    const scopeRaw = (c.req.query("scope") || "public") as string;
+    const allowed = ["public", "shared-with-me", "system", "mixed"] as const;
+    if (!(allowed as readonly string[]).includes(scopeRaw)) {
+      throw AppError.badRequest(
+        "INVALID_SCOPE",
+        `Unknown or unsupported scope '${scopeRaw}' for authors facet`,
+      );
+    }
+    const scope = scopeRaw as (typeof allowed)[number];
+    if (scope === "shared-with-me" && !authCtx) {
+      throw AppError.unauthorized(
+        "AUTH_REQUIRED",
+        `Scope '${scope}' requires authentication`,
+      );
+    }
+    const currentUserId = authCtx?.userId ?? "";
+    const userOrgIds = authCtx ? await readUserOrgIds(c) : [];
+    const items = await skillRepo.aggregateAuthorsByScope(scope, currentUserId, userOrgIds);
+    return c.json({ data: { items }, error: null });
+  });
+
+  /**
+   * GET /skill-facets/system-services
+   *
+   * List the NyxID services that have at least one tied system skill,
+   * with per-service skill counts. Powers the System-tab service
+   * filter chip row. No scope param — system skills are always public.
+   */
+  app.get("/skill-facets/system-services", optionalAuth, async (c) => {
+    const items = await skillRepo.aggregateSystemServices();
+    return c.json({ data: { items }, error: null });
+  });
+
   app.get("/skill-counts", optionalAuth, async (c) => {
     const authCtx = c.get("auth");
     const currentUserId = authCtx?.userId ?? "";

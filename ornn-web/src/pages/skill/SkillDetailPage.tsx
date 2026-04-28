@@ -32,6 +32,7 @@ import { useStartAudit, useAuditSummaryByVersion } from "@/hooks/useAudit";
 import { useSkillPulls } from "@/hooks/useAnalytics";
 import { SkillVersionList } from "@/components/skill/SkillVersionList";
 import { PermissionsModal } from "@/components/skill/PermissionsModal";
+import { NyxidServiceTieModal } from "@/components/skill/NyxidServiceTieModal";
 import {
   useSkill,
   useDeleteSkill,
@@ -155,6 +156,7 @@ export function SkillDetailPage() {
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showPermissionsModal, setShowPermissionsModal] = useState(false);
+  const [showServiceTieModal, setShowServiceTieModal] = useState(false);
   const [showSaveConfirm, setShowSaveConfirm] = useState(false);
   const [showAuditStartedModal, setShowAuditStartedModal] = useState(false);
   const [editedContents, setEditedContents] = useState<Map<string, string>>(new Map());
@@ -482,8 +484,10 @@ export function SkillDetailPage() {
         {/* ── Main grid ── */}
         <main className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
 
-          {/* Left: tabs + content */}
-          <section className="flex min-h-[640px] flex-col overflow-hidden rounded-md border border-subtle bg-card shadow-[0_2px_8px_-4px_rgba(26,24,18,0.06)] dark:shadow-[0_2px_12px_-6px_rgba(0,0,0,0.45)]">
+          {/* Left: tabs + content. Capped at ~80vh so very long SKILL.md
+              files don't blow up the page — the inner SkillFileViewer
+              has its own overflow-y-auto and will scroll within. */}
+          <section className="flex h-[80vh] min-h-[640px] max-h-[calc(100vh-140px)] flex-col overflow-hidden rounded-md border border-subtle bg-card shadow-[0_2px_8px_-4px_rgba(26,24,18,0.06)] dark:shadow-[0_2px_12px_-6px_rgba(0,0,0,0.45)]">
             <div className="flex shrink-0 border-b border-subtle px-3" role="tablist">
               <button
                 type="button"
@@ -638,6 +642,52 @@ export function SkillDetailPage() {
                     onClick={() => setShowPermissionsModal(true)}
                   >
                     {t("skillDetail.managePermissions", "Manage permissions")}
+                  </Button>
+                </div>
+              )}
+            </section>
+
+            {/* ── NyxID service tie card ── */}
+            <section className="rounded-md border border-subtle bg-card p-5 shadow-[0_2px_8px_-4px_rgba(26,24,18,0.06)] dark:shadow-[0_2px_12px_-6px_rgba(0,0,0,0.45)]">
+              <h3 className="mb-3.5 flex items-center gap-2 border-b border-dashed border-subtle pb-3 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-meta">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                  <circle cx="12" cy="12" r="3" />
+                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                </svg>
+                {t("skillDetail.cardNyxidService", "NyxID service")}
+              </h3>
+
+              {skill.nyxidServiceId ? (
+                <>
+                  <span className={`mb-3 inline-flex items-center gap-1.5 rounded-sm border px-2.5 py-1 font-mono text-[11px] uppercase tracking-wider ${skill.isSystemSkill ? "border-warning/40 bg-warning-soft text-warning" : "border-info/40 bg-info-soft text-info"}`}>
+                    {skill.isSystemSkill
+                      ? t("nyxidService.tierAdmin", "system")
+                      : t("nyxidService.tierPersonal", "personal")}
+                  </span>
+                  <p className="font-reading text-sm text-body break-words">
+                    {skill.nyxidServiceLabel ?? skill.nyxidServiceSlug ?? skill.nyxidServiceId}
+                  </p>
+                  {skill.nyxidServiceSlug && skill.nyxidServiceLabel !== skill.nyxidServiceSlug && (
+                    <p className="font-mono text-[11px] text-meta">{skill.nyxidServiceSlug}</p>
+                  )}
+                </>
+              ) : (
+                <p className="font-reading text-sm text-meta italic">
+                  {t("nyxidService.notTied", "Not tied to any service")}
+                </p>
+              )}
+
+              {isOwner && (
+                <div className="mt-3.5">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="w-full"
+                    onClick={() => setShowServiceTieModal(true)}
+                  >
+                    {skill.nyxidServiceId
+                      ? t("nyxidService.manageTie", "Change tie")
+                      : t("nyxidService.openTie", "Tie to a service")}
                   </Button>
                 </div>
               )}
@@ -813,6 +863,15 @@ export function SkillDetailPage() {
         <PermissionsModal
           isOpen={showPermissionsModal}
           onClose={() => setShowPermissionsModal(false)}
+          skill={skill}
+        />
+      )}
+
+      {/* ── NyxID service tie editor ── */}
+      {isOwner && (
+        <NyxidServiceTieModal
+          isOpen={showServiceTieModal}
+          onClose={() => setShowServiceTieModal(false)}
           skill={skill}
         />
       )}

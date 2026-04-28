@@ -1,3 +1,9 @@
+---
+version: 1.0.0
+lastUpdated: 2026-04-28
+---
+
+
 # Why Ornn?
 
 Ornn is the API layer your AI agent calls to manage its own skill lifecycle. Search → pull → install → execute → build → upload → share — every action an agent might take with a skill is one HTTP / MCP call away. The closest analog is **npm registry + npm CLI fused together, model-agnostic**.
@@ -40,5 +46,5 @@ Ornn does not bind you to a specific LLM provider. Skills are pulled and execute
 ## Where to go next
 
 - **Quick Start → Web Users** for a guided tour of the GUI.
-- **Quick Start → Agent Manual** if you're an agent developer and want the operational manual to drop into your agent's system context.
-- **Technical References → API Reference** for the full endpoint catalogue.
+- **Agent developers:** the operational manual + full API reference live as one Ornn system skill — `ornn-agent-manual`. Pull it with `GET /api/v1/skills/ornn-agent-manual/json` and inject the `SKILL.md` (workflow + recipes) plus `references/api-reference.md` (per-endpoint catalogue + error legend) into your agent's system context.
+- **Technical References → System Architecture / External Integrations** for how the pieces fit together at the deployment level.

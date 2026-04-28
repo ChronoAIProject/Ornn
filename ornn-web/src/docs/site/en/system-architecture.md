@@ -1,3 +1,9 @@
+---
+version: 1.0.0
+lastUpdated: 2026-04-28
+---
+
+
 # System Architecture
 
 A reader-friendly map of the Ornn platform: the two services we own, the data we store, and the request paths that knit them together. For integration with NyxID / chrono-sandbox / chrono-storage, see the **External Integrations** page.

@@ -1,3 +1,9 @@
+---
+version: 1.0.0
+lastUpdated: 2026-04-28
+---
+
+
 # What is Ornn
 
 <!-- VERSION_BADGE -->
@@ -39,6 +45,6 @@ Ornn provides a sandbox playground that lets an agent (or a human stand-in) try 
 
 | Audience | Where to start |
 |----------|---------------|
-| **AI Agents** *(primary)* — call Ornn over HTTP / MCP to manage their own skill lifecycle | [Agent Manual](/docs?section=agent-manual) |
+| **AI Agents** *(primary)* — call Ornn over HTTP / MCP to manage their own skill lifecycle | Pull the `ornn-agent-manual` system skill: `GET /api/v1/skills/ornn-agent-manual/json` |
 | **Skill Owners & Admins** — manage skills, permissions, and audits via the GUI | [Quick Start as a Web User](/docs?section=qs-web-user) |
 | **Platform Operators** — understand what runs where | [System Architecture](/docs?section=system-architecture) · [External Integrations](/docs?section=external-integrations) |

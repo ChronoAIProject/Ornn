@@ -15,7 +15,7 @@ import {
   readUserOrgIds,
   readUserOrgMemberships,
 } from "../../middleware/nyxidAuth";
-import { NyxidUserServicesClient } from "../../clients/nyxid/userServices";
+import type { NyxidServiceClient } from "../../clients/nyxid/service";
 import type { SkillRepository } from "../skills/crud/repository";
 import type { ActivityRepository } from "../admin/activityRepository";
 import { AppError } from "../../shared/types/index";
@@ -30,14 +30,19 @@ export interface MeRoutesConfig {
   nyxidBaseUrl: string;
   skillRepo: SkillRepository;
   activityRepo: ActivityRepository;
+  /**
+   * Catalog-service client. Powers `GET /me/nyxid-services`, which lists
+   * the NyxID services the caller can tie a skill to (public admin
+   * services + private services they own).
+   */
+  nyxidServiceClient: NyxidServiceClient;
 }
 
 export function createMeRoutes(config: MeRoutesConfig): Hono<{ Variables: AuthVariables }> {
-  const { nyxidBaseUrl, skillRepo, activityRepo } = config;
+  const { nyxidBaseUrl, skillRepo, activityRepo, nyxidServiceClient } = config;
   const baseUrl = nyxidBaseUrl.replace(/\/+$/, "");
   const app = new Hono<{ Variables: AuthVariables }>();
   const auth = nyxidAuthMiddleware();
-  const userServicesClient = new NyxidUserServicesClient(baseUrl);
 
   /**
    * GET /me/orgs — caller's NyxID org memberships.
@@ -160,13 +165,21 @@ export function createMeRoutes(config: MeRoutesConfig): Hono<{ Variables: AuthVa
   });
 
   /**
-   * GET /me/nyxid-services — caller's NyxID user-services (personal +
-   * org-inherited). Returns `{ items: Array<{ id, slug, label }> }`.
+   * GET /me/nyxid-services — NyxID catalog services the caller can tie a
+   * skill to.
    *
-   * Powers the System-skill filter: a skill is considered "system" for
-   * the caller when any of its tags matches one of these slugs/labels.
-   * Anonymous/no-token callers short-circuit to an empty list so the
-   * filter silently becomes a no-op rather than erroring.
+   * Returns the union of:
+   *   - **admin** services (NyxID `visibility: "public"`) — visible to
+   *     everyone. Tying a skill to an admin service marks the skill as a
+   *     **system skill** and forces it public.
+   *   - **personal** services (NyxID `visibility: "private"` AND
+   *     `created_by === caller`) — services the caller created. Tying a
+   *     skill to a personal service does not change the skill's privacy.
+   *
+   * Each item carries a `tier` field so the frontend can label / sort
+   * the picker without re-deriving from the raw fields.
+   *
+   * Fail-soft: empty list on auth/upstream failure.
    */
   app.get("/me/nyxid-services", auth, async (c) => {
     const authCtx = getAuth(c);
@@ -174,13 +187,25 @@ export function createMeRoutes(config: MeRoutesConfig): Hono<{ Variables: AuthVa
     if (!token) {
       return c.json({ data: { items: [] }, error: null });
     }
-    try {
-      const items = await userServicesClient.listUserServices(token);
-      return c.json({ data: { items }, error: null });
-    } catch {
-      // Fail-soft on read — matches the posture of /me/orgs.
-      return c.json({ data: { items: [] }, error: null });
-    }
+    const services = await nyxidServiceClient.listServicesForCaller(token);
+    const items = services
+      // NyxID's filter already restricts to public + own-private, but
+      // belt-and-braces: drop anything that wouldn't be eligible to tie.
+      .filter((s) =>
+        s.visibility === "public" ||
+        (s.visibility === "private" && s.createdBy === authCtx.userId),
+      )
+      .map((s) => ({
+        id: s.id,
+        slug: s.slug,
+        label: s.label,
+        description: s.description,
+        tier:
+          s.visibility === "public"
+            ? ("admin" as const)
+            : ("personal" as const),
+      }));
+    return c.json({ data: { items }, error: null });
   });
 
   /**

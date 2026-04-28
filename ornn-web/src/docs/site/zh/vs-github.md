@@ -1,3 +1,9 @@
+---
+version: 1.0.0
+lastUpdated: 2026-04-28
+---
+
+
 # Ornn 与裸 GitHub 的对比
 
 很多团队已经把 AI agent skill 以 `SKILL.md` 文件的形式放在 GitHub repo 里。能用、免费、你已经会用、agent 可以 curl raw URL 拿到。这一页讲清楚什么时候"裸 GitHub 就够"，什么时候 Ornn 真正开始物有所值。

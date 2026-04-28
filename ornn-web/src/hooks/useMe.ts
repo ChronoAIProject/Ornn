@@ -1,5 +1,6 @@
 /**
- * React Query hooks for caller-scoped data (`/api/v1/me/*`).
+ * React Query hooks for caller-scoped data (`/api/v1/me/*`) and the
+ * skill-facet aggregator endpoints (`/api/v1/skill-facets/*`).
  */
 
 import { useQuery } from "@tanstack/react-query";
@@ -10,6 +11,12 @@ import {
   fetchSharedSkillSourcesSummary,
   type MyOrgMembership,
 } from "@/services/meApi";
+import {
+  fetchSkillTagFacets,
+  fetchSkillAuthorFacets,
+  fetchSystemServiceFacets,
+  type FacetScope,
+} from "@/services/facetsApi";
 import { useIsAuthenticated } from "@/stores/authStore";
 
 const MY_ORGS_KEY = ["me", "orgs"] as const;
@@ -60,6 +67,46 @@ export function useSharedSkillSources() {
     queryKey: ["me", "shared-skills", "sources-summary"] as const,
     queryFn: fetchSharedSkillSourcesSummary,
     enabled: isAuthed,
+    staleTime: 30_000,
+  });
+}
+
+/**
+ * Distinct skill tags within scope, with per-tag counts. Powers the
+ * tag-filter chip rows on Public + My + System tabs.
+ */
+export function useSkillTagFacets(scope: FacetScope, enabled = true) {
+  return useQuery({
+    queryKey: ["skill-facets", "tags", scope] as const,
+    queryFn: () => fetchSkillTagFacets(scope),
+    enabled,
+    staleTime: 30_000,
+  });
+}
+
+/**
+ * Distinct skill authors within scope, with per-author counts. Powers
+ * the author-filter chip row on the Public tab.
+ */
+export function useSkillAuthorFacets(scope: FacetScope, enabled = true) {
+  return useQuery({
+    queryKey: ["skill-facets", "authors", scope] as const,
+    queryFn: () => fetchSkillAuthorFacets(scope),
+    enabled,
+    staleTime: 30_000,
+  });
+}
+
+/**
+ * NyxID services that have at least one tied system skill, with
+ * per-service skill counts. Powers the System-tab service-filter chip
+ * row.
+ */
+export function useSystemServiceFacets(enabled = true) {
+  return useQuery({
+    queryKey: ["skill-facets", "system-services"] as const,
+    queryFn: fetchSystemServiceFacets,
+    enabled,
     staleTime: 30_000,
   });
 }
