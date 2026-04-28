@@ -104,19 +104,19 @@ export function UsersPage() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-neon-cyan/20">
-                    <th className="px-4 py-3 text-left font-heading text-xs uppercase tracking-wider text-text-muted">
+                    <th className="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-[0.14em] text-text-muted">
                       User
                     </th>
-                    <th className="px-4 py-3 text-left font-heading text-xs uppercase tracking-wider text-text-muted">
+                    <th className="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-[0.14em] text-text-muted">
                       Email
                     </th>
-                    <th className="px-4 py-3 text-left font-heading text-xs uppercase tracking-wider text-text-muted">
+                    <th className="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-[0.14em] text-text-muted">
                       Skills
                     </th>
-                    <th className="px-4 py-3 text-left font-heading text-xs uppercase tracking-wider text-text-muted">
+                    <th className="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-[0.14em] text-text-muted">
                       Activities
                     </th>
-                    <th className="px-4 py-3 text-left font-heading text-xs uppercase tracking-wider text-text-muted">
+                    <th className="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-[0.14em] text-text-muted">
                       Last Active
                     </th>
                   </tr>

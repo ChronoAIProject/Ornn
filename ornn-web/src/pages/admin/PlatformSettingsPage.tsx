@@ -79,7 +79,7 @@ export function PlatformSettingsPage() {
             <section className="space-y-2">
               <label
                 htmlFor="auditWaiverThreshold"
-                className="block font-heading text-[11px] uppercase tracking-wider text-text-muted"
+                className="block font-mono text-[10px] uppercase tracking-[0.14em] text-text-muted"
               >
                 {t("platformSettings.auditThresholdLabel", "Audit waiver threshold")}
               </label>

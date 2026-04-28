@@ -117,7 +117,7 @@ export function NotificationsPage() {
                       )}
                       <div className="flex flex-col gap-1">
                         <div className="flex items-center gap-2">
-                          <span className="rounded border border-neon-cyan/20 px-2 py-0.5 font-heading text-[10px] uppercase tracking-wider text-text-muted">
+                          <span className="rounded border border-neon-cyan/20 px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.14em] text-text-muted">
                             {CATEGORY_LABEL[n.category] ?? n.category}
                           </span>
                           <span

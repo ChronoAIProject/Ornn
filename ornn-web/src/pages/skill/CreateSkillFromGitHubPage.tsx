@@ -115,7 +115,7 @@ export function CreateSkillFromGitHubPage() {
                 <div>
                   <label
                     htmlFor="repo"
-                    className="mb-1 block font-heading text-xs uppercase tracking-wider text-text-muted"
+                    className="mb-1 block font-mono text-[10px] uppercase tracking-[0.14em] text-text-muted"
                   >
                     {t("githubImport.repoLabel", "Repository")}{" "}
                     <span className="text-neon-red">*</span>
@@ -154,7 +154,7 @@ export function CreateSkillFromGitHubPage() {
                   <div>
                     <label
                       htmlFor="ref"
-                      className="mb-1 block font-heading text-xs uppercase tracking-wider text-text-muted"
+                      className="mb-1 block font-mono text-[10px] uppercase tracking-[0.14em] text-text-muted"
                     >
                       {t("githubImport.refLabel", "Branch / tag / commit")}
                     </label>
@@ -176,7 +176,7 @@ export function CreateSkillFromGitHubPage() {
                   <div>
                     <label
                       htmlFor="path"
-                      className="mb-1 block font-heading text-xs uppercase tracking-wider text-text-muted"
+                      className="mb-1 block font-mono text-[10px] uppercase tracking-[0.14em] text-text-muted"
                     >
                       {t("githubImport.pathLabel", "Path in repo")}
                     </label>
