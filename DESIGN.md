@@ -292,6 +292,8 @@ Rules:
 - Section spacing should reduce with screen size, but never to the point that the interface feels cramped.
 - Landing theatrics such as wires, chips, staged overlays, and complex mockups should reduce, restack, or disappear on smaller viewports if clarity suffers.
 - Motion must scale down on mobile when it interferes with comprehension, performance, or input precision.
+- Mobile horizontal padding for landing sections is standardized at `space-6` (24px). Every section, the nav, and the footer share the same gutter so the reading column is uniform from top to bottom.
+- Landing scrubs that read as side-by-side on desktop (intro / mockup / rail) should re-compose vertically on mobile, not shrink. The mobile narrative is: banner above, primary mockup centered, supporting surface (registry/rail) below. The scrub mechanic re-orients with it — chips and wires emerge from the supporting surface's outer edge nearest the mockup, not from the side.
 
 ### Spacing
 Use a 4px base scale.
@@ -400,6 +402,9 @@ Rules:
 - Scroll-scrub storytelling, wire routing, chip motion, phone mockups, and cinematic staging belong to flagship landing surfaces.
 - These patterns should not become the default behavior for dashboard, admin, docs, or registry pages.
 - Landing-specific theatrics must degrade into clear, static compositions on small screens.
+- When a scrub re-orients on mobile (rail under the phone instead of beside it), wire origins must anchor to the source surface's *outer visible edge* — never to an internal row position that may have scrolled out of view inside a clipped, max-height list. Anchoring to internal positions makes wires appear to start mid-air inside the mockup.
+- Wire trails that share an axis (multiple skills firing into one mockup) should fan across the source surface's width rather than stack on a single vertical or horizontal line. Each trail follows its own arc so the choreography reads as parallel motion, not one fat line. Origins should be inset from the surface's edges (~5–10%) so the outermost trails don't clip.
+- Reduced-motion users get a static composition with the same narrative beats — banner, mockup in its final/styled state, and an ambient skill marquee in place of the scroll-driven choreography. The marquee carries the "registry of skills" signal without requiring scroll input.
 
 ## Whole-App Application Guidance
 ### Landing and Marketing
@@ -465,3 +470,8 @@ The current app still uses a legacy design vocabulary centered on `neon.css`, `n
 | 2026-04-24 | Replaced Orbitron and Rajdhani with Fraunces, Inter, and JetBrains Mono | The new trio better supports editorial warmth, operational clarity, and product credibility |
 | 2026-04-24 | Standardized on three-layer tokens | Primitive, semantic, and component layers make the system easier to scale and theme |
 | 2026-04-24 | Deprecated `neon-*` naming as the long-term model | Role-based naming better matches the new system and reduces semantic confusion |
+| 2026-04-28 | Removed the editorial top-strip ("ORNN · CHRONO") above the landing nav | The wordmark in the nav already establishes the brand line; the strip read as decorative noise on every viewport, especially mobile |
+| 2026-04-28 | Standardized mobile landing horizontal padding to `space-6` (24px) across every section, nav, footer, and divider | A uniform mobile gutter keeps the reading column consistent and eliminates the ragged left edge that came from mixing 16px and 24px insets per section |
+| 2026-04-28 | Mobile landing hero re-composed vertically: banner above, phone centered at ~70% width, registry/rail compact at the bottom | The desktop 3-column scrub does not translate to a 390px column. Stacking by narrative (what is it → what does it look like → what's in it) gives mobile users immediate value above the fold instead of an empty starting frame |
+| 2026-04-28 | Mobile scrub re-orients chip/wire motion vertically: skills emerge upward from the rail's outer top edge into phone targets, with origins fanned across the rail's width | Anchoring to the rail's visible top edge prevents wires from appearing to start mid-screen when interior rows scroll out of the rail's clipped list. Fanning origins across the rail width turns 16 skill trails into a parallel arc choreography rather than one stacked vertical line |
+| 2026-04-28 | Reduced-motion users get a `SkillMarquee` (horizontal auto-scrolling skill chips) below the static phone in place of the scroll-driven scrub | Preserves the "registry of skills" signal without requiring scroll-driven choreography that reduced-motion users opt out of |

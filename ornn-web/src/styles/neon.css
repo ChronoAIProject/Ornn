@@ -1,6 +1,38 @@
 @import "tailwindcss";
 @import "highlight.js/styles/tokyo-night-dark.css";
 
+/* PP Editorial New — drop .woff2 files into ornn-web/public/fonts/ and the
+   browser will pick them up. Until the files exist, the font-display token
+   silently falls through to Newsreader. */
+@font-face {
+  font-family: "PP Editorial New";
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+  src: url("/fonts/PPEditorialNew-Regular.woff2") format("woff2");
+}
+@font-face {
+  font-family: "PP Editorial New";
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+  src: url("/fonts/PPEditorialNew-Italic.woff2") format("woff2");
+}
+@font-face {
+  font-family: "PP Editorial New";
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+  src: url("/fonts/PPEditorialNew-Ultralight.woff2") format("woff2");
+}
+@font-face {
+  font-family: "PP Editorial New";
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+  src: url("/fonts/PPEditorialNew-Ultrabold.woff2") format("woff2");
+}
+
 @theme {
   /* ── Legacy neon-* tokens — REMAPPED to Editorial Forge values during
    *    the design migration. Component code that still references
@@ -32,7 +64,7 @@
    *   text-accent, bg-accent, border-accent
    *   text-success / warning / danger / info
    *   border-subtle, border-strong
-   * Plus Fraunces / Inter via font-display, font-reading.
+   * Plus Fraunces / Inter via font-display, font-text, font-ui.
    */
   --color-page: #0A0907;
   --color-panel: #17150F;
@@ -46,6 +78,8 @@
   --color-accent-support: #E8B341;
   --color-subtle: rgba(201, 191, 173, 0.12);
   --color-strong-edge: rgba(201, 191, 173, 0.22);
+  --color-border-subtle: rgb(201 191 173 / 0.12);    /* alias for landing components */
+  --color-border-strong: rgb(201 191 173 / 0.22);    /* alias for landing components */
   --color-success: #7FA06A;
   --color-success-soft: rgba(127, 160, 106, 0.12);
   --color-warning: #E8B341;
@@ -55,9 +89,59 @@
   --color-info: #8A97A3;
   --color-info-soft: rgba(138, 151, 163, 0.12);
   --color-code-bg: #0A0907;
+  --color-code-surface: #0A0907;                     /* alias for landing components */
+
+  /* Material primitives — used for arbitrary-value tokens on the landing */
+  --color-obsidian: #0E0D0B;
+  --color-graphite: #17150F;
+  --color-iron: #26221B;
+  --color-steel: #3A3328;
+  --color-ash: #6B6254;
+  --color-bone: #C9BFAD;
+  --color-parchment: #F1ECDE;
+  --color-ember: #FF6A1A;
+  --color-ember-dim: #C94A0E;
+  --color-molten: #E8B341;
 
   --font-display: "Fraunces", Georgia, serif;
   --font-reading: "Inter", system-ui, sans-serif;
+  --font-text: "Inter", system-ui, sans-serif;       /* alias used by landing components */
+  --font-ui: "Inter", system-ui, sans-serif;         /* alias used by nav / footer */
+
+  /* Theme-aware gradients used by HeroStage and other landing surfaces.
+     Light-mode overrides live in [data-theme="light"] below. */
+  --gradient-hero:
+    radial-gradient(ellipse 70% 55% at 50% 95%, rgb(255 106 26 / 0.22), transparent 60%),
+    radial-gradient(ellipse 40% 30% at 50% 80%, rgb(232 179 65 / 0.10), transparent 70%),
+    linear-gradient(180deg, #0a0907 0%, #0E0D0B 40%, #140F0A 100%);
+  --gradient-hero-floor:
+    linear-gradient(rgb(201 191 173 / 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(201 191 173 / 0.04) 1px, transparent 1px);
+  --gradient-publish: linear-gradient(135deg, #140F0A 0%, #0E0D0B 60%);
+  --gradient-styled-media:
+    radial-gradient(ellipse 80% 70% at 30% 40%, rgb(255 106 26 / 0.45), transparent 60%),
+    radial-gradient(ellipse 60% 50% at 70% 70%, rgb(232 179 65 / 0.3), transparent 70%),
+    linear-gradient(135deg, #140F0A, #26221B);
+  --surface-styled-card: #140F0A;
+  --surface-code: #0a0907; /* terminal — stays dark in both themes per DESIGN.md */
+
+  /* Translucent rail surfaces — flip per theme */
+  --surface-rail: rgb(20 15 10 / 0.55);
+  --surface-rail-head: rgb(14 13 11 / 0.7);
+  --surface-rail-search: rgb(14 13 11 / 0.45);
+  --surface-rail-fade: linear-gradient(180deg, transparent, rgb(14 13 11 / 0.9));
+
+  /* Translucent nav surface (legacy) — landing nav now uses bg-page directly */
+  --surface-nav: rgb(14 13 11 / 0.72);
+
+  /* Translucent overlay panel — used by hero's final CTA card */
+  --surface-overlay: rgb(14 13 11 / 0.82);
+
+  /* Blueprint / drafting paper grid — applied behind editorial sections */
+  --pattern-grid:
+    linear-gradient(rgb(201 191 173 / 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(201 191 173 / 0.045) 1px, transparent 1px);
+  --pattern-grid-size: 48px 48px;
 }
 
 /* ──────── Light mode overrides — Editorial Forge bright (flagship) ──────── */
@@ -96,19 +180,73 @@
   --color-info: #5D6973;
   --color-info-soft: rgba(93, 105, 115, 0.10);
   --color-code-bg: #1A1612;
+  --color-border-subtle: rgb(26 24 18 / 0.10);
+  --color-border-strong: rgb(26 24 18 / 0.22);
+  --color-code-surface: #1A1612;
+
+  /* Material primitives — warm parchment family for light mode */
+  --color-obsidian: #F5EFE1;
+  --color-graphite: #EBE4D3;
+  --color-iron: #DDD3BD;
+  --color-steel: #C9BFAD;
+  --color-ash: #8A7F6C;
+  --color-bone: #5E5544;
+  --color-parchment: #1A1812;
+  --color-ember: #C94A0E;
+  --color-ember-dim: #A33A08;
+  --color-molten: #B8861A;
+
+  /* Aliases used by Fraunces-italic landing components */
+  --font-display: "Fraunces", Georgia, serif;
+  --font-reading: "Inter", system-ui, sans-serif;
+  --font-text: "Inter", system-ui, sans-serif;
+  --font-ui: "Inter", system-ui, sans-serif;
+
+  /* Theme-aware gradients — warm parchment in light mode */
+  --gradient-hero:
+    radial-gradient(ellipse 70% 55% at 50% 95%, rgb(201 74 14 / 0.18), transparent 60%),
+    radial-gradient(ellipse 40% 30% at 50% 80%, rgb(184 134 26 / 0.10), transparent 70%),
+    linear-gradient(180deg, #FFFBF0 0%, #F5EFE1 40%, #EBE4D3 100%);
+  --gradient-hero-floor:
+    linear-gradient(rgb(26 24 18 / 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(26 24 18 / 0.06) 1px, transparent 1px);
+  --gradient-publish: linear-gradient(135deg, #FFFBF0 0%, #EBE4D3 60%);
+  --gradient-styled-media:
+    radial-gradient(ellipse 80% 70% at 30% 40%, rgb(201 74 14 / 0.40), transparent 60%),
+    radial-gradient(ellipse 60% 50% at 70% 70%, rgb(184 134 26 / 0.25), transparent 70%),
+    linear-gradient(135deg, #FFFBF0, #EBE4D3);
+  --surface-styled-card: #FFFBF0;
+  /* --surface-code intentionally stays dark in light mode per DESIGN.md */
+
+  --surface-rail: rgb(255 251 240 / 0.88);
+  --surface-rail-head: rgb(235 228 211 / 0.82);
+  --surface-rail-search: rgb(245 239 225 / 0.55);
+  --surface-rail-fade: linear-gradient(180deg, transparent, rgb(245 239 225 / 0.95));
+
+  --surface-nav: rgb(245 239 225 / 0.85);
+  --surface-overlay: rgb(255 251 240 / 0.92);
+
+  --pattern-grid:
+    linear-gradient(rgb(26 24 18 / 0.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(26 24 18 / 0.07) 1px, transparent 1px);
 }
 
-/* Base */
-body {
-  font-family: var(--font-body);
-}
+/* Base — wrapped in @layer base so Tailwind utility classes (font-display,
+   font-mono, font-text) can override per-element on the landing while legacy
+   pages keep their Orbitron/Rajdhani defaults. Without the layer wrap,
+   bare element selectors are unlayered and outrank layered utilities. */
+@layer base {
+  body {
+    font-family: var(--font-body);
+  }
 
-h1, h2, h3, h4, h5, h6 {
-  font-family: var(--font-heading);
-}
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-heading);
+  }
 
-code, pre {
-  font-family: var(--font-mono);
+  code, pre {
+    font-family: var(--font-mono);
+  }
 }
 
 /* Editorial Forge — accent text emphasis (no glow, restrained per DESIGN.md) */

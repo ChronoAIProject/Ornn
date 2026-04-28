@@ -134,9 +134,13 @@ const router = createBrowserRouter(
       <Route path="/login" element={<LoginPage />} />
       <Route path="/oauth/callback" element={<OAuthCallbackPage />} />
 
+      {/* Landing owns its own container — the 820vh hero needs full
+          document scroll, and RootLayout's h-screen overflow-hidden
+          would trap it. */}
+      <Route path="/" element={<LandingPage />} />
+
       {/* Public routes with RootLayout */}
       <Route element={<RootLayout />}>
-        <Route path="/" element={<LandingPage />} />
         <Route path="/docs" element={<DocsPage />} />
         <Route path="/registry" element={<ExplorePage />} />
         <Route path="/skills/:idOrName" element={<SkillDetailPage />} />

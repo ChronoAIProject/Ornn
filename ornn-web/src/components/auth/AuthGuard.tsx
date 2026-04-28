@@ -32,8 +32,9 @@ export function AuthGuard({ children }: AuthGuardProps) {
     if (!isInitialized || isLoading) return;
 
     if (!isAuthenticated) {
-      // Redirect to landing page, preserving intended destination
-      navigate("/landing", {
+      // Redirect to login, preserving intended destination so we can
+      // return the user to the page they tried to reach after sign-in.
+      navigate("/login", {
         replace: true,
         state: { from: location.pathname },
       });
