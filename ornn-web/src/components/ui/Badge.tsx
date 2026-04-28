@@ -1,3 +1,18 @@
+/**
+ * Badge — Editorial Forge stamp / micro-label.
+ *
+ * Mono uppercase, 2px radius, hairline border, soft tinted background.
+ * Color names are the legacy palette mapped to Editorial Forge semantics:
+ *   cyan    → ember accent
+ *   magenta → accent support (molten)
+ *   yellow  → warning (brass)
+ *   green   → success (oxidized)
+ *   red     → danger (kiln)
+ *   muted   → meta
+ *
+ * @module components/ui/Badge
+ */
+
 import type { ReactNode } from "react";
 
 export interface BadgeProps {
@@ -7,20 +22,20 @@ export interface BadgeProps {
 }
 
 const COLOR_MAP = {
-  cyan: "bg-neon-cyan/10 text-neon-cyan border-neon-cyan/30",
-  magenta: "bg-neon-magenta/10 text-neon-magenta border-neon-magenta/30",
-  yellow: "bg-neon-yellow/10 text-neon-yellow border-neon-yellow/30",
-  green: "bg-neon-green/10 text-neon-green border-neon-green/30",
-  red: "bg-neon-red/10 text-neon-red border-neon-red/30",
-  muted: "bg-text-muted/10 text-text-muted border-text-muted/30",
+  cyan: "border-accent/40 bg-accent/10 text-accent",
+  magenta: "border-accent-support/40 bg-warning-soft text-accent-support",
+  yellow: "border-warning/40 bg-warning-soft text-warning",
+  green: "border-success/40 bg-success-soft text-success",
+  red: "border-danger/40 bg-danger-soft text-danger",
+  muted: "border-strong-edge bg-elevated text-meta",
 } as const;
 
 export function Badge({ children, color = "cyan", className = "" }: BadgeProps) {
   return (
     <span
       className={`
-        inline-flex items-center rounded-full border px-2.5 py-0.5
-        font-body text-xs font-semibold
+        inline-flex items-center rounded-sm border px-2 py-0.5
+        font-mono text-[10px] font-semibold uppercase tracking-[0.1em]
         ${COLOR_MAP[color]}
         ${className}
       `}
