@@ -181,23 +181,25 @@ export async function deleteSkillVersion(
 }
 
 export interface PullFromGitHubInput {
-  /** `owner/name`. */
-  repo: string;
-  /** Branch / tag / commit SHA. Omit for the repo default. */
+  /** Preferred: a folder URL like `https://github.com/owner/repo/tree/<ref>/<path>`. */
+  githubUrl?: string;
+  /** Legacy / explicit form. Pass instead of (or alongside, ignored if) `githubUrl`. */
+  repo?: string;
   ref?: string;
-  /** Subdirectory that contains `SKILL.md`. Omit for repo root. */
   path?: string;
   /** Skip the format-validation pass on the generated ZIP. */
   skipValidation?: boolean;
 }
 
 /**
- * Create a skill by cloning a public GitHub repo. Backend zips the tree,
- * records the source pointer, and publishes as v1. Subsequent updates
- * come via `refreshSkillFromSource`.
+ * Create a skill by cloning a public GitHub repo. Backend parses the URL
+ * (or the explicit `repo`/`ref`/`path`), zips the tree, records the
+ * source pointer, and publishes as v1. Subsequent updates come via
+ * `refreshSkillFromSource`.
  */
 export async function pullSkillFromGitHub(input: PullFromGitHubInput): Promise<SkillDetail> {
   const res = await apiPost<SkillDetail>("/api/v1/skills/pull", {
+    githubUrl: input.githubUrl,
     repo: input.repo,
     ref: input.ref,
     path: input.path,
@@ -207,11 +209,54 @@ export async function pullSkillFromGitHub(input: PullFromGitHubInput): Promise<S
 }
 
 /**
- * Re-pull the skill's GitHub source at the current ref HEAD and publish as
- * a new version. Requires owner or platform admin.
+ * Re-pull the skill's GitHub source and publish a new version. Requires
+ * owner or platform admin. `skipValidation` opts out of the format
+ * validator on the pulled package — useful when the upstream repo
+ * doesn't strictly conform to Ornn's skill-package layout.
  */
-export async function refreshSkillFromSource(id: string): Promise<SkillDetail> {
-  const res = await apiPost<SkillDetail>(`/api/v1/skills/${id}/refresh`, {});
+export async function refreshSkillFromSource(
+  id: string,
+  options?: { skipValidation?: boolean },
+): Promise<SkillDetail> {
+  const res = await apiPost<SkillDetail>(`/api/v1/skills/${id}/refresh`, {
+    skipValidation: options?.skipValidation ?? false,
+  });
+  return res.data!;
+}
+
+/**
+ * Dry-run a refresh. Server pulls the latest content from the skill's
+ * stored GitHub source, computes a structured diff against the current
+ * latest version, and returns it WITHOUT bumping. Powers the
+ * preview-then-confirm flow on the detail-page Advanced Options panel.
+ */
+export interface RefreshPreviewResponse {
+  skill: { guid: string; name: string };
+  source: import("@/types/domain").SkillSource;
+  pendingVersion: string;
+  hasChanges: boolean;
+  diff: import("@/types/domain").VersionDiffResponse["diff"];
+}
+
+export async function previewSkillRefresh(id: string): Promise<RefreshPreviewResponse> {
+  const res = await apiPost<RefreshPreviewResponse>(`/api/v1/skills/${id}/refresh`, {
+    dryRun: true,
+  });
+  return res.data!;
+}
+
+/**
+ * Attach (or clear) a GitHub source pointer on an existing skill. Pass
+ * `null` for `githubUrl` to unlink. The pointer is parsed server-side
+ * from a folder URL like `https://github.com/<owner>/<repo>/tree/<ref>/<path>`.
+ * Does NOT pull — the user triggers `previewSkillRefresh` →
+ * `refreshSkillFromSource` separately.
+ */
+export async function setSkillSource(
+  id: string,
+  githubUrl: string | null,
+): Promise<SkillDetail> {
+  const res = await apiPut<SkillDetail>(`/api/v1/skills/${id}/source`, { githubUrl });
   return res.data!;
 }
 

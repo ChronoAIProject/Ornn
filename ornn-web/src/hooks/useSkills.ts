@@ -12,6 +12,8 @@ import {
   setSkillVersionDeprecation,
   pullSkillFromGitHub,
   refreshSkillFromSource,
+  previewSkillRefresh,
+  setSkillSource,
   tieSkillToNyxidService,
   type PullFromGitHubInput,
 } from "@/services/skillApi";
@@ -254,7 +256,13 @@ export function usePullSkillFromGitHub() {
 export function useRefreshSkillFromSource(idOrName: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (guid: string) => refreshSkillFromSource(guid),
+    mutationFn: ({
+      guid,
+      skipValidation,
+    }: {
+      guid: string;
+      skipValidation?: boolean;
+    }) => refreshSkillFromSource(guid, { skipValidation }),
     onSuccess: (updated) => {
       // Prime the detail cache with the refreshed payload so the chip
       // updates in place.
@@ -262,6 +270,26 @@ export function useRefreshSkillFromSource(idOrName: string) {
       queryClient.invalidateQueries({ queryKey: [SKILLS_KEY] });
       queryClient.invalidateQueries({ queryKey: [SKILL_VERSIONS_KEY, idOrName] });
       queryClient.invalidateQueries({ queryKey: [MY_SKILLS_KEY] });
+    },
+  });
+}
+
+/** Dry-run a refresh — pull from GitHub, compute diff, return without bumping. */
+export function usePreviewSkillRefresh() {
+  return useMutation({
+    mutationFn: (guid: string) => previewSkillRefresh(guid),
+  });
+}
+
+/** Attach (or clear) a GitHub source pointer on an existing skill. */
+export function useSetSkillSource(idOrName: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ guid, githubUrl }: { guid: string; githubUrl: string | null }) =>
+      setSkillSource(guid, githubUrl),
+    onSuccess: (updated) => {
+      queryClient.setQueryData([SKILLS_KEY, idOrName, undefined], updated);
+      queryClient.invalidateQueries({ queryKey: [SKILLS_KEY] });
     },
   });
 }

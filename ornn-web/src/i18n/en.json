@@ -537,5 +537,44 @@
     "feature2Desc": "Cryptographic signatures ensure skill integrity.",
     "feature3Title": "Seamless SDK Integration",
     "feature3Desc": "One line to discover. One line to execute."
+  },
+  "advancedOptions": {
+    "title": "Advanced options",
+    "navLabel": "Advanced settings",
+    "nyxidServiceBinding": "Bind to NyxID Service",
+    "githubLink": "Link to GitHub"
+  },
+  "githubLink": {
+    "intro": "Point this skill at a folder in a public GitHub repo. Saving the link does not pull anything; click Sync afterwards to preview changes and publish a new version.",
+    "urlLabel": "GitHub folder URL",
+    "urlHelp": "Use the folder URL (the /tree/<ref>/<path> form). The skill's SKILL.md must be at the root of that folder. Default-branch and repo-root URLs work too.",
+    "skipValidationLabel": "Skip Ornn package validation",
+    "skipValidationHelp": "GitHub-hosted skills don't always follow Ornn's package rules; tick this if you trust the upstream and want syncs to succeed even when the validator would reject the layout.",
+    "currentlyLinked": "Currently linked",
+    "lastSyncedAt": "Last synced {{when}}",
+    "neverSynced": "Linked but never synced.",
+    "syncButton": "Sync from GitHub",
+    "unlinkButton": "Unlink",
+    "saveBeforeSync": "Save the URL change first, then sync.",
+    "linkSuccess": "GitHub link saved",
+    "unlinkSuccess": "GitHub link removed",
+    "alreadyInSync": "Already in sync — no changes to pull from GitHub.",
+    "syncSuccess": "Synced from GitHub — new version published.",
+    "previewTitle": "Sync preview",
+    "previewSubtitle": "Apply this sync to publish v{{version}} of {{name}} from the linked GitHub source.",
+    "applySync": "Apply sync"
+  },
+  "githubImport": {
+    "title": "Import from GitHub",
+    "subtitle": "Publish a skill from a folder in a public GitHub repo. Subsequent updates can be re-synced from the same link in one click.",
+    "urlLabel": "GitHub folder URL",
+    "urlHint": "Use the folder URL (the /tree/<ref>/<path> form). The skill's SKILL.md must sit at the root of that folder. Default-branch and repo-root URLs work too.",
+    "urlInvalid": "Enter a github.com URL (e.g. https://github.com/owner/repo/tree/main/path).",
+    "skipValidationLabel": "Skip Ornn package validation",
+    "skipValidationHelp": "GitHub-hosted skills don't always follow Ornn's package rules; tick this if you trust the upstream and want the import to succeed even when the validator would reject the layout.",
+    "syncButton": "Sync from GitHub",
+    "backToModes": "Back to creation modes",
+    "success": "Skill pulled from GitHub.",
+    "genericError": "Failed to pull from GitHub."
   }
 }

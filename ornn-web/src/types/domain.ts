@@ -26,10 +26,18 @@ export type SkillSource =
       ref: string;
       /** Subdirectory inside the repo that contains SKILL.md. Empty = repo root. */
       path: string;
-      /** ISO timestamp of the most recent successful pull / refresh. */
-      lastSyncedAt: string;
-      /** Commit SHA fetched at `lastSyncedAt`. */
-      lastSyncedCommit: string;
+      /**
+       * ISO timestamp of the most recent successful pull / refresh.
+       * Absent when the user attached a GitHub link without triggering
+       * a sync — the source pointer is stored, but no version has been
+       * pulled from it yet.
+       */
+      lastSyncedAt?: string;
+      /**
+       * Commit SHA fetched at `lastSyncedAt`. Absent in the same
+       * "linked but never synced" state.
+       */
+      lastSyncedCommit?: string;
     };
 
 export interface SkillDetail extends SkillSummary {

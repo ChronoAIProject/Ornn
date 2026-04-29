@@ -419,7 +419,7 @@ export function SkillDetailPage() {
             source={skill.source}
             canRefresh={isOwner || isAdminUser}
             isRefreshing={refreshMutation.isPending}
-            onRefresh={() => refreshMutation.mutate(skill.guid)}
+            onRefresh={() => refreshMutation.mutate({ guid: skill.guid })}
           />
         )}
 
