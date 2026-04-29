@@ -313,6 +313,10 @@ export function SkillDetailPage() {
       description: skill.description,
       metadata: skill.metadata ?? {},
       ornnOrigin: window.location.origin,
+      // Private skills 404 to anonymous callers, so the prompt needs to
+      // walk the agent through obtaining a NyxID token. Public / system
+      // skills don't — anonymous curl works directly.
+      isPrivate: skill.isPrivate,
     });
     try {
       await navigator.clipboard.writeText(prompt);
