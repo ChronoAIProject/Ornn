@@ -728,8 +728,18 @@ function mapDoc(doc: Document | null): SkillDocument | null {
           repo: String(doc.source.repo ?? ""),
           ref: String(doc.source.ref ?? ""),
           path: String(doc.source.path ?? ""),
-          lastSyncedAt: doc.source.lastSyncedAt instanceof Date ? doc.source.lastSyncedAt : new Date(doc.source.lastSyncedAt),
-          lastSyncedCommit: String(doc.source.lastSyncedCommit ?? ""),
+          // Both fields are optional — when the user attached a GitHub
+          // link via PUT /skills/:id/source without an immediate sync,
+          // they're absent from the doc. Don't fabricate an Invalid
+          // Date by feeding `undefined` to the Date constructor.
+          ...(doc.source.lastSyncedAt instanceof Date
+            ? { lastSyncedAt: doc.source.lastSyncedAt }
+            : doc.source.lastSyncedAt != null
+              ? { lastSyncedAt: new Date(doc.source.lastSyncedAt) }
+              : {}),
+          ...(typeof doc.source.lastSyncedCommit === "string" && doc.source.lastSyncedCommit
+            ? { lastSyncedCommit: doc.source.lastSyncedCommit }
+            : {}),
         }
       : undefined,
     nyxidServiceId: typeof doc.nyxidServiceId === "string" ? doc.nyxidServiceId : null,

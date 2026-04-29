@@ -1132,11 +1132,15 @@ export class SkillService {
             repo: skill.source.repo,
             ref: skill.source.ref,
             path: skill.source.path,
-            lastSyncedAt:
-              skill.source.lastSyncedAt instanceof Date
-                ? skill.source.lastSyncedAt.toISOString()
-                : String(skill.source.lastSyncedAt),
-            lastSyncedCommit: skill.source.lastSyncedCommit,
+            // Both fields are optional and absent for the "linked but
+            // never synced" state. Only include them when present so
+            // we never serialize an Invalid Date.
+            ...(skill.source.lastSyncedAt instanceof Date
+              ? { lastSyncedAt: skill.source.lastSyncedAt.toISOString() }
+              : {}),
+            ...(typeof skill.source.lastSyncedCommit === "string" && skill.source.lastSyncedCommit
+              ? { lastSyncedCommit: skill.source.lastSyncedCommit }
+              : {}),
           }
         : undefined,
       nyxidServiceId: skill.nyxidServiceId ?? null,
