@@ -13,15 +13,40 @@ describe("buildTrySkillPrompt", () => {
       metadata: {},
       ornnOrigin: ORIGIN,
     });
-    expect(out).toContain("# Try Ornn skill: my-skill");
+    expect(out).toContain("# Install Ornn skill: my-skill");
     expect(out).toContain("> Does useful things.");
     expect(out).toContain(`GUID: ${GUID}`);
     expect(out).toContain(`Ornn URL: ${ORIGIN}/skills/${GUID}`);
-    expect(out).toContain("~/.claude/skills/my-skill/");
-    expect(out).toContain(`nyxid proxy request ornn /api/v1/skills/${GUID}/json`);
   });
 
-  test("prerequisites section embeds actionable CLI check commands", () => {
+  test("offers per-agent install conventions including Claude Code, Codex, and Cursor", () => {
+    const out = buildTrySkillPrompt({
+      guid: GUID,
+      name: "my-skill",
+      description: "d",
+      metadata: {},
+      ornnOrigin: ORIGIN,
+    });
+    expect(out).toContain("~/.claude/skills/my-skill/");
+    expect(out).toContain("~/.codex/skills/my-skill/");
+    expect(out).toContain(".cursor/rules/my-skill.md");
+    expect(out).toMatch(/Other agents/);
+  });
+
+  test("instructs the agent to record the install in ~/.ornn/installed-skills.json", () => {
+    const out = buildTrySkillPrompt({
+      guid: GUID,
+      name: "my-skill",
+      description: "d",
+      metadata: {},
+      ornnOrigin: ORIGIN,
+    });
+    expect(out).toContain("~/.ornn/installed-skills.json");
+    expect(out).toMatch(/installedVersion/);
+    expect(out).toMatch(/ornn-agent-manual/);
+  });
+
+  test("offers multiple fetch paths — NyxID CLI, direct HTTPS, anonymous", () => {
     const out = buildTrySkillPrompt({
       guid: GUID,
       name: "s",
@@ -29,8 +54,11 @@ describe("buildTrySkillPrompt", () => {
       metadata: {},
       ornnOrigin: ORIGIN,
     });
-    expect(out).toContain("nyxid whoami");
-    expect(out).toContain("nyxid proxy discover");
+    expect(out).toContain(`nyxid proxy request ornn-api /api/v1/skills/${GUID}/json`);
+    expect(out).toContain(`Authorization: Bearer $TOKEN`);
+    expect(out).toContain(`${ORIGIN}/api/v1/skills/${GUID}/json`);
+    // Should NOT reference the deprecated `ornn` slug
+    expect(out).not.toMatch(/nyxid proxy request ornn[\s/]/);
     // Should NOT reference MCP tools
     expect(out).not.toContain("ornn__");
     expect(out).not.toContain("nyxid__nyx__");
@@ -110,5 +138,6 @@ describe("buildTrySkillPrompt", () => {
       ornnOrigin: `${ORIGIN}///`,
     });
     expect(out).toContain(`Ornn URL: ${ORIGIN}/skills/${GUID}`);
+    expect(out).not.toContain("https://ornn.chrono-ai.fun///");
   });
 });

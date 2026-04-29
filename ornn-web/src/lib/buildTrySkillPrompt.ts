@@ -1,8 +1,21 @@
 /**
- * Builds the "Try this skill with Nyx CLI" prompt that a user copies to their
- * clipboard and pastes into their agent (Claude Code, Cursor, etc.).
+ * Builds the "Install this Ornn skill into my agent" prompt that a user
+ * copies from the skill detail page and pastes into their agent (Claude
+ * Code, OpenAI Codex CLI, Cursor, custom agents — anything that takes a
+ * system / instruction prompt).
  *
- * Pure, side-effect-free — trivially unit-testable. No DOM, no window access.
+ * Goals:
+ *  - **Agent-agnostic.** Don't assume Claude-only file layout or
+ *    Nyx-only fetch path. List the common runtimes the agent might be
+ *    running under and let it pick.
+ *  - **Multiple fetch paths.** A connected NyxID CLI is the easiest;
+ *    a direct HTTPS GET with a bearer token works too. Public skills can
+ *    even be pulled anonymously.
+ *  - **Real verification.** Before executing, the agent runs actual
+ *    `--version` / `import` / `which` checks instead of trusting metadata.
+ *
+ * Pure, side-effect-free — trivially unit-testable. No DOM, no window
+ * access; the caller passes `ornnOrigin` explicitly.
  */
 
 export interface TrySkillPromptRuntimeDependency {
@@ -85,56 +98,73 @@ export function buildTrySkillPrompt(input: BuildTrySkillPromptInput): string {
   const envLine = renderEnvVarList(runtimes);
   const toolLine = renderToolList(tools);
 
-  const skillUrl = `${ornnOrigin.replace(/\/+$/, "")}/skills/${guid}`;
+  const origin = ornnOrigin.replace(/\/+$/, "");
+  const skillUrl = `${origin}/skills/${guid}`;
+  const apiUrl = `${origin}/api/v1/skills/${guid}/json`;
 
   return [
-    `# Try Ornn skill: ${name}`,
+    `# Install Ornn skill: ${name}`,
     "",
     `> ${description}`,
     "",
-    "All Ornn operations below go through the NyxID CLI (`nyxid`). Do not",
-    "invoke MCP tools — use the CLI commands shown.",
+    "You're being given an Ornn skill — a packaged AI capability",
+    "(`SKILL.md` prompt + optional scripts + metadata). Follow the steps",
+    "below to fetch it, install it locally if your runtime supports a",
+    "skills directory, verify dependencies, and use it.",
     "",
-    "## Prerequisites — actually run these checks",
+    "## Step 1: Fetch the skill content",
     "",
-    "1. **NyxID CLI installed and logged in.** Run:",
-    "   ```",
-    "   nyxid whoami",
-    "   ```",
-    "   - `command not found` → tell the user to install NyxID CLI and stop.",
-    "   - Error about token / not logged in → ask the user for their NyxID",
-    "     base URL and run `nyxid login --base-url <url>` (use `--password`",
-    "     if browser login is unavailable). Wait for success before continuing.",
+    `The skill is at \`${apiUrl}\`. Pick whichever fetch path is`,
+    "available in your environment:",
     "",
-    "2. **Ornn reachable through NyxID proxy.** Run:",
-    "   ```",
-    "   nyxid proxy discover --output json",
-    "   ```",
-    "   Look for a service with slug `ornn` in the output. If absent, tell",
-    "   the user Ornn is not connected in their NyxID account and stop.",
-    "",
-    "Only proceed once both checks pass.",
-    "",
-    "## Step 1: Check local installation",
-    "Look for this skill at your agent's skills directory:",
-    `- Claude Code: \`~/.claude/skills/${name}/\``,
-    "- Other agents: your equivalent skill dir",
-    "",
-    "- If `SKILL.md` is present → read the local copy and jump to step 3.",
-    `- If missing → ask the user: "Install ${name} locally for future reuse? (y/n)"`,
-    "  Record the answer; act on it in step 2.",
-    "",
-    "## Step 2: Fetch the skill package",
-    "Get the full package as JSON (SKILL.md + scripts + references + assets):",
+    "**Option A — via NyxID CLI** (if `nyxid` is installed and you've run `nyxid login`):",
     "```",
-    `nyxid proxy request ornn /api/v1/skills/${guid}/json --output json`,
+    `nyxid proxy request ornn-api /api/v1/skills/${guid}/json --output json`,
     "```",
-    "The response body contains `{ name, description, metadata, files: { ... } }`.",
-    "If the user said yes in step 1, write each entry of `files` to the local",
-    `skills dir (e.g. \`~/.claude/skills/${name}/\`), preserving path structure`,
-    "(`scripts/`, `references/`, `assets/`).",
     "",
-    "## Step 3: Check dependencies",
+    "**Option B — direct HTTPS** (if you have a NyxID bearer token):",
+    "```",
+    `curl -H "Authorization: Bearer $TOKEN" \\`,
+    `  "${apiUrl}"`,
+    "```",
+    "",
+    "**Option C — anonymous** (only works if this skill is public):",
+    "```",
+    `curl "${apiUrl}"`,
+    "```",
+    "",
+    "Response shape:",
+    "```",
+    "{ name, description, metadata, files: { \"SKILL.md\": \"…\", \"scripts/…\": \"…\", … } }",
+    "```",
+    "",
+    "## Step 2: Install locally (optional but recommended for reuse)",
+    "",
+    `Ask the user: "Install \`${name}\` locally for future reuse? (y/n)".`,
+    "",
+    "If yes, write each `files[path]` entry to your platform's local",
+    "skills directory, preserving the path structure (`scripts/`,",
+    "`references/`, `assets/`). Common per-agent conventions:",
+    "",
+    `- **Claude Code:** \`~/.claude/skills/${name}/\``,
+    `- **OpenAI Codex CLI:** \`~/.codex/skills/${name}/\` if your install`,
+    "  uses one, otherwise project-local `skills/<name>/`.",
+    `- **Cursor:** workspace \`.cursor/rules/${name}.md\` (paste the SKILL.md body).`,
+    "- **Other agents / no skills dir:** keep the `SKILL.md` content in",
+    "  your conversation context for the rest of this session.",
+    "",
+    "If the user said no, skip the write — just hold `SKILL.md` in context.",
+    "",
+    "**Either way, append a record for this skill to `~/.ornn/installed-skills.json`**",
+    "so future sessions (yours or any other agent's) know it's already installed.",
+    "The file is a flat JSON array; create it as `[]` if it doesn't exist. Record",
+    "shape: `{ name, ornnGuid, installedVersion, installedAt, localPath? }`. If you",
+    "later overwrite to a newer version, bump `installedVersion` + `installedAt` in",
+    "place. See the `ornn-agent-manual-cli` / `ornn-agent-manual-http` skill, §0.5,",
+    "for the full registry contract.",
+    "",
+    "## Step 3: Verify dependencies",
+    "",
     "Skill metadata:",
     `- Category: ${category}`,
     `- Runtime: ${runtimeLine}`,
@@ -142,21 +172,23 @@ export function buildTrySkillPrompt(input: BuildTrySkillPromptInput): string {
     `- Env vars: ${envLine}`,
     `- Required tools: ${toolLine}`,
     "",
-    "For each, run an actual check:",
-    "- runtime: `node --version` (for node) or `python3 --version` (for python).",
-    "- deps: try to resolve each — e.g. `node -e \"require('<lib>')\"` for node,",
+    "Run actual checks before executing — don't trust the metadata blindly:",
+    "- runtime: `node --version` (node) · `python3 --version` (python) ·",
+    "  the equivalent for whatever runtime is listed.",
+    "- deps: try to resolve each — `node -e \"require('<lib>')\"` for node,",
     "  `python3 -c \"import <lib>\"` for python.",
-    "- env vars: check each with `printenv <VAR>`; empty means missing.",
-    "- tools: verify each tool is callable (`which <tool>`).",
+    "- env vars: `printenv <VAR>` — empty output means missing.",
+    "- tools: `which <tool>` (or your runtime's equivalent).",
     "",
     "Report missing items to the user with install commands",
     "(`npm install <pkg>` for node, `pip install <pkg>` for python). Wait",
     "for fixes before step 4.",
     "",
     "## Step 4: Execute",
-    "Read the fetched SKILL.md body and follow its instructions. For",
-    "runtime-based or mixed skills, run the scripts under `scripts/` as",
-    "directed by SKILL.md.",
+    "",
+    "Read the fetched `SKILL.md` body and follow its instructions. For",
+    "runtime-based or mixed skills, run scripts under `scripts/` as",
+    "directed by `SKILL.md`.",
     "",
     "## Skill reference",
     `- GUID: ${guid}`,
