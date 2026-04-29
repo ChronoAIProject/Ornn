@@ -167,10 +167,18 @@ export type SkillSource =
       ref: string;
       /** Subdirectory inside the repo that contains SKILL.md. Empty string = repo root. */
       path: string;
-      /** ISO timestamp of the most recent successful pull / refresh. */
-      lastSyncedAt: Date;
-      /** Commit SHA that was fetched at `lastSyncedAt`. Allows drift detection. */
-      lastSyncedCommit: string;
+      /**
+       * ISO timestamp of the most recent successful pull / refresh.
+       * Absent when the source pointer was attached without an immediate
+       * sync (the user can save a GitHub link first and trigger the sync
+       * later from the detail-page advanced options).
+       */
+      lastSyncedAt?: Date;
+      /**
+       * Commit SHA that was fetched at `lastSyncedAt`. Allows drift
+       * detection. Absent in the same "linked but not yet synced" state.
+       */
+      lastSyncedCommit?: string;
     };
 
 /**
@@ -273,8 +281,14 @@ export interface SkillDetailResponse {
     repo: string;
     ref: string;
     path: string;
-    lastSyncedAt: string;
-    lastSyncedCommit: string;
+    /**
+     * Absent when the skill was linked but not yet synced (the user can
+     * attach a GitHub URL via PUT /skills/:id/source first and trigger
+     * the sync separately via POST /skills/:id/refresh).
+     */
+    lastSyncedAt?: string;
+    /** Absent in the same "linked but never synced" state. */
+    lastSyncedCommit?: string;
   };
   /** NyxID service tie (null when untied). See `SkillDocument.nyxidServiceId`. */
   nyxidServiceId?: string | null;

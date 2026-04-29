@@ -180,6 +180,23 @@ export class SkillRepository {
   }
 
   /**
+   * Remove the `source` field entirely from a skill doc (i.e. unlink the
+   * upstream pointer). Use $unset rather than `$set: { source: null }` so
+   * the field is absent from the doc — matches the "originally hand-
+   * uploaded skill" shape.
+   */
+  async clearSource(guid: string, updatedBy: string): Promise<SkillDocument | null> {
+    await this.collection.updateOne(
+      { _id: guid as any },
+      {
+        $set: { updatedBy, updatedOn: new Date() },
+        $unset: { source: "" },
+      },
+    );
+    return this.findByGuid(guid);
+  }
+
+  /**
    * Set or clear a NyxID-service tie. When `data.nyxidServiceId` is `null`
    * we wipe all four cached fields. Caller must have already validated
    * eligibility + decided whether to flip `isPrivate` (admin tie forces
