@@ -219,26 +219,47 @@ export function SkillVersionList({
                       : t("skillDetail.markDeprecated")}
                   </button>
                 )}
-                {canManage &&
-                  onDeleteVersion &&
-                  !isLatest &&
-                  versions.length > 1 && (
+                {canManage && onDeleteVersion && (() => {
+                  const isOnly = versions.length <= 1;
+                  // Backend rejects deleting the only-remaining version
+                  // (use the danger-zone "Delete skill" instead) and the
+                  // current latest (publish a newer version first). We
+                  // mirror that here as a disabled button with a tooltip
+                  // so the affordance stays discoverable.
+                  const blockedReason = isOnly
+                    ? (t(
+                        "skillDetail.deleteVersionBlockedOnly",
+                        "Can't delete the only remaining version. Use 'Delete skill' in the danger zone instead.",
+                      ) as string)
+                    : isLatest
+                      ? (t(
+                          "skillDetail.deleteVersionBlockedLatest",
+                          "Can't delete the current latest version. Publish a newer version first, then delete this one.",
+                        ) as string)
+                      : null;
+                  const isBlocked = blockedReason !== null;
+                  return (
                     <button
                       type="button"
-                      onClick={() => setDeleteTarget(v)}
-                      disabled={isDeleting}
-                      title={t("skillDetail.deleteVersion", "Delete this version")}
+                      onClick={() => !isBlocked && setDeleteTarget(v)}
+                      disabled={isDeleting || isBlocked}
+                      title={
+                        blockedReason ??
+                        (t("skillDetail.deleteVersion", "Delete this version") as string)
+                      }
                       className="
                         shrink-0 rounded border border-transparent px-2 py-1
                         font-body text-xs text-text-muted
                         hover:text-neon-red hover:border-neon-red/40
                         disabled:opacity-50 disabled:cursor-not-allowed
+                        disabled:hover:text-text-muted disabled:hover:border-transparent
                         transition-colors cursor-pointer
                       "
                     >
                       {t("common.delete")}
                     </button>
-                  )}
+                  );
+                })()}
               </div>
             </li>
           );

@@ -139,6 +139,8 @@
     "auditBannerYellow": "v{{v}} 的审计裁决为黄色（{{score}}/10），存在一些发现，谨慎使用。",
     "auditBannerRed": "v{{v}} 的审计裁决为红色（{{score}}/10），请谨慎使用。",
     "deleteVersion": "删除此版本",
+    "deleteVersionBlockedOnly": "无法删除唯一剩余的版本。请改用危险区的“删除技能”操作。",
+    "deleteVersionBlockedLatest": "无法删除当前的最新版本。请先发布一个更新的版本,然后再删除这一版。",
     "deleteVersionTitle": "删除 v{{version}}？",
     "deleteVersionConfirm": "确定要删除 v{{version}} 吗？该版本的安装包和审计历史会一并移除，此操作不可撤销。",
     "versionDeleted": "版本 v{{version}} 已删除",

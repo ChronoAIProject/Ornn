@@ -139,6 +139,8 @@
     "auditBannerYellow": "Audit verdict for v{{v}} is YELLOW ({{score}}/10). Some findings flagged.",
     "auditBannerRed": "Audit verdict for v{{v}} is RED ({{score}}/10). Use with caution.",
     "deleteVersion": "Delete this version",
+    "deleteVersionBlockedOnly": "Can't delete the only remaining version. Use 'Delete skill' in the danger zone instead.",
+    "deleteVersionBlockedLatest": "Can't delete the current latest version. Publish a newer version first, then delete this one.",
     "deleteVersionTitle": "Delete v{{version}}?",
     "deleteVersionConfirm": "Are you sure you want to delete v{{version}}? The version's package zip and audit history are removed and this cannot be undone.",
     "versionDeleted": "Version v{{version}} deleted",
