@@ -26,6 +26,7 @@ import {
 import { validateBody, getValidatedBody } from "../../../middleware/validate";
 import { AppError } from "../../../shared/types/index";
 import { canReadSkill, canManageSkill } from "./authorize";
+import { parseGithubUrl } from "./utils/githubPull";
 import pino from "pino";
 
 const deprecationPatchSchema = z.object({
@@ -149,32 +150,57 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
     async (c) => {
       const authCtx = getAuth(c);
       const body = (await c.req.json().catch(() => ({}))) as {
+        // Preferred: a single GitHub folder URL the user copied from the
+        // browser address bar. Server parses out repo / ref / path.
+        githubUrl?: unknown;
+        // Legacy / explicit form: caller already split the source apart.
         repo?: unknown;
         ref?: unknown;
         path?: unknown;
         skip_validation?: unknown;
       };
 
-      if (typeof body.repo !== "string" || !body.repo) {
-        throw AppError.badRequest("MISSING_REPO", "A 'repo' field (format 'owner/name') is required");
+      let repo: string;
+      let ref: string | undefined;
+      let path: string | undefined;
+
+      if (typeof body.githubUrl === "string" && body.githubUrl) {
+        try {
+          const parsed = parseGithubUrl(body.githubUrl);
+          repo = parsed.repo;
+          ref = parsed.ref;
+          path = parsed.path;
+        } catch (err) {
+          throw AppError.badRequest(
+            "INVALID_GITHUB_URL",
+            err instanceof Error ? err.message : String(err),
+          );
+        }
+      } else if (typeof body.repo === "string" && body.repo) {
+        repo = body.repo;
+        ref = typeof body.ref === "string" && body.ref ? body.ref : undefined;
+        path = typeof body.path === "string" ? body.path : undefined;
+      } else {
+        throw AppError.badRequest(
+          "MISSING_SOURCE",
+          "Provide either 'githubUrl' (preferred) or 'repo' (with optional 'ref'/'path').",
+        );
       }
 
-      const ref = typeof body.ref === "string" && body.ref ? body.ref : undefined;
-      const path = typeof body.path === "string" ? body.path : undefined;
       const skipValidation = body.skip_validation === true;
       const userEmail = authCtx.email || undefined;
       const userDisplayName = authCtx.displayName || undefined;
 
       try {
         const { guid } = await skillService.createSkillFromGitHub(
-          { repo: body.repo, ref, path },
+          { repo, ref, path },
           authCtx.userId,
           { userEmail, userDisplayName, skipValidation },
         );
         const skill = await skillService.getSkill(guid);
 
         logger.info(
-          { guid, userId: authCtx.userId, repo: body.repo, ref, path },
+          { guid, userId: authCtx.userId, repo, ref, path },
           "Skill created via GitHub pull",
         );
 
@@ -208,6 +234,13 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
     async (c) => {
       const authCtx = getAuth(c);
       const guid = c.req.param("id");
+      const body = (await c.req.json().catch(() => ({}))) as {
+        dryRun?: unknown;
+        skipValidation?: unknown;
+        skip_validation?: unknown;
+      };
+      const dryRun = body.dryRun === true;
+      const skipValidation = body.skipValidation === true || body.skip_validation === true;
 
       const existing = await skillService.getSkill(guid);
       const isPlatformAdmin = authCtx.permissions.includes("ornn:admin:skill");
@@ -218,10 +251,25 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
         );
       }
 
+      // Dry-run path — pull from GitHub, compute diff vs the current
+      // latest version, return the diff WITHOUT bumping. Powers the
+      // "preview-then-confirm" flow on the detail-page advanced settings.
+      if (dryRun) {
+        try {
+          const preview = await skillService.previewRefreshFromSource(guid);
+          return c.json({ data: preview, error: null });
+        } catch (err) {
+          if (err instanceof AppError) throw err;
+          const message = err instanceof Error ? err.message : String(err);
+          throw AppError.badRequest("REFRESH_PREVIEW_FAILED", message);
+        }
+      }
+
       try {
         const refreshed = await skillService.refreshSkillFromSource(guid, authCtx.userId, {
           userEmail: authCtx.email || undefined,
           userDisplayName: authCtx.displayName || undefined,
+          skipValidation,
         });
 
         logger.info(
@@ -249,6 +297,75 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
         const message = err instanceof Error ? err.message : String(err);
         throw AppError.badRequest("REFRESH_FAILED", message);
       }
+    },
+  );
+
+  /**
+   * PUT /skills/:id/source — Attach (or clear) a GitHub source pointer
+   * on a skill without pulling.
+   *
+   * Body: `{ githubUrl: string | null }`. A non-null value is parsed
+   * (e.g. `https://github.com/owner/repo/tree/<ref>/<path>`) and stored
+   * on the skill; `lastSyncedAt` / `lastSyncedCommit` are intentionally
+   * absent until the user triggers `POST /skills/:id/refresh`. Pass
+   * `null` to unlink.
+   *
+   * Requires: `ornn:skill:update` AND skill author or platform admin.
+   */
+  app.put(
+    "/skills/:id/source",
+    auth,
+    requirePermission("ornn:skill:update"),
+    async (c) => {
+      const authCtx = getAuth(c);
+      const guid = c.req.param("id");
+      const body = (await c.req.json().catch(() => ({}))) as { githubUrl?: unknown };
+
+      const existing = await skillService.getSkill(guid);
+      const isPlatformAdmin = authCtx.permissions.includes("ornn:admin:skill");
+      if (existing.createdBy !== authCtx.userId && !isPlatformAdmin) {
+        throw AppError.forbidden(
+          "NOT_SKILL_OWNER",
+          "Only the skill's author or a platform admin may set its source",
+        );
+      }
+
+      let githubUrl: string | null;
+      if (body.githubUrl === null) {
+        githubUrl = null;
+      } else if (typeof body.githubUrl === "string") {
+        githubUrl = body.githubUrl;
+      } else {
+        throw AppError.badRequest(
+          "INVALID_BODY",
+          "Body must include 'githubUrl' as a string (to link) or null (to unlink).",
+        );
+      }
+
+      const updated = await skillService.setSkillSource(guid, githubUrl, authCtx.userId);
+
+      logger.info(
+        { guid, userId: authCtx.userId, action: githubUrl === null ? "unlink" : "link" },
+        "Skill source pointer updated",
+      );
+
+      activityRepo
+        ?.log(
+          authCtx.userId,
+          authCtx.email ?? "",
+          authCtx.displayName ?? "",
+          githubUrl === null ? "skill:source_unlink" : "skill:source_link",
+          {
+            skillId: guid,
+            skillName: updated.name,
+            repo: updated.source?.repo,
+            ref: updated.source?.ref,
+            path: updated.source?.path,
+          },
+        )
+        .catch((err) => logger.warn({ err }, "Failed to log skill:source activity"));
+
+      return c.json({ data: updated, error: null });
     },
   );
 

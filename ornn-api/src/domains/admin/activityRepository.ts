@@ -19,7 +19,9 @@ export type ActivityAction =
   | "skill:visibility_change"
   | "skill:permissions_change"
   | "skill:refresh"
-  | "skill:nyxid_service_tie";
+  | "skill:nyxid_service_tie"
+  | "skill:source_link"
+  | "skill:source_unlink";
 
 export interface ActivityDocument {
   _id: string;

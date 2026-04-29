@@ -33,6 +33,7 @@ import { useSkillPulls } from "@/hooks/useAnalytics";
 import { SkillVersionList } from "@/components/skill/SkillVersionList";
 import { PermissionsModal } from "@/components/skill/PermissionsModal";
 import { AdvancedOptionsModal } from "@/components/skill/AdvancedOptionsModal";
+import { VersionDiffModal } from "@/components/skill/VersionDiffModal";
 import {
   useSkill,
   useDeleteSkill,
@@ -164,10 +165,14 @@ export function SkillDetailPage() {
   const [deletedPaths, setDeletedPaths] = useState<Set<string>>(new Set());
   const [skipValidation, setSkipValidation] = useState(false);
   const [showVersions, setShowVersions] = useState(false);
+  const [showVersionDiff, setShowVersionDiff] = useState(false);
   const hasChanges = editedContents.size > 0 || addedPaths.length > 0 || deletedPaths.size > 0;
 
   // Reset version expansion when skill changes.
-  useEffect(() => { setShowVersions(false); }, [skill?.guid]);
+  useEffect(() => {
+    setShowVersions(false);
+    setShowVersionDiff(false);
+  }, [skill?.guid]);
 
   const handleContentChange = useCallback((fileId: string, content: string) => {
     setEditedContents((prev) => {
@@ -414,7 +419,7 @@ export function SkillDetailPage() {
             source={skill.source}
             canRefresh={isOwner || isAdminUser}
             isRefreshing={refreshMutation.isPending}
-            onRefresh={() => refreshMutation.mutate(skill.guid)}
+            onRefresh={() => refreshMutation.mutate({ guid: skill.guid })}
           />
         )}
 
@@ -938,6 +943,17 @@ export function SkillDetailPage() {
         title={t("skillDetail.versionsTitle", "All versions") as string}
         className="!max-w-3xl"
       >
+        {versionList.length >= 2 && (
+          <div className="mb-4 flex justify-end">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setShowVersionDiff(true)}
+            >
+              {t("versionDiff.openButton", "Compare versions")}
+            </Button>
+          </div>
+        )}
         <SkillVersionList
           versions={versionList}
           currentVersion={skill.version}
@@ -970,6 +986,15 @@ export function SkillDetailPage() {
           }}
         />
       </Modal>
+
+      {/* ── Version diff modal ── */}
+      <VersionDiffModal
+        isOpen={showVersionDiff}
+        onClose={() => setShowVersionDiff(false)}
+        idOrName={skill.guid}
+        versions={versionList}
+        currentVersion={skill.version}
+      />
 
       {/* ── Delete confirmation modal ── */}
       <Modal

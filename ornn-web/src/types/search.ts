@@ -64,6 +64,14 @@ export interface SkillSearchResult {
   nyxidServiceLabel?: string | null;
   /** True iff tied to an admin/platform NyxID service. */
   isSystemSkill?: boolean;
+  /**
+   * True when the skill has a `source` pointer of type "github" — i.e.
+   * the owner has linked it to a folder in a public GitHub repo. The
+   * card uses this to render a small non-clickable GitHub mark in the
+   * badge row. The actual repo URL is not exposed in search results —
+   * users open the detail page to follow it.
+   */
+  hasGithubSource?: boolean;
 }
 
 export interface SkillSearchResponse {

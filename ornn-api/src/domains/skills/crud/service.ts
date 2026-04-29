@@ -11,7 +11,7 @@ import type { SkillVersionRepository } from "./skillVersionRepository";
 import type { IStorageClient } from "../../../clients/storageClient";
 import type { SkillDocument, SkillMetadata, SkillDetailResponse, SkillVersionDocument, SkillSource } from "../../../shared/types/index";
 import { AppError } from "../../../shared/types/index";
-import { fetchSkillFromGitHub, type GitHubPullInput } from "./utils/githubPull";
+import { fetchSkillFromGitHub, parseGithubUrl, type GitHubPullInput } from "./utils/githubPull";
 import { computeVersionDiff, type VersionDiffResult } from "./utils/versionDiff";
 import { isReservedVerb } from "../../../shared/reservedVerbs";
 import { validateSkillFrontmatter } from "../../../shared/schemas/skillFrontmatter";
@@ -496,6 +496,124 @@ export class SkillService {
       userDisplayName: options?.userDisplayName,
       source: newSource,
     });
+  }
+
+  /**
+   * Attach (or clear) a GitHub source pointer on an existing skill without
+   * pulling. Lets a user link an originally-uploaded skill to its GitHub
+   * source first and trigger the actual sync separately. Pass `null` to
+   * unlink. The pointer is parsed from a GitHub URL (e.g.
+   * `https://github.com/owner/repo/tree/<ref>/<path>`); `lastSyncedAt` /
+   * `lastSyncedCommit` are intentionally absent until the first refresh.
+   */
+  async setSkillSource(
+    guid: string,
+    githubUrl: string | null,
+    userId: string,
+  ): Promise<SkillDetailResponse> {
+    const existing = await this.skillRepo.findByGuid(guid);
+    if (!existing) {
+      throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${guid}' not found`);
+    }
+
+    if (githubUrl === null) {
+      await this.skillRepo.clearSource(guid, userId);
+      return this.getSkill(guid);
+    }
+
+    let parsed: { repo: string; ref?: string; path?: string };
+    try {
+      parsed = parseGithubUrl(githubUrl);
+    } catch (err) {
+      throw AppError.badRequest(
+        "INVALID_GITHUB_URL",
+        err instanceof Error ? err.message : String(err),
+      );
+    }
+
+    const newSource: SkillSource = {
+      type: "github",
+      repo: parsed.repo,
+      ref: parsed.ref ?? "HEAD",
+      path: parsed.path ?? "",
+    };
+
+    await this.skillRepo.update(guid, { source: newSource, updatedBy: userId });
+    return this.getSkill(guid);
+  }
+
+  /**
+   * Dry-run a refresh: pull the latest content from the skill's stored
+   * GitHub source, compute a structured diff against the current latest
+   * version, and return the diff without persisting anything. Drives the
+   * "preview-then-confirm" UI flow on the detail-page advanced settings.
+   *
+   * Throws NO_SOURCE if the skill has no `source`. Throws PULL_FAILED with
+   * a useful message if the upstream folder no longer exists / responds.
+   */
+  async previewRefreshFromSource(guid: string): Promise<{
+    skill: { guid: string; name: string };
+    source: SkillSource;
+    pendingVersion: string;
+    hasChanges: boolean;
+    diff: VersionDiffResult;
+  }> {
+    const existing = await this.skillRepo.findByGuid(guid);
+    if (!existing) {
+      throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${guid}' not found`);
+    }
+    if (!existing.source || existing.source.type !== "github") {
+      throw AppError.badRequest(
+        "NO_SOURCE",
+        "Skill has no linked GitHub source. Link one via PUT /api/v1/skills/:id/source first.",
+      );
+    }
+
+    const pulled = await fetchSkillFromGitHub({
+      repo: existing.source.repo,
+      ref: existing.source.ref,
+      path: existing.source.path,
+    });
+
+    const latestVersionDoc = await this.skillVersionRepo.findBySkillAndVersion(
+      existing.guid,
+      existing.latestVersion,
+    );
+    if (!latestVersionDoc) {
+      throw AppError.internalError(
+        "MISSING_VERSION",
+        `Latest version '${existing.latestVersion}' has no version row`,
+      );
+    }
+    const latestZip = await this.downloadPackage(latestVersionDoc.storageKey);
+    const diff = await computeVersionDiff(latestZip, pulled.zipBuffer);
+
+    const hasChanges =
+      diff.files.added.length > 0 ||
+      diff.files.removed.length > 0 ||
+      diff.files.modified.length > 0;
+
+    // Predict what the next version label will be. The actual bump
+    // happens inside `updateSkill` from the SKILL.md frontmatter, which
+    // is what the user already edited in the GitHub repo. We extract it
+    // out of the pulled ZIP so the UI can show "you'll create v1.2".
+    let pendingVersion = existing.latestVersion;
+    try {
+      const info = await this.extractSkillInfo(pulled.zipBuffer);
+      pendingVersion = info.version;
+    } catch {
+      // If the package can't be parsed (e.g. malformed frontmatter),
+      // fall back to the existing latest. The actual sync will surface
+      // the validation error properly.
+    }
+
+    return {
+      skill: { guid: existing.guid, name: existing.name },
+      source: { ...existing.source, lastSyncedCommit: pulled.resolvedCommitSha },
+      pendingVersion,
+      hasChanges,
+      diff,
+    };
   }
 
   /**
@@ -1014,11 +1132,15 @@ export class SkillService {
             repo: skill.source.repo,
             ref: skill.source.ref,
             path: skill.source.path,
-            lastSyncedAt:
-              skill.source.lastSyncedAt instanceof Date
-                ? skill.source.lastSyncedAt.toISOString()
-                : String(skill.source.lastSyncedAt),
-            lastSyncedCommit: skill.source.lastSyncedCommit,
+            // Both fields are optional and absent for the "linked but
+            // never synced" state. Only include them when present so
+            // we never serialize an Invalid Date.
+            ...(skill.source.lastSyncedAt instanceof Date
+              ? { lastSyncedAt: skill.source.lastSyncedAt.toISOString() }
+              : {}),
+            ...(typeof skill.source.lastSyncedCommit === "string" && skill.source.lastSyncedCommit
+              ? { lastSyncedCommit: skill.source.lastSyncedCommit }
+              : {}),
           }
         : undefined,
       nyxidServiceId: skill.nyxidServiceId ?? null,

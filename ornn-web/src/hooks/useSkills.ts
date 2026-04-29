@@ -3,6 +3,7 @@ import { searchSkills, fetchSkillCounts } from "@/services/searchApi";
 import {
   fetchSkill,
   fetchSkillVersions,
+  fetchSkillVersionDiff,
   createSkill,
   updateSkill,
   updateSkillPackage,
@@ -11,6 +12,8 @@ import {
   setSkillVersionDeprecation,
   pullSkillFromGitHub,
   refreshSkillFromSource,
+  previewSkillRefresh,
+  setSkillSource,
   tieSkillToNyxidService,
   type PullFromGitHubInput,
 } from "@/services/skillApi";
@@ -23,6 +26,7 @@ const MY_SKILLS_KEY = "my-skills";
 const SHARED_WITH_ME_KEY = "shared-with-me-skills";
 const SKILL_COUNTS_KEY = "skill-counts";
 const SKILL_VERSIONS_KEY = "skill-versions";
+const SKILL_VERSION_DIFF_KEY = "skill-version-diff";
 
 /**
  * Search platform-wide system skills. System skills are always public,
@@ -185,6 +189,24 @@ export function useSkillVersions(idOrName: string) {
   });
 }
 
+/**
+ * Diff two specific versions of a skill. Disabled until both `from` and
+ * `to` are non-empty AND distinct — the backend rejects a same-version
+ * compare with `400 SAME_VERSION` and we don't want that round-trip.
+ */
+export function useSkillVersionDiff(
+  idOrName: string,
+  fromVersion: string,
+  toVersion: string,
+) {
+  return useQuery({
+    queryKey: [SKILL_VERSION_DIFF_KEY, idOrName, fromVersion, toVersion],
+    queryFn: () => fetchSkillVersionDiff(idOrName, fromVersion, toVersion),
+    enabled:
+      !!idOrName && !!fromVersion && !!toVersion && fromVersion !== toVersion,
+  });
+}
+
 /** Toggle the deprecation flag on a specific published version. */
 export function useSetVersionDeprecation(idOrName: string) {
   const queryClient = useQueryClient();
@@ -234,7 +256,13 @@ export function usePullSkillFromGitHub() {
 export function useRefreshSkillFromSource(idOrName: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (guid: string) => refreshSkillFromSource(guid),
+    mutationFn: ({
+      guid,
+      skipValidation,
+    }: {
+      guid: string;
+      skipValidation?: boolean;
+    }) => refreshSkillFromSource(guid, { skipValidation }),
     onSuccess: (updated) => {
       // Prime the detail cache with the refreshed payload so the chip
       // updates in place.
@@ -242,6 +270,26 @@ export function useRefreshSkillFromSource(idOrName: string) {
       queryClient.invalidateQueries({ queryKey: [SKILLS_KEY] });
       queryClient.invalidateQueries({ queryKey: [SKILL_VERSIONS_KEY, idOrName] });
       queryClient.invalidateQueries({ queryKey: [MY_SKILLS_KEY] });
+    },
+  });
+}
+
+/** Dry-run a refresh — pull from GitHub, compute diff, return without bumping. */
+export function usePreviewSkillRefresh() {
+  return useMutation({
+    mutationFn: (guid: string) => previewSkillRefresh(guid),
+  });
+}
+
+/** Attach (or clear) a GitHub source pointer on an existing skill. */
+export function useSetSkillSource(idOrName: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ guid, githubUrl }: { guid: string; githubUrl: string | null }) =>
+      setSkillSource(guid, githubUrl),
+    onSuccess: (updated) => {
+      queryClient.setQueryData([SKILLS_KEY, idOrName, undefined], updated);
+      queryClient.invalidateQueries({ queryKey: [SKILLS_KEY] });
     },
   });
 }

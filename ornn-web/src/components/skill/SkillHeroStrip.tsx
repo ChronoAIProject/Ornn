@@ -229,8 +229,24 @@ export function SkillHeroStrip({
         </div>
 
         {/* Actions */}
-        {isAuthenticated && (
+        {(isAuthenticated || (skill.source && skill.source.type === "github")) && (
           <div className="flex shrink-0 items-center gap-2">
+            {skill.source && skill.source.type === "github" && (
+              <a
+                href={buildGithubFolderUrl(skill.source)}
+                target="_blank"
+                rel="noreferrer noopener"
+                aria-label={t("skillDetail.heroOpenOnGithub", "Open on GitHub") as string}
+                title={t("skillDetail.heroOpenOnGithub", "Open on GitHub") as string}
+                className="inline-flex h-10 w-10 items-center justify-center rounded-sm border border-strong-edge text-body transition-colors hover:bg-elevated hover:text-strong hover:border-strong"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                  <path d="M12 .5a11.5 11.5 0 00-3.64 22.42c.58.11.79-.25.79-.56v-2.16c-3.21.7-3.89-1.37-3.89-1.37-.52-1.32-1.28-1.67-1.28-1.67-1.05-.72.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.71 1.26 3.37.97.1-.76.4-1.27.73-1.56-2.56-.29-5.26-1.28-5.26-5.72 0-1.26.45-2.3 1.19-3.11-.12-.29-.52-1.47.11-3.06 0 0 .97-.31 3.18 1.18.92-.26 1.92-.39 2.9-.39.99 0 1.98.13 2.9.39 2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.77.11 3.06.74.81 1.19 1.85 1.19 3.11 0 4.45-2.7 5.42-5.28 5.71.41.35.78 1.05.78 2.12v3.14c0 .31.21.67.8.56A11.5 11.5 0 0012 .5z" />
+                </svg>
+              </a>
+            )}
+            {isAuthenticated && (
+              <>
             <button
               type="button"
               onClick={onTryPlayground}
@@ -283,11 +299,25 @@ export function SkillHeroStrip({
                 </div>
               )}
             </div>
+              </>
+            )}
           </div>
         )}
       </div>
     </section>
   );
+}
+
+/**
+ * Build a deep link to the skill's source folder on GitHub. Prefers the
+ * exact synced commit when available so the link is stable; falls back
+ * to the originally-requested ref (or "HEAD") when the skill was linked
+ * but never synced. Mirrors `GitHubOriginChip`'s logic.
+ */
+function buildGithubFolderUrl(source: NonNullable<SkillDetail["source"]>): string {
+  const treeRef = source.lastSyncedCommit || source.ref || "HEAD";
+  const pathSuffix = source.path ? `/${source.path.replace(/^\/+/, "")}` : "";
+  return `https://github.com/${source.repo}/tree/${treeRef}${pathSuffix}`;
 }
 
 function DropdownItem({ children, onClick }: { children: ReactNode; onClick: () => void }) {

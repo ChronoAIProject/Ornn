@@ -345,39 +345,76 @@ Request body (`application/json`):
 
 ```jsonc
 {
-  "repo": "owner/name",          // required
+  // Preferred — a single folder URL the user copied from the browser
+  // address bar; the server parses out repo / ref / path.
+  "githubUrl": "https://github.com/owner/repo/tree/main/path/to/skill",
+
+  // Legacy / explicit form. Either provide `githubUrl` OR (`repo` plus
+  // optional `ref`/`path`). `githubUrl` wins when both are sent.
+  "repo": "owner/name",
   "ref": "main",                 // optional — branch, tag, or commit SHA. Default: repo default branch.
   "path": "skills/my-skill",     // optional — sub-directory inside repo. Default: repo root.
-  "skip_validation": false       // optional
+
+  "skip_validation": false       // optional. Skips the format validator on the pulled ZIP — useful when upstream doesn't strictly conform to Ornn's package layout.
 }
 ```
+
+The accepted `githubUrl` shapes are: `https://github.com/<owner>/<repo>/tree/<ref>/<path...>`, `https://github.com/<owner>/<repo>/tree/<ref>`, and `https://github.com/<owner>/<repo>` (defaults to the repo root). `blob/` URLs (which point at a single file) and non-`github.com` hosts are rejected with `INVALID_GITHUB_URL`.
 
 Response 200: same shape as `POST /skills` — the freshly created `SkillDetail`. The skill's `source.lastSyncedCommit` records the commit SHA pulled at creation time.
 
 | Code | Status | Cause |
 |---|---|---|
-| `MISSING_REPO` | 400 | `repo` field missing or non-string. |
+| `MISSING_SOURCE` | 400 | Neither `githubUrl` nor `repo` was provided. |
+| `INVALID_GITHUB_URL` | 400 | `githubUrl` couldn't be parsed (blob URL, non-github host, missing repo, etc.). `message` carries the specific reason. |
 | `PULL_FAILED` | 400 | The repo couldn't be cloned, the path was empty, or the package failed to materialise. `message` carries the underlying cause. |
-| `VALIDATION_FAILED` | 400 | Pulled package failed format validation. |
-| `AUTH_MISSING` | 401 / `FORBIDDEN` | 403 — same as §3.1. |
+| `VALIDATION_FAILED` | 400 | Pulled package failed format validation (and `skip_validation` was not set). |
+| `AUTH_MISSING` / `FORBIDDEN` | 401 / 403 | Same as §3.1. |
 
 ### 3.3 Refresh from source — `POST /api/v1/skills/:id/refresh`
 
-Re-pull the skill's recorded GitHub source and publish a new version if the bytes changed.
+Re-pull the skill's recorded GitHub source. Two modes selected by the request body:
+
+- **Apply mode (default).** Pulls, validates (unless `skipValidation` is `true`), and publishes a new version when the bytes differ from the current latest.
+- **Dry-run mode (`dryRun: true`).** Pulls, computes a structured diff against the current latest version, and returns the diff without publishing. Drives the "preview-then-confirm" UI flow on the detail-page Advanced Options panel — surface the diff to the user, then call again with `dryRun: false` to commit.
 
 **Auth: required.** **Permission: `ornn:skill:update`.** **Owner OR platform admin** (`ornn:admin:skill`).
 
 Path param: `:id` — skill GUID (not name).
 
-Body: ignored.
+Request body (`application/json`):
 
-Response 200: the refreshed `SkillDetail`. `source.lastSyncedCommit` and `source.lastSyncedAt` advance.
+```jsonc
+{
+  "dryRun": false,         // optional. true → diff preview, no version bump. false / omitted → apply.
+  "skipValidation": false  // optional (apply mode only). Skips the format validator on the pulled package.
+}
+```
+
+Response 200 — apply mode: the refreshed `SkillDetail`. `source.lastSyncedCommit` and `source.lastSyncedAt` advance.
+
+Response 200 — dry-run mode:
+
+```jsonc
+{
+  "data": {
+    "skill":           { "guid": "…", "name": "…" },
+    "source":          { /* SkillSource, with lastSyncedCommit set to the commit that WOULD be pulled */ },
+    "pendingVersion":  "1.3",            // version the SKILL.md frontmatter inside the pulled bytes declares
+    "hasChanges":      true,             // false → upstream is byte-identical to current latest; nothing to bump
+    "diff":            { /* same shape as §3.7 — { files: { added, removed, modified, unchangedCount } } */ }
+  },
+  "error": null
+}
+```
 
 | Code | Status | Cause |
 |---|---|---|
 | `SKILL_NOT_FOUND` | 404 | No skill with that GUID. |
 | `NOT_SKILL_OWNER` | 403 | Caller is not the author and lacks `ornn:admin:skill`. |
-| `REFRESH_FAILED` | 400 | Source repo could not be re-fetched, or the resulting package failed validation. |
+| `NO_SOURCE` | 400 | Skill has no linked GitHub source. Attach one via §3.15 first. |
+| `REFRESH_FAILED` | 400 | Source repo could not be re-fetched, or the resulting package failed validation (apply mode). |
+| `REFRESH_PREVIEW_FAILED` | 400 | Dry-run pull failed (e.g. upstream folder removed). |
 | `AUTH_MISSING` / `FORBIDDEN` | 401 / 403 | Standard. |
 
 ### 3.4 Get skill — `GET /api/v1/skills/:idOrName`
@@ -798,6 +835,35 @@ Both refusals surface as a 400 with a descriptive code (`CANNOT_DELETE_LATEST`, 
 | `CANNOT_DELETE_ONLY_VERSION` | 400 | Skill has only one version. |
 | `FORBIDDEN` | 403 | Caller is not the author / not platform admin. |
 | `AUTH_MISSING` | 401 | Standard. |
+
+### 3.15 Set / clear GitHub source — `PUT /api/v1/skills/:id/source`
+
+Attach (or clear) a GitHub source pointer on an existing skill **without pulling**. Lets a user link an originally hand-uploaded skill to its GitHub source first and trigger the actual sync separately via §3.3 (typically dry-run → confirm → apply). Pass `null` to unlink.
+
+**Auth: required.** **Permission: `ornn:skill:update`.** **Owner OR platform admin** (`ornn:admin:skill`).
+
+Path param: `:id` — skill GUID (not name).
+
+Request body (`application/json`):
+
+```jsonc
+{
+  // Folder URL on github.com. Same shapes accepted by §3.2's `githubUrl`:
+  // /tree/<ref>/<path>, /tree/<ref>, or bare repo URL.
+  // Pass `null` to remove the existing source pointer.
+  "githubUrl": "https://github.com/owner/repo/tree/main/path/to/skill"
+}
+```
+
+Response 200: the updated `SkillDetail`. The stored `source` block omits `lastSyncedAt` / `lastSyncedCommit` until the first sync (apply-mode refresh) — that's the documented "linked but never synced" state.
+
+| Code | Status | Cause |
+|---|---|---|
+| `SKILL_NOT_FOUND` | 404 | No skill with that GUID. |
+| `NOT_SKILL_OWNER` | 403 | Caller is not the author and lacks `ornn:admin:skill`. |
+| `INVALID_BODY` | 400 | `githubUrl` is missing or not `string \| null`. |
+| `INVALID_GITHUB_URL` | 400 | URL couldn't be parsed (blob URL, non-github host, missing repo, etc.). |
+| `AUTH_MISSING` / `FORBIDDEN` | 401 / 403 | Standard. |
 
 ---
 

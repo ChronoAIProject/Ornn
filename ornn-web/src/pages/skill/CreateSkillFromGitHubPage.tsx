@@ -1,9 +1,16 @@
 /**
- * /skills/new/from-github — create a skill by pulling a public GitHub repo.
+ * /skills/new/from-github — create a skill by syncing a folder in a
+ * public GitHub repo.
  *
- * Thin wrapper around `POST /api/v1/skills/pull`: the backend does the
- * cloning, zipping, and publication. This page just collects the repo
- * coords and surfaces errors.
+ * Single-step form: enter the folder URL (e.g.
+ * `https://github.com/owner/repo/tree/<ref>/<path>`), optionally tick
+ * "skip validation" if your upstream doesn't strictly follow Ornn's
+ * package layout, then click "Sync from GitHub" to actually pull. The
+ * folder URL is parsed server-side into repo / ref / path. Without the
+ * Sync click, nothing is fetched — the form is the contract.
+ *
+ * Mirrors the GitHub-link panel inside `AdvancedOptionsModal` so the
+ * "first sync" and "subsequent sync" UX are visually consistent.
  *
  * @module pages/CreateSkillFromGitHubPage
  */
@@ -19,8 +26,6 @@ import { ArrowLeftIcon } from "@/components/icons";
 import { usePullSkillFromGitHub } from "@/hooks/useSkills";
 import { useToastStore } from "@/stores/toastStore";
 
-const REPO_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9_.-]*[A-Za-z0-9])?\/[A-Za-z0-9](?:[A-Za-z0-9_.-]*[A-Za-z0-9])?$/;
-
 function GitHubMarkIcon({ className }: { className?: string }) {
   return (
     <svg
@@ -34,35 +39,31 @@ function GitHubMarkIcon({ className }: { className?: string }) {
   );
 }
 
+const VALID_URL_PREFIX = /^https?:\/\/(www\.)?github\.com\//i;
+
 export function CreateSkillFromGitHubPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const addToast = useToastStore((s) => s.addToast);
   const pull = usePullSkillFromGitHub();
 
-  const [repo, setRepo] = useState("");
-  const [ref, setRef] = useState("");
-  const [path, setPath] = useState("");
+  const [githubUrl, setGithubUrl] = useState("");
   const [skipValidation, setSkipValidation] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
-  const repoValid = REPO_PATTERN.test(repo.trim());
-  const canSubmit = repoValid && !pull.isPending;
+  const trimmed = githubUrl.trim();
+  const urlValid = VALID_URL_PREFIX.test(trimmed);
+  const canSubmit = urlValid && !pull.isPending;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitted(true);
-    if (!repoValid) return;
+    if (!urlValid) return;
     try {
-      const skill = await pull.mutateAsync({
-        repo: repo.trim(),
-        ref: ref.trim() || undefined,
-        path: path.trim() || undefined,
-        skipValidation,
-      });
+      const skill = await pull.mutateAsync({ githubUrl: trimmed, skipValidation });
       addToast({
         type: "success",
-        message: t("githubImport.success", "Skill pulled from GitHub."),
+        message: t("githubImport.success", "Skill pulled from GitHub.") as string,
       });
       navigate(`/skills/${skill.guid}`);
     } catch (err) {
@@ -71,7 +72,7 @@ export function CreateSkillFromGitHubPage() {
         message:
           err instanceof Error
             ? err.message
-            : t("githubImport.genericError", "Failed to pull from GitHub."),
+            : (t("githubImport.genericError", "Failed to pull from GitHub.") as string),
       });
     }
   };
@@ -105,7 +106,7 @@ export function CreateSkillFromGitHubPage() {
                   <p className="mt-1 font-body text-sm text-text-muted">
                     {t(
                       "githubImport.subtitle",
-                      "Publish a skill from a public GitHub repo. Later updates can be pulled in one click.",
+                      "Publish a skill from a folder in a public GitHub repo. Subsequent updates can be re-synced from the same link in one click.",
                     )}
                   </p>
                 </div>
@@ -114,20 +115,21 @@ export function CreateSkillFromGitHubPage() {
               <form onSubmit={handleSubmit} className="space-y-5">
                 <div>
                   <label
-                    htmlFor="repo"
+                    htmlFor="github-url"
                     className="mb-1 block font-mono text-[10px] uppercase tracking-[0.14em] text-text-muted"
                   >
-                    {t("githubImport.repoLabel", "Repository")}{" "}
+                    {t("githubImport.urlLabel", "GitHub folder URL")}{" "}
                     <span className="text-neon-red">*</span>
                   </label>
                   <input
-                    id="repo"
-                    type="text"
-                    placeholder="owner/name"
-                    value={repo}
-                    onChange={(e) => setRepo(e.target.value)}
+                    id="github-url"
+                    type="url"
+                    inputMode="url"
+                    placeholder="https://github.com/owner/repo/tree/main/path/to/skill"
+                    value={githubUrl}
+                    onChange={(e) => setGithubUrl(e.target.value)}
                     className={`w-full rounded-lg border bg-bg-surface px-3 py-2 font-mono text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 ${
-                      submitted && !repoValid
+                      submitted && !urlValid
                         ? "border-neon-red/40 focus:ring-neon-red/40"
                         : "border-neon-cyan/20 focus:border-neon-cyan/60 focus:ring-neon-cyan/30"
                     }`}
@@ -136,77 +138,38 @@ export function CreateSkillFromGitHubPage() {
                   />
                   <p className="mt-1 font-body text-xs text-text-muted">
                     {t(
-                      "githubImport.repoHint",
-                      "The repo must be public. Private repos are not yet supported.",
+                      "githubImport.urlHint",
+                      "Use the folder URL (the /tree/<ref>/<path> form). The skill's SKILL.md must sit at the root of that folder. Default-branch and repo-root URLs work too.",
                     )}
                   </p>
-                  {submitted && !repoValid && (
+                  {submitted && !urlValid && (
                     <p className="mt-1 font-body text-xs text-neon-red">
                       {t(
-                        "githubImport.repoInvalid",
-                        "Expected format: owner/name (e.g. anthropics/claude-code).",
+                        "githubImport.urlInvalid",
+                        "Enter a github.com URL (e.g. https://github.com/owner/repo/tree/main/path).",
                       )}
                     </p>
                   )}
                 </div>
 
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div>
-                    <label
-                      htmlFor="ref"
-                      className="mb-1 block font-mono text-[10px] uppercase tracking-[0.14em] text-text-muted"
-                    >
-                      {t("githubImport.refLabel", "Branch / tag / commit")}
-                    </label>
-                    <input
-                      id="ref"
-                      type="text"
-                      placeholder="main"
-                      value={ref}
-                      onChange={(e) => setRef(e.target.value)}
-                      className="w-full rounded-lg border border-neon-cyan/20 bg-bg-surface px-3 py-2 font-mono text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-neon-cyan/60 focus:ring-2 focus:ring-neon-cyan/30"
-                      autoComplete="off"
-                      spellCheck={false}
-                    />
-                    <p className="mt-1 font-body text-xs text-text-muted">
-                      {t("githubImport.refHint", "Leave blank to use the default branch.")}
-                    </p>
-                  </div>
-
-                  <div>
-                    <label
-                      htmlFor="path"
-                      className="mb-1 block font-mono text-[10px] uppercase tracking-[0.14em] text-text-muted"
-                    >
-                      {t("githubImport.pathLabel", "Path in repo")}
-                    </label>
-                    <input
-                      id="path"
-                      type="text"
-                      placeholder="skills/my-skill"
-                      value={path}
-                      onChange={(e) => setPath(e.target.value)}
-                      className="w-full rounded-lg border border-neon-cyan/20 bg-bg-surface px-3 py-2 font-mono text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-neon-cyan/60 focus:ring-2 focus:ring-neon-cyan/30"
-                      autoComplete="off"
-                      spellCheck={false}
-                    />
-                    <p className="mt-1 font-body text-xs text-text-muted">
-                      {t(
-                        "githubImport.pathHint",
-                        "Sub-directory that contains SKILL.md. Leave blank for repo root.",
-                      )}
-                    </p>
-                  </div>
-                </div>
-
-                <label className="flex cursor-pointer items-center gap-2 font-body text-sm text-text-muted">
+                <label className="flex cursor-pointer items-start gap-2 font-body text-sm text-text-muted">
                   <input
                     type="checkbox"
                     checked={skipValidation}
                     onChange={(e) => setSkipValidation(e.target.checked)}
-                    className="h-4 w-4 accent-neon-cyan"
+                    className="h-4 w-4 mt-1 accent-neon-cyan"
                   />
-                  {t("githubImport.skipValidation", "Skip format validation (advanced)")}
+                  <span>
+                    <span className="block font-heading text-xs text-text-primary">
+                      {t("githubImport.skipValidationLabel", "Skip Ornn package validation")}
+                    </span>
+                    <span className="block text-[11px]">
+                      {t(
+                        "githubImport.skipValidationHelp",
+                        "GitHub-hosted skills don't always follow Ornn's package rules; tick this if you trust the upstream and want the import to succeed even when the validator would reject the layout.",
+                      )}
+                    </span>
+                  </span>
                 </label>
 
                 <div className="flex items-center justify-end gap-3 pt-2">
@@ -218,7 +181,7 @@ export function CreateSkillFromGitHubPage() {
                     {t("common.cancel", "Cancel")}
                   </Button>
                   <Button type="submit" disabled={!canSubmit} loading={pull.isPending}>
-                    {t("githubImport.submit", "Import")}
+                    {t("githubImport.syncButton", "Sync from GitHub")}
                   </Button>
                 </div>
               </form>

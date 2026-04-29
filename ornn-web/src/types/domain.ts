@@ -26,10 +26,18 @@ export type SkillSource =
       ref: string;
       /** Subdirectory inside the repo that contains SKILL.md. Empty = repo root. */
       path: string;
-      /** ISO timestamp of the most recent successful pull / refresh. */
-      lastSyncedAt: string;
-      /** Commit SHA fetched at `lastSyncedAt`. */
-      lastSyncedCommit: string;
+      /**
+       * ISO timestamp of the most recent successful pull / refresh.
+       * Absent when the user attached a GitHub link without triggering
+       * a sync — the source pointer is stored, but no version has been
+       * pulled from it yet.
+       */
+      lastSyncedAt?: string;
+      /**
+       * Commit SHA fetched at `lastSyncedAt`. Absent in the same
+       * "linked but never synced" state.
+       */
+      lastSyncedCommit?: string;
     };
 
 export interface SkillDetail extends SkillSummary {
@@ -75,4 +83,76 @@ export interface SkillVersionEntry {
   createdOn: string;
   isDeprecated: boolean;
   deprecationNote: string | null;
+}
+
+/**
+ * One file present only in `to` (a freshly added file). For text files the
+ * server inlines `content` (possibly capped at ~64 KiB → `truncated: true`);
+ * binary files come back without `content`.
+ */
+export interface DiffFileAdded {
+  path: string;
+  bytes: number;
+  hash: string;
+  isText: boolean;
+  content?: string;
+  truncated?: boolean;
+}
+
+/** One file present only in `from` (deleted in `to`). Same shape as added. */
+export interface DiffFileRemoved {
+  path: string;
+  bytes: number;
+  hash: string;
+  isText: boolean;
+  content?: string;
+  truncated?: boolean;
+}
+
+/**
+ * One file present in both versions but with different bytes. For text
+ * files the server inlines both sides so the client can render a unified
+ * line-level diff without a second fetch.
+ */
+export interface DiffFileModified {
+  path: string;
+  fromBytes: number;
+  toBytes: number;
+  fromHash: string;
+  toHash: string;
+  isText: boolean;
+  fromContent?: string;
+  toContent?: string;
+  truncated?: boolean;
+}
+
+/**
+ * Response shape for `GET /api/v1/skills/:idOrName/versions/:from/diff/:to`.
+ * `unchangedCount` is files that exist with identical bytes in both
+ * versions — only the count is reported to keep the response small.
+ */
+export interface VersionDiffResponse {
+  skill: { guid: string; name: string };
+  from: {
+    version: string;
+    hash: string;
+    createdOn: string;
+    isDeprecated: boolean;
+    releaseNotes: string | null;
+  };
+  to: {
+    version: string;
+    hash: string;
+    createdOn: string;
+    isDeprecated: boolean;
+    releaseNotes: string | null;
+  };
+  diff: {
+    files: {
+      added: DiffFileAdded[];
+      removed: DiffFileRemoved[];
+      modified: DiffFileModified[];
+      unchangedCount: number;
+    };
+  };
 }

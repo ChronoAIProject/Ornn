@@ -410,5 +410,10 @@ function enrichItem(
     nyxidServiceSlug: s.nyxidServiceSlug ?? null,
     nyxidServiceLabel: s.nyxidServiceLabel ?? null,
     isSystemSkill: s.isSystemSkill === true,
+    // Boolean — true when the skill is linked to a GitHub source. The
+    // card uses this to render a small non-clickable GitHub mark in the
+    // badge row. We don't leak the actual repo URL to search results;
+    // the user can drill into the detail page for that.
+    hasGithubSource: !!(s.source && s.source.type === "github"),
   };
 }
