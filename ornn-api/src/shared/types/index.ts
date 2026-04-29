@@ -355,6 +355,13 @@ export interface SkillSearchItem {
   nyxidServiceLabel?: string | null;
   /** Cached: true iff tied to an admin/platform-wide NyxID service. */
   isSystemSkill?: boolean;
+  /**
+   * True when the skill has a `source` pointer of type "github". The
+   * card UI uses this to render a small non-clickable GitHub mark; the
+   * actual repo URL is not exposed in search results — callers drill
+   * into the detail page if they want to follow the link.
+   */
+  hasGithubSource?: boolean;
 }
 
 export interface SkillSearchResponse {
