@@ -104,7 +104,7 @@ const MODE_CARDS: ModeCardConfig[] = [
     bulletsKey: "upload.freeBullets",
     ctaKey: "upload.startFree",
     route: "/skills/new/free",
-    variant: "secondary",
+    variant: "primary",
     delay: 0.2,
   },
   {
@@ -132,7 +132,7 @@ const MODE_CARDS: ModeCardConfig[] = [
     bulletsKey: "upload.githubBullets",
     ctaKey: "upload.startGithub",
     route: "/skills/new/from-github",
-    variant: "secondary",
+    variant: "primary",
     delay: 0.4,
   },
 ];
@@ -167,7 +167,14 @@ export function UploadSkillPage() {
                   onClick={() => navigate(card.route)}
                   className="h-full cursor-pointer group"
                 >
-                  <div className="flex flex-col items-center text-center p-4">
+                  {/*
+                    Inner column is the full card height (h-full) so the
+                    Button can use `mt-auto` to pin to the card's bottom.
+                    All four cards therefore have their CTAs sitting on
+                    exactly the same baseline regardless of whether the
+                    description / bullet list above is shorter or longer.
+                  */}
+                  <div className="flex flex-col items-center text-center p-4 h-full">
                     <div
                       className={`mb-6 p-4 rounded-2xl ${card.accentBg} border ${card.accentBorder} ${card.accentGlow} transition-all`}
                     >
@@ -198,7 +205,16 @@ export function UploadSkillPage() {
                       ))}
                     </ul>
 
-                    <Button variant={card.variant} className="w-full">
+                    {/*
+                      mt-auto pushes this CTA to the bottom; whitespace-nowrap
+                      keeps the text on one line so all four buttons share
+                      the same height (no two-line wrapping for the longer
+                      "Start Generative Mode" label).
+                    */}
+                    <Button
+                      variant={card.variant}
+                      className="w-full mt-auto whitespace-nowrap"
+                    >
                       {t(card.ctaKey)}
                     </Button>
                   </div>
