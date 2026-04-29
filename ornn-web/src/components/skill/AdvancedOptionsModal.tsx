@@ -69,13 +69,20 @@ export function AdvancedOptionsModal({ isOpen, onClose, skill }: AdvancedOptions
       isOpen={isOpen}
       onClose={onClose}
       title={t("advancedOptions.title", "Advanced options") as string}
-      className="!max-w-4xl"
+      className="!max-w-4xl !h-[80vh] !max-h-[80vh] !overflow-hidden flex flex-col"
     >
-      <div className="grid min-h-[420px] grid-cols-[200px_1fr] gap-5">
+      {/*
+        Fixed-height modal. The grid below grabs the remaining vertical
+        space (flex-1 min-h-0) and gives both cells their own scroll
+        container, so a long settings list on the left and a long
+        settings panel on the right scroll independently — neither one
+        forces the modal to grow.
+      */}
+      <div className="grid flex-1 min-h-0 grid-cols-[200px_1fr] gap-5">
         {/* Left rail — settings list */}
         <nav
           aria-label={t("advancedOptions.navLabel", "Advanced settings") as string}
-          className="flex flex-col gap-1 border-r border-subtle pr-4"
+          className="flex flex-col gap-1 overflow-y-auto border-r border-subtle pr-4"
         >
           {SETTINGS.map((s) => {
             const active = s.id === selected;
@@ -84,7 +91,7 @@ export function AdvancedOptionsModal({ isOpen, onClose, skill }: AdvancedOptions
                 key={s.id}
                 type="button"
                 onClick={() => setSelected(s.id)}
-                className={`rounded-sm px-3 py-2 text-left font-mono text-[11px] uppercase tracking-wider transition-colors ${
+                className={`shrink-0 rounded-sm px-3 py-2 text-left font-mono text-[11px] uppercase tracking-wider transition-colors ${
                   active
                     ? "bg-accent-soft text-accent"
                     : "text-meta hover:bg-elevated hover:text-strong"
@@ -96,8 +103,13 @@ export function AdvancedOptionsModal({ isOpen, onClose, skill }: AdvancedOptions
           })}
         </nav>
 
-        {/* Right pane — the selected setting's content */}
-        <div className="min-w-0">
+        {/*
+          Right pane — the selected setting's content. The panel itself
+          owns its scroll via its own flex column (header / scrollable
+          body / footer), so we just give it a min-h-0 flex column to
+          fill and let the panel handle the inside.
+        */}
+        <div className="flex min-h-0 min-w-0 flex-col">
           {selected === "nyxid-service-binding" && (
             <NyxidServiceBindingPanel skill={skill} onClose={onClose} />
           )}
