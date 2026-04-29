@@ -331,19 +331,19 @@
     "guidedTitle": "Guided Mode",
     "guidedDesc": "Step-by-step wizard that guides you through creating a skill. Perfect for beginners or structured authoring.",
     "guidedBullets": ["Step-by-step form", "Markdown editor with preview", "Folder-based file uploads", "Full package preview"],
-    "startGuided": "Start Guided Mode",
+    "startGuided": "Start",
     "freeTitle": "Free Mode",
     "freeDesc": "Upload a pre-built skill package as a ZIP file. Best for experienced authors with existing skills.",
     "freeBullets": ["ZIP file upload", "Structure validation", "Auto-metadata extraction", "Preview before upload"],
-    "startFree": "Start Free Mode",
+    "startFree": "Start",
     "genTitle": "Generative Mode",
     "genDesc": "Describe what you need and let AI generate a complete skill for you. Refine with chat.",
     "genBullets": ["AI-powered generation", "Real-time streaming", "Chat refinement", "Auto-structured output"],
-    "startGen": "Start Generative Mode",
+    "startGen": "Start",
     "githubTitle": "Import from GitHub",
     "githubDesc": "Pull a skill from a public GitHub repo. Later updates can be re-synced with one click.",
     "githubBullets": ["Public repos only", "Branch / tag / commit pinning", "One-click resync", "No ZIP packaging needed"],
-    "startGithub": "Import from GitHub"
+    "startGithub": "Import"
   },
   "guided": {
     "backToModes": "Back to mode selection",

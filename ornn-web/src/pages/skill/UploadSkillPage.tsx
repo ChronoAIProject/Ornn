@@ -213,7 +213,7 @@ export function UploadSkillPage() {
                     */}
                     <Button
                       variant={card.variant}
-                      className="w-full mt-auto whitespace-nowrap"
+                      className="w-full mt-auto"
                     >
                       {t(card.ctaKey)}
                     </Button>

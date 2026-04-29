@@ -331,19 +331,19 @@
     "guidedTitle": "引导模式",
     "guidedDesc": "分步向导引导你逐步创建技能。适合新手或希望结构化创作的作者。",
     "guidedBullets": ["分步表单", "支持预览的 Markdown 编辑器", "基于文件夹的文件上传", "完整的技能包预览"],
-    "startGuided": "使用引导模式",
+    "startGuided": "开始",
     "freeTitle": "自由模式",
     "freeDesc": "直接上传现成的技能包 ZIP 文件。适合已有技能的经验作者。",
     "freeBullets": ["上传 ZIP 文件", "结构校验", "自动提取元数据", "上传前预览"],
-    "startFree": "使用自由模式",
+    "startFree": "开始",
     "genTitle": "AI 生成模式",
     "genDesc": "描述你的需求，让 AI 为你生成完整的技能，可通过对话继续调整。",
     "genBullets": ["AI 生成", "实时流式输出", "对话迭代", "自动组织结构"],
-    "startGen": "使用 AI 生成模式",
+    "startGen": "开始",
     "githubTitle": "从 GitHub 导入",
     "githubDesc": "从公开的 GitHub 仓库拉取技能，之后可一键同步更新。",
     "githubBullets": ["仅支持公开仓库", "可按分支 / tag / commit 锁定", "一键重新同步", "无需打包成 ZIP"],
-    "startGithub": "从 GitHub 导入"
+    "startGithub": "导入"
   },
   "guided": {
     "backToModes": "返回模式选择",
