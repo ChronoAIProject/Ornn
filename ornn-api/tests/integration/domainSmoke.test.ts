@@ -15,7 +15,21 @@
  */
 
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import JSZip from "jszip";
 import { startHarness, authHeaders, type Harness } from "./harness";
+
+async function buildSkillZip(
+  rootFolder: string,
+  files: Record<string, string>,
+): Promise<Uint8Array> {
+  const zip = new JSZip();
+  const folder = zip.folder(rootFolder);
+  if (!folder) throw new Error("JSZip folder creation failed");
+  for (const [path, content] of Object.entries(files)) {
+    folder.file(path, content);
+  }
+  return zip.generateAsync({ type: "uint8array" });
+}
 
 let harness: Harness;
 
@@ -154,5 +168,121 @@ describe("integration: domain — skill format", () => {
     // Format rules are served from an in-process markdown file — should
     // return a 200 regardless of DB state.
     expect(res.status).toBe(200);
+  });
+
+  test("POST /api/v1/skill-format/validate returns valid:true for a well-formed package", async () => {
+    const zipBuffer = await buildSkillZip("smoke-valid", {
+      "SKILL.md": [
+        "---",
+        "name: smoke-valid",
+        "description: A minimal valid skill used by the smoke test.",
+        "metadata:",
+        "  category: plain",
+        'version: "1.0"',
+        "---",
+        "# smoke-valid",
+        "",
+        "Body.",
+      ].join("\n"),
+    });
+    const res = await harness.app.request("/api/v1/skill-format/validate", {
+      method: "POST",
+      headers: {
+        ...authHeaders({
+          userId: "user_smoke",
+          email: "smoke@test",
+          permissions: ["ornn:skill:read"],
+        }),
+        "content-type": "application/zip",
+      },
+      body: zipBuffer,
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      data: { valid: boolean; violations: Array<{ rule: string; message: string }> };
+    };
+    expect(body.data.valid).toBe(true);
+    expect(body.data.violations).toEqual([]);
+  });
+
+  test("POST /api/v1/skill-format/validate surfaces YAML parse errors as a violation (not a swallowed pass)", async () => {
+    // Frontmatter description contains an unquoted colon-space pattern
+    // (`Authorization: Bearer …`) which YAML interprets as a nested mapping.
+    // The validate endpoint must reject this and return the rule, not
+    // silently report `valid: true`.
+    const zipBuffer = await buildSkillZip("smoke-yaml-bad", {
+      "SKILL.md": [
+        "---",
+        "name: smoke-yaml-bad",
+        "description: Send Authorization: Bearer $TOKEN on every call.",
+        "metadata:",
+        "  category: plain",
+        'version: "1.0"',
+        "---",
+        "# smoke-yaml-bad",
+      ].join("\n"),
+    });
+    const res = await harness.app.request("/api/v1/skill-format/validate", {
+      method: "POST",
+      headers: {
+        ...authHeaders({
+          userId: "user_smoke",
+          email: "smoke@test",
+          permissions: ["ornn:skill:read"],
+        }),
+        "content-type": "application/zip",
+      },
+      body: zipBuffer,
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      data: { valid: boolean; violations: Array<{ rule: string; message: string }> };
+    };
+    expect(body.data.valid).toBe(false);
+    expect(body.data.violations.length).toBeGreaterThan(0);
+    expect(body.data.violations.some((v) => v.rule === "frontmatter-valid-yaml")).toBe(true);
+  });
+
+  test("POST /api/v1/skill-format/validate returns ALL violations in one response", async () => {
+    // Three independent rule violations that fire in the same pass:
+    //   - folder name uses underscores → folder-name-kebab-case
+    //   - README.md at the root → no-readme-md
+    //   - category is invalid (Zod) → frontmatter.metadata.category
+    // All three must come back in a single response so the calling agent
+    // can fix every problem in one round-trip.
+    const zipBuffer = await buildSkillZip("Bad_Folder_Name", {
+      "SKILL.md": [
+        "---",
+        "name: bad-folder-name",
+        "description: Bad on purpose.",
+        "metadata:",
+        "  category: not-a-real-category",
+        'version: "1.0"',
+        "---",
+        "# bad",
+      ].join("\n"),
+      "README.md": "should not exist at root",
+    });
+    const res = await harness.app.request("/api/v1/skill-format/validate", {
+      method: "POST",
+      headers: {
+        ...authHeaders({
+          userId: "user_smoke",
+          email: "smoke@test",
+          permissions: ["ornn:skill:read"],
+        }),
+        "content-type": "application/zip",
+      },
+      body: zipBuffer,
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      data: { valid: boolean; violations: Array<{ rule: string; message: string }> };
+    };
+    expect(body.data.valid).toBe(false);
+    const rules = body.data.violations.map((v) => v.rule);
+    expect(rules).toContain("folder-name-kebab-case");
+    expect(rules).toContain("no-readme-md");
+    expect(rules.some((r) => r.startsWith("frontmatter."))).toBe(true);
   });
 });
