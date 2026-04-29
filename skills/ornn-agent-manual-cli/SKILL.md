@@ -9,7 +9,7 @@ metadata:
     - manual
     - skill-lifecycle
     - cli
-version: "1.0"
+version: "1.1"
 lastUpdated: 2026-04-29
 ---
 
@@ -38,12 +38,13 @@ lastUpdated: 2026-04-29
 > - **Update a skill's visibility** (private / shared / public) — §2.2.
 > - **Publish a new version** of a skill you own — §2.3.
 > - **Trigger an audit** or **review the audit history** for a skill — §2.4 / §2.5.
-> - **Pull a non-latest version**, **diff two versions**, or **delete a version** — §2.6 / §2.7 / §2.10.
+> - **Pull a non-latest version**, **compare two versions**, or **delete / deprecate a version** — §2.6 / §2.7 / §2.10.
 > - **Check usage analytics** for a skill — §2.8.
 > - **Bind a skill to a NyxID service** (system / personal) — §2.9.
 > - **Delete a skill** entirely — §2.11.
 > - **Find skills** (by tag, author, system, shared, etc.) — §2.12.
 > - **Pull your Ornn notifications** (audit fan-out, etc.) — §2.13.
+> - **Link a skill to GitHub** or **trigger a sync** from the linked source — §2.14.
 >
 > Without this manual loaded, you do not know which endpoint to call, how to authenticate, or how to read the response shapes.
 >
@@ -397,9 +398,9 @@ nyxid proxy request ornn-api \
 
 **Step 3 — Install locally + update the registry.** **You are encouraged to ask the user for consent before overwriting an existing local copy.** If they say yes, write the new files over the old, bump `installedVersion` + `installedAt` in `~/.ornn/installed-skills.json`. If the user picked this version specifically as a pin, also set `isPinned: true` on the record so future sessions don't auto-prompt to update.
 
-### 2.7 Diff two versions of a skill — *spec: `api-reference.md` §3 Skills CRUD*
+### 2.7 Compare diff between two skill versions — *spec: `api-reference.md` §3.7 Skills CRUD*
 
-Useful before upgrading: see exactly what changed.
+**When:** the user (or you) want to know what changed between two published versions before pulling, upgrading, or generating a changelog.
 
 ```bash
 nyxid proxy request ornn-api \
@@ -407,7 +408,30 @@ nyxid proxy request ornn-api \
   --method GET --output json
 ```
 
-Response: `{ skill, from, to, diff: { added: [{ path, content }], removed: [{ path, content }], modified: [{ path, before, after }] } }`. File-level. Modified files include both sides' content so you can render a unified diff client-side.
+Response shape:
+
+```jsonc
+{
+  "data": {
+    "skill": { "guid": "…", "name": "…" },
+    "from":  { "version": "1.2", "hash": "…", "createdOn": "…", "isDeprecated": false, "releaseNotes": null },
+    "to":    { "version": "1.3", "hash": "…", "createdOn": "…", "isDeprecated": false, "releaseNotes": null },
+    "diff": {
+      "files": {
+        "added":   [{ "path": "scripts/new.js", "bytes": 1234, "isText": true, "content": "…" }],
+        "removed": [{ "path": "old.txt",        "bytes":  120, "isText": true, "content": "…" }],
+        "modified":[{ "path": "SKILL.md",       "fromBytes": 800, "toBytes": 920, "isText": true, "fromContent": "…", "toContent": "…" }],
+        "unchangedCount": 7
+      }
+    }
+  },
+  "error": null
+}
+```
+
+File-level diff. Text files come back with both sides' content (capped at ~64 KiB per side; flag `truncated: true` when capped) so you can render a unified line-level diff client-side without a second fetch — feed `fromContent` / `toContent` to your diff renderer (e.g., the `diff` npm package's `diffLines`). Binary files come back without `content` — just report the size + hash change.
+
+Same-version compares are rejected with `400 SAME_VERSION`. Short-circuit them locally — don't burn a round-trip on `from === to`.
 
 ### 2.8 Check a skill's usage analytics — *spec: `api-reference.md` §10 Analytics*
 
@@ -459,7 +483,26 @@ nyxid proxy request ornn-api "/api/v1/skills/<id>/nyxid-service" \
 
 Eligibility: regular users can bind a skill they own to (a) any admin service, or (b) one of *their own* personal services. Trying to bind to another user's personal service returns `403 NYXID_SERVICE_NOT_ELIGIBLE`. To make a system skill private again, unbind first — `PUT /skills/:id/permissions` with `isPrivate: true` is rejected with `SYSTEM_SKILL_MUST_BE_PUBLIC` while it's bound to an admin service.
 
-### 2.10 Delete a single non-latest version of a skill — *spec: `api-reference.md` §3 Skills CRUD*
+### 2.10 Delete or deprecate a single version — *spec: `api-reference.md` §3.8 + §3.14*
+
+**When:** an old version is broken, superseded, or otherwise something the user doesn't want consumers to keep using. Two options that leave the rest of the skill alone:
+
+- **Deprecate** — keeps the version readable and pullable, but stamps a warning on every read (`X-Skill-Deprecated: true` + `X-Skill-Deprecation-Note: <urlencoded>` headers, plus the deprecation note on the JSON response). Fully reversible. Use this when consumers may still need the version for compatibility.
+- **Delete** — removes the version row + its package zip from storage. Irreversible. Use this when the version is broken enough that you actively want it unreachable.
+
+**Mark deprecated** (the version stays — just flagged):
+
+```bash
+nyxid proxy request ornn-api \
+  "/api/v1/skills/<idOrName>/versions/<X.Y>" \
+  --method PATCH \
+  --data '{"isDeprecated": true, "deprecationNote": "Breaks with axios >= 1.7; use 1.3+."}' \
+  --output json
+```
+
+Un-deprecate: send the same request with `{"isDeprecated": false}`. Empty / omitted `deprecationNote` clears the message.
+
+**Hard-delete a non-latest version**:
 
 ```bash
 nyxid proxy request ornn-api \
@@ -467,7 +510,12 @@ nyxid proxy request ornn-api \
   --method DELETE --output json
 ```
 
-The backend refuses to delete the only-remaining version (use §2.11 to delete the whole skill instead) or the current latest version (publish a newer version first via §2.3, then delete the old one). After the call succeeds, **if the deleted version was your locally-installed one, also remove or refresh your local copy + update `~/.ornn/installed-skills.json` accordingly**.
+Backend refusals:
+
+- The version is the only-remaining version → `409 CANNOT_DELETE_ONLY_VERSION`. Use §2.11 to delete the whole skill instead.
+- The version is the current latest → `409 CANNOT_DELETE_LATEST`. Publish a newer version first via §2.3, then delete the older one.
+
+After the delete succeeds, **if the deleted version was your locally-installed one, also remove or refresh your local copy + update `~/.ornn/installed-skills.json` accordingly**.
 
 ### 2.11 Delete an entire skill — *spec: `api-reference.md` §3 Skills CRUD*
 
@@ -551,6 +599,69 @@ Two notification categories are emitted today:
 
 - `audit.completed` — sent to the skill owner on every audit completion.
 - `audit.risky_for_consumer` — fanned out to every consumer of the skill (everyone in `sharedWithUsers` + members of every org in `sharedWithOrgs`) when a verdict comes back `yellow` or `red`. **Treat this as a hard signal to stop using the skill** until you've reviewed the findings; surface it to the user and ask before continuing.
+
+### 2.14 Link a skill to GitHub or trigger a sync — *spec: `api-reference.md` §3.2 + §3.3 + §3.15*
+
+**When:** the user wants their Ornn skill to live in (or co-exist with) a public GitHub repo so updates flow from there into Ornn one-click. Three flows depending on starting state:
+
+#### A — Brand-new skill from GitHub *(no Ornn skill exists yet)*
+
+```bash
+nyxid proxy request ornn-api "/api/v1/skills/pull" \
+  --method POST \
+  --data '{
+    "githubUrl": "https://github.com/owner/repo/tree/main/path/to/skill",
+    "skip_validation": false
+  }' \
+  --output json
+```
+
+Server parses the URL, clones the folder, validates (unless `skip_validation`), and publishes as v1. The new skill carries a `source` block; `source.lastSyncedCommit` records the commit pulled at creation. Use `skip_validation: true` when the upstream repo wasn't authored against Ornn's package layout (most third-party repos).
+
+#### B — Attach a GitHub link to an EXISTING Ornn skill *(originally hand-uploaded)*
+
+```bash
+nyxid proxy request ornn-api "/api/v1/skills/<id>/source" \
+  --method PUT \
+  --data '{"githubUrl": "https://github.com/owner/repo/tree/main/path/to/skill"}' \
+  --output json
+```
+
+This **stores the source pointer without pulling**. `lastSyncedAt` / `lastSyncedCommit` stay absent until the first sync — the documented "linked but never synced" state. To unlink, call again with `{"githubUrl": null}`.
+
+#### C — Sync (pull updates from the linked GitHub source)
+
+Run as **two calls** so you can show the user a diff before bumping the version:
+
+```bash
+# 1. Dry-run — pull, compute diff vs current latest, return WITHOUT bumping.
+nyxid proxy request ornn-api "/api/v1/skills/<id>/refresh" \
+  --method POST \
+  --data '{"dryRun": true}' \
+  --output json
+```
+
+Dry-run response: `{ skill, source, pendingVersion, hasChanges, diff }`. The `diff` field has the same shape as §2.7's response (file-level added / removed / modified with inline content for text files), so you can hand it to the same diff renderer.
+
+- If `hasChanges: false` → the skill is already in sync. Tell the user, don't proceed.
+- If `hasChanges: true` → surface the diff and `pendingVersion` to the user. Ask for confirmation.
+
+```bash
+# 2. Apply — actually bump the version and replace the latest content.
+nyxid proxy request ornn-api "/api/v1/skills/<id>/refresh" \
+  --method POST \
+  --data '{"dryRun": false, "skipValidation": false}' \
+  --output json
+```
+
+Apply response: the refreshed `SkillDetail`. `source.lastSyncedAt` and `source.lastSyncedCommit` advance.
+
+#### Errors worth handling
+
+- `INVALID_GITHUB_URL` (400) on flows A or B — the URL is `blob/...`, non-`github.com`, or otherwise unparseable. Show the user the message; they need a folder URL like `tree/<ref>/<path>`.
+- `NO_SOURCE` (400) on flow C — no link is attached. Run flow B first, then re-try.
+- `REFRESH_FAILED` (400) on apply, `REFRESH_PREVIEW_FAILED` (400) on dry-run — the upstream folder no longer exists, or the pulled package failed validation. If the upstream is trusted and the failure is validation, retry apply with `skipValidation: true`.
+- `NOT_SKILL_OWNER` (403) — the caller isn't the author and lacks `ornn:admin:skill`.
 
 ---
 
