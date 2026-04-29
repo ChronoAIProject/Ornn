@@ -227,7 +227,7 @@ export function PermissionsModal({ isOpen, onClose, skill }: PermissionsModalPro
           <SectionHeader label={t("permissions.levelPublic", "Public access") as string} />
           <TierCard
             active={isPublic}
-            accent="cyan"
+            accent="public"
             onToggle={() => setIsPublic((v) => !v)}
           >
             <label className="flex items-start gap-3 cursor-pointer w-full">
@@ -258,7 +258,7 @@ export function PermissionsModal({ isOpen, onClose, skill }: PermissionsModalPro
             <TierCard
               active={orgsActive}
               dimmed={isPublic}
-              accent="cyan"
+              accent="limited"
               className="p-4"
             >
               <p className="font-heading text-base text-text-primary">
@@ -310,7 +310,7 @@ export function PermissionsModal({ isOpen, onClose, skill }: PermissionsModalPro
             <TierCard
               active={usersActive}
               dimmed={isPublic}
-              accent="cyan"
+              accent="limited"
               className="p-4"
             >
               <p className="font-heading text-base text-text-primary">
@@ -390,7 +390,7 @@ export function PermissionsModal({ isOpen, onClose, skill }: PermissionsModalPro
           </div>
 
           <SectionHeader label={t("permissions.levelPrivate", "Private access") as string} />
-          <TierCard active={privateActive} dimmed={isPublic} accent="cyan">
+          <TierCard active={privateActive} dimmed={isPublic} accent="private">
             <p className="font-heading text-base text-text-primary">
               {t("permissions.privateTitle", "Private")}
             </p>
@@ -436,11 +436,24 @@ interface TierCardProps {
   active: boolean;
   /** Overrides `active` visually — greyed out when Public is on for sub-tiers. */
   dimmed?: boolean;
-  accent: "cyan" | "yellow";
+  /**
+   * Tier of access this card represents — drives the highlight color
+   * when active. Matches the visibility-card chip on `SkillDetailPage`:
+   *   public  → green   (success)
+   *   limited → yellow  (warning) — orgs / users
+   *   private → grey    (info / mineral)
+   */
+  accent: "public" | "limited" | "private";
   onToggle?: () => void;
   className?: string;
   children: ReactNode;
 }
+
+const TIER_ACTIVE_CLASS: Record<TierCardProps["accent"], string> = {
+  public: "border-success/60 bg-success-soft",
+  limited: "border-warning/60 bg-warning-soft",
+  private: "border-info/60 bg-info-soft",
+};
 
 function TierCard({
   active,
@@ -450,11 +463,7 @@ function TierCard({
   className = "",
   children,
 }: TierCardProps) {
-  const ringClass = active
-    ? accent === "cyan"
-      ? "border-neon-cyan/50 bg-neon-cyan/5"
-      : "border-neon-yellow/50 bg-neon-yellow/5"
-    : "border-neon-cyan/15 bg-bg-elevated/40";
+  const ringClass = active ? TIER_ACTIVE_CLASS[accent] : "border-subtle bg-elevated/40";
   const dimmedClass = dimmed ? "opacity-60" : "";
   return (
     <div

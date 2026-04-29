@@ -1028,8 +1028,13 @@ export class SkillService {
     };
   }
 
-  /** Validate ZIP format rules (structure, required files, etc.). */
-  private async validateZipFormat(zipBuffer: Uint8Array): Promise<Array<{ rule: string; message: string }>> {
+  /**
+   * Validate ZIP format rules (structure, required files, frontmatter, etc.).
+   *
+   * Returns the list of rule violations. An empty array means the package is valid.
+   * Public so the `/skill-format/validate` route can call it without an `as any` cast.
+   */
+  async validateZipFormat(zipBuffer: Uint8Array): Promise<Array<{ rule: string; message: string }>> {
     const violations: Array<{ rule: string; message: string }> = [];
 
     let zip: JSZip;

@@ -56,24 +56,19 @@ function getTagColor(tag: string): "cyan" | "magenta" | "yellow" | "green" {
 }
 
 /**
- * Find the first file node (not folder) in the tree.
- * Prefers SKILL.md as the default selection.
+ * Walk the tree top-down looking ONLY for `SKILL.md` (anywhere). The
+ * helper is split out from `findDefaultFileId` so the recursion can't
+ * accidentally fall through to the "any first file" branch — earlier
+ * versions of this code mixed both passes in one function and would
+ * pick `references/api-reference.md` over a root-level `SKILL.md`
+ * whenever the folder happened to come first in the tree.
  */
-function findDefaultFileId(files: FileNode[]): string | undefined {
+function findSkillMdId(files: FileNode[]): string | undefined {
   for (const node of files) {
     if (node.type === "file" && node.name === "SKILL.md") return node.id;
     if (node.children) {
-      // Check children for SKILL.md first
-      const childResult = findDefaultFileId(node.children);
-      if (childResult) return childResult;
-    }
-  }
-  // If no SKILL.md found, return first file
-  for (const node of files) {
-    if (node.type === "file") return node.id;
-    if (node.children) {
-      const firstFile = findFirstFile(node.children);
-      if (firstFile) return firstFile;
+      const found = findSkillMdId(node.children);
+      if (found) return found;
     }
   }
   return undefined;
@@ -88,6 +83,16 @@ function findFirstFile(nodes: FileNode[]): string | undefined {
     }
   }
   return undefined;
+}
+
+/**
+ * Default file to land on when the viewer mounts. Always prefer
+ * `SKILL.md` (at any depth — but in practice it's always at the package
+ * root); only when no `SKILL.md` exists do we fall back to the first
+ * file we can find.
+ */
+function findDefaultFileId(files: FileNode[]): string | undefined {
+  return findSkillMdId(files) ?? findFirstFile(files);
 }
 
 /** Horizontally resizable two-pane layout with a draggable divider */
@@ -170,10 +175,22 @@ export function SkillPackagePreview({
     () => findDefaultFileId(files),
   );
 
-  // Update selection when files change
+  // Default-select SKILL.md when files arrive (or change). Three triggers:
+  //   1. Initial render had no files yet (async fetch) — `selectedFileId`
+  //      is undefined; pick SKILL.md once files land.
+  //   2. The currently-selected file disappeared from the tree (rename,
+  //      version switch, deletion) — fall back to SKILL.md.
+  //   3. Version switch / refresh produced a different default — re-pick
+  //      so the viewer always lands on SKILL.md unless the user explicitly
+  //      navigated away.
   useEffect(() => {
-    if (selectedFileId && !fileContents.has(selectedFileId)) {
-      setSelectedFileId(findDefaultFileId(files));
+    const fallback = findDefaultFileId(files);
+    if (!selectedFileId) {
+      if (fallback) setSelectedFileId(fallback);
+      return;
+    }
+    if (!fileContents.has(selectedFileId)) {
+      setSelectedFileId(fallback);
     }
   }, [files, fileContents, selectedFileId]);
 

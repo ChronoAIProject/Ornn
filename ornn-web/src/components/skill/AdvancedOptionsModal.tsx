@@ -1,18 +1,14 @@
 /**
- * NyxidServiceTieModal — picker for tying a skill to a NyxID catalog
- * service.
+ * AdvancedOptionsModal — settings-page-style modal for power-user
+ * skill knobs. Two-column layout inside the modal: a left rail with
+ * setting categories, and a right pane that renders whichever category
+ * is selected. v1 ships with one category — "Bind to NyxID Service".
  *
- * Two tiers:
- *   - **admin**    services (NyxID `visibility: "public"`, platform-wide).
- *     Tying here marks the skill a "system skill" and forces
- *     `isPrivate: false`.
- *   - **personal** services (caller-owned, NyxID `visibility: "private"`).
- *     Tying here doesn't change the skill's privacy.
+ * Adding a new advanced setting:
+ *   1. Add an entry to `SETTINGS`.
+ *   2. Render its panel under the matching `selected === "..."` branch.
  *
- * The picker also supports the "untie" path, which clears the tie and
- * leaves privacy alone.
- *
- * @module components/skill/NyxidServiceTieModal
+ * @module components/skill/AdvancedOptionsModal
  */
 
 import { useEffect, useMemo, useState } from "react";
@@ -24,23 +20,101 @@ import { useTieSkillToNyxidService } from "@/hooks/useSkills";
 import { useToastStore } from "@/stores/toastStore";
 import type { SkillDetail } from "@/types/domain";
 
-interface NyxidServiceTieModalProps {
+type AdvancedSettingId = "nyxid-service-binding";
+
+interface AdvancedOptionsModalProps {
   isOpen: boolean;
   onClose: () => void;
   skill: SkillDetail;
 }
 
-export function NyxidServiceTieModal({ isOpen, onClose, skill }: NyxidServiceTieModalProps) {
+/** Catalog of available settings. New settings appended here. */
+const SETTINGS: ReadonlyArray<{
+  id: AdvancedSettingId;
+  labelKey: string;
+  fallback: string;
+}> = [
+  {
+    id: "nyxid-service-binding",
+    labelKey: "advancedOptions.nyxidServiceBinding",
+    fallback: "Bind to NyxID Service",
+  },
+];
+
+export function AdvancedOptionsModal({ isOpen, onClose, skill }: AdvancedOptionsModalProps) {
+  const { t } = useTranslation();
+  const [selected, setSelected] = useState<AdvancedSettingId>(SETTINGS[0].id);
+
+  // Reset to the first setting whenever the modal opens, so the user
+  // always lands on a known starting point rather than wherever they
+  // left off across different skills.
+  useEffect(() => {
+    if (isOpen) setSelected(SETTINGS[0].id);
+  }, [isOpen]);
+
+  return (
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title={t("advancedOptions.title", "Advanced options") as string}
+      className="!max-w-4xl"
+    >
+      <div className="grid min-h-[420px] grid-cols-[200px_1fr] gap-5">
+        {/* Left rail — settings list */}
+        <nav
+          aria-label={t("advancedOptions.navLabel", "Advanced settings") as string}
+          className="flex flex-col gap-1 border-r border-subtle pr-4"
+        >
+          {SETTINGS.map((s) => {
+            const active = s.id === selected;
+            return (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => setSelected(s.id)}
+                className={`rounded-sm px-3 py-2 text-left font-mono text-[11px] uppercase tracking-wider transition-colors ${
+                  active
+                    ? "bg-accent-soft text-accent"
+                    : "text-meta hover:bg-elevated hover:text-strong"
+                }`}
+              >
+                {t(s.labelKey, s.fallback)}
+              </button>
+            );
+          })}
+        </nav>
+
+        {/* Right pane — the selected setting's content */}
+        <div className="min-w-0">
+          {selected === "nyxid-service-binding" && (
+            <NyxidServiceBindingPanel skill={skill} onClose={onClose} />
+          )}
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// NyxidServiceBindingPanel — picker for the Bind-to-NyxID-Service setting
+// ---------------------------------------------------------------------------
+
+function NyxidServiceBindingPanel({
+  skill,
+  onClose,
+}: {
+  skill: SkillDetail;
+  onClose: () => void;
+}) {
   const { t } = useTranslation();
   const addToast = useToastStore((s) => s.addToast);
   const { data: services = [], isLoading } = useMyNyxidServices();
   const mutation = useTieSkillToNyxidService(skill.guid);
 
   const [selectedId, setSelectedId] = useState<string | null>(skill.nyxidServiceId ?? null);
-
   useEffect(() => {
-    if (isOpen) setSelectedId(skill.nyxidServiceId ?? null);
-  }, [isOpen, skill.nyxidServiceId]);
+    setSelectedId(skill.nyxidServiceId ?? null);
+  }, [skill.nyxidServiceId]);
 
   const adminServices = useMemo(
     () => services.filter((s) => s.tier === "admin"),
@@ -55,13 +129,11 @@ export function NyxidServiceTieModal({ isOpen, onClose, skill }: NyxidServiceTie
     () => services.find((s) => s.id === selectedId) ?? null,
     [services, selectedId],
   );
-  const willForcePublic =
-    selectedService?.tier === "admin" && skill.isPrivate;
-
-  const tieChanged = selectedId !== (skill.nyxidServiceId ?? null);
+  const willForcePublic = selectedService?.tier === "admin" && skill.isPrivate;
+  const bindingChanged = selectedId !== (skill.nyxidServiceId ?? null);
 
   const handleSave = async () => {
-    if (!tieChanged) {
+    if (!bindingChanged) {
       onClose();
       return;
     }
@@ -71,8 +143,8 @@ export function NyxidServiceTieModal({ isOpen, onClose, skill }: NyxidServiceTie
         type: "success",
         message:
           selectedId === null
-            ? (t("nyxidService.untieSuccess", "Service unlinked") as string)
-            : (t("nyxidService.tieSuccess", "Service linked") as string),
+            ? (t("nyxidService.untieSuccess", "Service unbound") as string)
+            : (t("nyxidService.tieSuccess", "Service bound") as string),
       });
       onClose();
     } catch (err) {
@@ -82,38 +154,33 @@ export function NyxidServiceTieModal({ isOpen, onClose, skill }: NyxidServiceTie
   };
 
   return (
-    <Modal
-      isOpen={isOpen}
-      onClose={onClose}
-      title={t("nyxidService.modalTitle", "Tie to NyxID service") as string}
-      className="!max-w-2xl"
-    >
-      <div className="space-y-4">
-        <p className="font-body text-sm text-text-muted">
-          {t(
-            "nyxidService.intro",
-            "Tying a skill to a NyxID admin service marks it as a system skill (forced public). Tying to one of your personal services leaves the privacy alone.",
-          )}
-        </p>
+    <div className="flex h-full flex-col gap-4">
+      <p className="font-body text-sm text-text-muted">
+        {t(
+          "nyxidService.intro",
+          "Binding a skill to a NyxID admin service marks it as a system skill (forced public). Binding to one of your personal services leaves the privacy alone.",
+        )}
+      </p>
 
-        <div className="space-y-3">
-          <ServiceOption
-            id={null}
-            label={t("nyxidService.untied", "Untied (no service tie)") as string}
-            description={
-              t(
-                "nyxidService.untiedDesc",
-                "This skill is not associated with any NyxID service. Privacy and sharing remain manually controlled.",
-              ) as string
-            }
-            tier="none"
-            selected={selectedId === null}
-            onSelect={() => setSelectedId(null)}
-          />
-        </div>
+      <div className="flex-1 space-y-4 overflow-y-auto pr-1">
+        <ServiceOption
+          id={null}
+          label={t("nyxidService.untied", "No binding (unbound)") as string}
+          description={
+            t(
+              "nyxidService.untiedDesc",
+              "This skill is not bound to any NyxID service. Privacy and sharing remain manually controlled.",
+            ) as string
+          }
+          tier="none"
+          selected={selectedId === null}
+          onSelect={() => setSelectedId(null)}
+        />
 
         {isLoading ? (
-          <p className="font-body text-xs text-text-muted">{t("common.loading", "Loading...")}</p>
+          <p className="font-body text-xs text-text-muted">
+            {t("common.loading", "Loading...")}
+          </p>
         ) : (
           <>
             {adminServices.length > 0 && (
@@ -173,21 +240,25 @@ export function NyxidServiceTieModal({ isOpen, onClose, skill }: NyxidServiceTie
           <div className="rounded border border-warning/40 bg-warning-soft p-3 font-body text-xs text-warning">
             {t(
               "nyxidService.willForcePublic",
-              "Tying to an admin service will force this skill to be public. Other share settings (users / orgs) are kept but ignored while the skill is public.",
+              "Binding to an admin service will force this skill to be public. Other share settings (users / orgs) are kept but ignored while the skill is public.",
             )}
           </div>
         )}
       </div>
 
-      <div className="flex justify-end gap-2 pt-4 mt-5 border-t border-neon-cyan/10">
+      <div className="flex justify-end gap-2 border-t border-subtle pt-3">
         <Button variant="secondary" onClick={onClose} disabled={mutation.isPending}>
           {t("common.cancel", "Cancel")}
         </Button>
-        <Button onClick={handleSave} loading={mutation.isPending} disabled={!tieChanged}>
+        <Button
+          onClick={handleSave}
+          loading={mutation.isPending}
+          disabled={!bindingChanged}
+        >
           {t("common.save", "Save")}
         </Button>
       </div>
-    </Modal>
+    </div>
   );
 }
 
