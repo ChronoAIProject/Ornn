@@ -7,10 +7,7 @@
       "order": 1,
       "children": [
         { "id": "what-is-ornn", "label": "What is Ornn", "file": "what-is-ornn.md", "order": 1 },
-        { "id": "why-ornn", "label": "Why Ornn?", "file": "why-ornn.md", "order": 2 },
-        { "id": "vs-vercel-skills-sh", "label": "Ornn vs. Vercel skills.sh", "file": "vs-vercel-skills-sh.md", "order": 3 },
-        { "id": "vs-skillmp", "label": "Ornn vs. SkillMP", "file": "vs-skillmp.md", "order": 4 },
-        { "id": "vs-github", "label": "Ornn vs. GitHub", "file": "vs-github.md", "order": 5 }
+        { "id": "why-ornn", "label": "Why Ornn?", "file": "why-ornn.md", "order": 2 }
       ]
     },
     {
@@ -18,16 +15,8 @@
       "label": "Quick Start",
       "order": 2,
       "children": [
-        { "id": "qs-web-user", "label": "Guide for Web Users", "file": "qs-web-user.md", "order": 1 }
-      ]
-    },
-    {
-      "id": "reference",
-      "label": "Technical References",
-      "order": 3,
-      "children": [
-        { "id": "system-architecture", "label": "System Architecture", "file": "system-architecture.md", "order": 20 },
-        { "id": "external-integrations", "label": "External Integrations", "file": "external-integrations.md", "order": 21 }
+        { "id": "qs-web-user", "label": "Guide for Web Users", "file": "qs-web-user.md", "order": 1 },
+        { "id": "qs-agent-manual", "label": "Agent Manual", "file": "qs-agent-manual.md", "order": 2 }
       ]
     }
   ]

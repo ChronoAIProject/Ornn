@@ -7,10 +7,7 @@
       "order": 1,
       "children": [
         { "id": "what-is-ornn", "label": "什么是 Ornn", "file": "what-is-ornn.md", "order": 1 },
-        { "id": "why-ornn", "label": "为什么是 Ornn", "file": "why-ornn.md", "order": 2 },
-        { "id": "vs-vercel-skills-sh", "label": "Ornn vs. Vercel skills.sh", "file": "vs-vercel-skills-sh.md", "order": 3 },
-        { "id": "vs-skillmp", "label": "Ornn vs. SkillMP", "file": "vs-skillmp.md", "order": 4 },
-        { "id": "vs-github", "label": "Ornn vs. GitHub", "file": "vs-github.md", "order": 5 }
+        { "id": "why-ornn", "label": "为什么是 Ornn", "file": "why-ornn.md", "order": 2 }
       ]
     },
     {
@@ -18,7 +15,8 @@
       "label": "快速开始",
       "order": 2,
       "children": [
-        { "id": "qs-web-user", "label": "Web 用户快速入门", "file": "qs-web-user.md", "order": 1 }
+        { "id": "qs-web-user", "label": "Web 用户快速入门", "file": "qs-web-user.md", "order": 1 },
+        { "id": "qs-agent-manual", "label": "Agent Manual", "file": "qs-agent-manual.md", "order": 2 }
       ]
     }
   ]

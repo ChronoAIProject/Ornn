@@ -1,6 +1,6 @@
 ---
-version: 1.0.0
-lastUpdated: 2026-04-28
+version: 2.0.0
+lastUpdated: 2026-04-29
 ---
 
 
@@ -8,43 +8,41 @@ lastUpdated: 2026-04-28
 
 <!-- VERSION_BADGE -->
 
-## Overview
+## In one line
 
-**Ornn is an agent-facing skill-lifecycle API.** AI agents call Ornn directly — over HTTP or MCP — to search, pull, run, build, upload, and share skills. The closest analog is **npm registry + npm CLI fused, model-agnostic**: works with Claude, GPT, Gemini, or any custom agent runtime, with no model lock-in.
+**Ornn is the agent-facing skill-lifecycle API.** Your AI agent calls Ornn over HTTP or MCP to search, pull, execute, build, upload, share, audit, version, link to GitHub, and sync skills — every step it might take with a skill is one API call away.
 
-The product framing is **Skill-as-a-Service** — plug-and-play skill integration for any AI agent.
+The closest analog: **npm registry + npm CLI fused together, model-agnostic.**
 
-> Ornn is *not* a human-facing skill marketplace. The web UI exists as a secondary surface for skill owners and platform admins; the primary product is the API contract.
+> The customer is the agent developer. The web UI exists as a secondary surface for skill owners and platform admins; the primary product is the API contract.
 
-## Key Concepts
+## What an Ornn skill is
 
-### Skills
+A skill is a portable, versioned package of AI capability:
 
-A **skill** is a packaged AI capability — a combination of prompts, scripts, and metadata that an AI agent can discover and execute. Skills are versioned, validated, and stored in the Ornn skill registry.
+- **`SKILL.md`** — the prompt body + YAML frontmatter (name, description, category, runtime, tags, version, etc.).
+- Optional **`scripts/`** — executable code the agent runs in chrono-sandbox.
+- Optional **`references/`**, **`assets/`** — supporting context the agent loads alongside `SKILL.md`.
 
-### The Skill Registry
+Skills are runtime-agnostic — Claude, GPT, Gemini, or a custom agent loop can all consume them. The format is text + scripts the runtime injects into context and (optionally) executes.
 
-The Ornn registry is the central store every agent calls into. It supports:
+## What you get
 
-- **Semantic search** — find skills by meaning, not just keywords
-- **Keyword search** — traditional text-based search
-- **Category browsing** — explore skills by type (plain, tool-based, runtime-based, mixed)
-- **Audit as a public risk label** — every skill carries a verdict (`green` / `yellow` / `red`); consumers of a skill are notified when its audit flips to risky
-
-### Sandbox Playground
-
-Ornn provides a sandbox playground that lets an agent (or a human stand-in) try any skill end-to-end before committing to it. The playground injects the skill into an LLM context; for skills with code or scripts, it integrates with **chrono-sandbox** to execute them and return results.
-
-- Isolated, secure execution environment
-- Node.js and Python runtimes
-- Dependency management
-- File artifact retrieval
-- Environment variable injection
+| Capability | What it does |
+|---|---|
+| **Registry + CRUD** | Versioned skills with immutable per-version storage. Pull by GUID or kebab-case name. Diff two versions client-side. Deprecate or hard-delete a single version. |
+| **Search** | Keyword + semantic search across the public + caller-visible slice. Per-tab filters: tags, authors, services, grant-orgs / grant-users. Three facet endpoints back the filter chips. |
+| **AI generation** | Generate a brand-new skill from a prompt, from inline source, or from an OpenAPI spec — all SSE-streamed so the agent gets tokens as they're produced. |
+| **GitHub linking + sync** | Attach an Ornn skill to a folder in a public GitHub repo. Sync flows from GitHub to Ornn with a dry-run-then-confirm preview that surfaces a per-file diff before bumping the version. |
+| **Sandbox playground** | Try a skill end-to-end before installing. chrono-sandbox runs scripts; the LLM sees the result. Server-side tool-use loop so the playground call is one chunked SSE response. |
+| **Audit as a passive risk label** | Every skill carries a verdict (`green` / `yellow` / `red`). Audits are owner-triggered; verdicts decorate the skill but never block sharing. Consumers of a skill that flips to `yellow` / `red` get notified automatically. |
+| **NyxID identity + ACLs** | Real per-user / per-org identity at the API edge. Per-skill ACLs: private / shared-with-users / shared-with-orgs / public. Skills can also be tied to a NyxID service — admin-tier ties mark the skill as a *system skill* (forced public). |
+| **Analytics** | Pull counts (api / web / playground source breakdown) and execution telemetry per skill version. |
+| **Notifications** | `audit.completed` for owners; `audit.risky_for_consumer` fanned out to consumers when a verdict goes `yellow` / `red`. |
 
 ## Who is Ornn for?
 
 | Audience | Where to start |
-|----------|---------------|
-| **AI Agents** *(primary)* — call Ornn over HTTP / MCP to manage their own skill lifecycle | Pull the `ornn-agent-manual` system skill: `GET /api/v1/skills/ornn-agent-manual/json` |
-| **Skill Owners & Admins** — manage skills, permissions, and audits via the GUI | [Quick Start as a Web User](/docs?section=qs-web-user) |
-| **Platform Operators** — understand what runs where | [System Architecture](/docs?section=system-architecture) · [External Integrations](/docs?section=external-integrations) |
+|---|---|
+| **AI agents** *(primary customer)* — call Ornn over HTTP or MCP | [Quick Start → Agent Manual](/docs?section=qs-agent-manual) |
+| **Skill owners & platform admins** — manage skills, permissions, audits via the GUI | [Quick Start → Web Users](/docs?section=qs-web-user) |
