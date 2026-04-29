@@ -48,6 +48,10 @@ export interface SkillDetail extends SkillSummary {
   sharedWithOrgs: string[];
   /** Present when the skill was created (or last refreshed) by pulling from an external source. */
   source?: SkillSource;
+  /** Optional license string from `SKILL.md` frontmatter (e.g. "MIT"). */
+  license?: string | null;
+  /** Optional free-form compatibility note from `SKILL.md` frontmatter. */
+  compatibility?: string | null;
   /**
    * NyxID service this skill is tied to. `null` when untied.
    * Tying to an admin (`tier: "admin"`) service marks the skill as a
