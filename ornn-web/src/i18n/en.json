@@ -246,6 +246,28 @@
     "totalPulls": "Total",
     "noUsage": "No usage in this range."
   },
+  "versionDiff": {
+    "openButton": "Compare versions",
+    "title": "Compare versions",
+    "fromLabel": "From",
+    "toLabel": "To",
+    "summary": "{{added}} added · {{removed}} removed · {{modified}} modified · {{unchanged}} unchanged",
+    "needTwoVersions": "This skill only has one version — there's nothing to compare yet.",
+    "sameVersion": "Pick two different versions to see a diff.",
+    "loading": "Computing diff…",
+    "error": "Failed to compute diff.",
+    "noChanges": "These two versions have identical files.",
+    "addedHeading": "Added ({{count}})",
+    "removedHeading": "Removed ({{count}})",
+    "modifiedHeading": "Modified ({{count}})",
+    "added": "added",
+    "removed": "removed",
+    "modified": "modified",
+    "binaryHint": "Binary file. {{from}} → {{to}} (hash {{fromHash}} → {{toHash}})",
+    "binaryAdded": "Binary file ({{size}}).",
+    "binaryRemoved": "Binary file ({{size}}).",
+    "truncated": "File content truncated at 64 KiB per side."
+  },
   "notifications": {
     "bellAria": "Notifications",
     "title": "Notifications",

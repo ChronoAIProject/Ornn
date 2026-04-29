@@ -246,6 +246,28 @@
     "totalPulls": "总计",
     "noUsage": "此区间内没有使用记录。"
   },
+  "versionDiff": {
+    "openButton": "对比版本",
+    "title": "对比版本",
+    "fromLabel": "从",
+    "toLabel": "到",
+    "summary": "新增 {{added}} · 删除 {{removed}} · 修改 {{modified}} · 不变 {{unchanged}}",
+    "needTwoVersions": "此技能只有一个版本,暂无可对比的内容。",
+    "sameVersion": "请选择两个不同的版本进行对比。",
+    "loading": "正在计算差异…",
+    "error": "差异计算失败。",
+    "noChanges": "这两个版本的文件内容完全一致。",
+    "addedHeading": "新增 ({{count}})",
+    "removedHeading": "删除 ({{count}})",
+    "modifiedHeading": "修改 ({{count}})",
+    "added": "新增",
+    "removed": "删除",
+    "modified": "修改",
+    "binaryHint": "二进制文件。{{from}} → {{to}}(哈希 {{fromHash}} → {{toHash}})",
+    "binaryAdded": "二进制文件({{size}})。",
+    "binaryRemoved": "二进制文件({{size}})。",
+    "truncated": "每侧文件内容已截断至 64 KiB。"
+  },
   "notifications": {
     "bellAria": "通知",
     "title": "通知",

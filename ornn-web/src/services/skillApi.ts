@@ -1,6 +1,6 @@
 import { apiGet, apiPost, apiPut, apiDelete } from "./apiClient";
 import type { UpdateSkillMetadata } from "@/types/api";
-import type { SkillDetail, SkillVersionEntry } from "@/types/domain";
+import type { SkillDetail, SkillVersionEntry, VersionDiffResponse } from "@/types/domain";
 import { useAuthStore } from "@/stores/authStore";
 import { config } from "@/config";
 
@@ -22,6 +22,24 @@ export async function fetchSkillVersions(idOrName: string): Promise<SkillVersion
     `/api/v1/skills/${encodeURIComponent(idOrName)}/versions`,
   );
   return res.data?.items ?? [];
+}
+
+/**
+ * Fetch a structured diff between two published versions of a skill.
+ * Server returns added/removed/modified file lists with text content
+ * inlined for diffable files; binary files come back as path + hash + size.
+ */
+export async function fetchSkillVersionDiff(
+  idOrName: string,
+  fromVersion: string,
+  toVersion: string,
+): Promise<VersionDiffResponse> {
+  const res = await apiGet<VersionDiffResponse>(
+    `/api/v1/skills/${encodeURIComponent(idOrName)}/versions/${encodeURIComponent(
+      fromVersion,
+    )}/diff/${encodeURIComponent(toVersion)}`,
+  );
+  return res.data!;
 }
 
 /** Toggle the deprecation flag on a specific published version. */
