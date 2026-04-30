@@ -1,69 +1,114 @@
 ---
-version: 1.0.0
-lastUpdated: 2026-04-28
+version: 2.0.0
+lastUpdated: 2026-04-29
 ---
 
 
 # Quick Start as a Web User
 
-## 1. Sign In
+This is for skill owners and platform admins managing skills through the GUI. If you're an AI agent looking to call Ornn directly, start with the [Agent Manual quick start](/docs?section=qs-agent-manual) instead.
 
-Log in via **NyxID** at [https://nyx.chrono-ai.fun/](https://nyx.chrono-ai.fun/). Ornn relies on NyxID for user management and access control — your NyxID account is universal across Ornn and all affiliated services.
+## 1. Sign in
 
-## 2. Browse Skills
+Log in via **NyxID** at [https://nyx.chrono-ai.fun/](https://nyx.chrono-ai.fun/). Ornn does not maintain its own user accounts — your NyxID identity (and the orgs you belong to) drives every visibility / ACL decision in Ornn.
 
-Click **Registry** in the navigation bar to go to the public skill library. Click **My Skills** on the right to switch to your private skill library, which only you can access. Use the search bar for keyword or semantic search to find skills by name or description.
+## 2. Browse skills
 
-## 3. Create a New Skill
+Click **Registry** in the navigation bar. The registry has four tabs:
 
-Click **Build** in the navigation bar, then choose a creation method:
+- **System Skills** *(default landing)* — platform-wide skills tied to a NyxID admin service. Always public.
+- **Public** — every public skill in Ornn.
+- **My Skills** — skills you authored.
+- **Shared with Me** — private skills another user / org has shared with you.
 
-| Method | Best For |
-|--------|----------|
+Each tab has a search bar at the top and a sidebar of filter chips on the left. The chip groups are tab-specific:
+
+- *System Skills* → filter by NyxID service.
+- *Public* → tags + authors.
+- *My Skills* → tags + grant-orgs (orgs you've shared with) + grant-users.
+- *Shared with Me* → source-orgs (orgs you got grants through) + source-users.
+
+Filter state is encoded in the URL, so any view is bookmarkable / shareable.
+
+## 3. Create a new skill
+
+Click **Build** in the navigation bar. Pick one of four modes — all four CTAs are stylistically uniform; the card title above each button names the mode you're starting:
+
+| Mode | Best for |
+|---|---|
 | **Guided** | First-time creators — step-by-step wizard |
-| **Free-form** | Experienced users — upload a pre-built ZIP |
-| **Generative** | Describe what you need — AI builds it for you |
+| **Free** | Experienced authors with an existing ZIP package |
+| **Generative** | AI generates the skill from a prompt — refine with chat |
+| **Import from GitHub** | Pull a folder from a public GitHub repo as the skill source |
 
-### Guided Mode
+### Guided
 
-1. Click **Start Guided Mode**
-2. **Basic Info** — Enter a name, select a category, and add tags for your skill
-3. **Content** — Write the SKILL.md body (the main prompt content) using the Markdown editor with live preview
-4. **Files** — Add any supporting files (scripts, references, assets) to your skill package
-5. **Preview** — Review the full skill package structure, then click **Create Skill**
+Step-by-step form for name + category + tags + `SKILL.md` body + supporting files. Live Markdown preview. Best for first-time skill authors who want the structure laid out.
 
-### Free-form Mode
+### Free
 
-1. Click **Start Free-form Mode**
-2. Drag and drop a `.zip` file (or click to browse) containing your pre-built skill package
-3. The platform will automatically validate the package structure and extract metadata
-4. Review the preview, then click **Upload Skill**
+Drop a pre-built `.zip` (single root folder, `SKILL.md` at its root). Validation runs automatically; fix any reported issues before uploading. You can opt into "skip validation" if your package doesn't strictly conform to Ornn's format spec.
 
-### Generative Mode
+### Generative
 
-1. Click **Start Generative Mode**
-2. Describe what you want the skill to do in the text input
-3. AI will generate the full skill in real time with streaming output
-4. Review the generated SKILL.md and files in the preview panel
-5. Refine via follow-up messages if needed, then click **Save Skill**
+Describe what you need in natural language. AI streams the skill into the right shape. Refine with follow-up messages until the preview looks right, then **Save Skill**.
 
-## 4. View, Edit & Test Your Skill
+### Import from GitHub
 
-Your newly created skill is stored in your **private skill library**. You can choose to make it public to share with other Ornn users, or keep it private (only you can use it).
+Paste a single GitHub folder URL — `https://github.com/<owner>/<repo>/tree/<ref>/<path>` (the URL you'd copy from the browser address bar on a folder page). Optionally tick **Skip Ornn package validation** when the upstream wasn't authored against Ornn's package layout. Click **Import** to actually pull and publish; nothing is fetched until you click.
 
-Click on the skill you just created to enter its detail page:
+## 4. The skill detail page
 
-- **Left panel** — The full skill package contents. The top-level folder name is your skill name. `SKILL.md` in the root directory is the main prompt file, containing YAML-formatted frontmatter at the top and prompt Markdown text below. Your skill may also include folders like `references/`, `assets/`, `scripts/` — files in these folders serve as supporting content. For example, a skill that calls Gemini image generation to create images from a description might have script files under `scripts/` and environment variables, runtime, and runtime dependencies declared in the SKILL.md frontmatter.
+Click any skill to open its detail page.
 
-- You can edit and delete any file in the package. Click the **Save** button in the top right to confirm your changes. When saving, a dialog may ask whether to skip validation — we recommend only advanced users skip this, as the validation step ensures consistent skill formatting.
+**Hero strip** at the top — name, description, status pills (visibility / version / audit verdict / pulls·7d), owner, primary CTA **Try in Playground**. If the skill is GitHub-linked, a small GitHub icon sits to the left of "Try in Playground" — click to open the deep-linked folder in a new tab.
 
-- **Right panel** — The skill's description, tags, author, and other metadata. Below you can:
-  - Click **Try in Playground** to test the skill interactively
-  - Click **Download Skill Package** to download the skill for local use with your AI agent
-  - If you are the author, toggle the skill between public and private, or delete it
+**Left** — package preview. Tree on the left (defaults to `SKILL.md`), file content on the right. Click any file to view it. If you're the author / admin, **Save** in the top-right confirms edits to the package.
 
-## 5. Try It in the Playground
+**Right rail** (top to bottom): **Audit** card → **Versions** card → **Visibility** card → **Advanced** button → **Metadata** card → **Danger zone**.
 
-Click **Try in Playground** to open the sandbox playground. If the skill requires any environment variables, make sure to set them in the **Environment Variables** section in the top right.
+### Versions card → all-versions modal
 
-Now start chatting on the left — imagine you are working with an agent equipped with this skill. Ask it to invoke the skill and perform related tasks for you.
+Click **Browse all versions** to open a modal listing every published version with its date, author, deprecation flag, and audit verdict pill. From here you can:
+
+- **Compare versions** *(button at the top of the modal)* — pick any two versions and see the file-level + line-level diff.
+- Click a row to switch the page to that version.
+- *(owner / admin)* **Mark deprecated** to flag a version with a warning header (reversible).
+- *(owner / admin)* **Delete** to hard-delete a non-latest, non-only version. The button stays visible on the latest / only-version rows but is disabled with a tooltip pointing at the right alternative.
+
+### Visibility card
+
+A single coloured chip:
+
+- **Public** *(green)* — every authenticated Ornn user can see the skill.
+- **Limited access** *(yellow)* — private but shared with specific users / orgs.
+- **Private** *(grey)* — only you and platform admins can see it.
+
+Click the chip (as the owner) to open the permissions modal and reshape the allow-lists.
+
+### Advanced *(button — opens modal)*
+
+A settings-page-style modal with two surfaces today:
+
+- **Bind to NyxID Service** — tie the skill to a NyxID service. Tying to an admin-tier service marks the skill as a *system skill* (forced public, discoverable platform-wide). Personal-tier ties leave privacy alone.
+- **Link to GitHub** — paste a GitHub folder URL to attach a source pointer. **Save** stores the link without pulling. **Sync from GitHub** runs a dry-run preview: if there are no changes, you get an "already in sync" toast; otherwise the panel switches to a sync-preview view rendering a file-level diff with an **Apply sync** button that bumps the version. **Unlink** clears the pointer.
+
+The modal is a fixed 80vh shell — left rail and right pane scroll independently so a long sync diff doesn't push the whole modal taller.
+
+### Try in Playground
+
+Opens the sandbox. Set any required environment variables in the top-right panel; chat on the left as if the skill were already loaded into your agent. For runtime-based skills, the playground executes the scripts in chrono-sandbox and threads the result back through the chat.
+
+## 5. Share a skill
+
+From the detail page, click the visibility chip to open **Permissions**. Pick a tier:
+
+- **Public** — every Ornn user can see it.
+- **Limited** — share with specific users (typeahead by email prefix) and / or specific orgs (orgs you belong to).
+- **Private** — only you (and platform admins).
+
+Sharing is **unconditional** in Ornn's current model — there's no review queue, no waiver. Saving the form changes ACLs immediately.
+
+## 6. Trigger an audit *(optional)*
+
+The **Audit** card in the right rail surfaces the latest verdict. Click **Start audit** to queue a fresh run; the verdict appears once the pipeline finishes. Audit is a *passive risk label* — it never blocks sharing or pulling. If a verdict comes back `yellow` or `red`, every consumer (people / orgs the skill is shared with) gets an `audit.risky_for_consumer` notification automatically.

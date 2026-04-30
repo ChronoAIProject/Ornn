@@ -1,48 +1,46 @@
 ---
-version: 1.0.0
-lastUpdated: 2026-04-28
+version: 2.0.0
+lastUpdated: 2026-04-29
 ---
 
 
 # 什么是 Ornn
 
-## 概述
+## 一句话总结
 
-**Ornn 是一个面向 AI agent 的技能生命周期 API。** AI agent 通过 HTTP 或 MCP 直接调用 Ornn 来搜索、拉取、运行、构建、上传和分享技能。最接近的类比是 **npm registry + npm CLI 融为一体，model-agnostic** —— Claude、GPT、Gemini 或任意自研 agent 运行时都能用，不绑定特定模型。
+**Ornn 是面向 AI agent 的技能生命周期 API。** 你的 AI agent 通过 HTTP 或 MCP 调用 Ornn,完成 search / pull / execute / build / upload / share / audit / version / link-to-GitHub / sync 等所有跟技能相关的操作 —— 每一步都是一次 API 调用。
 
-产品定位是 **Skill-as-a-Service** —— 为任何 AI agent 提供即插即用的技能集成。
+最接近的类比:**npm registry + npm CLI 融为一体,model-agnostic。**
 
-> Ornn 不是给人逛的技能 marketplace。Web UI 是次要 surface，给 skill owner 和平台管理员使用；主产品是 API 契约本身。
+> 客户是 agent 开发者。Web UI 是次要 surface,给 skill owner 和平台管理员管理自己的工作用;主产品是 API 契约本身。
 
-## 核心概念
+## 一个 Ornn 技能是什么
 
-### 技能
+技能是可移植、版本化的 AI 能力打包:
 
-**技能**是一个打包的 AI 能力 —— 由提示词、脚本和元数据组合而成，AI agent 可以发现并执行它。技能是版本化的、经过验证的，并存储在 Ornn 技能 registry 中。
+- **`SKILL.md`** — 提示词正文 + YAML frontmatter(name、description、category、runtime、tags、version 等)。
+- 可选 **`scripts/`** — 在 chrono-sandbox 里执行的代码。
+- 可选 **`references/`**、**`assets/`** — 跟 `SKILL.md` 一起加载的辅助上下文。
 
-### 技能 Registry
+技能是 runtime-agnostic 的 —— Claude、GPT、Gemini 或任意自研 agent loop 都能消费。格式就是文本 + 脚本,由 runtime 注入上下文(以及可选地执行)。
 
-Ornn registry 是每个 agent 调用的中央存储，它支持：
+## 你能拿到什么
 
-- **语义搜索** — 按含义查找技能，而不仅仅是关键词
-- **关键词搜索** — 传统的文本搜索
-- **分类浏览** — 按类型浏览技能（plain、tool-based、runtime-based、mixed）
-- **审计作为公开风险标签** — 每个技能都带有 verdict（`green` / `yellow` / `red`），当某个 skill 的审计结果变成有风险时，使用者会收到通知
+| 能力 | 做什么 |
+|---|---|
+| **Registry + CRUD** | 版本化的技能,每个版本不可变存储。按 GUID 或 kebab-case 名字 pull。客户端 diff 两个版本。废弃或硬删单个版本。 |
+| **搜索** | 关键词 + 语义搜索,作用于 public + caller-visible 范围。每个 tab 都有专属过滤器:tags / authors / services / grant-orgs / grant-users。三个 facet 端点支持 chip 渲染。 |
+| **AI 生成** | 从 prompt、源代码或 OpenAPI spec 生成全新技能 —— 全部 SSE 流式,agent 边产生边收到 token。 |
+| **GitHub link + sync** | 把 Ornn 技能关联到 public GitHub 仓库的某个文件夹。从 GitHub 同步回 Ornn 时,先 dry-run 预览改动 + 用户确认,再 bump 版本。 |
+| **沙箱试验场** | 安装前完整试用技能。chrono-sandbox 跑脚本,LLM 看结果。Server-side tool-use loop —— 一次 SSE 调用搞定。 |
+| **审计作为被动风险标签** | 每个技能带 verdict(`green` / `yellow` / `red`)。审计由 owner 触发;verdict 只是装饰技能,从来不阻塞分享。技能 verdict 翻成 `yellow` / `red` 时,所有消费者会自动收到通知。 |
+| **NyxID 身份 + ACL** | API 边缘有真实的 per-user / per-org 身份。Per-skill ACL:私有 / 分享给用户 / 分享给组织 / 公开。技能也能绑定到 NyxID service —— 绑定到 admin 层级会把技能标成 *system skill*(强制 public)。 |
+| **分析** | Pull 数(api / web / playground 来源拆分),每个版本的执行 telemetry。 |
+| **通知** | `audit.completed` 给 owner;`audit.risky_for_consumer` 在 verdict 翻 `yellow` / `red` 时扇出给消费者。 |
 
-### 沙箱试验场
+## Ornn 给谁用?
 
-Ornn 提供沙箱试验场，让 agent（或代为操作的人类）在投入使用前完整试用任意技能。试验场会把技能注入 LLM 上下文；对于带代码或脚本的技能，会集成 **chrono-sandbox** 执行并返回结果。
-
-- 隔离、安全的执行环境
-- Node.js 和 Python 运行时
-- 依赖管理
-- 文件产物检索
-- 环境变量注入
-
-## Ornn 的目标用户
-
-| 用户类型 | 使用场景 |
-|----------|----------|
-| **AI Agent**（主要客户） | 通过 HTTP / MCP 直接调用 Ornn 管理自己的技能生命周期 — 拉取 `ornn-agent-manual` 系统技能：`GET /api/v1/skills/ornn-agent-manual/json` |
-| **Skill Owner / 管理员** | 通过 GUI 管理自己的技能、权限和审计 — [Web 用户快速入门](/docs?section=qs-web-user) |
-| **平台运维** | 了解各个组件运行在哪里 — [系统架构](/docs?section=system-architecture) · [外部集成](/docs?section=external-integrations) |
+| 用户 | 从哪里开始 |
+|---|---|
+| **AI agents** *(主要客户)* — 通过 HTTP 或 MCP 调 Ornn | [Quick Start → Agent Manual](/docs?section=qs-agent-manual) |
+| **Skill owner & 平台管理员** — 通过 GUI 管理技能、权限、审计 | [Quick Start → Web Users](/docs?section=qs-web-user) |
