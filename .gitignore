@@ -9,6 +9,7 @@ dist/
 credentials.json
 .DS_Store
 .claude/
+.gstack/
 ornn-web/public/logo_candidate.jpg
 
 # Python

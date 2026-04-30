@@ -32,6 +32,8 @@ import { useStartAudit, useAuditSummaryByVersion } from "@/hooks/useAudit";
 import { useSkillPulls } from "@/hooks/useAnalytics";
 import { SkillVersionList } from "@/components/skill/SkillVersionList";
 import { PermissionsModal } from "@/components/skill/PermissionsModal";
+import { AdvancedOptionsModal } from "@/components/skill/AdvancedOptionsModal";
+import { VersionDiffModal } from "@/components/skill/VersionDiffModal";
 import {
   useSkill,
   useDeleteSkill,
@@ -155,6 +157,7 @@ export function SkillDetailPage() {
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showPermissionsModal, setShowPermissionsModal] = useState(false);
+  const [showAdvancedModal, setShowAdvancedModal] = useState(false);
   const [showSaveConfirm, setShowSaveConfirm] = useState(false);
   const [showAuditStartedModal, setShowAuditStartedModal] = useState(false);
   const [editedContents, setEditedContents] = useState<Map<string, string>>(new Map());
@@ -162,10 +165,14 @@ export function SkillDetailPage() {
   const [deletedPaths, setDeletedPaths] = useState<Set<string>>(new Set());
   const [skipValidation, setSkipValidation] = useState(false);
   const [showVersions, setShowVersions] = useState(false);
+  const [showVersionDiff, setShowVersionDiff] = useState(false);
   const hasChanges = editedContents.size > 0 || addedPaths.length > 0 || deletedPaths.size > 0;
 
   // Reset version expansion when skill changes.
-  useEffect(() => { setShowVersions(false); }, [skill?.guid]);
+  useEffect(() => {
+    setShowVersions(false);
+    setShowVersionDiff(false);
+  }, [skill?.guid]);
 
   const handleContentChange = useCallback((fileId: string, content: string) => {
     setEditedContents((prev) => {
@@ -412,7 +419,7 @@ export function SkillDetailPage() {
             source={skill.source}
             canRefresh={isOwner || isAdminUser}
             isRefreshing={refreshMutation.isPending}
-            onRefresh={() => refreshMutation.mutate(skill.guid)}
+            onRefresh={() => refreshMutation.mutate({ guid: skill.guid })}
           />
         )}
 
@@ -480,35 +487,20 @@ export function SkillDetailPage() {
         />
 
         {/* ── Main grid ── */}
-        <main className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+        {/* Two-column layout (lg+). Both columns get the *exact same*
+            explicit height ladder so they end at the same y-pixel —
+            stretch via flex was inconsistent because something in
+            the page/PageTransition chain was letting the right rail
+            grow past the row. Belt + braces: explicit h on both. */}
+        <main className="flex flex-col gap-4 lg:flex-row">
 
-          {/* Left: tabs + content */}
-          <section className="flex min-h-[640px] flex-col overflow-hidden rounded-md border border-subtle bg-card shadow-[0_2px_8px_-4px_rgba(26,24,18,0.06)] dark:shadow-[0_2px_12px_-6px_rgba(0,0,0,0.45)]">
-            <div className="flex shrink-0 border-b border-subtle px-3" role="tablist">
-              <button
-                type="button"
-                role="tab"
-                aria-selected="true"
-                className="-mb-px border-b-2 border-accent px-4 py-3.5 font-mono text-[11px] uppercase tracking-widest text-strong"
-              >
-                {t("skillDetail.tabContent", "Skill content")}
-              </button>
-              <Link
-                to={`/skills/${encodeURIComponent(skill.name || skill.guid)}/audits${skill.version ? `?version=${encodeURIComponent(skill.version)}` : ""}`}
-                role="tab"
-                aria-selected="false"
-                className="-mb-px border-b-2 border-transparent px-4 py-3.5 font-mono text-[11px] uppercase tracking-widest text-meta transition-colors hover:text-strong"
-              >
-                {t("skillDetail.tabAuditHistory", "Audit history")}
-              </Link>
-            </div>
-
-            {/* Toolbar */}
+          {/* Left: tabs + content. */}
+          <section className="flex min-h-0 flex-col overflow-hidden rounded-md border border-subtle bg-card shadow-[0_2px_8px_-4px_rgba(26,24,18,0.06)] lg:h-[80vh] lg:min-h-[640px] lg:max-h-[calc(100vh-140px)] lg:flex-1 lg:min-w-0 dark:shadow-[0_2px_12px_-6px_rgba(0,0,0,0.45)]">
+            {/* Toolbar — VersionPicker carries its own "Version" label, so
+                no outer label here (we used to render two). Audit history
+                lives in the right-rail card now. */}
             <div className="flex shrink-0 items-center justify-between border-b border-subtle bg-elevated px-4 py-3">
               <div className="flex items-center gap-3">
-                <span className="font-mono text-[10px] uppercase tracking-widest text-meta">
-                  {t("skillDetail.version", "Version")}
-                </span>
                 {versionList.length > 0 && (
                   <VersionPicker
                     versions={versionList}
@@ -556,8 +548,11 @@ export function SkillDetailPage() {
             </div>
           </section>
 
-          {/* Right rail */}
-          <aside className="flex flex-col gap-4">
+          {/* Right rail — same explicit height ladder as the left so
+              both columns end at the same y-pixel. Cards inside scroll
+              via `overflow-y-auto` when their stacked height exceeds
+              the bounded box. */}
+          <aside className="flex flex-col gap-4 min-h-0 lg:h-[80vh] lg:min-h-[640px] lg:max-h-[calc(100vh-140px)] lg:w-[320px] lg:shrink-0 lg:overflow-y-auto lg:pr-1">
 
             {/* ── Audit card ── */}
             <section className="rounded-md border border-subtle bg-card p-5 shadow-[0_2px_8px_-4px_rgba(26,24,18,0.06)] dark:shadow-[0_2px_12px_-6px_rgba(0,0,0,0.45)]">
@@ -598,51 +593,6 @@ export function SkillDetailPage() {
               </div>
             </section>
 
-            {/* ── Visibility card ── */}
-            <section className="rounded-md border border-subtle bg-card p-5 shadow-[0_2px_8px_-4px_rgba(26,24,18,0.06)] dark:shadow-[0_2px_12px_-6px_rgba(0,0,0,0.45)]">
-              <h3 className="mb-3.5 flex items-center gap-2 border-b border-dashed border-subtle pb-3 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-meta">
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
-                  <circle cx="12" cy="12" r="9" /><line x1="3" y1="12" x2="21" y2="12" />
-                  <path d="M12 3a14 14 0 0 1 4 9 14 14 0 0 1-4 9 14 14 0 0 1-4-9 14 14 0 0 1 4-9z" />
-                </svg>
-                {t("skillDetail.cardVisibility", "Visibility")}
-              </h3>
-              <span className={`mb-3 inline-flex items-center gap-1.5 rounded-sm border px-2.5 py-1 font-mono text-[11px] uppercase tracking-wider ${skill.isPrivate ? "border-info/40 bg-info-soft text-info" : "border-info/40 bg-info-soft text-info"}`}>
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  {skill.isPrivate
-                    ? <path d="M12 2a5 5 0 0 0-5 5v3H5a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2h-2V7a5 5 0 0 0-5-5z" />
-                    : <><circle cx="12" cy="12" r="9" /><line x1="3" y1="12" x2="21" y2="12" /></>}
-                </svg>
-                {skill.isPrivate ? t("common.private", "Private") : t("common.public", "Public")}
-              </span>
-              <ul className="space-y-1.5 font-reading text-sm text-body">
-                <li className="flex items-baseline gap-2.5">
-                  <span className="min-w-[18px] text-right font-mono text-sm font-semibold text-strong">
-                    {skill.sharedWithUsers.length}
-                  </span>
-                  <span className="text-xs text-meta">{t("skillDetail.shareUsers", "users")}</span>
-                </li>
-                <li className="flex items-baseline gap-2.5">
-                  <span className="min-w-[18px] text-right font-mono text-sm font-semibold text-strong">
-                    {skill.sharedWithOrgs.length}
-                  </span>
-                  <span className="text-xs text-meta">{t("skillDetail.shareOrgs", "organizations")}</span>
-                </li>
-              </ul>
-              {isOwner && (
-                <div className="mt-3.5">
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    className="w-full"
-                    onClick={() => setShowPermissionsModal(true)}
-                  >
-                    {t("skillDetail.managePermissions", "Manage permissions")}
-                  </Button>
-                </div>
-              )}
-            </section>
-
             {/* ── Versions card ── */}
             {versionList.length > 0 && (
               <section className="rounded-md border border-subtle bg-card p-5 shadow-[0_2px_8px_-4px_rgba(26,24,18,0.06)] dark:shadow-[0_2px_12px_-6px_rgba(0,0,0,0.45)]">
@@ -676,49 +626,246 @@ export function SkillDetailPage() {
                 <div className="mt-3.5 flex flex-col gap-2">
                   <button
                     type="button"
-                    onClick={() => setShowVersions((v) => !v)}
+                    onClick={() => setShowVersions(true)}
                     className="inline-flex items-center gap-1 self-start py-1 font-mono text-[10px] uppercase tracking-widest text-accent transition-all hover:text-accent-muted hover:gap-2"
                   >
-                    {showVersions
-                      ? t("skillDetail.hideVersions", "Hide all versions")
-                      : t("skillDetail.browseVersions", "Browse all versions")}{" "}
-                    →
+                    {t("skillDetail.browseVersions", "Browse all versions")} →
                   </button>
                 </div>
-                {showVersions && (
-                  <div className="mt-3 border-t border-dashed border-subtle pt-3">
-                    <SkillVersionList
-                      versions={versionList}
-                      currentVersion={skill.version}
-                      onSelect={(v) => handleVersionChange(v === latestVersion ? null : v)}
-                      canManage={canManageVersions}
-                      onToggleDeprecation={handleToggleDeprecation}
-                      isMutating={deprecationMutation.isPending}
-                      isDeleting={deleteVersionMutation.isPending}
-                      auditSummary={auditSummaryByVersion}
-                      onDeleteVersion={async (version) => {
-                        try {
-                          await deleteVersionMutation.mutateAsync(version);
-                          if (skill.version === version) handleVersionChange(null);
+              </section>
+            )}
+
+            {/* ── Visibility card ── */}
+            <section className="rounded-md border border-subtle bg-card p-5 shadow-[0_2px_8px_-4px_rgba(26,24,18,0.06)] dark:shadow-[0_2px_12px_-6px_rgba(0,0,0,0.45)]">
+              <h3 className="mb-3.5 flex items-center gap-2 border-b border-dashed border-subtle pb-3 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-meta">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                  <circle cx="12" cy="12" r="9" /><line x1="3" y1="12" x2="21" y2="12" />
+                  <path d="M12 3a14 14 0 0 1 4 9 14 14 0 0 1-4 9 14 14 0 0 1-4-9 14 14 0 0 1 4-9z" />
+                </svg>
+                {t("skillDetail.cardVisibility", "Visibility")}
+              </h3>
+              {(() => {
+                // Visibility ladder:
+                //   public  — `isPrivate: false`
+                //   limited — `isPrivate: true` AND at least one explicit
+                //             grant (user or org)
+                //   private — `isPrivate: true` AND no grants — only the
+                //             author + platform admins can see it.
+                const hasGrants =
+                  skill.sharedWithUsers.length > 0 || skill.sharedWithOrgs.length > 0;
+                const tier: "public" | "limited" | "private" = !skill.isPrivate
+                  ? "public"
+                  : hasGrants
+                    ? "limited"
+                    : "private";
+                const tierClass: Record<typeof tier, string> = {
+                  public: "border-success/40 bg-success-soft text-success",
+                  limited: "border-warning/40 bg-warning-soft text-warning",
+                  private: "border-info/40 bg-info-soft text-info",
+                };
+                const tierLabel: Record<typeof tier, string> = {
+                  public: t("common.public", "Public"),
+                  limited: t("common.limited", "Limited access"),
+                  private: t("common.private", "Private"),
+                };
+                return (
+                  <span
+                    className={`mb-3 inline-flex items-center gap-1.5 rounded-sm border px-2.5 py-1 font-mono text-[11px] uppercase tracking-wider ${tierClass[tier]}`}
+                  >
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      {tier === "public" ? (
+                        <>
+                          <circle cx="12" cy="12" r="9" />
+                          <line x1="3" y1="12" x2="21" y2="12" />
+                        </>
+                      ) : tier === "limited" ? (
+                        <>
+                          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                          <circle cx="9" cy="7" r="4" />
+                          <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                          <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                        </>
+                      ) : (
+                        <path d="M12 2a5 5 0 0 0-5 5v3H5a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2h-2V7a5 5 0 0 0-5-5z" />
+                      )}
+                    </svg>
+                    {tierLabel[tier]}
+                  </span>
+                );
+              })()}
+              <ul className="space-y-1.5 font-reading text-sm text-body">
+                <li className="flex items-baseline gap-2.5">
+                  <span className="min-w-[18px] text-right font-mono text-sm font-semibold text-strong">
+                    {skill.sharedWithUsers.length}
+                  </span>
+                  <span className="text-xs text-meta">{t("skillDetail.shareUsers", "users")}</span>
+                </li>
+                <li className="flex items-baseline gap-2.5">
+                  <span className="min-w-[18px] text-right font-mono text-sm font-semibold text-strong">
+                    {skill.sharedWithOrgs.length}
+                  </span>
+                  <span className="text-xs text-meta">{t("skillDetail.shareOrgs", "organizations")}</span>
+                </li>
+              </ul>
+              {isOwner && (
+                <div className="mt-3.5">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="w-full"
+                    onClick={() => setShowPermissionsModal(true)}
+                  >
+                    {t("skillDetail.managePermissions", "Manage permissions")}
+                  </Button>
+                </div>
+              )}
+            </section>
+
+            {/* ── Advanced options ── click-to-open card. Settings UI
+                lives in `AdvancedOptionsModal` (settings-page-style:
+                left nav of categories, right pane of selected
+                category's content). */}
+            {isOwner && (
+              <button
+                type="button"
+                onClick={() => setShowAdvancedModal(true)}
+                className="flex w-full items-center justify-between gap-2 rounded-md border border-subtle bg-card p-5 text-left font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-meta shadow-[0_2px_8px_-4px_rgba(26,24,18,0.06)] transition-colors hover:border-strong-edge hover:text-strong dark:shadow-[0_2px_12px_-6px_rgba(0,0,0,0.45)]"
+              >
+                <span className="flex items-center gap-2">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                    <circle cx="12" cy="12" r="3" />
+                    <path d="M12 1v6m0 10v6m11-11h-6m-10 0H1m17.66-7.66l-4.24 4.24M6.34 17.66l-4.24 4.24m15.56 0l-4.24-4.24M6.34 6.34L2.1 2.1" />
+                  </svg>
+                  {t("skillDetail.cardAdvanced", "Advanced options")}
+                </span>
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                  <polyline points="9 18 15 12 9 6" />
+                </svg>
+              </button>
+            )}
+
+            {/* ── Metadata card ── identity + tags + source. Filler-
+                with-purpose: makes the right rail visually full
+                without resorting to an invisible spacer. */}
+            <section className="rounded-md border border-subtle bg-card p-5 shadow-[0_2px_8px_-4px_rgba(26,24,18,0.06)] dark:shadow-[0_2px_12px_-6px_rgba(0,0,0,0.45)]">
+              <h3 className="mb-3.5 flex items-center gap-2 border-b border-dashed border-subtle pb-3 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-meta">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                  <line x1="3" y1="6" x2="21" y2="6" />
+                  <line x1="3" y1="12" x2="21" y2="12" />
+                  <line x1="3" y1="18" x2="21" y2="18" />
+                </svg>
+                {t("skillDetail.cardMetadata", "Metadata")}
+              </h3>
+
+              <dl className="space-y-2.5 font-reading text-sm text-body">
+                {(() => {
+                  const category =
+                    typeof (skill.metadata as { category?: unknown })?.category === "string"
+                      ? ((skill.metadata as { category: string }).category)
+                      : null;
+                  return category ? (
+                    <div className="flex items-baseline justify-between gap-2">
+                      <dt className="font-mono text-[10px] uppercase tracking-widest text-meta">
+                        {t("skillDetail.metaCategory", "Category")}
+                      </dt>
+                      <dd className="text-right font-mono text-xs text-strong">{category}</dd>
+                    </div>
+                  ) : null;
+                })()}
+                {skill.tags && skill.tags.length > 0 && (
+                  <div>
+                    <dt className="mb-1.5 font-mono text-[10px] uppercase tracking-widest text-meta">
+                      {t("skillDetail.metaTags", "Tags")}
+                    </dt>
+                    <dd className="flex flex-wrap gap-1.5">
+                      {skill.tags.map((tag) => (
+                        <span
+                          key={tag}
+                          className="inline-flex items-center rounded-sm border border-subtle bg-elevated px-1.5 py-0.5 font-mono text-[10px] tracking-wider text-body"
+                        >
+                          {tag}
+                        </span>
+                      ))}
+                    </dd>
+                  </div>
+                )}
+                {skill.license && (
+                  <div className="flex items-baseline justify-between gap-2">
+                    <dt className="font-mono text-[10px] uppercase tracking-widest text-meta">
+                      {t("skillDetail.metaLicense", "License")}
+                    </dt>
+                    <dd className="text-right font-mono text-xs text-strong">{skill.license}</dd>
+                  </div>
+                )}
+                {skill.compatibility && (
+                  <div>
+                    <dt className="mb-1 font-mono text-[10px] uppercase tracking-widest text-meta">
+                      {t("skillDetail.metaCompatibility", "Compatibility")}
+                    </dt>
+                    <dd className="font-mono text-[11px] text-body break-words">
+                      {skill.compatibility}
+                    </dd>
+                  </div>
+                )}
+                {skill.source && skill.source.type === "github" && (
+                  <div>
+                    <dt className="mb-1 font-mono text-[10px] uppercase tracking-widest text-meta">
+                      {t("skillDetail.metaSource", "Source")}
+                    </dt>
+                    <dd className="font-mono text-[11px] text-body">
+                      <a
+                        href={`https://github.com/${skill.source.repo}`}
+                        target="_blank"
+                        rel="noreferrer noopener"
+                        className="text-accent transition-colors hover:text-accent-muted"
+                      >
+                        {skill.source.repo}
+                      </a>
+                      {skill.source.ref && (
+                        <span className="text-meta"> @ {skill.source.ref}</span>
+                      )}
+                    </dd>
+                  </div>
+                )}
+                <div className="flex items-baseline justify-between gap-2">
+                  <dt className="font-mono text-[10px] uppercase tracking-widest text-meta">
+                    {t("skillDetail.metaUpdated", "Updated")}
+                  </dt>
+                  <dd className="text-right font-mono text-xs text-strong">
+                    {formatDateSGT(skill.updatedOn)}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="mb-1 font-mono text-[10px] uppercase tracking-widest text-meta">
+                    {t("skillDetail.metaGuid", "GUID")}
+                  </dt>
+                  <dd>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (typeof navigator !== "undefined" && navigator.clipboard) {
+                          void navigator.clipboard.writeText(skill.guid);
                           addToast({
                             type: "success",
-                            message: t("skillDetail.versionDeleted", "Version v{{version}} deleted", { version }),
-                          });
-                        } catch (err) {
-                          addToast({
-                            type: "error",
-                            message:
-                              err instanceof Error
-                                ? err.message
-                                : t("skillDetail.versionDeleteFailed", "Failed to delete version"),
+                            message: t("skillDetail.guidCopied", "GUID copied") as string,
                           });
                         }
                       }}
-                    />
-                  </div>
-                )}
-              </section>
-            )}
+                      className="block w-full truncate rounded-sm border border-subtle bg-elevated px-2 py-1 text-left font-mono text-[11px] text-body transition-colors hover:border-strong-edge hover:text-strong"
+                      title={skill.guid}
+                    >
+                      {skill.guid}
+                    </button>
+                  </dd>
+                </div>
+              </dl>
+            </section>
+
+            {/* Spacer — eats any remaining vertical space when the cards
+                still don't fill the 80vh column, so Danger zone hugs
+                the bottom and both columns end at the same y-pixel.
+                Collapses to 0 when overflow-y-auto kicks in. */}
+            <div className="hidden lg:block lg:flex-1 lg:min-h-0" aria-hidden />
 
             {/* ── Danger zone (owner only) ── */}
             {isOwner && (
@@ -789,6 +936,66 @@ export function SkillDetailPage() {
         </div>
       </Modal>
 
+      {/* ── All versions browser ── */}
+      <Modal
+        isOpen={showVersions}
+        onClose={() => setShowVersions(false)}
+        title={t("skillDetail.versionsTitle", "All versions") as string}
+        className="!max-w-3xl"
+      >
+        {versionList.length >= 2 && (
+          <div className="mb-4 flex justify-end">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setShowVersionDiff(true)}
+            >
+              {t("versionDiff.openButton", "Compare versions")}
+            </Button>
+          </div>
+        )}
+        <SkillVersionList
+          versions={versionList}
+          currentVersion={skill.version}
+          onSelect={(v) => {
+            handleVersionChange(v === latestVersion ? null : v);
+            setShowVersions(false);
+          }}
+          canManage={canManageVersions}
+          onToggleDeprecation={handleToggleDeprecation}
+          isMutating={deprecationMutation.isPending}
+          isDeleting={deleteVersionMutation.isPending}
+          auditSummary={auditSummaryByVersion}
+          onDeleteVersion={async (version) => {
+            try {
+              await deleteVersionMutation.mutateAsync(version);
+              if (skill.version === version) handleVersionChange(null);
+              addToast({
+                type: "success",
+                message: t("skillDetail.versionDeleted", "Version v{{version}} deleted", { version }),
+              });
+            } catch (err) {
+              addToast({
+                type: "error",
+                message:
+                  err instanceof Error
+                    ? err.message
+                    : t("skillDetail.versionDeleteFailed", "Failed to delete version"),
+              });
+            }
+          }}
+        />
+      </Modal>
+
+      {/* ── Version diff modal ── */}
+      <VersionDiffModal
+        isOpen={showVersionDiff}
+        onClose={() => setShowVersionDiff(false)}
+        idOrName={skill.guid}
+        versions={versionList}
+        currentVersion={skill.version}
+      />
+
       {/* ── Delete confirmation modal ── */}
       <Modal
         isOpen={showDeleteConfirm}
@@ -813,6 +1020,15 @@ export function SkillDetailPage() {
         <PermissionsModal
           isOpen={showPermissionsModal}
           onClose={() => setShowPermissionsModal(false)}
+          skill={skill}
+        />
+      )}
+
+      {/* ── Advanced options popup ── */}
+      {isOwner && (
+        <AdvancedOptionsModal
+          isOpen={showAdvancedModal}
+          onClose={() => setShowAdvancedModal(false)}
           skill={skill}
         />
       )}

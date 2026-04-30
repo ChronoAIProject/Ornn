@@ -80,6 +80,73 @@ export function normalizePath(path: string | undefined): string {
 }
 
 /**
+ * Parse a GitHub URL into `{ repo, ref, path }`. Accepts the canonical
+ * tree-link form a user copies from a folder page:
+ *
+ *   https://github.com/<owner>/<repo>/tree/<ref>/<sub/dir/path>
+ *   https://github.com/<owner>/<repo>/tree/<ref>
+ *   https://github.com/<owner>/<repo>             (no tree, no ref → repo root)
+ *
+ * Rejects `blob/` URLs (they point at a single file, not a directory) and
+ * any URL that isn't on `github.com`. Branch names with slashes (e.g.
+ * `feature/foo-bar`) are NOT supported because the URL alone is ambiguous
+ * — `tree/feature/foo-bar/skills/x` could mean ref=feature/foo-bar
+ * path=skills/x OR ref=feature path=foo-bar/skills/x. The user can fall
+ * back to the explicit `{ repo, ref, path }` form for those.
+ */
+export function parseGithubUrl(rawUrl: string): { repo: string; ref?: string; path?: string } {
+  const url = rawUrl.trim();
+  if (!url) throw new Error("GitHub URL is empty");
+
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error(`Invalid GitHub URL '${rawUrl}'`);
+  }
+  if (parsed.host !== "github.com" && parsed.host !== "www.github.com") {
+    throw new Error(`Expected a github.com URL, got '${parsed.host}'`);
+  }
+
+  // Drop leading slash, split, drop trailing empty segment ("/foo/bar/" → ["foo","bar"]).
+  const segments = parsed.pathname.replace(/^\/+|\/+$/g, "").split("/").filter(Boolean);
+  if (segments.length < 2) {
+    throw new Error("GitHub URL must include both <owner> and <repo>");
+  }
+
+  const [owner, repoName, tree, ...rest] = segments;
+  const repo = `${owner}/${repoName}`;
+  normalizeRepoIdentifier(repo); // throws on invalid characters
+
+  // Bare repo URL: https://github.com/owner/repo (no tree segment).
+  if (tree === undefined) {
+    return { repo };
+  }
+
+  if (tree === "blob") {
+    throw new Error(
+      "GitHub blob URL points at a single file. Use the folder URL ('/tree/<ref>/<path>') of the skill root instead.",
+    );
+  }
+  if (tree !== "tree") {
+    throw new Error(
+      `Unsupported GitHub URL shape: '/${tree}/...'. Use the folder URL ('/tree/<ref>/<path>').`,
+    );
+  }
+
+  if (rest.length === 0) {
+    throw new Error("GitHub tree URL is missing the <ref> segment");
+  }
+
+  // First segment after `/tree/` is the ref. We accept simple refs only
+  // (no slashes) — see the doc comment above. Anything else and we make
+  // the user provide repo/ref/path explicitly.
+  const ref = rest[0];
+  const path = rest.slice(1).join("/");
+  return { repo, ref, path: path || undefined };
+}
+
+/**
  * Fetch and package a skill from a public GitHub repo.
  */
 export async function fetchSkillFromGitHub(

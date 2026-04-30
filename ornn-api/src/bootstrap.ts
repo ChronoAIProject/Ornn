@@ -29,6 +29,7 @@ import { StorageClient } from "./clients/storageClient";
 import { SandboxClient } from "./clients/sandboxClient";
 import { NyxLlmClient } from "./clients/nyxid/llm";
 import { NyxidOrgsClient } from "./clients/nyxid/orgs";
+import { NyxidServiceClient } from "./clients/nyxid/service";
 import { NyxidSaTokenProvider } from "./clients/nyxid/base";
 
 // Domain: Skill CRUD
@@ -173,6 +174,10 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   //   sharedWithOrgs into member rosters when sending consumer notifications.
   const nyxidOrgsClient = new NyxidOrgsClient(config.nyxidBaseUrl, saTokenProvider);
 
+  // ---- NyxID Service Client — used by the skill→service tie endpoint
+  //   and the picker (`/me/nyxid-services`). Per-token cached.
+  const nyxidServiceClient = new NyxidServiceClient(config.nyxidBaseUrl);
+
   // ---- Domain: Skill Audit ----
   const auditRepo = new AuditRepository(db);
   void auditRepo.ensureIndexes().catch((err) =>
@@ -216,6 +221,7 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
     analyticsService,
     maxFileSize: config.maxPackageSizeBytes,
     activityRepo,
+    nyxidServiceClient,
   });
 
   // ---- Domain: Skill Search ----
@@ -227,7 +233,6 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
 
   const searchRoutes = createSearchRoutes({
     searchService,
-    nyxidBaseUrl: config.nyxidBaseUrl,
     skillRepo,
   });
 
@@ -353,6 +358,7 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
     nyxidBaseUrl: config.nyxidBaseUrl,
     skillRepo,
     activityRepo,
+    nyxidServiceClient,
   }));
   apiApp.route("/", createUserRoutes({ activityRepo }));
   app.route("/api/v1", apiApp);

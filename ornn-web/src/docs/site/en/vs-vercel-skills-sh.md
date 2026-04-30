@@ -1,3 +1,9 @@
+---
+version: 1.0.0
+lastUpdated: 2026-04-28
+---
+
+
 # Ornn vs. Vercel `skills.sh`
 
 Both projects host AI agent skills. They solve different problems. This page is about when each one fits.

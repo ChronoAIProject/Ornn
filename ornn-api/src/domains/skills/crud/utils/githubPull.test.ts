@@ -4,7 +4,79 @@ import {
   fetchSkillFromGitHub,
   normalizePath,
   normalizeRepoIdentifier,
+  parseGithubUrl,
 } from "./githubPull";
+
+describe("parseGithubUrl", () => {
+  test("extracts repo + ref + path from a /tree/ URL", () => {
+    expect(
+      parseGithubUrl(
+        "https://github.com/ChronoAIProject/Ornn/tree/develop/skills/ornn-agent-manual-cli",
+      ),
+    ).toEqual({
+      repo: "ChronoAIProject/Ornn",
+      ref: "develop",
+      path: "skills/ornn-agent-manual-cli",
+    });
+  });
+
+  test("/tree/<ref> with no path → path undefined", () => {
+    expect(parseGithubUrl("https://github.com/owner/repo/tree/main")).toEqual({
+      repo: "owner/repo",
+      ref: "main",
+    });
+  });
+
+  test("bare repo URL → { repo } only", () => {
+    expect(parseGithubUrl("https://github.com/owner/repo")).toEqual({
+      repo: "owner/repo",
+    });
+  });
+
+  test("trailing slash is stripped", () => {
+    expect(parseGithubUrl("https://github.com/owner/repo/")).toEqual({
+      repo: "owner/repo",
+    });
+  });
+
+  test("rejects blob URLs (point at file, not folder)", () => {
+    expect(() =>
+      parseGithubUrl("https://github.com/owner/repo/blob/main/SKILL.md"),
+    ).toThrow(/blob URL/);
+  });
+
+  test("rejects non-github hosts", () => {
+    expect(() => parseGithubUrl("https://gitlab.com/owner/repo/tree/main")).toThrow(
+      /github\.com/,
+    );
+  });
+
+  test("rejects empty URL", () => {
+    expect(() => parseGithubUrl("")).toThrow(/empty/);
+  });
+
+  test("rejects URLs missing the repo name", () => {
+    expect(() => parseGithubUrl("https://github.com/owner")).toThrow(/<owner> and <repo>/);
+  });
+
+  test("rejects /tree/ without a ref segment", () => {
+    expect(() => parseGithubUrl("https://github.com/owner/repo/tree")).toThrow(
+      /missing the <ref>/,
+    );
+  });
+
+  test("multi-segment path is preserved", () => {
+    expect(
+      parseGithubUrl("https://github.com/owner/repo/tree/main/a/b/c"),
+    ).toEqual({ repo: "owner/repo", ref: "main", path: "a/b/c" });
+  });
+
+  test("accepts www.github.com host alias", () => {
+    expect(
+      parseGithubUrl("https://www.github.com/owner/repo/tree/main/x"),
+    ).toEqual({ repo: "owner/repo", ref: "main", path: "x" });
+  });
+});
 
 describe("normalizeRepoIdentifier", () => {
   test("accepts owner/name", () => {

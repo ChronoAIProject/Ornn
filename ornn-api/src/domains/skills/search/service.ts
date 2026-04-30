@@ -8,19 +8,17 @@
 import type { SkillRepository } from "../crud/repository";
 import type { NyxLlmClient } from "../../../clients/nyxid/llm";
 import type { SkillDocument, SkillSearchItem, SkillSearchResponse } from "../../../shared/types/index";
-import type { UserService } from "../../../clients/nyxid/userServices";
 import pino from "pino";
 
 /**
- * Input params for per-item response enrichment. Passed through the
- * service methods so callers can decide how much context to fetch per
- * request. Anonymous callers pass empty arrays — the enrichment fields
- * degrade gracefully to undefined / "public".
+ * Per-item response enrichment context. The system-skill predicate is
+ * now read off `SkillDocument.isSystemSkill` (cached at tie-time) — no
+ * caller-services slug match. Kept as an interface for future
+ * caller-scoped fields.
  */
 export interface SearchEnrichmentContext {
   callerUserId: string;
   callerOrgIds: string[];
-  callerServices: UserService[];
 }
 
 export type SystemFilter = "any" | "only" | "exclude";
@@ -57,28 +55,23 @@ export class SearchService {
     userOrgIds: string[];
     model?: string;
     /**
-     * Caller's NyxID services (personal + org-inherited). Used for
-     * system-skill detection and filter: a skill whose tags include one
-     * of these slugs is "system" for the caller. Pass `[]` when
-     * unavailable (anonymous, or when NyxID lookup failed).
+     * Tri-state toggle for the System-skill filter. Pushed down to the
+     * DB match stage — `isSystemSkill: true` (cached on the skill doc
+     * at tie-time) is the source of truth.
      */
-    callerServices?: UserService[];
-    /** Tri-state toggle for the System-skill filter. Default `any`. */
     systemFilter?: SystemFilter;
     /** Registry filter-chip constraints. Applied at the DB match level. */
     sharedWithOrgsAny?: string[];
     sharedWithUsersAny?: string[];
     createdByAny?: string[];
+    /** Restrict to skills tied to a specific NyxID service. */
+    nyxidServiceId?: string;
+    /** Skills must have ALL listed tags (AND match). */
+    tagsAll?: string[];
   }): Promise<SkillSearchResponse> {
     const { query, mode, scope, page, pageSize, currentUserId, userOrgIds } = params;
-    const callerServices = params.callerServices ?? [];
     const systemFilter = params.systemFilter ?? "any";
     const startTime = Date.now();
-
-    // Pre-compute the lookup set once per request. `callerServiceSlugs` is
-    // the source of truth for "is this skill a system skill for me?" —
-    // derived from NyxID service slugs, never from a DB field.
-    const serviceSlugSet = new Set(callerServices.map((s) => s.slug));
 
     let skills: SkillDocument[] = [];
     let total = 0;
@@ -87,6 +80,9 @@ export class SearchService {
       sharedWithOrgsAny: params.sharedWithOrgsAny,
       sharedWithUsersAny: params.sharedWithUsersAny,
       createdByAny: params.createdByAny,
+      systemFilter,
+      nyxidServiceId: params.nyxidServiceId,
+      tagsAll: params.tagsAll,
     };
 
     if (mode === "keyword") {
@@ -101,7 +97,9 @@ export class SearchService {
       }
     } else if (mode === "semantic") {
       // Semantic search runs over all skills matching scope and uses the
-      // LLM to rank by full frontmatter metadata.
+      // LLM to rank by full frontmatter metadata. Extra filters
+      // (system/tag/service) are applied post-DB-fetch but pre-LLM so we
+      // don't waste tokens ranking skills the user filtered out.
       const result = await this.semanticSearch({
         query,
         scope,
@@ -110,6 +108,9 @@ export class SearchService {
         model: params.model ?? this.defaultModel,
         page,
         pageSize,
+        systemFilter,
+        nyxidServiceId: params.nyxidServiceId,
+        tagsAll: params.tagsAll,
       });
       skills = result.skills;
       total = result.total;
@@ -118,17 +119,9 @@ export class SearchService {
     const queryTimeMs = Date.now() - startTime;
     logger.info({ mode, scope, query: query.slice(0, 50), total, queryTimeMs }, "Search completed");
 
-    // System-filter is applied post-query. Acceptable for V1 because
-    // most users have < 20 services; pagination skew is small. Future
-    // optimization: push the tag-match into the DB `$match` stage.
-    const enrichedAll = skills.map((s) =>
-      enrichItem(s, {
-        callerUserId: currentUserId,
-        callerOrgIds: userOrgIds,
-        callerServices,
-      }, serviceSlugSet),
+    const items = skills.map((s) =>
+      enrichItem(s, { callerUserId: currentUserId, callerOrgIds: userOrgIds }),
     );
-    const filtered = applySystemFilter(enrichedAll, systemFilter);
     const totalPages = Math.ceil(total / pageSize);
 
     return {
@@ -138,7 +131,7 @@ export class SearchService {
       totalPages,
       page,
       pageSize,
-      items: filtered,
+      items,
     };
   }
 
@@ -155,11 +148,29 @@ export class SearchService {
     model: string;
     page: number;
     pageSize: number;
+    systemFilter: SystemFilter;
+    nyxidServiceId?: string;
+    tagsAll?: string[];
   }): Promise<{ skills: SkillDocument[]; total: number }> {
-    const { query, scope, currentUserId, userOrgIds, model, page, pageSize } = params;
+    const { query, scope, currentUserId, userOrgIds, model, page, pageSize, systemFilter, nyxidServiceId, tagsAll } = params;
 
     // Load all skills matching scope (no pagination — we need all of them).
-    const allSkills = await this.skillRepo.findAllByScope(scope, currentUserId, userOrgIds);
+    const allRaw = await this.skillRepo.findAllByScope(scope, currentUserId, userOrgIds);
+    // Filter the candidate pool *before* paying the LLM round-trip cost.
+    const allSkills = allRaw
+      .filter((s) =>
+        systemFilter === "only"
+          ? s.isSystemSkill === true
+          : systemFilter === "exclude"
+            ? s.isSystemSkill !== true
+            : true,
+      )
+      .filter((s) => !nyxidServiceId || s.nyxidServiceId === nyxidServiceId)
+      .filter((s) => {
+        if (!tagsAll || tagsAll.length === 0) return true;
+        const docTags = new Set(s.metadata?.tags ?? []);
+        return tagsAll.every((t) => docTags.has(t));
+      });
 
     if (allSkills.length === 0) {
       return { skills: [], total: 0 };
@@ -340,8 +351,7 @@ ${JSON.stringify(skillList, null, 2)}`;
  */
 function enrichItem(
   s: SkillDocument,
-  ctx: { callerUserId: string; callerOrgIds: string[]; callerServices: UserService[] },
-  serviceSlugSet: Set<string>,
+  ctx: { callerUserId: string; callerOrgIds: string[] },
 ): SkillSearchItem {
   const tags = s.metadata?.tags ?? [];
 
@@ -361,11 +371,19 @@ function enrichItem(
     }
   }
 
-  const systemTag = tags.find((t) => serviceSlugSet.has(t));
-  const isSystemForMe = systemTag !== undefined;
-  const systemForService = systemTag
-    ? ctx.callerServices.find((svc) => svc.slug === systemTag)
-    : undefined;
+  // System-skill predicate now reads straight off the cached doc field.
+  // `isSystemForMe` retained as a name for back-compat — semantically it
+  // is now "this is a platform system skill" (true for everyone) since
+  // admin-tier ties force the skill public.
+  const isSystemForMe = s.isSystemSkill === true;
+  const systemForService =
+    isSystemForMe && s.nyxidServiceId
+      ? {
+          id: s.nyxidServiceId,
+          slug: s.nyxidServiceSlug ?? "",
+          label: s.nyxidServiceLabel ?? s.nyxidServiceSlug ?? "",
+        }
+      : undefined;
 
   return {
     guid: s.guid,
@@ -382,24 +400,20 @@ function enrichItem(
     myAccessReason,
     sharedViaOrgId,
     isSystemForMe,
-    systemForService: systemForService
-      ? { id: systemForService.id, slug: systemForService.slug, label: systemForService.label }
-      : undefined,
+    systemForService,
     permissionSummary: {
       isPrivate: s.isPrivate,
       sharedUserCount: s.sharedWithUsers.length,
       sharedOrgCount: s.sharedWithOrgs.length,
     },
+    nyxidServiceId: s.nyxidServiceId ?? null,
+    nyxidServiceSlug: s.nyxidServiceSlug ?? null,
+    nyxidServiceLabel: s.nyxidServiceLabel ?? null,
+    isSystemSkill: s.isSystemSkill === true,
+    // Boolean — true when the skill is linked to a GitHub source. The
+    // card uses this to render a small non-clickable GitHub mark in the
+    // badge row. We don't leak the actual repo URL to search results;
+    // the user can drill into the detail page for that.
+    hasGithubSource: !!(s.source && s.source.type === "github"),
   };
-}
-
-/**
- * Post-query `systemFilter` toggle. Applied client-side in the service
- * because the detection depends on the caller's service list (not a DB
- * field). Skew against pagination totals is accepted for V1.
- */
-function applySystemFilter(items: SkillSearchItem[], filter: SystemFilter): SkillSearchItem[] {
-  if (filter === "any") return items;
-  if (filter === "only") return items.filter((i) => i.isSystemForMe);
-  return items.filter((i) => !i.isSystemForMe);
 }

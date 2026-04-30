@@ -1,3 +1,9 @@
+---
+version: 1.0.0
+lastUpdated: 2026-04-28
+---
+
+
 # 什么是 Ornn
 
 ## 概述
@@ -37,6 +43,6 @@ Ornn 提供沙箱试验场，让 agent（或代为操作的人类）在投入使
 
 | 用户类型 | 使用场景 |
 |----------|----------|
-| **AI Agent**（主要客户） | 通过 HTTP / MCP 直接调用 Ornn 管理自己的技能生命周期 — [Agent 手册](/docs?section=agent-manual) |
+| **AI Agent**（主要客户） | 通过 HTTP / MCP 直接调用 Ornn 管理自己的技能生命周期 — 拉取 `ornn-agent-manual` 系统技能：`GET /api/v1/skills/ornn-agent-manual/json` |
 | **Skill Owner / 管理员** | 通过 GUI 管理自己的技能、权限和审计 — [Web 用户快速入门](/docs?section=qs-web-user) |
 | **平台运维** | 了解各个组件运行在哪里 — [系统架构](/docs?section=system-architecture) · [外部集成](/docs?section=external-integrations) |

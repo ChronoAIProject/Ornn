@@ -1,3 +1,9 @@
+---
+version: 1.0.0
+lastUpdated: 2026-04-28
+---
+
+
 # Ornn vs. SkillMP
 
 SkillMP and Ornn both name themselves around AI agent skills. They are not the same kind of product. Knowing which one fits your problem is mostly about knowing whether you're shopping or building.

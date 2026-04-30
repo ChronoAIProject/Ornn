@@ -102,23 +102,27 @@ export function createFormatRoutes(config: FormatRoutesConfig): Hono<{ Variables
 
       const zipBuffer = new Uint8Array(body);
 
-      // Use the service's validation which applies Zod schema validation
+      // `validateZipFormat` returns the full list of rule violations.
+      // An empty array means the package is valid; anything non-empty is what
+      // the client agent needs to fix. Surface the entire list so a single
+      // round-trip tells the caller every problem with their package.
+      let violations: Array<{ rule: string; message: string }>;
       try {
-        await (skillService as any).validateZipFormat(zipBuffer);
-        return c.json({ data: { valid: true }, error: null });
-      } catch (err: any) {
-        if (err?.code === "VALIDATION_FAILED" || err?.code === "FRONTMATTER_VALIDATION_FAILED") {
-          return c.json({
-            data: { valid: false, violations: [{ rule: err.code, message: err.message }] },
-            error: null,
-          });
-        }
-        // If it's a validation-related error, format it
+        violations = await skillService.validateZipFormat(zipBuffer);
+      } catch (err: unknown) {
+        // Catastrophic failures (e.g., corrupted ZIP) — `validateZipFormat`
+        // throws here rather than returning a violations row.
+        const message = err instanceof Error ? err.message : "Validation failed";
         return c.json({
-          data: { valid: false, violations: [{ rule: "unknown", message: err?.message ?? "Validation failed" }] },
+          data: { valid: false, violations: [{ rule: "unexpected-error", message }] },
           error: null,
         });
       }
+
+      if (violations.length === 0) {
+        return c.json({ data: { valid: true, violations: [] }, error: null });
+      }
+      return c.json({ data: { valid: false, violations }, error: null });
     },
   );
 

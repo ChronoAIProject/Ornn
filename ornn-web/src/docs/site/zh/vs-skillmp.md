@@ -1,3 +1,9 @@
+---
+version: 1.0.0
+lastUpdated: 2026-04-28
+---
+
+
 # Ornn 与 SkillMP 的对比
 
 SkillMP 和 Ornn 都把自己定位在 AI agent skill 上，但它们不是同一种产品。判断哪个适合你，主要看你是在"逛"还是在"造"。

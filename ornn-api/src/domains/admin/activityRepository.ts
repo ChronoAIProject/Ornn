@@ -18,7 +18,10 @@ export type ActivityAction =
   | "skill:version_delete"
   | "skill:visibility_change"
   | "skill:permissions_change"
-  | "skill:refresh";
+  | "skill:refresh"
+  | "skill:nyxid_service_tie"
+  | "skill:source_link"
+  | "skill:source_unlink";
 
 export interface ActivityDocument {
   _id: string;
