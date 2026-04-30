@@ -210,7 +210,7 @@ export function Navbar({ className = "" }: NavbarProps) {
             >
               {({ isActive }) =>
                 isActive ? (
-                  <HighlighterMark>{t(item.i18nKey)}</HighlighterMark>
+                  <HighlighterMark className="highlighter-mark--loose">{t(item.i18nKey)}</HighlighterMark>
                 ) : (
                   t(item.i18nKey)
                 )
@@ -388,7 +388,7 @@ export function Navbar({ className = "" }: NavbarProps) {
               >
                 {({ isActive }) =>
                   isActive ? (
-                    <HighlighterMark>{t(item.i18nKey)}</HighlighterMark>
+                    <HighlighterMark className="highlighter-mark--loose">{t(item.i18nKey)}</HighlighterMark>
                   ) : (
                     t(item.i18nKey)
                   )

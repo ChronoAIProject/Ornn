@@ -160,7 +160,7 @@ export function LandingNav() {
             }`}
           >
             {isNavActive("/registry") ? (
-              <HighlighterMark>{t("nav.registry")}</HighlighterMark>
+              <HighlighterMark className="highlighter-mark--loose">{t("nav.registry")}</HighlighterMark>
             ) : (
               t("nav.registry")
             )}
@@ -175,7 +175,7 @@ export function LandingNav() {
             }`}
           >
             {isNavActive("/skills/new") ? (
-              <HighlighterMark>{t("nav.build")}</HighlighterMark>
+              <HighlighterMark className="highlighter-mark--loose">{t("nav.build")}</HighlighterMark>
             ) : (
               t("nav.build")
             )}
@@ -190,7 +190,7 @@ export function LandingNav() {
             }`}
           >
             {isNavActive("/docs") ? (
-              <HighlighterMark>{t("nav.docs")}</HighlighterMark>
+              <HighlighterMark className="highlighter-mark--loose">{t("nav.docs")}</HighlighterMark>
             ) : (
               t("nav.docs")
             )}
@@ -454,7 +454,7 @@ export function LandingNav() {
               }`}
             >
               {isNavActive("/registry") ? (
-                <HighlighterMark>{t("nav.registry")}</HighlighterMark>
+                <HighlighterMark className="highlighter-mark--loose">{t("nav.registry")}</HighlighterMark>
               ) : (
                 t("nav.registry")
               )}
@@ -471,7 +471,7 @@ export function LandingNav() {
               }`}
             >
               {isNavActive("/skills/new") ? (
-                <HighlighterMark>{t("nav.build")}</HighlighterMark>
+                <HighlighterMark className="highlighter-mark--loose">{t("nav.build")}</HighlighterMark>
               ) : (
                 t("nav.build")
               )}
@@ -488,7 +488,7 @@ export function LandingNav() {
               }`}
             >
               {isNavActive("/docs") ? (
-                <HighlighterMark>{t("nav.docs")}</HighlighterMark>
+                <HighlighterMark className="highlighter-mark--loose">{t("nav.docs")}</HighlighterMark>
               ) : (
                 t("nav.docs")
               )}
