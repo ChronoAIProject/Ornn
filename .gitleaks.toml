@@ -1,0 +1,27 @@
+# gitleaks configuration
+#
+# Extends the default ruleset and excludes known false-positives.
+# Source of truth for repo-wide secret-scanning behaviour; edited rather
+# than disabled when a real false-positive shows up so reviewers can see
+# why a string is allowed.
+
+[extend]
+useDefault = true
+
+# Frontend i18n key strings (namespaced dot-notation, e.g.
+# `landing.compare.row2Them`, `skillDetail.metaCategory`) match the
+# generic-api-key rule's entropy threshold even though they're plain
+# constants — never user-supplied, never a secret. Allowlist matches
+# against the candidate secret value itself (default regexTarget).
+#
+# The regex is bounded so it can't accidentally allow a JWT or base64
+# token of the form `header.payload.signature`:
+#   - each segment must START with a letter (JWT segments often start
+#     with an alpha but the bound below also keeps it terse)
+#   - each segment is capped at 32 chars (i18n keys are short; JWT
+#     segments are typically 100+ chars)
+[[allowlists]]
+description = "Frontend i18n key dot-notation strings"
+regexes = [
+  '''^[a-z][a-zA-Z0-9]{0,31}(\.[a-zA-Z][a-zA-Z0-9]{0,31}){2,}$''',
+]
