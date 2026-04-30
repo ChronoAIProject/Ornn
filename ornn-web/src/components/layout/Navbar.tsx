@@ -24,6 +24,7 @@ import { useThemeStore } from "@/stores/themeStore";
 import { logActivity } from "@/services/activityApi";
 import { Logo } from "@/components/brand/Logo";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
+import { HighlighterMark } from "@/pages/landing/HighlighterMark";
 import { config } from "@/config";
 
 function getNyxIdUrl(): string {
@@ -173,9 +174,13 @@ export function Navbar({ className = "" }: NavbarProps) {
   const closeMenu = () => setMenuOpen(false);
   const toggleLang = () => i18n.changeLanguage(i18n.language === "zh" ? "en" : "zh");
 
+  // Active-tab styling: the link text is wrapped in <HighlighterMark>
+  // so the active route gets the same hand-drawn ember wash used on the
+  // landing-page headline. The text itself stays bold + strong-color so
+  // the multiply-blended wash reads cleanly on top.
   const navLinkClass = ({ isActive }: { isActive: boolean }) =>
     `font-text text-[15px] transition-colors duration-150 ${
-      isActive ? "text-accent" : "text-body hover:text-accent"
+      isActive ? "font-semibold text-strong" : "text-body hover:text-accent"
     }`;
 
   return (
@@ -203,7 +208,13 @@ export function Navbar({ className = "" }: NavbarProps) {
               }}
               className={navLinkClass}
             >
-              {t(item.i18nKey)}
+              {({ isActive }) =>
+                isActive ? (
+                  <HighlighterMark>{t(item.i18nKey)}</HighlighterMark>
+                ) : (
+                  t(item.i18nKey)
+                )
+              }
             </NavLink>
           ))}
         </div>
@@ -371,11 +382,17 @@ export function Navbar({ className = "" }: NavbarProps) {
                 tabIndex={menuOpen ? 0 : -1}
                 className={({ isActive }) =>
                   `border-b border-subtle py-3 font-text text-[16px] transition-colors ${
-                    isActive ? "text-accent" : "text-body hover:text-accent"
+                    isActive ? "font-semibold text-strong" : "text-body hover:text-accent"
                   }`
                 }
               >
-                {t(item.i18nKey)}
+                {({ isActive }) =>
+                  isActive ? (
+                    <HighlighterMark>{t(item.i18nKey)}</HighlighterMark>
+                  ) : (
+                    t(item.i18nKey)
+                  )
+                }
               </NavLink>
             ))}
 

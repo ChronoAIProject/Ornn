@@ -11,7 +11,7 @@ export type FeaturedSkill = {
   tag: string;
   name: string;
   desc: string;
-  install: string;
+  tags: string[];
   author: string;
   version: string;
   date: string;
@@ -44,7 +44,7 @@ export const FEATURED_DEFAULT: FeaturedSkill[] = [
     tag: "FEATURED · search",
     name: "ornn-search-and-run",
     desc: "Find any skill on the registry from inside your agent — semantic ranking via NyxID MCP, loaded into context on demand, no separate install step.",
-    install: 'ornn-search-and-run "<query>"',
+    tags: ["search", "discovery", "mcp"],
     author: "@ornn",
     version: "v 0.9.1",
     date: "24 Apr",
@@ -54,7 +54,7 @@ export const FEATURED_DEFAULT: FeaturedSkill[] = [
     tag: "FEATURED · publish",
     name: "ornn-upload",
     desc: "Package a local skill folder and push it to the registry — versioned, audited, ready for any agent that consumes the format.",
-    install: "ornn-upload <skill-folder>",
+    tags: ["publish", "registry", "versioning"],
     author: "@ornn",
     version: "v 0.9.0",
     date: "20 Apr",
@@ -64,7 +64,7 @@ export const FEATURED_DEFAULT: FeaturedSkill[] = [
     tag: "FEATURED · build",
     name: "ornn-build",
     desc: "Meta-skill: describe the task in plain English, ornn-build drafts a working SKILL.md you can iterate on, sandbox, and publish.",
-    install: 'ornn-build "<prompt>"',
+    tags: ["meta-skill", "scaffolding", "skill.md"],
     author: "@ornn",
     version: "v 0.9.0",
     date: "22 Apr",

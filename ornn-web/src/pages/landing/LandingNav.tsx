@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import { useThemeStore } from "@/stores/themeStore";
@@ -9,6 +9,7 @@ import { config } from "@/config";
 import { Logo } from "@/components/brand/Logo";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { EmberLink } from "./EmberButton";
+import { HighlighterMark } from "./HighlighterMark";
 
 /** Derive NyxID home URL from the authorize URL env var. */
 function getNyxIdUrl(): string {
@@ -83,9 +84,21 @@ function DropdownInternal({
 export function LandingNav() {
   const { theme, toggle } = useThemeStore();
   const { t, i18n } = useTranslation();
+  const { pathname } = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
   const closeMenu = () => setMenuOpen(false);
   const toggleLang = () => i18n.changeLanguage(i18n.language === "zh" ? "en" : "zh");
+
+  // Active-tab matcher. `/skills/new` must NOT activate when the user is on a
+  // skill detail page like `/skills/some-skill` — so its match is scoped to
+  // exact / nested paths under `/skills/new` only. Other links use a loose
+  // prefix match so `/registry/foo` still highlights "Registry".
+  const isNavActive = (to: string): boolean => {
+    if (to === "/skills/new") {
+      return pathname === "/skills/new" || pathname.startsWith("/skills/new/");
+    }
+    return pathname === to || pathname.startsWith(to + "/");
+  };
 
   const isAuthenticated = useIsAuthenticated();
   const user = useCurrentUser();
@@ -133,23 +146,54 @@ export function LandingNav() {
         </Link>
 
         <div className="absolute left-1/2 top-1/2 hidden -translate-x-1/2 -translate-y-1/2 gap-7 font-text text-[15px] font-normal text-bone md:flex">
+          {/* Active links use the same hand-drawn ember wash as the
+              landing-page headline (<HighlighterMark>). Text stays
+              parchment-strong on active so the multiply-blend wash
+              reads cleanly on top. */}
           <Link
             to="/registry"
-            className="focus-ring-ember transition-colors duration-150 hover:text-ember"
+            aria-current={isNavActive("/registry") ? "page" : undefined}
+            className={`focus-ring-ember transition-colors duration-150 ${
+              isNavActive("/registry")
+                ? "font-semibold text-parchment"
+                : "hover:text-ember"
+            }`}
           >
-            {t("nav.registry")}
+            {isNavActive("/registry") ? (
+              <HighlighterMark>{t("nav.registry")}</HighlighterMark>
+            ) : (
+              t("nav.registry")
+            )}
           </Link>
           <Link
             to="/skills/new"
-            className="focus-ring-ember transition-colors duration-150 hover:text-ember"
+            aria-current={isNavActive("/skills/new") ? "page" : undefined}
+            className={`focus-ring-ember transition-colors duration-150 ${
+              isNavActive("/skills/new")
+                ? "font-semibold text-parchment"
+                : "hover:text-ember"
+            }`}
           >
-            {t("nav.build")}
+            {isNavActive("/skills/new") ? (
+              <HighlighterMark>{t("nav.build")}</HighlighterMark>
+            ) : (
+              t("nav.build")
+            )}
           </Link>
           <Link
             to="/docs"
-            className="focus-ring-ember transition-colors duration-150 hover:text-ember"
+            aria-current={isNavActive("/docs") ? "page" : undefined}
+            className={`focus-ring-ember transition-colors duration-150 ${
+              isNavActive("/docs")
+                ? "font-semibold text-parchment"
+                : "hover:text-ember"
+            }`}
           >
-            {t("nav.docs")}
+            {isNavActive("/docs") ? (
+              <HighlighterMark>{t("nav.docs")}</HighlighterMark>
+            ) : (
+              t("nav.docs")
+            )}
           </Link>
         </div>
 
@@ -402,25 +446,52 @@ export function LandingNav() {
               to="/registry"
               onClick={closeMenu}
               tabIndex={menuOpen ? 0 : -1}
-              className="focus-ring-ember border-b border-[color:var(--color-border-subtle)] py-3 font-text text-[16px] text-bone transition-colors hover:text-ember"
+              aria-current={isNavActive("/registry") ? "page" : undefined}
+              className={`focus-ring-ember border-b border-[color:var(--color-border-subtle)] py-3 font-text text-[16px] transition-colors ${
+                isNavActive("/registry")
+                  ? "font-semibold text-parchment"
+                  : "text-bone hover:text-ember"
+              }`}
             >
-              {t("nav.registry")}
+              {isNavActive("/registry") ? (
+                <HighlighterMark>{t("nav.registry")}</HighlighterMark>
+              ) : (
+                t("nav.registry")
+              )}
             </Link>
             <Link
               to="/skills/new"
               onClick={closeMenu}
               tabIndex={menuOpen ? 0 : -1}
-              className="focus-ring-ember border-b border-[color:var(--color-border-subtle)] py-3 font-text text-[16px] text-bone transition-colors hover:text-ember"
+              aria-current={isNavActive("/skills/new") ? "page" : undefined}
+              className={`focus-ring-ember border-b border-[color:var(--color-border-subtle)] py-3 font-text text-[16px] transition-colors ${
+                isNavActive("/skills/new")
+                  ? "font-semibold text-parchment"
+                  : "text-bone hover:text-ember"
+              }`}
             >
-              {t("nav.build")}
+              {isNavActive("/skills/new") ? (
+                <HighlighterMark>{t("nav.build")}</HighlighterMark>
+              ) : (
+                t("nav.build")
+              )}
             </Link>
             <Link
               to="/docs"
               onClick={closeMenu}
               tabIndex={menuOpen ? 0 : -1}
-              className="focus-ring-ember border-b border-[color:var(--color-border-subtle)] py-3 font-text text-[16px] text-bone transition-colors hover:text-ember"
+              aria-current={isNavActive("/docs") ? "page" : undefined}
+              className={`focus-ring-ember border-b border-[color:var(--color-border-subtle)] py-3 font-text text-[16px] transition-colors ${
+                isNavActive("/docs")
+                  ? "font-semibold text-parchment"
+                  : "text-bone hover:text-ember"
+              }`}
             >
-              {t("nav.docs")}
+              {isNavActive("/docs") ? (
+                <HighlighterMark>{t("nav.docs")}</HighlighterMark>
+              ) : (
+                t("nav.docs")
+              )}
             </Link>
             <a
               href="https://github.com/ChronoAIProject/Ornn"

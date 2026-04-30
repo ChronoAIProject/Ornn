@@ -499,15 +499,18 @@ export function SkillDetailPage() {
         />
 
         {/* ── Main grid ── */}
-        {/* Two-column layout (lg+). Both columns get the *exact same*
-            explicit height ladder so they end at the same y-pixel —
-            stretch via flex was inconsistent because something in
-            the page/PageTransition chain was letting the right rail
-            grow past the row. Belt + braces: explicit h on both. */}
-        <main className="flex flex-col gap-4 lg:flex-row">
+        {/* Two-column layout (lg+). Columns flow with content; flex's
+            default `align-items: stretch` keeps both ending at the same
+            y-pixel (whichever column is taller wins; the shorter one
+            grows to match). Page-level scroll is the only scroll —
+            neither column has its own. A responsive `min-h` on the left
+            section keeps the file panel substantial when the package is
+            small; the right rail's intrinsic card stack handles the
+            rest. */}
+        <main className="flex flex-col gap-4 lg:flex-row lg:items-stretch">
 
           {/* Left: tabs + content. */}
-          <section className="card-impression flex min-h-0 flex-col overflow-hidden rounded border border-subtle bg-card lg:h-[80vh] lg:min-h-[640px] lg:max-h-[calc(100vh-140px)] lg:flex-1 lg:min-w-0">
+          <section className="card-impression flex min-h-[420px] flex-col overflow-hidden rounded border border-subtle bg-card lg:min-h-[680px] lg:flex-1 lg:min-w-0">
             {/* Toolbar — VersionPicker carries its own "Version" label, so
                 no outer label here (we used to render two). Audit history
                 lives in the right-rail card now. */}
@@ -560,11 +563,11 @@ export function SkillDetailPage() {
             </div>
           </section>
 
-          {/* Right rail — same explicit height ladder as the left so
-              both columns end at the same y-pixel. Cards inside scroll
-              via `overflow-y-auto` when their stacked height exceeds
-              the bounded box. */}
-          <aside className="flex flex-col gap-4 min-h-0 lg:h-[80vh] lg:min-h-[640px] lg:max-h-[calc(100vh-140px)] lg:w-[320px] lg:shrink-0 lg:overflow-y-auto lg:pr-1">
+          {/* Right rail — flows with content, no inner scroll. Flex
+              stretch keeps it aligned to the left section's y-extent
+              (or pushes the left section to grow when the rail is
+              taller). */}
+          <aside className="flex flex-col gap-4 lg:w-[320px] lg:shrink-0">
 
             {/* ── Audit card ── */}
             <section className="rounded-md border border-subtle bg-card p-5 card-impression">
@@ -870,12 +873,6 @@ export function SkillDetailPage() {
                 </div>
               </dl>
             </section>
-
-            {/* Spacer — eats any remaining vertical space when the cards
-                still don't fill the 80vh column, so Danger zone hugs
-                the bottom and both columns end at the same y-pixel.
-                Collapses to 0 when overflow-y-auto kicks in. */}
-            <div className="hidden lg:block lg:flex-1 lg:min-h-0" aria-hidden />
 
             {/* ── Danger zone (owner only) ── */}
             {isOwner && (

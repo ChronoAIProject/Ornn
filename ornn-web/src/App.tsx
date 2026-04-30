@@ -27,6 +27,7 @@ import { AdminLayout } from "@/components/layout/AdminLayout";
 import { AuthGuard } from "@/components/auth/AuthGuard";
 import { AdminGuard } from "@/components/auth/AdminGuard";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { HighlighterMarkFilter } from "@/pages/landing/HighlighterMark";
 
 // Route-level code split. Each lazy() call becomes its own async chunk.
 // Pages export named members, so the import() is unwrapped to a default.
@@ -191,6 +192,11 @@ export function App() {
   return (
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
+        {/* Singleton SVG turbulence filter referenced by every
+            <HighlighterMark>. Mounted at the app root so both the
+            landing surface and the app-shell nav can use the
+            highlighter wash without duplicating filter IDs in the DOM. */}
+        <HighlighterMarkFilter />
         <Suspense fallback={<RouteFallback />}>
           <RouterProvider router={router} />
         </Suspense>
