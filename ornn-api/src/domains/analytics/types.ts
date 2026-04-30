@@ -32,6 +32,8 @@ export interface SkillExecutionEvent {
 export interface SkillAnalyticsSummary {
   readonly skillGuid: string;
   readonly window: "7d" | "30d" | "all";
+  /** When set, the summary was computed only from events for this version. */
+  readonly version?: string;
   readonly executionCount: number;
   readonly successCount: number;
   readonly failureCount: number;
@@ -45,4 +47,37 @@ export interface SkillAnalyticsSummary {
   };
   readonly uniqueUsers: number;
   readonly topErrorCodes: ReadonlyArray<{ code: string; count: number }>;
+}
+
+/**
+ * One row of `skill_pulls` — a record that a skill's package contents
+ * were materialized somewhere (handed back via the JSON endpoint, the
+ * detail page mint, or the playground sandbox load).
+ *
+ * The three sources answer different questions:
+ *  - `api`        : someone (SDK / CLI / external agent) actually consumed the
+ *                   skill programmatically. Closest to the north-star metric.
+ *  - `web`        : someone opened the detail page; mostly exploration.
+ *  - `playground` : the in-product trial path materialized the skill.
+ */
+export type PullSource = "api" | "web" | "playground";
+
+export interface SkillPullEvent {
+  readonly _id: string;
+  readonly skillGuid: string;
+  readonly skillName: string;
+  readonly skillVersion: string;
+  readonly userId: string;
+  readonly source: PullSource;
+  readonly createdAt: Date;
+}
+
+/** Granularity of a `pulls` time-series query. */
+export type PullBucket = "hour" | "day" | "month";
+
+/** One bucket of the pull time series. `bucket` is an ISO-8601 timestamp at the start of the window. */
+export interface PullBucketCount {
+  readonly bucket: string;
+  readonly total: number;
+  readonly bySource: Readonly<Record<PullSource, number>>;
 }

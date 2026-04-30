@@ -3,11 +3,19 @@ import { searchSkills, fetchSkillCounts } from "@/services/searchApi";
 import {
   fetchSkill,
   fetchSkillVersions,
+  fetchSkillVersionDiff,
   createSkill,
   updateSkill,
   updateSkillPackage,
   deleteSkill,
+  deleteSkillVersion,
   setSkillVersionDeprecation,
+  pullSkillFromGitHub,
+  refreshSkillFromSource,
+  previewSkillRefresh,
+  setSkillSource,
+  tieSkillToNyxidService,
+  type PullFromGitHubInput,
 } from "@/services/skillApi";
 import { updateSkillPermissions, type SkillPermissionsInput } from "@/services/permissionsApi";
 import type { SkillSearchParams, SystemFilter } from "@/types/search";
@@ -18,6 +26,36 @@ const MY_SKILLS_KEY = "my-skills";
 const SHARED_WITH_ME_KEY = "shared-with-me-skills";
 const SKILL_COUNTS_KEY = "skill-counts";
 const SKILL_VERSIONS_KEY = "skill-versions";
+const SKILL_VERSION_DIFF_KEY = "skill-version-diff";
+
+/**
+ * Search platform-wide system skills. System skills are always public,
+ * so `scope: "public"` + `systemFilter: "only"` is the right query.
+ * Visible to anonymous + authed callers; the System tab itself is the
+ * primary consumer.
+ */
+export function useSystemSkills(params: {
+  query?: string;
+  mode?: SkillSearchParams["mode"];
+  page?: number;
+  pageSize?: number;
+  /** Filter to skills tied to a specific NyxID service id. */
+  nyxidServiceId?: string;
+}) {
+  const searchParams: SkillSearchParams = {
+    query: params.query,
+    mode: params.mode ?? "keyword",
+    scope: "public",
+    page: params.page,
+    pageSize: params.pageSize,
+    systemFilter: "only",
+    nyxidServiceId: params.nyxidServiceId,
+  };
+  return useQuery({
+    queryKey: ["system-skills", searchParams],
+    queryFn: () => searchSkills(searchParams),
+  });
+}
 
 /** Search public skills */
 export function useSkills(params: {
@@ -26,6 +64,10 @@ export function useSkills(params: {
   page?: number;
   pageSize?: number;
   systemFilter?: SystemFilter;
+  /** Tag filter (AND match). */
+  tags?: string[];
+  /** Author user_ids — filter to skills authored by these users. */
+  createdByAny?: string[];
 }) {
   const searchParams: SkillSearchParams = {
     query: params.query,
@@ -34,6 +76,8 @@ export function useSkills(params: {
     page: params.page,
     pageSize: params.pageSize,
     systemFilter: params.systemFilter,
+    tags: params.tags,
+    createdByAny: params.createdByAny,
   };
 
   return useQuery({
@@ -55,6 +99,8 @@ export function useMySkills(params: {
   systemFilter?: SystemFilter;
   sharedWithOrgs?: string[];
   sharedWithUsers?: string[];
+  /** Tag filter (AND match). */
+  tags?: string[];
 }) {
   const searchParams: SkillSearchParams = {
     query: params.query,
@@ -65,6 +111,7 @@ export function useMySkills(params: {
     systemFilter: params.systemFilter,
     sharedWithOrgs: params.sharedWithOrgs,
     sharedWithUsers: params.sharedWithUsers,
+    tags: params.tags,
   };
 
   return useQuery({
@@ -142,6 +189,24 @@ export function useSkillVersions(idOrName: string) {
   });
 }
 
+/**
+ * Diff two specific versions of a skill. Disabled until both `from` and
+ * `to` are non-empty AND distinct — the backend rejects a same-version
+ * compare with `400 SAME_VERSION` and we don't want that round-trip.
+ */
+export function useSkillVersionDiff(
+  idOrName: string,
+  fromVersion: string,
+  toVersion: string,
+) {
+  return useQuery({
+    queryKey: [SKILL_VERSION_DIFF_KEY, idOrName, fromVersion, toVersion],
+    queryFn: () => fetchSkillVersionDiff(idOrName, fromVersion, toVersion),
+    enabled:
+      !!idOrName && !!fromVersion && !!toVersion && fromVersion !== toVersion,
+  });
+}
+
 /** Toggle the deprecation flag on a specific published version. */
 export function useSetVersionDeprecation(idOrName: string) {
   const queryClient = useQueryClient();
@@ -175,6 +240,60 @@ export function useCreateSkill() {
   });
 }
 
+/** Pull a new skill from a public GitHub repo. */
+export function usePullSkillFromGitHub() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: PullFromGitHubInput) => pullSkillFromGitHub(input),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [SKILLS_KEY] });
+      queryClient.invalidateQueries({ queryKey: [MY_SKILLS_KEY] });
+    },
+  });
+}
+
+/** Re-pull the skill's GitHub source and publish a fresh version. */
+export function useRefreshSkillFromSource(idOrName: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      guid,
+      skipValidation,
+    }: {
+      guid: string;
+      skipValidation?: boolean;
+    }) => refreshSkillFromSource(guid, { skipValidation }),
+    onSuccess: (updated) => {
+      // Prime the detail cache with the refreshed payload so the chip
+      // updates in place.
+      queryClient.setQueryData([SKILLS_KEY, idOrName, undefined], updated);
+      queryClient.invalidateQueries({ queryKey: [SKILLS_KEY] });
+      queryClient.invalidateQueries({ queryKey: [SKILL_VERSIONS_KEY, idOrName] });
+      queryClient.invalidateQueries({ queryKey: [MY_SKILLS_KEY] });
+    },
+  });
+}
+
+/** Dry-run a refresh — pull from GitHub, compute diff, return without bumping. */
+export function usePreviewSkillRefresh() {
+  return useMutation({
+    mutationFn: (guid: string) => previewSkillRefresh(guid),
+  });
+}
+
+/** Attach (or clear) a GitHub source pointer on an existing skill. */
+export function useSetSkillSource(idOrName: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ guid, githubUrl }: { guid: string; githubUrl: string | null }) =>
+      setSkillSource(guid, githubUrl),
+    onSuccess: (updated) => {
+      queryClient.setQueryData([SKILLS_KEY, idOrName, undefined], updated);
+      queryClient.invalidateQueries({ queryKey: [SKILLS_KEY] });
+    },
+  });
+}
+
 /** Update skill metadata (e.g. toggle isPrivate) */
 export function useUpdateSkill(id: string) {
   const queryClient = useQueryClient();
@@ -201,9 +320,10 @@ export function useUpdateSkillPackage(id: string) {
 }
 
 /**
- * Replace the skill's visibility config in one atomic call. Invalidates
- * the skill detail query so the UI redraws with the new permissions
- * without needing a manual refetch.
+ * Replace the skill's visibility config in one atomic call. The save is
+ * unconditional; audit runs out-of-band. Invalidates the skill detail
+ * query so the UI redraws with the new permissions without needing a
+ * manual refetch.
  */
 export function useUpdateSkillPermissions(idOrName: string) {
   const queryClient = useQueryClient();
@@ -217,6 +337,26 @@ export function useUpdateSkillPermissions(idOrName: string) {
   });
 }
 
+/**
+ * Tie or untie a skill to a NyxID catalog service. Invalidates the
+ * registry tabs (especially System) and the skill detail cache so the
+ * tied chip + privacy flag both redraw without a manual refetch.
+ */
+export function useTieSkillToNyxidService(idOrName: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { skillId: string; nyxidServiceId: string | null }) =>
+      tieSkillToNyxidService(input.skillId, input.nyxidServiceId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [SKILLS_KEY, idOrName] });
+      queryClient.invalidateQueries({ queryKey: [SKILLS_KEY] });
+      queryClient.invalidateQueries({ queryKey: [MY_SKILLS_KEY] });
+      queryClient.invalidateQueries({ queryKey: ["system-skills"] });
+      queryClient.invalidateQueries({ queryKey: [SKILL_COUNTS_KEY] });
+    },
+  });
+}
+
 /** Delete a skill */
 export function useDeleteSkill() {
   const queryClient = useQueryClient();
@@ -225,6 +365,28 @@ export function useDeleteSkill() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [SKILLS_KEY] });
       queryClient.invalidateQueries({ queryKey: [MY_SKILLS_KEY] });
+    },
+  });
+}
+
+/**
+ * Delete one non-latest version of a skill. Refreshes the skill itself,
+ * its versions list, and the audit history (which is keyed per version).
+ */
+export function useDeleteSkillVersion(idOrName: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (version: string) => deleteSkillVersion(idOrName, version),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [SKILLS_KEY, idOrName] });
+      queryClient.invalidateQueries({ queryKey: [SKILLS_KEY] });
+      queryClient.invalidateQueries({ queryKey: [MY_SKILLS_KEY] });
+      queryClient.invalidateQueries({
+        predicate: (q) =>
+          Array.isArray(q.queryKey) &&
+          q.queryKey[0] === "audit" &&
+          q.queryKey[1] === idOrName,
+      });
     },
   });
 }

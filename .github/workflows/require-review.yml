@@ -10,6 +10,12 @@ on:
 jobs:
   check-approval:
     runs-on: ubuntu-latest
+    # checkCollaborator is a read-only metadata call; the default
+    # GITHUB_TOKEN scope already covers it, but we name it here so the
+    # intent is explicit and fork PRs can't silently lose access.
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
       - name: Check if team approval is required
         uses: actions/github-script@v7
@@ -33,11 +39,31 @@ jobs:
               return;
             }
 
-            // External contributors: placeholder. The original team-based
-            // gate (aevatarAI/Aevatarians) pointed at the pre-transfer org
-            // and was removed when the repo moved to ChronoAIProject. Until
-            // a ChronoAIProject team exists + there are actual external
-            // contributors to gate, fail explicitly so nothing slips through.
+            // Anyone explicitly invited as a collaborator on the repo (any
+            // permission level — read, triage, write, maintain, admin)
+            // passes without an additional maintainer approval gate. The
+            // act of accepting the collaborator invite is the vetting.
+            try {
+              await github.rest.repos.checkCollaborator({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                username: author,
+              });
+              console.log(`PR author '${author}' is a repo collaborator — no approval required`);
+              return;
+            } catch (err) {
+              if (err.status !== 404) {
+                // Any non-404 error (rate limit, auth, transient) should
+                // surface rather than be silently treated as "not a
+                // collaborator" — that would mask token-scope regressions.
+                throw err;
+              }
+              // 404 = not a collaborator. Fall through to the gate below.
+            }
+
+            // External contributors fall through to the explicit fail. Add
+            // them as repo collaborators (Settings → Collaborators) if you
+            // want them to pass this check automatically.
             core.setFailed(
-              `PRs from '${author}' require maintainer approval — no team-review gate is configured yet for the ChronoAIProject org.`,
+              `PRs from '${author}' require maintainer approval. Add them as a repo collaborator to auto-pass this check.`,
             );

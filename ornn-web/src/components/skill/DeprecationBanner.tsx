@@ -30,14 +30,14 @@ export function DeprecationBanner({
     <div
       role="alert"
       className={`
-        glass flex flex-col gap-2 rounded-xl border border-neon-yellow/40
-        bg-neon-yellow/5 p-4
+        bg-card flex flex-col gap-2 rounded border border-warning/40
+        bg-warning/5 p-4
         ${className}
       `}
     >
       <div className="flex items-start gap-3">
         <svg
-          className="mt-0.5 h-5 w-5 shrink-0 text-neon-yellow"
+          className="mt-0.5 h-5 w-5 shrink-0 text-warning"
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"
@@ -51,15 +51,15 @@ export function DeprecationBanner({
           />
         </svg>
         <div className="flex-1 min-w-0">
-          <p className="font-heading text-sm text-neon-yellow">
+          <p className="font-display text-sm text-warning">
             {t("skillDetail.deprecationBannerTitle", { version })}
           </p>
           {note ? (
-            <p className="mt-1 font-body text-sm text-text-primary/90">
+            <p className="mt-1 font-text text-sm text-strong/90">
               {t("skillDetail.deprecationBannerBody", { note })}
             </p>
           ) : (
-            <p className="mt-1 font-body text-sm text-text-muted">
+            <p className="mt-1 font-text text-sm text-meta">
               {t("skillDetail.deprecationWarning")}
             </p>
           )}
@@ -71,7 +71,7 @@ export function DeprecationBanner({
             type="button"
             onClick={onViewLatest}
             className="
-              font-body text-sm text-neon-yellow hover:text-neon-yellow/80
+              font-text text-sm text-warning hover:text-warning/80
               underline underline-offset-2 transition-colors cursor-pointer
             "
           >

@@ -27,10 +27,10 @@ function InfoIcon({ className }: { className?: string }) {
 }
 
 const CATEGORY_COLORS: Record<SkillCategory, string> = {
-  plain: "text-neon-cyan",
-  "tool-based": "text-neon-magenta",
-  "runtime-based": "text-neon-yellow",
-  mixed: "text-neon-green",
+  plain: "text-accent",
+  "tool-based": "text-accent-support",
+  "runtime-based": "text-warning",
+  mixed: "text-success",
 };
 
 export function CategoryTooltip({ className = "" }: CategoryTooltipProps) {
@@ -54,7 +54,7 @@ export function CategoryTooltip({ className = "" }: CategoryTooltipProps) {
         onMouseEnter={() => setIsOpen(true)}
         onMouseLeave={() => setIsOpen(false)}
         onClick={() => setIsOpen((prev) => !prev)}
-        className="p-1 text-text-muted hover:text-neon-cyan transition-colors cursor-pointer"
+        className="p-1 text-meta hover:text-accent transition-colors cursor-pointer"
         aria-label="Category descriptions"
       >
         <InfoIcon className="h-4 w-4" />
@@ -67,19 +67,19 @@ export function CategoryTooltip({ className = "" }: CategoryTooltipProps) {
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
             transition={{ duration: 0.15 }}
-            className="absolute left-6 top-0 z-50 w-72 glass rounded-lg border border-neon-cyan/12 p-4 shadow-lg"
+            className="absolute left-6 top-0 z-50 w-72 rounded-md border border-strong-edge bg-card p-4 card-impression"
           >
-            <p className="font-heading text-xs uppercase tracking-wider text-text-muted mb-3">
+            <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-meta mb-3">
               Skill Categories
             </p>
             <div className="space-y-3">
               {(Object.entries(SKILL_CATEGORY_INFO) as [SkillCategory, { label: string; description: string }][]).map(
                 ([key, info]) => (
                   <div key={key}>
-                    <p className={`font-heading text-xs uppercase ${CATEGORY_COLORS[key]}`}>
+                    <p className={`font-mono text-[10px] font-semibold uppercase tracking-[0.12em] ${CATEGORY_COLORS[key]}`}>
                       {info.label}
                     </p>
-                    <p className="text-text-muted text-xs mt-0.5 font-body leading-relaxed">
+                    <p className="font-text text-xs leading-relaxed text-body mt-0.5">
                       {info.description}
                     </p>
                   </div>

@@ -1,4 +1,19 @@
-import { motion } from "framer-motion";
+/**
+ * Button — Forge Workshop primitive.
+ *
+ * Three variants per DESIGN.md:
+ *   primary    — ember fill, page-bg text, mono uppercase label, ember letterpress
+ *   secondary  — paper surface, strong border, ink letterpress
+ *   danger     — paper surface, danger color, ink letterpress
+ *
+ * All variants carry a hard-offset letterpress impression at rest and
+ * press DOWN on hover (translate +2px / +2px, shadow shrinks). Disabled
+ * removes the impression entirely. Reduced-motion suppresses the
+ * translate; the shadow swap alone communicates press.
+ *
+ * @module components/ui/Button
+ */
+
 import type { ReactNode } from "react";
 
 export interface ButtonProps {
@@ -13,15 +28,18 @@ export interface ButtonProps {
 }
 
 const VARIANT_STYLES = {
-  primary: "border-neon-cyan/50 text-neon-cyan hover:border-neon-cyan hover:shadow-[0_0_15px_rgba(255,107,0,0.3)]",
-  secondary: "border-neon-magenta/50 text-neon-magenta hover:border-neon-magenta hover:shadow-[0_0_15px_rgba(255,140,56,0.3)]",
-  danger: "border-neon-red/50 text-neon-red hover:border-neon-red hover:shadow-[0_0_15px_rgba(255,0,60,0.3)]",
+  primary:
+    "bg-accent text-page hover:bg-accent-muted border border-accent-muted",
+  secondary:
+    "bg-card text-strong border border-strong-edge hover:border-accent",
+  danger:
+    "bg-card text-danger border border-danger/40 hover:border-danger",
 } as const;
 
 const SIZE_STYLES = {
-  sm: "px-3 py-1.5 text-sm",
-  md: "px-5 py-2.5 text-base",
-  lg: "px-7 py-3 text-lg",
+  sm: "px-3 py-1.5 text-[11px] tracking-[0.1em]",
+  md: "px-5 py-2.5 text-xs tracking-[0.12em]",
+  lg: "px-6 py-3 text-sm tracking-[0.12em]",
 } as const;
 
 export function Button({
@@ -35,32 +53,33 @@ export function Button({
   className = "",
 }: ButtonProps) {
   const isDisabled = disabled || loading;
+  const letterpressClass =
+    variant === "primary"
+      ? "cta-letterpress"
+      : "cta-letterpress cta-letterpress--ghost";
 
   return (
-    <motion.button
+    <button
       type={type}
       onClick={onClick}
       disabled={isDisabled}
-      whileTap={isDisabled ? undefined : { scale: 0.97 }}
-      whileHover={isDisabled ? undefined : { scale: 1.02 }}
-      transition={{ duration: 0.1, ease: "easeIn" }}
       className={`
-        glass cursor-pointer rounded-lg font-body font-semibold
-        transition-all duration-200
+        ${letterpressClass}
+        cursor-pointer rounded-sm font-mono font-semibold uppercase
         ${VARIANT_STYLES[variant]}
         ${SIZE_STYLES[size]}
-        ${isDisabled ? "opacity-50 cursor-not-allowed" : ""}
+        ${isDisabled ? "cursor-not-allowed" : ""}
         ${className}
       `}
     >
       {loading ? (
-        <span className="flex items-center gap-2">
-          <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-          Loading...
+        <span className="flex items-center justify-center gap-2">
+          <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-[1.5px] border-current border-t-transparent" />
+          <span>Loading…</span>
         </span>
       ) : (
         children
       )}
-    </motion.button>
+    </button>
   );
 }

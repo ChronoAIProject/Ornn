@@ -31,7 +31,7 @@ export function OtpInput({ length = 6, onComplete, disabled, error }: OtpInputPr
           maxLength={1}
           disabled={disabled}
           onChange={(e) => handleChange(e, i)}
-          className={`w-10 h-12 text-center border rounded-lg text-lg font-mono ${error ? "border-red-500" : ""}`}
+          className={`w-10 h-12 text-center border rounded text-lg font-mono ${error ? "border-red-500" : ""}`}
         />
       ))}
     </div>

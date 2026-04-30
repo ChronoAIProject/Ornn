@@ -67,7 +67,7 @@ export function SkillPublicToggle({
   return (
     <>
       <div className={`flex items-center gap-2 ${className}`}>
-        <span className="text-xs font-body text-text-muted uppercase tracking-wide">
+        <span className="text-xs font-text text-meta uppercase tracking-wide">
           {isPublic ? "Public" : "Private"}
         </span>
         <button
@@ -78,11 +78,11 @@ export function SkillPublicToggle({
             relative ${toggleWidth} ${toggleHeight} rounded-full
             transition-all duration-200
             ${isPublic
-              ? "bg-neon-green/20 border border-neon-green/50 shadow-[0_0_8px_rgba(57,255,20,0.3)]"
-              : "bg-bg-elevated border border-neon-cyan/30"
+              ? "bg-success/20 border border-success/50"
+              : "bg-elevated border border-accent/30"
             }
-            ${disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer hover:border-neon-cyan"}
-            focus:outline-none focus-visible:ring-2 focus-visible:ring-neon-cyan focus-visible:ring-offset-2 focus-visible:ring-offset-bg-deep
+            ${disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer hover:border-accent"}
+            focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg-deep
           `}
           aria-label={isPublic ? "Make skill private" : "Make skill public"}
         >
@@ -93,8 +93,8 @@ export function SkillPublicToggle({
             className={`
               absolute top-0.5 ${knobSize} rounded-full
               ${isPublic
-                ? "bg-neon-green shadow-[0_0_6px_rgba(57,255,20,0.6)]"
-                : "bg-neon-cyan/60"
+                ? "bg-success"
+                : "bg-accent/60"
               }
             `}
           />
@@ -107,19 +107,19 @@ export function SkillPublicToggle({
         title={isPublic ? "Make Skill Private?" : "Make Skill Public?"}
       >
         <div className="space-y-4">
-          <p className="font-body text-text-primary">
+          <p className="font-text text-strong">
             {isPublic
               ? "Are you sure you want to make this skill private? Other users will no longer be able to view it."
               : "Are you sure you want to make this skill public? All users will be able to view it."}
           </p>
 
-          <div className="glass rounded-lg p-4 border border-neon-cyan/10">
+          <div className="bg-card rounded p-4 border border-accent/10">
             <div className="flex items-center gap-3">
               <div className={`
                 w-3 h-3 rounded-full
-                ${isPublic ? "bg-neon-cyan" : "bg-neon-green shadow-[0_0_8px_rgba(57,255,20,0.5)]"}
+                ${isPublic ? "bg-accent" : "bg-success"}
               `} />
-              <span className="font-body text-sm">
+              <span className="font-text text-sm">
                 {isPublic
                   ? "Skill will become private"
                   : "Skill will become public"}

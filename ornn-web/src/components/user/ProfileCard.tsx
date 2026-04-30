@@ -103,7 +103,7 @@ export function ProfileCard({
   return (
     <Card className="p-6">
       <div className="mb-6 flex items-center justify-between">
-        <h2 className="font-heading text-lg text-neon-cyan">Profile</h2>
+        <h2 className="font-display text-lg text-accent">Profile</h2>
         {!isEditing && (
           <Button
             variant="secondary"
@@ -141,7 +141,7 @@ export function ProfileCard({
 
           {/* Bio */}
           <div className="flex flex-col gap-1.5">
-            <label className="font-heading text-xs uppercase tracking-wider text-text-muted">
+            <label className="font-display text-xs uppercase tracking-wider text-meta">
               Bio
             </label>
             <textarea
@@ -149,14 +149,14 @@ export function ProfileCard({
               disabled={isLoading}
               rows={3}
               className={`
-                neon-input rounded-lg px-4 py-2.5 font-body text-text-primary
-                placeholder:text-text-muted/50 resize-none
-                ${errors.bio ? "border-b-neon-red!" : ""}
+                neon-input rounded px-4 py-2.5 font-text text-strong
+                placeholder:text-meta/50 resize-none
+                ${errors.bio ? "border-b-danger!" : ""}
               `}
               {...register("bio")}
             />
             {errors.bio && (
-              <span className="text-xs text-neon-red">{errors.bio.message}</span>
+              <span className="text-xs text-danger">{errors.bio.message}</span>
             )}
           </div>
 
@@ -164,9 +164,9 @@ export function ProfileCard({
             <motion.div
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="rounded-lg border border-neon-red/30 bg-neon-red/10 p-3"
+              className="rounded border border-danger/30 bg-danger/10 p-3"
             >
-              <p className="text-sm text-neon-red">{error}</p>
+              <p className="text-sm text-danger">{error}</p>
             </motion.div>
           )}
 
@@ -194,7 +194,7 @@ export function ProfileCard({
         <div className="space-y-4">
           {/* Avatar & Name */}
           <div className="flex items-center gap-4">
-            <div className="h-16 w-16 overflow-hidden rounded-full bg-bg-surface">
+            <div className="h-16 w-16 overflow-hidden rounded-full bg-card">
               {user.avatarUrl ? (
                 <img
                   src={user.avatarUrl}
@@ -203,17 +203,17 @@ export function ProfileCard({
                 />
               ) : (
                 <div className="flex h-full w-full items-center justify-center">
-                  <span className="font-heading text-2xl text-text-muted">
+                  <span className="font-display text-2xl text-meta">
                     {user.displayName.charAt(0).toUpperCase()}
                   </span>
                 </div>
               )}
             </div>
             <div>
-              <h3 className="font-heading text-lg text-text-primary">
+              <h3 className="font-display text-lg text-strong">
                 {user.displayName}
               </h3>
-              <p className="font-mono text-sm text-text-muted">
+              <p className="font-mono text-sm text-meta">
                 {user.primaryEmail}
               </p>
             </div>
@@ -221,8 +221,8 @@ export function ProfileCard({
 
           {/* Bio */}
           {user.bio && (
-            <div className="rounded-lg bg-bg-surface/50 p-4">
-              <p className="font-body text-sm text-text-primary whitespace-pre-wrap">
+            <div className="rounded bg-card/50 p-4">
+              <p className="font-text text-sm text-strong whitespace-pre-wrap">
                 {user.bio}
               </p>
             </div>

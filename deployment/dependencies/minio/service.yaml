@@ -7,6 +7,15 @@ spec:
   selector:
     app: minio
   ports:
+    # Port 80 maps to the S3 API so callers can address minio as
+    # http://minio.ornn-cluster.local (port 80 implicit) both via the
+    # ingress (external) and via hostAliases on peer pods (internal).
+    # Having a stable, well-known port means presigned URLs can be
+    # signed and validated against the same Host without baking a
+    # non-standard port into the signature.
+    - name: http
+      port: 80
+      targetPort: 9000
     - name: api
       port: 9000
       targetPort: 9000

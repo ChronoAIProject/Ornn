@@ -1,14 +1,24 @@
 /**
  * ExplorePage — the skill registry.
  *
- * Three mutually-exclusive tabs filter the same skill search endpoint
- * by scope. Tab counts come from /api/v1/skills/counts in a single
- * round-trip. The System-skill control is a tri-state filter (not a
- * tab) so a user can ask "what do I have wired to my NyxID services?"
- * within any tab.
+ * Layout:
+ *   ┌──────────────────────────────────────────────┐
+ *   │  Tabs strip                                   │
+ *   ├──────────────────────────────────────────────┤
+ *   │  Search bar                                   │
+ *   ├──────────────────────────────────────────────┤
+ *   │  Sidebar │ Cards grid                         │
+ *   │  filters │ + pagination                       │
+ *   └──────────┴───────────────────────────────────┘
  *
- * All visible state is URL-encoded via useSearchParams so a registry
- * view can be copy-pasted between tabs/people.
+ * Four tabs, ordered: System · Public · My Skills · Shared with me.
+ * Per-tab filter sets live in the sidebar; everything is URL-encoded so a
+ * filtered view can be copy-pasted between tabs/people.
+ *
+ *   System         → `?service=<csv>` (admin NyxID services)
+ *   Public         → `?tags=<csv>` + `?authors=<csv>`
+ *   My Skills      → `?tags=<csv>` + `?orgs=<csv>` + `?users=<csv>`
+ *   Shared with me → `?srcOrgs=<csv>` + `?srcUsers=<csv>`
  */
 
 import { useMemo } from "react";
@@ -28,12 +38,18 @@ import {
   useMySkills,
   useSharedWithMeSkills,
   useSkillCounts,
+  useSystemSkills,
 } from "@/hooks/useSkills";
-import { useMySkillGrantsSummary, useSharedSkillSources } from "@/hooks/useMe";
+import {
+  useMySkillGrantsSummary,
+  useSharedSkillSources,
+  useSkillTagFacets,
+  useSkillAuthorFacets,
+  useSystemServiceFacets,
+} from "@/hooks/useMe";
 import { useCurrentUser, useIsAuthenticated } from "@/stores/authStore";
-import type { SystemFilter } from "@/types/search";
 
-type ExploreTab = "public" | "my-skills" | "shared-with-me";
+type ExploreTab = "system" | "public" | "my-skills" | "shared-with-me";
 
 const DEFAULT_PAGE_SIZE = 20;
 
@@ -47,15 +63,17 @@ const itemVariants = {
   visible: { opacity: 1, y: 0, transition: { duration: 0.15, ease: "easeOut" } },
 };
 
-/** Parse the `?tab=` query param into a concrete tab value, defaulting to "public". */
+/**
+ * Parse the `?tab=` query param into a concrete tab value, defaulting to
+ * "system". The `system` and `public` tabs are visible to everyone;
+ * `my-skills` and `shared-with-me` require auth.
+ */
 function parseTab(raw: string | null, authed: boolean): ExploreTab {
-  if (!authed) return "public";
+  if (raw === "public") return "public";
+  if (raw === "system" || raw === null) return raw === null ? "system" : "system";
+  if (!authed) return "system";
   if (raw === "my-skills" || raw === "shared-with-me") return raw;
-  return "public";
-}
-
-function parseSystemFilter(raw: string | null): SystemFilter {
-  return raw === "only" || raw === "exclude" ? raw : "any";
+  return "system";
 }
 
 /** Parse a comma-joined URL param into a de-duped id list. */
@@ -76,32 +94,39 @@ export function ExplorePage() {
   const user = useCurrentUser();
 
   const activeTab = parseTab(searchParams.get("tab"), isAuthenticated);
-  const systemFilter = parseSystemFilter(searchParams.get("sys"));
   const pageParam = Number.parseInt(searchParams.get("page") ?? "1", 10);
   const activePage = Number.isFinite(pageParam) && pageParam > 0 ? pageParam : 1;
 
-  // Chip-row filter state is held in the URL so the whole view is
-  // replayable: `orgs=` / `users=` on My Skills, `srcOrgs=` / `srcUsers=`
-  // on Shared-with-me. Empty arrays mean no filter.
+  // Filter state lives in the URL across tabs:
+  //   System         → service (single id)
+  //   Public         → tags, authors
+  //   My Skills      → tags, orgs (sharedWithOrgs), users (sharedWithUsers)
+  //   Shared with me → srcOrgs (sharedWithOrgs), srcUsers (createdByAny)
+  const selectedServiceId = searchParams.get("service") || undefined;
+  const selectedTags = parseCsvParam(searchParams.get("tags"));
+  const selectedAuthors = parseCsvParam(searchParams.get("authors"));
   const selectedGrantOrgs = parseCsvParam(searchParams.get("orgs"));
   const selectedGrantUsers = parseCsvParam(searchParams.get("users"));
   const selectedSourceOrgs = parseCsvParam(searchParams.get("srcOrgs"));
   const selectedSourceUsers = parseCsvParam(searchParams.get("srcUsers"));
 
-  // Query + mode still live in the global search store (shared with the
-  // search bar). Page lives in the URL so tab switches preserve pagination
-  // cleanly per tab identity.
   const { query, mode } = useSearchStore();
+
+  const { data: systemData, isLoading: systemLoading } = useSystemSkills({
+    query: query || undefined,
+    mode,
+    page: activeTab === "system" ? activePage : 1,
+    pageSize: DEFAULT_PAGE_SIZE,
+    nyxidServiceId: selectedServiceId,
+  });
 
   const { data: publicData, isLoading: publicLoading } = useSkills({
     query: query || undefined,
     mode,
     page: activeTab === "public" ? activePage : 1,
     pageSize: DEFAULT_PAGE_SIZE,
-    systemFilter,
-    // React Query skips the call-level `enabled` for useQuery derived
-    // from hook, but empty renders are cheap. Public always loads; the
-    // tab's paging + filter variance is the cache key.
+    tags: selectedTags,
+    createdByAny: selectedAuthors,
   });
 
   const { data: mineData, isLoading: mineLoading } = useMySkills({
@@ -109,7 +134,7 @@ export function ExplorePage() {
     mode,
     page: activeTab === "my-skills" ? activePage : 1,
     pageSize: DEFAULT_PAGE_SIZE,
-    systemFilter,
+    tags: selectedTags,
     sharedWithOrgs: selectedGrantOrgs,
     sharedWithUsers: selectedGrantUsers,
   });
@@ -119,39 +144,37 @@ export function ExplorePage() {
     mode,
     page: activeTab === "shared-with-me" ? activePage : 1,
     pageSize: DEFAULT_PAGE_SIZE,
-    systemFilter,
     sharedWithOrgs: selectedSourceOrgs,
     createdByAny: selectedSourceUsers,
     enabled: isAuthenticated,
   });
 
   const { data: counts } = useSkillCounts();
-  const { data: grantsSummary } = useMySkillGrantsSummary();
-  const { data: sourcesSummary } = useSharedSkillSources();
 
   const activeData =
-    activeTab === "public" ? publicData : activeTab === "my-skills" ? mineData : sharedData;
+    activeTab === "system"
+      ? systemData
+      : activeTab === "public"
+        ? publicData
+        : activeTab === "my-skills"
+          ? mineData
+          : sharedData;
   const activeLoading =
-    activeTab === "public" ? publicLoading : activeTab === "my-skills" ? mineLoading : sharedLoading;
+    activeTab === "system"
+      ? systemLoading
+      : activeTab === "public"
+        ? publicLoading
+        : activeTab === "my-skills"
+          ? mineLoading
+          : sharedLoading;
 
   const totalPages = activeData?.totalPages ?? 0;
-
   const items = useMemo(() => activeData?.items ?? [], [activeData]);
 
-  /** Update `?tab=`; reset page to 1 to avoid landing on a page past the new tab's range. */
+  /** Update `?tab=`; reset page + per-tab filter params to avoid leaking state. */
   function handleTabChange(tab: ExploreTab) {
-    const next = new URLSearchParams(searchParams);
-    if (tab === "public") next.delete("tab");
-    else next.set("tab", tab);
-    next.delete("page");
-    setSearchParams(next);
-  }
-
-  function handleSystemFilterChange(value: SystemFilter) {
-    const next = new URLSearchParams(searchParams);
-    if (value === "any") next.delete("sys");
-    else next.set("sys", value);
-    next.delete("page");
+    const next = new URLSearchParams();
+    if (tab !== "system") next.set("tab", tab);
     setSearchParams(next);
   }
 
@@ -175,23 +198,35 @@ export function ExplorePage() {
     setSearchParams(next);
   }
 
+  /** Set a single-value URL param (toggle off when picking the same value). */
+  function setSingleParam(key: string, value: string | undefined) {
+    const next = new URLSearchParams(searchParams);
+    if (!value || next.get(key) === value) next.delete(key);
+    else next.set(key, value);
+    next.delete("page");
+    setSearchParams(next);
+  }
+
   return (
     <PageTransition>
-      <div className="flex flex-col h-full py-2">
-        {/* Tab selector — equal-width segmented control, centered and
-            capped so it doesn't balloon across wide desktops. Inside
-            the cap, grid-cols-N splits the strip into identical-width
-            slots regardless of label length. */}
-        <div className="mb-3 shrink-0 flex justify-center">
+      <div className="flex flex-col h-full py-2 gap-3">
+        {/* Tabs */}
+        <div className="shrink-0 flex justify-center">
           <div
             className={`
-              grid rounded-lg border border-neon-cyan/20 bg-bg-elevated p-1 gap-1
-              w-full max-w-xl
-              ${isAuthenticated ? "grid-cols-3" : "grid-cols-1"}
+              grid rounded border border-accent/20 bg-elevated p-1 gap-1
+              w-full max-w-3xl
+              ${isAuthenticated ? "grid-cols-4" : "grid-cols-2"}
             `}
           >
             <TabButton
-              label={t("explore.publicSkills", "Public")}
+              label={t("explore.systemSkills", "System Skills")}
+              count={systemData?.total}
+              active={activeTab === "system"}
+              onClick={() => handleTabChange("system")}
+            />
+            <TabButton
+              label={t("explore.publicSkills", "Public Skills")}
               count={counts?.public}
               active={activeTab === "public"}
               onClick={() => handleTabChange("public")}
@@ -215,100 +250,73 @@ export function ExplorePage() {
           </div>
         </div>
 
-        {/* Search + system-filter bar */}
-        <div className="mb-3 flex flex-wrap gap-3 items-center shrink-0">
-          <div className="flex-1 min-w-[220px]">
-            <SearchBar />
-          </div>
-          {isAuthenticated && (
-            <SystemFilterControl value={systemFilter} onChange={handleSystemFilterChange} />
-          )}
+        {/* Search bar (full width, above the 2-col layout) */}
+        <div className="shrink-0">
+          <SearchBar />
         </div>
 
-        {/* Per-tab chip filter rows — aggregated server-side so the
-            chip list is exact, not a snapshot of the current page. */}
-        {activeTab === "my-skills" && grantsSummary && (grantsSummary.orgs.length + grantsSummary.users.length > 0) && (
-          <div className="mb-3 space-y-2 shrink-0">
-            {grantsSummary.orgs.length > 0 && (
-              <ChipRow
-                label="Shared with orgs"
-                items={grantsSummary.orgs.map((o) => ({ id: o.id, label: o.displayName, count: o.skillCount }))}
-                selected={selectedGrantOrgs}
-                onToggle={(id) => toggleListParam("orgs", id)}
-              />
-            )}
-            {grantsSummary.users.length > 0 && (
-              <ChipRow
-                label="Shared with users"
-                items={grantsSummary.users.map((u) => ({ id: u.userId, label: u.email || u.displayName || u.userId, count: u.skillCount }))}
-                selected={selectedGrantUsers}
-                onToggle={(id) => toggleListParam("users", id)}
-              />
-            )}
-          </div>
-        )}
-
-        {activeTab === "shared-with-me" && sourcesSummary && (sourcesSummary.orgs.length + sourcesSummary.users.length > 0) && (
-          <div className="mb-3 space-y-2 shrink-0">
-            {sourcesSummary.orgs.length > 0 && (
-              <ChipRow
-                label="Via organizations"
-                items={sourcesSummary.orgs.map((o) => ({ id: o.id, label: o.displayName, count: o.skillCount }))}
-                selected={selectedSourceOrgs}
-                onToggle={(id) => toggleListParam("srcOrgs", id)}
-              />
-            )}
-            {sourcesSummary.users.length > 0 && (
-              <ChipRow
-                label="Shared by"
-                items={sourcesSummary.users.map((u) => ({ id: u.userId, label: u.email || u.displayName || u.userId, count: u.skillCount }))}
-                selected={selectedSourceUsers}
-                onToggle={(id) => toggleListParam("srcUsers", id)}
-              />
-            )}
-          </div>
-        )}
-
-        {/* Scrollable content */}
-        <div className="flex-1 min-h-0 overflow-y-auto px-2 py-1 -mx-2 -my-1">
-          {activeLoading ? (
-            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 pb-4">
-              {Array.from({ length: 6 }).map((_, i) => (
-                <SkeletonCard key={i} />
-              ))}
-            </div>
-          ) : items.length === 0 ? (
-            <EmptyState
-              title={emptyTitle(activeTab, t as (k: string, f?: string) => string)}
-              description={emptyDescription(activeTab, t as (k: string, f?: string) => string)}
-              action={
-                activeTab === "my-skills" && isAuthenticated ? (
-                  <Button onClick={() => navigate("/skills/new")}>
-                    {t("explore.createSkill", "Create a skill")}
-                  </Button>
-                ) : undefined
-              }
+        {/* 2-col: filter sidebar + cards */}
+        <div className="flex flex-1 min-h-0 flex-col lg:flex-row gap-4">
+          <aside className="lg:w-[280px] shrink-0 lg:overflow-y-auto lg:pr-1">
+            <FilterSidebar
+              tab={activeTab}
+              selectedServiceId={selectedServiceId}
+              selectedTags={selectedTags}
+              selectedAuthors={selectedAuthors}
+              selectedGrantOrgs={selectedGrantOrgs}
+              selectedGrantUsers={selectedGrantUsers}
+              selectedSourceOrgs={selectedSourceOrgs}
+              selectedSourceUsers={selectedSourceUsers}
+              onSetService={(id) => setSingleParam("service", id)}
+              onToggleTag={(name) => toggleListParam("tags", name)}
+              onToggleAuthor={(id) => toggleListParam("authors", id)}
+              onToggleGrantOrg={(id) => toggleListParam("orgs", id)}
+              onToggleGrantUser={(id) => toggleListParam("users", id)}
+              onToggleSourceOrg={(id) => toggleListParam("srcOrgs", id)}
+              onToggleSourceUser={(id) => toggleListParam("srcUsers", id)}
             />
-          ) : (
-            <motion.div
-              variants={containerVariants}
-              initial="hidden"
-              animate="visible"
-              className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 pb-4"
-            >
-              {items.map((skill) => (
-                <motion.div key={skill.guid} variants={itemVariants}>
-                  <SkillCard
-                    skill={skill}
-                    showOwnerControls={activeTab === "my-skills"}
-                    currentUserId={user?.id}
-                  />
-                </motion.div>
-              ))}
-            </motion.div>
-          )}
+          </aside>
 
-          <Pagination page={activePage} totalPages={totalPages} onPageChange={handlePageChange} />
+          <main className="flex-1 min-h-0 overflow-y-auto px-2 py-1 -mx-2 -my-1">
+            {activeLoading ? (
+              <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3 pb-4">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <SkeletonCard key={i} />
+                ))}
+              </div>
+            ) : items.length === 0 ? (
+              <EmptyState
+                title={emptyTitle(activeTab, t as (k: string, f?: string) => string)}
+                description={emptyDescription(activeTab, t as (k: string, f?: string) => string)}
+                action={
+                  activeTab === "my-skills" && isAuthenticated ? (
+                    <Button onClick={() => navigate("/skills/new")}>
+                      {t("explore.createSkill", "Create a skill")}
+                    </Button>
+                  ) : undefined
+                }
+              />
+            ) : (
+              <motion.div
+                variants={containerVariants}
+                initial="hidden"
+                animate="visible"
+                className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3 pb-4"
+              >
+                {items.map((skill) => (
+                  <motion.div key={skill.guid} variants={itemVariants}>
+                    <SkillCard
+                      skill={skill}
+                      showOwnerControls={activeTab === "my-skills"}
+                      currentUserId={user?.id}
+                    />
+                  </motion.div>
+                ))}
+              </motion.div>
+            )}
+
+            <Pagination page={activePage} totalPages={totalPages} onPageChange={handlePageChange} />
+          </main>
         </div>
       </div>
     </PageTransition>
@@ -328,19 +336,19 @@ function TabButton({ label, count, active, onClick }: TabButtonProps) {
       type="button"
       onClick={onClick}
       className={`
-        w-full px-4 py-2 rounded-md font-body text-sm transition-all cursor-pointer
-        inline-flex items-center justify-center gap-2
+        w-full px-3 py-2 rounded-md font-text text-sm transition-all cursor-pointer
+        inline-flex items-center justify-center gap-2 whitespace-nowrap
         ${active
-          ? "bg-neon-cyan/20 text-neon-cyan border border-neon-cyan/50"
-          : "text-text-muted hover:text-text-primary"}
+          ? "bg-accent/20 text-accent border border-accent/50"
+          : "text-meta hover:text-strong"}
       `}
     >
-      <span>{label}</span>
+      <span className="whitespace-nowrap">{label}</span>
       {count !== undefined && (
         <span
           className={`
-            px-1.5 py-0.5 rounded font-mono text-[10px]
-            ${active ? "bg-neon-cyan/30 text-neon-cyan" : "bg-bg-elevated text-text-muted"}
+            shrink-0 px-1.5 py-0.5 rounded font-mono text-[10px]
+            ${active ? "bg-accent/30 text-accent" : "bg-elevated text-meta"}
           `}
         >
           {count}
@@ -350,100 +358,361 @@ function TabButton({ label, count, active, onClick }: TabButtonProps) {
   );
 }
 
-interface SystemFilterControlProps {
-  value: SystemFilter;
-  onChange: (v: SystemFilter) => void;
+// ---------------------------------------------------------------------------
+// Filter sidebar
+// ---------------------------------------------------------------------------
+
+interface FilterSidebarProps {
+  tab: ExploreTab;
+  selectedServiceId?: string;
+  selectedTags: string[];
+  selectedAuthors: string[];
+  selectedGrantOrgs: string[];
+  selectedGrantUsers: string[];
+  selectedSourceOrgs: string[];
+  selectedSourceUsers: string[];
+  onSetService: (id: string | undefined) => void;
+  onToggleTag: (name: string) => void;
+  onToggleAuthor: (id: string) => void;
+  onToggleGrantOrg: (id: string) => void;
+  onToggleGrantUser: (id: string) => void;
+  onToggleSourceOrg: (id: string) => void;
+  onToggleSourceUser: (id: string) => void;
 }
 
-/**
- * Tri-state System-skill filter rendered as a compact segmented
- * control. Visible only to authenticated users — the detection depends
- * on the caller's NyxID services list, which anonymous callers don't
- * have.
- */
-function SystemFilterControl({ value, onChange }: SystemFilterControlProps) {
-  const options: Array<{ value: SystemFilter; label: string }> = [
-    { value: "any", label: "All" },
-    { value: "only", label: "System only" },
-    { value: "exclude", label: "Hide system" },
-  ];
+function FilterSidebar(props: FilterSidebarProps) {
+  switch (props.tab) {
+    case "system":
+      return (
+        <SystemFilters
+          selectedServiceId={props.selectedServiceId}
+          onSetService={props.onSetService}
+        />
+      );
+    case "public":
+      return (
+        <PublicFilters
+          selectedTags={props.selectedTags}
+          selectedAuthors={props.selectedAuthors}
+          onToggleTag={props.onToggleTag}
+          onToggleAuthor={props.onToggleAuthor}
+        />
+      );
+    case "my-skills":
+      return (
+        <MyFilters
+          selectedTags={props.selectedTags}
+          selectedGrantOrgs={props.selectedGrantOrgs}
+          selectedGrantUsers={props.selectedGrantUsers}
+          onToggleTag={props.onToggleTag}
+          onToggleGrantOrg={props.onToggleGrantOrg}
+          onToggleGrantUser={props.onToggleGrantUser}
+        />
+      );
+    case "shared-with-me":
+      return (
+        <SharedWithMeFilters
+          selectedSourceOrgs={props.selectedSourceOrgs}
+          selectedSourceUsers={props.selectedSourceUsers}
+          onToggleSourceOrg={props.onToggleSourceOrg}
+          onToggleSourceUser={props.onToggleSourceUser}
+        />
+      );
+  }
+}
+
+// --- per-tab sidebar bodies ---
+
+function SystemFilters({
+  selectedServiceId,
+  onSetService,
+}: {
+  selectedServiceId?: string;
+  onSetService: (id: string | undefined) => void;
+}) {
+  const { t } = useTranslation();
+  const { data: services = [] } = useSystemServiceFacets();
   return (
-    <div className="inline-flex rounded-lg border border-neon-cyan/20 bg-bg-elevated p-0.5">
-      {options.map((opt) => (
-        <button
-          key={opt.value}
-          type="button"
-          onClick={() => onChange(opt.value)}
-          className={`
-            px-3 py-1.5 rounded-md font-body text-xs transition-all cursor-pointer
-            ${value === opt.value
-              ? "bg-neon-cyan/20 text-neon-cyan"
-              : "text-text-muted hover:text-text-primary"}
-          `}
-        >
-          {opt.label}
-        </button>
-      ))}
+    <FilterSection title={t("explore.filterService", "NyxID service") as string}>
+      {services.length === 0 ? (
+        <FilterEmpty>{t("explore.noServices", "No system services yet.")}</FilterEmpty>
+      ) : (
+        <FilterChipList>
+          {services.map((s) => (
+            <FilterChip
+              key={s.id}
+              label={s.label || s.slug}
+              count={s.count}
+              selected={selectedServiceId === s.id}
+              onClick={() => onSetService(selectedServiceId === s.id ? undefined : s.id)}
+            />
+          ))}
+        </FilterChipList>
+      )}
+    </FilterSection>
+  );
+}
+
+function PublicFilters({
+  selectedTags,
+  selectedAuthors,
+  onToggleTag,
+  onToggleAuthor,
+}: {
+  selectedTags: string[];
+  selectedAuthors: string[];
+  onToggleTag: (name: string) => void;
+  onToggleAuthor: (id: string) => void;
+}) {
+  const { t } = useTranslation();
+  const { data: tags = [] } = useSkillTagFacets("public");
+  const { data: authors = [] } = useSkillAuthorFacets("public");
+  return (
+    <div className="space-y-4">
+      <FilterSection title={t("explore.filterTags", "Tag") as string}>
+        {tags.length === 0 ? (
+          <FilterEmpty>{t("explore.noTags", "No tags yet.")}</FilterEmpty>
+        ) : (
+          <FilterChipList>
+            {tags.map((tag) => (
+              <FilterChip
+                key={tag.name}
+                label={tag.name}
+                count={tag.count}
+                selected={selectedTags.includes(tag.name)}
+                onClick={() => onToggleTag(tag.name)}
+              />
+            ))}
+          </FilterChipList>
+        )}
+      </FilterSection>
+      <FilterSection title={t("explore.filterAuthors", "Author") as string}>
+        {authors.length === 0 ? (
+          <FilterEmpty>{t("explore.noAuthors", "No authors yet.")}</FilterEmpty>
+        ) : (
+          <FilterChipList>
+            {authors.map((a) => (
+              <FilterChip
+                key={a.userId}
+                label={a.displayName || a.email || a.userId}
+                count={a.count}
+                selected={selectedAuthors.includes(a.userId)}
+                onClick={() => onToggleAuthor(a.userId)}
+              />
+            ))}
+          </FilterChipList>
+        )}
+      </FilterSection>
     </div>
   );
 }
 
-interface ChipRowProps {
-  label: string;
-  items: Array<{ id: string; label: string; count: number }>;
-  selected: string[];
-  onToggle: (id: string) => void;
+function MyFilters({
+  selectedTags,
+  selectedGrantOrgs,
+  selectedGrantUsers,
+  onToggleTag,
+  onToggleGrantOrg,
+  onToggleGrantUser,
+}: {
+  selectedTags: string[];
+  selectedGrantOrgs: string[];
+  selectedGrantUsers: string[];
+  onToggleTag: (name: string) => void;
+  onToggleGrantOrg: (id: string) => void;
+  onToggleGrantUser: (id: string) => void;
+}) {
+  const { t } = useTranslation();
+  const { data: tags = [] } = useSkillTagFacets("mine");
+  const { data: grants } = useMySkillGrantsSummary();
+  const orgs = grants?.orgs ?? [];
+  const users = grants?.users ?? [];
+  return (
+    <div className="space-y-4">
+      <FilterSection title={t("explore.filterTags", "Tag") as string}>
+        {tags.length === 0 ? (
+          <FilterEmpty>{t("explore.noTags", "No tags yet.")}</FilterEmpty>
+        ) : (
+          <FilterChipList>
+            {tags.map((tag) => (
+              <FilterChip
+                key={tag.name}
+                label={tag.name}
+                count={tag.count}
+                selected={selectedTags.includes(tag.name)}
+                onClick={() => onToggleTag(tag.name)}
+              />
+            ))}
+          </FilterChipList>
+        )}
+      </FilterSection>
+      <FilterSection title={t("explore.filterSharedWithUsers", "Shared with users") as string}>
+        {users.length === 0 ? (
+          <FilterEmpty>
+            {t("explore.notSharedWithUsers", "You haven't shared any skills with specific users.")}
+          </FilterEmpty>
+        ) : (
+          <FilterChipList>
+            {users.map((u) => (
+              <FilterChip
+                key={u.userId}
+                label={u.email || u.displayName || u.userId}
+                count={u.skillCount}
+                selected={selectedGrantUsers.includes(u.userId)}
+                onClick={() => onToggleGrantUser(u.userId)}
+              />
+            ))}
+          </FilterChipList>
+        )}
+      </FilterSection>
+      <FilterSection title={t("explore.filterSharedWithOrgs", "Shared with orgs") as string}>
+        {orgs.length === 0 ? (
+          <FilterEmpty>
+            {t("explore.notSharedWithOrgs", "You haven't shared any skills with orgs.")}
+          </FilterEmpty>
+        ) : (
+          <FilterChipList>
+            {orgs.map((o) => (
+              <FilterChip
+                key={o.id}
+                label={o.displayName}
+                count={o.skillCount}
+                selected={selectedGrantOrgs.includes(o.id)}
+                onClick={() => onToggleGrantOrg(o.id)}
+              />
+            ))}
+          </FilterChipList>
+        )}
+      </FilterSection>
+    </div>
+  );
 }
 
-/**
- * Horizontal row of filter chips. Each chip reads
- * `"<label>  <count>"` and toggles the corresponding id in the tab's
- * URL list param. Multiple chips can be selected at once — the
- * underlying query interprets them with OR semantics.
- */
-function ChipRow({ label, items, selected, onToggle }: ChipRowProps) {
+function SharedWithMeFilters({
+  selectedSourceOrgs,
+  selectedSourceUsers,
+  onToggleSourceOrg,
+  onToggleSourceUser,
+}: {
+  selectedSourceOrgs: string[];
+  selectedSourceUsers: string[];
+  onToggleSourceOrg: (id: string) => void;
+  onToggleSourceUser: (id: string) => void;
+}) {
+  const { t } = useTranslation();
+  const { data: sources } = useSharedSkillSources();
+  const orgs = sources?.orgs ?? [];
+  const users = sources?.users ?? [];
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <span className="font-mono text-[10px] uppercase tracking-widest text-text-muted shrink-0">
-        {label}
-      </span>
-      {items.map((item) => {
-        const isOn = selected.includes(item.id);
-        return (
-          <button
-            key={item.id}
-            type="button"
-            onClick={() => onToggle(item.id)}
-            className={`
-              inline-flex items-center gap-2 px-2.5 py-1 rounded-full border font-body text-xs transition-all cursor-pointer
-              ${isOn
-                ? "border-neon-cyan/60 bg-neon-cyan/15 text-neon-cyan"
-                : "border-neon-cyan/15 bg-bg-elevated text-text-primary hover:border-neon-cyan/40"}
-            `}
-          >
-            <span className="max-w-[180px] truncate">{item.label}</span>
-            <span
-              className={`
-                px-1.5 rounded font-mono text-[10px]
-                ${isOn ? "bg-neon-cyan/30" : "bg-bg-base/70 text-text-muted"}
-              `}
-            >
-              {item.count}
-            </span>
-          </button>
-        );
-      })}
+    <div className="space-y-4">
+      <FilterSection title={t("explore.filterSharedByUsers", "Shared by users") as string}>
+        {users.length === 0 ? (
+          <FilterEmpty>{t("explore.notSharedByUsers", "Nobody has shared with you directly.")}</FilterEmpty>
+        ) : (
+          <FilterChipList>
+            {users.map((u) => (
+              <FilterChip
+                key={u.userId}
+                label={u.email || u.displayName || u.userId}
+                count={u.skillCount}
+                selected={selectedSourceUsers.includes(u.userId)}
+                onClick={() => onToggleSourceUser(u.userId)}
+              />
+            ))}
+          </FilterChipList>
+        )}
+      </FilterSection>
+      <FilterSection title={t("explore.filterSharedByOrgs", "Shared via orgs") as string}>
+        {orgs.length === 0 ? (
+          <FilterEmpty>{t("explore.notSharedByOrgs", "No orgs have shared anything with you.")}</FilterEmpty>
+        ) : (
+          <FilterChipList>
+            {orgs.map((o) => (
+              <FilterChip
+                key={o.id}
+                label={o.displayName}
+                count={o.skillCount}
+                selected={selectedSourceOrgs.includes(o.id)}
+                onClick={() => onToggleSourceOrg(o.id)}
+              />
+            ))}
+          </FilterChipList>
+        )}
+      </FilterSection>
     </div>
+  );
+}
+
+// --- sidebar primitives ---
+
+function FilterSection({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section>
+      <h3 className="mb-2 font-mono text-[10px] uppercase tracking-[0.18em] text-meta">
+        {title}
+      </h3>
+      {children}
+    </section>
+  );
+}
+
+function FilterEmpty({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="font-text text-xs text-meta italic">{children}</p>
+  );
+}
+
+function FilterChipList({ children }: { children: React.ReactNode }) {
+  return <div className="flex flex-wrap gap-1.5">{children}</div>;
+}
+
+interface FilterChipProps {
+  label: string;
+  count?: number;
+  selected: boolean;
+  onClick: () => void;
+}
+
+function FilterChip({ label, count, selected, onClick }: FilterChipProps) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`
+        inline-flex items-center gap-2 px-2.5 py-1 rounded-full border font-text text-xs transition-all cursor-pointer
+        ${selected
+          ? "border-accent/60 bg-accent/15 text-accent"
+          : "border-accent/15 bg-elevated text-strong hover:border-accent/40"}
+      `}
+    >
+      <span className="max-w-[180px] truncate">{label}</span>
+      {count !== undefined && (
+        <span
+          className={`
+            px-1.5 rounded font-mono text-[10px]
+            ${selected ? "bg-accent/30" : "bg-bg-base/70 text-meta"}
+          `}
+        >
+          {count}
+        </span>
+      )}
+    </button>
   );
 }
 
 function emptyTitle(tab: ExploreTab, t: (key: string, fallback?: string) => string): string {
+  if (tab === "system") return t("explore.noSystemSkills", "No system skills yet");
   if (tab === "public") return t("explore.noSkillsFound", "No public skills match");
   if (tab === "my-skills") return t("explore.noSkillsYet", "You haven't created any skills yet");
   return t("explore.noSharedSkills", "Nothing has been shared with you yet");
 }
 
 function emptyDescription(tab: ExploreTab, t: (key: string, fallback?: string) => string): string {
+  if (tab === "system")
+    return t(
+      "explore.systemSkillsHint",
+      "System skills are skills tied to a NyxID admin service. Platform admins tie any skill to any admin service to publish it as a system skill.",
+    );
   if (tab === "public") return t("explore.tryAdjusting", "Try adjusting your search or filters.");
   if (tab === "my-skills") return t("explore.createFirst", "Create your first skill to get started.");
   return t(

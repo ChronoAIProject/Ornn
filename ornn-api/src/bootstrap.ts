@@ -29,6 +29,7 @@ import { StorageClient } from "./clients/storageClient";
 import { SandboxClient } from "./clients/sandboxClient";
 import { NyxLlmClient } from "./clients/nyxid/llm";
 import { NyxidOrgsClient } from "./clients/nyxid/orgs";
+import { NyxidServiceClient } from "./clients/nyxid/service";
 import { NyxidSaTokenProvider } from "./clients/nyxid/base";
 
 // Domain: Skill CRUD
@@ -42,10 +43,6 @@ import { AuditRepository } from "./domains/skills/audit/repository";
 import { AuditService } from "./domains/skills/audit/service";
 import { createAuditRoutes } from "./domains/skills/audit/routes";
 
-// Domain: Shares (audit-gated sharing)
-import { ShareRepository } from "./domains/shares/repository";
-import { ShareService } from "./domains/shares/service";
-import { createShareRoutes } from "./domains/shares/routes";
 
 // Domain: Notifications
 import { NotificationRepository } from "./domains/notifications/repository";
@@ -83,6 +80,11 @@ import { createMeRoutes } from "./domains/me/routes";
 
 // Domain: Users (directory lookup)
 import { createUserRoutes } from "./domains/users/routes";
+
+// Domain: Platform settings (admin-editable thresholds, etc.)
+import { PlatformSettingsRepository } from "./domains/platform/repository";
+import { PlatformSettingsService } from "./domains/platform/service";
+import { createPlatformSettingsRoutes } from "./domains/platform/routes";
 
 // OpenAPI spec
 import { buildSpec } from "./openapi/specBuilder";
@@ -159,12 +161,22 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
     storageBucket: config.storageBucket,
   });
 
-  const skillRoutes = createSkillRoutes({
-    skillService,
-    skillRepo,
-    maxFileSize: config.maxPackageSizeBytes,
-    activityRepo,
-  });
+  // ---- Domain: Notifications (built before AuditService so the audit
+  //   pipeline can fan out completion notifications) ----
+  const notificationRepo = new NotificationRepository(db);
+  void notificationRepo.ensureIndexes().catch((err) =>
+    logger.warn({ err }, "notifications indexes ensureIndexes failed — proceeding anyway"),
+  );
+  const notificationService = new NotificationService({ notificationRepo });
+  const notificationRoutes = createNotificationRoutes({ notificationService });
+
+  // ---- NyxID Orgs Client — built early so the audit fan-out can expand
+  //   sharedWithOrgs into member rosters when sending consumer notifications.
+  const nyxidOrgsClient = new NyxidOrgsClient(config.nyxidBaseUrl, saTokenProvider);
+
+  // ---- NyxID Service Client — used by the skill→service tie endpoint
+  //   and the picker (`/me/nyxid-services`). Per-token cached.
+  const nyxidServiceClient = new NyxidServiceClient(config.nyxidBaseUrl);
 
   // ---- Domain: Skill Audit ----
   const auditRepo = new AuditRepository(db);
@@ -178,18 +190,15 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
     storageBucket: config.storageBucket,
     llmClient: nyxLlmClient,
     model: config.defaultLlmModel,
-    cacheTtlMs: 7 * 24 * 60 * 60 * 1000, // 7 days
+    // Audits are re-run automatically when the cached record ages past
+    // this TTL, even if the skill bytes haven't changed. 30 days keeps
+    // LLM spend reasonable while still catching drift in the audit
+    // prompt / model over time.
+    cacheTtlMs: 30 * 24 * 60 * 60 * 1000,
+    notificationService,
+    nyxidOrgsClient,
   });
   const auditRoutes = createAuditRoutes({ auditService, skillService });
-
-  // ---- Domain: Shares (audit-gated sharing) ----
-  // ---- Domain: Notifications ----
-  const notificationRepo = new NotificationRepository(db);
-  void notificationRepo.ensureIndexes().catch((err) =>
-    logger.warn({ err }, "notifications indexes ensureIndexes failed — proceeding anyway"),
-  );
-  const notificationService = new NotificationService({ notificationRepo });
-  const notificationRoutes = createNotificationRoutes({ notificationService });
 
   // ---- Domain: Analytics ----
   const analyticsRepo = new AnalyticsRepository(db);
@@ -199,17 +208,22 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   const analyticsService = new AnalyticsService({ analyticsRepo });
   const analyticsRoutes = createAnalyticsRoutes({ analyticsService, skillService });
 
-  const shareRepo = new ShareRepository(db);
-  void shareRepo.ensureIndexes().catch((err) =>
-    logger.warn({ err }, "share_requests indexes ensureIndexes failed — proceeding anyway"),
-  );
-  const shareService = new ShareService({
-    shareRepo,
-    auditService,
+  // ---- Domain: Platform settings (admin-editable thresholds) ----
+  const platformSettingsRepo = new PlatformSettingsRepository(db);
+  const platformSettingsService = new PlatformSettingsService(platformSettingsRepo);
+  const platformSettingsRoutes = createPlatformSettingsRoutes({ platformSettingsService });
+
+  // Skill routes — sharing is now a direct PUT /permissions write; the
+  // audit signal is surfaced as a per-version label, not a gate.
+  const skillRoutes = createSkillRoutes({
     skillService,
-    notificationService,
+    skillRepo,
+    analyticsService,
+    maxFileSize: config.maxPackageSizeBytes,
+    activityRepo,
+    nyxidServiceClient,
+    extraNyxidServices: config.extraNyxidServices,
   });
-  const shareRoutes = createShareRoutes({ shareService });
 
   // ---- Domain: Skill Search ----
   const searchService = new SearchService({
@@ -220,7 +234,6 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
 
   const searchRoutes = createSearchRoutes({
     searchService,
-    nyxidBaseUrl: config.nyxidBaseUrl,
     skillRepo,
   });
 
@@ -250,6 +263,8 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   const playgroundRoutes = createPlaygroundRoutes({
     chatService,
     keepAliveIntervalMs: config.sseKeepAliveIntervalMs,
+    analyticsService,
+    skillService,
   });
 
   // ---- Domain: Admin ----
@@ -323,9 +338,6 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
     );
   });
 
-  // ---- NyxID Orgs Client — used by the per-request org-membership lookup ----
-  const nyxidOrgsClient = new NyxidOrgsClient(config.nyxidBaseUrl);
-
   // ---- API routes — all traffic via NyxID proxy, trust proxy headers ----
   const apiApp = new Hono();
   apiApp.use("*", proxyAuthSetup());
@@ -335,18 +347,20 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   apiApp.use("*", nyxidOrgLookupMiddleware(nyxidOrgsClient));
   apiApp.route("/", skillRoutes);
   apiApp.route("/", auditRoutes);
-  apiApp.route("/", shareRoutes);
   apiApp.route("/", notificationRoutes);
   apiApp.route("/", analyticsRoutes);
   apiApp.route("/", searchRoutes);
   apiApp.route("/", generationRoutes);
   apiApp.route("/", playgroundRoutes);
   apiApp.route("/", adminRoutes);
+  apiApp.route("/", platformSettingsRoutes);
   apiApp.route("/", formatRoutes);
   apiApp.route("/", createMeRoutes({
     nyxidBaseUrl: config.nyxidBaseUrl,
     skillRepo,
     activityRepo,
+    nyxidServiceClient,
+    extraNyxidServices: config.extraNyxidServices,
   }));
   apiApp.route("/", createUserRoutes({ activityRepo }));
   app.route("/api/v1", apiApp);

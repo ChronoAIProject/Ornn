@@ -1,6 +1,8 @@
 /**
- * Sidebar Component.
- * Collapsible sidebar navigation with neon cyberpunk styling.
+ * Sidebar Component — Forge Workshop app shell.
+ *
+ * Collapsible sidebar navigation that reads as a workshop tool rail:
+ * hairline borders, mono utility labels, ember active markers.
  * Responsive: drawer on mobile, fixed sidebar on desktop.
  * @module components/layout/Sidebar
  */
@@ -105,11 +107,11 @@ export function Sidebar({
     <div className="flex h-full flex-col">
       {/* Header with collapse toggle */}
       {!isMobile && (
-        <div className="flex h-14 items-center justify-end border-b border-neon-cyan/10 px-3">
+        <div className="flex h-14 items-center justify-end border-b border-subtle px-3">
           <button
             type="button"
             onClick={toggleCollapsed}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-neon-cyan/10 hover:text-neon-cyan cursor-pointer"
+            className="flex h-8 w-8 items-center justify-center rounded text-meta transition-colors hover:bg-accent/10 hover:text-accent cursor-pointer"
             aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
           >
             <ChevronIcon
@@ -122,14 +124,14 @@ export function Sidebar({
 
       {/* Mobile header */}
       {isMobile && (
-        <div className="flex h-14 items-center justify-between border-b border-neon-cyan/10 px-4">
-          <span className="font-heading text-sm uppercase tracking-wider text-neon-cyan">
+        <div className="flex h-14 items-center justify-between border-b border-subtle px-4">
+          <span className="font-display text-sm uppercase tracking-wider text-accent">
             Navigation
           </span>
           <button
             type="button"
             onClick={onMobileClose}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-neon-cyan/10 hover:text-neon-cyan cursor-pointer"
+            className="flex h-8 w-8 items-center justify-center rounded text-meta transition-colors hover:bg-accent/10 hover:text-accent cursor-pointer"
             aria-label="Close sidebar"
           >
             <CloseIcon className="h-5 w-5" />
@@ -156,13 +158,13 @@ export function Sidebar({
                   to={item.to}
                   onClick={isMobile ? onMobileClose : undefined}
                   className={`
-                    group relative flex items-center gap-3 rounded-lg px-3 py-2.5
-                    font-body text-sm transition-all duration-200
+                    group relative flex items-center gap-3 rounded px-3 py-2.5
+                    font-text text-sm transition-all duration-200
                     ${collapsed && !isMobile ? "justify-center" : ""}
                     ${
                       active
-                        ? "bg-neon-cyan/10 text-neon-cyan"
-                        : "text-text-muted hover:bg-bg-elevated hover:text-text-primary"
+                        ? "bg-accent/10 text-accent"
+                        : "text-meta hover:bg-elevated hover:text-strong"
                     }
                   `}
                 >
@@ -172,7 +174,7 @@ export function Sidebar({
                     {active && (
                       <motion.div
                         layoutId={isMobile ? "sidebar-mobile-active" : "sidebar-active"}
-                        className="absolute -left-3 top-1/2 h-4 w-1 -translate-y-1/2 rounded-r bg-neon-cyan shadow-[0_0_8px_#FF6B00]"
+                        className="absolute -left-3 top-1/2 h-4 w-1 -translate-y-1/2 rounded-r bg-accent"
                       />
                     )}
                   </div>
@@ -195,17 +197,17 @@ export function Sidebar({
 
                   {/* Badge */}
                   {item.badge && (!collapsed || isMobile) && (
-                    <span className="ml-auto rounded-full bg-neon-magenta/20 px-2 py-0.5 text-xs font-semibold text-neon-magenta">
+                    <span className="ml-auto rounded-full bg-accent-support/20 px-2 py-0.5 text-xs font-semibold text-accent-support">
                       {item.badge}
                     </span>
                   )}
 
                   {/* Tooltip for collapsed state */}
                   {collapsed && !isMobile && (
-                    <div className="absolute left-full ml-2 hidden rounded-lg bg-bg-elevated px-3 py-1.5 text-xs font-medium text-text-primary shadow-lg group-hover:block z-50 whitespace-nowrap">
+                    <div className="absolute left-full ml-2 hidden rounded bg-elevated px-3 py-1.5 text-xs font-medium text-strong card-impression group-hover:block z-50 whitespace-nowrap">
                       {item.label}
                       {item.badge && (
-                        <span className="ml-2 text-neon-magenta">({item.badge})</span>
+                        <span className="ml-2 text-accent-support">({item.badge})</span>
                       )}
                     </div>
                   )}
@@ -218,9 +220,9 @@ export function Sidebar({
 
       {/* Footer / User info when collapsed */}
       {user && collapsed && !isMobile && (
-        <div className="border-t border-neon-cyan/10 p-3">
+        <div className="border-t border-subtle p-3">
           <div className="group relative flex justify-center">
-            <div className="h-8 w-8 overflow-hidden rounded-full bg-bg-elevated ring-2 ring-neon-cyan/20">
+            <div className="h-8 w-8 overflow-hidden rounded-full bg-elevated ring-2 ring-accent/20">
               {user.avatarUrl ? (
                 <img
                   src={user.avatarUrl}
@@ -229,14 +231,14 @@ export function Sidebar({
                 />
               ) : (
                 <div className="flex h-full w-full items-center justify-center">
-                  <span className="font-heading text-xs text-neon-cyan">
+                  <span className="font-display text-xs text-accent">
                     {user.displayName.charAt(0).toUpperCase()}
                   </span>
                 </div>
               )}
             </div>
             {/* Tooltip */}
-            <div className="absolute left-full ml-2 hidden rounded-lg bg-bg-elevated px-3 py-1.5 text-xs font-medium text-text-primary shadow-lg group-hover:block z-50 whitespace-nowrap">
+            <div className="absolute left-full ml-2 hidden rounded bg-elevated px-3 py-1.5 text-xs font-medium text-strong card-impression group-hover:block z-50 whitespace-nowrap">
               {user.displayName}
             </div>
           </div>
@@ -254,8 +256,8 @@ export function Sidebar({
         animate={collapsed ? "collapsed" : "expanded"}
         transition={{ type: "spring", stiffness: 300, damping: 30 }}
         className={`
-          hidden lg:block fixed top-16 left-0 bottom-0 z-20
-          border-r border-neon-cyan/10 bg-bg-deep/95 backdrop-blur-md
+          hidden lg:block fixed top-[60px] left-0 bottom-0 z-20
+          border-r border-subtle bg-page/95 backdrop-blur-md
           ${className}
         `}
       >
@@ -282,7 +284,7 @@ export function Sidebar({
               animate={{ x: 0 }}
               exit={{ x: "-100%" }}
               transition={{ type: "spring", stiffness: 300, damping: 30 }}
-              className="fixed top-0 left-0 bottom-0 z-40 w-72 glass border-r border-neon-cyan/10 lg:hidden"
+              className="card-impression fixed top-0 left-0 bottom-0 z-40 w-72 border-r border-subtle bg-page lg:hidden"
             >
               <SidebarContent isMobile />
             </motion.aside>

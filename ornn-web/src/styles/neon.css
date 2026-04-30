@@ -1,150 +1,268 @@
 @import "tailwindcss";
 @import "highlight.js/styles/tokyo-night-dark.css";
 
+/* Reserve the scrollbar gutter at all times so navigating between
+   landing (body scrolls — scrollbar visible) and app-shell routes
+   (RootLayout uses h-screen overflow-hidden — no body scrollbar)
+   doesn't make centered containers (Navbar, page wrappers) jump
+   horizontally by the scrollbar width. The gutter stays empty on
+   app-shell routes; landing keeps its actual scrollbar. */
+html {
+  scrollbar-gutter: stable;
+}
+
+/* Space Grotesk is the single Forge Workshop display voice for the whole
+   product (landing + app shell). Loaded via index.html alongside Inter and
+   JetBrains Mono. The legacy Fraunces / PP Editorial New fonts have been
+   retired — `--font-display` resolves to Space Grotesk everywhere. */
+
 @theme {
-  --color-neon-cyan: #FF6B00;
-  --color-neon-magenta: #FF8C38;
-  --color-neon-yellow: #FFB800;
-  --color-neon-green: #39ff14;
-  --color-neon-red: #ff003c;
-  --color-bg-deep: #0a0a0f;
-  --color-bg-surface: #131313;
-  --color-bg-elevated: #1e1e1e;
-  --color-text-primary: #e8e8e8;
-  --color-text-muted: #7a7a7a;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
 
-  --font-heading: "Orbitron", sans-serif;
-  --font-body: "Rajdhani", sans-serif;
-  --font-mono: "JetBrains Mono", monospace;
+  /* ── Forge Workshop tokens (DESIGN.md, light-first) ──
+   * Defaults below are the dark-mode values; light-mode overrides
+   * sit in [data-theme="light"]. New UI work uses these:
+   *   bg-page, bg-panel, bg-card, bg-elevated
+   *   text-strong, text-body, text-meta
+   *   text-accent, bg-accent, border-accent
+   *   text-success / warning / danger / info
+   *   border-subtle, border-strong
+   * Plus Space Grotesk / Inter / JetBrains Mono via font-display, font-text, font-mono.
+   */
+  --color-page: #0B0907;
+  --color-panel: #14110B;
+  --color-card: #1A1610;
+  --color-elevated: #221E16;
+  --color-strong: #F1ECDE;
+  --color-body: #C9BFAD;
+  --color-meta: #6B6254;
+  --color-accent: #FF7322;
+  --color-accent-muted: #C9460D;                     /* lower-heat ember; press-shadow color */
+  --color-accent-support: #E8B341;
+  --color-accent-secondary: #5BC8E8;                 /* arc-blue (welding light) — secondary diagrammatic accent */
+  --color-shadow-press: rgba(0, 0, 0, 0.55);         /* letterpress impression on cards */
+  --color-subtle: rgba(201, 191, 173, 0.12);
+  --color-strong-edge: rgba(201, 191, 173, 0.22);
+  --color-border-subtle: rgb(201 191 173 / 0.12);    /* alias for landing components */
+  --color-border-strong: rgb(201 191 173 / 0.22);    /* alias for landing components */
+  --color-border-stronger: rgb(201 191 173 / 0.34);  /* rivet dots, welded-seam markers */
+  --color-success: #7FA06A;
+  --color-success-soft: rgba(127, 160, 106, 0.12);
+  --color-warning: #E8B341;
+  --color-warning-soft: rgba(232, 179, 65, 0.12);
+  --color-danger: #C96B5A;
+  --color-danger-soft: rgba(201, 107, 90, 0.12);
+  --color-info: #8A97A3;
+  --color-info-soft: rgba(138, 151, 163, 0.12);
+  --color-code-bg: #08070A;
+  --color-code-surface: #08070A;                     /* alias for landing components */
+
+  /* Material primitives — used for arbitrary-value tokens on the landing */
+  --color-obsidian: #0B0907;
+  --color-graphite: #14110B;
+  --color-iron: #221E16;
+  --color-steel: #3A3328;
+  --color-ash: #6B6254;
+  --color-bone: #C9BFAD;
+  --color-parchment: #F1ECDE;
+  --color-ember: #FF7322;
+  --color-ember-dim: #C9460D;
+  --color-ember-deep: #7A2308;                       /* deep burnt-sienna for letterpress card-shadow */
+  --color-molten: #E8B341;
+  --color-arc: #5BC8E8;                              /* arc-blue — secondary diagrammatic accent */
+  --color-arc-dim: #3A8FB8;
+  --color-arc-glow: rgba(91, 200, 232, 0.28);
+  --color-arc-soft: rgba(91, 200, 232, 0.10);
+  --color-ember-glow: rgba(255, 115, 34, 0.30);      /* hero floor / pulse glows */
+
+  --font-display: "Space Grotesk", "Inter", system-ui, sans-serif;
+  --font-text: "Inter", system-ui, sans-serif;
+  --font-ui: "Inter", system-ui, sans-serif;
+
+  /* Component shadow tokens — letterpress hard-offset (Forge Workshop).
+     No soft drop shadows on cards or CTAs; never inline arbitrary shadow strings.
+     Per-state contract: rest carries impression, hover translates INTO impression
+     (shadow shrinks), active fully sinks. See DESIGN.md → Material & Print Vocabulary. */
+  --button-primary-shadow-rest:   4px 4px 0 0 var(--color-accent-muted);
+  --button-primary-shadow-hover:  2px 2px 0 0 var(--color-accent-muted);
+  --button-primary-shadow-active: 0 0 0 0 transparent;
+  --button-ghost-shadow-rest:     3px 3px 0 0 var(--color-border-stronger);
+  --button-ghost-shadow-hover:    1.5px 1.5px 0 0 var(--color-accent);
+  --button-focus-ring:            0 0 0 2px var(--color-page), 0 0 0 4px var(--color-accent);
+  --card-shadow-rest:             5px 5px 0 0 var(--color-shadow-press), inset 0 0 0 1px var(--color-border-subtle);
+  --card-shadow-hover:            2px 2px 0 0 var(--color-shadow-press), inset 0 0 0 1px var(--color-border-strong);
+
+  /* Theme-aware gradients used by HeroStage and other landing surfaces.
+     Light-mode overrides live in [data-theme="light"] below. */
+  --gradient-hero:
+    radial-gradient(ellipse 70% 55% at 50% 95%, rgb(255 115 34 / 0.22), transparent 60%),
+    radial-gradient(ellipse 40% 30% at 50% 80%, rgb(232 179 65 / 0.10), transparent 70%),
+    linear-gradient(180deg, #0B0907 0%, #0E0D0B 40%, #14110B 100%);
+  --gradient-hero-floor:
+    linear-gradient(rgb(201 191 173 / 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(201 191 173 / 0.04) 1px, transparent 1px);
+  --gradient-publish: linear-gradient(135deg, #14110B 0%, #0E0D0B 60%);
+  --gradient-styled-media:
+    radial-gradient(ellipse 80% 70% at 30% 40%, rgb(255 115 34 / 0.45), transparent 60%),
+    radial-gradient(ellipse 60% 50% at 70% 70%, rgb(232 179 65 / 0.3), transparent 70%),
+    linear-gradient(135deg, #14110B, #221E16);
+  --surface-styled-card: #140F0A;
+  --surface-code: #0a0907; /* terminal — stays dark in both themes per DESIGN.md */
+
+  /* Translucent rail surfaces — flip per theme */
+  --surface-rail: rgb(20 15 10 / 0.55);
+  --surface-rail-head: rgb(14 13 11 / 0.7);
+  --surface-rail-search: rgb(14 13 11 / 0.45);
+  --surface-rail-fade: linear-gradient(180deg, transparent, rgb(14 13 11 / 0.9));
+
+  /* Translucent nav surface (legacy) — landing nav now uses bg-page directly */
+  --surface-nav: rgb(14 13 11 / 0.72);
+
+  /* Translucent overlay panel — used by hero's final CTA card */
+  --surface-overlay: rgb(14 13 11 / 0.82);
+
+  /* Blueprint / drafting paper grid — applied behind editorial sections */
+  --pattern-grid:
+    linear-gradient(rgb(201 191 173 / 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(201 191 173 / 0.045) 1px, transparent 1px);
+  --pattern-grid-size: 48px 48px;
 }
 
-/* ──────── Light mode overrides ──────── */
+/* ──────── Light mode overrides — Forge Workshop (cool steel paper) ──────── */
 [data-theme="light"] {
-  --color-bg-deep: #fafafa;
-  --color-bg-surface: #ffffff;
-  --color-bg-elevated: #f3f3f5;
-  --color-text-primary: #2d2d2d;
-  --color-text-muted: #888888;
-  --color-neon-cyan: #d45a00;
-  --color-neon-magenta: #c06000;
-  --color-neon-yellow: #b38200;
-  --color-neon-green: #1a8c0a;
-  --color-neon-red: #d42020;
+  /* Forge Workshop — bright (flagship). Page bg uses cool steel paper
+     (B ≥ G ≥ R) per DESIGN.md Differentiation Guardrails — never warm cream. */
+  --color-page: #EAECEC;
+  --color-panel: #DCDFDF;
+  --color-card: #FFFFFF;
+  --color-elevated: #EDEFEF;
+  --color-strong: #14130E;
+  --color-body: #4A453B;
+  --color-meta: #7E776B;
+  --color-accent: #D9461A;
+  --color-accent-muted: #B33912;                     /* press-shadow color on primary CTAs */
+  --color-accent-support: #B8861A;
+  --color-accent-secondary: #2B7791;                 /* arc-blue (welding light, light mode) */
+  --color-shadow-press: rgba(110, 34, 7, 0.13);      /* deep ember letterpress impression on light */
+  --color-subtle: rgba(20, 19, 14, 0.08);
+  --color-strong-edge: rgba(20, 19, 14, 0.18);
+  --color-success: #5F7A46;
+  --color-success-soft: rgba(95, 122, 70, 0.10);
+  --color-warning: #A97818;
+  --color-warning-soft: rgba(169, 120, 24, 0.10);
+  --color-danger: #9E4E42;
+  --color-danger-soft: rgba(158, 78, 66, 0.10);
+  --color-info: #5D6973;
+  --color-info-soft: rgba(93, 105, 115, 0.10);
+  --color-code-bg: #14110B;
+  --color-border-subtle: rgb(20 19 14 / 0.08);
+  --color-border-strong: rgb(20 19 14 / 0.18);
+  --color-border-stronger: rgb(20 19 14 / 0.40);
+  --color-code-surface: #14110B;                      /* deliberately stays dark per DESIGN.md */
+
+  /* Material primitives — Forge Workshop cool steel family */
+  --color-obsidian: #EAECEC;
+  --color-graphite: #DCDFDF;
+  --color-iron: #CECECE;
+  --color-steel: #B8B8B8;
+  --color-ash: #7E776B;
+  --color-bone: #4A453B;
+  --color-parchment: #14130E;
+  --color-ember: #D9461A;
+  --color-ember-dim: #B33912;
+  --color-ember-deep: #6E2207;                       /* slightly deeper for paper contrast */
+  --color-molten: #B8861A;
+  --color-arc: #2B7791;                              /* arc-blue — secondary, light mode */
+  --color-arc-dim: #1A5670;
+  --color-arc-glow: rgba(43, 119, 145, 0.22);
+  --color-arc-soft: rgba(43, 119, 145, 0.10);
+  --color-ember-glow: rgba(217, 70, 26, 0.22);       /* light-mode ember pulse */
+
+  --font-display: "Space Grotesk", "Inter", system-ui, sans-serif;
+  --font-text: "Inter", system-ui, sans-serif;
+  --font-ui: "Inter", system-ui, sans-serif;
+
+  /* Component shadow tokens — light-mode letterpress (deep-ember impression) */
+  --button-primary-shadow-rest:   4px 4px 0 0 var(--color-accent-muted);
+  --button-primary-shadow-hover:  2px 2px 0 0 var(--color-accent-muted);
+  --button-primary-shadow-active: 0 0 0 0 transparent;
+  --button-ghost-shadow-rest:     3px 3px 0 0 var(--color-border-stronger);
+  --button-ghost-shadow-hover:    1.5px 1.5px 0 0 var(--color-accent);
+  --button-focus-ring:            0 0 0 2px var(--color-page), 0 0 0 4px var(--color-accent);
+  --card-shadow-rest:             5px 5px 0 0 var(--color-shadow-press), inset 0 0 0 1px var(--color-border-subtle);
+  --card-shadow-hover:            2px 2px 0 0 var(--color-shadow-press), inset 0 0 0 1px var(--color-border-strong);
+
+  /* Theme-aware gradients — cool steel paper in light mode (Forge Workshop) */
+  --gradient-hero:
+    radial-gradient(ellipse 70% 55% at 50% 95%, rgb(217 70 26 / 0.18), transparent 60%),
+    radial-gradient(ellipse 40% 30% at 50% 80%, rgb(184 134 26 / 0.10), transparent 70%),
+    linear-gradient(180deg, #FFFFFF 0%, #EAECEC 40%, #DCDFDF 100%);
+  --gradient-hero-floor:
+    linear-gradient(rgb(20 19 14 / 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(20 19 14 / 0.06) 1px, transparent 1px);
+  --gradient-publish: linear-gradient(135deg, #FFFFFF 0%, #DCDFDF 60%);
+  --gradient-styled-media:
+    radial-gradient(ellipse 80% 70% at 30% 40%, rgb(217 70 26 / 0.40), transparent 60%),
+    radial-gradient(ellipse 60% 50% at 70% 70%, rgb(184 134 26 / 0.25), transparent 70%),
+    linear-gradient(135deg, #FFFFFF, #DCDFDF);
+  --surface-styled-card: #FFFFFF;
+  /* --surface-code intentionally stays dark in light mode per DESIGN.md */
+
+  --surface-rail: rgb(255 255 255 / 0.92);
+  --surface-rail-head: rgb(220 223 223 / 0.85);
+  --surface-rail-search: rgb(234 236 236 / 0.55);
+  --surface-rail-fade: linear-gradient(180deg, transparent, rgb(234 236 236 / 0.95));
+
+  --surface-nav: rgb(234 236 236 / 0.88);
+  --surface-overlay: rgb(255 255 255 / 0.94);
+
+  --pattern-grid:
+    linear-gradient(rgb(20 19 14 / 0.055) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(20 19 14 / 0.055) 1px, transparent 1px);
 }
 
-/* Base */
-body {
-  font-family: var(--font-body);
+/* Base — wrapped in @layer base so Tailwind utility classes (font-display,
+   font-mono, font-text) can override per-element. Without the layer wrap,
+   bare element selectors are unlayered and outrank layered utilities. */
+@layer base {
+  body {
+    font-family: var(--font-text);
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-display);
+  }
+
+  code, pre {
+    font-family: var(--font-mono);
+  }
 }
 
-h1, h2, h3, h4, h5, h6 {
-  font-family: var(--font-heading);
-}
-
-code, pre {
-  font-family: var(--font-mono);
-}
-
-/* Forge glow text — subtle single-layer glow */
-.neon-cyan {
-  text-shadow: 0 0 8px rgba(255, 107, 0, 0.5);
-}
-
-.neon-magenta {
-  text-shadow: 0 0 8px rgba(255, 140, 56, 0.5);
-}
-
-.neon-yellow {
-  text-shadow: 0 0 8px rgba(255, 184, 0, 0.5);
-}
-
-[data-theme="light"] .neon-cyan,
-[data-theme="light"] .neon-magenta,
-[data-theme="light"] .neon-yellow {
-  text-shadow: none;
-}
-
-/* Forge border glow */
-.neon-border-cyan {
-  border: 1px solid #FF6B00;
-  box-shadow: 0 0 5px #FF6B0044, inset 0 0 5px #FF6B0022;
-}
-
-.neon-border-magenta {
-  border: 1px solid #FF8C38;
-  box-shadow: 0 0 5px #FF8C3844, inset 0 0 5px #FF8C3822;
-}
-
-/* Glass morphism */
-.glass {
-  background: rgba(19, 19, 19, 0.7);
-  backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 107, 0, 0.12);
-}
-
-.glass-hover:hover {
-  border-color: rgba(255, 107, 0, 0.35);
-  box-shadow: 0 0 15px rgba(255, 107, 0, 0.15);
-}
-
-[data-theme="light"] .glass {
-  background: rgba(255, 255, 255, 0.92);
-  border: 1px solid rgba(0, 0, 0, 0.08);
-}
-
-[data-theme="light"] .glass-hover:hover {
-  border-color: rgba(212, 90, 0, 0.35);
-  box-shadow: 0 2px 12px rgba(212, 90, 0, 0.08);
-}
-
-/* Scanline overlay */
-.scanlines {
-  position: relative;
-}
-
-.scanlines::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: repeating-linear-gradient(
-    0deg,
-    transparent,
-    transparent 2px,
-    rgba(0, 0, 0, 0.08) 2px,
-    rgba(0, 0, 0, 0.08) 4px
-  );
-  pointer-events: none;
-}
-
-/* Forge scrollbar */
+/* Forge Workshop scrollbar — ember thumb on transparent track. */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #0a0a0f;
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #FF6B0044;
-  border-radius: 3px;
+  background: rgba(201, 74, 14, 0.28);
+  border-radius: 2px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #FF6B0088;
-}
-
-[data-theme="light"] ::-webkit-scrollbar-track {
-  background: #f3f3f5;
+  background: rgba(201, 74, 14, 0.55);
 }
 
 [data-theme="light"] ::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.15);
+  background: rgba(201, 74, 14, 0.22);
 }
 
 [data-theme="light"] ::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 0, 0, 0.25);
+  background: rgba(201, 74, 14, 0.45);
 }
 
 /* Blinking cursor for streaming token display */
@@ -207,11 +325,11 @@ code, pre {
   100% { transform: translateX(-50%); }
 }
 
-/* Background grid pattern */
+/* Background grid pattern — restrained dot grid in ember tone. */
 .bg-grid {
   background-image: radial-gradient(
     circle,
-    rgba(255, 107, 0, 0.06) 1px,
+    rgba(201, 74, 14, 0.06) 1px,
     transparent 1px
   );
   background-size: 32px 32px;
@@ -221,57 +339,52 @@ code, pre {
 [data-theme="light"] .bg-grid {
   background-image: radial-gradient(
     circle,
-    rgba(0, 0, 0, 0.04) 1px,
+    rgba(26, 24, 18, 0.05) 1px,
     transparent 1px
   );
 }
 
-/* Focus ring */
-.neon-focus:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 2px #FF6B00, 0 0 10px #FF6B0044;
-}
-
-/* Forge input */
+/* Forge input — drafted, instrument-like. Hairline edge, focus tightens. */
 .neon-input {
-  background: rgba(10, 10, 15, 0.8);
-  border: none;
-  border-bottom: 2px solid rgba(255, 107, 0, 0.3);
-  transition: border-color 0.2s, box-shadow 0.2s;
+  background: var(--color-elevated);
+  border: 1px solid var(--color-subtle);
+  border-radius: 2px;
+  transition: border-color 0.2s;
 }
 
 .neon-input:focus {
   outline: none;
-  border-bottom-color: #FF6B00;
-  box-shadow: 0 2px 10px rgba(255, 107, 0, 0.2);
+  border-color: var(--color-accent);
 }
 
 [data-theme="light"] .neon-input {
-  background: rgba(255, 255, 255, 0.95);
-  border-bottom: 2px solid rgba(0, 0, 0, 0.12);
+  background: var(--color-card);
+  border: 1px solid var(--color-subtle);
 }
 
 [data-theme="light"] .neon-input:focus {
-  border-bottom-color: #d45a00;
-  box-shadow: 0 2px 8px rgba(212, 90, 0, 0.1);
+  border-color: var(--color-accent);
 }
 
-/* Markdown content styling */
+/* Markdown content styling — Editorial Forge editorial reading surface. */
 .markdown-body {
-  color: #e8e8e8;
+  color: var(--color-body);
+  font-family: var(--font-text);
   line-height: 1.7;
 }
 
 .markdown-body h1,
 .markdown-body h2,
 .markdown-body h3 {
-  font-family: var(--font-heading);
-  color: #FF6B00;
+  font-family: var(--font-display);
+  color: var(--color-strong);
+  font-weight: 600;
+  letter-spacing: -0.01em;
   margin-top: 1.5em;
   margin-bottom: 0.5em;
 }
 
-.markdown-body h1 { font-size: 1.75rem; }
+.markdown-body h1 { font-size: 1.875rem; }
 .markdown-body h2 { font-size: 1.5rem; }
 .markdown-body h3 { font-size: 1.25rem; }
 
@@ -281,16 +394,17 @@ code, pre {
 
 .markdown-body code {
   font-family: var(--font-mono);
-  background: rgba(255, 107, 0, 0.08);
-  padding: 0.15em 0.4em;
-  border-radius: 4px;
+  background: var(--color-elevated);
+  border: 1px solid var(--color-subtle);
+  padding: 0.1em 0.4em;
+  border-radius: 2px;
   font-size: 0.9em;
 }
 
 .markdown-body pre {
-  background: #0a0a0f !important;
-  border: 1px solid rgba(255, 107, 0, 0.15);
-  border-radius: 8px;
+  background: var(--color-code-bg) !important;
+  border: 1px solid var(--color-subtle);
+  border-radius: 4px;
   padding: 1rem;
   overflow-x: auto;
   margin-bottom: 1em;
@@ -298,13 +412,18 @@ code, pre {
 
 .markdown-body pre code {
   background: none;
+  border: none;
   padding: 0;
 }
 
 .markdown-body a {
-  color: #FF6B00;
+  color: var(--color-accent);
   text-decoration: underline;
   text-underline-offset: 2px;
+}
+
+.markdown-body a:hover {
+  color: var(--color-accent-muted);
 }
 
 .markdown-body ul,
@@ -318,9 +437,10 @@ code, pre {
 }
 
 .markdown-body blockquote {
-  border-left: 3px solid #FF8C38;
+  border-left: 2px solid var(--color-accent);
   padding-left: 1em;
-  color: #7a7a7a;
+  color: var(--color-meta);
+  font-style: italic;
   margin-bottom: 1em;
 }
 
@@ -332,154 +452,353 @@ code, pre {
 
 .markdown-body th,
 .markdown-body td {
-  border: 1px solid rgba(255, 107, 0, 0.15);
+  border: 1px solid var(--color-subtle);
   padding: 0.5em 0.75em;
   text-align: left;
 }
 
 .markdown-body th {
-  background: rgba(255, 107, 0, 0.08);
-  font-family: var(--font-heading);
-  font-size: 0.85em;
-}
-
-/* ──────── Markdown light mode ──────── */
-[data-theme="light"] .markdown-body {
-  color: #2d2d2d;
-}
-
-[data-theme="light"] .markdown-body h1,
-[data-theme="light"] .markdown-body h2,
-[data-theme="light"] .markdown-body h3 {
-  color: #b34a00;
-}
-
-[data-theme="light"] .markdown-body code {
-  background: rgba(0, 0, 0, 0.05);
-  color: #c04000;
-}
-
-[data-theme="light"] .markdown-body pre {
-  background: #f6f6f8 !important;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-}
-
-[data-theme="light"] .markdown-body pre code {
-  color: inherit;
-}
-
-[data-theme="light"] .markdown-body a {
-  color: #c04000;
-}
-
-[data-theme="light"] .markdown-body blockquote {
-  color: #888888;
-  border-left-color: #d45a00;
-}
-
-[data-theme="light"] .markdown-body th,
-[data-theme="light"] .markdown-body td {
-  border: 1px solid rgba(0, 0, 0, 0.08);
-}
-
-[data-theme="light"] .markdown-body th {
-  background: rgba(0, 0, 0, 0.03);
+  background: var(--color-elevated);
+  font-family: var(--font-mono);
+  font-size: 0.8em;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-meta);
+  font-weight: 600;
 }
 
 /* ──────── Mermaid diagram theme adaptation ──────── */
 
-/* Dark mode: ensure mermaid SVGs have proper text color */
 .markdown-body .mermaid-container text,
 .markdown-body .mermaid-container .nodeLabel,
 .markdown-body .mermaid-container .edgeLabel,
 .markdown-body .mermaid-container .label,
 .markdown-body .mermaid-container .cluster-label {
-  fill: #e8e8e8 !important;
+  fill: var(--color-strong) !important;
 }
 
 .markdown-body .mermaid-container .messageText,
 .markdown-body .mermaid-container .loopText,
 .markdown-body .mermaid-container .labelText {
-  fill: #e8e8e8 !important;
+  fill: var(--color-strong) !important;
 }
 
-/* Light mode: override mermaid SVG colors */
-[data-theme="light"] .markdown-body .mermaid-container text,
-[data-theme="light"] .markdown-body .mermaid-container .nodeLabel,
-[data-theme="light"] .markdown-body .mermaid-container .edgeLabel,
-[data-theme="light"] .markdown-body .mermaid-container .label,
-[data-theme="light"] .markdown-body .mermaid-container .cluster-label {
-  fill: #2d2d2d !important;
-}
-
-[data-theme="light"] .markdown-body .mermaid-container .messageText,
-[data-theme="light"] .markdown-body .mermaid-container .loopText,
-[data-theme="light"] .markdown-body .mermaid-container .labelText {
-  fill: #2d2d2d !important;
-}
-
-/* Light mode code syntax highlighting overrides */
-[data-theme="light"] .markdown-body pre {
-  color: #2d2d2d;
-}
-
+/* Code syntax highlighting — Editorial Forge code chrome.
+ * Code surfaces stay deliberately dark in both themes (DESIGN.md
+ * "Terminal and Install Surfaces"); foreground tokens use editorial
+ * mineral colors. */
+[data-theme="light"] .markdown-body pre,
 [data-theme="light"] .hljs {
-  background: #f6f6f8 !important;
-  color: #2d2d2d !important;
+  background: var(--color-code-bg) !important;
+  color: #C9BFAD !important;
 }
 
-[data-theme="light"] .hljs-keyword,
-[data-theme="light"] .hljs-selector-tag,
-[data-theme="light"] .hljs-built_in {
-  color: #8b3fbd !important;
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-built_in {
+  color: #E8B341 !important;
 }
 
-[data-theme="light"] .hljs-string,
-[data-theme="light"] .hljs-title.class_,
-[data-theme="light"] .hljs-section {
-  color: #0d7c3b !important;
+.hljs-string,
+.hljs-title.class_,
+.hljs-section {
+  color: #7FA06A !important;
 }
 
-[data-theme="light"] .hljs-attr,
-[data-theme="light"] .hljs-attribute {
-  color: #c04000 !important;
+.hljs-attr,
+.hljs-attribute,
+.hljs-name,
+.hljs-tag {
+  color: #FF6A1A !important;
 }
 
-[data-theme="light"] .hljs-number,
-[data-theme="light"] .hljs-literal {
-  color: #0b69a3 !important;
+.hljs-number,
+.hljs-literal {
+  color: #8A97A3 !important;
 }
 
-[data-theme="light"] .hljs-comment {
-  color: #888888 !important;
+.hljs-comment {
+  color: #6B6254 !important;
+  font-style: italic;
 }
 
-[data-theme="light"] .hljs-type,
-[data-theme="light"] .hljs-title {
-  color: #b34a00 !important;
+.hljs-type,
+.hljs-title {
+  color: #E8B341 !important;
 }
 
-[data-theme="light"] .hljs-name,
-[data-theme="light"] .hljs-tag {
-  color: #d42020 !important;
+/* ──────── Forge Workshop letterpress component utilities ──────── */
+/* Per DESIGN.md: cards / buttons use hard-offset impression shadows.
+   Hover translates INTO the impression (press DOWN, never lift).
+   Active fully sinks. Focus-visible stacks an outer ring over the
+   press shadow with sufficient contrast in both themes. Disabled
+   removes the press impression entirely. Reduced-motion suppresses
+   the translate; shadow swap alone communicates press. */
+
+.cta-letterpress {
+  box-shadow: var(--button-primary-shadow-rest);
+  transition: transform 140ms ease, box-shadow 140ms ease, background-color 200ms,
+    color 200ms, border-color 200ms;
+}
+.cta-letterpress:hover {
+  transform: translate(2px, 2px);
+  box-shadow: var(--button-primary-shadow-hover);
+}
+.cta-letterpress:active {
+  transform: translate(4px, 4px);
+  box-shadow: var(--button-primary-shadow-active);
+}
+.cta-letterpress:focus-visible {
+  outline: none;
+  /* Press shadow is preserved via the appropriate state declaration above;
+     the focus ring stacks ON TOP via the :focus-visible state-aware shadow. */
+  box-shadow: var(--button-primary-shadow-rest), var(--button-focus-ring);
+}
+.cta-letterpress:focus-visible:hover {
+  box-shadow: var(--button-primary-shadow-hover), var(--button-focus-ring);
+}
+.cta-letterpress:focus-visible:active {
+  box-shadow: var(--button-primary-shadow-active), var(--button-focus-ring);
+}
+.cta-letterpress:disabled,
+.cta-letterpress[aria-disabled="true"] {
+  /* Disabled CTAs MUST NOT carry a press impression — would misread as actionable. */
+  transform: none;
+  box-shadow: inset 0 0 0 1px var(--color-border-subtle);
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
-/* Forge border glow — light mode */
-[data-theme="light"] .neon-border-cyan {
-  box-shadow: none;
+/* Ghost variant — ink-line letterpress impression instead of ember press */
+.cta-letterpress--ghost {
+  box-shadow: var(--button-ghost-shadow-rest);
+}
+.cta-letterpress--ghost:hover {
+  transform: translate(1.5px, 1.5px);
+  box-shadow: var(--button-ghost-shadow-hover);
+}
+.cta-letterpress--ghost:active {
+  transform: translate(3px, 3px);
+  box-shadow: var(--button-primary-shadow-active);
+}
+.cta-letterpress--ghost:focus-visible {
+  box-shadow: var(--button-ghost-shadow-rest), var(--button-focus-ring);
+}
+.cta-letterpress--ghost:focus-visible:hover {
+  box-shadow: var(--button-ghost-shadow-hover), var(--button-focus-ring);
 }
 
-[data-theme="light"] .neon-border-magenta {
-  box-shadow: none;
+/* Reduced-motion — suppress translate; shadow swap alone communicates press. */
+@media (prefers-reduced-motion: reduce) {
+  .cta-letterpress,
+  .cta-letterpress:hover,
+  .cta-letterpress:active,
+  .cta-letterpress--ghost,
+  .cta-letterpress--ghost:hover,
+  .cta-letterpress--ghost:active {
+    transform: none;
+  }
 }
 
-/* Skeleton shimmer — light mode */
-[data-theme="light"] .skeleton-shimmer {
-  background: linear-gradient(
-    90deg,
-    rgba(255, 107, 0, 0.04) 25%,
-    rgba(255, 107, 0, 0.08) 50%,
-    rgba(255, 107, 0, 0.04) 75%
+/* ──────── Landing-only chrome — registration marks + drafting overlay ──────── */
+/* Scoped to `.landing-route` (set by LandingPage). App-shell pages do NOT
+   inherit any of this. Per DESIGN.md → Material & Print Vocabulary. */
+
+/* Drafting overlay: light-mode-only blueprint grid backdrop on the body.
+   Renders as a fixed background painted across the whole viewport so the
+   grid scrolls with content seamlessly. Dark mode hides this — workshop
+   signal there comes from --gradient-hero patina. */
+.landing-drafting-overlay {
+  display: none;
+}
+[data-theme="light"] .landing-route .landing-drafting-overlay {
+  display: block;
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background-image:
+    linear-gradient(rgba(20, 19, 14, 0.038) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(20, 19, 14, 0.038) 1px, transparent 1px);
+  background-size: 32px 32px;
+  background-attachment: fixed;
+}
+
+/* Page-edge dimension rulers — light only.
+   14px wide strips down both viewport edges with dashed tick every 64px. */
+.landing-edge-rule {
+  display: none;
+}
+[data-theme="light"] .landing-route .landing-edge-rule {
+  display: block;
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  width: 14px;
+  pointer-events: none;
+  background-image: linear-gradient(
+    to bottom,
+    rgba(20, 19, 14, 0.18) 1px,
+    transparent 1px
   );
-  background-size: 200% 100%;
+  background-size: 100% 64px;
+  opacity: 0.55;
+  z-index: 1;
+}
+[data-theme="light"] .landing-route .landing-edge-rule--left {
+  left: 0;
+  border-right: 1px solid rgba(20, 19, 14, 0.08);
+}
+[data-theme="light"] .landing-route .landing-edge-rule--right {
+  right: 0;
+  border-left: 1px solid rgba(20, 19, 14, 0.08);
+}
+
+/* Page-corner registration marks — both themes.
+   14px ember crosshair (cross + ring) at all four viewport corners.
+   Top corners offset 78px (below 64px sticky nav) so they sit at the
+   page-content area's corners, not buried under the nav strip. */
+.landing-route .landing-page-regs {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+}
+.landing-route .landing-page-reg {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+}
+.landing-route .landing-page-reg::before,
+.landing-route .landing-page-reg::after {
+  content: "";
+  position: absolute;
+  background: var(--color-ember);
+  opacity: 0.55;
+}
+.landing-route .landing-page-reg::before {
+  left: 0;
+  top: 50%;
+  height: 1px;
+  width: 100%;
+  transform: translateY(-50%);
+}
+.landing-route .landing-page-reg::after {
+  left: 50%;
+  top: 0;
+  width: 1px;
+  height: 100%;
+  transform: translateX(-50%);
+}
+.landing-route .landing-page-reg-ring {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  border: 1px solid var(--color-ember);
+  opacity: 0.55;
+  transform: translate(-50%, -50%);
+}
+.landing-route .landing-page-reg--tl { top: 78px; left: 14px; }
+.landing-route .landing-page-reg--tr { top: 78px; right: 14px; }
+.landing-route .landing-page-reg--bl { bottom: 14px; left: 14px; }
+.landing-route .landing-page-reg--br { bottom: 14px; right: 14px; }
+
+/* Hide registration marks on narrow screens — corner real estate is precious */
+@media (max-width: 720px) {
+  .landing-route .landing-page-regs {
+    display: none;
+  }
+}
+
+/* ──────── HighlighterMark — hand-applied translucent emphasis ──────── */
+/* Forge Workshop brand emphasis pattern (DESIGN.md → Signature Emphasis).
+   Replaces the legacy italic-Fraunces-ember signature on landing surfaces.
+   A translucent ember (or arc, restricted) wash sitting OVER the text via
+   asymmetric border-radius + SVG turbulence-filtered organic edges, with
+   mix-blend-mode multiply (light) / screen (dark) so the text shows
+   through tinted. Shared filter is mounted once via <HighlighterMarkFilter />.
+   Per-instance variation via :nth-of-type so adjacent marks don't read as stamped. */
+
+.highlighter-mark {
+  position: relative;
+  display: inline-block;
+  isolation: isolate;
+  font-weight: inherit;
+  color: inherit;
+  white-space: nowrap;
+  z-index: 0;
+}
+.highlighter-mark::before {
+  content: "";
+  position: absolute;
+  left: -0.16em;
+  right: -0.16em;
+  top: 0.04em;
+  bottom: 0;
+  background: var(--color-ember);
+  opacity: 0.5;
+  z-index: 1;                 /* IN FRONT of the text */
+  pointer-events: none;
+  border-radius: 9px 14px 7px 11px / 11px 6px 14px 8px;
+  transform: rotate(-0.7deg) skewX(-1.5deg);
+  filter: url(#ornn-highlighter-rough) blur(0.5px);
+  mix-blend-mode: multiply;
+}
+[data-theme="dark"] .highlighter-mark::before {
+  mix-blend-mode: screen;
+  opacity: 0.42;
+}
+.highlighter-mark:nth-of-type(2n)::before {
+  border-radius: 13px 7px 14px 9px / 6px 14px 8px 13px;
+  transform: rotate(0.5deg) skewX(1.4deg);
+  filter: url(#ornn-highlighter-rough) blur(0.6px);
+}
+.highlighter-mark:nth-of-type(3n)::before {
+  border-radius: 7px 13px 10px 14px / 13px 8px 11px 9px;
+  transform: rotate(-0.3deg) skewX(-1deg);
+}
+.highlighter-mark--gold::before { background: var(--color-molten); }
+.highlighter-mark--arc::before  { background: var(--color-arc); }
+
+/* Card letterpress — paired with --card-shadow-rest / --card-shadow-hover.
+   Apply via .card-letterpress on any interactive card / panel / terminal
+   that currently uses inline `shadow-[...]` Tailwind arbitrary syntax.
+   Use .card-impression on static (non-hoverable) panels, modal dialogs,
+   and toasts — same rest impression without the press-down hover. */
+.card-impression {
+  box-shadow: var(--card-shadow-rest);
+}
+.card-letterpress {
+  box-shadow: var(--card-shadow-rest);
+  transition: transform 140ms ease, box-shadow 140ms ease, border-color 200ms;
+}
+.card-letterpress:hover {
+  transform: translate(2px, 2px);
+  box-shadow: var(--card-shadow-hover);
+}
+.card-letterpress:focus-visible {
+  outline: none;
+  box-shadow: var(--card-shadow-rest), var(--button-focus-ring);
+}
+.card-letterpress:focus-visible:hover {
+  box-shadow: var(--card-shadow-hover), var(--button-focus-ring);
+}
+@media (prefers-reduced-motion: reduce) {
+  .card-letterpress,
+  .card-letterpress:hover {
+    transform: none;
+  }
+}
+
+/* Reusable focus ring for landing links and rows that don't carry a press
+   shadow (e.g. text nav, footer links, catalog rows). Matches DESIGN.md
+   --button-focus-ring: page-color halo + ember outer for visibility against
+   any landing surface in either theme. */
+.focus-ring-ember:focus-visible {
+  outline: none;
+  box-shadow: var(--button-focus-ring);
+  border-radius: 2px;
 }

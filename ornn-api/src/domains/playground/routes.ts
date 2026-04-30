@@ -8,6 +8,8 @@ import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { z } from "zod";
 import type { PlaygroundChatService, PlaygroundChatRequest } from "./chatService";
+import type { SkillService } from "../skills/crud/service";
+import type { AnalyticsService } from "../analytics/service";
 import {
   type AuthVariables,
   nyxidAuthMiddleware,
@@ -40,10 +42,14 @@ const chatRequestSchema = z.object({
 export interface PlaygroundRoutesConfig {
   chatService: PlaygroundChatService;
   keepAliveIntervalMs: number;
+  /** Optional. When set together with `skillService`, the route emits a
+   *  `playground` pull event each time a chat references a real skill. */
+  analyticsService?: AnalyticsService;
+  skillService?: SkillService;
 }
 
 export function createPlaygroundRoutes(config: PlaygroundRoutesConfig): Hono<{ Variables: AuthVariables }> {
-  const { chatService, keepAliveIntervalMs } = config;
+  const { chatService, keepAliveIntervalMs, analyticsService, skillService } = config;
   const app = new Hono<{ Variables: AuthVariables }>();
 
   const auth = nyxidAuthMiddleware();
@@ -64,6 +70,27 @@ export function createPlaygroundRoutes(config: PlaygroundRoutesConfig): Hono<{ V
       const parsed = getValidatedBody<z.infer<typeof chatRequestSchema>>(c);
 
       logger.info({ userId: authCtx.userId, messageCount: parsed.messages.length }, "Chat request");
+
+      // Record a `playground` pull if the chat is bound to a skill. The
+      // chat service loads the skill internally; we duplicate the lookup
+      // here so analytics doesn't change the chat-service contract. Cost
+      // is one cached MongoDB read per chat session opening.
+      if (analyticsService && skillService && parsed.skillId) {
+        void skillService
+          .getSkill(parsed.skillId)
+          .then((skill) =>
+            analyticsService.recordPull({
+              skillGuid: skill.guid,
+              skillName: skill.name,
+              skillVersion: skill.version,
+              userId: authCtx.userId,
+              source: "playground",
+            }),
+          )
+          .catch(() => {
+            /* analytics failures must not surface to the caller */
+          });
+      }
 
       c.header("Cache-Control", "no-cache");
       c.header("Connection", "keep-alive");

@@ -1,38 +1,23 @@
 /**
- * Toast Component.
- * Cyberpunk-styled notification toasts with glass morphism and neon accents.
- * Features slide-in/out animations and severity-based color coding.
+ * Toast — Editorial Forge notification primitive.
+ *
+ * Card surface with a left accent bar (mineral state colors), Inter
+ * body, mono dismiss icon. Slide-in from the right, auto-dismiss
+ * progress bar at the bottom.
+ *
  * @module components/ui/Toast
  */
 
 import { motion, AnimatePresence } from "framer-motion";
 import { useToastStore, type Toast as ToastType } from "@/stores/toastStore";
 
-/** Accent colors mapped to toast types */
 const ACCENT_STYLES = {
-  success: {
-    bar: "bg-neon-green",
-    icon: "text-neon-green",
-    glow: "shadow-[0_0_15px_rgba(57,255,20,0.3)]",
-  },
-  error: {
-    bar: "bg-neon-red",
-    icon: "text-neon-red",
-    glow: "shadow-[0_0_15px_rgba(255,0,60,0.3)]",
-  },
-  warning: {
-    bar: "bg-neon-yellow",
-    icon: "text-neon-yellow",
-    glow: "shadow-[0_0_15px_rgba(255,184,0,0.3)]",
-  },
-  info: {
-    bar: "bg-neon-cyan",
-    icon: "text-neon-cyan",
-    glow: "shadow-[0_0_15px_rgba(255,107,0,0.3)]",
-  },
+  success: { bar: "bg-success", icon: "text-success" },
+  error: { bar: "bg-danger", icon: "text-danger" },
+  warning: { bar: "bg-warning", icon: "text-warning" },
+  info: { bar: "bg-accent", icon: "text-accent" },
 } as const;
 
-/** Success icon */
 function SuccessIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -46,7 +31,6 @@ function SuccessIcon({ className }: { className?: string }) {
   );
 }
 
-/** Error icon */
 function ErrorIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -60,7 +44,6 @@ function ErrorIcon({ className }: { className?: string }) {
   );
 }
 
-/** Warning icon */
 function WarningIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -74,7 +57,6 @@ function WarningIcon({ className }: { className?: string }) {
   );
 }
 
-/** Info icon */
 function InfoIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -88,7 +70,6 @@ function InfoIcon({ className }: { className?: string }) {
   );
 }
 
-/** Close icon */
 function CloseIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -121,48 +102,30 @@ function ToastItem({ toast }: ToastItemProps) {
   return (
     <motion.div
       layout
-      initial={{ opacity: 0, x: 100, scale: 0.9 }}
+      initial={{ opacity: 0, x: 80, scale: 0.96 }}
       animate={{ opacity: 1, x: 0, scale: 1 }}
-      exit={{ opacity: 0, x: 100, scale: 0.9 }}
-      transition={{
-        type: "spring",
-        stiffness: 200,
-        damping: 20,
-      }}
-      className={`
-        glass overflow-hidden rounded-lg
-        border border-neon-cyan/10
-        ${styles.glow}
-      `}
+      exit={{ opacity: 0, x: 80, scale: 0.96 }}
+      transition={{ type: "spring", stiffness: 200, damping: 22 }}
+      className="card-impression overflow-hidden rounded border border-strong-edge bg-card"
     >
       <div className="flex">
-        {/* Left accent bar */}
-        <div className={`w-1.5 shrink-0 ${styles.bar}`} />
-
-        {/* Content */}
+        <div className={`w-1 shrink-0 ${styles.bar}`} />
         <div className="flex flex-1 items-start gap-3 px-4 py-3">
-          {/* Icon */}
           <div className={`shrink-0 mt-0.5 ${styles.icon}`}>
             <Icon className="h-5 w-5" />
           </div>
-
-          {/* Message */}
-          <p className="flex-1 font-body text-sm text-text-primary leading-relaxed">
+          <p className="flex-1 font-text text-sm leading-relaxed text-strong">
             {toast.message}
           </p>
-
-          {/* Close button */}
           <button
             onClick={() => removeToast(toast.id)}
-            className="shrink-0 -mt-1 -mr-1 p-1 rounded-md text-text-muted transition-colors hover:text-text-primary hover:bg-bg-elevated cursor-pointer"
+            className="-mt-1 -mr-1 shrink-0 cursor-pointer rounded-sm p-1 text-meta transition-colors hover:bg-elevated hover:text-strong"
             aria-label="Dismiss notification"
           >
             <CloseIcon className="h-4 w-4" />
           </button>
         </div>
       </div>
-
-      {/* Progress bar (optional, shows time remaining) */}
       {toast.duration && toast.duration > 0 && (
         <motion.div
           initial={{ scaleX: 1 }}
@@ -176,9 +139,7 @@ function ToastItem({ toast }: ToastItemProps) {
 }
 
 export interface ToastContainerProps {
-  /** Position of the toast container */
   position?: "top-right" | "top-left" | "bottom-right" | "bottom-left" | "top-center" | "bottom-center";
-  /** Maximum number of toasts to show */
   maxToasts?: number;
   className?: string;
 }
@@ -192,7 +153,6 @@ const POSITION_STYLES = {
   "bottom-center": "bottom-4 left-1/2 -translate-x-1/2",
 } as const;
 
-/** Global toast container -- mount once in the app root */
 export function ToastContainer({
   position = "bottom-right",
   maxToasts = 5,
@@ -203,12 +163,7 @@ export function ToastContainer({
 
   return (
     <div
-      className={`
-        pointer-events-none fixed z-50
-        flex flex-col gap-3
-        ${POSITION_STYLES[position]}
-        ${className}
-      `}
+      className={`pointer-events-none fixed z-50 flex flex-col gap-3 ${POSITION_STYLES[position]} ${className}`}
       role="region"
       aria-label="Notifications"
     >
@@ -223,13 +178,8 @@ export function ToastContainer({
   );
 }
 
-/**
- * Hook to show toasts programmatically.
- * Convenience wrapper around the toast store.
- */
 export function useToast() {
   const addToast = useToastStore((s) => s.addToast);
-
   return {
     success: (message: string, duration?: number) =>
       addToast({ type: "success", message, duration }),

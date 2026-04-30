@@ -12,6 +12,9 @@ import type { Collection, Db, Document } from "mongodb";
 import pino from "pino";
 import type {
   ExecutionOutcome,
+  PullBucket,
+  PullBucketCount,
+  PullSource,
   SkillAnalyticsSummary,
   SkillExecutionEvent,
 } from "./types";
@@ -29,11 +32,32 @@ export interface RecordEventInput {
   errorCode?: string;
 }
 
+export interface RecordPullInput {
+  skillGuid: string;
+  skillName: string;
+  skillVersion: string;
+  userId: string;
+  source: PullSource;
+}
+
+export interface AggregatePullsParams {
+  skillGuid: string;
+  bucket: PullBucket;
+  /** Inclusive lower bound. Defaults to 7 days before `to`. */
+  from?: Date;
+  /** Exclusive upper bound. Defaults to now. */
+  to?: Date;
+  /** When set, only include pulls of this version. */
+  version?: string;
+}
+
 export class AnalyticsRepository {
   private readonly collection: Collection;
+  private readonly pulls: Collection;
 
   constructor(db: Db) {
     this.collection = db.collection("skill_executions");
+    this.pulls = db.collection("skill_pulls");
   }
 
   async ensureIndexes(): Promise<void> {
@@ -42,9 +66,12 @@ export class AnalyticsRepository {
         this.collection.createIndex({ skillGuid: 1, createdAt: -1 }),
         this.collection.createIndex({ createdAt: -1 }),
         this.collection.createIndex({ userId: 1 }),
+        this.pulls.createIndex({ skillGuid: 1, createdAt: -1 }),
+        this.pulls.createIndex({ skillGuid: 1, skillVersion: 1, createdAt: -1 }),
+        this.pulls.createIndex({ createdAt: -1 }),
       ]);
     } catch (err) {
-      logger.error({ err }, "Failed to create skill_executions indexes");
+      logger.error({ err }, "Failed to create analytics indexes");
     }
   }
 
@@ -72,10 +99,12 @@ export class AnalyticsRepository {
   async summarize(
     skillGuid: string,
     window: "7d" | "30d" | "all",
-    topErrorsLimit = 5,
+    options: { version?: string; topErrorsLimit?: number } = {},
   ): Promise<SkillAnalyticsSummary> {
+    const { version, topErrorsLimit = 5 } = options;
     const now = new Date();
     const filter: Record<string, unknown> = { skillGuid };
+    if (version) filter.skillVersion = version;
     if (window !== "all") {
       const days = window === "7d" ? 7 : 30;
       const cutoff = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
@@ -171,6 +200,7 @@ export class AnalyticsRepository {
     return {
       skillGuid,
       window,
+      version,
       executionCount: counts.executionCount,
       successCount: counts.successCount,
       failureCount: counts.failureCount,
@@ -184,5 +214,84 @@ export class AnalyticsRepository {
       uniqueUsers: counts.uniqueUsers,
       topErrorCodes,
     };
+  }
+
+  async recordPull(input: RecordPullInput): Promise<void> {
+    try {
+      const doc: Document = {
+        _id: randomUUID() as unknown as Document["_id"],
+        skillGuid: input.skillGuid,
+        skillName: input.skillName,
+        skillVersion: input.skillVersion,
+        userId: input.userId,
+        source: input.source,
+        createdAt: new Date(),
+      };
+      await this.pulls.insertOne(doc);
+    } catch (err) {
+      logger.warn({ err, skillGuid: input.skillGuid }, "Failed to record skill pull");
+    }
+  }
+
+  /**
+   * Time-bucketed pull counts. Returns one row per non-empty bucket between
+   * `from` (inclusive) and `to` (exclusive); `bySource` totals each enum
+   * value within the bucket.
+   */
+  async aggregatePullsByBucket(
+    params: AggregatePullsParams,
+  ): Promise<ReadonlyArray<PullBucketCount>> {
+    const to = params.to ?? new Date();
+    const from = params.from ?? new Date(to.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+    // Mongo `$dateTrunc` is the cleanest way to bucket by hour/day/month —
+    // server-side, timezone-pinned to UTC, no client cooperation required.
+    const unit: "hour" | "day" | "month" = params.bucket;
+    const filter: Record<string, unknown> = {
+      skillGuid: params.skillGuid,
+      createdAt: { $gte: from, $lt: to },
+    };
+    if (params.version) filter.skillVersion = params.version;
+
+    const pipeline: Document[] = [
+      { $match: filter },
+      {
+        $group: {
+          _id: {
+            bucket: { $dateTrunc: { date: "$createdAt", unit, timezone: "UTC" } },
+            source: "$source",
+          },
+          count: { $sum: 1 },
+        },
+      },
+      {
+        $group: {
+          _id: "$_id.bucket",
+          total: { $sum: "$count" },
+          sources: {
+            $push: { source: "$_id.source", count: "$count" },
+          },
+        },
+      },
+      { $sort: { _id: 1 } },
+    ];
+
+    const rows = (await this.pulls.aggregate(pipeline).toArray()) as Array<{
+      _id: Date;
+      total: number;
+      sources: Array<{ source: PullSource; count: number }>;
+    }>;
+
+    return rows.map((row) => {
+      const bySource: Record<PullSource, number> = { api: 0, web: 0, playground: 0 };
+      for (const entry of row.sources) {
+        bySource[entry.source] = (bySource[entry.source] ?? 0) + entry.count;
+      }
+      return {
+        bucket: (row._id instanceof Date ? row._id : new Date(row._id)).toISOString(),
+        total: row.total,
+        bySource,
+      };
+    });
   }
 }

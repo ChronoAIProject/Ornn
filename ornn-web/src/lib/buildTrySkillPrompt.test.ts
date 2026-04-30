@@ -13,15 +13,40 @@ describe("buildTrySkillPrompt", () => {
       metadata: {},
       ornnOrigin: ORIGIN,
     });
-    expect(out).toContain("# Try Ornn skill: my-skill");
+    expect(out).toContain("# Install Ornn skill: my-skill");
     expect(out).toContain("> Does useful things.");
     expect(out).toContain(`GUID: ${GUID}`);
     expect(out).toContain(`Ornn URL: ${ORIGIN}/skills/${GUID}`);
-    expect(out).toContain("~/.claude/skills/my-skill/");
-    expect(out).toContain(`nyxid proxy request ornn /api/v1/skills/${GUID}/json`);
   });
 
-  test("prerequisites section embeds actionable CLI check commands", () => {
+  test("offers per-agent install conventions including Claude Code, Codex, and Cursor", () => {
+    const out = buildTrySkillPrompt({
+      guid: GUID,
+      name: "my-skill",
+      description: "d",
+      metadata: {},
+      ornnOrigin: ORIGIN,
+    });
+    expect(out).toContain("~/.claude/skills/my-skill/");
+    expect(out).toContain("~/.codex/skills/my-skill/");
+    expect(out).toContain(".cursor/rules/my-skill.md");
+    expect(out).toMatch(/Other agents/);
+  });
+
+  test("instructs the agent to record the install in ~/.ornn/installed-skills.json", () => {
+    const out = buildTrySkillPrompt({
+      guid: GUID,
+      name: "my-skill",
+      description: "d",
+      metadata: {},
+      ornnOrigin: ORIGIN,
+    });
+    expect(out).toContain("~/.ornn/installed-skills.json");
+    expect(out).toMatch(/installedVersion/);
+    expect(out).toMatch(/ornn-agent-manual/);
+  });
+
+  test("renders both NyxID CLI + bearer-token fetch paths regardless of visibility", () => {
     const out = buildTrySkillPrompt({
       guid: GUID,
       name: "s",
@@ -29,11 +54,31 @@ describe("buildTrySkillPrompt", () => {
       metadata: {},
       ornnOrigin: ORIGIN,
     });
-    expect(out).toContain("nyxid whoami");
-    expect(out).toContain("nyxid proxy discover");
-    // Should NOT reference MCP tools
+    // NyxID CLI option present.
+    expect(out).toContain(`nyxid proxy request ornn-api /api/v1/skills/${GUID}/json`);
+    // Direct HTTPS bearer option present and uses the dynamic origin.
+    expect(out).toContain(`Authorization: Bearer $TOKEN`);
+    expect(out).toContain(`${ORIGIN}/api/v1/skills/${GUID}/json`);
+    // No anonymous-curl option — every Ornn call goes through NyxID's
+    // proxy, which requires a token even for public skills.
+    expect(out).not.toMatch(/Option C/);
+    // Should NOT reference the deprecated `ornn` slug.
+    expect(out).not.toMatch(/nyxid proxy request ornn[\s/]/);
+    // Should NOT reference MCP tools.
     expect(out).not.toContain("ornn__");
     expect(out).not.toContain("nyxid__nyx__");
+  });
+
+  test("explains the NyxID-proxy auth requirement for callers without nyxid installed", () => {
+    const out = buildTrySkillPrompt({
+      guid: GUID,
+      name: "s",
+      description: "d",
+      metadata: {},
+      ornnOrigin: ORIGIN,
+    });
+    expect(out).toMatch(/NyxID identity is required even for public skills/);
+    expect(out).toMatch(/install it first|nyxid login/i);
   });
 
   test("renders runtime-dependency list as library@version", () => {
@@ -110,5 +155,6 @@ describe("buildTrySkillPrompt", () => {
       ornnOrigin: `${ORIGIN}///`,
     });
     expect(out).toContain(`Ornn URL: ${ORIGIN}/skills/${GUID}`);
+    expect(out).not.toContain("https://ornn.chrono-ai.fun///");
   });
 });

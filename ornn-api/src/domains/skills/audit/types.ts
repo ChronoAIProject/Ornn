@@ -46,12 +46,25 @@ export interface AuditFinding {
 /** Overall verdict. Green = safe to share silently. */
 export type AuditVerdict = "green" | "yellow" | "red";
 
+/**
+ * Audit lifecycle status.
+ *
+ *   running    — row created when the user triggered the audit; the LLM
+ *                pipeline is still in flight, so `verdict/overallScore/
+ *                scores/findings` aren't final yet (zeroes / empty).
+ *   completed  — pipeline finished, every result field is populated.
+ *   failed     — pipeline errored out (storage fetch, LLM call, etc.);
+ *                `errorMessage` holds a short cause.
+ */
+export type AuditStatus = "running" | "completed" | "failed";
+
 export interface AuditRecord {
-  readonly _id: string; // `${skillGuid}@${version}`
+  readonly _id: string;
   readonly skillGuid: string;
   readonly version: string;
   /** SHA-256 of the skill package bytes at audit time. */
   readonly skillHash: string;
+  readonly status: AuditStatus;
   readonly verdict: AuditVerdict;
   /** 0–10 weighted average. Convenience — derivable from `scores`. */
   readonly overallScore: number;
@@ -60,6 +73,10 @@ export interface AuditRecord {
   /** The LLM model used, for audit traceability. */
   readonly model: string;
   readonly createdAt: Date;
+  /** When the record moved from `running` to a terminal state. */
+  readonly completedAt?: Date;
+  /** Populated when status === "failed". */
+  readonly errorMessage?: string;
   /**
    * User who triggered the audit. `system` when the audit-on-share
    * pipeline kicked it off automatically (to be wired in a later PR).

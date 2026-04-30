@@ -1,5 +1,9 @@
 /**
- * Client for the per-skill permissions endpoint.
+ * Client for the per-skill permissions endpoint. Sharing is unconditional —
+ * the backend applies the requested visibility directly. Audit findings are
+ * surfaced afterwards as notifications, not as a gate on the save.
+ *
+ * @module services/permissionsApi
  */
 
 import { apiPut } from "./apiClient";
@@ -11,10 +15,17 @@ export interface SkillPermissionsInput {
   sharedWithOrgs: string[];
 }
 
+export interface SkillPermissionsResult {
+  skill: SkillDetail;
+}
+
 export async function updateSkillPermissions(
   skillGuid: string,
   body: SkillPermissionsInput,
-): Promise<SkillDetail> {
-  const res = await apiPut<SkillDetail>(`/api/v1/skills/${encodeURIComponent(skillGuid)}/permissions`, body);
+): Promise<SkillPermissionsResult> {
+  const res = await apiPut<SkillPermissionsResult>(
+    `/api/v1/skills/${encodeURIComponent(skillGuid)}/permissions`,
+    body,
+  );
   return res.data!;
 }

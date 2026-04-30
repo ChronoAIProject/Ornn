@@ -1,18 +1,31 @@
 <!doctype html>
-<html lang="en" class="dark">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>ORNN</title>
     <link rel="icon" type="image/png" href="/favicon.png?v=12" />
+    <script>
+      // Pre-paint: restore saved theme so the landing does not flash
+      // the wrong palette before React boots. Matches themeStore's key.
+      (function () {
+        try {
+          var t = localStorage.getItem("ornn-theme");
+          if (t !== "light" && t !== "dark") t = "dark";
+          document.documentElement.setAttribute("data-theme", t);
+        } catch (e) {
+          document.documentElement.setAttribute("data-theme", "dark");
+        }
+      })();
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Orbitron:wght@400;500;600;700;800;900&family=Rajdhani:wght@300;400;500;600;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
   </head>
-  <body class="bg-[#0a0a0f] text-[#e8e8e8] antialiased">
+  <body class="bg-page text-strong antialiased">
     <div id="root"></div>
     <!-- Runtime config, generated per-environment at container startup
          by /docker-entrypoint.d/40-envsubst-config-js.sh. Must load before

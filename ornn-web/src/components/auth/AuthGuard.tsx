@@ -32,8 +32,9 @@ export function AuthGuard({ children }: AuthGuardProps) {
     if (!isInitialized || isLoading) return;
 
     if (!isAuthenticated) {
-      // Redirect to landing page, preserving intended destination
-      navigate("/landing", {
+      // Redirect to login, preserving intended destination so we can
+      // return the user to the page they tried to reach after sign-in.
+      navigate("/login", {
         replace: true,
         state: { from: location.pathname },
       });
@@ -43,15 +44,15 @@ export function AuthGuard({ children }: AuthGuardProps) {
   // Show loading while initializing
   if (!isInitialized || isLoading) {
     return (
-      <div className="min-h-screen bg-bg-deep bg-grid">
+      <div className="min-h-screen bg-page bg-grid">
         <div className="mx-auto max-w-[1280px] px-4 pt-20 pb-12 sm:px-6">
           <div className="space-y-6">
             <Skeleton className="h-10 w-48" />
-            <Skeleton className="h-64 w-full rounded-xl" />
+            <Skeleton className="h-64 w-full rounded" />
             <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-              <Skeleton className="h-48 rounded-xl" />
-              <Skeleton className="h-48 rounded-xl" />
-              <Skeleton className="h-48 rounded-xl" />
+              <Skeleton className="h-48 rounded" />
+              <Skeleton className="h-48 rounded" />
+              <Skeleton className="h-48 rounded" />
             </div>
           </div>
         </div>

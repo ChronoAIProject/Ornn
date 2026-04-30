@@ -34,7 +34,7 @@ export function RuntimeSelect({
 
   return (
     <div className={`flex flex-col gap-1.5 ${className}`}>
-      <label className="font-heading text-xs uppercase tracking-wider text-text-muted">
+      <label className="font-display text-xs uppercase tracking-wider text-meta">
         Runtime Environments
       </label>
 
@@ -57,7 +57,7 @@ export function RuntimeSelect({
       )}
 
       {/* Checkbox list */}
-      <div className="neon-input rounded-lg p-3 space-y-2">
+      <div className="neon-input rounded p-3 space-y-2">
         {AVAILABLE_RUNTIMES.map((runtime) => {
           const isChecked = selected.includes(runtime);
           const info = RUNTIME_INFO[runtime];
@@ -70,13 +70,13 @@ export function RuntimeSelect({
                 type="checkbox"
                 checked={isChecked}
                 onChange={() => toggleRuntime(runtime)}
-                className="h-4 w-4 rounded border-text-muted/30 bg-bg-deep text-neon-cyan accent-neon-cyan cursor-pointer"
+                className="h-4 w-4 rounded border-meta/30 bg-page text-accent accent-accent cursor-pointer"
               />
               <span
-                className={`font-body text-sm transition-colors ${
+                className={`font-text text-sm transition-colors ${
                   isChecked
-                    ? "text-neon-yellow"
-                    : "text-text-muted group-hover:text-text-primary"
+                    ? "text-warning"
+                    : "text-meta group-hover:text-strong"
                 }`}
               >
                 {info.label}
@@ -86,7 +86,7 @@ export function RuntimeSelect({
         })}
       </div>
 
-      {error && <span className="text-xs text-neon-red">{error}</span>}
+      {error && <span className="text-xs text-danger">{error}</span>}
     </div>
   );
 }

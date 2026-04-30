@@ -116,7 +116,7 @@ export function LinkedAccountsCard({
   return (
     <>
       <Card className="p-6">
-        <h2 className="mb-6 font-heading text-lg text-neon-cyan">
+        <h2 className="mb-6 font-display text-lg text-accent">
           Linked Accounts
         </h2>
 
@@ -129,21 +129,21 @@ export function LinkedAccountsCard({
             return (
               <div
                 key={provider}
-                className="flex items-center justify-between rounded-lg bg-bg-surface/50 p-4"
+                className="flex items-center justify-between rounded bg-card/50 p-4"
               >
                 <div className="flex items-center gap-3">
                   <div className={`${info.color}`}>{info.icon}</div>
                   <div>
-                    <h3 className="font-body text-sm font-semibold text-text-primary">
+                    <h3 className="font-text text-sm font-semibold text-strong">
                       {info.name}
                     </h3>
                     {linked ? (
-                      <p className="font-mono text-xs text-text-muted">
+                      <p className="font-mono text-xs text-meta">
                         {linked.email || "Connected"} - Linked{" "}
                         {formatDate(linked.linkedAt)}
                       </p>
                     ) : (
-                      <p className="text-xs text-text-muted">Not connected</p>
+                      <p className="text-xs text-meta">Not connected</p>
                     )}
                   </div>
                 </div>
@@ -178,14 +178,14 @@ export function LinkedAccountsCard({
           <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="mt-4 rounded-lg border border-neon-red/30 bg-neon-red/10 p-3"
+            className="mt-4 rounded border border-danger/30 bg-danger/10 p-3"
           >
-            <p className="text-sm text-neon-red">{error}</p>
+            <p className="text-sm text-danger">{error}</p>
           </motion.div>
         )}
 
         {!canUnlink && (
-          <p className="mt-4 text-xs text-text-muted">
+          <p className="mt-4 text-xs text-meta">
             You must have at least one login method. Link another account or
             verify an email before unlinking.
           </p>
@@ -199,11 +199,11 @@ export function LinkedAccountsCard({
         title="Unlink Account"
       >
         <div className="space-y-4">
-          <p className="font-body text-text-primary">
+          <p className="font-text text-strong">
             Are you sure you want to unlink your{" "}
             {unlinkConfirm ? PROVIDER_INFO[unlinkConfirm].name : ""} account?
           </p>
-          <p className="font-body text-sm text-text-muted">
+          <p className="font-text text-sm text-meta">
             You will no longer be able to sign in using this account.
           </p>
           <div className="flex justify-end gap-3 pt-4">

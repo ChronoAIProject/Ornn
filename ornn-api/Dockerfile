@@ -1,23 +1,27 @@
-FROM oven/bun:latest AS install
+# Pin bun explicitly. `oven/bun:latest` floats and bun's workspace
+# hoister behaviour has shifted between releases (see the comment in
+# ornn-web/Dockerfile for the failure mode). Same pinning + same
+# copy-the-real-package.jsons treatment here so the install stage stays
+# reproducible.
+FROM oven/bun:1.3.13 AS install
 
 WORKDIR /app
 
 # Copy workspace root package files
 COPY package.json bun.lock ./
 
-# Copy this service
+# Copy every workspace package.json the lockfile references. Stubs used
+# to live here too (see git history) and they hit the same bun-hoister
+# issue documented in ornn-web/Dockerfile — the lockfile and stubbed
+# package.jsons drifted apart and `bun install` skipped hoistable deps.
 COPY ornn-api/package.json ornn-api/
-
-# Stub sibling workspaces (required by bun workspace resolution) —
-# only the ornn-api dep graph is actually needed at runtime, so minimal
-# placeholders satisfy the resolver without pulling their deps.
-RUN mkdir -p ornn-web && echo '{"name":"ornn-web","version":"1.0.0","private":true}' > ornn-web/package.json
-RUN mkdir -p ornn-sdk && echo '{"name":"@chronoai/ornn-sdk","version":"1.0.0","private":true}' > ornn-sdk/package.json
+COPY ornn-web/package.json ornn-web/
+COPY ornn-sdk/package.json ornn-sdk/
 
 RUN bun install
 
 # Runtime stage
-FROM oven/bun:latest
+FROM oven/bun:1.3.13
 
 WORKDIR /app
 

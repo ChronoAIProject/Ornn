@@ -1,7 +1,7 @@
 /**
  * Step Indicator Component.
  * Visual progress indicator for multi-step forms.
- * Cyberpunk styled with neon accents.
+ * Forge Workshop styled with neon accents.
  * @module components/form/StepIndicator
  */
 
@@ -77,12 +77,12 @@ export function StepIndicator({
             >
               {/* Connector line (before) */}
               {index > 0 && !isVertical && (
-                <div className="flex-1 h-0.5 bg-bg-elevated">
+                <div className="flex-1 h-0.5 bg-elevated">
                   <motion.div
                     initial={{ scaleX: 0 }}
                     animate={{ scaleX: isCompleted || isCurrent ? 1 : 0 }}
                     transition={{ duration: 0.3, delay: 0.1 }}
-                    className="h-full bg-neon-cyan origin-left"
+                    className="h-full bg-accent origin-left"
                   />
                 </div>
               )}
@@ -98,10 +98,10 @@ export function StepIndicator({
                   ${isClickable ? "cursor-pointer" : "cursor-default"}
                   ${
                     isCompleted
-                      ? "bg-neon-cyan/20 border-neon-cyan text-neon-cyan shadow-[0_0_15px_rgba(255,107,0,0.4)]"
+                      ? "bg-accent/20 border-accent text-accent"
                       : isCurrent
-                      ? "bg-neon-magenta/20 border-neon-magenta text-neon-magenta shadow-[0_0_15px_rgba(255,140,56,0.4)]"
-                      : "bg-bg-elevated border-text-muted/30 text-text-muted"
+                      ? "bg-accent-support/20 border-accent-support text-accent-support"
+                      : "bg-elevated border-meta/30 text-meta"
                   }
                 `}
               >
@@ -114,7 +114,7 @@ export function StepIndicator({
                     <CheckIcon className="h-5 w-5" />
                   </motion.div>
                 ) : (
-                  <span className="font-heading text-sm font-bold">
+                  <span className="font-display text-sm font-bold">
                     {index + 1}
                   </span>
                 )}
@@ -125,31 +125,31 @@ export function StepIndicator({
                     initial={{ scale: 1, opacity: 0.5 }}
                     animate={{ scale: 1.5, opacity: 0 }}
                     transition={{ duration: 1.5, repeat: Infinity }}
-                    className="absolute inset-0 rounded-full border-2 border-neon-magenta"
+                    className="absolute inset-0 rounded-full border-2 border-accent-support"
                   />
                 )}
               </button>
 
               {/* Connector line (after) */}
               {index < steps.length - 1 && !isVertical && (
-                <div className="flex-1 h-0.5 bg-bg-elevated">
+                <div className="flex-1 h-0.5 bg-elevated">
                   <motion.div
                     initial={{ scaleX: 0 }}
                     animate={{ scaleX: isCompleted ? 1 : 0 }}
                     transition={{ duration: 0.3 }}
-                    className="h-full bg-neon-cyan origin-left"
+                    className="h-full bg-accent origin-left"
                   />
                 </div>
               )}
 
               {/* Vertical connector */}
               {index < steps.length - 1 && isVertical && (
-                <div className="absolute top-10 left-1/2 w-0.5 h-8 -translate-x-1/2 bg-bg-elevated">
+                <div className="absolute top-10 left-1/2 w-0.5 h-8 -translate-x-1/2 bg-elevated">
                   <motion.div
                     initial={{ scaleY: 0 }}
                     animate={{ scaleY: isCompleted ? 1 : 0 }}
                     transition={{ duration: 0.3 }}
-                    className="h-full bg-neon-cyan origin-top"
+                    className="h-full bg-accent origin-top"
                   />
                 </div>
               )}
@@ -163,14 +163,14 @@ export function StepIndicator({
             >
               <p
                 className={`
-                  font-body text-sm font-medium transition-colors
-                  ${isCurrent ? "text-neon-magenta" : isCompleted ? "text-neon-cyan" : "text-text-muted"}
+                  font-text text-sm font-medium transition-colors
+                  ${isCurrent ? "text-accent-support" : isCompleted ? "text-accent" : "text-meta"}
                 `}
               >
                 {step.label}
               </p>
               {step.description && (
-                <p className="font-body text-xs text-text-muted mt-0.5">
+                <p className="font-text text-xs text-meta mt-0.5">
                   {step.description}
                 </p>
               )}
@@ -202,22 +202,22 @@ export function CompactStepIndicator({
   return (
     <div className={`flex items-center gap-3 ${className}`}>
       {/* Progress bar */}
-      <div className="flex-1 h-1.5 rounded-full bg-bg-elevated overflow-hidden">
+      <div className="flex-1 h-1.5 rounded-full bg-elevated overflow-hidden">
         <motion.div
           initial={{ width: 0 }}
           animate={{ width: `${((currentStep + 1) / totalSteps) * 100}%` }}
           transition={{ duration: 0.3 }}
-          className="h-full bg-gradient-to-r from-neon-cyan to-neon-magenta rounded-full"
+          className="h-full bg-gradient-to-r from-accent to-accent-support rounded-full"
         />
       </div>
 
       {/* Step text */}
       <div className="shrink-0 text-right">
-        <p className="font-body text-xs text-text-muted">
+        <p className="font-text text-xs text-meta">
           Step {currentStep + 1} of {totalSteps}
         </p>
         {currentLabel && (
-          <p className="font-body text-sm text-neon-cyan">{currentLabel}</p>
+          <p className="font-text text-sm text-accent">{currentLabel}</p>
         )}
       </div>
     </div>

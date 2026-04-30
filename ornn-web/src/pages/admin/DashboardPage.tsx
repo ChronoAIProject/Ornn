@@ -83,11 +83,11 @@ interface StatCardProps {
 }
 
 const COLOR_CLASSES = {
-  cyan: "text-neon-cyan border-neon-cyan/30 bg-neon-cyan/5",
-  magenta: "text-neon-magenta border-neon-magenta/30 bg-neon-magenta/5",
-  green: "text-neon-green border-neon-green/30 bg-neon-green/5",
-  yellow: "text-neon-yellow border-neon-yellow/30 bg-neon-yellow/5",
-  red: "text-neon-red border-neon-red/30 bg-neon-red/5",
+  cyan: "text-accent border-accent/30 bg-accent/5",
+  magenta: "text-accent-support border-accent-support/30 bg-accent-support/5",
+  green: "text-success border-success/30 bg-success/5",
+  yellow: "text-warning border-warning/30 bg-warning/5",
+  red: "text-danger border-danger/30 bg-danger/5",
 } as const;
 
 function StatCard({ label, value, icon, color, delay }: StatCardProps) {
@@ -97,17 +97,17 @@ function StatCard({ label, value, icon, color, delay }: StatCardProps) {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3, delay }}
     >
-      <div className={`glass rounded-xl border p-5 ${COLOR_CLASSES[color]}`}>
+      <div className={`bg-card rounded border p-5 ${COLOR_CLASSES[color]}`}>
         <div className="flex items-center justify-between">
           <div>
-            <p className="font-body text-xs uppercase tracking-wider text-text-muted">
+            <p className="font-text text-xs uppercase tracking-wider text-meta">
               {label}
             </p>
-            <p className={`mt-2 font-heading text-3xl font-bold ${COLOR_CLASSES[color].split(" ")[0]}`}>
+            <p className={`mt-2 font-display text-3xl font-bold ${COLOR_CLASSES[color].split(" ")[0]}`}>
               {value.toLocaleString()}
             </p>
           </div>
-          <div className={`flex h-12 w-12 items-center justify-center rounded-lg ${COLOR_CLASSES[color]}`}>
+          <div className={`flex h-12 w-12 items-center justify-center rounded ${COLOR_CLASSES[color]}`}>
             {icon}
           </div>
         </div>
@@ -150,10 +150,10 @@ export function DashboardPage() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="font-heading text-2xl font-bold text-neon-magenta neon-magenta">
+        <h1 className="font-display text-2xl font-bold text-accent-support accent-support">
           Dashboard
         </h1>
-        <p className="mt-1 font-body text-text-muted">
+        <p className="mt-1 font-text text-meta">
           Platform overview and recent activity
         </p>
       </div>
@@ -170,7 +170,7 @@ export function DashboardPage() {
       ) : error ? (
         <Card>
           <div className="py-8 text-center">
-            <p className="font-body text-neon-red">
+            <p className="font-text text-danger">
               {error instanceof Error ? error.message : "Failed to load dashboard data"}
             </p>
           </div>
@@ -243,12 +243,12 @@ export function DashboardPage() {
       >
         <Card>
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="font-heading text-lg font-semibold text-neon-cyan">
+            <h2 className="font-display text-lg font-semibold text-accent">
               Recent Activity
             </h2>
             <a
               href="/admin/activities"
-              className="font-body text-sm text-text-muted hover:text-neon-cyan transition-colors"
+              className="font-text text-sm text-meta hover:text-accent transition-colors"
             >
               View all
             </a>
@@ -258,14 +258,14 @@ export function DashboardPage() {
             <Skeleton lines={5} />
           ) : activitiesError ? (
             <div className="py-8 text-center">
-              <p className="font-body text-neon-red">
+              <p className="font-text text-danger">
                 {activitiesError instanceof Error
                   ? activitiesError.message
                   : "Failed to load activities"}
               </p>
             </div>
           ) : recentActivities?.items.length === 0 ? (
-            <p className="py-8 text-center font-body text-text-muted">
+            <p className="py-8 text-center font-text text-meta">
               No recent activity.
             </p>
           ) : (
@@ -273,19 +273,19 @@ export function DashboardPage() {
               {recentActivities?.items.map((activity) => (
                 <div
                   key={activity.id}
-                  className="flex flex-col gap-2 rounded-lg border border-neon-cyan/10 bg-bg-surface p-3 sm:flex-row sm:items-center sm:gap-4"
+                  className="flex flex-col gap-2 rounded border border-accent/10 bg-card p-3 sm:flex-row sm:items-center sm:gap-4"
                 >
-                  <span className="shrink-0 font-body text-xs text-text-muted">
+                  <span className="shrink-0 font-text text-xs text-meta">
                     {formatDateSGT(activity.createdAt)}
                   </span>
-                  <span className="font-body text-sm text-text-primary">
+                  <span className="font-text text-sm text-strong">
                     {activity.userEmail}
                   </span>
                   <Badge color={getActionBadgeColor(activity.action)}>
                     {activity.action}
                   </Badge>
                   {activity.details && Object.keys(activity.details).length > 0 && (
-                    <span className="font-body text-sm text-text-muted">
+                    <span className="font-text text-sm text-meta">
                       {(activity.details as Record<string, unknown>).skillName as string ?? JSON.stringify(activity.details)}
                     </span>
                   )}

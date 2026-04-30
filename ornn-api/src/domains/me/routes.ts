@@ -15,7 +15,7 @@ import {
   readUserOrgIds,
   readUserOrgMemberships,
 } from "../../middleware/nyxidAuth";
-import { NyxidUserServicesClient } from "../../clients/nyxid/userServices";
+import type { NyxidServiceClient } from "../../clients/nyxid/service";
 import type { SkillRepository } from "../skills/crud/repository";
 import type { ActivityRepository } from "../admin/activityRepository";
 import { AppError } from "../../shared/types/index";
@@ -30,14 +30,53 @@ export interface MeRoutesConfig {
   nyxidBaseUrl: string;
   skillRepo: SkillRepository;
   activityRepo: ActivityRepository;
+  /**
+   * Catalog-service client. Powers `GET /me/nyxid-services`, which lists
+   * the NyxID services the caller can tie a skill to (public admin
+   * services + private services they own).
+   */
+  nyxidServiceClient: NyxidServiceClient;
+  /**
+   * Synthetic NyxID service names appended to the bottom of every
+   * `GET /me/nyxid-services` response. Driven by the
+   * `EXTRA_NYXID_SERVICES` env var so operators can surface a
+   * platform-side option (e.g. "NyxID") that isn't (yet) registered in
+   * the catalogue. See `infra/config.ts`.
+   */
+  extraNyxidServices: readonly string[];
 }
 
 export function createMeRoutes(config: MeRoutesConfig): Hono<{ Variables: AuthVariables }> {
-  const { nyxidBaseUrl, skillRepo, activityRepo } = config;
+  const {
+    nyxidBaseUrl,
+    skillRepo,
+    activityRepo,
+    nyxidServiceClient,
+    extraNyxidServices,
+  } = config;
   const baseUrl = nyxidBaseUrl.replace(/\/+$/, "");
   const app = new Hono<{ Variables: AuthVariables }>();
   const auth = nyxidAuthMiddleware();
-  const userServicesClient = new NyxidUserServicesClient(baseUrl);
+
+  /**
+   * Pre-compute the synthetic-service rows once. Each entry inherits a
+   * stable id of the form `synthetic:<slug>` so downstream code can
+   * detect them without a round-trip to NyxID; tier is hard-pinned to
+   * `admin` since these stand in for platform-side services.
+   */
+  const syntheticNyxidServices = extraNyxidServices.map((name) => {
+    const slug = name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+    return {
+      id: `synthetic:${slug}` as const,
+      slug,
+      label: name,
+      description: "",
+      tier: "admin" as const,
+    };
+  });
 
   /**
    * GET /me/orgs — caller's NyxID org memberships.
@@ -160,27 +199,53 @@ export function createMeRoutes(config: MeRoutesConfig): Hono<{ Variables: AuthVa
   });
 
   /**
-   * GET /me/nyxid-services — caller's NyxID user-services (personal +
-   * org-inherited). Returns `{ items: Array<{ id, slug, label }> }`.
+   * GET /me/nyxid-services — NyxID catalog services the caller can tie a
+   * skill to.
    *
-   * Powers the System-skill filter: a skill is considered "system" for
-   * the caller when any of its tags matches one of these slugs/labels.
-   * Anonymous/no-token callers short-circuit to an empty list so the
-   * filter silently becomes a no-op rather than erroring.
+   * Returns the union of:
+   *   - **admin** services (NyxID `visibility: "public"`) — visible to
+   *     everyone. Tying a skill to an admin service marks the skill as a
+   *     **system skill** and forces it public.
+   *   - **personal** services (NyxID `visibility: "private"` AND
+   *     `created_by === caller`) — services the caller created. Tying a
+   *     skill to a personal service does not change the skill's privacy.
+   *
+   * Each item carries a `tier` field so the frontend can label / sort
+   * the picker without re-deriving from the raw fields.
+   *
+   * Fail-soft: empty list on auth/upstream failure.
    */
   app.get("/me/nyxid-services", auth, async (c) => {
     const authCtx = getAuth(c);
     const token = authCtx.userAccessToken;
+    // Even when the proxy stripped the user's token, still surface the
+    // synthetic services — they don't depend on NyxID at all.
     if (!token) {
-      return c.json({ data: { items: [] }, error: null });
+      return c.json({ data: { items: [...syntheticNyxidServices] }, error: null });
     }
-    try {
-      const items = await userServicesClient.listUserServices(token);
-      return c.json({ data: { items }, error: null });
-    } catch {
-      // Fail-soft on read — matches the posture of /me/orgs.
-      return c.json({ data: { items: [] }, error: null });
-    }
+    const services = await nyxidServiceClient.listServicesForCaller(token);
+    const items = services
+      // NyxID's filter already restricts to public + own-private, but
+      // belt-and-braces: drop anything that wouldn't be eligible to tie.
+      .filter((s) =>
+        s.visibility === "public" ||
+        (s.visibility === "private" && s.createdBy === authCtx.userId),
+      )
+      .map((s) => ({
+        id: s.id,
+        slug: s.slug,
+        label: s.label,
+        description: s.description,
+        tier:
+          s.visibility === "public"
+            ? ("admin" as const)
+            : ("personal" as const),
+      }));
+
+    // Append synthetic / platform-side services at the bottom so they
+    // sit visually after every catalogue entry in the picker UI.
+    items.push(...syntheticNyxidServices);
+    return c.json({ data: { items }, error: null });
   });
 
   /**

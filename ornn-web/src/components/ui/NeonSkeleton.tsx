@@ -1,6 +1,6 @@
 /**
  * Neon Skeleton Component.
- * Cyberpunk-styled loading skeletons with neon shimmer effect.
+ * Forge Workshop styled loading skeletons with neon shimmer effect.
  * Composable skeleton variants for different UI elements.
  * @module components/ui/NeonSkeleton
  */
@@ -38,7 +38,7 @@ const VARIANT_STYLES = {
   text: "rounded-md",
   circular: "rounded-full aspect-square",
   rectangular: "rounded-none",
-  rounded: "rounded-lg",
+  rounded: "rounded",
 } as const;
 
 /**
@@ -83,7 +83,7 @@ export function NeonSkeleton({
   return (
     <div
       className={`
-        ${animate ? "skeleton-shimmer" : "bg-neon-cyan/5"}
+        ${animate ? "skeleton-shimmer" : "bg-elevated/40"}
         ${VARIANT_STYLES[variant]}
         ${className}
       `}
@@ -101,7 +101,7 @@ export function SkillCardSkeleton({ className = "" }: { className?: string }) {
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      className={`glass rounded-xl p-6 ${className}`}
+      className={`rounded-md border border-subtle bg-card p-6 ${className}`}
     >
       {/* Header */}
       <div className="flex items-start justify-between mb-4">
@@ -120,7 +120,7 @@ export function SkillCardSkeleton({ className = "" }: { className?: string }) {
       </div>
 
       {/* Footer */}
-      <div className="flex items-center justify-between pt-4 border-t border-neon-cyan/10">
+      <div className="flex items-center justify-between pt-4 border-t border-subtle">
         <NeonSkeleton variant="text" width="6rem" height="1rem" />
         <NeonSkeleton variant="text" width="4rem" height="1rem" />
       </div>
@@ -210,7 +210,7 @@ export function DetailPageSkeleton({ className = "" }: { className?: string }) {
       </div>
 
       {/* Main content card */}
-      <div className="glass rounded-xl p-6 space-y-4">
+      <div className="rounded-md border border-subtle bg-card p-6 space-y-4">
         <NeonSkeleton variant="text" width="30%" height="1.25rem" />
         <NeonSkeleton variant="text" lines={4} size="full" />
         <NeonSkeleton variant="rounded" width="100%" height="12rem" />
@@ -218,11 +218,11 @@ export function DetailPageSkeleton({ className = "" }: { className?: string }) {
 
       {/* Secondary cards */}
       <div className="grid gap-6 md:grid-cols-2">
-        <div className="glass rounded-xl p-6 space-y-3">
+        <div className="rounded-md border border-subtle bg-card p-6 space-y-3">
           <NeonSkeleton variant="text" width="40%" height="1.25rem" />
           <NeonSkeleton variant="text" lines={3} size="full" />
         </div>
-        <div className="glass rounded-xl p-6 space-y-3">
+        <div className="rounded-md border border-subtle bg-card p-6 space-y-3">
           <NeonSkeleton variant="text" width="40%" height="1.25rem" />
           <NeonSkeleton variant="text" lines={3} size="full" />
         </div>
@@ -237,7 +237,7 @@ export function DetailPageSkeleton({ className = "" }: { className?: string }) {
  */
 export function StatsCardSkeleton({ className = "" }: { className?: string }) {
   return (
-    <div className={`glass rounded-xl p-6 ${className}`}>
+    <div className={`rounded-md border border-subtle bg-card p-6 ${className}`}>
       <div className="flex items-center justify-between mb-4">
         <NeonSkeleton variant="text" width="40%" height="1rem" />
         <NeonSkeleton variant="circular" width={32} height={32} />

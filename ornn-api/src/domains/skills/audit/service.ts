@@ -14,7 +14,9 @@
 import pino from "pino";
 import type { NyxLlmClient, ResponsesApiInputMessage } from "../../../clients/nyxid/llm";
 import type { IStorageClient } from "../../../clients/storageClient";
+import type { NyxidOrgsClient } from "../../../clients/nyxid/orgs";
 import type { SkillService } from "../crud/service";
+import type { NotificationService } from "../../notifications/service";
 import { AppError } from "../../../shared/types/index";
 import type { AuditRepository } from "./repository";
 import {
@@ -40,6 +42,11 @@ export interface AuditServiceDeps {
   readonly llmClient: NyxLlmClient;
   readonly model: string;
   readonly cacheTtlMs: number;
+  /** Optional. When wired, the finalize step fans out audit-result notifications. */
+  readonly notificationService?: NotificationService;
+  /** Optional. When wired together with `notificationService`, org targets are
+   *  expanded to their admin/member roster so every consumer gets notified. */
+  readonly nyxidOrgsClient?: NyxidOrgsClient;
 }
 
 export interface AuditOptions {
@@ -56,6 +63,8 @@ export class AuditService {
   private readonly llmClient: NyxLlmClient;
   private readonly model: string;
   private readonly cacheTtlMs: number;
+  private readonly notificationService?: NotificationService;
+  private readonly nyxidOrgsClient?: NyxidOrgsClient;
 
   constructor(deps: AuditServiceDeps) {
     this.auditRepo = deps.auditRepo;
@@ -65,17 +74,63 @@ export class AuditService {
     this.llmClient = deps.llmClient;
     this.model = deps.model;
     this.cacheTtlMs = deps.cacheTtlMs;
-  }
-
-  /** Fetch the most recent audit for (skill, version) without triggering a new one. */
-  async getAudit(idOrName: string, version?: string): Promise<AuditRecord | null> {
-    const skill = await this.skillService.getSkill(idOrName, version);
-    return this.auditRepo.findBySkillAndVersion(skill.guid, skill.version);
+    this.notificationService = deps.notificationService;
+    this.nyxidOrgsClient = deps.nyxidOrgsClient;
   }
 
   /**
-   * Run an audit. Cache-first unless `options.force`. Persists the
-   * result and returns it.
+   * Fetch the most recent *completed* audit for (skill, version). Running
+   * rows are ignored so callers (e.g. the share path) see only final
+   * scores. The history endpoint returns everything for the UI.
+   */
+  async getAudit(idOrName: string, version?: string): Promise<AuditRecord | null> {
+    const skill = await this.skillService.getSkill(idOrName, version);
+    const latest = await this.auditRepo.findLatestBySkillAndVersion(skill.guid, skill.version);
+    if (!latest || latest.status !== "completed") return null;
+    return latest;
+  }
+
+  /**
+   * Return audit records for a skill, newest first. When `version` is
+   * provided, only records for that version are returned; otherwise every
+   * record across versions is included.
+   */
+  async listHistory(
+    idOrName: string,
+    version?: string,
+  ): Promise<ReadonlyArray<AuditRecord>> {
+    const skill = await this.skillService.getSkill(idOrName);
+    const all = await this.auditRepo.listBySkillGuid(skill.guid);
+    if (!version) return all;
+    return all.filter((r) => r.version === version);
+  }
+
+  /**
+   * Per-version summary of the most recent completed audit. Powers the
+   * audit badge next to each row on the version picker. Versions that
+   * never had a completed audit are absent from the returned object;
+   * the caller treats absence as "not audited yet".
+   */
+  async summaryByVersion(
+    idOrName: string,
+  ): Promise<Record<string, AuditRecord>> {
+    const skill = await this.skillService.getSkill(idOrName);
+    const records = await this.auditRepo.findLatestCompletedPerVersion(skill.guid);
+    const out: Record<string, AuditRecord> = {};
+    for (const r of records) out[r.version] = r;
+    return out;
+  }
+
+  /**
+   * Kick off an audit. Inserts a `running` row immediately so the UI sees
+   * it, runs the LLM pipeline in the background, then marks the row as
+   * `completed`/`failed`. The returned record is always the initial
+   * `running` row (unless the cache short-circuits) — callers poll
+   * `listHistory` / `getAudit` for the final verdict.
+   *
+   * Cache path: with `force: false`, if there's a completed audit for the
+   * same bytes younger than the TTL, we just return that without
+   * creating a new row.
    */
   async runAudit(idOrName: string, options: AuditOptions): Promise<AuditRecord> {
     const skill = await this.skillService.getSkill(idOrName);
@@ -89,62 +144,164 @@ export class AuditService {
       }
     }
 
-    // Pull package bytes + build a readable file bundle the LLM can score.
-    const { filesBundle, metadataSummary } = await this.buildAuditContext(guid);
-
-    const input: ResponsesApiInputMessage[] = [
-      { role: "developer", content: AUDIT_SYSTEM_PROMPT },
-      {
-        role: "user",
-        content: buildAuditUserPrompt({
-          skillName: name,
-          version,
-          metadataSummary,
-          filesBundle,
-        }),
-      },
-    ];
-
-    const outputs = await this.llmClient.complete({
-      model: this.model,
-      input,
-      max_output_tokens: 4000,
-      temperature: 0.1,
-    });
-
-    let rawText = "";
-    for (const output of outputs) {
-      if (output.content) {
-        for (const part of output.content) {
-          if (part.text) rawText += part.text;
-        }
-      }
-    }
-
-    const parsed = parseAuditJson(rawText);
-    if (!parsed) {
-      logger.warn({ guid, version, first200: rawText.slice(0, 200) }, "Audit LLM output failed to parse");
-      throw AppError.internalError(
-        "AUDIT_PARSE_FAILED",
-        "Audit LLM did not return a valid scoring JSON. Try again.",
-      );
-    }
-
-    const { scores, findings } = parsed;
-    const overallScore = computeOverallScore(scores);
-    const verdict = computeVerdict(scores, findings);
-
-    return this.auditRepo.upsert({
+    const running = await this.auditRepo.createRunning({
       skillGuid: guid,
       version,
       skillHash,
-      verdict,
-      overallScore,
-      scores,
-      findings,
       model: this.model,
       triggeredBy: options.triggeredBy,
     });
+
+    // Run the LLM pipeline as a background task. The response returns
+    // the `running` row immediately so the UI can render a pending
+    // entry; this promise updates the same row when the pipeline is
+    // done (or fails). We never re-throw here — errors are surfaced on
+    // the record itself as `status: "failed"`.
+    void this.finalizeAudit(running._id, guid, name, version).catch((err) => {
+      logger.error({ err, auditId: running._id }, "Background audit task threw unexpectedly");
+    });
+
+    return running;
+  }
+
+  private async finalizeAudit(
+    auditId: string,
+    guid: string,
+    name: string,
+    version: string,
+  ): Promise<void> {
+    try {
+      const { filesBundle, metadataSummary } = await this.buildAuditContext(guid);
+
+      const input: ResponsesApiInputMessage[] = [
+        { role: "developer", content: AUDIT_SYSTEM_PROMPT },
+        {
+          role: "user",
+          content: buildAuditUserPrompt({
+            skillName: name,
+            version,
+            metadataSummary,
+            filesBundle,
+          }),
+        },
+      ];
+
+      const outputs = await this.llmClient.complete({
+        model: this.model,
+        input,
+        max_output_tokens: 4000,
+        temperature: 0.1,
+      });
+
+      let rawText = "";
+      for (const output of outputs) {
+        if (output.content) {
+          for (const part of output.content) {
+            if (part.text) rawText += part.text;
+          }
+        }
+      }
+
+      const parsed = parseAuditJson(rawText);
+      if (!parsed) {
+        logger.warn(
+          { guid, version, first200: rawText.slice(0, 200) },
+          "Audit LLM output failed to parse",
+        );
+        await this.auditRepo.markFailed(
+          auditId,
+          "Audit LLM did not return a valid scoring JSON",
+        );
+        return;
+      }
+
+      const { scores, findings } = parsed;
+      const overallScore = computeOverallScore(scores);
+      const verdict = computeVerdict(scores, findings);
+
+      await this.auditRepo.markCompleted(auditId, {
+        verdict,
+        overallScore,
+        scores,
+        findings,
+      });
+
+      // Fan out notifications. Owner always; consumers only on yellow/red.
+      // Failures here are best-effort — the audit row is already saved
+      // and the agent can read the verdict via the polling endpoints.
+      void this.fanOutNotifications({
+        guid,
+        name,
+        version,
+        verdict,
+        overallScore,
+      }).catch((err) => {
+        logger.warn({ err, auditId }, "Audit-completed notification fan-out failed");
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      await this.auditRepo.markFailed(auditId, message).catch((inner) => {
+        logger.error({ inner, auditId }, "markFailed threw");
+      });
+    }
+  }
+
+  /**
+   * Notify the owner (always) and every consumer (only on yellow/red).
+   * Consumer = anyone in `skill.sharedWithUsers` plus every admin/member
+   * of any org in `skill.sharedWithOrgs`. The owner is de-duped if they
+   * happen to also be in the consumer set.
+   */
+  private async fanOutNotifications(params: {
+    guid: string;
+    name: string;
+    version: string;
+    verdict: "green" | "yellow" | "red";
+    overallScore: number;
+  }): Promise<void> {
+    if (!this.notificationService) return;
+    const skill = await this.skillService.getSkill(params.guid);
+    const ownerUserId = skill.createdBy;
+
+    await this.notificationService.notifyAuditCompleted({
+      ownerUserId,
+      skillGuid: params.guid,
+      skillName: params.name,
+      version: params.version,
+      verdict: params.verdict,
+      overallScore: params.overallScore,
+    });
+
+    // Consumers only see this when the audit flagged risk.
+    if (params.verdict === "green") return;
+
+    const consumers = new Set<string>(skill.sharedWithUsers);
+    if (this.nyxidOrgsClient && skill.sharedWithOrgs.length > 0) {
+      // Expand each org to its admin/member roster. NyxID lookup is
+      // best-effort; missing orgs / failures yield empty member lists.
+      const memberLists = await Promise.all(
+        skill.sharedWithOrgs.map((orgId) =>
+          this.nyxidOrgsClient!.listOrgMembers(orgId).catch(() => []),
+        ),
+      );
+      for (const list of memberLists) {
+        for (const m of list) consumers.add(m.userId);
+      }
+    }
+    consumers.delete(ownerUserId);
+
+    await Promise.all(
+      Array.from(consumers).map((consumerUserId) =>
+        this.notificationService!.notifyAuditRiskyForConsumer({
+          consumerUserId,
+          skillGuid: params.guid,
+          skillName: params.name,
+          version: params.version,
+          verdict: params.verdict as "yellow" | "red",
+          overallScore: params.overallScore,
+        }),
+      ),
+    );
   }
 
   private async buildAuditContext(

@@ -11,7 +11,7 @@ import type { SkillVersionRepository } from "./skillVersionRepository";
 import type { IStorageClient } from "../../../clients/storageClient";
 import type { SkillDocument, SkillMetadata, SkillDetailResponse, SkillVersionDocument, SkillSource } from "../../../shared/types/index";
 import { AppError } from "../../../shared/types/index";
-import { fetchSkillFromGitHub, type GitHubPullInput } from "./utils/githubPull";
+import { fetchSkillFromGitHub, parseGithubUrl, type GitHubPullInput } from "./utils/githubPull";
 import { computeVersionDiff, type VersionDiffResult } from "./utils/versionDiff";
 import { isReservedVerb } from "../../../shared/reservedVerbs";
 import { validateSkillFrontmatter } from "../../../shared/schemas/skillFrontmatter";
@@ -274,6 +274,17 @@ export class SkillService {
       throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${guid}' not found`);
     }
 
+    // System-skill invariant: a skill tied to an admin NyxID service is
+    // always public. Reject attempts to flip it back to private without
+    // first untying — keeps the "system skill ⇒ visible to everyone"
+    // mental model tight.
+    if (existing.isSystemSkill === true && permissions.isPrivate === true) {
+      throw AppError.badRequest(
+        "SYSTEM_SKILL_MUST_BE_PUBLIC",
+        "This skill is tied to an admin NyxID service and must remain public. Untie the service before making it private.",
+      );
+    }
+
     // Dedupe the lists + drop any self-references. The author always has
     // access; including their id in `sharedWithUsers` is redundant and
     // noisy for downstream debugging.
@@ -309,6 +320,18 @@ export class SkillService {
     const existing = await this.skillRepo.findByGuid(guid);
     if (!existing) {
       throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${guid}' not found`);
+    }
+
+    // System-skill invariant — same as setSkillPermissions. Block
+    // `PUT /skills/:id` body that flips a system skill private.
+    if (
+      existing.isSystemSkill === true &&
+      options.isPrivate === true
+    ) {
+      throw AppError.badRequest(
+        "SYSTEM_SKILL_MUST_BE_PUBLIC",
+        "This skill is tied to an admin NyxID service and must remain public. Untie the service before making it private.",
+      );
     }
 
     const updateData: Record<string, unknown> = { updatedBy: userId };
@@ -476,6 +499,124 @@ export class SkillService {
   }
 
   /**
+   * Attach (or clear) a GitHub source pointer on an existing skill without
+   * pulling. Lets a user link an originally-uploaded skill to its GitHub
+   * source first and trigger the actual sync separately. Pass `null` to
+   * unlink. The pointer is parsed from a GitHub URL (e.g.
+   * `https://github.com/owner/repo/tree/<ref>/<path>`); `lastSyncedAt` /
+   * `lastSyncedCommit` are intentionally absent until the first refresh.
+   */
+  async setSkillSource(
+    guid: string,
+    githubUrl: string | null,
+    userId: string,
+  ): Promise<SkillDetailResponse> {
+    const existing = await this.skillRepo.findByGuid(guid);
+    if (!existing) {
+      throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${guid}' not found`);
+    }
+
+    if (githubUrl === null) {
+      await this.skillRepo.clearSource(guid, userId);
+      return this.getSkill(guid);
+    }
+
+    let parsed: { repo: string; ref?: string; path?: string };
+    try {
+      parsed = parseGithubUrl(githubUrl);
+    } catch (err) {
+      throw AppError.badRequest(
+        "INVALID_GITHUB_URL",
+        err instanceof Error ? err.message : String(err),
+      );
+    }
+
+    const newSource: SkillSource = {
+      type: "github",
+      repo: parsed.repo,
+      ref: parsed.ref ?? "HEAD",
+      path: parsed.path ?? "",
+    };
+
+    await this.skillRepo.update(guid, { source: newSource, updatedBy: userId });
+    return this.getSkill(guid);
+  }
+
+  /**
+   * Dry-run a refresh: pull the latest content from the skill's stored
+   * GitHub source, compute a structured diff against the current latest
+   * version, and return the diff without persisting anything. Drives the
+   * "preview-then-confirm" UI flow on the detail-page advanced settings.
+   *
+   * Throws NO_SOURCE if the skill has no `source`. Throws PULL_FAILED with
+   * a useful message if the upstream folder no longer exists / responds.
+   */
+  async previewRefreshFromSource(guid: string): Promise<{
+    skill: { guid: string; name: string };
+    source: SkillSource;
+    pendingVersion: string;
+    hasChanges: boolean;
+    diff: VersionDiffResult;
+  }> {
+    const existing = await this.skillRepo.findByGuid(guid);
+    if (!existing) {
+      throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${guid}' not found`);
+    }
+    if (!existing.source || existing.source.type !== "github") {
+      throw AppError.badRequest(
+        "NO_SOURCE",
+        "Skill has no linked GitHub source. Link one via PUT /api/v1/skills/:id/source first.",
+      );
+    }
+
+    const pulled = await fetchSkillFromGitHub({
+      repo: existing.source.repo,
+      ref: existing.source.ref,
+      path: existing.source.path,
+    });
+
+    const latestVersionDoc = await this.skillVersionRepo.findBySkillAndVersion(
+      existing.guid,
+      existing.latestVersion,
+    );
+    if (!latestVersionDoc) {
+      throw AppError.internalError(
+        "MISSING_VERSION",
+        `Latest version '${existing.latestVersion}' has no version row`,
+      );
+    }
+    const latestZip = await this.downloadPackage(latestVersionDoc.storageKey);
+    const diff = await computeVersionDiff(latestZip, pulled.zipBuffer);
+
+    const hasChanges =
+      diff.files.added.length > 0 ||
+      diff.files.removed.length > 0 ||
+      diff.files.modified.length > 0;
+
+    // Predict what the next version label will be. The actual bump
+    // happens inside `updateSkill` from the SKILL.md frontmatter, which
+    // is what the user already edited in the GitHub repo. We extract it
+    // out of the pulled ZIP so the UI can show "you'll create v1.2".
+    let pendingVersion = existing.latestVersion;
+    try {
+      const info = await this.extractSkillInfo(pulled.zipBuffer);
+      pendingVersion = info.version;
+    } catch {
+      // If the package can't be parsed (e.g. malformed frontmatter),
+      // fall back to the existing latest. The actual sync will surface
+      // the validation error properly.
+    }
+
+    return {
+      skill: { guid: existing.guid, name: existing.name },
+      source: { ...existing.source, lastSyncedCommit: pulled.resolvedCommitSha },
+      pendingVersion,
+      hasChanges,
+      diff,
+    };
+  }
+
+  /**
    * Compute a structured diff between two versions of a skill.
    *
    * Downloads both version ZIPs from storage, extracts, and compares
@@ -571,6 +712,144 @@ export class SkillService {
       );
     }
     return new Uint8Array(await res.arrayBuffer());
+  }
+
+  /**
+   * Delete a single non-latest version. Constraints:
+   *   - The version must exist.
+   *   - Cannot delete the **only** version on the skill — the caller should
+   *     use `DELETE /skills/:id` for that.
+   *   - Cannot delete the **current latest** version — moving the latest
+   *     pointer is a write that touches the skill doc and isn't worth the
+   *     complexity for a UI prune; ask the owner to publish a new latest
+   *     first if they really need to remove what's currently latest.
+   * Storage is best-effort cleaned up; failures are logged but do not roll
+   * back the version row deletion.
+   */
+  async deleteVersion(idOrName: string, version: string): Promise<void> {
+    let skill = await this.skillRepo.findByGuid(idOrName);
+    if (!skill) skill = await this.skillRepo.findByName(idOrName);
+    if (!skill) {
+      throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${idOrName}' not found`);
+    }
+    const versionDoc = await this.skillVersionRepo.findBySkillAndVersion(skill.guid, version);
+    if (!versionDoc) {
+      throw AppError.notFound(
+        "SKILL_VERSION_NOT_FOUND",
+        `Version '${version}' not found for skill '${skill.name}'`,
+      );
+    }
+    const allVersions = await this.skillVersionRepo.listBySkill(skill.guid);
+    if (allVersions.length <= 1) {
+      throw AppError.conflict(
+        "SKILL_VERSION_LAST",
+        `Cannot delete the only remaining version of '${skill.name}'. Delete the whole skill instead.`,
+      );
+    }
+    // `listBySkill` returns versions sorted latest-first, so index 0 is the
+    // current latest pointer. Forbid deleting it; owner must publish a
+    // newer version first.
+    const latest = allVersions[0]!;
+    if (latest.version === version) {
+      throw AppError.conflict(
+        "SKILL_VERSION_LATEST",
+        `Cannot delete v${version}: it is the current latest. Publish a newer version first, then delete v${version}.`,
+      );
+    }
+
+    if (versionDoc.storageKey) {
+      try {
+        await this.storageClient.delete(this.storageBucket, versionDoc.storageKey);
+      } catch (err) {
+        logger.warn(
+          { skillGuid: skill.guid, version, storageKey: versionDoc.storageKey, err },
+          "Best-effort version-storage cleanup failed",
+        );
+      }
+    }
+    await this.skillVersionRepo.deleteOne(skill.guid, version);
+    logger.info({ skillGuid: skill.guid, version }, "Skill version deleted");
+  }
+
+  /**
+   * Tie or untie a skill to a NyxID service. `serviceId === null` clears
+   * the tie and leaves `isPrivate` alone. When tying to a service:
+   *
+   * - The route layer has already verified the caller can manage the
+   *   skill (author or platform admin).
+   * - This method validates that the caller is **eligible** to use the
+   *   target service: either it's an admin/platform service
+   *   (`visibility: "public"`) the caller can see, or it's a private
+   *   service the caller created (`created_by === caller.userId`).
+   * - If the target is an admin service, `isPrivate` is forced to
+   *   `false` atomically. Personal ties leave `isPrivate` alone.
+   *
+   * The `lookupService` callback is passed in so the route layer can
+   * inject a `NyxidServiceClient` without the service module taking a
+   * direct dependency on it. Returns the refreshed `SkillDetailResponse`.
+   */
+  async tieToNyxidService(
+    guid: string,
+    serviceId: string | null,
+    actor: { userId: string; isPlatformAdmin: boolean },
+    lookupService: (id: string) => Promise<{
+      id: string;
+      slug: string;
+      label: string;
+      visibility: "public" | "private";
+      createdBy: string;
+    } | null>,
+  ): Promise<SkillDetailResponse> {
+    const existing = await this.skillRepo.findByGuid(guid);
+    if (!existing) {
+      throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${guid}' not found`);
+    }
+
+    // Untie path — wipe all four cached fields, leave `isPrivate` alone.
+    if (serviceId === null) {
+      const updated = await this.skillRepo.setNyxidService(guid, {
+        nyxidServiceId: null,
+        nyxidServiceSlug: null,
+        nyxidServiceLabel: null,
+        isSystemSkill: false,
+        updatedBy: actor.userId,
+      });
+      return this.buildDetailResponse(updated);
+    }
+
+    const service = await lookupService(serviceId);
+    if (!service) {
+      throw AppError.notFound(
+        "NYXID_SERVICE_NOT_FOUND",
+        `NyxID service '${serviceId}' not found or not visible to caller`,
+      );
+    }
+
+    const isAdminService = service.visibility === "public";
+    const isCallerOwnedPersonal =
+      service.visibility === "private" && service.createdBy === actor.userId;
+
+    // Eligibility: admin service (anyone can tie) OR own personal service.
+    // Tying to *another user's* personal service is rejected even for
+    // platform admins — the spec's #4 explicitly limits admins to "his
+    // own personal nyxid service or any admin nyxid services".
+    if (!isAdminService && !isCallerOwnedPersonal) {
+      throw AppError.forbidden(
+        "NYXID_SERVICE_NOT_ELIGIBLE",
+        "Caller is not eligible to tie this skill to that NyxID service",
+      );
+    }
+
+    const updated = await this.skillRepo.setNyxidService(guid, {
+      nyxidServiceId: service.id,
+      nyxidServiceSlug: service.slug,
+      nyxidServiceLabel: service.label,
+      isSystemSkill: isAdminService,
+      // Admin tie forces public; personal tie leaves privacy alone.
+      isPrivate: isAdminService ? false : undefined,
+      updatedBy: actor.userId,
+    });
+    return this.buildDetailResponse(updated);
   }
 
   async deleteSkill(guid: string): Promise<void> {
@@ -853,18 +1132,31 @@ export class SkillService {
             repo: skill.source.repo,
             ref: skill.source.ref,
             path: skill.source.path,
-            lastSyncedAt:
-              skill.source.lastSyncedAt instanceof Date
-                ? skill.source.lastSyncedAt.toISOString()
-                : String(skill.source.lastSyncedAt),
-            lastSyncedCommit: skill.source.lastSyncedCommit,
+            // Both fields are optional and absent for the "linked but
+            // never synced" state. Only include them when present so
+            // we never serialize an Invalid Date.
+            ...(skill.source.lastSyncedAt instanceof Date
+              ? { lastSyncedAt: skill.source.lastSyncedAt.toISOString() }
+              : {}),
+            ...(typeof skill.source.lastSyncedCommit === "string" && skill.source.lastSyncedCommit
+              ? { lastSyncedCommit: skill.source.lastSyncedCommit }
+              : {}),
           }
         : undefined,
+      nyxidServiceId: skill.nyxidServiceId ?? null,
+      nyxidServiceSlug: skill.nyxidServiceSlug ?? null,
+      nyxidServiceLabel: skill.nyxidServiceLabel ?? null,
+      isSystemSkill: skill.isSystemSkill === true,
     };
   }
 
-  /** Validate ZIP format rules (structure, required files, etc.). */
-  private async validateZipFormat(zipBuffer: Uint8Array): Promise<Array<{ rule: string; message: string }>> {
+  /**
+   * Validate ZIP format rules (structure, required files, frontmatter, etc.).
+   *
+   * Returns the list of rule violations. An empty array means the package is valid.
+   * Public so the `/skill-format/validate` route can call it without an `as any` cast.
+   */
+  async validateZipFormat(zipBuffer: Uint8Array): Promise<Array<{ rule: string; message: string }>> {
     const violations: Array<{ rule: string; message: string }> = [];
 
     let zip: JSZip;
