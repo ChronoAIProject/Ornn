@@ -763,6 +763,17 @@ html {
 .highlighter-mark--gold::before { background: var(--color-molten); }
 .highlighter-mark--arc::before  { background: var(--color-arc); }
 
+/* Loose sizing — wash extends further past the text. The default em-based
+   inset (-0.16em horizontal, 0.04em top, 0 bottom) is tuned for the giant
+   landing headline; on small text (e.g. 15px nav links) it reads tight,
+   so loose variants used in nav-scale contexts pad the wash out. */
+.highlighter-mark--loose::before {
+  left: -0.4em;
+  right: -0.4em;
+  top: -0.12em;
+  bottom: -0.08em;
+}
+
 /* Card letterpress — paired with --card-shadow-rest / --card-shadow-hover.
    Apply via .card-letterpress on any interactive card / panel / terminal
    that currently uses inline `shadow-[...]` Tailwind arbitrary syntax.
