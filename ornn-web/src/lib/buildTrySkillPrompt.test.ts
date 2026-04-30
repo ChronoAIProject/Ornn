@@ -46,49 +46,30 @@ describe("buildTrySkillPrompt", () => {
     expect(out).toMatch(/ornn-agent-manual/);
   });
 
-  test("public skill — only renders the anonymous curl path (no token, no NyxID CLI)", () => {
+  test("renders both NyxID CLI + bearer-token fetch paths regardless of visibility", () => {
     const out = buildTrySkillPrompt({
       guid: GUID,
       name: "s",
       description: "d",
       metadata: {},
       ornnOrigin: ORIGIN,
-      // Default is `isPrivate: false`; pass it explicitly here so the
-      // intent of this test is obvious to a future reader.
-      isPrivate: false,
     });
-    // The skill is public — no auth instructions should appear.
-    expect(out).not.toContain("nyxid proxy request");
-    expect(out).not.toContain("Authorization: Bearer");
-    expect(out).not.toContain("$TOKEN");
-    expect(out).not.toContain("Option A");
-    expect(out).not.toContain("Option B");
-    // The anonymous curl line still uses the dynamic origin.
-    expect(out).toContain(`curl "${ORIGIN}/api/v1/skills/${GUID}/json"`);
-    expect(out).toContain("public");
-    // Should NOT reference MCP tools
+    // NyxID CLI option present.
+    expect(out).toContain(`nyxid proxy request ornn-api /api/v1/skills/${GUID}/json`);
+    // Direct HTTPS bearer option present and uses the dynamic origin.
+    expect(out).toContain(`Authorization: Bearer $TOKEN`);
+    expect(out).toContain(`${ORIGIN}/api/v1/skills/${GUID}/json`);
+    // No anonymous-curl option — every Ornn call goes through NyxID's
+    // proxy, which requires a token even for public skills.
+    expect(out).not.toMatch(/Option C/);
+    // Should NOT reference the deprecated `ornn` slug.
+    expect(out).not.toMatch(/nyxid proxy request ornn[\s/]/);
+    // Should NOT reference MCP tools.
     expect(out).not.toContain("ornn__");
     expect(out).not.toContain("nyxid__nyx__");
   });
 
-  test("private skill — renders NyxID CLI + bearer-token paths and explains anonymous won't work", () => {
-    const out = buildTrySkillPrompt({
-      guid: GUID,
-      name: "s",
-      description: "d",
-      metadata: {},
-      ornnOrigin: ORIGIN,
-      isPrivate: true,
-    });
-    expect(out).toContain(`nyxid proxy request ornn-api /api/v1/skills/${GUID}/json`);
-    expect(out).toContain(`Authorization: Bearer $TOKEN`);
-    expect(out).toContain(`${ORIGIN}/api/v1/skills/${GUID}/json`);
-    expect(out).toMatch(/Anonymous fetch is not an option/);
-    // Should NOT reference the deprecated `ornn` slug
-    expect(out).not.toMatch(/nyxid proxy request ornn[\s/]/);
-  });
-
-  test("default (no isPrivate) treats the skill as public", () => {
+  test("explains the NyxID-proxy auth requirement for callers without nyxid installed", () => {
     const out = buildTrySkillPrompt({
       guid: GUID,
       name: "s",
@@ -96,8 +77,8 @@ describe("buildTrySkillPrompt", () => {
       metadata: {},
       ornnOrigin: ORIGIN,
     });
-    expect(out).not.toContain("Authorization: Bearer");
-    expect(out).toContain(`curl "${ORIGIN}/api/v1/skills/${GUID}/json"`);
+    expect(out).toMatch(/NyxID identity is required even for public skills/);
+    expect(out).toMatch(/install it first|nyxid login/i);
   });
 
   test("renders runtime-dependency list as library@version", () => {

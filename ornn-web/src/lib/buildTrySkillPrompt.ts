@@ -47,16 +47,6 @@ export interface BuildTrySkillPromptInput {
   metadata: TrySkillPromptMetadata | Record<string, unknown>;
   /** e.g. `window.location.origin` passed in by the caller. */
   ornnOrigin: string;
-  /**
-   * When `true`, the skill is private — the prompt will only render the
-   * authenticated fetch paths (NyxID CLI + direct HTTPS bearer token)
-   * because anonymous would 404. When `false` (public / system skill),
-   * the prompt drops the auth options entirely and renders only the
-   * anonymous curl: a public skill needs no token, and pretending it
-   * does just adds noise the agent has to ignore. Defaults to `false`
-   * (public).
-   */
-  isPrivate?: boolean;
 }
 
 const NONE = "none";
@@ -98,7 +88,7 @@ function renderToolList(tools: TrySkillPromptTool[]): string {
 }
 
 export function buildTrySkillPrompt(input: BuildTrySkillPromptInput): string {
-  const { guid, name, description, metadata, ornnOrigin, isPrivate = false } = input;
+  const { guid, name, description, metadata, ornnOrigin } = input;
   const category = asString((metadata as { category?: unknown }).category) ?? "plain";
   const runtimes = readRuntimes(metadata);
   const tools = readTools(metadata);
@@ -112,38 +102,6 @@ export function buildTrySkillPrompt(input: BuildTrySkillPromptInput): string {
   const skillUrl = `${origin}/skills/${guid}`;
   const apiUrl = `${origin}/api/v1/skills/${guid}/json`;
 
-  // Visibility-aware fetch instructions. A public skill is reachable
-  // anonymously; we don't make the agent juggle a token it doesn't need.
-  // A private skill is 404'd to anonymous callers, so we instead show the
-  // two authenticated paths (NyxID CLI proxy and direct HTTPS bearer).
-  const fetchSection: string[] = isPrivate
-    ? [
-        `The skill is private. Fetch \`${apiUrl}\` with one of these`,
-        "authenticated paths:",
-        "",
-        "**Option A — via NyxID CLI** (if `nyxid` is installed and you've run `nyxid login`):",
-        "```",
-        `nyxid proxy request ornn-api /api/v1/skills/${guid}/json --output json`,
-        "```",
-        "",
-        "**Option B — direct HTTPS** (if you already have a NyxID bearer token):",
-        "```",
-        `curl -H "Authorization: Bearer $TOKEN" \\`,
-        `  "${apiUrl}"`,
-        "```",
-        "",
-        "Anonymous fetch is not an option here — a private skill returns",
-        "`404 SKILL_NOT_FOUND` to callers without a valid grant.",
-      ]
-    : [
-        `The skill is public — fetch \`${apiUrl}\` directly. No token,`,
-        "no proxy:",
-        "",
-        "```",
-        `curl "${apiUrl}"`,
-        "```",
-      ];
-
   return [
     `# Install Ornn skill: ${name}`,
     "",
@@ -156,7 +114,25 @@ export function buildTrySkillPrompt(input: BuildTrySkillPromptInput): string {
     "",
     "## Step 1: Fetch the skill content",
     "",
-    ...fetchSection,
+    `Every Ornn API call goes through the NyxID proxy in front of`,
+    `\`ornn-api\`, so a NyxID identity is required even for public skills.`,
+    "Pick whichever path your environment supports:",
+    "",
+    "**Option A — via NyxID CLI** (preferred if `nyxid` is installed and you've run `nyxid login`):",
+    "```",
+    `nyxid proxy request ornn-api /api/v1/skills/${guid}/json --output json`,
+    "```",
+    "",
+    "**Option B — direct HTTPS** (if you already have a NyxID bearer token):",
+    "```",
+    `curl -H "Authorization: Bearer $TOKEN" \\`,
+    `  "${apiUrl}"`,
+    "```",
+    "",
+    "If `nyxid` is not installed, install it first (see the NyxID docs)",
+    "and run `nyxid login` against your platform's NyxID instance — the",
+    "CLI handles token refresh automatically. Without a NyxID identity,",
+    "the proxy returns `401 unauthorized` regardless of skill visibility.",
     "",
     "Response shape:",
     "```",
