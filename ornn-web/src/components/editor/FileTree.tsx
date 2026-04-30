@@ -335,9 +335,10 @@ export function FileTree({
 
   return (
     <div className={`flex flex-col h-full ${className}`}>
-      {/* Header */}
-      <div className="flex items-center px-3 py-2 border-b border-accent/10">
-        <span className="font-display text-xs uppercase tracking-wider text-meta">
+      {/* Header — same vertical rhythm as the file-viewer header on the
+          right so they line up across the unified panel. */}
+      <div className="flex shrink-0 items-center border-b border-subtle bg-elevated/40 px-4 py-2">
+        <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.2em] text-meta">
           Files
         </span>
       </div>
