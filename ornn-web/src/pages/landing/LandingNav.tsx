@@ -7,6 +7,7 @@ import { useAuthStore, useIsAuthenticated, useCurrentUser, isAdmin } from "@/sto
 import { logActivity } from "@/services/activityApi";
 import { config } from "@/config";
 import { Logo } from "@/components/brand/Logo";
+import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { EmberLink } from "./EmberButton";
 
 /** Derive NyxID home URL from the authorize URL env var. */
@@ -219,6 +220,8 @@ export function LandingNav() {
               </svg>
             )}
           </button>
+
+          {isAuthenticated && <NotificationBell />}
 
           {isAuthenticated && user ? (
             // Avatar trigger + dropdown. Uses landing-page tokens

@@ -112,10 +112,10 @@ export function AdminLayout() {
     <div className="bg-grid min-h-screen bg-page">
       {/* Top Bar */}
       <header className="fixed top-0 z-40 w-full border-b border-subtle bg-page/95 backdrop-blur-md">
-        <div className="flex h-16 items-center justify-between px-4 lg:px-8">
+        <div className="flex h-[60px] items-center justify-between px-4 lg:px-8">
           {/* Logo / Back Link */}
           <NavLink to="/" className="flex items-center gap-3">
-            <Logo className="h-7 w-auto" />
+            <Logo className="h-[26px] w-auto" />
             <span className="font-display text-sm font-semibold uppercase tracking-[0.16em] text-accent">
               Admin
             </span>
@@ -165,9 +165,9 @@ export function AdminLayout() {
         </div>
       </header>
 
-      <div className="flex pt-16">
+      <div className="flex pt-[60px]">
         {/* Sidebar */}
-        <aside className="fixed left-0 top-16 z-30 hidden h-[calc(100vh-4rem)] w-60 border-r border-subtle bg-page lg:block">
+        <aside className="fixed left-0 top-[60px] z-30 hidden h-[calc(100vh-60px)] w-60 border-r border-subtle bg-page lg:block">
           <nav className="flex flex-col gap-1 p-4">
             {NAV_ITEMS.map((item) => (
               <NavLink
@@ -211,7 +211,7 @@ export function AdminLayout() {
         </nav>
 
         {/* Main Content */}
-        <main className="min-h-[calc(100vh-4rem)] flex-1 p-4 pb-20 lg:ml-60 lg:p-8 lg:pb-8">
+        <main className="min-h-[calc(100vh-60px)] flex-1 p-4 pb-20 lg:ml-60 lg:p-8 lg:pb-8">
           <motion.div
             key={location.pathname}
             initial={{ opacity: 0, y: 10 }}

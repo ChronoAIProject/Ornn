@@ -73,7 +73,15 @@ server {
     }
 
     # ── SPA fallback ──────────────────────────────────────────────────────
+    # index.html itself must NOT be cached so browsers always pull the
+    # latest chunk-hash references after a redeploy. Without this, an
+    # older tab that holds a stale index.html in cache will try to
+    # dynamic-import chunks (e.g. SkillDetailPage-<hash>.js) that no
+    # longer exist on disk, and React Router surfaces "Failed to fetch
+    # dynamically imported module". The hashed JS/CSS assets keep the
+    # immutable cache-control declared above (regex location runs first).
     location / {
         try_files $uri $uri/ /index.html;
+        add_header Cache-Control "no-cache, no-store, must-revalidate";
     }
 }

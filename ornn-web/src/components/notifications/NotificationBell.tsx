@@ -101,11 +101,11 @@ export function NotificationBell() {
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-label={t("notifications.bellAria", "Notifications")}
-        className="relative flex h-10 w-10 items-center justify-center rounded-full border border-accent/20 bg-card/50 text-meta transition-all duration-200 hover:border-accent/60 hover:text-strong cursor-pointer"
+        className="relative flex h-9 w-9 cursor-pointer items-center justify-center rounded-sm border border-strong-edge bg-transparent text-strong transition-colors duration-200 hover:border-accent hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
       >
-        <BellIcon className="h-5 w-5" />
+        <BellIcon className="h-4 w-4" />
         {unread > 0 && (
-          <span className="absolute -right-0.5 -top-0.5 min-w-[1.25rem] rounded-full border-2 border-bg-surface bg-danger px-1 font-display text-[10px] font-bold leading-4 text-white">
+          <span className="absolute -right-1 -top-1 min-w-[1.1rem] rounded-full border border-page bg-danger px-1 font-mono text-[10px] font-semibold leading-[14px] text-page">
             {badgeLabel}
           </span>
         )}

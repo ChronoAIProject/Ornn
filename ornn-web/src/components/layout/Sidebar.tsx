@@ -256,7 +256,7 @@ export function Sidebar({
         animate={collapsed ? "collapsed" : "expanded"}
         transition={{ type: "spring", stiffness: 300, damping: 30 }}
         className={`
-          hidden lg:block fixed top-16 left-0 bottom-0 z-20
+          hidden lg:block fixed top-[60px] left-0 bottom-0 z-20
           border-r border-subtle bg-page/95 backdrop-blur-md
           ${className}
         `}

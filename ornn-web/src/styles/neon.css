@@ -1,6 +1,16 @@
 @import "tailwindcss";
 @import "highlight.js/styles/tokyo-night-dark.css";
 
+/* Reserve the scrollbar gutter at all times so navigating between
+   landing (body scrolls — scrollbar visible) and app-shell routes
+   (RootLayout uses h-screen overflow-hidden — no body scrollbar)
+   doesn't make centered containers (Navbar, page wrappers) jump
+   horizontally by the scrollbar width. The gutter stays empty on
+   app-shell routes; landing keeps its actual scrollbar. */
+html {
+  scrollbar-gutter: stable;
+}
+
 /* Space Grotesk is the single Forge Workshop display voice for the whole
    product (landing + app shell). Loaded via index.html alongside Inter and
    JetBrains Mono. The legacy Fraunces / PP Editorial New fonts have been

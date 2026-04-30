@@ -182,10 +182,10 @@ export function Navbar({ className = "" }: NavbarProps) {
     <nav
       className={`sticky top-0 z-40 shrink-0 border-b border-subtle bg-page/95 backdrop-blur-md ${className}`}
     >
-      <div className="relative mx-auto flex h-16 max-w-[1280px] items-center justify-between gap-3 px-6 sm:px-8">
+      <div className="relative mx-auto flex h-[60px] max-w-[1280px] items-center justify-between gap-3 px-6 sm:px-8">
         {/* Logo */}
         <Link to="/" className="flex items-center gap-2 text-strong" aria-label="Ornn home">
-          <Logo className="block h-7 w-auto" />
+          <Logo className="block h-[26px] w-auto" />
         </Link>
 
         {/* Center nav (md+) */}
@@ -209,7 +209,7 @@ export function Navbar({ className = "" }: NavbarProps) {
         </div>
 
         {/* Right cluster (md+) */}
-        <div className="hidden items-center gap-3 md:flex">
+        <div className="hidden items-center gap-3.5 md:flex">
           <a
             href="https://github.com/ChronoAIProject/Ornn"
             target="_blank"
