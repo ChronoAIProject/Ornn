@@ -34,7 +34,7 @@ export function RuntimeSelect({
 
   return (
     <div className={`flex flex-col gap-1.5 ${className}`}>
-      <label className="font-heading text-xs uppercase tracking-wider text-text-muted">
+      <label className="font-heading text-xs uppercase tracking-wider text-meta">
         Runtime Environments
       </label>
 
@@ -70,13 +70,13 @@ export function RuntimeSelect({
                 type="checkbox"
                 checked={isChecked}
                 onChange={() => toggleRuntime(runtime)}
-                className="h-4 w-4 rounded border-text-muted/30 bg-bg-deep text-neon-cyan accent-neon-cyan cursor-pointer"
+                className="h-4 w-4 rounded border-text-muted/30 bg-page text-accent accent-accent cursor-pointer"
               />
               <span
                 className={`font-body text-sm transition-colors ${
                   isChecked
-                    ? "text-neon-yellow"
-                    : "text-text-muted group-hover:text-text-primary"
+                    ? "text-warning"
+                    : "text-meta group-hover:text-strong"
                 }`}
               >
                 {info.label}
@@ -86,7 +86,7 @@ export function RuntimeSelect({
         })}
       </div>
 
-      {error && <span className="text-xs text-neon-red">{error}</span>}
+      {error && <span className="text-xs text-danger">{error}</span>}
     </div>
   );
 }

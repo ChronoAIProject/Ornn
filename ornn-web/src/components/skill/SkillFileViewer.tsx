@@ -85,17 +85,17 @@ export function SkillFileViewer({
 
   if (isBinary) {
     return (
-      <div className={`flex flex-col rounded-lg border border-neon-cyan/10 bg-bg-deep ${className}`}>
-        <div className="flex shrink-0 items-center justify-between border-b border-neon-cyan/10 bg-bg-surface px-4 py-2">
-          <span className="font-mono text-sm text-text-primary truncate">
+      <div className={`flex flex-col rounded-lg border border-accent/10 bg-page ${className}`}>
+        <div className="flex shrink-0 items-center justify-between border-b border-accent/10 bg-card px-4 py-2">
+          <span className="font-mono text-sm text-strong truncate">
             {filename}
           </span>
         </div>
         <div className="flex flex-1 flex-col items-center justify-center py-16 px-4">
-          <BinaryFileIcon className="h-12 w-12 text-text-muted mb-3" />
-          <p className="font-mono text-sm text-text-primary">{filename}</p>
+          <BinaryFileIcon className="h-12 w-12 text-meta mb-3" />
+          <p className="font-mono text-sm text-strong">{filename}</p>
           {fileSize !== undefined && (
-            <p className="font-body text-xs text-text-muted mt-1">
+            <p className="font-body text-xs text-meta mt-1">
               {formatFileSize(fileSize)} (binary file)
             </p>
           )}
@@ -105,17 +105,17 @@ export function SkillFileViewer({
   }
 
   return (
-    <div className={`flex flex-col rounded-lg border border-neon-cyan/10 bg-bg-deep ${className}`}>
+    <div className={`flex flex-col rounded-lg border border-accent/10 bg-page ${className}`}>
       {/* Header */}
-      <div className="flex shrink-0 items-center justify-between border-b border-neon-cyan/10 bg-bg-surface px-4 py-2">
-        <span className="font-mono text-sm text-text-primary truncate">
+      <div className="flex shrink-0 items-center justify-between border-b border-accent/10 bg-card px-4 py-2">
+        <span className="font-mono text-sm text-strong truncate">
           {filename}
         </span>
         {editable && (
           <button
             type="button"
             onClick={() => setIsEditing((prev) => !prev)}
-            className="p-1 rounded text-text-muted hover:text-neon-cyan transition-colors cursor-pointer"
+            className="p-1 rounded text-meta hover:text-accent transition-colors cursor-pointer"
             title={isEditing ? "Preview" : "Edit"}
           >
             {isEditing ? (
@@ -132,12 +132,12 @@ export function SkillFileViewer({
         <textarea
           value={content}
           onChange={(e) => onChange?.(e.target.value)}
-          className="w-full flex-1 resize-none bg-transparent p-4 font-mono text-sm leading-relaxed text-text-primary outline-none"
+          className="w-full flex-1 resize-none bg-transparent p-4 font-mono text-sm leading-relaxed text-strong outline-none"
           spellCheck={false}
         />
       ) : (
         <div className="flex-1 overflow-y-auto p-4">
-          <pre className="whitespace-pre-wrap break-words font-mono text-sm leading-relaxed text-text-primary">
+          <pre className="whitespace-pre-wrap break-words font-mono text-sm leading-relaxed text-strong">
             {content}
           </pre>
         </div>

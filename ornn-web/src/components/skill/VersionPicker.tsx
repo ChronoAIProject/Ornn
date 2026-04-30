@@ -68,7 +68,7 @@ export function VersionPicker({
 
   return (
     <div ref={containerRef} className={`relative ${className}`}>
-      <span className="font-heading text-[11px] uppercase tracking-wider text-text-muted mr-2">
+      <span className="font-heading text-[11px] uppercase tracking-wider text-meta mr-2">
         {t("skillDetail.version")}
       </span>
       <button
@@ -78,17 +78,17 @@ export function VersionPicker({
         aria-expanded={open}
         className={`
           glass inline-flex items-center gap-2 rounded-lg
-          border border-neon-cyan/20 bg-bg-elevated
-          px-3 py-1.5 font-body text-sm text-text-primary
+          border border-accent/20 bg-elevated
+          px-3 py-1.5 font-body text-sm text-strong
           cursor-pointer transition-colors
-          hover:border-neon-cyan/50
-          focus:outline-none focus:border-neon-cyan/70
-          ${open ? "border-neon-cyan/70" : ""}
+          hover:border-accent/50
+          focus:outline-none focus:border-accent/70
+          ${open ? "border-accent/70" : ""}
         `}
       >
         <span className="truncate max-w-[16rem]">{buttonLabel}</span>
         <svg
-          className={`h-3.5 w-3.5 shrink-0 text-text-muted transition-transform ${open ? "rotate-180" : ""}`}
+          className={`h-3.5 w-3.5 shrink-0 text-meta transition-transform ${open ? "rotate-180" : ""}`}
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"
@@ -108,8 +108,8 @@ export function VersionPicker({
             transition={{ duration: 0.12, ease: "easeOut" }}
             className="
               absolute left-0 top-full mt-1 z-20 min-w-[14rem]
-              glass rounded-lg border border-neon-cyan/30
-              bg-bg-surface/95 backdrop-blur-md
+              glass rounded-lg border border-accent/30
+              bg-card/95 backdrop-blur-md
               shadow-[0_4px_24px_rgba(0,0,0,0.3)]
               py-1 overflow-hidden
             "
@@ -132,8 +132,8 @@ export function VersionPicker({
                       font-body text-sm text-left cursor-pointer transition-colors
                       ${
                         isCurrent
-                          ? "bg-neon-cyan/10 text-neon-cyan"
-                          : "text-text-primary hover:bg-bg-elevated"
+                          ? "bg-accent/10 text-accent"
+                          : "text-strong hover:bg-elevated"
                       }
                     `}
                   >

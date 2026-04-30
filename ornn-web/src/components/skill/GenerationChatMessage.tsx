@@ -47,8 +47,8 @@ function UserBubble({ content }: { content: string }) {
       transition={{ duration: 0.15, ease: "easeOut" }}
       className="flex justify-end"
     >
-      <div className="max-w-[80%] rounded-xl rounded-br-sm border border-neon-cyan/30 bg-neon-cyan/5 px-4 py-3">
-        <p className="whitespace-pre-wrap font-body text-sm text-text-primary">
+      <div className="max-w-[80%] rounded-xl rounded-br-sm border border-accent/30 bg-accent/5 px-4 py-3">
+        <p className="whitespace-pre-wrap font-body text-sm text-strong">
           {content}
         </p>
       </div>
@@ -67,14 +67,14 @@ function StreamingBubble({ content }: { content: string }) {
     >
       <div className="glass max-w-[85%] rounded-xl rounded-bl-sm px-4 py-3">
         {content ? (
-          <pre className="whitespace-pre-wrap font-mono text-xs text-text-primary/80">
+          <pre className="whitespace-pre-wrap font-mono text-xs text-strong/80">
             {content}
-            <span className="inline-block h-4 w-1.5 animate-blink bg-neon-cyan/80" />
+            <span className="inline-block h-4 w-1.5 animate-blink bg-accent/80" />
           </pre>
         ) : (
           <div className="flex items-center gap-2">
-            <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-neon-yellow border-t-transparent" />
-            <span className="font-body text-xs text-text-muted">Generating...</span>
+            <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-warning border-t-transparent" />
+            <span className="font-body text-xs text-meta">Generating...</span>
           </div>
         )}
       </div>
@@ -102,15 +102,15 @@ function CompleteBubble({
       <div className="glass max-w-[85%] rounded-xl rounded-bl-sm px-4 py-3">
         {skillName ? (
           <div className="space-y-1">
-            <p className="font-body text-sm text-text-primary">
-              Generated: <span className="font-semibold text-neon-green">{skillName}</span>
+            <p className="font-body text-sm text-strong">
+              Generated: <span className="font-semibold text-success">{skillName}</span>
             </p>
             {skillDescription && (
-              <p className="font-body text-xs text-text-muted">{skillDescription}</p>
+              <p className="font-body text-xs text-meta">{skillDescription}</p>
             )}
           </div>
         ) : (
-          <p className="whitespace-pre-wrap font-body text-sm text-text-primary">
+          <p className="whitespace-pre-wrap font-body text-sm text-strong">
             {content}
           </p>
         )}
@@ -128,8 +128,8 @@ function ErrorBubble({ content }: { content: string }) {
       transition={{ duration: 0.15, ease: "easeOut" }}
       className="flex justify-start"
     >
-      <div className="max-w-[85%] rounded-xl rounded-bl-sm border border-neon-red/30 bg-neon-red/5 px-4 py-3">
-        <p className="font-body text-sm text-neon-red">{content.replace(/^Error:\s*/, "")}</p>
+      <div className="max-w-[85%] rounded-xl rounded-bl-sm border border-danger/30 bg-danger/5 px-4 py-3">
+        <p className="font-body text-sm text-danger">{content.replace(/^Error:\s*/, "")}</p>
       </div>
     </motion.div>
   );

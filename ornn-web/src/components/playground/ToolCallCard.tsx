@@ -19,33 +19,33 @@ const STATUS_STYLES: Record<
   { border: string; badge: string; label: string }
 > = {
   pending: {
-    border: "border-neon-yellow/40 animate-pulse",
-    badge: "bg-neon-yellow/10 text-neon-yellow",
+    border: "border-warning/40 animate-pulse",
+    badge: "bg-warning/10 text-warning",
     label: "Pending Approval",
   },
   approved: {
-    border: "border-neon-cyan/40",
-    badge: "bg-neon-cyan/10 text-neon-cyan",
+    border: "border-accent/40",
+    badge: "bg-accent/10 text-accent",
     label: "Approved",
   },
   executing: {
-    border: "border-neon-cyan/40",
-    badge: "bg-neon-cyan/10 text-neon-cyan",
+    border: "border-accent/40",
+    badge: "bg-accent/10 text-accent",
     label: "Executing...",
   },
   completed: {
-    border: "border-neon-green/40",
-    badge: "bg-neon-green/10 text-neon-green",
+    border: "border-success/40",
+    badge: "bg-success/10 text-success",
     label: "Completed",
   },
   rejected: {
-    border: "border-neon-red/40",
-    badge: "bg-neon-red/10 text-neon-red",
+    border: "border-danger/40",
+    badge: "bg-danger/10 text-danger",
     label: "Rejected",
   },
   error: {
-    border: "border-neon-red/40",
-    badge: "bg-neon-red/10 text-neon-red",
+    border: "border-danger/40",
+    badge: "bg-danger/10 text-danger",
     label: "Error",
   },
 };
@@ -68,12 +68,12 @@ export function ToolCallCard({ toolCall, status }: ToolCallCardProps) {
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
       transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
-      className={`rounded-lg border bg-bg-surface/50 p-3 ${style.border}`}
+      className={`rounded-lg border bg-card/50 p-3 ${style.border}`}
     >
       {/* Header */}
       <div className="flex items-center gap-2">
-        <ToolIcon className="h-4 w-4 text-text-muted" />
-        <span className="font-heading text-xs uppercase tracking-wider text-text-primary">
+        <ToolIcon className="h-4 w-4 text-meta" />
+        <span className="font-heading text-xs uppercase tracking-wider text-strong">
           {toolCall.name}
         </span>
 
@@ -87,7 +87,7 @@ export function ToolCallCard({ toolCall, status }: ToolCallCardProps) {
 
       {/* Arguments */}
       {Object.keys(toolCall.args).length > 0 && (
-        <pre className="mt-2 max-h-32 overflow-auto rounded bg-bg-deep/60 p-2 font-mono text-xs text-text-muted">
+        <pre className="mt-2 max-h-32 overflow-auto rounded bg-page/60 p-2 font-mono text-xs text-meta">
           {formatArgs(toolCall.args)}
         </pre>
       )}

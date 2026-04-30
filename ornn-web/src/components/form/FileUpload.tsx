@@ -78,7 +78,7 @@ export function FileUpload({ onFileSelect, error: externalError, className = "" 
 
   return (
     <div className={`flex flex-col gap-1.5 ${className}`}>
-      <label className="font-heading text-xs uppercase tracking-wider text-text-muted">
+      <label className="font-heading text-xs uppercase tracking-wider text-meta">
         Package File
       </label>
       <motion.div
@@ -94,30 +94,30 @@ export function FileUpload({ onFileSelect, error: externalError, className = "" 
         className={`
           flex cursor-pointer flex-col items-center justify-center rounded-xl
           border-2 border-dashed px-6 py-10 transition-colors
-          ${isDragging ? "border-neon-cyan bg-neon-cyan/5" : "border-neon-cyan/20 bg-bg-deep/50"}
+          ${isDragging ? "border-accent bg-accent/5" : "border-accent/20 bg-page/50"}
         `}
       >
         {file ? (
           <div className="text-center">
-            <p className="font-mono text-sm text-neon-cyan">{file.name}</p>
-            <p className="mt-1 text-xs text-text-muted">{formatFileSize(file.size)}</p>
+            <p className="font-mono text-sm text-accent">{file.name}</p>
+            <p className="mt-1 text-xs text-meta">{formatFileSize(file.size)}</p>
             <button
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
                 clearFile();
               }}
-              className="mt-2 text-xs text-neon-red hover:underline"
+              className="mt-2 text-xs text-danger hover:underline"
             >
               Remove
             </button>
           </div>
         ) : (
           <div className="text-center">
-            <p className="font-body text-sm text-text-muted">
+            <p className="font-body text-sm text-meta">
               Drag & drop or click to browse
             </p>
-            <p className="mt-1 text-xs text-text-muted/60">
+            <p className="mt-1 text-xs text-meta/60">
               {ACCEPTED_FILE_TYPES.join(", ")} up to {MAX_FILE_SIZE_LABEL}
             </p>
           </div>
@@ -133,7 +133,7 @@ export function FileUpload({ onFileSelect, error: externalError, className = "" 
         }}
         className="hidden"
       />
-      {displayError && <span className="text-xs text-neon-red">{displayError}</span>}
+      {displayError && <span className="text-xs text-danger">{displayError}</span>}
     </div>
   );
 }

@@ -107,13 +107,13 @@ export function SkillCard({
     >
       {/* Title + permission/system badges */}
       <div className="mb-3 flex items-start justify-between gap-2">
-        <h3 className="min-w-0 font-heading text-lg font-semibold text-neon-cyan truncate">
+        <h3 className="min-w-0 font-heading text-lg font-semibold text-accent truncate">
           {skill.name}
         </h3>
         <div className="flex shrink-0 items-center gap-1.5 flex-wrap justify-end">
           {skill.hasGithubSource && (
             <span
-              className="inline-flex h-5 w-5 items-center justify-center text-text-muted"
+              className="inline-flex h-5 w-5 items-center justify-center text-meta"
               aria-label="Linked to GitHub"
               title="Linked to GitHub"
             >
@@ -133,18 +133,18 @@ export function SkillCard({
           non-owned skill. Rendered only when the backend populated
           `myAccessReason` with a grant-based value. */}
       {skill.myAccessReason === "shared-via-org" && (
-        <p className="mb-2 font-body text-[11px] uppercase tracking-wider text-text-muted">
+        <p className="mb-2 font-body text-[11px] uppercase tracking-wider text-meta">
           Via organization
         </p>
       )}
       {skill.myAccessReason === "shared-direct" && (
-        <p className="mb-2 font-body text-[11px] uppercase tracking-wider text-text-muted">
+        <p className="mb-2 font-body text-[11px] uppercase tracking-wider text-meta">
           Shared by {displayName}
         </p>
       )}
 
       {/* Description — fixed 2 lines, break long words */}
-      <p className="mb-4 font-body text-sm leading-relaxed text-text-muted line-clamp-2 break-words">
+      <p className="mb-4 font-body text-sm leading-relaxed text-meta line-clamp-2 break-words">
         {skill.description}
       </p>
 
@@ -161,7 +161,7 @@ export function SkillCard({
       <div className="flex-1" />
 
       {/* Author + timestamp */}
-      <div className="flex items-center justify-between gap-4 text-xs text-text-muted">
+      <div className="flex items-center justify-between gap-4 text-xs text-meta">
         <div className="flex items-center gap-2 min-w-0">
           {ownerAvatarUrl ? (
             <img
@@ -170,7 +170,7 @@ export function SkillCard({
               className="h-4 w-4 rounded-full object-cover shrink-0"
             />
           ) : (
-            <div className="flex h-4 w-4 items-center justify-center rounded-full bg-bg-elevated text-[8px] text-text-muted shrink-0">
+            <div className="flex h-4 w-4 items-center justify-center rounded-full bg-elevated text-[8px] text-meta shrink-0">
               {displayName.charAt(0).toUpperCase()}
             </div>
           )}
@@ -180,7 +180,7 @@ export function SkillCard({
       </div>
 
       {showOwnerControls && isOwner && (
-        <div className="mt-4 pt-4 border-t border-neon-cyan/10">
+        <div className="mt-4 pt-4 border-t border-accent/10">
           <div className="flex items-center justify-end gap-2">
             <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
               {onEdit && (

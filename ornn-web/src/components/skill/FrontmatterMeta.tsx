@@ -36,7 +36,7 @@ function MetaSection({
 }) {
   return (
     <div>
-      <h4 className="mb-2 font-heading text-xs uppercase tracking-wider text-text-muted">
+      <h4 className="mb-2 font-heading text-xs uppercase tracking-wider text-meta">
         {title}
       </h4>
       {children}
@@ -83,7 +83,7 @@ export function FrontmatterMeta({
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.25, ease: "easeOut" }}
-      className={`glass space-y-4 rounded-lg border border-neon-cyan/10 p-4 ${className}`}
+      className={`glass space-y-4 rounded-lg border border-accent/10 p-4 ${className}`}
     >
       {hasRuntimes && (
         <MetaSection title="Runtime">
@@ -135,7 +135,7 @@ export function FrontmatterMeta({
 
       {hasCompat && (
         <MetaSection title="Compatibility">
-          <p className="font-body text-sm text-text-primary">
+          <p className="font-body text-sm text-strong">
             {compatibility}
           </p>
         </MetaSection>

@@ -73,7 +73,7 @@ export function EditSkillPage() {
     return (
       <PageTransition>
         <div className="h-full overflow-y-auto py-4">
-          <p className="py-20 text-center text-text-muted">
+          <p className="py-20 text-center text-meta">
             {t("editSkill.notFound", "Skill not found")}
           </p>
         </div>
@@ -108,7 +108,7 @@ export function EditSkillPage() {
             </h3>
             <div className="flex items-center justify-between">
               <div>
-                <p className="font-body text-sm text-text-primary">
+                <p className="font-body text-sm text-strong">
                   {t("editSkill.currentVisibility", "Current visibility:")}{" "}
                   <Badge color={skill.isPrivate ? "cyan" : "green"}>
                     {skill.isPrivate
@@ -116,7 +116,7 @@ export function EditSkillPage() {
                       : t("editSkill.badgePublic", "Public")}
                   </Badge>
                 </p>
-                <p className="mt-1 font-body text-xs text-text-muted">
+                <p className="mt-1 font-body text-xs text-meta">
                   {skill.isPrivate
                     ? t(
                         "editSkill.privateDesc",
@@ -146,7 +146,7 @@ export function EditSkillPage() {
             <h3 className="mb-4 font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-meta border-b border-dashed border-subtle pb-3">
               {t("editSkill.updatePackageHeading", "Update Package")}
             </h3>
-            <p className="mb-4 font-body text-xs text-text-muted">
+            <p className="mb-4 font-body text-xs text-meta">
               {t(
                 "editSkill.updatePackageDesc",
                 "Upload a new ZIP package to replace the current skill contents. Tags, description, and metadata are extracted from the SKILL.md inside the ZIP.",
@@ -156,12 +156,12 @@ export function EditSkillPage() {
             <div className="space-y-4">
               <div
                 onClick={() => fileInputRef.current?.click()}
-                className="flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-neon-cyan/20 bg-bg-deep/50 px-6 py-8 transition-colors hover:border-neon-cyan/40"
+                className="flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-accent/20 bg-page/50 px-6 py-8 transition-colors hover:border-accent/40"
               >
                 {zipFile ? (
                   <div className="text-center">
-                    <p className="font-mono text-sm text-neon-cyan">{zipFile.name}</p>
-                    <p className="mt-1 text-xs text-text-muted">{formatFileSize(zipFile.size)}</p>
+                    <p className="font-mono text-sm text-accent">{zipFile.name}</p>
+                    <p className="mt-1 text-xs text-meta">{formatFileSize(zipFile.size)}</p>
                     <button
                       type="button"
                       onClick={(e) => {
@@ -169,17 +169,17 @@ export function EditSkillPage() {
                         setZipFile(null);
                         if (fileInputRef.current) fileInputRef.current.value = "";
                       }}
-                      className="mt-2 text-xs text-neon-red hover:underline cursor-pointer"
+                      className="mt-2 text-xs text-danger hover:underline cursor-pointer"
                     >
                       {t("common.remove", "Remove")}
                     </button>
                   </div>
                 ) : (
                   <div className="text-center">
-                    <p className="font-body text-sm text-text-muted">
+                    <p className="font-body text-sm text-meta">
                       {t("editSkill.selectZip", "Click to select a .zip file")}
                     </p>
-                    <p className="mt-1 text-xs text-text-muted/60">
+                    <p className="mt-1 text-xs text-meta/60">
                       {t("editSkill.zipSizeHint", ".zip files up to 50 MB")}
                     </p>
                   </div>

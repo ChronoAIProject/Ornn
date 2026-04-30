@@ -314,10 +314,10 @@ export function CreateSkillGuidedPage() {
         </nav>
         {/* Header */}
         <div className="mb-8">
-          <h1 className="neon-cyan mb-2 font-heading text-2xl font-bold tracking-wider text-neon-cyan sm:text-3xl">
+          <h1 className="accent mb-2 font-heading text-2xl font-bold tracking-wider text-accent sm:text-3xl">
             {t("guided.header")}
           </h1>
-          <p className="font-body text-text-muted">
+          <p className="font-body text-meta">
             {t("guided.headerDesc")}
           </p>
         </div>
@@ -372,7 +372,7 @@ export function CreateSkillGuidedPage() {
           </AnimatePresence>
 
           {/* Navigation buttons */}
-          <div className="flex items-center justify-between mt-8 pt-6 border-t border-neon-cyan/10">
+          <div className="flex items-center justify-between mt-8 pt-6 border-t border-accent/10">
             <Button
               variant="secondary"
               onClick={handlePrevStep}

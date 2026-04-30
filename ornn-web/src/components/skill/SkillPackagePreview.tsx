@@ -150,7 +150,7 @@ function ResizablePanes({
         onMouseDown={handleMouseDown}
         className="shrink-0 w-2 cursor-col-resize flex items-center justify-center group"
       >
-        <div className="w-0.5 h-8 rounded-full bg-neon-cyan/20 group-hover:bg-neon-cyan/50 transition-colors" />
+        <div className="w-0.5 h-8 rounded-full bg-accent/20 group-hover:bg-accent/50 transition-colors" />
       </div>
       <div style={{ width: `${100 - leftWidth}%` }} className="min-w-0 h-full">
         {children[1]}
@@ -210,9 +210,9 @@ export function SkillPackagePreview({
     <div className={`flex flex-col ${className}`}>
       {/* Metadata summary bar */}
       {metadata && (
-        <div className="glass rounded-lg border border-neon-cyan/10 p-4 mb-4">
+        <div className="glass rounded-lg border border-accent/10 p-4 mb-4">
           <div className="flex flex-wrap items-center gap-3">
-            <h3 className="font-heading text-lg text-text-primary">
+            <h3 className="font-heading text-lg text-strong">
               {metadata.name}
             </h3>
             <Badge color={CATEGORY_BADGE_COLORS[metadata.metadata.category]}>
@@ -224,13 +224,13 @@ export function SkillPackagePreview({
               </Badge>
             ))}
             {authorName && (
-              <span className="font-body text-xs text-text-muted ml-auto">
+              <span className="font-body text-xs text-meta ml-auto">
                 by {authorName}
               </span>
             )}
           </div>
           {metadata.description && (
-            <p className="font-body text-sm text-text-muted mt-2">
+            <p className="font-body text-sm text-meta mt-2">
               {metadata.description}
             </p>
           )}
@@ -240,7 +240,7 @@ export function SkillPackagePreview({
       {/* Two-column layout with draggable divider */}
       <ResizablePanes className="flex-1 min-h-0" style={{ minHeight: "300px" }}>
         {/* Left: File tree */}
-        <div className="rounded-lg border border-neon-cyan/10 bg-bg-surface overflow-hidden flex flex-col h-full">
+        <div className="rounded-lg border border-accent/10 bg-card overflow-hidden flex flex-col h-full">
           <FileTree
             files={files}
             selectedId={selectedFileId}
@@ -267,8 +267,8 @@ export function SkillPackagePreview({
               className="h-full"
             />
           ) : (
-            <div className="flex items-center justify-center h-full rounded-lg border border-neon-cyan/10 bg-bg-deep">
-              <p className="font-body text-sm text-text-muted">
+            <div className="flex items-center justify-center h-full rounded-lg border border-accent/10 bg-page">
+              <p className="font-body text-sm text-meta">
                 Select a file to view its content
               </p>
             </div>

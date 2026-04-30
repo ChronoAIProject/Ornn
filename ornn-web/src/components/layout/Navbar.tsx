@@ -102,7 +102,7 @@ function ThemeToggle() {
     <button
       type="button"
       onClick={toggle}
-      className="hidden sm:flex items-center justify-center h-10 w-10 rounded-lg border border-neon-cyan/30 bg-bg-surface/50 text-text-muted transition-all duration-200 hover:text-neon-cyan hover:border-neon-cyan/50 cursor-pointer"
+      className="hidden sm:flex items-center justify-center h-10 w-10 rounded-lg border border-accent/30 bg-card/50 text-meta transition-all duration-200 hover:text-accent hover:border-accent/50 cursor-pointer"
       title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
     >
       {theme === "dark" ? (
@@ -130,7 +130,7 @@ function GitHubLink() {
       href="https://github.com/ChronoAIProject/Ornn"
       target="_blank"
       rel="noopener noreferrer"
-      className="hidden sm:flex items-center justify-center h-10 w-10 rounded-lg border border-neon-cyan/30 bg-bg-surface/50 text-text-muted transition-all duration-200 hover:text-neon-cyan hover:border-neon-cyan/50"
+      className="hidden sm:flex items-center justify-center h-10 w-10 rounded-lg border border-accent/30 bg-card/50 text-meta transition-all duration-200 hover:text-accent hover:border-accent/50"
       title="GitHub"
     >
       <GitHubIcon className="h-5 w-5" />
@@ -175,7 +175,7 @@ function LangDropdown() {
         </svg>
       </button>
       {open && (
-        <div className="absolute right-0 top-full mt-1 w-36 rounded-lg glass border border-neon-cyan/20 shadow-lg shadow-neon-cyan/10 py-1 z-50">
+        <div className="absolute right-0 top-full mt-1 w-36 rounded-lg glass border border-accent/20 shadow-lg shadow-accent/10 py-1 z-50">
           {LANGS.map((lang) => (
             <button
               key={lang.code}
@@ -186,8 +186,8 @@ function LangDropdown() {
               }}
               className={`w-full text-left px-4 py-2 font-body text-sm transition-colors cursor-pointer ${
                 lang.code === i18n.language
-                  ? "text-neon-cyan bg-neon-cyan/5"
-                  : "text-text-muted hover:text-text-primary hover:bg-bg-elevated"
+                  ? "text-accent bg-accent/5"
+                  : "text-meta hover:text-strong hover:bg-elevated"
               }`}
             >
               {lang.label}
@@ -208,7 +208,7 @@ function MobileLangToggle() {
     <button
       type="button"
       onClick={toggle}
-      className="flex w-full items-center gap-3 px-4 py-3 rounded-lg text-text-muted hover:bg-bg-elevated hover:text-text-primary transition-colors cursor-pointer"
+      className="flex w-full items-center gap-3 px-4 py-3 rounded-lg text-meta hover:bg-elevated hover:text-strong transition-colors cursor-pointer"
     >
       <span className="font-heading text-sm">{isZh ? "EN" : "中"}</span>
       <span className="font-body text-sm font-medium">{isZh ? "English" : "中文"}</span>
@@ -224,7 +224,7 @@ function MobileThemeToggle() {
     <button
       type="button"
       onClick={toggle}
-      className="flex w-full items-center gap-3 px-4 py-3 rounded-lg text-text-muted hover:bg-bg-elevated hover:text-text-primary transition-colors cursor-pointer"
+      className="flex w-full items-center gap-3 px-4 py-3 rounded-lg text-meta hover:bg-elevated hover:text-strong transition-colors cursor-pointer"
     >
       {theme === "dark" ? <SunIcon className="h-5 w-5" /> : <MoonIcon className="h-5 w-5" />}
       <span className="font-body text-sm font-medium">
@@ -291,7 +291,7 @@ export function Navbar({ className = "" }: NavbarProps) {
   return (
     <>
       <nav
-        className={`glass sticky top-0 z-40 shrink-0 border-b border-neon-cyan/10 ${className}`}
+        className={`glass sticky top-0 z-40 shrink-0 border-b border-accent/10 ${className}`}
       >
         <div className="flex h-24 items-center px-6 sm:px-10 lg:px-14">
           {/* Logo */}
@@ -336,7 +336,7 @@ export function Navbar({ className = "" }: NavbarProps) {
                     {isActive && (
                       <motion.div
                         layoutId="nav-indicator"
-                        className="absolute inset-x-2 -bottom-0.5 h-0.5 rounded-full bg-neon-cyan"
+                        className="absolute inset-x-2 -bottom-0.5 h-0.5 rounded-full bg-accent"
                         transition={{ type: "spring", stiffness: 300, damping: 25 }}
                       />
                     )}
@@ -363,10 +363,10 @@ export function Navbar({ className = "" }: NavbarProps) {
                 <button
                   type="button"
                   onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
-                  className="flex items-center gap-2 rounded-full border border-neon-cyan/30 bg-bg-surface/50 p-1.5 pr-3 transition-all duration-200 hover:border-neon-cyan/60 cursor-pointer"
+                  className="flex items-center gap-2 rounded-full border border-accent/30 bg-card/50 p-1.5 pr-3 transition-all duration-200 hover:border-accent/60 cursor-pointer"
                 >
                   {/* Avatar */}
-                  <div className="h-10 w-10 overflow-hidden rounded-full bg-bg-elevated ring-2 ring-neon-cyan/20">
+                  <div className="h-10 w-10 overflow-hidden rounded-full bg-elevated ring-2 ring-accent/20">
                     {user.avatarUrl ? (
                       <img
                         src={user.avatarUrl}
@@ -375,7 +375,7 @@ export function Navbar({ className = "" }: NavbarProps) {
                       />
                     ) : (
                       <div className="flex h-full w-full items-center justify-center">
-                        <span className="font-heading text-base text-neon-cyan">
+                        <span className="font-heading text-base text-accent">
                           {user.displayName.charAt(0).toUpperCase()}
                         </span>
                       </div>
@@ -383,7 +383,7 @@ export function Navbar({ className = "" }: NavbarProps) {
                   </div>
                   {/* Arrow */}
                   <svg
-                    className={`h-4 w-4 text-text-muted transition-transform duration-200 ${
+                    className={`h-4 w-4 text-meta transition-transform duration-200 ${
                       isUserMenuOpen ? "rotate-180" : ""
                     }`}
                     fill="none"
@@ -407,14 +407,14 @@ export function Navbar({ className = "" }: NavbarProps) {
                       animate={{ opacity: 1, y: 0, scale: 1 }}
                       exit={{ opacity: 0, y: -10, scale: 0.95 }}
                       transition={{ duration: 0.15, ease: "easeOut" }}
-                      className="absolute right-0 top-full mt-2 w-56 overflow-hidden rounded-lg glass border border-neon-cyan/20 shadow-lg shadow-neon-cyan/10"
+                      className="absolute right-0 top-full mt-2 w-56 overflow-hidden rounded-lg glass border border-accent/20 shadow-lg shadow-accent/10"
                     >
                       {/* User Info */}
-                      <div className="border-b border-neon-cyan/10 px-4 py-3">
-                        <p className="font-body text-sm font-semibold text-text-primary truncate">
+                      <div className="border-b border-accent/10 px-4 py-3">
+                        <p className="font-body text-sm font-semibold text-strong truncate">
                           {user.displayName}
                         </p>
-                        <p className="font-mono text-xs text-text-muted truncate">
+                        <p className="font-mono text-xs text-meta truncate">
                           {user.email}
                         </p>
                       </div>
@@ -425,9 +425,9 @@ export function Navbar({ className = "" }: NavbarProps) {
                           href={`${getNyxIdUrl()}/settings`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="flex items-center gap-3 px-4 py-2.5 font-body text-sm text-text-primary transition-colors hover:bg-neon-cyan/5"
+                          className="flex items-center gap-3 px-4 py-2.5 font-body text-sm text-strong transition-colors hover:bg-accent/5"
                         >
-                          <svg className="h-4 w-4 text-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <svg className="h-4 w-4 text-meta" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                           </svg>
                           {t("nav.myProfile", "My Profile")}
@@ -436,9 +436,9 @@ export function Navbar({ className = "" }: NavbarProps) {
                           href={`${getNyxIdUrl()}/services`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="flex items-center gap-3 px-4 py-2.5 font-body text-sm text-text-primary transition-colors hover:bg-neon-cyan/5"
+                          className="flex items-center gap-3 px-4 py-2.5 font-body text-sm text-strong transition-colors hover:bg-accent/5"
                         >
-                          <svg className="h-4 w-4 text-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <svg className="h-4 w-4 text-meta" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2" />
                           </svg>
                           {t("nav.myServices", "My NyxID Services")}
@@ -447,9 +447,9 @@ export function Navbar({ className = "" }: NavbarProps) {
                           href={`${getNyxIdUrl()}/orgs`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="flex items-center gap-3 px-4 py-2.5 font-body text-sm text-text-primary transition-colors hover:bg-neon-cyan/5"
+                          className="flex items-center gap-3 px-4 py-2.5 font-body text-sm text-strong transition-colors hover:bg-accent/5"
                         >
-                          <svg className="h-4 w-4 text-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <svg className="h-4 w-4 text-meta" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
                           </svg>
                           {t("nav.myOrgs", "My Organizations")}
@@ -458,9 +458,9 @@ export function Navbar({ className = "" }: NavbarProps) {
                           href={getNyxIdUrl()}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="flex items-center gap-3 px-4 py-2.5 font-body text-sm text-text-primary transition-colors hover:bg-neon-cyan/5"
+                          className="flex items-center gap-3 px-4 py-2.5 font-body text-sm text-strong transition-colors hover:bg-accent/5"
                         >
-                          <NyxIdIcon className="h-4 w-4 text-text-muted" />
+                          <NyxIdIcon className="h-4 w-4 text-meta" />
                           {t("nav.goToNyxId")}
                         </a>
                       </div>
@@ -469,21 +469,21 @@ export function Navbar({ className = "" }: NavbarProps) {
                           separate bordered block so the visual grouping
                           signals "this group requires elevated access". */}
                       {isAdmin(user) && (
-                        <div className="border-t border-neon-cyan/10 py-1">
+                        <div className="border-t border-accent/10 py-1">
                           <Link
                             to="/admin"
-                            className="flex items-center gap-3 px-4 py-2.5 font-body text-sm text-text-primary transition-colors hover:bg-neon-cyan/5"
+                            className="flex items-center gap-3 px-4 py-2.5 font-body text-sm text-strong transition-colors hover:bg-accent/5"
                           >
-                            <AdminIcon className="h-4 w-4 text-text-muted" />
+                            <AdminIcon className="h-4 w-4 text-meta" />
                             {t("nav.adminPanel")}
                           </Link>
                           <a
                             href={`${getNyxIdUrl()}/admin/services`}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="flex items-center gap-3 px-4 py-2.5 font-body text-sm text-text-primary transition-colors hover:bg-neon-cyan/5"
+                            className="flex items-center gap-3 px-4 py-2.5 font-body text-sm text-strong transition-colors hover:bg-accent/5"
                           >
-                            <svg className="h-4 w-4 text-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <svg className="h-4 w-4 text-meta" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                             </svg>
@@ -493,11 +493,11 @@ export function Navbar({ className = "" }: NavbarProps) {
                       )}
 
                       {/* Section 3 — Sign out */}
-                      <div className="border-t border-neon-cyan/10 py-1">
+                      <div className="border-t border-accent/10 py-1">
                         <button
                           type="button"
                           onClick={handleLogout}
-                          className="flex w-full items-center gap-3 px-4 py-2.5 font-body text-sm text-neon-red transition-colors hover:bg-neon-red/10 cursor-pointer"
+                          className="flex w-full items-center gap-3 px-4 py-2.5 font-body text-sm text-danger transition-colors hover:bg-danger/10 cursor-pointer"
                         >
                           <LogoutIcon className="h-4 w-4" />
                           {t("nav.signOut")}
@@ -513,7 +513,7 @@ export function Navbar({ className = "" }: NavbarProps) {
             {!isAuthenticated && (
               <Link
                 to="/login"
-                className="hidden sm:block rounded-lg px-5 py-2.5 border border-neon-cyan/50 font-body text-base font-semibold text-neon-cyan transition-all duration-200 hover:border-neon-cyan hover:shadow-[0_0_15px_rgba(255,107,0,0.3)]"
+                className="hidden sm:block rounded-lg px-5 py-2.5 border border-accent/50 font-body text-base font-semibold text-accent transition-all duration-200 hover:border-accent hover:shadow-[0_0_15px_rgba(255,107,0,0.3)]"
               >
                 {t("nav.signIn")}
               </Link>
@@ -523,7 +523,7 @@ export function Navbar({ className = "" }: NavbarProps) {
             <button
               type="button"
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-              className="lg:hidden flex items-center justify-center h-10 w-10 rounded-lg border border-neon-cyan/30 bg-bg-surface/50 text-text-muted transition-colors hover:text-neon-cyan hover:border-neon-cyan/50 cursor-pointer"
+              className="lg:hidden flex items-center justify-center h-10 w-10 rounded-lg border border-accent/30 bg-card/50 text-meta transition-colors hover:text-accent hover:border-accent/50 cursor-pointer"
               aria-label="Toggle mobile menu"
             >
               {isMobileMenuOpen ? (
@@ -556,13 +556,13 @@ export function Navbar({ className = "" }: NavbarProps) {
               animate={{ x: 0 }}
               exit={{ x: "100%" }}
               transition={{ type: "spring", stiffness: 300, damping: 30 }}
-              className="fixed top-20 right-0 bottom-0 z-30 w-72 glass border-l border-neon-cyan/10 overflow-y-auto lg:hidden"
+              className="fixed top-20 right-0 bottom-0 z-30 w-72 glass border-l border-accent/10 overflow-y-auto lg:hidden"
             >
               {/* User section (mobile) */}
               {isAuthenticated && user && (
-                <div className="border-b border-neon-cyan/10 p-4">
+                <div className="border-b border-accent/10 p-4">
                   <div className="flex items-center gap-3">
-                    <div className="h-12 w-12 overflow-hidden rounded-full bg-bg-elevated ring-2 ring-neon-cyan/20">
+                    <div className="h-12 w-12 overflow-hidden rounded-full bg-elevated ring-2 ring-accent/20">
                       {user.avatarUrl ? (
                         <img
                           src={user.avatarUrl}
@@ -571,17 +571,17 @@ export function Navbar({ className = "" }: NavbarProps) {
                         />
                       ) : (
                         <div className="flex h-full w-full items-center justify-center">
-                          <span className="font-heading text-lg text-neon-cyan">
+                          <span className="font-heading text-lg text-accent">
                             {user.displayName.charAt(0).toUpperCase()}
                           </span>
                         </div>
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="font-body text-sm font-semibold text-text-primary truncate">
+                      <p className="font-body text-sm font-semibold text-strong truncate">
                         {user.displayName}
                       </p>
-                      <p className="font-mono text-xs text-text-muted truncate">
+                      <p className="font-mono text-xs text-meta truncate">
                         {user.email}
                       </p>
                     </div>
@@ -610,8 +610,8 @@ export function Navbar({ className = "" }: NavbarProps) {
                       className={`
                         flex w-full items-center gap-3 px-4 py-3 rounded-lg transition-all cursor-pointer
                         ${isActive
-                          ? "text-neon-cyan bg-neon-cyan/10 border border-neon-cyan/30"
-                          : "text-text-muted hover:bg-bg-elevated hover:text-text-primary"
+                          ? "text-accent bg-accent/10 border border-accent/30"
+                          : "text-meta hover:bg-elevated hover:text-strong"
                         }
                       `}
                     >
@@ -622,7 +622,7 @@ export function Navbar({ className = "" }: NavbarProps) {
               </nav>
 
               {/* Bottom section */}
-              <div className="absolute bottom-0 left-0 right-0 border-t border-neon-cyan/10 p-2 bg-bg-deep/80">
+              <div className="absolute bottom-0 left-0 right-0 border-t border-accent/10 p-2 bg-page/80">
                 {/* Mobile lang + theme toggles */}
                 <MobileLangToggle />
                 <MobileThemeToggle />
@@ -632,7 +632,7 @@ export function Navbar({ className = "" }: NavbarProps) {
                     {isAdmin(user) && (
                       <Link
                         to="/admin"
-                        className="flex items-center gap-3 px-4 py-3 rounded-lg text-text-muted hover:bg-bg-elevated hover:text-text-primary transition-colors"
+                        className="flex items-center gap-3 px-4 py-3 rounded-lg text-meta hover:bg-elevated hover:text-strong transition-colors"
                       >
                         <AdminIcon className="h-5 w-5" />
                         <span className="font-body text-sm font-medium">{t("nav.adminPanel")}</span>
@@ -642,7 +642,7 @@ export function Navbar({ className = "" }: NavbarProps) {
                     <Link
                       to="/services/my"
                       onClick={() => setIsMobileMenuOpen(false)}
-                      className="flex items-center gap-3 px-4 py-3 rounded-lg text-text-muted hover:bg-bg-elevated hover:text-text-primary transition-colors"
+                      className="flex items-center gap-3 px-4 py-3 rounded-lg text-meta hover:bg-elevated hover:text-strong transition-colors"
                     >
                       <span className="font-body text-sm font-medium">My NyxID Services</span>
                     </Link>
@@ -650,7 +650,7 @@ export function Navbar({ className = "" }: NavbarProps) {
                       <Link
                         to="/services/admin"
                         onClick={() => setIsMobileMenuOpen(false)}
-                        className="flex items-center gap-3 px-4 py-3 rounded-lg text-text-muted hover:bg-bg-elevated hover:text-text-primary transition-colors"
+                        className="flex items-center gap-3 px-4 py-3 rounded-lg text-meta hover:bg-elevated hover:text-strong transition-colors"
                       >
                         <span className="font-body text-sm font-medium">Admin NyxID Services</span>
                       </Link>
@@ -659,7 +659,7 @@ export function Navbar({ className = "" }: NavbarProps) {
                       href={getNyxIdUrl()}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex items-center gap-3 px-4 py-3 rounded-lg text-text-muted hover:bg-bg-elevated hover:text-text-primary transition-colors"
+                      className="flex items-center gap-3 px-4 py-3 rounded-lg text-meta hover:bg-elevated hover:text-strong transition-colors"
                     >
                       <NyxIdIcon className="h-5 w-5" />
                       <span className="font-body text-sm font-medium">{t("nav.goToNyxId")}</span>
@@ -668,7 +668,7 @@ export function Navbar({ className = "" }: NavbarProps) {
                     <button
                       type="button"
                       onClick={handleLogout}
-                      className="flex w-full items-center gap-3 px-4 py-3 rounded-lg text-neon-red hover:bg-neon-red/10 transition-colors cursor-pointer"
+                      className="flex w-full items-center gap-3 px-4 py-3 rounded-lg text-danger hover:bg-danger/10 transition-colors cursor-pointer"
                     >
                       <LogoutIcon className="h-5 w-5" />
                       <span className="font-body text-sm font-medium">{t("nav.signOut")}</span>
@@ -677,7 +677,7 @@ export function Navbar({ className = "" }: NavbarProps) {
                 ) : (
                   <Link
                     to="/login"
-                    className="flex items-center justify-center gap-2 px-4 py-3 rounded-lg border border-neon-cyan/50 text-neon-cyan font-body text-sm font-semibold transition-all hover:border-neon-cyan hover:shadow-[0_0_15px_rgba(255,107,0,0.3)]"
+                    className="flex items-center justify-center gap-2 px-4 py-3 rounded-lg border border-accent/50 text-accent font-body text-sm font-semibold transition-all hover:border-accent hover:shadow-[0_0_15px_rgba(255,107,0,0.3)]"
                   >
                     {t("nav.signIn")}
                   </Link>

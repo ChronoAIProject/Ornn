@@ -71,25 +71,25 @@ export function GitHubOriginChip({
 
   return (
     <div
-      className={`flex flex-wrap items-center gap-3 rounded-lg border border-neon-cyan/20 bg-bg-surface/40 px-3 py-2 ${
+      className={`flex flex-wrap items-center gap-3 rounded-lg border border-accent/20 bg-card/40 px-3 py-2 ${
         className ?? ""
       }`}
     >
-      <GitHubMarkIcon className="h-4 w-4 text-text-primary" />
-      <span className="font-heading text-xs uppercase tracking-wider text-text-muted">
+      <GitHubMarkIcon className="h-4 w-4 text-strong" />
+      <span className="font-heading text-xs uppercase tracking-wider text-meta">
         {t("githubOrigin.label", "Synced from GitHub")}
       </span>
       <a
         href={repoUrl}
         target="_blank"
         rel="noreferrer"
-        className="font-mono text-sm text-neon-cyan transition-colors hover:text-text-primary"
+        className="font-mono text-sm text-accent transition-colors hover:text-strong"
         title={source.lastSyncedCommit || refLabel}
       >
         {source.repo}
-        {sha ? <span className="text-text-muted">@{sha}</span> : null}
+        {sha ? <span className="text-meta">@{sha}</span> : null}
       </a>
-      <span className="font-body text-xs text-text-muted">
+      <span className="font-body text-xs text-meta">
         · {t("githubOrigin.ref", "ref")}:{" "}
         <span className="font-mono">{refLabel}</span>
         {source.path && (
@@ -101,7 +101,7 @@ export function GitHubOriginChip({
         )}
       </span>
       {syncedLabel && (
-        <span className="font-body text-xs text-text-muted">
+        <span className="font-body text-xs text-meta">
           · {t("githubOrigin.syncedAt", "synced")} {syncedLabel}
         </span>
       )}
@@ -111,10 +111,10 @@ export function GitHubOriginChip({
           type="button"
           onClick={onRefresh}
           disabled={isRefreshing}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-neon-cyan/30 px-3 py-1 font-body text-xs text-text-primary transition-colors hover:bg-neon-cyan/10 cursor-pointer disabled:opacity-50"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-accent/30 px-3 py-1 font-body text-xs text-strong transition-colors hover:bg-accent/10 cursor-pointer disabled:opacity-50"
         >
           <RefreshIcon
-            className={`h-3.5 w-3.5 text-text-muted ${isRefreshing ? "animate-spin" : ""}`}
+            className={`h-3.5 w-3.5 text-meta ${isRefreshing ? "animate-spin" : ""}`}
           />
           {isRefreshing
             ? t("githubOrigin.refreshing", "Refreshing…")

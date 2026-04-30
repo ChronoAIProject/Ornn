@@ -228,7 +228,7 @@ export function LandingNav() {
             // Avatar trigger + dropdown. Uses landing-page tokens
             // (parchment / bone / ember / page) so it sits inside the
             // Forge Workshop palette without leaking the rest of the
-            // app's neon-cyan styling.
+            // app's accent styling.
             <div ref={userMenuRef} className="relative">
               <button
                 type="button"

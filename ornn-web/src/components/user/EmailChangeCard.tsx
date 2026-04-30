@@ -168,7 +168,7 @@ export function EmailChangeCard({
 
   return (
     <Card className="p-6">
-      <h2 className="mb-6 font-heading text-lg text-neon-cyan">Primary Email</h2>
+      <h2 className="mb-6 font-heading text-lg text-accent">Primary Email</h2>
 
       <AnimatePresence mode="wait">
         {step === "idle" && (
@@ -179,11 +179,11 @@ export function EmailChangeCard({
             exit={{ opacity: 0 }}
             className="space-y-4"
           >
-            <div className="rounded-lg bg-bg-surface/50 p-4">
-              <p className="font-mono text-sm text-text-primary">{currentEmail}</p>
+            <div className="rounded-lg bg-card/50 p-4">
+              <p className="font-mono text-sm text-strong">{currentEmail}</p>
             </div>
             <div className="flex items-center justify-between">
-              <p className="text-xs text-text-muted">
+              <p className="text-xs text-meta">
                 Changing your email requires verification of both addresses.
               </p>
               <Button
@@ -208,10 +208,10 @@ export function EmailChangeCard({
             className="space-y-4"
           >
             <div className="text-center">
-              <p className="font-body text-sm text-text-muted">
+              <p className="font-body text-sm text-meta">
                 Enter the 6-digit code sent to
               </p>
-              <p className="font-mono text-sm text-neon-cyan">{currentEmail}</p>
+              <p className="font-mono text-sm text-accent">{currentEmail}</p>
             </div>
 
             <OtpInput
@@ -223,7 +223,7 @@ export function EmailChangeCard({
 
             {isLoading && (
               <div className="flex justify-center">
-                <span className="inline-block h-6 w-6 animate-spin rounded-full border-2 border-neon-cyan border-t-transparent" />
+                <span className="inline-block h-6 w-6 animate-spin rounded-full border-2 border-accent border-t-transparent" />
               </div>
             )}
 
@@ -236,8 +236,8 @@ export function EmailChangeCard({
                   font-body text-sm
                   ${
                     cooldown > 0 || isLoading
-                      ? "text-text-muted cursor-not-allowed"
-                      : "text-neon-cyan hover:underline cursor-pointer"
+                      ? "text-meta cursor-not-allowed"
+                      : "text-accent hover:underline cursor-pointer"
                   }
                 `}
               >
@@ -247,7 +247,7 @@ export function EmailChangeCard({
                 type="button"
                 onClick={handleCancel}
                 disabled={isLoading}
-                className="font-body text-sm text-text-muted hover:text-text-primary cursor-pointer"
+                className="font-body text-sm text-meta hover:text-strong cursor-pointer"
               >
                 Cancel
               </button>
@@ -264,7 +264,7 @@ export function EmailChangeCard({
           >
             <form onSubmit={handleSubmit(handleNewEmailSubmit)} className="space-y-4">
               <div className="text-center">
-                <p className="font-body text-sm text-text-muted">
+                <p className="font-body text-sm text-meta">
                   Enter your new email address
                 </p>
               </div>
@@ -307,10 +307,10 @@ export function EmailChangeCard({
             className="space-y-4"
           >
             <div className="text-center">
-              <p className="font-body text-sm text-text-muted">
+              <p className="font-body text-sm text-meta">
                 Enter the 6-digit code sent to
               </p>
-              <p className="font-mono text-sm text-neon-cyan">{newEmail}</p>
+              <p className="font-mono text-sm text-accent">{newEmail}</p>
             </div>
 
             <OtpInput
@@ -322,7 +322,7 @@ export function EmailChangeCard({
 
             {isLoading && (
               <div className="flex justify-center">
-                <span className="inline-block h-6 w-6 animate-spin rounded-full border-2 border-neon-cyan border-t-transparent" />
+                <span className="inline-block h-6 w-6 animate-spin rounded-full border-2 border-accent border-t-transparent" />
               </div>
             )}
 
@@ -335,8 +335,8 @@ export function EmailChangeCard({
                   font-body text-sm
                   ${
                     cooldown > 0 || isLoading
-                      ? "text-text-muted cursor-not-allowed"
-                      : "text-neon-cyan hover:underline cursor-pointer"
+                      ? "text-meta cursor-not-allowed"
+                      : "text-accent hover:underline cursor-pointer"
                   }
                 `}
               >
@@ -346,7 +346,7 @@ export function EmailChangeCard({
                 type="button"
                 onClick={handleCancel}
                 disabled={isLoading}
-                className="font-body text-sm text-text-muted hover:text-text-primary cursor-pointer"
+                className="font-body text-sm text-meta hover:text-strong cursor-pointer"
               >
                 Cancel
               </button>
@@ -359,9 +359,9 @@ export function EmailChangeCard({
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="mt-4 rounded-lg border border-neon-red/30 bg-neon-red/10 p-3"
+          className="mt-4 rounded-lg border border-danger/30 bg-danger/10 p-3"
         >
-          <p className="text-sm text-neon-red">{error}</p>
+          <p className="text-sm text-danger">{error}</p>
         </motion.div>
       )}
     </Card>

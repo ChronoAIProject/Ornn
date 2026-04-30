@@ -129,7 +129,7 @@ export function CreateSkillGenerativePage() {
         <div className="flex items-center justify-between py-2 shrink-0">
           <Link
             to="/skills/new"
-            className="flex items-center gap-2 text-text-muted hover:text-neon-cyan transition-colors"
+            className="flex items-center gap-2 text-meta hover:text-accent transition-colors"
           >
             <ArrowLeftIcon className="h-4 w-4" />
             <span className="font-body text-sm">{t("generative.backToModes")}</span>
@@ -139,7 +139,7 @@ export function CreateSkillGenerativePage() {
         {/* Main two-column layout — left chat narrower, right preview wider */}
         <div className="flex flex-1 min-h-0 gap-4 pb-2">
           {/* Left: Chat panel (35%) */}
-          <div className="flex w-[35%] shrink-0 flex-col min-w-0 min-h-0 rounded-lg border border-neon-cyan/10 bg-bg-elevated/30">
+          <div className="flex w-[35%] shrink-0 flex-col min-w-0 min-h-0 rounded-lg border border-accent/10 bg-elevated/30">
             {/* Chat messages area — scrolls independently */}
             <div className="flex-1 min-h-0 overflow-y-auto space-y-4 px-3 py-3">
               {!hasMessages && (
@@ -148,11 +148,11 @@ export function CreateSkillGenerativePage() {
                   animate={{ opacity: 1 }}
                   className="flex flex-col items-center justify-center h-full text-center"
                 >
-                  <SparkleIcon className="h-12 w-12 text-neon-cyan/30 mb-4" />
-                  <p className="font-body text-sm text-text-muted max-w-sm">
+                  <SparkleIcon className="h-12 w-12 text-accent/30 mb-4" />
+                  <p className="font-body text-sm text-meta max-w-sm">
                     {t("generative.desc")}
                   </p>
-                  <p className="font-body text-xs text-text-muted/60 mt-3">
+                  <p className="font-body text-xs text-meta/60 mt-3">
                     {t("generative.note")}
                   </p>
                 </motion.div>
@@ -166,7 +166,7 @@ export function CreateSkillGenerativePage() {
             </div>
 
             {/* Chat input (fixed at bottom) */}
-            <div className="shrink-0 border-t border-neon-cyan/10 px-1 pb-1">
+            <div className="shrink-0 border-t border-accent/10 px-1 pb-1">
               <ChatInput
                 onSend={generation.sendMessage}
                 onAbort={generation.abort}
@@ -206,7 +206,7 @@ export function CreateSkillGenerativePage() {
                     onClick={handleSave}
                     loading={createMutation.isPending}
                     disabled={hasFrontmatterErrors}
-                    className="border-neon-green/50 text-neon-green hover:border-neon-green hover:shadow-[0_0_15px_rgba(57,255,20,0.3)]"
+                    className="border-success/50 text-success hover:border-success hover:shadow-[0_0_15px_rgba(57,255,20,0.3)]"
                   >
                     {t("generative.saveSkill")}
                   </Button>
@@ -214,7 +214,7 @@ export function CreateSkillGenerativePage() {
               </div>
             ) : (
               <div className="flex items-center justify-center h-full">
-                <p className="font-body text-xs text-text-muted">
+                <p className="font-body text-xs text-meta">
                   {t("generative.emptyPreview")}
                 </p>
               </div>

@@ -42,11 +42,11 @@ function Stat({
 }) {
   return (
     <div>
-      <p className="font-heading text-[11px] uppercase tracking-wider text-text-muted mb-0.5">
+      <p className="font-heading text-[11px] uppercase tracking-wider text-meta mb-0.5">
         {label}
       </p>
-      <p className="font-heading text-lg text-text-primary leading-tight">{value}</p>
-      {hint && <p className="font-body text-xs text-text-muted mt-0.5">{hint}</p>}
+      <p className="font-heading text-lg text-strong leading-tight">{value}</p>
+      {hint && <p className="font-body text-xs text-meta mt-0.5">{hint}</p>}
     </div>
   );
 }
@@ -73,10 +73,10 @@ export function AnalyticsCard({ idOrName, version, className }: AnalyticsCardPro
   return (
     <div className={`glass rounded-xl p-5 space-y-4 ${className ?? ""}`}>
       <div className="flex items-center justify-between gap-3">
-        <p className="font-heading text-[11px] uppercase tracking-wider text-text-muted">
+        <p className="font-heading text-[11px] uppercase tracking-wider text-meta">
           {t("analytics.heading", "Usage")}
         </p>
-        <div className="flex overflow-hidden rounded-md border border-neon-cyan/20">
+        <div className="flex overflow-hidden rounded-md border border-accent/20">
           {WINDOWS.map((w) => (
             <button
               key={w.key}
@@ -84,8 +84,8 @@ export function AnalyticsCard({ idOrName, version, className }: AnalyticsCardPro
               onClick={() => setWindowChoice(w.key)}
               className={`px-2 py-0.5 font-mono text-[11px] transition-colors cursor-pointer ${
                 windowChoice === w.key
-                  ? "bg-neon-cyan/15 text-neon-cyan"
-                  : "text-text-muted hover:text-text-primary"
+                  ? "bg-accent/15 text-accent"
+                  : "text-meta hover:text-strong"
               }`}
             >
               {t(w.labelKey, w.fallback)}
@@ -95,17 +95,17 @@ export function AnalyticsCard({ idOrName, version, className }: AnalyticsCardPro
       </div>
 
       {isLoading ? (
-        <p className="font-body text-sm text-text-muted">{t("analytics.loading", "Loading…")}</p>
+        <p className="font-body text-sm text-meta">{t("analytics.loading", "Loading…")}</p>
       ) : isError ? (
-        <p className="font-body text-sm text-neon-red">
+        <p className="font-body text-sm text-danger">
           {t("analytics.loadFailed", "Could not load analytics.")}
         </p>
       ) : !data ? (
-        <p className="font-body text-sm text-text-muted">
+        <p className="font-body text-sm text-meta">
           {t("analytics.unavailable", "Analytics unavailable for this skill.")}
         </p>
       ) : showEmpty ? (
-        <p className="font-body text-sm text-text-muted">
+        <p className="font-body text-sm text-meta">
           {t(
             "analytics.empty",
             "No executions recorded in this window yet.",
@@ -153,17 +153,17 @@ export function AnalyticsCard({ idOrName, version, className }: AnalyticsCardPro
 
           {data.topErrorCodes.length > 0 && (
             <div>
-              <p className="font-heading text-[11px] uppercase tracking-wider text-text-muted mb-1.5">
+              <p className="font-heading text-[11px] uppercase tracking-wider text-meta mb-1.5">
                 {t("analytics.topErrors", "Top errors")}
               </p>
               <ul className="space-y-1">
                 {data.topErrorCodes.slice(0, 5).map((e) => (
                   <li
                     key={e.code}
-                    className="flex items-center justify-between gap-3 rounded-md border border-neon-red/20 bg-neon-red/5 px-2 py-1"
+                    className="flex items-center justify-between gap-3 rounded-md border border-danger/20 bg-danger/5 px-2 py-1"
                   >
-                    <span className="font-mono text-xs text-neon-red truncate">{e.code}</span>
-                    <span className="font-mono text-xs text-text-muted shrink-0">
+                    <span className="font-mono text-xs text-danger truncate">{e.code}</span>
+                    <span className="font-mono text-xs text-meta shrink-0">
                       ×{e.count}
                     </span>
                   </li>

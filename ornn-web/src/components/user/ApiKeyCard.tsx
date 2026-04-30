@@ -104,21 +104,21 @@ export function ApiKeyCard({
   return (
     <>
       <Card className="p-6">
-        <h2 className="mb-6 font-heading text-lg text-neon-cyan">API Key</h2>
+        <h2 className="mb-6 font-heading text-lg text-accent">API Key</h2>
 
         {apiKey ? (
           <div className="space-y-4">
             {/* Key Info */}
-            <div className="rounded-lg bg-bg-surface/50 p-4">
+            <div className="rounded-lg bg-card/50 p-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="font-mono text-sm text-text-primary">
+                  <p className="font-mono text-sm text-strong">
                     {apiKey.prefix}...
                   </p>
-                  <p className="mt-1 text-xs text-text-muted">
+                  <p className="mt-1 text-xs text-meta">
                     Created: {formatDate(apiKey.createdAt)}
                   </p>
-                  <p className="text-xs text-text-muted">
+                  <p className="text-xs text-meta">
                     Last used: {formatDate(apiKey.lastUsedAt)}
                   </p>
                 </div>
@@ -128,8 +128,8 @@ export function ApiKeyCard({
                       rounded-full px-2 py-0.5 text-xs font-semibold
                       ${
                         apiKey.status === "active"
-                          ? "bg-neon-green/20 text-neon-green"
-                          : "bg-neon-red/20 text-neon-red"
+                          ? "bg-success/20 text-success"
+                          : "bg-danger/20 text-danger"
                       }
                     `}
                   >
@@ -141,7 +141,7 @@ export function ApiKeyCard({
 
             {/* Regenerate Button */}
             <div className="flex items-center justify-between">
-              <p className="text-xs text-text-muted">
+              <p className="text-xs text-meta">
                 Regenerating will invalidate your current key immediately.
               </p>
               <Button
@@ -157,7 +157,7 @@ export function ApiKeyCard({
           </div>
         ) : (
           <div className="space-y-4">
-            <p className="font-body text-sm text-text-muted">
+            <p className="font-body text-sm text-meta">
               Generate an API key to access the Skill Search API from external
               applications.
             </p>
@@ -176,9 +176,9 @@ export function ApiKeyCard({
           <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="mt-4 rounded-lg border border-neon-red/30 bg-neon-red/10 p-3"
+            className="mt-4 rounded-lg border border-danger/30 bg-danger/10 p-3"
           >
-            <p className="text-sm text-neon-red">{error}</p>
+            <p className="text-sm text-danger">{error}</p>
           </motion.div>
         )}
       </Card>
@@ -190,15 +190,15 @@ export function ApiKeyCard({
         title="API Key Generated"
       >
         <div className="space-y-4">
-          <div className="rounded-lg border border-neon-yellow/30 bg-neon-yellow/10 p-3">
-            <p className="text-sm text-neon-yellow">
+          <div className="rounded-lg border border-warning/30 bg-warning/10 p-3">
+            <p className="text-sm text-warning">
               Make sure to copy your API key now. You will not be able to see it
               again!
             </p>
           </div>
 
           <div className="relative">
-            <div className="rounded-lg bg-bg-deep p-4 pr-12 font-mono text-sm text-text-primary break-all">
+            <div className="rounded-lg bg-page p-4 pr-12 font-mono text-sm text-strong break-all">
               {newKey}
             </div>
             <button
@@ -207,7 +207,7 @@ export function ApiKeyCard({
               className="
                 absolute right-2 top-1/2 -translate-y-1/2
                 rounded-lg p-2
-                text-text-muted hover:text-neon-cyan
+                text-meta hover:text-accent
                 transition-colors
                 cursor-pointer
               "
@@ -219,7 +219,7 @@ export function ApiKeyCard({
                     initial={{ scale: 0 }}
                     animate={{ scale: 1 }}
                     exit={{ scale: 0 }}
-                    className="h-5 w-5 text-neon-green"
+                    className="h-5 w-5 text-success"
                     fill="none"
                     viewBox="0 0 24 24"
                     stroke="currentColor"

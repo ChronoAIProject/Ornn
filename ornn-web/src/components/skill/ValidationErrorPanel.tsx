@@ -19,7 +19,7 @@ export interface ValidationErrorPanelProps {
 }
 
 /**
- * Renders a glass panel with neon-red accent showing validation errors.
+ * Renders a glass panel with danger accent showing validation errors.
  * Each error displays the field path and human-readable message.
  */
 export function ValidationErrorPanel({
@@ -34,22 +34,22 @@ export function ValidationErrorPanel({
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.25, ease: "easeOut" }}
-      className={`rounded-lg border border-neon-red/30 bg-neon-red/5 p-4 ${className}`}
+      className={`rounded-lg border border-danger/30 bg-danger/5 p-4 ${className}`}
       role="alert"
       aria-live="polite"
     >
       {/* Left accent bar */}
       <div className="flex gap-3">
-        <div className="w-1 shrink-0 rounded-full bg-neon-red/60" />
+        <div className="w-1 shrink-0 rounded-full bg-danger/60" />
 
         <div className="flex-1 space-y-3">
           {/* Title */}
-          <h3 className="font-heading text-sm uppercase tracking-wider text-neon-red">
+          <h3 className="font-heading text-sm uppercase tracking-wider text-danger">
             {title}
           </h3>
 
           {/* Error count */}
-          <p className="font-body text-xs text-text-muted">
+          <p className="font-body text-xs text-meta">
             {errors.length} {errors.length === 1 ? "error" : "errors"}{" "}
             found. Fix all errors before saving.
           </p>
@@ -59,11 +59,11 @@ export function ValidationErrorPanel({
             {errors.map((err, idx) => (
               <li key={`${err.field}-${idx}`} className="flex gap-2">
                 {/* Field path badge */}
-                <span className="shrink-0 rounded border border-neon-red/20 bg-neon-red/10 px-1.5 py-0.5 font-mono text-xs text-neon-red">
+                <span className="shrink-0 rounded border border-danger/20 bg-danger/10 px-1.5 py-0.5 font-mono text-xs text-danger">
                   {err.field || "root"}
                 </span>
                 {/* Error message */}
-                <span className="font-body text-sm text-text-primary">
+                <span className="font-body text-sm text-strong">
                   {err.message}
                 </span>
               </li>

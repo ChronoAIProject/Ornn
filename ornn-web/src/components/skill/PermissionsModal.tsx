@@ -211,7 +211,7 @@ export function PermissionsModal({ isOpen, onClose, skill }: PermissionsModalPro
         <div className="flex flex-col items-center py-1 shrink-0" aria-hidden>
           <svg
             viewBox="0 0 16 16"
-            className="h-4 w-4 text-neon-cyan"
+            className="h-4 w-4 text-accent"
             fill="none"
             stroke="currentColor"
             strokeWidth="2.5"
@@ -220,7 +220,7 @@ export function PermissionsModal({ isOpen, onClose, skill }: PermissionsModalPro
           >
             <polyline points="4 10 8 6 12 10" />
           </svg>
-          <div className="flex-1 w-px my-1 bg-gradient-to-b from-neon-cyan/70 via-neon-cyan/25 to-neon-cyan/5" />
+          <div className="flex-1 w-px my-1 bg-gradient-to-b from-accent/70 via-accent/25 to-accent/5" />
         </div>
 
         <div className="flex-1">
@@ -235,13 +235,13 @@ export function PermissionsModal({ isOpen, onClose, skill }: PermissionsModalPro
                 type="checkbox"
                 checked={isPublic}
                 onChange={(e) => setIsPublic(e.target.checked)}
-                className="mt-1 h-4 w-4 shrink-0 rounded border-neon-cyan/40 accent-neon-cyan"
+                className="mt-1 h-4 w-4 shrink-0 rounded border-accent/40 accent-accent"
               />
               <div className="flex-1">
-                <p className="font-heading text-base text-text-primary">
+                <p className="font-heading text-base text-strong">
                   {t("permissions.publicTitle", "Public")}
                 </p>
-                <p className="mt-0.5 font-body text-sm text-text-muted">
+                <p className="mt-0.5 font-body text-sm text-meta">
                   {t(
                     "permissions.publicDesc",
                     "Anyone on Ornn can find and use this skill, including unauthenticated visitors.",
@@ -261,10 +261,10 @@ export function PermissionsModal({ isOpen, onClose, skill }: PermissionsModalPro
               accent="limited"
               className="p-4"
             >
-              <p className="font-heading text-base text-text-primary">
+              <p className="font-heading text-base text-strong">
                 {t("permissions.orgsTitle", "Shared with organizations")}
               </p>
-              <p className="mt-0.5 font-body text-sm text-text-muted">
+              <p className="mt-0.5 font-body text-sm text-meta">
                 {t(
                   "permissions.orgsDesc",
                   "Every admin and member of a checked org can see and use this skill.",
@@ -276,7 +276,7 @@ export function PermissionsModal({ isOpen, onClose, skill }: PermissionsModalPro
                 }`}
               >
                 {allOrgOptions.length === 0 && (
-                  <p className="font-body text-xs text-text-muted italic">
+                  <p className="font-body text-xs text-meta italic">
                     {t("permissions.noOrgs", "No organizations to choose from.")}
                   </p>
                 )}
@@ -285,19 +285,19 @@ export function PermissionsModal({ isOpen, onClose, skill }: PermissionsModalPro
                   return (
                     <label
                       key={org.userId}
-                      className="flex items-center gap-2 cursor-pointer py-1 px-2 rounded hover:bg-neon-cyan/5"
+                      className="flex items-center gap-2 cursor-pointer py-1 px-2 rounded hover:bg-accent/5"
                     >
                       <input
                         type="checkbox"
                         checked={checked}
                         onChange={() => toggleOrg(org.userId)}
-                        className="h-4 w-4 rounded border-neon-cyan/40 accent-neon-cyan"
+                        className="h-4 w-4 rounded border-accent/40 accent-accent"
                       />
-                      <span className="font-body text-sm text-text-primary truncate">
+                      <span className="font-body text-sm text-strong truncate">
                         {org.displayName}
                       </span>
                       {!org.isMember && (
-                        <span className="font-mono text-[10px] text-text-muted ml-auto">
+                        <span className="font-mono text-[10px] text-meta ml-auto">
                           {t("permissions.notMember", "not member")}
                         </span>
                       )}
@@ -313,10 +313,10 @@ export function PermissionsModal({ isOpen, onClose, skill }: PermissionsModalPro
               accent="limited"
               className="p-4"
             >
-              <p className="font-heading text-base text-text-primary">
+              <p className="font-heading text-base text-strong">
                 {t("permissions.usersTitle", "Shared with specific users")}
               </p>
-              <p className="mt-0.5 font-body text-sm text-text-muted">
+              <p className="mt-0.5 font-body text-sm text-meta">
                 {t(
                   "permissions.usersDesc",
                   "Search by email. Only users who have signed into Ornn appear here.",
@@ -330,13 +330,13 @@ export function PermissionsModal({ isOpen, onClose, skill }: PermissionsModalPro
                 {sharedUsers.map((u) => (
                   <span
                     key={u.userId}
-                    className="inline-flex items-center gap-2 px-2 py-1 rounded-full border border-neon-cyan/30 bg-neon-cyan/5 font-mono text-xs text-text-primary h-fit"
+                    className="inline-flex items-center gap-2 px-2 py-1 rounded-full border border-accent/30 bg-accent/5 font-mono text-xs text-strong h-fit"
                   >
                     <span>{u.email || u.displayName || u.userId}</span>
                     <button
                       type="button"
                       onClick={() => removeUser(u.userId)}
-                      className="text-neon-red hover:text-neon-red/80 cursor-pointer"
+                      className="text-danger hover:text-danger/80 cursor-pointer"
                       aria-label={t("permissions.removeUser", "Remove") as string}
                     >
                       ×
@@ -344,7 +344,7 @@ export function PermissionsModal({ isOpen, onClose, skill }: PermissionsModalPro
                   </span>
                 ))}
                 {sharedUsers.length === 0 && (
-                  <p className="font-body text-xs text-text-muted italic w-full">
+                  <p className="font-body text-xs text-meta italic w-full">
                     {t("permissions.noUsersYet", "No users added yet.")}
                   </p>
                 )}
@@ -360,11 +360,11 @@ export function PermissionsModal({ isOpen, onClose, skill }: PermissionsModalPro
                   placeholder={
                     t("permissions.searchPlaceholder", "type an email to find a user...") as string
                   }
-                  className="w-full glass rounded-lg border border-neon-cyan/20 bg-bg-elevated px-3 py-2 font-body text-sm text-text-primary focus:outline-none focus:border-neon-cyan/60"
+                  className="w-full glass rounded-lg border border-accent/20 bg-elevated px-3 py-2 font-body text-sm text-strong focus:outline-none focus:border-accent/60"
                   disabled={isPublic}
                 />
                 {userInputFocused && suggestions.length > 0 && (
-                  <div className="absolute left-0 right-0 bottom-full mb-1 z-10 rounded-lg glass border border-neon-cyan/20 shadow-lg max-h-52 overflow-y-auto">
+                  <div className="absolute left-0 right-0 bottom-full mb-1 z-10 rounded-lg glass border border-accent/20 shadow-lg max-h-52 overflow-y-auto">
                     {suggestions.map((s) => (
                       <button
                         key={s.userId}
@@ -373,12 +373,12 @@ export function PermissionsModal({ isOpen, onClose, skill }: PermissionsModalPro
                           e.preventDefault();
                           addUser(s);
                         }}
-                        className="flex w-full items-center gap-2 px-3 py-2 text-left font-body text-sm hover:bg-neon-cyan/10 cursor-pointer"
+                        className="flex w-full items-center gap-2 px-3 py-2 text-left font-body text-sm hover:bg-accent/10 cursor-pointer"
                       >
-                        <span className="text-text-primary truncate">
+                        <span className="text-strong truncate">
                           {s.displayName || s.email}
                         </span>
-                        <span className="ml-auto font-mono text-xs text-text-muted truncate">
+                        <span className="ml-auto font-mono text-xs text-meta truncate">
                           {s.email}
                         </span>
                       </button>
@@ -391,10 +391,10 @@ export function PermissionsModal({ isOpen, onClose, skill }: PermissionsModalPro
 
           <SectionHeader label={t("permissions.levelPrivate", "Private access") as string} />
           <TierCard active={privateActive} dimmed={isPublic} accent="private">
-            <p className="font-heading text-base text-text-primary">
+            <p className="font-heading text-base text-strong">
               {t("permissions.privateTitle", "Private")}
             </p>
-            <p className="mt-0.5 font-body text-sm text-text-muted">
+            <p className="mt-0.5 font-body text-sm text-meta">
               {t(
                 "permissions.privateDesc",
                 "Only you and platform admins can see this skill. Active when nothing above is set.",
@@ -404,7 +404,7 @@ export function PermissionsModal({ isOpen, onClose, skill }: PermissionsModalPro
         </div>
       </div>
 
-      <div className="flex justify-end gap-2 pt-4 mt-5 border-t border-neon-cyan/10">
+      <div className="flex justify-end gap-2 pt-4 mt-5 border-t border-accent/10">
         <Button variant="secondary" onClick={onClose}>
           {t("common.cancel", "Cancel")}
         </Button>
@@ -423,11 +423,11 @@ export function PermissionsModal({ isOpen, onClose, skill }: PermissionsModalPro
 function SectionHeader({ label }: { label: string }) {
   return (
     <div className="mt-5 mb-3 first:mt-0 flex items-center gap-3" aria-hidden>
-      <div className="flex-1 h-px bg-neon-cyan/15" />
-      <span className="font-mono text-[10px] uppercase tracking-widest text-text-muted shrink-0">
+      <div className="flex-1 h-px bg-accent/15" />
+      <span className="font-mono text-[10px] uppercase tracking-widest text-meta shrink-0">
         {label}
       </span>
-      <div className="flex-1 h-px bg-neon-cyan/15" />
+      <div className="flex-1 h-px bg-accent/15" />
     </div>
   );
 }

@@ -220,15 +220,15 @@ export function MarkdownEditor({
     <div className={`space-y-2 ${className}`}>
       {/* Label */}
       {label && (
-        <label className="block font-heading text-xs uppercase tracking-wider text-text-muted">
+        <label className="block font-heading text-xs uppercase tracking-wider text-meta">
           {label}
         </label>
       )}
 
       {/* Editor container */}
-      <div className="rounded-lg border border-neon-cyan/20 bg-bg-deep overflow-hidden">
+      <div className="rounded-lg border border-accent/20 bg-page overflow-hidden">
         {/* Toolbar */}
-        <div className="flex items-center justify-between border-b border-neon-cyan/10 px-2 py-1.5 bg-bg-surface/50">
+        <div className="flex items-center justify-between border-b border-accent/10 px-2 py-1.5 bg-card/50">
           {/* Formatting buttons */}
           <div className="flex items-center gap-0.5">
             {TOOLBAR_BUTTONS.map((button) => {
@@ -239,7 +239,7 @@ export function MarkdownEditor({
                   type="button"
                   onClick={() => handleToolbarClick(button)}
                   disabled={isPreview}
-                  className="p-1.5 rounded text-text-muted hover:text-neon-cyan hover:bg-neon-cyan/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                  className="p-1.5 rounded text-meta hover:text-accent hover:bg-accent/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                   title={button.label}
                 >
                   <Icon className="h-4 w-4" />
@@ -257,8 +257,8 @@ export function MarkdownEditor({
                 flex items-center gap-1.5 px-2 py-1 rounded text-sm font-body
                 transition-colors cursor-pointer
                 ${isPreview
-                  ? "text-neon-cyan bg-neon-cyan/10"
-                  : "text-text-muted hover:text-text-primary"
+                  ? "text-accent bg-accent/10"
+                  : "text-meta hover:text-strong"
                 }
               `}
             >
@@ -298,7 +298,7 @@ export function MarkdownEditor({
                   </Markdown>
                 </div>
               ) : (
-                <p className="text-text-muted font-body text-sm italic">
+                <p className="text-meta font-body text-sm italic">
                   Nothing to preview yet...
                 </p>
               )}
@@ -317,7 +317,7 @@ export function MarkdownEditor({
                 onChange={(e) => onChange(e.target.value)}
                 placeholder={placeholder}
                 rows={minRows}
-                className="w-full bg-transparent px-4 py-3 font-mono text-sm text-text-primary placeholder:text-text-muted/50 resize-y focus:outline-none"
+                className="w-full bg-transparent px-4 py-3 font-mono text-sm text-strong placeholder:text-meta/50 resize-y focus:outline-none"
                 style={{
                   minHeight: `${minRows * 1.5}rem`,
                   maxHeight: `${maxRows * 1.5}rem`,
@@ -330,11 +330,11 @@ export function MarkdownEditor({
 
       {/* Error message */}
       {error && (
-        <p className="text-xs text-neon-red font-body">{error}</p>
+        <p className="text-xs text-danger font-body">{error}</p>
       )}
 
       {/* Help text */}
-      <p className="text-xs text-text-muted font-body">
+      <p className="text-xs text-meta font-body">
         Supports Markdown formatting. Use **bold**, _italic_, `code`, and more.
       </p>
     </div>

@@ -109,14 +109,14 @@ export function AdminLayout() {
   const breadcrumbs = getBreadcrumbs(location.pathname);
 
   return (
-    <div className="bg-grid min-h-screen bg-bg-deep">
+    <div className="bg-grid min-h-screen bg-page">
       {/* Top Bar */}
-      <header className="fixed top-0 z-40 w-full border-b border-neon-cyan/10 bg-bg-deep/80 backdrop-blur-md">
+      <header className="fixed top-0 z-40 w-full border-b border-accent/10 bg-page/80 backdrop-blur-md">
         <div className="flex h-28 items-center justify-between px-4 lg:px-8">
           {/* Logo / Back Link */}
           <NavLink to="/" className="flex items-center gap-3">
             <Logo className="h-8 w-auto" />
-            <span className="font-heading text-lg tracking-wider text-neon-magenta">
+            <span className="font-heading text-lg tracking-wider text-accent-support">
               Admin Panel
             </span>
           </NavLink>
@@ -125,16 +125,16 @@ export function AdminLayout() {
           <nav className="hidden items-center gap-2 sm:flex">
             {breadcrumbs.map((crumb, idx) => (
               <span key={crumb.label} className="flex items-center gap-2">
-                {idx > 0 && <span className="text-text-muted">/</span>}
+                {idx > 0 && <span className="text-meta">/</span>}
                 {crumb.path && idx < breadcrumbs.length - 1 ? (
                   <NavLink
                     to={crumb.path}
-                    className="font-body text-sm text-text-muted hover:text-neon-cyan transition-colors"
+                    className="font-body text-sm text-meta hover:text-accent transition-colors"
                   >
                     {crumb.label}
                   </NavLink>
                 ) : (
-                  <span className="font-body text-sm text-text-primary">
+                  <span className="font-body text-sm text-strong">
                     {crumb.label}
                   </span>
                 )}
@@ -145,7 +145,7 @@ export function AdminLayout() {
           {/* Back to Main */}
           <NavLink
             to="/"
-            className="flex items-center gap-2 font-body text-sm text-text-muted hover:text-neon-cyan transition-colors"
+            className="flex items-center gap-2 font-body text-sm text-meta hover:text-accent transition-colors"
           >
             <svg
               className="h-4 w-4"
@@ -167,7 +167,7 @@ export function AdminLayout() {
 
       <div className="flex pt-28">
         {/* Sidebar */}
-        <aside className="fixed left-0 top-28 z-30 hidden h-[calc(100vh-7rem)] w-60 border-r border-neon-cyan/10 bg-bg-deep lg:block">
+        <aside className="fixed left-0 top-28 z-30 hidden h-[calc(100vh-7rem)] w-60 border-r border-accent/10 bg-page lg:block">
           <nav className="flex flex-col gap-1 p-4">
             {NAV_ITEMS.map((item) => (
               <NavLink
@@ -177,8 +177,8 @@ export function AdminLayout() {
                 className={({ isActive }) =>
                   `flex items-center gap-3 rounded-lg px-4 py-2.5 font-body text-sm transition-all duration-200 ${
                     isActive
-                      ? "bg-neon-magenta/10 text-neon-magenta border border-neon-magenta/30 shadow-[0_0_10px_rgba(255,140,56,0.1)]"
-                      : "text-text-muted hover:bg-bg-elevated hover:text-text-primary border border-transparent"
+                      ? "bg-accent-support/10 text-accent-support border border-accent-support/30 shadow-[0_0_10px_rgba(255,140,56,0.1)]"
+                      : "text-meta hover:bg-elevated hover:text-strong border border-transparent"
                   }`
                 }
               >
@@ -190,7 +190,7 @@ export function AdminLayout() {
         </aside>
 
         {/* Mobile Navigation */}
-        <nav className="fixed bottom-0 left-0 right-0 z-40 flex border-t border-neon-cyan/10 bg-bg-deep/95 backdrop-blur-md lg:hidden">
+        <nav className="fixed bottom-0 left-0 right-0 z-40 flex border-t border-accent/10 bg-page/95 backdrop-blur-md lg:hidden">
           {NAV_ITEMS.map((item) => (
             <NavLink
               key={item.path}
@@ -199,8 +199,8 @@ export function AdminLayout() {
               className={({ isActive }) =>
                 `flex flex-1 flex-col items-center gap-1 py-3 text-xs transition-colors ${
                   isActive
-                    ? "text-neon-magenta"
-                    : "text-text-muted hover:text-text-primary"
+                    ? "text-accent-support"
+                    : "text-meta hover:text-strong"
                 }`
               }
             >

@@ -170,8 +170,8 @@ export function SkillFileBrowser({ skillId, version, isOwner }: SkillFileBrowser
 
   if (error) {
     return (
-      <div className="flex items-center justify-center rounded-lg border border-neon-red/20 bg-bg-surface py-12">
-        <p className="font-body text-sm text-neon-red">
+      <div className="flex items-center justify-center rounded-lg border border-danger/20 bg-card py-12">
+        <p className="font-body text-sm text-danger">
           Failed to load files
         </p>
       </div>
@@ -180,8 +180,8 @@ export function SkillFileBrowser({ skillId, version, isOwner }: SkillFileBrowser
 
   if (treeNodes.length === 0) {
     return (
-      <div className="flex items-center justify-center rounded-lg border border-neon-cyan/10 bg-bg-surface py-12">
-        <p className="font-body text-sm text-text-muted">
+      <div className="flex items-center justify-center rounded-lg border border-accent/10 bg-card py-12">
+        <p className="font-body text-sm text-meta">
           No package files available
         </p>
       </div>
@@ -192,7 +192,7 @@ export function SkillFileBrowser({ skillId, version, isOwner }: SkillFileBrowser
     <div className="space-y-3">
       <div className="flex flex-col lg:flex-row gap-4">
         {/* Left: File tree */}
-        <div className="lg:w-1/3 rounded-lg border border-neon-cyan/10 bg-bg-surface min-h-[300px]">
+        <div className="lg:w-1/3 rounded-lg border border-accent/10 bg-card min-h-[300px]">
           <FileTree
             files={treeNodes}
             selectedId={selectedFileId}
@@ -211,9 +211,9 @@ export function SkillFileBrowser({ skillId, version, isOwner }: SkillFileBrowser
                 onChange={isEditable ? handleContentChange : undefined}
               />
             ) : (
-              <div className="flex flex-col items-center justify-center h-full min-h-[300px] rounded-lg border border-neon-cyan/10 bg-bg-deep">
+              <div className="flex flex-col items-center justify-center h-full min-h-[300px] rounded-lg border border-accent/10 bg-page">
                 <svg
-                  className="h-10 w-10 text-text-muted mb-3"
+                  className="h-10 w-10 text-meta mb-3"
                   fill="none"
                   viewBox="0 0 24 24"
                   stroke="currentColor"
@@ -225,7 +225,7 @@ export function SkillFileBrowser({ skillId, version, isOwner }: SkillFileBrowser
                     d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
                   />
                 </svg>
-                <p className="font-body text-sm text-text-muted text-center px-4">
+                <p className="font-body text-sm text-meta text-center px-4">
                   This file type cannot be viewed online.
                   <br />
                   Download the package to access it.
@@ -233,8 +233,8 @@ export function SkillFileBrowser({ skillId, version, isOwner }: SkillFileBrowser
               </div>
             )
           ) : (
-            <div className="flex items-center justify-center h-full min-h-[300px] rounded-lg border border-neon-cyan/10 bg-bg-deep">
-              <p className="font-body text-sm text-text-muted">
+            <div className="flex items-center justify-center h-full min-h-[300px] rounded-lg border border-accent/10 bg-page">
+              <p className="font-body text-sm text-meta">
                 Select a file to view its content
               </p>
             </div>

@@ -68,11 +68,11 @@ function FileTypeIcon({ filename, className }: { filename: string; className?: s
   const ext = filename.split(".").pop()?.toLowerCase();
 
   // Simple color coding based on file type
-  let color = "text-text-muted";
-  if (["js", "ts", "jsx", "tsx"].includes(ext || "")) color = "text-neon-yellow";
-  else if (["md", "txt"].includes(ext || "")) color = "text-neon-cyan";
-  else if (["json", "yaml", "yml"].includes(ext || "")) color = "text-neon-magenta";
-  else if (["py", "rb"].includes(ext || "")) color = "text-neon-green";
+  let color = "text-meta";
+  if (["js", "ts", "jsx", "tsx"].includes(ext || "")) color = "text-warning";
+  else if (["md", "txt"].includes(ext || "")) color = "text-accent";
+  else if (["json", "yaml", "yml"].includes(ext || "")) color = "text-accent-support";
+  else if (["py", "rb"].includes(ext || "")) color = "text-success";
 
   return (
     <svg className={`${className} ${color}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -90,18 +90,18 @@ interface TabBarProps {
 
 function TabBar({ tabs, activeTabId, onTabChange, onTabClose }: TabBarProps) {
   return (
-    <div className="flex items-center border-b border-neon-cyan/10 bg-bg-surface/50 overflow-x-auto">
+    <div className="flex items-center border-b border-accent/10 bg-card/50 overflow-x-auto">
       {tabs.map((tab) => {
         const isActive = tab.id === activeTabId;
         return (
           <div
             key={tab.id}
             className={`
-              group flex items-center gap-2 px-3 py-2 border-r border-neon-cyan/10
+              group flex items-center gap-2 px-3 py-2 border-r border-accent/10
               cursor-pointer transition-colors
               ${isActive
-                ? "bg-bg-deep text-text-primary border-b-2 border-b-neon-cyan"
-                : "text-text-muted hover:bg-bg-elevated hover:text-text-primary"
+                ? "bg-page text-strong border-b-2 border-b-accent"
+                : "text-meta hover:bg-elevated hover:text-strong"
               }
             `}
             onClick={() => onTabChange(tab.id)}
@@ -109,7 +109,7 @@ function TabBar({ tabs, activeTabId, onTabChange, onTabClose }: TabBarProps) {
             <FileTypeIcon filename={tab.name} className="h-4 w-4 shrink-0" />
             <span className="font-mono text-sm whitespace-nowrap">{tab.name}</span>
             {tab.isModified && (
-              <span className="h-2 w-2 rounded-full bg-neon-yellow shrink-0" title="Unsaved changes" />
+              <span className="h-2 w-2 rounded-full bg-warning shrink-0" title="Unsaved changes" />
             )}
             <button
               type="button"
@@ -119,7 +119,7 @@ function TabBar({ tabs, activeTabId, onTabChange, onTabClose }: TabBarProps) {
               }}
               className={`
                 p-0.5 rounded opacity-0 group-hover:opacity-100
-                hover:bg-neon-red/20 hover:text-neon-red
+                hover:bg-danger/20 hover:text-danger
                 transition-all cursor-pointer
                 ${isActive ? "opacity-100" : ""}
               `}
@@ -189,12 +189,12 @@ function TextAreaEditor({ content, onChange, onSave, readOnly }: TextAreaEditorP
       {/* Line numbers */}
       <div
         ref={lineNumbersRef}
-        className="shrink-0 w-12 py-4 pr-2 text-right border-r border-neon-cyan/10 bg-bg-surface/30 overflow-hidden select-none"
+        className="shrink-0 w-12 py-4 pr-2 text-right border-r border-accent/10 bg-card/30 overflow-hidden select-none"
       >
         {Array.from({ length: lineCount }).map((_, i) => (
           <div
             key={i}
-            className="font-mono text-xs text-text-muted/50 leading-6 h-6"
+            className="font-mono text-xs text-meta/50 leading-6 h-6"
           >
             {i + 1}
           </div>
@@ -212,7 +212,7 @@ function TextAreaEditor({ content, onChange, onSave, readOnly }: TextAreaEditorP
         spellCheck={false}
         className={`
           flex-1 w-full h-full p-4
-          bg-transparent text-text-primary
+          bg-transparent text-strong
           font-mono text-sm leading-6
           resize-none focus:outline-none
           ${readOnly ? "cursor-not-allowed opacity-75" : ""}
@@ -236,7 +236,7 @@ export function CodeEditor({
   const activeTab = tabs.find((t) => t.id === activeTabId);
 
   return (
-    <div className={`flex flex-col h-full bg-bg-deep ${className}`}>
+    <div className={`flex flex-col h-full bg-page ${className}`}>
       {/* Tab bar */}
       {tabs.length > 0 && (
         <TabBar
@@ -275,10 +275,10 @@ export function CodeEditor({
               className="flex items-center justify-center h-full"
             >
               <div className="text-center">
-                <p className="font-body text-lg text-text-muted mb-2">
+                <p className="font-body text-lg text-meta mb-2">
                   No file open
                 </p>
-                <p className="font-body text-sm text-text-muted/70">
+                <p className="font-body text-sm text-meta/70">
                   Select a file from the tree to edit
                 </p>
               </div>
@@ -289,21 +289,21 @@ export function CodeEditor({
 
       {/* Status bar */}
       {activeTab && (
-        <div className="flex items-center justify-between px-4 py-1.5 border-t border-neon-cyan/10 bg-bg-surface/50">
+        <div className="flex items-center justify-between px-4 py-1.5 border-t border-accent/10 bg-card/50">
           <div className="flex items-center gap-4">
-            <span className="font-mono text-xs text-text-muted">
+            <span className="font-mono text-xs text-meta">
               {activeTab.language || getLanguageFromFilename(activeTab.name)}
             </span>
-            <span className="font-mono text-xs text-text-muted">
+            <span className="font-mono text-xs text-meta">
               {activeTab.content.split("\n").length} lines
             </span>
           </div>
           <div className="flex items-center gap-2">
             {activeTab.isModified && (
-              <span className="font-mono text-xs text-neon-yellow">Modified</span>
+              <span className="font-mono text-xs text-warning">Modified</span>
             )}
             {onSave && (
-              <span className="font-mono text-xs text-text-muted/50">
+              <span className="font-mono text-xs text-meta/50">
                 {navigator.platform.includes("Mac") ? "Cmd" : "Ctrl"}+S to save
               </span>
             )}

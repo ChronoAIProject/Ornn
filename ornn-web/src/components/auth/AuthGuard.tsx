@@ -44,7 +44,7 @@ export function AuthGuard({ children }: AuthGuardProps) {
   // Show loading while initializing
   if (!isInitialized || isLoading) {
     return (
-      <div className="min-h-screen bg-bg-deep bg-grid">
+      <div className="min-h-screen bg-page bg-grid">
         <div className="mx-auto max-w-[1280px] px-4 pt-20 pb-12 sm:px-6">
           <div className="space-y-6">
             <Skeleton className="h-10 w-48" />

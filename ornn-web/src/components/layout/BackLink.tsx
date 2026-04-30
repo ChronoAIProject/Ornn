@@ -26,7 +26,7 @@ export function BackLink({ label, to, className = "" }: BackLinkProps) {
     <button
       type="button"
       onClick={() => (to ? navigate(to) : navigate(-1))}
-      className={`inline-flex items-center gap-1 font-body text-xs text-text-muted transition-colors hover:text-neon-cyan cursor-pointer ${className}`}
+      className={`inline-flex items-center gap-1 font-body text-xs text-meta transition-colors hover:text-accent cursor-pointer ${className}`}
     >
       <span aria-hidden>←</span>
       <span>{label}</span>

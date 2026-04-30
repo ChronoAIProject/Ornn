@@ -80,8 +80,8 @@ export function FolderFileUpload({
                 px-4 py-2 rounded-lg font-mono text-sm transition-all cursor-pointer
                 ${
                   selectedFolder === folder
-                    ? "bg-neon-cyan/10 border border-neon-cyan/40 text-neon-cyan"
-                    : "bg-bg-elevated border border-transparent text-text-muted hover:text-text-primary"
+                    ? "bg-accent/10 border border-accent/40 text-accent"
+                    : "bg-elevated border border-transparent text-meta hover:text-strong"
                 }
               `}
             >
@@ -100,10 +100,10 @@ export function FolderFileUpload({
           className={`
             flex-1 flex items-center justify-center rounded-lg border-2 border-dashed
             px-4 py-4 cursor-pointer transition-colors min-h-[60px]
-            ${isDragging ? "border-neon-cyan bg-neon-cyan/5" : "border-neon-cyan/20 bg-bg-deep/50"}
+            ${isDragging ? "border-accent bg-accent/5" : "border-accent/20 bg-page/50"}
           `}
         >
-          <p className="font-body text-sm text-text-muted">
+          <p className="font-body text-sm text-meta">
             {t("guided.dropHint")}
           </p>
         </motion.div>
@@ -125,11 +125,11 @@ export function FolderFileUpload({
           const folderFiles = files.get(folder) ?? [];
           return (
             <div key={folder}>
-              <p className="font-heading text-xs uppercase tracking-wider text-text-muted mb-2">
+              <p className="font-heading text-xs uppercase tracking-wider text-meta mb-2">
                 {FOLDER_LABELS[folder]}
               </p>
               {folderFiles.length === 0 ? (
-                <p className="font-body text-xs text-text-muted/50 pl-4">
+                <p className="font-body text-xs text-meta/50 pl-4">
                   {t("guided.noFiles")}
                 </p>
               ) : (
@@ -137,18 +137,18 @@ export function FolderFileUpload({
                   {folderFiles.map((file, index) => (
                     <div
                       key={`${folder}-${file.name}-${index}`}
-                      className="flex items-center justify-between p-2 pl-4 rounded-lg bg-bg-elevated border border-neon-cyan/10"
+                      className="flex items-center justify-between p-2 pl-4 rounded-lg bg-elevated border border-accent/10"
                     >
-                      <span className="font-mono text-sm text-text-primary truncate flex-1">
+                      <span className="font-mono text-sm text-strong truncate flex-1">
                         {file.name}
                       </span>
-                      <span className="font-body text-xs text-text-muted mx-3 shrink-0">
+                      <span className="font-body text-xs text-meta mx-3 shrink-0">
                         {formatFileSize(file.size)}
                       </span>
                       <button
                         type="button"
                         onClick={() => onRemove(folder, index)}
-                        className="text-text-muted hover:text-neon-red transition-colors text-xs cursor-pointer shrink-0"
+                        className="text-meta hover:text-danger transition-colors text-xs cursor-pointer shrink-0"
                       >
                         {t("guided.remove")}
                       </button>

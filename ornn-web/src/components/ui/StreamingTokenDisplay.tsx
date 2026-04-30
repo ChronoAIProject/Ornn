@@ -12,11 +12,11 @@ export interface StreamingTokenDisplayProps {
 export function StreamingTokenDisplay({ tokens, className = "" }: StreamingTokenDisplayProps) {
   return (
     <div
-      className={`rounded-lg border border-neon-cyan/10 bg-bg-deep p-4 font-mono text-sm text-text-primary ${className}`}
+      className={`rounded-lg border border-accent/10 bg-page p-4 font-mono text-sm text-strong ${className}`}
     >
       <pre className="whitespace-pre-wrap break-words">
         {tokens}
-        <span className="inline-block h-4 w-0.5 animate-pulse bg-neon-cyan ml-0.5" />
+        <span className="inline-block h-4 w-0.5 animate-pulse bg-accent ml-0.5" />
       </pre>
     </div>
   );

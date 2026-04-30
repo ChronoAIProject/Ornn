@@ -51,9 +51,9 @@ export function AdminGuard({ children }: AdminGuardProps) {
       >
         <div className="glass rounded-xl p-8 text-center max-w-md">
           <div className="mb-4 flex justify-center">
-            <div className="flex h-16 w-16 items-center justify-center rounded-full border-2 border-neon-red">
+            <div className="flex h-16 w-16 items-center justify-center rounded-full border-2 border-danger">
               <svg
-                className="h-8 w-8 text-neon-red"
+                className="h-8 w-8 text-danger"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -67,10 +67,10 @@ export function AdminGuard({ children }: AdminGuardProps) {
               </svg>
             </div>
           </div>
-          <h2 className="mb-2 font-heading text-xl text-neon-red">
+          <h2 className="mb-2 font-heading text-xl text-danger">
             Access Denied
           </h2>
-          <p className="mb-6 font-body text-text-muted">
+          <p className="mb-6 font-body text-meta">
             You do not have permission to access this page. Please contact an
             administrator if you believe this is an error.
           </p>

@@ -122,7 +122,7 @@ const queryClient = new QueryClient({
 
 /** Minimal fallback while a route chunk is in flight. */
 function RouteFallback() {
-  return <div className="p-8 text-text-muted text-sm">Loading…</div>;
+  return <div className="p-8 text-meta text-sm">Loading…</div>;
 }
 
 // Created once at module scope — `createBrowserRouter` is intentionally

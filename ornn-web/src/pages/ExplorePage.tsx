@@ -214,7 +214,7 @@ export function ExplorePage() {
         <div className="shrink-0 flex justify-center">
           <div
             className={`
-              grid rounded-lg border border-neon-cyan/20 bg-bg-elevated p-1 gap-1
+              grid rounded-lg border border-accent/20 bg-elevated p-1 gap-1
               w-full max-w-3xl
               ${isAuthenticated ? "grid-cols-4" : "grid-cols-2"}
             `}
@@ -339,8 +339,8 @@ function TabButton({ label, count, active, onClick }: TabButtonProps) {
         w-full px-3 py-2 rounded-md font-body text-sm transition-all cursor-pointer
         inline-flex items-center justify-center gap-2 whitespace-nowrap
         ${active
-          ? "bg-neon-cyan/20 text-neon-cyan border border-neon-cyan/50"
-          : "text-text-muted hover:text-text-primary"}
+          ? "bg-accent/20 text-accent border border-accent/50"
+          : "text-meta hover:text-strong"}
       `}
     >
       <span className="whitespace-nowrap">{label}</span>
@@ -348,7 +348,7 @@ function TabButton({ label, count, active, onClick }: TabButtonProps) {
         <span
           className={`
             shrink-0 px-1.5 py-0.5 rounded font-mono text-[10px]
-            ${active ? "bg-neon-cyan/30 text-neon-cyan" : "bg-bg-elevated text-text-muted"}
+            ${active ? "bg-accent/30 text-accent" : "bg-elevated text-meta"}
           `}
         >
           {count}
@@ -648,7 +648,7 @@ function SharedWithMeFilters({
 function FilterSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section>
-      <h3 className="mb-2 font-mono text-[10px] uppercase tracking-[0.18em] text-text-muted">
+      <h3 className="mb-2 font-mono text-[10px] uppercase tracking-[0.18em] text-meta">
         {title}
       </h3>
       {children}
@@ -658,7 +658,7 @@ function FilterSection({ title, children }: { title: string; children: React.Rea
 
 function FilterEmpty({ children }: { children: React.ReactNode }) {
   return (
-    <p className="font-body text-xs text-text-muted italic">{children}</p>
+    <p className="font-body text-xs text-meta italic">{children}</p>
   );
 }
 
@@ -681,8 +681,8 @@ function FilterChip({ label, count, selected, onClick }: FilterChipProps) {
       className={`
         inline-flex items-center gap-2 px-2.5 py-1 rounded-full border font-body text-xs transition-all cursor-pointer
         ${selected
-          ? "border-neon-cyan/60 bg-neon-cyan/15 text-neon-cyan"
-          : "border-neon-cyan/15 bg-bg-elevated text-text-primary hover:border-neon-cyan/40"}
+          ? "border-accent/60 bg-accent/15 text-accent"
+          : "border-accent/15 bg-elevated text-strong hover:border-accent/40"}
       `}
     >
       <span className="max-w-[180px] truncate">{label}</span>
@@ -690,7 +690,7 @@ function FilterChip({ label, count, selected, onClick }: FilterChipProps) {
         <span
           className={`
             px-1.5 rounded font-mono text-[10px]
-            ${selected ? "bg-neon-cyan/30" : "bg-bg-base/70 text-text-muted"}
+            ${selected ? "bg-accent/30" : "bg-bg-base/70 text-meta"}
           `}
         >
           {count}

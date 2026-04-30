@@ -139,8 +139,8 @@ function TreeNode({
           flex items-center gap-1 px-2 py-1.5 rounded cursor-pointer
           transition-colors duration-150
           ${isSelected
-            ? "bg-neon-cyan/15 text-neon-cyan"
-            : "text-text-muted hover:bg-bg-elevated hover:text-text-primary"
+            ? "bg-accent/15 text-accent"
+            : "text-meta hover:bg-elevated hover:text-strong"
           }
         `}
         style={{ paddingLeft: `${level * 12 + 8}px` }}
@@ -153,12 +153,12 @@ function TreeNode({
         {/* Icon */}
         {isFolder ? (
           <FolderIcon
-            className={`h-4 w-4 shrink-0 ${isSelected ? "text-neon-cyan" : "text-neon-yellow"}`}
+            className={`h-4 w-4 shrink-0 ${isSelected ? "text-accent" : "text-warning"}`}
             isOpen={isExpanded}
           />
         ) : (
           <FileIcon
-            className={`h-4 w-4 shrink-0 ml-3.5 ${isSelected ? "text-neon-cyan" : ""}`}
+            className={`h-4 w-4 shrink-0 ml-3.5 ${isSelected ? "text-accent" : ""}`}
           />
         )}
 
@@ -175,7 +175,7 @@ function TreeNode({
                   e.stopPropagation();
                   onCreateFile(node.id);
                 }}
-                className="p-1 rounded hover:bg-neon-cyan/20 text-text-muted hover:text-neon-cyan cursor-pointer"
+                className="p-1 rounded hover:bg-accent/20 text-meta hover:text-accent cursor-pointer"
                 title="New file"
               >
                 <PlusIcon className="h-3 w-3" />
@@ -188,7 +188,7 @@ function TreeNode({
                   e.stopPropagation();
                   onDelete(node.id);
                 }}
-                className="p-1 rounded hover:bg-neon-red/20 text-text-muted hover:text-neon-red cursor-pointer"
+                className="p-1 rounded hover:bg-danger/20 text-meta hover:text-danger cursor-pointer"
                 title="Delete"
               >
                 <TrashIcon className="h-3 w-3" />
@@ -221,7 +221,7 @@ function TreeNode({
                   onBlur={onCancelCreate}
                   autoFocus
                   placeholder={creatingState.type === "file" ? "filename.md" : "folder-name"}
-                  className="w-full px-2 py-1 rounded bg-bg-elevated border border-neon-cyan/30 font-mono text-sm text-text-primary placeholder:text-text-muted/50 focus:outline-none focus:border-neon-cyan"
+                  className="w-full px-2 py-1 rounded bg-elevated border border-accent/30 font-mono text-sm text-strong placeholder:text-meta/50 focus:outline-none focus:border-accent"
                 />
               </div>
             )}
@@ -336,8 +336,8 @@ export function FileTree({
   return (
     <div className={`flex flex-col h-full ${className}`}>
       {/* Header */}
-      <div className="flex items-center px-3 py-2 border-b border-neon-cyan/10">
-        <span className="font-heading text-xs uppercase tracking-wider text-text-muted">
+      <div className="flex items-center px-3 py-2 border-b border-accent/10">
+        <span className="font-heading text-xs uppercase tracking-wider text-meta">
           Files
         </span>
       </div>
@@ -367,13 +367,13 @@ export function FileTree({
         {/* Empty state */}
         {files.length === 0 && !isCreating && (
           <div className="px-4 py-8 text-center">
-            <p className="font-body text-sm text-text-muted mb-2">
+            <p className="font-body text-sm text-meta mb-2">
               No files yet
             </p>
             <button
               type="button"
               onClick={() => setIsCreating({ type: "file", parentId: null })}
-              className="font-body text-sm text-neon-cyan hover:underline cursor-pointer"
+              className="font-body text-sm text-accent hover:underline cursor-pointer"
             >
               Create your first file
             </button>

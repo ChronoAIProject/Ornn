@@ -72,10 +72,10 @@ export function CategoriesPage() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="font-heading text-2xl font-bold text-neon-magenta neon-magenta">
+        <h1 className="font-heading text-2xl font-bold text-accent-support accent-support">
           Categories
         </h1>
-        <p className="mt-1 font-body text-text-muted">
+        <p className="mt-1 font-body text-meta">
           Manage skill categories based on execution requirements
         </p>
       </div>
@@ -83,9 +83,9 @@ export function CategoriesPage() {
       {/* Info Card */}
       <Card>
         <div className="flex items-start gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-neon-cyan/10">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-accent/10">
             <svg
-              className="h-5 w-5 text-neon-cyan"
+              className="h-5 w-5 text-accent"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -99,24 +99,24 @@ export function CategoriesPage() {
             </svg>
           </div>
           <div>
-            <h3 className="font-heading text-sm font-medium text-text-primary">
+            <h3 className="font-heading text-sm font-medium text-strong">
               About Categories
             </h3>
-            <p className="mt-1 font-body text-sm text-text-muted">
+            <p className="mt-1 font-body text-sm text-meta">
               Categories classify skills based on the client capabilities required to execute them:
             </p>
-            <ul className="mt-2 space-y-1 font-body text-sm text-text-muted">
+            <ul className="mt-2 space-y-1 font-body text-sm text-meta">
               <li>
-                <span className="text-neon-cyan">plain</span> - No tools or runtime needed
+                <span className="text-accent">plain</span> - No tools or runtime needed
               </li>
               <li>
-                <span className="text-neon-cyan">tools_required</span> - Requires local tools
+                <span className="text-accent">tools_required</span> - Requires local tools
               </li>
               <li>
-                <span className="text-neon-cyan">runtime_required</span> - Requires script runtime
+                <span className="text-accent">runtime_required</span> - Requires script runtime
               </li>
               <li>
-                <span className="text-neon-cyan">mixed</span> - Requires both tools and runtime
+                <span className="text-accent">mixed</span> - Requires both tools and runtime
               </li>
             </ul>
           </div>
@@ -134,7 +134,7 @@ export function CategoriesPage() {
             <Skeleton lines={6} />
           ) : error ? (
             <div className="py-8 text-center">
-              <p className="font-body text-neon-red">
+              <p className="font-body text-danger">
                 {error instanceof Error ? error.message : "Failed to load categories"}
               </p>
             </div>

@@ -43,10 +43,10 @@ export function SettingsPage() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="font-heading text-2xl font-bold text-neon-cyan neon-cyan">
+            <h1 className="font-heading text-2xl font-bold text-accent accent">
               {t("settings.title")}
             </h1>
-            <p className="mt-1 font-body text-text-muted">
+            <p className="mt-1 font-body text-meta">
               {t("settings.subtitle")}
             </p>
           </div>
@@ -60,11 +60,11 @@ export function SettingsPage() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3 }}
-          className="glass rounded-xl border border-neon-cyan/20 p-6"
+          className="glass rounded-xl border border-accent/20 p-6"
         >
           <div className="flex items-center gap-4">
             {/* Avatar */}
-            <div className="h-16 w-16 shrink-0 overflow-hidden rounded-full bg-bg-elevated ring-2 ring-neon-cyan/20">
+            <div className="h-16 w-16 shrink-0 overflow-hidden rounded-full bg-elevated ring-2 ring-accent/20">
               {user.avatarUrl ? (
                 <img
                   src={user.avatarUrl}
@@ -73,7 +73,7 @@ export function SettingsPage() {
                 />
               ) : (
                 <div className="flex h-full w-full items-center justify-center">
-                  <span className="font-heading text-xl text-neon-cyan">
+                  <span className="font-heading text-xl text-accent">
                     {user.displayName.charAt(0).toUpperCase()}
                   </span>
                 </div>
@@ -82,10 +82,10 @@ export function SettingsPage() {
 
             {/* Info */}
             <div className="min-w-0 flex-1">
-              <p className="font-body text-lg font-semibold text-text-primary truncate">
+              <p className="font-body text-lg font-semibold text-strong truncate">
                 {user.displayName}
               </p>
-              <p className="font-mono text-sm text-text-muted truncate">
+              <p className="font-mono text-sm text-meta truncate">
                 {user.email}
               </p>
               {user.roles.length > 0 && (
@@ -93,7 +93,7 @@ export function SettingsPage() {
                   {user.roles.map((role) => (
                     <span
                       key={role}
-                      className="rounded-full bg-neon-cyan/10 px-2 py-0.5 font-body text-xs text-neon-cyan"
+                      className="rounded-full bg-accent/10 px-2 py-0.5 font-body text-xs text-accent"
                     >
                       {role}
                     </span>
@@ -110,19 +110,19 @@ export function SettingsPage() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3, delay: 0.1 }}
-            className="glass rounded-xl border border-neon-cyan/20 p-6"
+            className="glass rounded-xl border border-accent/20 p-6"
           >
-            <h3 className="font-mono text-[11px] uppercase tracking-[0.16em] text-text-primary mb-3">
+            <h3 className="font-mono text-[11px] uppercase tracking-[0.16em] text-strong mb-3">
               {t("settings.accountMgmt")}
             </h3>
-            <p className="font-body text-sm text-text-muted mb-4">
+            <p className="font-body text-sm text-meta mb-4">
               {t("settings.accountDesc")}
             </p>
             <a
               href={NYXID_SETTINGS_URL}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 rounded-lg border border-neon-cyan/50 px-4 py-2 font-body text-sm font-semibold text-neon-cyan transition-all duration-200 hover:border-neon-cyan hover:shadow-[0_0_15px_rgba(255,107,0,0.3)]"
+              className="inline-flex items-center gap-2 rounded-lg border border-accent/50 px-4 py-2 font-body text-sm font-semibold text-accent transition-all duration-200 hover:border-accent hover:shadow-[0_0_15px_rgba(255,107,0,0.3)]"
             >
               {t("settings.openNyxID")}
               <ExternalLinkIcon className="h-4 w-4" />

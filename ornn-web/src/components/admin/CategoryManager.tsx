@@ -119,7 +119,7 @@ export function CategoryManager({
     <div className="space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <p className="font-body text-sm text-text-muted">
+        <p className="font-body text-sm text-meta">
           Drag to reorder. Categories determine skill classification.
         </p>
         <div className="flex gap-2">
@@ -154,13 +154,13 @@ export function CategoryManager({
           >
             <motion.div
               layout
-              className="rounded-lg border border-neon-cyan/20 bg-bg-surface p-4 hover:border-neon-cyan/40 transition-colors"
+              className="rounded-lg border border-accent/20 bg-card p-4 hover:border-accent/40 transition-colors"
             >
               <div className="flex items-start justify-between gap-4">
                 {/* Drag Handle */}
                 <div className="flex items-center gap-3">
                   <svg
-                    className="h-5 w-5 text-text-muted"
+                    className="h-5 w-5 text-meta"
                     fill="none"
                     viewBox="0 0 24 24"
                     stroke="currentColor"
@@ -175,12 +175,12 @@ export function CategoryManager({
 
                   <div>
                     <div className="flex items-center gap-2">
-                      <h4 className="font-heading text-sm font-medium text-text-primary">
+                      <h4 className="font-heading text-sm font-medium text-strong">
                         {category.name}
                       </h4>
                       <Badge color="muted">{category.slug}</Badge>
                     </div>
-                    <p className="mt-1 font-body text-xs text-text-muted">
+                    <p className="mt-1 font-body text-xs text-meta">
                       {category.description}
                     </p>
                   </div>
@@ -212,7 +212,7 @@ export function CategoryManager({
 
       {items.length === 0 && (
         <Card>
-          <p className="py-8 text-center font-body text-text-muted">
+          <p className="py-8 text-center font-body text-meta">
             No categories yet. Create your first category to get started.
           </p>
         </Card>
@@ -245,7 +245,7 @@ export function CategoryManager({
           />
 
           {formError && (
-            <p className="font-body text-sm text-neon-red">{formError}</p>
+            <p className="font-body text-sm text-danger">{formError}</p>
           )}
 
           <div className="flex justify-end gap-3 pt-2">
@@ -275,14 +275,14 @@ export function CategoryManager({
         title="Delete Category?"
       >
         <div className="space-y-4">
-          <p className="font-body text-text-primary">
+          <p className="font-body text-strong">
             Are you sure you want to delete{" "}
-            <span className="font-semibold text-neon-cyan">
+            <span className="font-semibold text-accent">
               {categoryToDelete?.name}
             </span>
             ?
           </p>
-          <p className="font-body text-sm text-text-muted">
+          <p className="font-body text-sm text-meta">
             This action cannot be undone.
           </p>
           <div className="flex justify-end gap-3 pt-2">

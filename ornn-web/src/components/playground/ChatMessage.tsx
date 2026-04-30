@@ -70,8 +70,8 @@ function UserMessage({ content }: { content: string }) {
       transition={{ duration: 0.15, ease: "easeOut" }}
       className="flex justify-end"
     >
-      <div className="max-w-[80%] rounded-xl rounded-br-sm border border-neon-cyan/30 bg-neon-cyan/5 px-4 py-3">
-        <p className="whitespace-pre-wrap font-body text-sm text-text-primary">
+      <div className="max-w-[80%] rounded-xl rounded-br-sm border border-accent/30 bg-accent/5 px-4 py-3">
+        <p className="whitespace-pre-wrap font-body text-sm text-strong">
           {content}
         </p>
       </div>
@@ -109,7 +109,7 @@ function AssistantMessage({
                 {content}
               </ReactMarkdown>
               {isStreaming && (
-                <span className="inline-block h-4 w-1.5 animate-blink bg-neon-cyan/80" />
+                <span className="inline-block h-4 w-1.5 animate-blink bg-accent/80" />
               )}
             </div>
           </div>
@@ -147,17 +147,17 @@ function ToolResultMessage({
       <div
         className={`max-w-[85%] rounded-lg border px-3 py-2 ${
           isRejection
-            ? "border-neon-red/30 bg-neon-red/5"
-            : "border-neon-cyan/20 bg-bg-surface/50"
+            ? "border-danger/30 bg-danger/5"
+            : "border-accent/20 bg-card/50"
         }`}
       >
         <div className="flex items-center gap-2">
-          <ToolIcon className="h-3.5 w-3.5 shrink-0 text-text-muted" />
-          <span className="font-heading text-[10px] uppercase tracking-wider text-text-muted">
+          <ToolIcon className="h-3.5 w-3.5 shrink-0 text-meta" />
+          <span className="font-heading text-[10px] uppercase tracking-wider text-meta">
             Tool Result{toolCallId ? ` (${toolCallId.slice(0, 8)})` : ""}
           </span>
         </div>
-        <pre className="mt-1 max-h-48 overflow-auto whitespace-pre-wrap font-mono text-xs text-text-primary/80">
+        <pre className="mt-1 max-h-48 overflow-auto whitespace-pre-wrap font-mono text-xs text-strong/80">
           {content}
         </pre>
       </div>
