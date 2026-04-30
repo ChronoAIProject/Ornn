@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
+import { useTranslation } from "react-i18next";
 import { useThemeStore } from "@/stores/themeStore";
 import { useAuthStore, useIsAuthenticated, useCurrentUser, isAdmin } from "@/stores/authStore";
 import { logActivity } from "@/services/activityApi";
 import { config } from "@/config";
+import { Logo } from "@/components/brand/Logo";
 import { EmberLink } from "./EmberButton";
 
 /** Derive NyxID home URL from the authorize URL env var. */
@@ -79,8 +81,10 @@ function DropdownInternal({
  */
 export function LandingNav() {
   const { theme, toggle } = useThemeStore();
+  const { t, i18n } = useTranslation();
   const [menuOpen, setMenuOpen] = useState(false);
   const closeMenu = () => setMenuOpen(false);
+  const toggleLang = () => i18n.changeLanguage(i18n.language === "zh" ? "en" : "zh");
 
   const isAuthenticated = useIsAuthenticated();
   const user = useCurrentUser();
@@ -124,23 +128,7 @@ export function LandingNav() {
           aria-label="ornn home"
           className="focus-ring-ember flex items-center gap-2.5 text-parchment no-underline"
         >
-          <svg
-            className="block h-[26px] w-auto"
-            viewBox="0 0 230 64"
-            fill="none"
-            aria-hidden="true"
-          >
-            <path
-              fill="var(--color-ember)"
-              fillRule="evenodd"
-              d="M63.39,38.24 L59.46,37.46 A28,28 0 0,1 55.28,47.56 L58.61,49.78 A32,32 0 0,1 49.78,58.61 L47.56,55.28 A28,28 0 0,1 37.46,59.46 L38.24,63.39 A32,32 0 0,1 25.76,63.39 L26.54,59.46 A28,28 0 0,1 16.44,55.28 L14.22,58.61 A32,32 0 0,1 5.39,49.78 L8.72,47.56 A28,28 0 0,1 4.54,37.46 L0.61,38.24 A32,32 0 0,1 0.61,25.76 L4.54,26.54 A28,28 0 0,1 8.72,16.44 L5.39,14.22 A32,32 0 0,1 14.22,5.39 L16.44,8.72 A28,28 0 0,1 26.54,4.54 L25.76,0.61 A32,32 0 0,1 38.24,0.61 L37.46,4.54 A28,28 0 0,1 47.56,8.72 L49.78,5.39 A32,32 0 0,1 58.61,14.22 L55.28,16.44 A28,28 0 0,1 59.46,26.54 L63.39,25.76 A32,32 0 0,1 63.39,38.24 Z M46,32 A14,14 0 1,0 18,32 A14,14 0 1,0 46,32 Z"
-            />
-            <g fill="currentColor">
-              <path d="M74,60 L74,12 L86,12 A24,24 0 0,1 110,36 L98,36 A12,12 0 0,0 86,24 L86,60 Z" />
-              <path d="M122,60 L122,36 A24,24 0 0,1 170,36 L170,60 L158,60 L158,36 A12,12 0 0,0 134,36 L134,60 Z" />
-              <path d="M182,60 L182,36 A24,24 0 0,1 230,36 L230,60 L218,60 L218,36 A12,12 0 0,0 194,36 L194,60 Z" />
-            </g>
-          </svg>
+          <Logo className="block h-[26px] w-auto" />
         </Link>
 
         <div className="absolute left-1/2 top-1/2 hidden -translate-x-1/2 -translate-y-1/2 gap-7 font-text text-[15px] font-normal text-bone md:flex">
@@ -148,19 +136,19 @@ export function LandingNav() {
             to="/registry"
             className="focus-ring-ember transition-colors duration-150 hover:text-ember"
           >
-            Registry
+            {t("nav.registry")}
           </Link>
           <Link
             to="/skills/new"
             className="focus-ring-ember transition-colors duration-150 hover:text-ember"
           >
-            Build
+            {t("nav.build")}
           </Link>
           <Link
             to="/docs"
             className="focus-ring-ember transition-colors duration-150 hover:text-ember"
           >
-            Docs
+            {t("nav.docs")}
           </Link>
         </div>
 
@@ -187,6 +175,14 @@ export function LandingNav() {
               />
             </svg>
           </a>
+          <button
+            type="button"
+            aria-label="Toggle language"
+            onClick={toggleLang}
+            className="inline-flex h-9 min-w-[2.25rem] items-center justify-center rounded-[2px] border border-[color:var(--color-border-strong)] bg-transparent px-2 font-mono text-[10px] uppercase tracking-[0.14em] text-parchment transition-colors duration-200 hover:border-ember hover:text-ember focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ember"
+          >
+            {i18n.language === "zh" ? "中" : "EN"}
+          </button>
           <button
             type="button"
             aria-label="Toggle theme"
@@ -286,21 +282,23 @@ export function LandingNav() {
                         focused on Ornn. */}
                     <div className="py-1">
                       <DropdownExternal href={`${getNyxIdUrl()}/settings`}>
-                        My Profile
+                        {t("nav.myProfile", "My Profile")}
                       </DropdownExternal>
                       <DropdownExternal href={`${getNyxIdUrl()}/services`}>
-                        My NyxID Services
+                        {t("nav.myServices", "My NyxID Services")}
                       </DropdownExternal>
                       <DropdownExternal href={`${getNyxIdUrl()}/orgs`}>
-                        My Organizations
+                        {t("nav.myOrgs", "My Organizations")}
                       </DropdownExternal>
-                      <DropdownExternal href={getNyxIdUrl()}>NyxID Portal</DropdownExternal>
+                      <DropdownExternal href={getNyxIdUrl()}>
+                        {t("nav.goToNyxId")}
+                      </DropdownExternal>
                     </div>
 
                     {isAdmin(user) && (
                       <div className="border-t border-[color:var(--color-border-subtle)] py-1">
                         <DropdownInternal to="/admin" onClick={() => setUserMenuOpen(false)}>
-                          Admin Panel
+                          {t("nav.adminPanel")}
                         </DropdownInternal>
                       </div>
                     )}
@@ -311,7 +309,7 @@ export function LandingNav() {
                         onClick={handleLogout}
                         className="flex w-full items-center px-4 py-2.5 text-left font-mono text-[11px] uppercase tracking-[0.14em] text-ember transition-colors hover:bg-[color:var(--surface-elevated)]"
                       >
-                        Sign out
+                        {t("nav.signOut")}
                       </button>
                     </div>
                   </motion.div>
@@ -321,11 +319,11 @@ export function LandingNav() {
           ) : (
             <>
               <EmberLink to="/login" variant="ghost">
-                Sign in
+                {t("nav.signIn")}
               </EmberLink>
 
               <EmberLink to="/login" variant="primary">
-                Get started
+                {t("landing.getStarted")}
               </EmberLink>
             </>
           )}
@@ -403,7 +401,7 @@ export function LandingNav() {
               tabIndex={menuOpen ? 0 : -1}
               className="focus-ring-ember border-b border-[color:var(--color-border-subtle)] py-3 font-text text-[16px] text-bone transition-colors hover:text-ember"
             >
-              Registry
+              {t("nav.registry")}
             </Link>
             <Link
               to="/skills/new"
@@ -411,7 +409,7 @@ export function LandingNav() {
               tabIndex={menuOpen ? 0 : -1}
               className="focus-ring-ember border-b border-[color:var(--color-border-subtle)] py-3 font-text text-[16px] text-bone transition-colors hover:text-ember"
             >
-              Build
+              {t("nav.build")}
             </Link>
             <Link
               to="/docs"
@@ -419,7 +417,7 @@ export function LandingNav() {
               tabIndex={menuOpen ? 0 : -1}
               className="focus-ring-ember border-b border-[color:var(--color-border-subtle)] py-3 font-text text-[16px] text-bone transition-colors hover:text-ember"
             >
-              Docs
+              {t("nav.docs")}
             </Link>
             <a
               href="https://github.com/ChronoAIProject/Ornn"
@@ -445,13 +443,24 @@ export function LandingNav() {
             </a>
             <button
               type="button"
+              onClick={toggleLang}
+              tabIndex={menuOpen ? 0 : -1}
+              className="flex items-center justify-between border-b border-[color:var(--color-border-subtle)] py-3 font-mono text-[12px] uppercase tracking-[0.14em] text-bone transition-colors hover:text-ember"
+            >
+              <span>{t("landing.languageLabel")}</span>
+              <span className="text-ember">
+                {i18n.language === "zh" ? t("landing.languageChinese") : t("landing.languageEnglish")}
+              </span>
+            </button>
+            <button
+              type="button"
               onClick={toggle}
               tabIndex={menuOpen ? 0 : -1}
               className="flex items-center justify-between border-b border-[color:var(--color-border-subtle)] py-3 font-mono text-[12px] uppercase tracking-[0.14em] text-bone transition-colors hover:text-ember"
             >
-              <span>Theme</span>
+              <span>{t("landing.themeLabel")}</span>
               <span className="text-ember">
-                {theme === "light" ? "Light" : "Dark"}
+                {theme === "light" ? t("landing.themeLight") : t("landing.themeDark")}
               </span>
             </button>
             {isAuthenticated && user ? (
@@ -482,7 +491,7 @@ export function LandingNav() {
                   tabIndex={menuOpen ? 0 : -1}
                   className="border-b border-[color:var(--color-border-subtle)] py-3 font-text text-[16px] text-bone transition-colors hover:text-ember"
                 >
-                  My Profile
+                  {t("nav.myProfile", "My Profile")}
                 </a>
                 {isAdmin(user) && (
                   <Link
@@ -491,7 +500,7 @@ export function LandingNav() {
                     tabIndex={menuOpen ? 0 : -1}
                     className="border-b border-[color:var(--color-border-subtle)] py-3 font-text text-[16px] text-bone transition-colors hover:text-ember"
                   >
-                    Admin Panel
+                    {t("nav.adminPanel")}
                   </Link>
                 )}
                 <button
@@ -500,7 +509,7 @@ export function LandingNav() {
                   tabIndex={menuOpen ? 0 : -1}
                   className="flex items-center justify-start py-3 font-mono text-[12px] uppercase tracking-[0.14em] text-ember transition-colors hover:text-parchment"
                 >
-                  Sign out
+                  {t("nav.signOut")}
                 </button>
               </>
             ) : (
@@ -511,14 +520,14 @@ export function LandingNav() {
                   tabIndex={menuOpen ? 0 : -1}
                   className="py-3 font-mono text-[12px] uppercase tracking-[0.14em] text-parchment transition-colors hover:text-ember"
                 >
-                  Sign in →
+                  {t("nav.signIn")} →
                 </Link>
                 <EmberLink
                   to="/login"
                   variant="primary"
                   className="!mt-2 !w-full !justify-center"
                 >
-                  Get started
+                  {t("landing.getStarted")}
                 </EmberLink>
               </>
             )}

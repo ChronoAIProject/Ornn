@@ -81,9 +81,11 @@ export function RootLayout() {
   return (
     <div className="flex flex-col h-screen bg-page bg-grid overflow-hidden">
       <Navbar />
-      {/* Breadcrumb navigation — hide when only root crumb */}
+      {/* Breadcrumb navigation — hide when only root crumb. Width matches
+          LandingNav (max-w-[1280px] mx-auto px-6 sm:px-8) so app-shell
+          horizontal rhythm aligns with the landing surface. */}
       {crumbs.length > 1 && (
-      <div className="shrink-0 px-6 sm:px-10 pt-3 pb-2">
+      <div className="mx-auto w-full max-w-[1280px] shrink-0 px-6 sm:px-8 pt-3 pb-2">
         <nav className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.08em]">
           {crumbs.map((crumb, i) => {
             const isLast = i === crumbs.length - 1;
@@ -110,7 +112,7 @@ export function RootLayout() {
         </nav>
       </div>
       )}
-      <main className="flex-1 min-h-0 px-6 sm:px-10 overflow-hidden">
+      <main className="mx-auto w-full max-w-[1280px] flex-1 min-h-0 px-6 sm:px-8 overflow-hidden">
         <Outlet />
       </main>
       <ToastContainer />

@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { BlueprintGrid, RegMark } from "./BlueprintGrid";
 import { HighlighterMark } from "./HighlighterMark";
 
@@ -5,80 +6,87 @@ import { HighlighterMark } from "./HighlighterMark";
  * "Why ornn" — three editorial pillars under the hero.
  */
 export function WhyOrnnSection() {
+  const { t } = useTranslation();
   return (
     <section className="relative overflow-hidden">
       <BlueprintGrid />
       <div className="relative mx-auto max-w-[1280px] px-6 sm:px-8">
         <div className="pb-8 pt-8 sm:pb-10 sm:pt-12">
           <h2 className="max-w-[900px] font-display-grotesk text-[clamp(36px,4vw,56px)] font-bold uppercase leading-[0.98] tracking-[-0.025em] text-parchment">
-            Stop copy-pasting prompts.
+            {t("landing.why.headlineLine1")}
             <br />
-            Install <HighlighterMark>skills</HighlighterMark> like packages.
+            {t("landing.why.headlineLine2Start")}{" "}
+            <HighlighterMark>{t("landing.why.headlineLine2Highlight")}</HighlighterMark>{" "}
+            {t("landing.why.headlineLine2End")}
           </h2>
         </div>
 
         <div className="grid grid-cols-1 border-y border-[color:var(--color-border-subtle)] md:grid-cols-3">
           <Pillar
             num="I"
+            label={t("landing.why.pillarLabel")}
             title={
               <>
-                Pull, <HighlighterMark>don&apos;t</HighlighterMark>
-                <br />
-                paste.
+                {t("landing.why.pillar1Title")
+                  .split(t("landing.why.pillar1TitleHighlight"))
+                  .flatMap((piece, i, arr) =>
+                    i < arr.length - 1
+                      ? [piece, <HighlighterMark key={i}>{t("landing.why.pillar1TitleHighlight")}</HighlighterMark>]
+                      : [piece],
+                  )}
               </>
             }
             body={
               <>
-                Skills live on a versioned, audited registry — not in Slack
-                threads or random gists. Pull on demand from inside your agent
-                via{" "}
+                {t("landing.why.pillar1Body").split("{{cmd}}")[0]}
                 <code className="rounded-[2px] bg-iron px-1.5 py-0.5 font-mono text-xs text-molten">
                   ornn-search-and-run
                 </code>
-                .
+                {t("landing.why.pillar1Body").split("{{cmd}}")[1]}
               </>
             }
-            proof="// versioned · audited · agent-ready"
+            proof={t("landing.why.pillar1Proof")}
             border
           />
           <Pillar
             num="II"
+            label={t("landing.why.pillarLabel")}
             title={
               <>
-                Generate skills
+                {t("landing.why.pillar2Title")}
                 <br />
-                <HighlighterMark>from a prompt</HighlighterMark>.
+                <HighlighterMark>
+                  {t("landing.why.pillar2TitleHighlight")}
+                </HighlighterMark>
+                .
               </>
             }
             body={
               <>
-                Describe the skill in plain English;{" "}
+                {t("landing.why.pillar2Body").split("{{cmd}}")[0]}
                 <code className="rounded-[2px] bg-iron px-1.5 py-0.5 font-mono text-xs text-molten">
                   ornn-build
-                </code>{" "}
-                drafts a working SKILL.md you can iterate on, sandbox, and
-                publish to the registry.
+                </code>
+                {t("landing.why.pillar2Body").split("{{cmd}}")[1]}
               </>
             }
-            proof="// ornn-build is itself a skill on the registry"
+            proof={t("landing.why.pillar2Proof")}
             border
           />
           <Pillar
             num="III"
+            label={t("landing.why.pillarLabel")}
             title={
               <>
-                Portable by{" "}
-                <HighlighterMark>format</HighlighterMark>.
+                {t("landing.why.pillar3Title")}{" "}
+                <HighlighterMark>
+                  {t("landing.why.pillar3TitleHighlight")}
+                </HighlighterMark>
+                .
               </>
             }
-            body={
-              <>
-                Platform-agnostic skill format with a sandbox playground (Node +
-                Python) before you ship. NyxID-gated for anything that needs
-                auth.
-              </>
-            }
-            proof="// chrono-sandbox · nyxid · audited"
+            body={t("landing.why.pillar3Body")}
+            proof={t("landing.why.pillar3Proof")}
           />
         </div>
       </div>
@@ -88,12 +96,14 @@ export function WhyOrnnSection() {
 
 function Pillar({
   num,
+  label,
   title,
   body,
   proof,
   border = false,
 }: {
   num: string;
+  label: string;
   title: React.ReactNode;
   body: React.ReactNode;
   proof: string;
@@ -114,7 +124,7 @@ function Pillar({
           {num}
         </div>
         <div className="font-mono text-[9px] uppercase tracking-[0.32em] text-meta">
-          Pillar · {num}
+          {label} · {num}
         </div>
       </div>
       <h3 className="mb-4 mt-5 font-display-grotesk text-[32px] font-bold uppercase leading-[1.0] tracking-[-0.02em] text-parchment">

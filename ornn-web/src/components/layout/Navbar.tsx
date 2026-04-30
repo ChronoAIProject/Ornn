@@ -69,7 +69,6 @@ function MoonIcon({ className }: { className?: string }) {
 }
 
 const NAV_ITEMS = [
-  { i18nKey: "nav.home", path: "/", requiresAuth: false, exact: true },
   { i18nKey: "nav.registry", path: "/registry", requiresAuth: false, exact: true },
   { i18nKey: "nav.build", path: "/skills/new", requiresAuth: true },
   { i18nKey: "nav.docs", path: "/docs", requiresAuth: false },

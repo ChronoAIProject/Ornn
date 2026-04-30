@@ -7,6 +7,7 @@ import {
   useSpring,
   useTransform,
 } from "framer-motion";
+import { useTranslation } from "react-i18next";
 import { PhoneMockup } from "./PhoneMockup";
 import { RepoRail } from "./RepoRail";
 import { HeroChyron } from "./HeroChyron";
@@ -56,6 +57,7 @@ export function HeroStage() {
    ──────────────────────────────────────────────────────────── */
 
 function ScrubHero() {
+  const { t } = useTranslation();
   const heroRef = useRef<HTMLDivElement>(null);
   const stickyRef = useRef<HTMLDivElement>(null);
 
@@ -428,23 +430,23 @@ function ScrubHero() {
               className="pointer-events-none transition-opacity duration-300 data-[off=true]:opacity-[0.18]"
             >
               <div className="mb-5 max-[720px]:mb-2">
-                <Stamp dot>NOW FORGING · v 0.9.3</Stamp>
+                <Stamp dot>{t("landing.nowForging")}</Stamp>
               </div>
               {/* Forge Workshop display: Space Grotesk Bold UPPERCASE
                   with HighlighterMark on emphasis nouns. Replaces the
                   legacy italic-Fraunces-ember signature per DESIGN.md. */}
               <h1 className="font-display-grotesk text-[clamp(40px,4.6vw,64px)] font-bold uppercase leading-[0.98] tracking-[-0.025em] text-parchment max-[720px]:text-[clamp(28px,8vw,36px)]">
-                Start with <HighlighterMark>nothing</HighlighterMark>.
+                {t("landing.hero.headlineStart")}{" "}
+                <HighlighterMark>{t("landing.hero.headlineNothing")}</HighlighterMark>.
                 <br />
-                Ship with <HighlighterMark>everything</HighlighterMark>.
+                {t("landing.hero.headlineEnd")}{" "}
+                <HighlighterMark>{t("landing.hero.headlineEverything")}</HighlighterMark>.
               </h1>
               <p className="mt-4 max-w-[340px] font-text text-[14px] leading-[1.55] text-bone max-[720px]:hidden">
-                A registry of composable skills. Watch a blank screen equip
-                itself — nav, type, hero, motion. Install what you need; skip
-                what you don&apos;t.
+                {t("landing.hero.subhead")}
               </p>
               <div className="mt-7 flex items-center gap-2.5 font-mono text-[10px] uppercase tracking-[0.2em] text-ash after:h-px after:flex-1 after:bg-[linear-gradient(90deg,var(--color-border-strong),transparent)] after:content-[''] max-[720px]:hidden">
-                Scroll to equip ↓
+                {t("landing.scrollHint")}
               </div>
             </div>
             <div className="mt-4 max-[720px]:mt-2">
@@ -509,14 +511,14 @@ function ScrubHero() {
         >
           <div className="flex max-w-[500px] flex-col items-center gap-4 rounded-[4px] border border-[color:var(--color-border-strong)] [background-color:var(--surface-overlay)] px-10 py-8 backdrop-blur-[14px]">
             <div className="font-display-grotesk text-[28px] font-bold uppercase leading-[1.0] tracking-[-0.02em] text-parchment">
-              Your product. Your agent.
+              {t("landing.hero.finalLine1")}
               <br />
-              Fully equipped.
+              {t("landing.hero.finalLine2")}
             </div>
             <div className="flex gap-3">
-              <EmberLink to="/registry">Browse skills →</EmberLink>
+              <EmberLink to="/registry">{t("landing.browseSkills")}</EmberLink>
               <EmberLink to="/skills/new" variant="ghost">
-                Publish yours
+                {t("landing.publishYours")}
               </EmberLink>
             </div>
           </div>
@@ -532,6 +534,7 @@ function ScrubHero() {
    ──────────────────────────────────────────────────────────── */
 
 function StaticHero() {
+  const { t } = useTranslation();
   const phoneRef = useRef<HTMLDivElement>(null);
   const layerBlankRef = useRef<HTMLDivElement>(null);
   const layerWireRef = useRef<HTMLDivElement>(null);
@@ -561,21 +564,22 @@ function StaticHero() {
         <div className="relative z-10 mx-auto flex max-w-[1280px] flex-col gap-10 px-6 pb-12 pt-14 sm:gap-12 sm:px-8 sm:pb-20 sm:pt-24">
           <div className="grid items-center gap-10 sm:gap-12 lg:grid-cols-[1fr_320px]">
             <div className="flex flex-col items-start gap-5 sm:gap-6">
-              <Stamp dot>NOW FORGING · v 0.9.3</Stamp>
+              <Stamp dot>{t("landing.nowForging")}</Stamp>
               {/* Static / reduced-motion hero — same Forge Workshop display */}
               <h1 className="font-display-grotesk text-[clamp(40px,4.6vw,64px)] font-bold uppercase leading-[0.98] tracking-[-0.025em] text-parchment max-[720px]:text-[clamp(28px,8vw,36px)]">
-                Start with <HighlighterMark>nothing</HighlighterMark>.
+                {t("landing.hero.headlineStart")}{" "}
+                <HighlighterMark>{t("landing.hero.headlineNothing")}</HighlighterMark>.
                 <br />
-                Ship with <HighlighterMark>everything</HighlighterMark>.
+                {t("landing.hero.headlineEnd")}{" "}
+                <HighlighterMark>{t("landing.hero.headlineEverything")}</HighlighterMark>.
               </h1>
               <p className="max-w-[440px] font-text text-[14px] leading-[1.55] text-bone sm:text-base">
-                A registry of composable skills. Install what you need; skip what
-                you don&apos;t.
+                {t("landing.hero.subheadStatic")}
               </p>
               <div className="flex flex-wrap gap-3">
-                <EmberLink to="/registry">Browse skills →</EmberLink>
+                <EmberLink to="/registry">{t("landing.browseSkills")}</EmberLink>
                 <EmberLink to="/skills/new" variant="ghost">
-                  Publish yours
+                  {t("landing.publishYours")}
                 </EmberLink>
               </div>
             </div>

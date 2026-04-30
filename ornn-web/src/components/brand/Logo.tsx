@@ -1,14 +1,16 @@
 /**
- * Ornn wordmark — picks the dark-mode or light-mode SVG based on the
- * current theme. Kept as a thin component so the 4 nav/login touch
- * points stay one-line swaps.
+ * Ornn wordmark — Forge Workshop expression.
  *
- * Asset naming mirrors the background it's meant to sit on:
- *   - `logo-dark.svg`  → white "rnn" text, use on dark backgrounds.
- *   - `logo-light.svg` → dark-grey "rnn" text, use on light backgrounds.
+ * Inline SVG with the ember-filled polygon orbit + parchment "rnn"
+ * wordmark. Identical mark across the landing page (LandingNav) and
+ * every app-shell route so the user never sees the brand jump.
+ *
+ * Color tokens render via `var(--color-ember)` (orbit) and
+ * `currentColor` (wordmark) so the mark inherits the surrounding text
+ * color and adapts to theme automatically.
+ *
+ * @module components/brand/Logo
  */
-
-import { useThemeStore } from "@/stores/themeStore";
 
 export interface LogoProps {
   /** Optional Tailwind class set (sizing, margin, etc.). */
@@ -17,16 +19,25 @@ export interface LogoProps {
   alt?: string;
 }
 
-/**
- * Cache-bust version stamp. Bump when swapping the underlying SVGs so
- * browsers (and our CDN, if any) refetch instead of serving a stale
- * copy after a logo redesign. All logo consumers import this Logo
- * component, so bumping here fans out to every render site.
- */
-const LOGO_VERSION = "12";
-
 export function Logo({ className = "", alt = "ORNN" }: LogoProps) {
-  const theme = useThemeStore((s) => s.theme);
-  const src = theme === "dark" ? "/logo-dark.svg" : "/logo-light.svg";
-  return <img src={`${src}?v=${LOGO_VERSION}`} alt={alt} className={className} />;
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 230 64"
+      fill="none"
+      role="img"
+      aria-label={alt}
+    >
+      <path
+        fill="var(--color-ember)"
+        fillRule="evenodd"
+        d="M63.39,38.24 L59.46,37.46 A28,28 0 0,1 55.28,47.56 L58.61,49.78 A32,32 0 0,1 49.78,58.61 L47.56,55.28 A28,28 0 0,1 37.46,59.46 L38.24,63.39 A32,32 0 0,1 25.76,63.39 L26.54,59.46 A28,28 0 0,1 16.44,55.28 L14.22,58.61 A32,32 0 0,1 5.39,49.78 L8.72,47.56 A28,28 0 0,1 4.54,37.46 L0.61,38.24 A32,32 0 0,1 0.61,25.76 L4.54,26.54 A28,28 0 0,1 8.72,16.44 L5.39,14.22 A32,32 0 0,1 14.22,5.39 L16.44,8.72 A28,28 0 0,1 26.54,4.54 L25.76,0.61 A32,32 0 0,1 38.24,0.61 L37.46,4.54 A28,28 0 0,1 47.56,8.72 L49.78,5.39 A32,32 0 0,1 58.61,14.22 L55.28,16.44 A28,28 0 0,1 59.46,26.54 L63.39,25.76 A32,32 0 0,1 63.39,38.24 Z M46,32 A14,14 0 1,0 18,32 A14,14 0 1,0 46,32 Z"
+      />
+      <g fill="currentColor">
+        <path d="M74,60 L74,12 L86,12 A24,24 0 0,1 110,36 L98,36 A12,12 0 0,0 86,24 L86,60 Z" />
+        <path d="M122,60 L122,36 A24,24 0 0,1 170,36 L170,60 L158,60 L158,36 A12,12 0 0,0 134,36 L134,60 Z" />
+        <path d="M182,60 L182,36 A24,24 0 0,1 230,36 L230,60 L218,60 L218,36 A12,12 0 0,0 194,36 L194,60 Z" />
+      </g>
+    </svg>
+  );
 }
