@@ -1,6 +1,8 @@
 /**
- * Sidebar Component.
- * Collapsible sidebar navigation with neon cyberpunk styling.
+ * Sidebar Component — Forge Workshop app shell.
+ *
+ * Collapsible sidebar navigation that reads as a workshop tool rail:
+ * hairline borders, mono utility labels, ember active markers.
  * Responsive: drawer on mobile, fixed sidebar on desktop.
  * @module components/layout/Sidebar
  */
@@ -105,7 +107,7 @@ export function Sidebar({
     <div className="flex h-full flex-col">
       {/* Header with collapse toggle */}
       {!isMobile && (
-        <div className="flex h-14 items-center justify-end border-b border-accent/10 px-3">
+        <div className="flex h-14 items-center justify-end border-b border-subtle px-3">
           <button
             type="button"
             onClick={toggleCollapsed}
@@ -122,7 +124,7 @@ export function Sidebar({
 
       {/* Mobile header */}
       {isMobile && (
-        <div className="flex h-14 items-center justify-between border-b border-accent/10 px-4">
+        <div className="flex h-14 items-center justify-between border-b border-subtle px-4">
           <span className="font-display text-sm uppercase tracking-wider text-accent">
             Navigation
           </span>
@@ -218,7 +220,7 @@ export function Sidebar({
 
       {/* Footer / User info when collapsed */}
       {user && collapsed && !isMobile && (
-        <div className="border-t border-accent/10 p-3">
+        <div className="border-t border-subtle p-3">
           <div className="group relative flex justify-center">
             <div className="h-8 w-8 overflow-hidden rounded-full bg-elevated ring-2 ring-accent/20">
               {user.avatarUrl ? (
@@ -255,7 +257,7 @@ export function Sidebar({
         transition={{ type: "spring", stiffness: 300, damping: 30 }}
         className={`
           hidden lg:block fixed top-16 left-0 bottom-0 z-20
-          border-r border-accent/10 bg-page/95 backdrop-blur-md
+          border-r border-subtle bg-page/95 backdrop-blur-md
           ${className}
         `}
       >
@@ -282,7 +284,7 @@ export function Sidebar({
               animate={{ x: 0 }}
               exit={{ x: "-100%" }}
               transition={{ type: "spring", stiffness: 300, damping: 30 }}
-              className="fixed top-0 left-0 bottom-0 z-40 w-72 glass border-r border-accent/10 lg:hidden"
+              className="card-impression fixed top-0 left-0 bottom-0 z-40 w-72 border-r border-subtle bg-page lg:hidden"
             >
               <SidebarContent isMobile />
             </motion.aside>

@@ -1,49 +1,31 @@
 /**
- * Navigation Bar Component.
- * Fixed top navigation with links, mobile hamburger menu, and user dropdown.
- * Cyberpunk styled with glass morphism and neon accents.
+ * Navigation Bar — Forge Workshop app shell.
+ *
+ * Sticky 64px nav row with the Ornn wordmark on the left, primary nav
+ * links centered on md+, and the right cluster (GitHub / language /
+ * theme / notifications / avatar dropdown) on the right. Mobile
+ * collapses everything except logo + avatar/sign-in into a hamburger
+ * panel that drops below the nav row.
+ *
+ * Mirrors `pages/landing/LandingNav` so the app shell and landing
+ * surfaces share the same chrome vocabulary: hairline borders, parchment /
+ * bone / ember tokens, mono uppercase utility labels, letterpress
+ * impression on dropdowns. This is the application of the Forge Workshop
+ * language to the app shell per DESIGN.md "Whole-App Application Guidance".
+ *
  * @module components/layout/Navbar
  */
 
 import { useState, useRef, useEffect } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
-import { motion, AnimatePresence } from "framer-motion";
-import { useAuthStore, useIsAuthenticated, useCurrentUser, isAdmin } from "@/stores/authStore";
-import { logActivity } from "@/services/activityApi";
-import { useThemeStore } from "@/stores/themeStore";
+import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import { useAuthStore, useIsAuthenticated, useCurrentUser, isAdmin } from "@/stores/authStore";
+import { useThemeStore } from "@/stores/themeStore";
+import { logActivity } from "@/services/activityApi";
 import { Logo } from "@/components/brand/Logo";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { config } from "@/config";
 
-/** Admin icon */
-function AdminIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-    </svg>
-  );
-}
-
-/** Logout icon */
-function LogoutIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-    </svg>
-  );
-}
-
-/** NyxID icon (shield/key) */
-function NyxIdIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
-    </svg>
-  );
-}
-
-/** Derive NyxID home URL from the authorize URL env var */
 function getNyxIdUrl(): string {
   try {
     const authorizeUrl = config.nyxidOauthAuthorizeUrl;
@@ -51,190 +33,41 @@ function getNyxIdUrl(): string {
       const url = new URL(authorizeUrl);
       return url.origin;
     }
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
   return "https://nyx.chrono-ai.fun";
 }
 
-/** Menu icon (hamburger) */
-function MenuIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-    </svg>
-  );
-}
-
-/** Close icon */
-function CloseIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-    </svg>
-  );
-}
-
-export interface NavbarProps {
-  className?: string;
-}
-
-/** Sun icon */
-function SunIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
-    </svg>
-  );
-}
-
-/** Moon icon */
-function MoonIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
-    </svg>
-  );
-}
-
-/** Theme toggle button */
-function ThemeToggle() {
-  const { theme, toggle } = useThemeStore();
-  return (
-    <button
-      type="button"
-      onClick={toggle}
-      className="hidden sm:flex items-center justify-center h-10 w-10 rounded border border-accent/30 bg-card/50 text-meta transition-all duration-200 hover:text-accent hover:border-accent/50 cursor-pointer"
-      title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
-    >
-      {theme === "dark" ? (
-        <SunIcon className="h-5 w-5" />
-      ) : (
-        <MoonIcon className="h-5 w-5" />
-      )}
-    </button>
-  );
-}
-
-/** GitHub icon */
 function GitHubIcon({ className }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
-      <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z" />
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path
+        fillRule="evenodd"
+        clipRule="evenodd"
+        d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.203 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.847-2.339 4.695-4.566 4.943.359.31.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.02 10.02 0 0022 12.017C22 6.484 17.522 2 12 2z"
+      />
     </svg>
   );
 }
 
-/** GitHub link button */
-function GitHubLink() {
+function SunIcon({ className }: { className?: string }) {
   return (
-    <a
-      href="https://github.com/ChronoAIProject/Ornn"
-      target="_blank"
-      rel="noopener noreferrer"
-      className="hidden sm:flex items-center justify-center h-10 w-10 rounded border border-accent/30 bg-card/50 text-meta transition-all duration-200 hover:text-accent hover:border-accent/50"
-      title="GitHub"
-    >
-      <GitHubIcon className="h-5 w-5" />
-    </a>
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="4.5" />
+      <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
+    </svg>
   );
 }
 
-/** Language dropdown */
-function LangDropdown() {
-  const { i18n } = useTranslation();
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  const LANGS = [
-    { code: "en", label: "English" },
-    { code: "zh", label: "中文" },
-  ] as const;
-
-  const current = LANGS.find((l) => l.code === i18n.language) ?? LANGS[0];
-
-  useEffect(() => {
-    const handleClick = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, []);
-
+function MoonIcon({ className }: { className?: string }) {
   return (
-    <div ref={ref} className="relative hidden sm:block">
-      <button
-        type="button"
-        onClick={() => setOpen(!open)}
-        className="flex items-center gap-1.5 h-10 px-3 rounded-sm border border-strong-edge bg-elevated/40 font-mono text-[10px] uppercase tracking-[0.12em] text-meta transition-all duration-150 hover:text-strong hover:border-strong cursor-pointer"
-      >
-        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 21a9.004 9.004 0 008.716-6.747M12 21a9.004 9.004 0 01-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 017.843 4.582M12 3a8.997 8.997 0 00-7.843 4.582m15.686 0A11.953 11.953 0 0112 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0121 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0112 16.5a17.92 17.92 0 01-8.716-2.247m0 0A8.966 8.966 0 013 12c0-1.777.514-3.434 1.4-4.832" />
-        </svg>
-        {current.label}
-        <svg className={`h-3 w-3 transition-transform ${open ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-        </svg>
-      </button>
-      {open && (
-        <div className="absolute right-0 top-full mt-1 w-36 rounded glass border border-accent/20 card-impression py-1 z-50">
-          {LANGS.map((lang) => (
-            <button
-              key={lang.code}
-              type="button"
-              onClick={() => {
-                i18n.changeLanguage(lang.code);
-                setOpen(false);
-              }}
-              className={`w-full text-left px-4 py-2 font-text text-sm transition-colors cursor-pointer ${
-                lang.code === i18n.language
-                  ? "text-accent bg-accent/5"
-                  : "text-meta hover:text-strong hover:bg-elevated"
-              }`}
-            >
-              {lang.label}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M20.5 14A8.5 8.5 0 0 1 9.5 3.5a.75.75 0 0 0-.9-.9A9.5 9.5 0 1 0 21.4 14.9a.75.75 0 0 0-.9-.9Z" />
+    </svg>
   );
 }
 
-/** Mobile language toggle */
-function MobileLangToggle() {
-  const { i18n } = useTranslation();
-  const isZh = i18n.language === "zh";
-  const toggle = () => i18n.changeLanguage(isZh ? "en" : "zh");
-  return (
-    <button
-      type="button"
-      onClick={toggle}
-      className="flex w-full items-center gap-3 px-4 py-3 rounded text-meta hover:bg-elevated hover:text-strong transition-colors cursor-pointer"
-    >
-      <span className="font-display text-sm">{isZh ? "EN" : "中"}</span>
-      <span className="font-text text-sm font-medium">{isZh ? "English" : "中文"}</span>
-    </button>
-  );
-}
-
-/** Mobile theme toggle (full-width row) */
-function MobileThemeToggle() {
-  const { theme, toggle } = useThemeStore();
-  const { t } = useTranslation();
-  return (
-    <button
-      type="button"
-      onClick={toggle}
-      className="flex w-full items-center gap-3 px-4 py-3 rounded text-meta hover:bg-elevated hover:text-strong transition-colors cursor-pointer"
-    >
-      {theme === "dark" ? <SunIcon className="h-5 w-5" /> : <MoonIcon className="h-5 w-5" />}
-      <span className="font-text text-sm font-medium">
-        {theme === "dark" ? t("nav.lightMode") : t("nav.darkMode")}
-      </span>
-    </button>
-  );
-}
-
-/** Top-level nav items next to the logo */
 const NAV_ITEMS = [
   { i18nKey: "nav.home", path: "/", requiresAuth: false, exact: true },
   { i18nKey: "nav.registry", path: "/registry", requiresAuth: false, exact: true },
@@ -242,451 +75,400 @@ const NAV_ITEMS = [
   { i18nKey: "nav.docs", path: "/docs", requiresAuth: false },
 ] as const;
 
+export interface NavbarProps {
+  className?: string;
+}
+
+/**
+ * One row inside the desktop avatar dropdown. Opens an external URL
+ * (NyxID portal) in a new tab. Styled with Forge Workshop tokens.
+ */
+function DropdownExternal({ href, children }: { href: string; children: React.ReactNode }) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      role="menuitem"
+      className="flex items-center px-4 py-2.5 font-text text-sm text-body transition-colors hover:bg-elevated hover:text-accent"
+    >
+      {children}
+    </a>
+  );
+}
+
+function DropdownInternal({
+  to,
+  onClick,
+  children,
+}: {
+  to: string;
+  onClick?: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <Link
+      to={to}
+      onClick={onClick}
+      role="menuitem"
+      className="flex items-center px-4 py-2.5 font-text text-sm text-body transition-colors hover:bg-elevated hover:text-accent"
+    >
+      {children}
+    </Link>
+  );
+}
+
 export function Navbar({ className = "" }: NavbarProps) {
   const location = useLocation();
   const navigate = useNavigate();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const { theme, toggle: toggleTheme } = useThemeStore();
   const isAuthenticated = useIsAuthenticated();
   const user = useCurrentUser();
 
-  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
 
-  // Close user menu when clicking outside
+  // Close avatar dropdown on outside click + ESC
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
-        setIsUserMenuOpen(false);
+    if (!userMenuOpen) return;
+    const onClick = (e: MouseEvent) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
+        setUserMenuOpen(false);
       }
     };
-
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setUserMenuOpen(false);
+    };
+    document.addEventListener("mousedown", onClick);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onClick);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [userMenuOpen]);
 
   // Close menus on navigation
   useEffect(() => {
-    setIsUserMenuOpen(false);
-    setIsMobileMenuOpen(false);
+    setUserMenuOpen(false);
+    setMenuOpen(false);
   }, [location.pathname]);
 
   // Lock body scroll when mobile menu is open
   useEffect(() => {
-    if (isMobileMenuOpen) {
-      document.body.style.overflow = "hidden";
-    } else {
-      document.body.style.overflow = "";
-    }
+    document.body.style.overflow = menuOpen ? "hidden" : "";
     return () => {
       document.body.style.overflow = "";
     };
-  }, [isMobileMenuOpen]);
+  }, [menuOpen]);
 
   const handleLogout = async () => {
+    setUserMenuOpen(false);
+    setMenuOpen(false);
     await logActivity("logout");
     useAuthStore.getState().logout();
   };
 
+  const initial = (user?.displayName || user?.email || "?").charAt(0).toUpperCase();
+  const closeMenu = () => setMenuOpen(false);
+  const toggleLang = () => i18n.changeLanguage(i18n.language === "zh" ? "en" : "zh");
+
+  const navLinkClass = ({ isActive }: { isActive: boolean }) =>
+    `font-text text-[15px] transition-colors duration-150 ${
+      isActive ? "text-accent" : "text-body hover:text-accent"
+    }`;
+
   return (
-    <>
-      <nav
-        className={`glass sticky top-0 z-40 shrink-0 border-b border-accent/10 ${className}`}
-      >
-        <div className="flex h-24 items-center px-6 sm:px-10 lg:px-14">
-          {/* Logo */}
-          <div className="flex items-center shrink-0">
-            <Link to="/" className="flex items-center">
-              <Logo className="h-10 w-auto" />
-            </Link>
-          </div>
+    <nav
+      className={`sticky top-0 z-40 shrink-0 border-b border-subtle bg-page/95 backdrop-blur-md ${className}`}
+    >
+      <div className="relative mx-auto flex h-16 max-w-[1280px] items-center justify-between gap-3 px-6 sm:px-8">
+        {/* Logo */}
+        <Link to="/" className="flex items-center gap-2 text-strong" aria-label="Ornn home">
+          <Logo className="block h-7 w-auto" />
+        </Link>
 
-          <div className="flex-1" />
-
-          {/* Right section: Nav + GitHub + Lang + Theme + User menu */}
-          <div className="flex items-center gap-4 shrink-0">
-
-            {/* Nav links — pushed right, sits just to the left of the
-                GitHub icon with a small visual gap via `mr-2`. */}
-            <nav className="hidden sm:flex items-center gap-1 mr-2">
-              {NAV_ITEMS.map((item) => {
-                const isActive = "exact" in item && item.exact
-                  ? location.pathname === item.path
-                  : location.pathname.startsWith(item.path);
-                return (
-                  <button
-                    key={item.i18nKey}
-                    type="button"
-                    onClick={() => {
-                      if (item.requiresAuth && !isAuthenticated) {
-                        navigate("/login", { state: { from: item.path } });
-                      } else {
-                        navigate(item.path);
-                      }
-                    }}
-                    className={`
-                      relative px-4 py-2 rounded-sm font-text text-sm font-medium tracking-wide transition-colors duration-150 cursor-pointer
-                      ${isActive
-                        ? "text-accent"
-                        : "text-meta hover:text-strong"
-                      }
-                    `}
-                  >
-                    {t(item.i18nKey)}
-                    {isActive && (
-                      <motion.div
-                        layoutId="nav-indicator"
-                        className="absolute inset-x-2 -bottom-0.5 h-0.5 rounded-full bg-accent"
-                        transition={{ type: "spring", stiffness: 300, damping: 25 }}
-                      />
-                    )}
-                  </button>
-                );
-              })}
-            </nav>
-
-            {/* GitHub + Lang + Theme */}
-            <GitHubLink />
-            <LangDropdown />
-            <ThemeToggle />
-
-            {/* Notifications — authenticated users only. */}
-            {isAuthenticated && (
-              <div className="hidden sm:block">
-                <NotificationBell />
-              </div>
-            )}
-
-            {/* User Menu (Desktop) */}
-            {isAuthenticated && user && (
-              <div ref={userMenuRef} className="relative hidden sm:block">
-                <button
-                  type="button"
-                  onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
-                  className="flex items-center gap-2 rounded-full border border-accent/30 bg-card/50 p-1.5 pr-3 transition-all duration-200 hover:border-accent/60 cursor-pointer"
-                >
-                  {/* Avatar */}
-                  <div className="h-10 w-10 overflow-hidden rounded-full bg-elevated ring-2 ring-accent/20">
-                    {user.avatarUrl ? (
-                      <img
-                        src={user.avatarUrl}
-                        alt={user.displayName}
-                        className="h-full w-full object-cover"
-                      />
-                    ) : (
-                      <div className="flex h-full w-full items-center justify-center">
-                        <span className="font-display text-base text-accent">
-                          {user.displayName.charAt(0).toUpperCase()}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                  {/* Arrow */}
-                  <svg
-                    className={`h-4 w-4 text-meta transition-transform duration-200 ${
-                      isUserMenuOpen ? "rotate-180" : ""
-                    }`}
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M19 9l-7 7-7-7"
-                    />
-                  </svg>
-                </button>
-
-                {/* Dropdown Menu */}
-                <AnimatePresence>
-                  {isUserMenuOpen && (
-                    <motion.div
-                      initial={{ opacity: 0, y: -10, scale: 0.95 }}
-                      animate={{ opacity: 1, y: 0, scale: 1 }}
-                      exit={{ opacity: 0, y: -10, scale: 0.95 }}
-                      transition={{ duration: 0.15, ease: "easeOut" }}
-                      className="absolute right-0 top-full mt-2 w-56 overflow-hidden rounded glass border border-accent/20 card-impression"
-                    >
-                      {/* User Info */}
-                      <div className="border-b border-accent/10 px-4 py-3">
-                        <p className="font-text text-sm font-semibold text-strong truncate">
-                          {user.displayName}
-                        </p>
-                        <p className="font-mono text-xs text-meta truncate">
-                          {user.email}
-                        </p>
-                      </div>
-
-                      {/* Section 1 — caller-scoped (every signed-in user). */}
-                      <div className="py-1">
-                        <a
-                          href={`${getNyxIdUrl()}/settings`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center gap-3 px-4 py-2.5 font-text text-sm text-strong transition-colors hover:bg-accent/5"
-                        >
-                          <svg className="h-4 w-4 text-meta" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                          </svg>
-                          {t("nav.myProfile", "My Profile")}
-                        </a>
-                        <a
-                          href={`${getNyxIdUrl()}/services`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center gap-3 px-4 py-2.5 font-text text-sm text-strong transition-colors hover:bg-accent/5"
-                        >
-                          <svg className="h-4 w-4 text-meta" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2" />
-                          </svg>
-                          {t("nav.myServices", "My NyxID Services")}
-                        </a>
-                        <a
-                          href={`${getNyxIdUrl()}/orgs`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center gap-3 px-4 py-2.5 font-text text-sm text-strong transition-colors hover:bg-accent/5"
-                        >
-                          <svg className="h-4 w-4 text-meta" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                          </svg>
-                          {t("nav.myOrgs", "My Organizations")}
-                        </a>
-                        <a
-                          href={getNyxIdUrl()}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center gap-3 px-4 py-2.5 font-text text-sm text-strong transition-colors hover:bg-accent/5"
-                        >
-                          <NyxIdIcon className="h-4 w-4 text-meta" />
-                          {t("nav.goToNyxId")}
-                        </a>
-                      </div>
-
-                      {/* Section 2 — ornn platform admins only. Rendered as a
-                          separate bordered block so the visual grouping
-                          signals "this group requires elevated access". */}
-                      {isAdmin(user) && (
-                        <div className="border-t border-accent/10 py-1">
-                          <Link
-                            to="/admin"
-                            className="flex items-center gap-3 px-4 py-2.5 font-text text-sm text-strong transition-colors hover:bg-accent/5"
-                          >
-                            <AdminIcon className="h-4 w-4 text-meta" />
-                            {t("nav.adminPanel")}
-                          </Link>
-                          <a
-                            href={`${getNyxIdUrl()}/admin/services`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex items-center gap-3 px-4 py-2.5 font-text text-sm text-strong transition-colors hover:bg-accent/5"
-                          >
-                            <svg className="h-4 w-4 text-meta" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                            </svg>
-                            {t("nav.adminServices", "Admin NyxID Services")}
-                          </a>
-                        </div>
-                      )}
-
-                      {/* Section 3 — Sign out */}
-                      <div className="border-t border-accent/10 py-1">
-                        <button
-                          type="button"
-                          onClick={handleLogout}
-                          className="flex w-full items-center gap-3 px-4 py-2.5 font-text text-sm text-danger transition-colors hover:bg-danger/10 cursor-pointer"
-                        >
-                          <LogoutIcon className="h-4 w-4" />
-                          {t("nav.signOut")}
-                        </button>
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
-            )}
-
-            {/* Login button when not authenticated */}
-            {!isAuthenticated && (
-              <Link
-                to="/login"
-                className="hidden sm:block rounded px-5 py-2.5 border border-accent/50 font-text text-base font-semibold text-accent transition-all duration-200 hover:border-accent"
-              >
-                {t("nav.signIn")}
-              </Link>
-            )}
-
-            {/* Mobile menu button */}
-            <button
-              type="button"
-              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-              className="lg:hidden flex items-center justify-center h-10 w-10 rounded border border-accent/30 bg-card/50 text-meta transition-colors hover:text-accent hover:border-accent/50 cursor-pointer"
-              aria-label="Toggle mobile menu"
+        {/* Center nav (md+) */}
+        <div className="absolute left-1/2 top-1/2 hidden -translate-x-1/2 -translate-y-1/2 gap-7 md:flex">
+          {NAV_ITEMS.map((item) => (
+            <NavLink
+              key={item.i18nKey}
+              to={item.path}
+              end={"exact" in item ? item.exact : false}
+              onClick={(e) => {
+                if (item.requiresAuth && !isAuthenticated) {
+                  e.preventDefault();
+                  navigate("/login", { state: { from: item.path } });
+                }
+              }}
+              className={navLinkClass}
             >
-              {isMobileMenuOpen ? (
-                <CloseIcon className="h-5 w-5" />
-              ) : (
-                <MenuIcon className="h-5 w-5" />
-              )}
-            </button>
-          </div>
+              {t(item.i18nKey)}
+            </NavLink>
+          ))}
         </div>
-      </nav>
 
-      {/* Mobile Menu Overlay */}
-      <AnimatePresence>
-        {isMobileMenuOpen && (
-          <>
-            {/* Backdrop */}
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.2 }}
-              className="fixed inset-0 z-30 bg-black/60 backdrop-blur-sm lg:hidden"
-              onClick={() => setIsMobileMenuOpen(false)}
-            />
+        {/* Right cluster (md+) */}
+        <div className="hidden items-center gap-3 md:flex">
+          <a
+            href="https://github.com/ChronoAIProject/Ornn"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="ornn on GitHub"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-sm border border-strong-edge bg-transparent text-strong transition-colors duration-200 hover:border-accent hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          >
+            <GitHubIcon className="h-4 w-4" />
+          </a>
+          <button
+            type="button"
+            onClick={toggleLang}
+            aria-label="Toggle language"
+            className="inline-flex h-9 min-w-[2.25rem] items-center justify-center rounded-sm border border-strong-edge bg-transparent px-2 font-mono text-[10px] uppercase tracking-[0.14em] text-strong transition-colors duration-200 hover:border-accent hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          >
+            {i18n.language === "zh" ? "中" : "EN"}
+          </button>
+          <button
+            type="button"
+            onClick={toggleTheme}
+            aria-label="Toggle theme"
+            aria-pressed={theme === "light"}
+            className="inline-flex h-9 w-9 items-center justify-center rounded-sm border border-strong-edge bg-transparent text-strong transition-colors duration-200 hover:border-accent hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          >
+            {theme === "light" ? <MoonIcon className="h-4 w-4" /> : <SunIcon className="h-4 w-4" />}
+          </button>
 
-            {/* Mobile Menu Panel */}
-            <motion.div
-              initial={{ x: "100%" }}
-              animate={{ x: 0 }}
-              exit={{ x: "100%" }}
-              transition={{ type: "spring", stiffness: 300, damping: 30 }}
-              className="fixed top-20 right-0 bottom-0 z-30 w-72 glass border-l border-accent/10 overflow-y-auto lg:hidden"
-            >
-              {/* User section (mobile) */}
-              {isAuthenticated && user && (
-                <div className="border-b border-accent/10 p-4">
-                  <div className="flex items-center gap-3">
-                    <div className="h-12 w-12 overflow-hidden rounded-full bg-elevated ring-2 ring-accent/20">
-                      {user.avatarUrl ? (
-                        <img
-                          src={user.avatarUrl}
-                          alt={user.displayName}
-                          className="h-full w-full object-cover"
-                        />
-                      ) : (
-                        <div className="flex h-full w-full items-center justify-center">
-                          <span className="font-display text-lg text-accent">
-                            {user.displayName.charAt(0).toUpperCase()}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-text text-sm font-semibold text-strong truncate">
-                        {user.displayName}
-                      </p>
-                      <p className="font-mono text-xs text-meta truncate">
-                        {user.email}
-                      </p>
-                    </div>
+          {isAuthenticated && <NotificationBell />}
+
+          {isAuthenticated && user ? (
+            <div ref={userMenuRef} className="relative">
+              <button
+                type="button"
+                onClick={() => setUserMenuOpen((o) => !o)}
+                aria-haspopup="menu"
+                aria-expanded={userMenuOpen}
+                aria-label="Account menu"
+                className="flex items-center gap-2 rounded-sm border border-strong-edge bg-transparent p-1 pr-2.5 transition-colors duration-200 hover:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+              >
+                <span className="flex h-7 w-7 items-center justify-center overflow-hidden rounded-full bg-page text-accent">
+                  {user.avatarUrl ? (
+                    <img src={user.avatarUrl} alt="" className="h-full w-full object-cover" />
+                  ) : (
+                    <span className="font-display text-sm font-semibold">{initial}</span>
+                  )}
+                </span>
+                <svg
+                  className={`h-3 w-3 text-meta transition-transform duration-200 ${userMenuOpen ? "rotate-180" : ""}`}
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  aria-hidden="true"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+
+              {userMenuOpen && (
+                <div
+                  role="menu"
+                  className="card-impression absolute right-0 top-full mt-2 w-60 overflow-hidden rounded-sm border border-subtle bg-page"
+                >
+                  <div className="border-b border-subtle px-4 py-3">
+                    <p className="truncate font-display text-sm font-semibold text-strong">
+                      {user.displayName}
+                    </p>
+                    <p className="truncate font-mono text-[11px] text-meta">{user.email}</p>
                   </div>
-                </div>
-              )}
 
-              {/* Navigation Links */}
-              <nav className="p-2 space-y-1">
-                {NAV_ITEMS.map((item) => {
-                  const isActive = "exact" in item && item.exact
-                    ? location.pathname === item.path
-                    : location.pathname.startsWith(item.path);
-                  return (
-                    <button
-                      key={item.i18nKey}
-                      type="button"
-                      onClick={() => {
-                        if (item.requiresAuth && !isAuthenticated) {
-                          navigate("/login", { state: { from: item.path } });
-                        } else {
-                          navigate(item.path);
-                        }
-                        setIsMobileMenuOpen(false);
-                      }}
-                      className={`
-                        flex w-full items-center gap-3 px-4 py-3 rounded transition-all cursor-pointer
-                        ${isActive
-                          ? "text-accent bg-accent/10 border border-accent/30"
-                          : "text-meta hover:bg-elevated hover:text-strong"
-                        }
-                      `}
-                    >
-                      <span className="font-text text-sm font-medium">{t(item.i18nKey)}</span>
-                    </button>
-                  );
-                })}
-              </nav>
+                  <div className="py-1">
+                    <DropdownExternal href={`${getNyxIdUrl()}/settings`}>
+                      {t("nav.myProfile", "My Profile")}
+                    </DropdownExternal>
+                    <DropdownExternal href={`${getNyxIdUrl()}/services`}>
+                      {t("nav.myServices", "My NyxID Services")}
+                    </DropdownExternal>
+                    <DropdownExternal href={`${getNyxIdUrl()}/orgs`}>
+                      {t("nav.myOrgs", "My Organizations")}
+                    </DropdownExternal>
+                    <DropdownExternal href={getNyxIdUrl()}>
+                      {t("nav.goToNyxId")}
+                    </DropdownExternal>
+                  </div>
 
-              {/* Bottom section */}
-              <div className="absolute bottom-0 left-0 right-0 border-t border-accent/10 p-2 bg-page/80">
-                {/* Mobile lang + theme toggles */}
-                <MobileLangToggle />
-                <MobileThemeToggle />
+                  {isAdmin(user) && (
+                    <div className="border-t border-subtle py-1">
+                      <DropdownInternal to="/admin" onClick={() => setUserMenuOpen(false)}>
+                        {t("nav.adminPanel")}
+                      </DropdownInternal>
+                      <DropdownExternal href={`${getNyxIdUrl()}/admin/services`}>
+                        {t("nav.adminServices", "Admin NyxID Services")}
+                      </DropdownExternal>
+                    </div>
+                  )}
 
-                {isAuthenticated && user ? (
-                  <>
-                    {isAdmin(user) && (
-                      <Link
-                        to="/admin"
-                        className="flex items-center gap-3 px-4 py-3 rounded text-meta hover:bg-elevated hover:text-strong transition-colors"
-                      >
-                        <AdminIcon className="h-5 w-5" />
-                        <span className="font-text text-sm font-medium">{t("nav.adminPanel")}</span>
-                      </Link>
-                    )}
-
-                    <Link
-                      to="/services/my"
-                      onClick={() => setIsMobileMenuOpen(false)}
-                      className="flex items-center gap-3 px-4 py-3 rounded text-meta hover:bg-elevated hover:text-strong transition-colors"
-                    >
-                      <span className="font-text text-sm font-medium">My NyxID Services</span>
-                    </Link>
-                    {isAdmin(user) && (
-                      <Link
-                        to="/services/admin"
-                        onClick={() => setIsMobileMenuOpen(false)}
-                        className="flex items-center gap-3 px-4 py-3 rounded text-meta hover:bg-elevated hover:text-strong transition-colors"
-                      >
-                        <span className="font-text text-sm font-medium">Admin NyxID Services</span>
-                      </Link>
-                    )}
-                    <a
-                      href={getNyxIdUrl()}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-3 px-4 py-3 rounded text-meta hover:bg-elevated hover:text-strong transition-colors"
-                    >
-                      <NyxIdIcon className="h-5 w-5" />
-                      <span className="font-text text-sm font-medium">{t("nav.goToNyxId")}</span>
-                    </a>
-
+                  <div className="border-t border-subtle py-1">
                     <button
                       type="button"
                       onClick={handleLogout}
-                      className="flex w-full items-center gap-3 px-4 py-3 rounded text-danger hover:bg-danger/10 transition-colors cursor-pointer"
+                      className="flex w-full items-center px-4 py-2.5 text-left font-mono text-[11px] uppercase tracking-[0.14em] text-accent transition-colors hover:bg-elevated"
                     >
-                      <LogoutIcon className="h-5 w-5" />
-                      <span className="font-text text-sm font-medium">{t("nav.signOut")}</span>
+                      {t("nav.signOut")}
                     </button>
-                  </>
-                ) : (
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <Link
+              to="/login"
+              className="cta-letterpress cta-letterpress--ghost rounded-sm border border-strong-edge bg-card px-4 py-2 font-mono text-[11px] font-semibold uppercase tracking-[0.14em] text-strong hover:border-accent"
+            >
+              {t("nav.signIn")}
+            </Link>
+          )}
+        </div>
+
+        {/* Mobile hamburger */}
+        <button
+          type="button"
+          onClick={() => setMenuOpen((o) => !o)}
+          aria-label={menuOpen ? "Close menu" : "Open menu"}
+          aria-expanded={menuOpen}
+          aria-controls="app-mobile-nav-panel"
+          data-open={menuOpen}
+          className="group inline-flex h-9 w-9 items-center justify-center rounded-sm border border-strong-edge bg-transparent text-strong transition-colors duration-200 hover:border-accent hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent md:hidden"
+        >
+          <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+            <line x1="3" y1="6" x2="21" y2="6" className="origin-center [transform-box:fill-box] transition-[translate,rotate] duration-300 ease-out group-data-[open=true]:translate-y-[6px] group-data-[open=true]:rotate-45" />
+            <line x1="3" y1="12" x2="21" y2="12" className="transition-opacity duration-150 group-data-[open=true]:opacity-0" />
+            <line x1="3" y1="18" x2="21" y2="18" className="origin-center [transform-box:fill-box] transition-[translate,rotate] duration-300 ease-out group-data-[open=true]:-translate-y-[6px] group-data-[open=true]:-rotate-45" />
+          </svg>
+        </button>
+      </div>
+
+      {/* Mobile dropdown panel — slide-down via grid-rows trick. Solid bg-page
+          so it reads as a discrete surface, not a frosted overlay. */}
+      <div
+        id="app-mobile-nav-panel"
+        data-open={menuOpen}
+        aria-hidden={!menuOpen}
+        className="absolute left-0 right-0 top-full grid grid-rows-[0fr] bg-page transition-[grid-template-rows,border-color] duration-300 ease-out border-t border-transparent data-[open=true]:grid-rows-[1fr] data-[open=true]:border-subtle data-[open=true]:card-impression md:hidden"
+      >
+        <div className="overflow-hidden">
+          <div className="mx-auto flex max-w-[1280px] flex-col px-6 py-3 sm:px-8">
+            {NAV_ITEMS.map((item) => (
+              <NavLink
+                key={item.i18nKey}
+                to={item.path}
+                end={"exact" in item ? item.exact : false}
+                onClick={(e) => {
+                  if (item.requiresAuth && !isAuthenticated) {
+                    e.preventDefault();
+                    navigate("/login", { state: { from: item.path } });
+                  }
+                  closeMenu();
+                }}
+                tabIndex={menuOpen ? 0 : -1}
+                className={({ isActive }) =>
+                  `border-b border-subtle py-3 font-text text-[16px] transition-colors ${
+                    isActive ? "text-accent" : "text-body hover:text-accent"
+                  }`
+                }
+              >
+                {t(item.i18nKey)}
+              </NavLink>
+            ))}
+
+            <a
+              href="https://github.com/ChronoAIProject/Ornn"
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={closeMenu}
+              tabIndex={menuOpen ? 0 : -1}
+              className="flex items-center gap-2 border-b border-subtle py-3 font-text text-[16px] text-body transition-colors hover:text-accent"
+            >
+              <GitHubIcon className="h-[18px] w-[18px]" />
+              GitHub
+            </a>
+            <button
+              type="button"
+              onClick={toggleLang}
+              tabIndex={menuOpen ? 0 : -1}
+              className="flex items-center justify-between border-b border-subtle py-3 font-mono text-[12px] uppercase tracking-[0.14em] text-body transition-colors hover:text-accent"
+            >
+              <span>Language</span>
+              <span className="text-accent">{i18n.language === "zh" ? "中文" : "English"}</span>
+            </button>
+            <button
+              type="button"
+              onClick={toggleTheme}
+              tabIndex={menuOpen ? 0 : -1}
+              className="flex items-center justify-between border-b border-subtle py-3 font-mono text-[12px] uppercase tracking-[0.14em] text-body transition-colors hover:text-accent"
+            >
+              <span>Theme</span>
+              <span className="text-accent">{theme === "light" ? "Light" : "Dark"}</span>
+            </button>
+
+            {isAuthenticated && user ? (
+              <>
+                <div className="flex items-center gap-3 border-b border-subtle py-3">
+                  <span className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-full bg-elevated text-accent">
+                    {user.avatarUrl ? (
+                      <img src={user.avatarUrl} alt="" className="h-full w-full object-cover" />
+                    ) : (
+                      <span className="font-display text-base font-semibold">{initial}</span>
+                    )}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-display text-sm font-semibold text-strong">
+                      {user.displayName}
+                    </p>
+                    <p className="truncate font-mono text-[11px] text-meta">{user.email}</p>
+                  </div>
+                </div>
+                <a
+                  href={`${getNyxIdUrl()}/settings`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={closeMenu}
+                  tabIndex={menuOpen ? 0 : -1}
+                  className="border-b border-subtle py-3 font-text text-[16px] text-body transition-colors hover:text-accent"
+                >
+                  {t("nav.myProfile", "My Profile")}
+                </a>
+                {isAdmin(user) && (
                   <Link
-                    to="/login"
-                    className="flex items-center justify-center gap-2 px-4 py-3 rounded border border-accent/50 text-accent font-text text-sm font-semibold transition-all hover:border-accent"
+                    to="/admin"
+                    onClick={closeMenu}
+                    tabIndex={menuOpen ? 0 : -1}
+                    className="border-b border-subtle py-3 font-text text-[16px] text-body transition-colors hover:text-accent"
                   >
-                    {t("nav.signIn")}
+                    {t("nav.adminPanel")}
                   </Link>
                 )}
-              </div>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
-    </>
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  tabIndex={menuOpen ? 0 : -1}
+                  className="py-3 text-left font-mono text-[12px] uppercase tracking-[0.14em] text-accent transition-colors hover:text-accent-muted"
+                >
+                  {t("nav.signOut")}
+                </button>
+              </>
+            ) : (
+              <Link
+                to="/login"
+                onClick={closeMenu}
+                tabIndex={menuOpen ? 0 : -1}
+                className="py-3 font-mono text-[12px] uppercase tracking-[0.14em] text-strong transition-colors hover:text-accent"
+              >
+                {t("nav.signIn")} →
+              </Link>
+            )}
+          </div>
+        </div>
+      </div>
+    </nav>
   );
 }

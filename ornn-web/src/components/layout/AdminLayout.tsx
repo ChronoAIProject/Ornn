@@ -111,13 +111,13 @@ export function AdminLayout() {
   return (
     <div className="bg-grid min-h-screen bg-page">
       {/* Top Bar */}
-      <header className="fixed top-0 z-40 w-full border-b border-accent/10 bg-page/80 backdrop-blur-md">
-        <div className="flex h-28 items-center justify-between px-4 lg:px-8">
+      <header className="fixed top-0 z-40 w-full border-b border-subtle bg-page/95 backdrop-blur-md">
+        <div className="flex h-16 items-center justify-between px-4 lg:px-8">
           {/* Logo / Back Link */}
           <NavLink to="/" className="flex items-center gap-3">
-            <Logo className="h-8 w-auto" />
-            <span className="font-display text-lg tracking-wider text-accent-support">
-              Admin Panel
+            <Logo className="h-7 w-auto" />
+            <span className="font-display text-sm font-semibold uppercase tracking-[0.16em] text-accent">
+              Admin
             </span>
           </NavLink>
 
@@ -145,7 +145,7 @@ export function AdminLayout() {
           {/* Back to Main */}
           <NavLink
             to="/"
-            className="flex items-center gap-2 font-text text-sm text-meta hover:text-accent transition-colors"
+            className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.14em] text-meta transition-colors hover:text-accent"
           >
             <svg
               className="h-4 w-4"
@@ -165,9 +165,9 @@ export function AdminLayout() {
         </div>
       </header>
 
-      <div className="flex pt-28">
+      <div className="flex pt-16">
         {/* Sidebar */}
-        <aside className="fixed left-0 top-28 z-30 hidden h-[calc(100vh-7rem)] w-60 border-r border-accent/10 bg-page lg:block">
+        <aside className="fixed left-0 top-16 z-30 hidden h-[calc(100vh-4rem)] w-60 border-r border-subtle bg-page lg:block">
           <nav className="flex flex-col gap-1 p-4">
             {NAV_ITEMS.map((item) => (
               <NavLink
@@ -175,10 +175,10 @@ export function AdminLayout() {
                 to={item.path}
                 end={item.path === "/admin"}
                 className={({ isActive }) =>
-                  `flex items-center gap-3 rounded px-4 py-2.5 font-text text-sm transition-all duration-200 ${
+                  `flex items-center gap-3 rounded-sm px-4 py-2.5 font-text text-sm transition-colors duration-150 ${
                     isActive
-                      ? "bg-accent-support/10 text-accent-support border border-accent-support/30"
-                      : "text-meta hover:bg-elevated hover:text-strong border border-transparent"
+                      ? "border border-accent/30 bg-accent/10 text-accent"
+                      : "border border-transparent text-meta hover:bg-elevated hover:text-strong"
                   }`
                 }
               >
@@ -190,16 +190,16 @@ export function AdminLayout() {
         </aside>
 
         {/* Mobile Navigation */}
-        <nav className="fixed bottom-0 left-0 right-0 z-40 flex border-t border-accent/10 bg-page/95 backdrop-blur-md lg:hidden">
+        <nav className="fixed bottom-0 left-0 right-0 z-40 flex border-t border-subtle bg-page/95 backdrop-blur-md lg:hidden">
           {NAV_ITEMS.map((item) => (
             <NavLink
               key={item.path}
               to={item.path}
               end={item.path === "/admin"}
               className={({ isActive }) =>
-                `flex flex-1 flex-col items-center gap-1 py-3 text-xs transition-colors ${
+                `flex flex-1 flex-col items-center gap-1 py-3 font-mono text-[10px] uppercase tracking-[0.12em] transition-colors ${
                   isActive
-                    ? "text-accent-support"
+                    ? "text-accent"
                     : "text-meta hover:text-strong"
                 }`
               }
