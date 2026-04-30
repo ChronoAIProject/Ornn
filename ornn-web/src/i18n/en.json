@@ -54,7 +54,8 @@
     "docs": "docs",
     "admin": "admin",
     "categories": "categories",
-    "tags": "tags"
+    "tags": "tags",
+    "auditHistory": "Audit history"
   },
   "explore": {
     "systemSkills": "System Skills",
@@ -178,7 +179,19 @@
     "browseVersions": "Browse all versions",
     "hideVersions": "Hide all versions",
     "dangerExplain": "Permanently delete this skill and every version. This cannot be undone.",
-    "deleteSkill": "Delete skill"
+    "deleteSkill": "Delete skill",
+    "metaCategory": "Category",
+    "metaTags": "Tags",
+    "metaSource": "Source",
+    "metaUpdated": "Updated",
+    "metaGuid": "GUID",
+    "metaLicense": "License",
+    "metaCompatibility": "Compatibility",
+    "cardMetadata": "Metadata",
+    "cardAdvanced": "Advanced options",
+    "guidCopied": "GUID copied",
+    "auditRunning": "Audit in progress",
+    "auditRunningHint": "Scoring against the audit engine — this usually takes 30–60 seconds."
   },
   "editSkill": {
     "backToSkill": "Back to {{name}}",
@@ -228,7 +241,8 @@
     "statusFailed": "Failed",
     "runningHint": "Scoring against the audit engine…",
     "rerun": "Rerun",
-    "runFirst": "Run audit"
+    "runFirst": "Run audit",
+    "triggeredByUnknown": "Unknown user"
   },
   "analytics": {
     "heading": "Usage analytics",

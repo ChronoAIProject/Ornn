@@ -6,7 +6,7 @@
  * @module pages/SkillAuditHistoryPage
  */
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams, Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { PageTransition } from "@/components/layout/PageTransition";
@@ -15,12 +15,20 @@ import { Button } from "@/components/ui/Button";
 import { useSkill } from "@/hooks/useSkills";
 import { useStartAudit, useSkillAuditHistory } from "@/hooks/useAudit";
 import { isAdmin, useAuthStore } from "@/stores/authStore";
+import { resolveUsers, type UserDirectoryEntry } from "@/services/usersApi";
 import type {
   AuditFinding,
   AuditRecord,
   AuditScore,
   AuditVerdict,
 } from "@/types/audit";
+
+/**
+ * Map of `user_id → display label` used to resolve `record.triggeredBy`
+ * (a NyxID UUID) to a human label on the page. Values fall through to
+ * the raw UUID when the user is not in Ornn's directory yet.
+ */
+type UserLabelMap = Record<string, string>;
 
 const VERDICT_STYLE: Record<
   AuditVerdict,
@@ -161,7 +169,15 @@ function FailedRow({ record }: { record: AuditRecord }) {
   );
 }
 
-function HistoryRow({ record, defaultOpen }: { record: AuditRecord; defaultOpen: boolean }) {
+function HistoryRow({
+  record,
+  defaultOpen,
+  userLabels,
+}: {
+  record: AuditRecord;
+  defaultOpen: boolean;
+  userLabels: UserLabelMap;
+}) {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(defaultOpen);
   if (record.status === "running") return <RunningRow record={record} />;
@@ -246,7 +262,9 @@ function HistoryRow({ record, defaultOpen }: { record: AuditRecord; defaultOpen:
             {t("audit.model", "Model")}: <span className="font-mono">{record.model}</span>
             {" · "}
             {t("audit.triggeredBy", "Triggered by")}:{" "}
-            <span className="font-mono">{record.triggeredBy}</span>
+            <span className="text-strong">
+              {userLabels[record.triggeredBy] ?? record.triggeredBy}
+            </span>
           </p>
         </div>
       )}
@@ -269,6 +287,45 @@ export function SkillAuditHistoryPage() {
     version: versionFilter,
   });
   const startAuditMutation = useStartAudit();
+
+  /**
+   * Batch-resolve every distinct `triggeredBy` user_id to a human label
+   * via Ornn's activity directory. Re-runs whenever the history rows
+   * surface a new id (history poll, version filter change, …). Unknown
+   * ids fall through and the row renders the raw UUID — better than
+   * showing nothing.
+   */
+  const triggererIds = useMemo(() => {
+    if (!items) return [] as string[];
+    const seen = new Set<string>();
+    for (const r of items) {
+      if (r.triggeredBy) seen.add(r.triggeredBy);
+    }
+    return [...seen];
+  }, [items]);
+
+  const [userLabels, setUserLabels] = useState<UserLabelMap>({});
+  useEffect(() => {
+    if (triggererIds.length === 0) return;
+    const missing = triggererIds.filter((id) => userLabels[id] === undefined);
+    if (missing.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      const resolved: UserDirectoryEntry[] = await resolveUsers(missing).catch(() => []);
+      if (cancelled) return;
+      setUserLabels((prev) => {
+        const next = { ...prev };
+        for (const id of missing) {
+          const hit = resolved.find((r) => r.userId === id);
+          next[id] = hit ? hit.displayName || hit.email || id : id;
+        }
+        return next;
+      });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [triggererIds, userLabels]);
 
   if (!idOrName) return null;
 
@@ -342,7 +399,12 @@ export function SkillAuditHistoryPage() {
           ) : (
             <div className="space-y-2">
               {items.map((rec, idx) => (
-                <HistoryRow key={rec._id} record={rec} defaultOpen={idx === 0} />
+                <HistoryRow
+                  key={rec._id}
+                  record={rec}
+                  defaultOpen={idx === 0}
+                  userLabels={userLabels}
+                />
               ))}
             </div>
           )}

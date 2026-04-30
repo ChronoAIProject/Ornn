@@ -61,29 +61,27 @@ export function PermissionsModal({ isOpen, onClose, skill }: PermissionsModalPro
   const [userInputFocused, setUserInputFocused] = useState(false);
   const userInputRef = useRef<HTMLInputElement>(null);
 
-  // Reset form whenever the modal re-opens on a different skill version.
+  // Reset form + resolve saved user_ids into email/displayName whenever
+  // the modal opens or the underlying skill ACLs change. The two used
+  // to be split across separate effects, but the resolve effect's
+  // closure captured `sharedUsers` from the render BEFORE the reset
+  // effect ran — so the resolved labels never landed on a re-open.
+  // Folding both into one effect closes that race: we always resolve
+  // against `skill.sharedWithUsers` directly, not the post-reset state.
   useEffect(() => {
     if (!isOpen) return;
     setIsPublic(!skill.isPrivate);
     setSharedOrgIds(skill.sharedWithOrgs);
     setUserQuery("");
+    const ids = skill.sharedWithUsers;
     setSharedUsers(
-      skill.sharedWithUsers.map((id) => ({
-        userId: id,
-        email: "",
-        displayName: id,
-      })),
+      ids.map((id) => ({ userId: id, email: "", displayName: id })),
     );
-  }, [isOpen, skill]);
 
-  // Resolve saved user_ids into email/displayName so the chip list
-  // renders something human. Runs once per modal open.
-  useEffect(() => {
-    const needResolve = sharedUsers.filter((u) => !u.email).map((u) => u.userId);
-    if (needResolve.length === 0) return;
+    if (ids.length === 0) return;
     let cancelled = false;
     (async () => {
-      const resolved = await resolveUsers(needResolve).catch(() => []);
+      const resolved = await resolveUsers(ids).catch(() => []);
       if (cancelled || resolved.length === 0) return;
       const byId = new Map(resolved.map((r) => [r.userId, r]));
       setSharedUsers((prev) =>
@@ -93,8 +91,7 @@ export function PermissionsModal({ isOpen, onClose, skill }: PermissionsModalPro
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen]);
+  }, [isOpen, skill]);
 
   const debouncedQuery = useDebouncedValue(userQuery.trim(), 200);
   const shouldSearch = !isPublic && (userInputFocused || debouncedQuery.length > 0);

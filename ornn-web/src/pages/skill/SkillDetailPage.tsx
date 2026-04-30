@@ -28,7 +28,7 @@ import { UsagePullsCard } from "@/components/skill/UsagePullsCard";
 import { SkillHeroStrip } from "@/components/skill/SkillHeroStrip";
 import { BackLink } from "@/components/layout/BackLink";
 import { useRefreshSkillFromSource } from "@/hooks/useSkills";
-import { useStartAudit, useAuditSummaryByVersion } from "@/hooks/useAudit";
+import { useStartAudit, useAuditSummaryByVersion, useSkillAuditHistory } from "@/hooks/useAudit";
 import { useSkillPulls } from "@/hooks/useAnalytics";
 import { SkillVersionList } from "@/components/skill/SkillVersionList";
 import { PermissionsModal } from "@/components/skill/PermissionsModal";
@@ -89,6 +89,12 @@ export function SkillDetailPage() {
   const deprecationMutation = useSetVersionDeprecation(idOrName ?? "");
   const deleteVersionMutation = useDeleteSkillVersion(idOrName ?? "");
   const { data: auditSummaryByVersion } = useAuditSummaryByVersion(idOrName);
+  // History for the version currently being viewed, so the audit card
+  // can detect an in-flight (status: running) audit and show a loading
+  // state. The hook polls every 3s while any row is running.
+  const { data: versionAuditHistory } = useSkillAuditHistory(idOrName, {
+    version: versionParam,
+  });
   const refreshMutation = useRefreshSkillFromSource(idOrName ?? "");
   const startAuditMutation = useStartAudit();
 
@@ -386,6 +392,12 @@ export function SkillDetailPage() {
   }
 
   const versionAudit = auditSummaryByVersion?.[skill.version];
+  // Detect an in-flight audit on the current version so the right-rail
+  // Audit card can swap to a "running" loading tile. The history hook
+  // already polls every 3s while any row is running, so the UI flips
+  // back to the verdict tile automatically once the LLM finishes.
+  const versionAuditRunning =
+    versionAuditHistory?.some((r) => r.status === "running") ?? false;
   const ownerDisplayName =
     isOwner && user?.displayName
       ? user.displayName
@@ -560,15 +572,13 @@ export function SkillDetailPage() {
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></svg>
                 {t("skillDetail.cardAudit", "Audit")}
               </h3>
-              <AuditVerdictPill audit={versionAudit} />
+              <AuditVerdictPill audit={versionAudit} running={versionAuditRunning} />
               <p className="font-mono text-[11px] leading-relaxed tracking-wide text-meta">
-                {versionAudit?.completedAt ? (
-                  <>
-                    {t("skillDetail.auditLast", "Last audited {{date}}", { date: formatDateSGT(versionAudit.completedAt) })}
-                  </>
-                ) : (
-                  t("skillDetail.auditNoneYet", "Not audited yet for this version.")
-                )}
+                {versionAuditRunning
+                  ? t("skillDetail.auditRunningHint", "Scoring against the audit engine — this usually takes 30–60 seconds.")
+                  : versionAudit?.completedAt
+                    ? t("skillDetail.auditLast", "Last audited {{date}}", { date: formatDateSGT(versionAudit.completedAt) })
+                    : t("skillDetail.auditNoneYet", "Not audited yet for this version.")}
               </p>
               <div className="mt-3.5 flex flex-col gap-2">
                 {(isOwner || isAdminUser) && (
@@ -1058,8 +1068,21 @@ export function SkillDetailPage() {
 }
 
 /** Audit verdict tile rendered inside the right-rail Audit card. */
-function AuditVerdictPill({ audit }: { audit?: AuditRecord }) {
+function AuditVerdictPill({ audit, running }: { audit?: AuditRecord; running?: boolean }) {
   const { t } = useTranslation();
+  // In-flight audit takes precedence over the cached completed result —
+  // even if there's a previous completed verdict on this version, surface
+  // the spinner while a new run is scoring.
+  if (running) {
+    return (
+      <div className="mb-3.5 flex items-center gap-3 rounded-sm border border-accent/30 bg-accent/5 p-3 font-mono text-[11px] uppercase tracking-wider text-accent">
+        <div className="flex h-8 w-8 items-center justify-center rounded-sm border border-accent/30" aria-hidden>
+          <span className="h-4 w-4 animate-spin rounded-full border-2 border-accent/30 border-t-accent" />
+        </div>
+        <span>{t("skillDetail.auditRunning", "Audit in progress")}</span>
+      </div>
+    );
+  }
   if (!audit || audit.status !== "completed") {
     return (
       <div className="mb-3.5 flex items-center gap-3 rounded-sm border border-strong-edge bg-elevated/60 p-3 font-mono text-[11px] uppercase tracking-wider text-meta">

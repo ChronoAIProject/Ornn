@@ -54,7 +54,8 @@
     "docs": "文档",
     "admin": "管理",
     "categories": "分类",
-    "tags": "标签"
+    "tags": "标签",
+    "auditHistory": "审计历史"
   },
   "explore": {
     "systemSkills": "系统技能",
@@ -178,7 +179,19 @@
     "browseVersions": "浏览全部版本",
     "hideVersions": "收起版本列表",
     "dangerExplain": "彻底删除此技能及其所有版本。此操作无法撤销。",
-    "deleteSkill": "删除技能"
+    "deleteSkill": "删除技能",
+    "metaCategory": "分类",
+    "metaTags": "标签",
+    "metaSource": "来源",
+    "metaUpdated": "更新于",
+    "metaGuid": "GUID",
+    "metaLicense": "许可证",
+    "metaCompatibility": "兼容性",
+    "cardMetadata": "元数据",
+    "cardAdvanced": "高级选项",
+    "guidCopied": "GUID 已复制",
+    "auditRunning": "审计进行中",
+    "auditRunningHint": "正在用审计引擎评分 — 通常需要 30–60 秒。"
   },
   "editSkill": {
     "backToSkill": "返回 {{name}}",
@@ -228,7 +241,8 @@
     "statusFailed": "失败",
     "runningHint": "正在由审计引擎评分…",
     "rerun": "重新运行",
-    "runFirst": "开始审计"
+    "runFirst": "开始审计",
+    "triggeredByUnknown": "未知用户"
   },
   "analytics": {
     "heading": "使用分析",
