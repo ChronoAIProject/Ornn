@@ -100,7 +100,7 @@ function AssistantMessage({
     >
       <div className="max-w-[85%] space-y-3">
         {content && (
-          <div className="glass rounded rounded-bl-sm px-4 py-3">
+          <div className="bg-card rounded rounded-bl-sm px-4 py-3">
             <div className="markdown-body text-sm">
               <ReactMarkdown
                 remarkPlugins={[remarkGfm]}

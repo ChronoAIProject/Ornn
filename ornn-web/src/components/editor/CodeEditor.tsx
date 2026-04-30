@@ -1,7 +1,7 @@
 /**
  * Code Editor Component.
  * Syntax-highlighted code editor with multi-tab support.
- * Cyberpunk styled with neon accents.
+ * Forge Workshop styled with neon accents.
  * @module components/editor/CodeEditor
  */
 

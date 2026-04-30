@@ -1,7 +1,7 @@
 /**
  * Page Transition Component.
  * Wraps page content with customizable entrance/exit animations.
- * Follows cyberpunk design guidelines with fade + slide animations.
+ * Follows Forge Workshop design guidelines with fade + slide animations.
  * @module components/layout/PageTransition
  */
 

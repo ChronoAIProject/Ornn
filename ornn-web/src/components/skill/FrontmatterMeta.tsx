@@ -47,7 +47,7 @@ function MetaSection({
 /**
  * Renders parsed YAML frontmatter metadata from skill content.
  * Displays runtimes, tools, npm dependencies, environment variables,
- * and compatibility info as badge groups within a glass panel.
+ * and compatibility info as badge groups within a bg-card panel.
  * Supports both new nested metadata structure and old flat keys.
  */
 export function FrontmatterMeta({
@@ -83,7 +83,7 @@ export function FrontmatterMeta({
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.25, ease: "easeOut" }}
-      className={`glass space-y-4 rounded border border-accent/10 p-4 ${className}`}
+      className={`bg-card space-y-4 rounded border border-accent/10 p-4 ${className}`}
     >
       {hasRuntimes && (
         <MetaSection title="Runtime">

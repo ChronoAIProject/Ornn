@@ -1,7 +1,7 @@
 /**
  * Validation Error Panel Component.
  * Displays frontmatter validation errors with field paths and messages.
- * Styled in the project's cyberpunk/neon design system.
+ * Styled in the project's Forge Workshop design system.
  * Reusable across upload and generative modes.
  * @module components/skill/ValidationErrorPanel
  */
@@ -19,7 +19,7 @@ export interface ValidationErrorPanelProps {
 }
 
 /**
- * Renders a glass panel with danger accent showing validation errors.
+ * Renders a bg-card panel with danger accent showing validation errors.
  * Each error displays the field path and human-readable message.
  */
 export function ValidationErrorPanel({

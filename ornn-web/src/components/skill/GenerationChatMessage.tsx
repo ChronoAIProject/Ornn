@@ -65,7 +65,7 @@ function StreamingBubble({ content }: { content: string }) {
       transition={{ duration: 0.15, ease: "easeOut" }}
       className="flex justify-start"
     >
-      <div className="glass max-w-[85%] rounded rounded-bl-sm px-4 py-3">
+      <div className="bg-card max-w-[85%] rounded rounded-bl-sm px-4 py-3">
         {content ? (
           <pre className="whitespace-pre-wrap font-mono text-xs text-strong/80">
             {content}
@@ -99,7 +99,7 @@ function CompleteBubble({
       transition={{ duration: 0.15, ease: "easeOut" }}
       className="flex justify-start"
     >
-      <div className="glass max-w-[85%] rounded rounded-bl-sm px-4 py-3">
+      <div className="bg-card max-w-[85%] rounded rounded-bl-sm px-4 py-3">
         {skillName ? (
           <div className="space-y-1">
             <p className="font-text text-sm text-strong">

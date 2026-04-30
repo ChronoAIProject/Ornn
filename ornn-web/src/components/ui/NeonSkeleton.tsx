@@ -1,6 +1,6 @@
 /**
  * Neon Skeleton Component.
- * Cyberpunk-styled loading skeletons with neon shimmer effect.
+ * Forge Workshop styled loading skeletons with neon shimmer effect.
  * Composable skeleton variants for different UI elements.
  * @module components/ui/NeonSkeleton
  */

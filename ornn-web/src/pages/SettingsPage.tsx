@@ -60,7 +60,7 @@ export function SettingsPage() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3 }}
-          className="glass rounded border border-accent/20 p-6"
+          className="bg-card rounded border border-accent/20 p-6"
         >
           <div className="flex items-center gap-4">
             {/* Avatar */}
@@ -110,7 +110,7 @@ export function SettingsPage() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3, delay: 0.1 }}
-            className="glass rounded border border-accent/20 p-6"
+            className="bg-card rounded border border-accent/20 p-6"
           >
             <h3 className="font-mono text-[11px] uppercase tracking-[0.16em] text-strong mb-3">
               {t("settings.accountMgmt")}

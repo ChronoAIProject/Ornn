@@ -71,7 +71,7 @@ export function AnalyticsCard({ idOrName, version, className }: AnalyticsCardPro
   const showEmpty = !isLoading && !isError && data && data.executionCount === 0;
 
   return (
-    <div className={`glass rounded p-5 space-y-4 ${className ?? ""}`}>
+    <div className={`bg-card rounded p-5 space-y-4 ${className ?? ""}`}>
       <div className="flex items-center justify-between gap-3">
         <p className="font-display text-[11px] uppercase tracking-wider text-meta">
           {t("analytics.heading", "Usage")}

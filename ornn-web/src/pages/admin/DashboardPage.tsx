@@ -97,7 +97,7 @@ function StatCard({ label, value, icon, color, delay }: StatCardProps) {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3, delay }}
     >
-      <div className={`glass rounded border p-5 ${COLOR_CLASSES[color]}`}>
+      <div className={`bg-card rounded border p-5 ${COLOR_CLASSES[color]}`}>
         <div className="flex items-center justify-between">
           <div>
             <p className="font-text text-xs uppercase tracking-wider text-meta">

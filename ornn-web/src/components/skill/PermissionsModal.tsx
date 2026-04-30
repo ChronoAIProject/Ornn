@@ -360,11 +360,11 @@ export function PermissionsModal({ isOpen, onClose, skill }: PermissionsModalPro
                   placeholder={
                     t("permissions.searchPlaceholder", "type an email to find a user...") as string
                   }
-                  className="w-full glass rounded border border-accent/20 bg-elevated px-3 py-2 font-text text-sm text-strong focus:outline-none focus:border-accent/60"
+                  className="w-full bg-card rounded border border-accent/20 bg-elevated px-3 py-2 font-text text-sm text-strong focus:outline-none focus:border-accent/60"
                   disabled={isPublic}
                 />
                 {userInputFocused && suggestions.length > 0 && (
-                  <div className="absolute left-0 right-0 bottom-full mb-1 z-10 rounded glass border border-accent/20 card-impression max-h-52 overflow-y-auto">
+                  <div className="absolute left-0 right-0 bottom-full mb-1 z-10 rounded bg-card border border-accent/20 card-impression max-h-52 overflow-y-auto">
                     {suggestions.map((s) => (
                       <button
                         key={s.userId}

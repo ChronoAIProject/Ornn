@@ -1,7 +1,7 @@
 /**
  * Step Indicator Component.
  * Visual progress indicator for multi-step forms.
- * Cyberpunk styled with neon accents.
+ * Forge Workshop styled with neon accents.
  * @module components/form/StepIndicator
  */
 

@@ -113,7 +113,7 @@ export function SkillPublicToggle({
               : "Are you sure you want to make this skill public? All users will be able to view it."}
           </p>
 
-          <div className="glass rounded p-4 border border-accent/10">
+          <div className="bg-card rounded p-4 border border-accent/10">
             <div className="flex items-center gap-3">
               <div className={`
                 w-3 h-3 rounded-full

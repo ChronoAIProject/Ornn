@@ -1,7 +1,7 @@
 /**
  * Markdown Editor Component.
  * Simple textarea-based markdown editor with preview.
- * Cyberpunk styled with neon accents.
+ * Forge Workshop styled with neon accents.
  * @module components/form/MarkdownEditor
  */
 

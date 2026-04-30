@@ -1,7 +1,7 @@
 /**
  * File Tree Component.
  * Displays a hierarchical file structure with create/delete capabilities.
- * Cyberpunk styled with neon accents.
+ * Forge Workshop styled with neon accents.
  * @module components/editor/FileTree
  */
 

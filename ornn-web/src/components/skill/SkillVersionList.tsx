@@ -145,7 +145,7 @@ export function SkillVersionList({
   }
 
   return (
-    <div className={`glass rounded p-5 space-y-3 ${className}`}>
+    <div className={`bg-card rounded p-5 space-y-3 ${className}`}>
       <p className="font-display text-[11px] uppercase tracking-wider text-meta">
         {t("skillDetail.versions")}
       </p>

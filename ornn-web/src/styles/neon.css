@@ -228,34 +228,7 @@
   }
 }
 
-/* Glass morphism — re-cast as a paper / forged-metal card surface.
- * Drop the backdrop blur (DESIGN.md: "no generic glassmorphism as the
- * default surface treatment"). Kept the class so existing markup
- * compiles, but it now resolves to an Editorial Forge card. */
-.glass {
-  background: var(--color-card);
-  border: 1px solid var(--color-subtle);
-}
-
-.glass-hover:hover {
-  border-color: var(--color-strong-edge);
-}
-
-[data-theme="light"] .glass {
-  background: var(--color-card);
-  border: 1px solid var(--color-subtle);
-}
-
-[data-theme="light"] .glass-hover:hover {
-  border-color: var(--color-strong-edge);
-}
-
-/* Scanline overlay — no-op. Class kept so legacy markup compiles. */
-.scanlines {
-  position: relative;
-}
-
-/* Editorial Forge scrollbar — ember thumb on transparent track. */
+/* Forge Workshop scrollbar — ember thumb on transparent track. */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;

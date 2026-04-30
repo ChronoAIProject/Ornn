@@ -210,7 +210,7 @@ export function SkillPackagePreview({
     <div className={`flex flex-col ${className}`}>
       {/* Metadata summary bar */}
       {metadata && (
-        <div className="glass rounded border border-accent/10 p-4 mb-4">
+        <div className="bg-card rounded border border-accent/10 p-4 mb-4">
           <div className="flex flex-wrap items-center gap-3">
             <h3 className="font-display text-lg text-strong">
               {metadata.name}

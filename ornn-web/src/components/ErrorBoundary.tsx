@@ -1,6 +1,6 @@
 /**
  * Error Boundary Component.
- * Catches rendering errors and displays a cyberpunk-themed error page.
+ * Catches rendering errors and displays a Forge Workshop styled error page.
  * Provides retry functionality and error reporting.
  * @module components/ErrorBoundary
  */
@@ -155,7 +155,7 @@ export function ErrorFallback({
         className="max-w-lg w-full"
       >
         {/* Error card */}
-        <div className="glass rounded overflow-hidden border border-danger/30">
+        <div className="bg-card rounded overflow-hidden border border-danger/30">
           {/* Glitch header */}
           <div className="bg-danger/10 border-b border-danger/20 px-6 py-4">
             <div className="flex items-center gap-3">
@@ -269,8 +269,6 @@ export function ErrorFallback({
             </div>
           </div>
 
-          {/* Decorative scanlines */}
-          <div className="scanlines absolute inset-0 pointer-events-none opacity-30" />
         </div>
 
         {/* Decorative glitch text */}
