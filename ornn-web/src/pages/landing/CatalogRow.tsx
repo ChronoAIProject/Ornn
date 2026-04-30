@@ -11,7 +11,7 @@ export function CatalogRow({
   return (
     <Link
       to={`/skills/${skill.name}`}
-      className={`group/row block py-5 no-underline text-parchment transition-colors duration-200 hover:bg-[rgb(255_106_26/0.04)] md:grid md:grid-cols-[40px_minmax(0,1.3fr)_minmax(0,1fr)_120px] md:items-baseline md:gap-5 ${
+      className={`focus-ring-ember group/row block py-5 no-underline text-parchment transition-colors duration-200 hover:bg-[rgb(255_106_26/0.04)] md:grid md:grid-cols-[40px_minmax(0,1.3fr)_minmax(0,1fr)_120px] md:items-baseline md:gap-5 ${
         isLast ? "" : "border-b border-[color:var(--color-border-subtle)]"
       }`}
     >

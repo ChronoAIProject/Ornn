@@ -19,7 +19,7 @@ export function LandingNav() {
         <Link
           to="/"
           aria-label="ornn home"
-          className="flex items-center gap-2.5 text-parchment no-underline"
+          className="focus-ring-ember flex items-center gap-2.5 text-parchment no-underline"
         >
           <svg
             className="block h-[26px] w-auto"
@@ -40,22 +40,22 @@ export function LandingNav() {
           </svg>
         </Link>
 
-        <div className="absolute left-1/2 top-1/2 hidden -translate-x-1/2 -translate-y-1/2 gap-7 font-display text-[15px] font-normal text-bone md:flex">
+        <div className="absolute left-1/2 top-1/2 hidden -translate-x-1/2 -translate-y-1/2 gap-7 font-text text-[15px] font-normal text-bone md:flex">
           <Link
             to="/registry"
-            className="transition-colors duration-150 hover:text-ember"
+            className="focus-ring-ember transition-colors duration-150 hover:text-ember"
           >
             Registry
           </Link>
           <Link
             to="/skills/new"
-            className="transition-colors duration-150 hover:text-ember"
+            className="focus-ring-ember transition-colors duration-150 hover:text-ember"
           >
             Build
           </Link>
           <Link
             to="/docs"
-            className="transition-colors duration-150 hover:text-ember"
+            className="focus-ring-ember transition-colors duration-150 hover:text-ember"
           >
             Docs
           </Link>
@@ -192,7 +192,7 @@ export function LandingNav() {
         id="mobile-nav-panel"
         data-open={menuOpen}
         aria-hidden={!menuOpen}
-        className="absolute left-0 right-0 top-full grid grid-rows-[0fr] bg-page shadow-[0_18px_28px_-12px_rgb(0_0_0/0.45)] transition-[grid-template-rows,border-color] duration-300 ease-out border-t border-transparent data-[open=true]:grid-rows-[1fr] data-[open=true]:border-[color:var(--color-border-subtle)] md:hidden"
+        className="absolute left-0 right-0 top-full grid grid-rows-[0fr] bg-page shadow-[var(--card-shadow-rest)] transition-[grid-template-rows,border-color] duration-300 ease-out border-t border-transparent data-[open=true]:grid-rows-[1fr] data-[open=true]:border-[color:var(--color-border-subtle)] md:hidden"
       >
         <div className="overflow-hidden">
           <div className="mx-auto flex max-w-[1280px] flex-col px-6 py-3 sm:px-8">
@@ -200,7 +200,7 @@ export function LandingNav() {
               to="/registry"
               onClick={closeMenu}
               tabIndex={menuOpen ? 0 : -1}
-              className="border-b border-[color:var(--color-border-subtle)] py-3 font-display text-[16px] text-bone transition-colors hover:text-ember"
+              className="focus-ring-ember border-b border-[color:var(--color-border-subtle)] py-3 font-text text-[16px] text-bone transition-colors hover:text-ember"
             >
               Registry
             </Link>
@@ -208,7 +208,7 @@ export function LandingNav() {
               to="/skills/new"
               onClick={closeMenu}
               tabIndex={menuOpen ? 0 : -1}
-              className="border-b border-[color:var(--color-border-subtle)] py-3 font-display text-[16px] text-bone transition-colors hover:text-ember"
+              className="focus-ring-ember border-b border-[color:var(--color-border-subtle)] py-3 font-text text-[16px] text-bone transition-colors hover:text-ember"
             >
               Build
             </Link>
@@ -216,7 +216,7 @@ export function LandingNav() {
               to="/docs"
               onClick={closeMenu}
               tabIndex={menuOpen ? 0 : -1}
-              className="border-b border-[color:var(--color-border-subtle)] py-3 font-display text-[16px] text-bone transition-colors hover:text-ember"
+              className="focus-ring-ember border-b border-[color:var(--color-border-subtle)] py-3 font-text text-[16px] text-bone transition-colors hover:text-ember"
             >
               Docs
             </Link>

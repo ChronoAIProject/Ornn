@@ -21,7 +21,7 @@ export function FeaturedSkillsSection() {
       <div className="mx-auto max-w-[1280px] px-6 sm:px-8">
         <div className="mb-12 flex flex-wrap items-end justify-between gap-6">
           <div>
-            <h2 className="font-display-grotesk text-[clamp(40px,5.4vw,72px)] font-bold uppercase leading-[0.98] tracking-[-0.025em] text-parchment">
+            <h2 className="font-display-grotesk text-[clamp(36px,4vw,56px)] font-bold uppercase leading-[0.98] tracking-[-0.025em] text-parchment">
               Skills, <HighlighterMark variant="gold">freshly forged</HighlighterMark>.
             </h2>
           </div>

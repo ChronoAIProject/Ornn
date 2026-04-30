@@ -563,7 +563,7 @@ function StaticHero() {
             <div className="flex flex-col items-start gap-5 sm:gap-6">
               <Stamp dot>NOW FORGING · v 0.9.3</Stamp>
               {/* Static / reduced-motion hero — same Forge Workshop display */}
-              <h1 className="font-display-grotesk text-[clamp(34px,8.4vw,76px)] font-bold uppercase leading-[0.98] tracking-[-0.025em] text-parchment">
+              <h1 className="font-display-grotesk text-[clamp(40px,4.6vw,64px)] font-bold uppercase leading-[0.98] tracking-[-0.025em] text-parchment max-[720px]:text-[clamp(28px,8vw,36px)]">
                 Start with <HighlighterMark>nothing</HighlighterMark>.
                 <br />
                 Ship with <HighlighterMark>everything</HighlighterMark>.

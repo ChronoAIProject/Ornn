@@ -10,7 +10,7 @@ export function PublishSection() {
       <div className="mx-auto max-w-[1280px] px-6 sm:px-8">
         <div className="grid grid-cols-1 items-center gap-14 border border-[color:var(--color-border-strong)] [background-image:var(--gradient-publish)] px-6 py-12 sm:px-12 sm:py-16 lg:[grid-template-columns:1.4fr_1fr]">
           <div>
-            <h2 className="font-display-grotesk text-[clamp(38px,4.4vw,58px)] font-bold uppercase leading-[0.98] tracking-[-0.025em] text-parchment">
+            <h2 className="font-display-grotesk text-[clamp(36px,4vw,56px)] font-bold uppercase leading-[0.98] tracking-[-0.025em] text-parchment">
               Publish a skill
               <br />
               <HighlighterMark variant="gold">in 60 seconds</HighlighterMark>.

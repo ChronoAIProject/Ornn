@@ -10,7 +10,7 @@ export function WhyOrnnSection() {
       <BlueprintGrid />
       <div className="relative mx-auto max-w-[1280px] px-6 sm:px-8">
         <div className="pb-8 pt-8 sm:pb-10 sm:pt-12">
-          <h2 className="max-w-[900px] font-display-grotesk text-[clamp(36px,5.4vw,72px)] font-bold uppercase leading-[0.98] tracking-[-0.025em] text-parchment">
+          <h2 className="max-w-[900px] font-display-grotesk text-[clamp(36px,4vw,56px)] font-bold uppercase leading-[0.98] tracking-[-0.025em] text-parchment">
             Stop copy-pasting prompts.
             <br />
             Install <HighlighterMark>skills</HighlighterMark> like packages.

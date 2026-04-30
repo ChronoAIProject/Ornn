@@ -281,6 +281,14 @@
     linear-gradient(90deg, rgb(20 19 14 / 0.055) 1px, transparent 1px);
 }
 
+/* Forge Workshop v3 — landing surfaces remap --font-display to Space Grotesk
+   so the existing `font-display` Tailwind utility resolves to the v3 voice
+   without requiring per-component className changes. App-shell pages still
+   inherit Fraunces from :root during the separate migration window. */
+.landing-route {
+  --font-display: var(--font-display-grotesk);
+}
+
 /* Base — wrapped in @layer base so Tailwind utility classes (font-display,
    font-mono, font-text) can override per-element on the landing while legacy
    pages keep their Orbitron/Rajdhani defaults. Without the layer wrap,
@@ -884,9 +892,26 @@
   transform: translate(2px, 2px);
   box-shadow: var(--card-shadow-hover);
 }
+.card-letterpress:focus-visible {
+  outline: none;
+  box-shadow: var(--card-shadow-rest), var(--button-focus-ring);
+}
+.card-letterpress:focus-visible:hover {
+  box-shadow: var(--card-shadow-hover), var(--button-focus-ring);
+}
 @media (prefers-reduced-motion: reduce) {
   .card-letterpress,
   .card-letterpress:hover {
     transform: none;
   }
+}
+
+/* Reusable focus ring for landing links and rows that don't carry a press
+   shadow (e.g. text nav, footer links, catalog rows). Matches DESIGN.md
+   --button-focus-ring: page-color halo + ember outer for visibility against
+   any landing surface in either theme. */
+.focus-ring-ember:focus-visible {
+  outline: none;
+  box-shadow: var(--button-focus-ring);
+  border-radius: 2px;
 }
