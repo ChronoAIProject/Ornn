@@ -2,7 +2,8 @@
  * Modal — Forge Workshop primitive.
  *
  * Backdrop fades in, dialog springs in. Surface is paper / forged metal
- * with a hairline border. Title uses Space Grotesk (display).
+ * with a hairline border and a hard-offset letterpress impression
+ * (no soft drop shadow per DESIGN.md). Title uses Space Grotesk display.
  *
  * @module components/ui/Modal
  */
@@ -38,9 +39,9 @@ export function Modal({ isOpen, onClose, title, children, className = "" }: Moda
             exit={{ opacity: 0, y: 8, scale: 0.98 }}
             transition={{ type: "spring", stiffness: 220, damping: 22, mass: 0.9 }}
             className={`
+              card-impression
               relative z-10 mx-4 w-full max-w-lg max-h-[80vh] overflow-y-auto
-              rounded-md border border-strong-edge bg-card p-6
-              shadow-[0_24px_48px_-16px_rgba(0,0,0,0.35)]
+              rounded border border-strong-edge bg-card p-6
               ${className}
             `}
           >

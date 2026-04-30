@@ -781,8 +781,13 @@
 .highlighter-mark--arc::before  { background: var(--color-arc); }
 
 /* Card letterpress — paired with --card-shadow-rest / --card-shadow-hover.
-   Apply via .card-letterpress on any landing card / panel / terminal that
-   currently uses inline `shadow-[...]` Tailwind arbitrary syntax. */
+   Apply via .card-letterpress on any interactive card / panel / terminal
+   that currently uses inline `shadow-[...]` Tailwind arbitrary syntax.
+   Use .card-impression on static (non-hoverable) panels, modal dialogs,
+   and toasts — same rest impression without the press-down hover. */
+.card-impression {
+  box-shadow: var(--card-shadow-rest);
+}
 .card-letterpress {
   box-shadow: var(--card-shadow-rest);
   transition: transform 140ms ease, box-shadow 140ms ease, border-color 200ms;

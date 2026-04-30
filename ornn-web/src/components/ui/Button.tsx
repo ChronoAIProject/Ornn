@@ -1,15 +1,19 @@
 /**
- * Button — Editorial Forge primitive.
+ * Button — Forge Workshop primitive.
  *
  * Three variants per DESIGN.md:
- *   primary    — ember fill, page-bg text, mono uppercase label
- *   secondary  — outline, strong border, body text
- *   danger     — outline, danger color, kiln-red on hover
+ *   primary    — ember fill, page-bg text, mono uppercase label, ember letterpress
+ *   secondary  — paper surface, strong border, ink letterpress
+ *   danger     — paper surface, danger color, ink letterpress
+ *
+ * All variants carry a hard-offset letterpress impression at rest and
+ * press DOWN on hover (translate +2px / +2px, shadow shrinks). Disabled
+ * removes the impression entirely. Reduced-motion suppresses the
+ * translate; the shadow swap alone communicates press.
  *
  * @module components/ui/Button
  */
 
-import { motion } from "framer-motion";
 import type { ReactNode } from "react";
 
 export interface ButtonProps {
@@ -25,11 +29,11 @@ export interface ButtonProps {
 
 const VARIANT_STYLES = {
   primary:
-    "bg-accent text-page hover:bg-accent-muted border border-accent",
+    "bg-accent text-page hover:bg-accent-muted border border-accent-muted",
   secondary:
-    "bg-transparent text-strong border border-strong-edge hover:bg-elevated hover:border-strong",
+    "bg-card text-strong border border-strong-edge hover:border-accent",
   danger:
-    "bg-transparent text-danger border border-danger/40 hover:bg-danger-soft hover:border-danger",
+    "bg-card text-danger border border-danger/40 hover:border-danger",
 } as const;
 
 const SIZE_STYLES = {
@@ -49,22 +53,22 @@ export function Button({
   className = "",
 }: ButtonProps) {
   const isDisabled = disabled || loading;
+  const letterpressClass =
+    variant === "primary"
+      ? "cta-letterpress"
+      : "cta-letterpress cta-letterpress--ghost";
 
   return (
-    <motion.button
+    <button
       type={type}
       onClick={onClick}
       disabled={isDisabled}
-      whileTap={isDisabled ? undefined : { y: 0 }}
-      whileHover={isDisabled ? undefined : { y: -1 }}
-      transition={{ duration: 0.12, ease: "easeOut" }}
       className={`
+        ${letterpressClass}
         cursor-pointer rounded-sm font-mono font-semibold uppercase
-        transition-colors duration-150
-        focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent
         ${VARIANT_STYLES[variant]}
         ${SIZE_STYLES[size]}
-        ${isDisabled ? "opacity-50 cursor-not-allowed" : ""}
+        ${isDisabled ? "cursor-not-allowed" : ""}
         ${className}
       `}
     >
@@ -76,6 +80,6 @@ export function Button({
       ) : (
         children
       )}
-    </motion.button>
+    </button>
   );
 }
