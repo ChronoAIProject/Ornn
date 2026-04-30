@@ -222,6 +222,7 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
     maxFileSize: config.maxPackageSizeBytes,
     activityRepo,
     nyxidServiceClient,
+    extraNyxidServices: config.extraNyxidServices,
   });
 
   // ---- Domain: Skill Search ----
@@ -359,6 +360,7 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
     skillRepo,
     activityRepo,
     nyxidServiceClient,
+    extraNyxidServices: config.extraNyxidServices,
   }));
   apiApp.route("/", createUserRoutes({ activityRepo }));
   app.route("/api/v1", apiApp);

@@ -36,13 +36,47 @@ export interface MeRoutesConfig {
    * services + private services they own).
    */
   nyxidServiceClient: NyxidServiceClient;
+  /**
+   * Synthetic NyxID service names appended to the bottom of every
+   * `GET /me/nyxid-services` response. Driven by the
+   * `EXTRA_NYXID_SERVICES` env var so operators can surface a
+   * platform-side option (e.g. "NyxID") that isn't (yet) registered in
+   * the catalogue. See `infra/config.ts`.
+   */
+  extraNyxidServices: readonly string[];
 }
 
 export function createMeRoutes(config: MeRoutesConfig): Hono<{ Variables: AuthVariables }> {
-  const { nyxidBaseUrl, skillRepo, activityRepo, nyxidServiceClient } = config;
+  const {
+    nyxidBaseUrl,
+    skillRepo,
+    activityRepo,
+    nyxidServiceClient,
+    extraNyxidServices,
+  } = config;
   const baseUrl = nyxidBaseUrl.replace(/\/+$/, "");
   const app = new Hono<{ Variables: AuthVariables }>();
   const auth = nyxidAuthMiddleware();
+
+  /**
+   * Pre-compute the synthetic-service rows once. Each entry inherits a
+   * stable id of the form `synthetic:<slug>` so downstream code can
+   * detect them without a round-trip to NyxID; tier is hard-pinned to
+   * `admin` since these stand in for platform-side services.
+   */
+  const syntheticNyxidServices = extraNyxidServices.map((name) => {
+    const slug = name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+    return {
+      id: `synthetic:${slug}` as const,
+      slug,
+      label: name,
+      description: "",
+      tier: "admin" as const,
+    };
+  });
 
   /**
    * GET /me/orgs — caller's NyxID org memberships.
@@ -184,8 +218,10 @@ export function createMeRoutes(config: MeRoutesConfig): Hono<{ Variables: AuthVa
   app.get("/me/nyxid-services", auth, async (c) => {
     const authCtx = getAuth(c);
     const token = authCtx.userAccessToken;
+    // Even when the proxy stripped the user's token, still surface the
+    // synthetic services — they don't depend on NyxID at all.
     if (!token) {
-      return c.json({ data: { items: [] }, error: null });
+      return c.json({ data: { items: [...syntheticNyxidServices] }, error: null });
     }
     const services = await nyxidServiceClient.listServicesForCaller(token);
     const items = services
@@ -205,6 +241,10 @@ export function createMeRoutes(config: MeRoutesConfig): Hono<{ Variables: AuthVa
             ? ("admin" as const)
             : ("personal" as const),
       }));
+
+    // Append synthetic / platform-side services at the bottom so they
+    // sit visually after every catalogue entry in the picker UI.
+    items.push(...syntheticNyxidServices);
     return c.json({ data: { items }, error: null });
   });
 
