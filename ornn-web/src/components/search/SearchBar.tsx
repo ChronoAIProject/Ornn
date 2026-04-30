@@ -29,7 +29,7 @@ export function SearchBar({ className = "" }: SearchBarProps) {
     <div className={`flex items-center gap-3 ${className}`}>
       <div className="relative flex-1">
         <svg
-          className="absolute top-1/2 left-4 h-5 w-5 -translate-y-1/2 text-neon-cyan/50"
+          className="absolute top-1/2 left-4 h-5 w-5 -translate-y-1/2 text-accent/50"
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -46,7 +46,7 @@ export function SearchBar({ className = "" }: SearchBarProps) {
               ? "Describe what you're looking for..."
               : "Search skills by name, description, or tags..."
           }
-          className="neon-input w-full rounded-xl py-3 pr-4 pl-12 font-body text-text-primary placeholder:text-text-muted/50"
+          className="neon-input w-full rounded py-3 pr-4 pl-12 font-text text-strong placeholder:text-meta/50"
         />
       </div>
 
@@ -56,10 +56,10 @@ export function SearchBar({ className = "" }: SearchBarProps) {
         onClick={() => setMode(isSemanticMode ? "keyword" : "semantic")}
         title={isSemanticMode ? "Switch to keyword search" : "Switch to semantic search"}
         className={`
-          flex items-center gap-2 shrink-0 rounded-xl border px-4 py-3 font-body text-sm transition-all
+          flex items-center gap-2 shrink-0 rounded border px-4 py-3 font-text text-sm transition-all
           ${isSemanticMode
-            ? "border-neon-magenta/50 bg-neon-magenta/10 text-neon-magenta hover:bg-neon-magenta/20"
-            : "border-neon-cyan/20 bg-bg-elevated text-text-muted hover:text-text-primary hover:border-neon-cyan/40"
+            ? "border-accent-support/50 bg-accent-support/10 text-accent-support hover:bg-accent-support/20"
+            : "border-accent/20 bg-elevated text-meta hover:text-strong hover:border-accent/40"
           }
         `}
       >

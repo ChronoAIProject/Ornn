@@ -95,7 +95,12 @@ function findDefaultFileId(files: FileNode[]): string | undefined {
   return findSkillMdId(files) ?? findFirstFile(files);
 }
 
-/** Horizontally resizable two-pane layout with a draggable divider */
+/**
+ * Horizontally resizable two-pane layout with a draggable divider.
+ * The divider is a 1px hairline; the surrounding 8px hit area is
+ * invisible so the seam reads as a single hairline at rest, no
+ * pill-styled grip floating in the middle.
+ */
 function ResizablePanes({
   children,
   className = "",
@@ -142,17 +147,18 @@ function ResizablePanes({
 
   return (
     <div ref={containerRef} className={`flex flex-row ${className}`} style={style}>
-      <div style={{ width: `${leftWidth}%` }} className="shrink-0 h-full">
+      <div style={{ width: `${leftWidth}%` }} className="h-full shrink-0">
         {children[0]}
       </div>
-      {/* Draggable divider */}
+      {/* Draggable divider — hairline at rest, ember on hover. */}
       <div
         onMouseDown={handleMouseDown}
-        className="shrink-0 w-2 cursor-col-resize flex items-center justify-center group"
+        className="group relative h-full w-px shrink-0 cursor-col-resize bg-subtle"
       >
-        <div className="w-0.5 h-8 rounded-full bg-neon-cyan/20 group-hover:bg-neon-cyan/50 transition-colors" />
+        <div className="pointer-events-none absolute inset-y-0 -left-1 -right-1 group-hover:bg-accent/20 transition-colors" />
+        <div className="pointer-events-none absolute inset-y-0 left-0 w-px bg-subtle group-hover:bg-accent/60 transition-colors" />
       </div>
-      <div style={{ width: `${100 - leftWidth}%` }} className="min-w-0 h-full">
+      <div style={{ width: `calc(${100 - leftWidth}% - 1px)` }} className="h-full min-w-0">
         {children[1]}
       </div>
     </div>
@@ -208,11 +214,13 @@ export function SkillPackagePreview({
 
   return (
     <div className={`flex flex-col ${className}`}>
-      {/* Metadata summary bar */}
+      {/* Metadata summary bar — kept as its own card above the package
+          panel; this is a different concern (skill identity) from the
+          file browser below. */}
       {metadata && (
-        <div className="glass rounded-lg border border-neon-cyan/10 p-4 mb-4">
+        <div className="card-impression mb-4 rounded border border-subtle bg-card p-4">
           <div className="flex flex-wrap items-center gap-3">
-            <h3 className="font-heading text-lg text-text-primary">
+            <h3 className="font-display text-lg font-semibold text-strong">
               {metadata.name}
             </h3>
             <Badge color={CATEGORY_BADGE_COLORS[metadata.metadata.category]}>
@@ -224,57 +232,64 @@ export function SkillPackagePreview({
               </Badge>
             ))}
             {authorName && (
-              <span className="font-body text-xs text-text-muted ml-auto">
+              <span className="ml-auto font-text text-xs text-meta">
                 by {authorName}
               </span>
             )}
           </div>
           {metadata.description && (
-            <p className="font-body text-sm text-text-muted mt-2">
+            <p className="mt-2 font-text text-sm text-meta">
               {metadata.description}
             </p>
           )}
         </div>
       )}
 
-      {/* Two-column layout with draggable divider */}
-      <ResizablePanes className="flex-1 min-h-0" style={{ minHeight: "300px" }}>
-        {/* Left: File tree */}
-        <div className="rounded-lg border border-neon-cyan/10 bg-bg-surface overflow-hidden flex flex-col h-full">
-          <FileTree
-            files={files}
-            selectedId={selectedFileId}
-            onSelect={handleFileSelect}
-            onCreateFile={onCreateFile}
-            onCreateFolder={onCreateFolder}
-            onDelete={onFileDelete}
-          />
-        </div>
-
-        {/* Right: File content viewer */}
-        <div className="min-w-0 h-full">
-          {selectedFileId ? (
-            <SkillFileViewer
-              filename={selectedFilename}
-              content={selectedContent}
-              editable={editable}
-              onChange={
-                onContentChange
-                  ? (content) => onContentChange(selectedFileId, content)
-                  : undefined
-              }
-              isBinary={!fileContents.has(selectedFileId)}
-              className="h-full"
+      {/* Unified package panel: the file tree and the viewer share one
+          rounded letterpressed surface, separated by a hairline draggable
+          divider. No double borders, no nested cards. */}
+      <div
+        className="card-impression flex-1 overflow-hidden rounded border border-subtle bg-card"
+        style={{ minHeight: "300px" }}
+      >
+        <ResizablePanes className="h-full min-h-0">
+          {/* Left: file tree (no outer chrome — parent panel owns it) */}
+          <div className="flex h-full flex-col">
+            <FileTree
+              files={files}
+              selectedId={selectedFileId}
+              onSelect={handleFileSelect}
+              onCreateFile={onCreateFile}
+              onCreateFolder={onCreateFolder}
+              onDelete={onFileDelete}
             />
-          ) : (
-            <div className="flex items-center justify-center h-full rounded-lg border border-neon-cyan/10 bg-bg-deep">
-              <p className="font-body text-sm text-text-muted">
-                Select a file to view its content
-              </p>
-            </div>
-          )}
-        </div>
-      </ResizablePanes>
+          </div>
+
+          {/* Right: file content viewer (also naked) */}
+          <div className="h-full min-w-0">
+            {selectedFileId ? (
+              <SkillFileViewer
+                filename={selectedFilename}
+                content={selectedContent}
+                editable={editable}
+                onChange={
+                  onContentChange
+                    ? (content) => onContentChange(selectedFileId, content)
+                    : undefined
+                }
+                isBinary={!fileContents.has(selectedFileId)}
+                className="h-full"
+              />
+            ) : (
+              <div className="flex h-full items-center justify-center">
+                <p className="font-text text-sm text-meta">
+                  Select a file to view its content
+                </p>
+              </div>
+            )}
+          </div>
+        </ResizablePanes>
+      </div>
     </div>
   );
 }

@@ -1,68 +1,25 @@
 @import "tailwindcss";
 @import "highlight.js/styles/tokyo-night-dark.css";
 
-/* Space Grotesk — Forge Workshop display voice on landing surfaces.
-   Supersedes Fraunces italic-ember on landing per DESIGN.md (2026-04-29).
-   Italic Fraunces stays loaded via PP Editorial New for app-shell during
-   the separate migration. */
-@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap");
+/* Reserve the scrollbar gutter at all times so navigating between
+   landing (body scrolls — scrollbar visible) and app-shell routes
+   (RootLayout uses h-screen overflow-hidden — no body scrollbar)
+   doesn't make centered containers (Navbar, page wrappers) jump
+   horizontally by the scrollbar width. The gutter stays empty on
+   app-shell routes; landing keeps its actual scrollbar. */
+html {
+  scrollbar-gutter: stable;
+}
 
-/* PP Editorial New — drop .woff2 files into ornn-web/public/fonts/ and the
-   browser will pick them up. Until the files exist, the font-display token
-   silently falls through to Newsreader. */
-@font-face {
-  font-family: "PP Editorial New";
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-  src: url("/fonts/PPEditorialNew-Regular.woff2") format("woff2");
-}
-@font-face {
-  font-family: "PP Editorial New";
-  font-weight: 400;
-  font-style: italic;
-  font-display: swap;
-  src: url("/fonts/PPEditorialNew-Italic.woff2") format("woff2");
-}
-@font-face {
-  font-family: "PP Editorial New";
-  font-weight: 500;
-  font-style: normal;
-  font-display: swap;
-  src: url("/fonts/PPEditorialNew-Ultralight.woff2") format("woff2");
-}
-@font-face {
-  font-family: "PP Editorial New";
-  font-weight: 700;
-  font-style: normal;
-  font-display: swap;
-  src: url("/fonts/PPEditorialNew-Ultrabold.woff2") format("woff2");
-}
+/* Space Grotesk is the single Forge Workshop display voice for the whole
+   product (landing + app shell). Loaded via index.html alongside Inter and
+   JetBrains Mono. The legacy Fraunces / PP Editorial New fonts have been
+   retired — `--font-display` resolves to Space Grotesk everywhere. */
 
 @theme {
-  /* ── Legacy neon-* tokens — REMAPPED to Editorial Forge values during
-   *    the design migration. Component code that still references
-   *    `bg-neon-cyan`, `text-text-primary`, `font-heading`, etc. now
-   *    automatically picks up the Editorial Forge palette + typography
-   *    without touching component source. New work should use the
-   *    semantic tokens below (bg-page / text-strong / text-accent /
-   *    font-display / font-reading). ── */
-  --color-neon-cyan: #FF7322;     /* was Orbitron-era — now Forge Workshop ember */
-  --color-neon-magenta: #E8B341;  /* now accent-support / molten */
-  --color-neon-yellow: #E8B341;   /* now warning */
-  --color-neon-green: #7FA06A;    /* mineral success */
-  --color-neon-red: #C96B5A;      /* kiln danger */
-  --color-bg-deep: #0B0907;       /* page */
-  --color-bg-surface: #14110B;    /* panel / card */
-  --color-bg-elevated: #221E16;   /* elevated */
-  --color-text-primary: #F1ECDE;  /* strong */
-  --color-text-muted: #6B6254;    /* meta */
-
-  --font-heading: "Fraunces", Georgia, serif;          /* legacy app-shell display — landing uses Space Grotesk */
-  --font-body: "Inter", system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
 
-  /* ── Editorial Forge tokens (DESIGN.md, light-first) ──
+  /* ── Forge Workshop tokens (DESIGN.md, light-first) ──
    * Defaults below are the dark-mode values; light-mode overrides
    * sit in [data-theme="light"]. New UI work uses these:
    *   bg-page, bg-panel, bg-card, bg-elevated
@@ -70,7 +27,7 @@
    *   text-accent, bg-accent, border-accent
    *   text-success / warning / danger / info
    *   border-subtle, border-strong
-   * Plus Fraunces / Inter via font-display, font-text, font-ui.
+   * Plus Space Grotesk / Inter / JetBrains Mono via font-display, font-text, font-mono.
    */
   --color-page: #0B0907;
   --color-panel: #14110B;
@@ -118,11 +75,9 @@
   --color-arc-soft: rgba(91, 200, 232, 0.10);
   --color-ember-glow: rgba(255, 115, 34, 0.30);      /* hero floor / pulse glows */
 
-  --font-display: "Fraunces", Georgia, serif;        /* legacy display, app-shell only */
-  --font-display-grotesk: "Space Grotesk", "Inter", system-ui, sans-serif;  /* Forge Workshop display, landing only */
-  --font-reading: "Inter", system-ui, sans-serif;
-  --font-text: "Inter", system-ui, sans-serif;       /* alias used by landing components */
-  --font-ui: "Inter", system-ui, sans-serif;         /* alias used by nav / footer */
+  --font-display: "Space Grotesk", "Inter", system-ui, sans-serif;
+  --font-text: "Inter", system-ui, sans-serif;
+  --font-ui: "Inter", system-ui, sans-serif;
 
   /* Component shadow tokens — letterpress hard-offset (Forge Workshop).
      No soft drop shadows on cards or CTAs; never inline arbitrary shadow strings.
@@ -175,21 +130,8 @@
 
 /* ──────── Light mode overrides — Forge Workshop (cool steel paper) ──────── */
 [data-theme="light"] {
-  /* Legacy aliases mapped to Forge Workshop bright values.
-     Page bg cooled from warm parchment to cool steel paper per
-     DESIGN.md Differentiation Guardrails (B ≥ G ≥ R, never warm). */
-  --color-bg-deep: #EAECEC;       /* cool steel paper (was warm #F5EFE1) */
-  --color-bg-surface: #DCDFDF;    /* cool panel */
-  --color-bg-elevated: #EDEFEF;   /* elevated cool paper */
-  --color-text-primary: #14130E;  /* ink (slightly stronger than warm 1A1812) */
-  --color-text-muted: #7E776B;    /* cool gray meta */
-  --color-neon-cyan: #D9461A;     /* ember (v3 brighter) */
-  --color-neon-magenta: #B8861A;  /* molten brass */
-  --color-neon-yellow: #A97818;   /* warning brass deeper */
-  --color-neon-green: #5F7A46;    /* success oxidized */
-  --color-neon-red: #9E4E42;      /* danger kiln */
-
-  /* Forge Workshop — bright (flagship) */
+  /* Forge Workshop — bright (flagship). Page bg uses cool steel paper
+     (B ≥ G ≥ R) per DESIGN.md Differentiation Guardrails — never warm cream. */
   --color-page: #EAECEC;
   --color-panel: #DCDFDF;
   --color-card: #FFFFFF;
@@ -236,9 +178,7 @@
   --color-arc-soft: rgba(43, 119, 145, 0.10);
   --color-ember-glow: rgba(217, 70, 26, 0.22);       /* light-mode ember pulse */
 
-  --font-display: "Fraunces", Georgia, serif;        /* legacy app-shell display */
-  --font-display-grotesk: "Space Grotesk", "Inter", system-ui, sans-serif;
-  --font-reading: "Inter", system-ui, sans-serif;
+  --font-display: "Space Grotesk", "Inter", system-ui, sans-serif;
   --font-text: "Inter", system-ui, sans-serif;
   --font-ui: "Inter", system-ui, sans-serif;
 
@@ -281,25 +221,16 @@
     linear-gradient(90deg, rgb(20 19 14 / 0.055) 1px, transparent 1px);
 }
 
-/* Forge Workshop v3 — landing surfaces remap --font-display to Space Grotesk
-   so the existing `font-display` Tailwind utility resolves to the v3 voice
-   without requiring per-component className changes. App-shell pages still
-   inherit Fraunces from :root during the separate migration window. */
-.landing-route {
-  --font-display: var(--font-display-grotesk);
-}
-
 /* Base — wrapped in @layer base so Tailwind utility classes (font-display,
-   font-mono, font-text) can override per-element on the landing while legacy
-   pages keep their Orbitron/Rajdhani defaults. Without the layer wrap,
+   font-mono, font-text) can override per-element. Without the layer wrap,
    bare element selectors are unlayered and outrank layered utilities. */
 @layer base {
   body {
-    font-family: var(--font-body);
+    font-family: var(--font-text);
   }
 
   h1, h2, h3, h4, h5, h6 {
-    font-family: var(--font-heading);
+    font-family: var(--font-display);
   }
 
   code, pre {
@@ -307,49 +238,7 @@
   }
 }
 
-/* Editorial Forge — accent text emphasis (no glow, restrained per DESIGN.md) */
-.neon-cyan, .neon-magenta, .neon-yellow {
-  font-weight: 600;
-}
-
-/* Editorial Forge edge — for legacy `.neon-border-cyan` / `.neon-border-magenta`
- * usages still in the codebase. Hairline border, no glow. */
-.neon-border-cyan {
-  border: 1px solid var(--color-accent);
-}
-
-.neon-border-magenta {
-  border: 1px solid var(--color-accent-support);
-}
-
-/* Glass morphism — re-cast as a paper / forged-metal card surface.
- * Drop the backdrop blur (DESIGN.md: "no generic glassmorphism as the
- * default surface treatment"). Kept the class so existing markup
- * compiles, but it now resolves to an Editorial Forge card. */
-.glass {
-  background: var(--color-card);
-  border: 1px solid var(--color-subtle);
-}
-
-.glass-hover:hover {
-  border-color: var(--color-strong-edge);
-}
-
-[data-theme="light"] .glass {
-  background: var(--color-card);
-  border: 1px solid var(--color-subtle);
-}
-
-[data-theme="light"] .glass-hover:hover {
-  border-color: var(--color-strong-edge);
-}
-
-/* Scanline overlay — no-op. Class kept so legacy markup compiles. */
-.scanlines {
-  position: relative;
-}
-
-/* Editorial Forge scrollbar — ember thumb on transparent track. */
+/* Forge Workshop scrollbar — ember thumb on transparent track. */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -455,13 +344,6 @@
   );
 }
 
-/* Focus ring — Editorial Forge ember edge, no glow halo. */
-.neon-focus:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 2px;
-  box-shadow: none;
-}
-
 /* Forge input — drafted, instrument-like. Hairline edge, focus tightens. */
 .neon-input {
   background: var(--color-elevated);
@@ -487,14 +369,14 @@
 /* Markdown content styling — Editorial Forge editorial reading surface. */
 .markdown-body {
   color: var(--color-body);
-  font-family: var(--font-reading, "Inter", system-ui, sans-serif);
+  font-family: var(--font-text);
   line-height: 1.7;
 }
 
 .markdown-body h1,
 .markdown-body h2,
 .markdown-body h3 {
-  font-family: var(--font-display, "Fraunces", Georgia, serif);
+  font-family: var(--font-display);
   color: var(--color-strong);
   font-weight: 600;
   letter-spacing: -0.01em;
@@ -882,8 +764,13 @@
 .highlighter-mark--arc::before  { background: var(--color-arc); }
 
 /* Card letterpress — paired with --card-shadow-rest / --card-shadow-hover.
-   Apply via .card-letterpress on any landing card / panel / terminal that
-   currently uses inline `shadow-[...]` Tailwind arbitrary syntax. */
+   Apply via .card-letterpress on any interactive card / panel / terminal
+   that currently uses inline `shadow-[...]` Tailwind arbitrary syntax.
+   Use .card-impression on static (non-hoverable) panels, modal dialogs,
+   and toasts — same rest impression without the press-down hover. */
+.card-impression {
+  box-shadow: var(--card-shadow-rest);
+}
 .card-letterpress {
   box-shadow: var(--card-shadow-rest);
   transition: transform 140ms ease, box-shadow 140ms ease, border-color 200ms;

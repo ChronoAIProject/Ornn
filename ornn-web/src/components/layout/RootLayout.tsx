@@ -2,6 +2,7 @@ import { Outlet, useLocation, useParams, Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Navbar } from "./Navbar";
 import { ToastContainer } from "@/components/ui/Toast";
+import { useSkill } from "@/hooks/useSkills";
 
 /** Build breadcrumb segments from current route — every crumb is clickable */
 function useBreadcrumbs() {
@@ -9,6 +10,15 @@ function useBreadcrumbs() {
   const params = useParams();
   const { t } = useTranslation();
   const path = location.pathname;
+
+  // Resolve idOrName → skill name when the route addresses a specific
+  // skill, so the breadcrumb shows the human label instead of a raw
+  // UUID (e.g. when arriving via notification deep-link). The query is
+  // gated on path, so non-skill pages don't trigger a needless fetch.
+  // SkillDetailPage already has the same query in flight, so the cache
+  // hits without a second round-trip.
+  const isSkillRoute = path.startsWith("/skills/") && Boolean(params.idOrName);
+  const { data: skillForCrumb } = useSkill(isSkillRoute ? params.idOrName! : "");
 
   const crumbs: Array<{ label: string; to: string }> = [
     { label: t("breadcrumb.ornn"), to: "/" },
@@ -32,7 +42,15 @@ function useBreadcrumbs() {
     else if (path === "/skills/new/free") crumbs.push({ label: t("breadcrumb.upload"), to: "/skills/new/free" });
     else if (path === "/skills/new/generate") crumbs.push({ label: t("breadcrumb.generate"), to: "/skills/new/generate" });
   } else if (path.startsWith("/skills/") && params.idOrName) {
-    crumbs.push({ label: params.idOrName, to: `/skills/${params.idOrName}` });
+    // Resolve skill GUID → skill name so the breadcrumb reads the
+    // human label even when the user navigated here from a deep link
+    // (e.g. notification → /skills/<UUID>/audits). Falls back to the
+    // raw idOrName until the skill query lands.
+    const skillName = skillForCrumb?.name || params.idOrName;
+    crumbs.push({ label: skillName, to: `/skills/${params.idOrName}` });
+    if (path.endsWith("/audits") || path.includes("/audits?")) {
+      crumbs.push({ label: t("breadcrumb.auditHistory"), to: path });
+    }
   } else if (path.startsWith("/skills/") && params.id) {
     crumbs.push({ label: t("breadcrumb.editSkill"), to: path });
   } else if (path === "/playground") {
@@ -81,9 +99,11 @@ export function RootLayout() {
   return (
     <div className="flex flex-col h-screen bg-page bg-grid overflow-hidden">
       <Navbar />
-      {/* Breadcrumb navigation — hide when only root crumb */}
+      {/* Breadcrumb navigation — hide when only root crumb. Width matches
+          LandingNav (max-w-[1280px] mx-auto px-6 sm:px-8) so app-shell
+          horizontal rhythm aligns with the landing surface. */}
       {crumbs.length > 1 && (
-      <div className="shrink-0 px-6 sm:px-10 pt-3 pb-2">
+      <div className="mx-auto w-full max-w-[1280px] shrink-0 px-6 sm:px-8 pt-3 pb-2">
         <nav className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.08em]">
           {crumbs.map((crumb, i) => {
             const isLast = i === crumbs.length - 1;
@@ -110,7 +130,7 @@ export function RootLayout() {
         </nav>
       </div>
       )}
-      <main className="flex-1 min-h-0 px-6 sm:px-10 overflow-hidden">
+      <main className="mx-auto w-full max-w-[1280px] flex-1 min-h-0 px-6 sm:px-8 overflow-hidden">
         <Outlet />
       </main>
       <ToastContainer />

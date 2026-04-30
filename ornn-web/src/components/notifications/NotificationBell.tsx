@@ -101,11 +101,11 @@ export function NotificationBell() {
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-label={t("notifications.bellAria", "Notifications")}
-        className="relative flex h-10 w-10 items-center justify-center rounded-full border border-neon-cyan/20 bg-bg-surface/50 text-text-muted transition-all duration-200 hover:border-neon-cyan/60 hover:text-text-primary cursor-pointer"
+        className="relative flex h-9 w-9 cursor-pointer items-center justify-center rounded-sm border border-strong-edge bg-transparent text-strong transition-colors duration-200 hover:border-accent hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
       >
-        <BellIcon className="h-5 w-5" />
+        <BellIcon className="h-4 w-4" />
         {unread > 0 && (
-          <span className="absolute -right-0.5 -top-0.5 min-w-[1.25rem] rounded-full border-2 border-bg-surface bg-neon-red px-1 font-heading text-[10px] font-bold leading-4 text-white">
+          <span className="absolute -right-1 -top-1 min-w-[1.1rem] rounded-full border border-page bg-danger px-1 font-mono text-[10px] font-semibold leading-[14px] text-page">
             {badgeLabel}
           </span>
         )}
@@ -118,10 +118,10 @@ export function NotificationBell() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -10, scale: 0.95 }}
             transition={{ duration: 0.15, ease: "easeOut" }}
-            className="absolute right-0 top-full mt-2 w-80 overflow-hidden rounded-lg glass border border-neon-cyan/20 shadow-lg shadow-neon-cyan/10"
+            className="absolute right-0 top-full mt-2 w-80 overflow-hidden rounded bg-card border border-accent/20 card-impression"
           >
-            <div className="flex items-center justify-between border-b border-neon-cyan/10 px-4 py-3">
-              <span className="font-heading text-sm uppercase tracking-wider text-text-primary">
+            <div className="flex items-center justify-between border-b border-accent/10 px-4 py-3">
+              <span className="font-display text-sm uppercase tracking-wider text-strong">
                 {t("notifications.title", "Notifications")}
               </span>
               {unread > 0 && (
@@ -129,7 +129,7 @@ export function NotificationBell() {
                   type="button"
                   onClick={() => markAll.mutate()}
                   disabled={markAll.isPending}
-                  className="font-body text-xs text-text-muted transition-colors hover:text-neon-cyan cursor-pointer disabled:opacity-50"
+                  className="font-text text-xs text-meta transition-colors hover:text-accent cursor-pointer disabled:opacity-50"
                 >
                   {t("notifications.markAllRead", "Mark all read")}
                 </button>
@@ -138,11 +138,11 @@ export function NotificationBell() {
 
             <div className="max-h-96 overflow-y-auto">
               {isLoading ? (
-                <div className="px-4 py-6 text-center font-body text-sm text-text-muted">
+                <div className="px-4 py-6 text-center font-text text-sm text-meta">
                   {t("notifications.loading", "Loading…")}
                 </div>
               ) : visibleItems.length === 0 ? (
-                <div className="px-4 py-6 text-center font-body text-sm text-text-muted">
+                <div className="px-4 py-6 text-center font-text text-sm text-meta">
                   {t("notifications.empty", "You're all caught up.")}
                 </div>
               ) : (
@@ -151,25 +151,25 @@ export function NotificationBell() {
                     key={n._id}
                     type="button"
                     onClick={() => handleItemClick(n)}
-                    className={`flex w-full flex-col gap-1 border-b border-neon-cyan/5 px-4 py-3 text-left transition-colors last:border-b-0 cursor-pointer ${
+                    className={`flex w-full flex-col gap-1 border-b border-accent/5 px-4 py-3 text-left transition-colors last:border-b-0 cursor-pointer ${
                       n.readAt
-                        ? "hover:bg-neon-cyan/5"
-                        : "bg-neon-cyan/[0.04] hover:bg-neon-cyan/10"
+                        ? "hover:bg-accent/5"
+                        : "bg-accent/[0.04] hover:bg-accent/10"
                     }`}
                   >
                     <div className="flex items-start gap-2">
                       {!n.readAt && (
-                        <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-neon-cyan" />
+                        <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-accent" />
                       )}
                       <span
-                        className={`font-body text-sm leading-snug ${
-                          n.readAt ? "text-text-muted" : "text-text-primary"
+                        className={`font-text text-sm leading-snug ${
+                          n.readAt ? "text-meta" : "text-strong"
                         }`}
                       >
                         {n.title}
                       </span>
                     </div>
-                    <span className="font-mono text-xs text-text-muted pl-4">
+                    <span className="font-mono text-xs text-meta pl-4">
                       {formatRelative(n.createdAt)}
                     </span>
                   </button>
@@ -177,14 +177,14 @@ export function NotificationBell() {
               )}
             </div>
 
-            <div className="border-t border-neon-cyan/10">
+            <div className="border-t border-accent/10">
               <button
                 type="button"
                 onClick={() => {
                   setOpen(false);
                   navigate("/notifications");
                 }}
-                className="flex w-full items-center justify-center px-4 py-2.5 font-body text-sm text-neon-cyan transition-colors hover:bg-neon-cyan/5 cursor-pointer"
+                className="flex w-full items-center justify-center px-4 py-2.5 font-text text-sm text-accent transition-colors hover:bg-accent/5 cursor-pointer"
               >
                 {t("notifications.viewAll", "View all")}
               </button>

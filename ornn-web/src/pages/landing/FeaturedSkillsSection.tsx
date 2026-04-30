@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { SkillCard } from "./SkillCard";
 import { CatalogRow } from "./CatalogRow";
 import { HammeredDivider } from "./HammeredDivider";
@@ -7,6 +8,7 @@ import { useCatalogSkills, useFeaturedSkills } from "./useFeaturedSkills";
 import { CATALOG_DEFAULT, FEATURED_DEFAULT } from "./skillsData";
 
 export function FeaturedSkillsSection() {
+  const { t } = useTranslation();
   const featured = useFeaturedSkills();
   const catalog = useCatalogSkills();
 
@@ -22,11 +24,15 @@ export function FeaturedSkillsSection() {
         <div className="mb-12 flex flex-wrap items-end justify-between gap-6">
           <div>
             <h2 className="font-display-grotesk text-[clamp(36px,4vw,56px)] font-bold uppercase leading-[0.98] tracking-[-0.025em] text-parchment">
-              Skills, <HighlighterMark variant="gold">freshly forged</HighlighterMark>.
+              {t("landing.featured.headlineStart")}{" "}
+              <HighlighterMark variant="gold">
+                {t("landing.featured.headlineHighlight")}
+              </HighlighterMark>
+              .
             </h2>
           </div>
           <EmberLink to="/registry" variant="ghost">
-            See all →
+            {t("landing.featured.seeAll")}
           </EmberLink>
         </div>
 
@@ -39,7 +45,7 @@ export function FeaturedSkillsSection() {
         <HammeredDivider className="my-16" />
 
         <div className="mb-5 font-mono text-[10px] uppercase tracking-[0.25em] text-meta">
-          Also on the registry
+          {t("landing.featured.alsoOnRegistry")}
         </div>
         <div>
           {catalogItems.map((s, i) => (

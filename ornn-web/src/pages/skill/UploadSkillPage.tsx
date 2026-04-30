@@ -83,10 +83,10 @@ const MODE_CARDS: ModeCardConfig[] = [
     titleKey: "upload.guidedTitle",
     descKey: "upload.guidedDesc",
     icon: WizardIcon,
-    accentColor: "text-neon-cyan",
-    accentBg: "bg-neon-cyan/10",
-    accentBorder: "border-neon-cyan/30",
-    accentGlow: "group-hover:shadow-[0_0_20px_rgba(255,107,0,0.3)]",
+    accentColor: "text-accent",
+    accentBg: "bg-accent/10",
+    accentBorder: "border-accent/30",
+    accentGlow: "",
     bulletsKey: "upload.guidedBullets",
     ctaKey: "upload.startGuided",
     route: "/skills/new/guided",
@@ -97,10 +97,10 @@ const MODE_CARDS: ModeCardConfig[] = [
     titleKey: "upload.freeTitle",
     descKey: "upload.freeDesc",
     icon: UploadIcon,
-    accentColor: "text-neon-magenta",
-    accentBg: "bg-neon-magenta/10",
-    accentBorder: "border-neon-magenta/30",
-    accentGlow: "group-hover:shadow-[0_0_20px_rgba(255,140,56,0.3)]",
+    accentColor: "text-accent-support",
+    accentBg: "bg-accent-support/10",
+    accentBorder: "border-accent-support/30",
+    accentGlow: "",
     bulletsKey: "upload.freeBullets",
     ctaKey: "upload.startFree",
     route: "/skills/new/free",
@@ -111,10 +111,10 @@ const MODE_CARDS: ModeCardConfig[] = [
     titleKey: "upload.genTitle",
     descKey: "upload.genDesc",
     icon: SparkleIcon,
-    accentColor: "text-neon-yellow",
-    accentBg: "bg-neon-yellow/10",
-    accentBorder: "border-neon-yellow/30",
-    accentGlow: "group-hover:shadow-[0_0_20px_rgba(255,184,0,0.3)]",
+    accentColor: "text-warning",
+    accentBg: "bg-warning/10",
+    accentBorder: "border-warning/30",
+    accentGlow: "",
     bulletsKey: "upload.genBullets",
     ctaKey: "upload.startGen",
     route: "/skills/new/generate",
@@ -125,10 +125,10 @@ const MODE_CARDS: ModeCardConfig[] = [
     titleKey: "upload.githubTitle",
     descKey: "upload.githubDesc",
     icon: GitHubMarkIcon,
-    accentColor: "text-neon-cyan",
-    accentBg: "bg-neon-cyan/10",
-    accentBorder: "border-neon-cyan/30",
-    accentGlow: "group-hover:shadow-[0_0_20px_rgba(34,211,238,0.3)]",
+    accentColor: "text-accent",
+    accentBg: "bg-accent/10",
+    accentBorder: "border-accent/30",
+    accentGlow: "",
     bulletsKey: "upload.githubBullets",
     ctaKey: "upload.startGithub",
     route: "/skills/new/from-github",
@@ -148,7 +148,7 @@ export function UploadSkillPage() {
         <BackLink label={t("common.back", "Back")} />
       </nav>
       <div className="max-w-5xl mx-auto flex-1 flex flex-col justify-center">
-        <p className="font-body text-base text-text-muted text-center mb-6">
+        <p className="font-text text-base text-meta text-center mb-6">
           {t("upload.chooseMode")}
         </p>
 
@@ -176,18 +176,18 @@ export function UploadSkillPage() {
                   */}
                   <div className="flex flex-col items-center text-center p-4 h-full">
                     <div
-                      className={`mb-6 p-4 rounded-2xl ${card.accentBg} border ${card.accentBorder} ${card.accentGlow} transition-all`}
+                      className={`mb-6 p-4 rounded ${card.accentBg} border ${card.accentBorder} ${card.accentGlow} transition-all`}
                     >
                       <Icon className={`h-12 w-12 ${card.accentColor}`} />
                     </div>
 
                     <h2
-                      className={`font-heading text-xl ${card.accentColor} mb-3`}
+                      className={`font-display text-xl ${card.accentColor} mb-3`}
                     >
                       {t(card.titleKey)}
                     </h2>
 
-                    <p className="font-body text-text-muted mb-6">
+                    <p className="font-text text-meta mb-6">
                       {t(card.descKey)}
                     </p>
 
@@ -195,7 +195,7 @@ export function UploadSkillPage() {
                       {(t(card.bulletsKey, { returnObjects: true }) as string[]).map((bullet) => (
                         <li
                           key={bullet}
-                          className="flex items-center gap-2 text-sm text-text-muted"
+                          className="flex items-center gap-2 text-sm text-meta"
                         >
                           <span
                             className={`h-1.5 w-1.5 rounded-full ${card.accentBg.replace("/10", "")}`}

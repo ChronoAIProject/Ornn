@@ -1,7 +1,9 @@
+import { useTranslation } from "react-i18next";
 import { EmberLink } from "./EmberButton";
 import { HighlighterMark } from "./HighlighterMark";
 
 export function PublishSection() {
+  const { t } = useTranslation();
   return (
     <section
       id="build"
@@ -11,29 +13,30 @@ export function PublishSection() {
         <div className="grid grid-cols-1 items-center gap-14 border border-[color:var(--color-border-strong)] [background-image:var(--gradient-publish)] px-6 py-12 sm:px-12 sm:py-16 lg:[grid-template-columns:1.4fr_1fr]">
           <div>
             <h2 className="font-display-grotesk text-[clamp(36px,4vw,56px)] font-bold uppercase leading-[0.98] tracking-[-0.025em] text-parchment">
-              Publish a skill
+              {t("landing.publish.headlineLine1")}
               <br />
-              <HighlighterMark variant="gold">in 60 seconds</HighlighterMark>.
+              <HighlighterMark variant="gold">
+                {t("landing.publish.headlineLine2")}
+              </HighlighterMark>
+              .
             </h2>
             <p className="mt-5 max-w-[460px] text-sm leading-[1.6] text-bone">
-              You built something useful. Others need it too. Push to ORNN and
-              it lives on the registry — versioned, audited, ready to pull into
-              your agent.
+              {t("landing.publish.body")}
             </p>
             <div className="mt-7 flex flex-wrap gap-3.5">
-              <EmberLink to="/login">Start publishing →</EmberLink>
+              <EmberLink to="/login">{t("landing.publish.startPublishing")}</EmberLink>
               <EmberLink to="/docs" variant="ghost">
-                Read the guide
+                {t("landing.publish.readGuide")}
               </EmberLink>
             </div>
           </div>
 
           <ol className="m-0 list-none p-0 [counter-reset:step]">
             <Step
-              title="Describe the skill."
+              title={t("landing.publish.step1Title")}
               body={
                 <>
-                  Plain English.{" "}
+                  {t("landing.publish.step1Body")}{" "}
                   <code className="font-mono text-xs text-molten">
                     ornn-build &quot;summarize any GitHub PR into a changelog
                     entry.&quot;
@@ -42,20 +45,20 @@ export function PublishSection() {
               }
             />
             <Step
-              title="Test in the sandbox."
+              title={t("landing.publish.step2Title")}
               body={
                 <>
-                  Run in{" "}
+                  {t("landing.publish.step2BodyPrefix")}{" "}
                   <code className="font-mono text-xs text-molten">
                     chrono-sandbox
                   </code>{" "}
-                  (Node + Python). NyxID-gated for anything that needs auth.
+                  {t("landing.publish.step2BodySuffix")}
                 </>
               }
             />
             <Step
-              title="Audit & ship."
-              body="One command. Versioned, audited, live on the registry."
+              title={t("landing.publish.step3Title")}
+              body={t("landing.publish.step3Body")}
               isLast
             />
           </ol>

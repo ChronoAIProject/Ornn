@@ -96,24 +96,24 @@ export function PhoneNumberInput({
           className={`
             flex items-center gap-1 rounded-l-lg
             px-3 py-2.5
-            bg-bg-deep/80 border-b-2 border-r
-            font-body text-sm text-text-primary
+            bg-page/80 border-b-2 border-r
+            font-text text-sm text-strong
             transition-all duration-200
             ${
               error
-                ? "border-b-neon-red border-r-neon-cyan/30"
-                : "border-b-neon-cyan/30 border-r-neon-cyan/30"
+                ? "border-b-danger border-r-accent/30"
+                : "border-b-accent/30 border-r-accent/30"
             }
             ${
               disabled
                 ? "opacity-50 cursor-not-allowed"
-                : "cursor-pointer hover:border-b-neon-cyan/50"
+                : "cursor-pointer hover:border-b-accent/50"
             }
           `}
         >
           <span className="font-mono">{selectedCode}</span>
           <svg
-            className={`h-4 w-4 text-text-muted transition-transform ${isOpen ? "rotate-180" : ""}`}
+            className={`h-4 w-4 text-meta transition-transform ${isOpen ? "rotate-180" : ""}`}
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
@@ -137,22 +137,22 @@ export function PhoneNumberInput({
           className={`
             flex-1 rounded-r-lg
             px-4 py-2.5
-            bg-bg-deep/80 border-b-2
-            font-body text-text-primary
-            placeholder:text-text-muted/50
+            bg-page/80 border-b-2
+            font-text text-strong
+            placeholder:text-meta/50
             transition-all duration-200
             focus:outline-none
             ${
               error
-                ? "border-b-neon-red"
-                : "border-b-neon-cyan/30 focus:border-b-neon-cyan"
+                ? "border-b-danger"
+                : "border-b-accent/30 focus:border-b-accent"
             }
             ${disabled ? "opacity-50 cursor-not-allowed" : ""}
           `}
         />
       </div>
 
-      {error && <span className="mt-1 block text-xs text-neon-red">{error}</span>}
+      {error && <span className="mt-1 block text-xs text-danger">{error}</span>}
 
       {/* Dropdown */}
       <AnimatePresence>
@@ -165,13 +165,13 @@ export function PhoneNumberInput({
             className="
               absolute left-0 top-full z-50 mt-1
               max-h-64 w-64 overflow-hidden
-              rounded-lg
-              glass border border-neon-cyan/20
-              shadow-lg shadow-neon-cyan/10
+              rounded
+              bg-card border border-accent/20
+              card-impression
             "
           >
             {/* Search Input */}
-            <div className="border-b border-neon-cyan/10 p-2">
+            <div className="border-b border-accent/10 p-2">
               <input
                 ref={searchInputRef}
                 type="text"
@@ -180,10 +180,10 @@ export function PhoneNumberInput({
                 placeholder="Search country..."
                 className="
                   w-full rounded-md
-                  bg-bg-deep/50 px-3 py-2
-                  font-body text-sm text-text-primary
-                  placeholder:text-text-muted/50
-                  focus:outline-none focus:ring-1 focus:ring-neon-cyan/50
+                  bg-page/50 px-3 py-2
+                  font-text text-sm text-strong
+                  placeholder:text-meta/50
+                  focus:outline-none focus:ring-1 focus:ring-accent/50
                 "
               />
             </div>
@@ -198,23 +198,23 @@ export function PhoneNumberInput({
                     onClick={() => handleCountrySelect(country.dialCode)}
                     className={`
                       flex w-full items-center gap-3 px-3 py-2
-                      font-body text-sm text-left
+                      font-text text-sm text-left
                       transition-colors
                       ${
                         selectedCode === country.dialCode
-                          ? "bg-neon-cyan/10 text-neon-cyan"
-                          : "text-text-primary hover:bg-bg-elevated"
+                          ? "bg-accent/10 text-accent"
+                          : "text-strong hover:bg-elevated"
                       }
                     `}
                   >
-                    <span className="font-mono text-xs text-text-muted w-12">
+                    <span className="font-mono text-xs text-meta w-12">
                       {country.dialCode}
                     </span>
                     <span className="truncate">{country.name}</span>
                   </button>
                 ))
               ) : (
-                <div className="px-3 py-4 text-center text-sm text-text-muted">
+                <div className="px-3 py-4 text-center text-sm text-meta">
                   No countries found
                 </div>
               )}

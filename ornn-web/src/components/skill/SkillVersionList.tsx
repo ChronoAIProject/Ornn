@@ -65,26 +65,26 @@ function AuditPill({
   if (!audit) {
     return (
       <span
-        className="inline-flex items-center gap-1 rounded-full border border-text-muted/30 bg-text-muted/10 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-text-muted"
+        className="inline-flex items-center gap-1 rounded-full border border-meta/30 bg-meta/10 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-meta"
         title={notAuditedLabel}
       >
-        <span className="h-1.5 w-1.5 rounded-full bg-text-muted/60" aria-hidden />
+        <span className="h-1.5 w-1.5 rounded-full bg-meta/60" aria-hidden />
         ?
       </span>
     );
   }
   const cls: Record<AuditVerdict, string> = {
     green:
-      "border-neon-cyan/40 bg-neon-cyan/10 text-neon-cyan",
+      "border-accent/40 bg-accent/10 text-accent",
     yellow:
-      "border-neon-yellow/40 bg-neon-yellow/10 text-neon-yellow",
+      "border-warning/40 bg-warning/10 text-warning",
     red:
-      "border-neon-red/40 bg-neon-red/10 text-neon-red",
+      "border-danger/40 bg-danger/10 text-danger",
   };
   const dotCls: Record<AuditVerdict, string> = {
-    green: "bg-neon-cyan",
-    yellow: "bg-neon-yellow",
-    red: "bg-neon-red",
+    green: "bg-accent",
+    yellow: "bg-warning",
+    red: "bg-danger",
   };
   return (
     <span
@@ -145,8 +145,8 @@ export function SkillVersionList({
   }
 
   return (
-    <div className={`glass rounded-xl p-5 space-y-3 ${className}`}>
-      <p className="font-heading text-[11px] uppercase tracking-wider text-text-muted">
+    <div className={`bg-card rounded p-5 space-y-3 ${className}`}>
+      <p className="font-display text-[11px] uppercase tracking-wider text-meta">
         {t("skillDetail.versions")}
       </p>
       <ul className="space-y-1.5">
@@ -157,11 +157,11 @@ export function SkillVersionList({
             <li
               key={v.version}
               className={`
-                rounded-lg border p-2.5 transition-colors
+                rounded border p-2.5 transition-colors
                 ${
                   isCurrent
-                    ? "border-neon-cyan/40 bg-neon-cyan/5"
-                    : "border-transparent bg-bg-elevated/40 hover:border-neon-cyan/20"
+                    ? "border-accent/40 bg-accent/5"
+                    : "border-transparent bg-elevated/40 hover:border-accent/20"
                 }
               `}
             >
@@ -176,7 +176,7 @@ export function SkillVersionList({
                   `}
                 >
                   <div className="flex flex-wrap items-center gap-1.5">
-                    <span className="font-mono text-sm text-text-primary">{v.version}</span>
+                    <span className="font-mono text-sm text-strong">{v.version}</span>
                     {isLatest && (
                       <Badge color="cyan" className="text-[10px]">
                         {t("skillDetail.latest")}
@@ -196,7 +196,7 @@ export function SkillVersionList({
                       />
                     )}
                   </div>
-                  <div className="mt-0.5 font-body text-xs text-text-muted truncate">
+                  <div className="mt-0.5 font-text text-xs text-meta truncate">
                     {formatDateSGT(v.createdOn)}
                     {v.createdByDisplayName ? ` · ${v.createdByDisplayName}` : ""}
                   </div>
@@ -208,8 +208,8 @@ export function SkillVersionList({
                     disabled={isMutating}
                     className="
                       shrink-0 rounded border border-transparent px-2 py-1
-                      font-body text-xs text-text-muted
-                      hover:text-neon-yellow hover:border-neon-yellow/30
+                      font-text text-xs text-meta
+                      hover:text-warning hover:border-warning/30
                       disabled:opacity-50 disabled:cursor-not-allowed
                       transition-colors cursor-pointer
                     "
@@ -249,10 +249,10 @@ export function SkillVersionList({
                       }
                       className="
                         shrink-0 rounded border border-transparent px-2 py-1
-                        font-body text-xs text-text-muted
-                        hover:text-neon-red hover:border-neon-red/40
+                        font-text text-xs text-meta
+                        hover:text-danger hover:border-danger/40
                         disabled:opacity-50 disabled:cursor-not-allowed
-                        disabled:hover:text-text-muted disabled:hover:border-transparent
+                        disabled:hover:text-meta disabled:hover:border-transparent
                         transition-colors cursor-pointer
                       "
                     >
@@ -275,7 +275,7 @@ export function SkillVersionList({
           <div className="space-y-2">
             <label
               htmlFor="deprecation-note"
-              className="font-heading text-[11px] uppercase tracking-wider text-text-muted"
+              className="font-display text-[11px] uppercase tracking-wider text-meta"
             >
               {t("skillDetail.deprecationNoteLabel")}
             </label>
@@ -287,14 +287,14 @@ export function SkillVersionList({
               rows={3}
               placeholder={t("skillDetail.deprecationNotePlaceholder")}
               className="
-                neon-input w-full rounded-lg px-3 py-2 font-body text-sm
-                text-text-primary resize-y
+                neon-input w-full rounded px-3 py-2 font-text text-sm
+                text-strong resize-y
               "
             />
           </div>
         )}
         {modalTarget?.isDeprecated && modalTarget.deprecationNote && (
-          <p className="font-body text-sm text-text-muted">
+          <p className="font-text text-sm text-meta">
             {t("skillDetail.deprecationBannerBody", { note: modalTarget.deprecationNote })}
           </p>
         )}
@@ -320,7 +320,7 @@ export function SkillVersionList({
           }) as string
         }
       >
-        <p className="font-body text-sm text-text-muted">
+        <p className="font-text text-sm text-meta">
           {t("skillDetail.deleteVersionConfirm", {
             defaultValue:
               "Are you sure you want to delete v{{version}}? The version's package zip and audit history are removed and this cannot be undone.",

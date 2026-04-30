@@ -65,22 +65,22 @@ export function AuditHistoryCard({ idOrName, version, className }: AuditHistoryC
       type="button"
       onClick={handleClick}
       disabled={disabled}
-      className={`glass flex w-full items-center justify-between gap-3 rounded-xl border border-neon-cyan/15 p-4 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-70 enabled:hover:border-neon-cyan/40 enabled:hover:bg-neon-cyan/5 enabled:cursor-pointer ${className ?? ""}`}
+      className={`bg-card flex w-full items-center justify-between gap-3 rounded border border-accent/15 p-4 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-70 enabled:hover:border-accent/40 enabled:hover:bg-accent/5 enabled:cursor-pointer ${className ?? ""}`}
     >
       <div className="flex min-w-0 flex-col gap-1">
-        <h3 className="font-heading text-sm uppercase tracking-wider text-text-primary">
+        <h3 className="font-display text-sm uppercase tracking-wider text-strong">
           {t("audit.historyHeading", "Audit history")}
         </h3>
         <p
-          className={`font-body text-xs ${
-            isError ? "text-neon-red" : "text-text-muted"
+          className={`font-text text-xs ${
+            isError ? "text-danger" : "text-meta"
           }`}
         >
           {secondaryLine}
         </p>
       </div>
       {!disabled && (
-        <span className="flex items-center gap-1 font-mono text-xs text-neon-cyan shrink-0">
+        <span className="flex items-center gap-1 font-mono text-xs text-accent shrink-0">
           {t("audit.viewHistory", "View history")}
           <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />

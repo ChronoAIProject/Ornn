@@ -101,6 +101,7 @@ export async function startHarness(): Promise<Harness> {
     sseKeepAliveIntervalMs: 15_000,
     maxPackageSizeBytes: 10 * 1024 * 1024,
     allowedOrigins: [],
+    extraNyxidServices: [],
   };
 
   const { app, shutdown } = await bootstrap(config);

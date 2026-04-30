@@ -45,12 +45,12 @@ export function ToolsInput({ tools, onChange, error, className = "" }: ToolsInpu
 
   return (
     <div className={`flex flex-col gap-1.5 ${className}`}>
-      <label className="font-heading text-xs uppercase tracking-wider text-text-muted">
+      <label className="font-display text-xs uppercase tracking-wider text-meta">
         Required Tools
       </label>
 
       {/* Input with tag chips */}
-      <div className="neon-input flex flex-wrap gap-1.5 rounded-lg px-3 py-2">
+      <div className="neon-input flex flex-wrap gap-1.5 rounded px-3 py-2">
         {tools.map((tool) => (
           <Badge key={tool} color="cyan">
             {tool}
@@ -69,13 +69,13 @@ export function ToolsInput({ tools, onChange, error, className = "" }: ToolsInpu
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder="Type a tool name + Enter"
-          className="min-w-[100px] flex-1 border-none bg-transparent font-body text-sm text-text-primary outline-none placeholder:text-text-muted/50"
+          className="min-w-[100px] flex-1 border-none bg-transparent font-text text-sm text-strong outline-none placeholder:text-meta/50"
         />
       </div>
 
       {/* Suggested tools */}
       <div className="flex flex-wrap gap-1.5 mt-1">
-        <span className="text-xs text-text-muted font-body mr-1 self-center">
+        <span className="text-xs text-meta font-text mr-1 self-center">
           Suggested:
         </span>
         {SUGGESTED_TOOLS.map((tool) => {
@@ -97,14 +97,14 @@ export function ToolsInput({ tools, onChange, error, className = "" }: ToolsInpu
       </div>
 
       {/* Warning banner */}
-      <div className="rounded-lg border border-neon-yellow/20 bg-neon-yellow/5 p-3 mt-1">
-        <p className="font-body text-xs text-neon-yellow">
+      <div className="rounded border border-warning/20 bg-warning/5 p-3 mt-1">
+        <p className="font-text text-xs text-warning">
           Ensure that the tools you list are available in your target Claude client
           environment. Skills referencing unavailable tools will fail at runtime.
         </p>
       </div>
 
-      {error && <span className="text-xs text-neon-red">{error}</span>}
+      {error && <span className="text-xs text-danger">{error}</span>}
     </div>
   );
 }

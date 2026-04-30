@@ -50,10 +50,10 @@ export function TagsPage() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="font-heading text-2xl font-bold text-neon-magenta neon-magenta">
+        <h1 className="font-display text-2xl font-bold text-accent-support accent-support">
           Tags
         </h1>
-        <p className="mt-1 font-body text-text-muted">
+        <p className="mt-1 font-text text-meta">
           Manage predefined tags for skill categorization
         </p>
       </div>
@@ -61,9 +61,9 @@ export function TagsPage() {
       {/* Info Card */}
       <Card>
         <div className="flex items-start gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-neon-cyan/10">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded bg-accent/10">
             <svg
-              className="h-5 w-5 text-neon-cyan"
+              className="h-5 w-5 text-accent"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -77,23 +77,23 @@ export function TagsPage() {
             </svg>
           </div>
           <div>
-            <h3 className="font-heading text-sm font-medium text-text-primary">
+            <h3 className="font-display text-sm font-medium text-strong">
               Tag System
             </h3>
-            <p className="mt-1 font-body text-sm text-text-muted">
+            <p className="mt-1 font-text text-sm text-meta">
               Tags help users find and organize skills. The platform uses a hybrid system:
             </p>
-            <ul className="mt-2 space-y-1 font-body text-sm text-text-muted">
+            <ul className="mt-2 space-y-1 font-text text-sm text-meta">
               <li>
-                <span className="text-neon-cyan">Predefined tags</span> - Created by admins,
+                <span className="text-accent">Predefined tags</span> - Created by admins,
                 suggested to users
               </li>
               <li>
-                <span className="text-neon-cyan">Custom tags</span> - Created by users when
+                <span className="text-accent">Custom tags</span> - Created by users when
                 uploading skills (max 30 chars)
               </li>
             </ul>
-            <p className="mt-2 font-body text-xs text-text-muted">
+            <p className="mt-2 font-text text-xs text-meta">
               Each skill can have up to 10 tags.
             </p>
           </div>
@@ -111,7 +111,7 @@ export function TagsPage() {
             <Skeleton lines={6} />
           ) : error ? (
             <div className="py-8 text-center">
-              <p className="font-body text-neon-red">
+              <p className="font-text text-danger">
                 {error instanceof Error ? error.message : "Failed to load tags"}
               </p>
             </div>

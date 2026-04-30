@@ -28,7 +28,7 @@ import { UsagePullsCard } from "@/components/skill/UsagePullsCard";
 import { SkillHeroStrip } from "@/components/skill/SkillHeroStrip";
 import { BackLink } from "@/components/layout/BackLink";
 import { useRefreshSkillFromSource } from "@/hooks/useSkills";
-import { useStartAudit, useAuditSummaryByVersion } from "@/hooks/useAudit";
+import { useStartAudit, useAuditSummaryByVersion, useSkillAuditHistory } from "@/hooks/useAudit";
 import { useSkillPulls } from "@/hooks/useAnalytics";
 import { SkillVersionList } from "@/components/skill/SkillVersionList";
 import { PermissionsModal } from "@/components/skill/PermissionsModal";
@@ -89,6 +89,12 @@ export function SkillDetailPage() {
   const deprecationMutation = useSetVersionDeprecation(idOrName ?? "");
   const deleteVersionMutation = useDeleteSkillVersion(idOrName ?? "");
   const { data: auditSummaryByVersion } = useAuditSummaryByVersion(idOrName);
+  // History for the version currently being viewed, so the audit card
+  // can detect an in-flight (status: running) audit and show a loading
+  // state. The hook polls every 3s while any row is running.
+  const { data: versionAuditHistory } = useSkillAuditHistory(idOrName, {
+    version: versionParam,
+  });
   const refreshMutation = useRefreshSkillFromSource(idOrName ?? "");
   const startAuditMutation = useStartAudit();
 
@@ -386,6 +392,12 @@ export function SkillDetailPage() {
   }
 
   const versionAudit = auditSummaryByVersion?.[skill.version];
+  // Detect an in-flight audit on the current version so the right-rail
+  // Audit card can swap to a "running" loading tile. The history hook
+  // already polls every 3s while any row is running, so the UI flips
+  // back to the verdict tile automatically once the LLM finishes.
+  const versionAuditRunning =
+    versionAuditHistory?.some((r) => r.status === "running") ?? false;
   const ownerDisplayName =
     isOwner && user?.displayName
       ? user.displayName
@@ -467,7 +479,7 @@ export function SkillDetailPage() {
                   { v: skill.version, score: v.overallScore.toFixed(1) },
                 );
           return (
-            <div className={`flex shrink-0 items-center justify-between gap-3 rounded-sm border px-4 py-2 font-reading text-xs ${tone}`}>
+            <div className={`flex shrink-0 items-center justify-between gap-3 rounded-sm border px-4 py-2 font-text text-xs ${tone}`}>
               <span className="min-w-0 truncate">{message}</span>
               <Link
                 to={`/skills/${encodeURIComponent(skill.name || skill.guid)}/audits?version=${encodeURIComponent(skill.version)}`}
@@ -495,7 +507,7 @@ export function SkillDetailPage() {
         <main className="flex flex-col gap-4 lg:flex-row">
 
           {/* Left: tabs + content. */}
-          <section className="flex min-h-0 flex-col overflow-hidden rounded-md border border-subtle bg-card shadow-[0_2px_8px_-4px_rgba(26,24,18,0.06)] lg:h-[80vh] lg:min-h-[640px] lg:max-h-[calc(100vh-140px)] lg:flex-1 lg:min-w-0 dark:shadow-[0_2px_12px_-6px_rgba(0,0,0,0.45)]">
+          <section className="card-impression flex min-h-0 flex-col overflow-hidden rounded border border-subtle bg-card lg:h-[80vh] lg:min-h-[640px] lg:max-h-[calc(100vh-140px)] lg:flex-1 lg:min-w-0">
             {/* Toolbar — VersionPicker carries its own "Version" label, so
                 no outer label here (we used to render two). Audit history
                 lives in the right-rail card now. */}
@@ -525,7 +537,7 @@ export function SkillDetailPage() {
               {packageLoading ? (
                 <div className="p-6"><Skeleton lines={8} /></div>
               ) : packageError ? (
-                <p className="py-12 text-center font-reading text-sm text-meta">
+                <p className="py-12 text-center font-text text-sm text-meta">
                   {t("skillDetail.failedPackage")}
                 </p>
               ) : packageFiles.length > 0 || addedPaths.length > 0 ? (
@@ -541,7 +553,7 @@ export function SkillDetailPage() {
                   className="h-full"
                 />
               ) : (
-                <p className="py-12 text-center font-reading text-sm text-meta">
+                <p className="py-12 text-center font-text text-sm text-meta">
                   {t("skillDetail.noPackage")}
                 </p>
               )}
@@ -555,20 +567,18 @@ export function SkillDetailPage() {
           <aside className="flex flex-col gap-4 min-h-0 lg:h-[80vh] lg:min-h-[640px] lg:max-h-[calc(100vh-140px)] lg:w-[320px] lg:shrink-0 lg:overflow-y-auto lg:pr-1">
 
             {/* ── Audit card ── */}
-            <section className="rounded-md border border-subtle bg-card p-5 shadow-[0_2px_8px_-4px_rgba(26,24,18,0.06)] dark:shadow-[0_2px_12px_-6px_rgba(0,0,0,0.45)]">
+            <section className="rounded-md border border-subtle bg-card p-5 card-impression">
               <h3 className="mb-3.5 flex items-center gap-2 border-b border-dashed border-subtle pb-3 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-meta">
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></svg>
                 {t("skillDetail.cardAudit", "Audit")}
               </h3>
-              <AuditVerdictPill audit={versionAudit} />
+              <AuditVerdictPill audit={versionAudit} running={versionAuditRunning} />
               <p className="font-mono text-[11px] leading-relaxed tracking-wide text-meta">
-                {versionAudit?.completedAt ? (
-                  <>
-                    {t("skillDetail.auditLast", "Last audited {{date}}", { date: formatDateSGT(versionAudit.completedAt) })}
-                  </>
-                ) : (
-                  t("skillDetail.auditNoneYet", "Not audited yet for this version.")
-                )}
+                {versionAuditRunning
+                  ? t("skillDetail.auditRunningHint", "Scoring against the audit engine — this usually takes 30–60 seconds.")
+                  : versionAudit?.completedAt
+                    ? t("skillDetail.auditLast", "Last audited {{date}}", { date: formatDateSGT(versionAudit.completedAt) })
+                    : t("skillDetail.auditNoneYet", "Not audited yet for this version.")}
               </p>
               <div className="mt-3.5 flex flex-col gap-2">
                 {(isOwner || isAdminUser) && (
@@ -595,7 +605,7 @@ export function SkillDetailPage() {
 
             {/* ── Versions card ── */}
             {versionList.length > 0 && (
-              <section className="rounded-md border border-subtle bg-card p-5 shadow-[0_2px_8px_-4px_rgba(26,24,18,0.06)] dark:shadow-[0_2px_12px_-6px_rgba(0,0,0,0.45)]">
+              <section className="rounded-md border border-subtle bg-card p-5 card-impression">
                 <h3 className="mb-3.5 flex items-center gap-2 border-b border-dashed border-subtle pb-3 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-meta">
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
                     <path d="M21 16V8a2 2 0 0 0-1-1.7l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.7l7 4a2 2 0 0 0 2 0l7-4a2 2 0 0 0 1-1.7z" />
@@ -636,7 +646,7 @@ export function SkillDetailPage() {
             )}
 
             {/* ── Visibility card ── */}
-            <section className="rounded-md border border-subtle bg-card p-5 shadow-[0_2px_8px_-4px_rgba(26,24,18,0.06)] dark:shadow-[0_2px_12px_-6px_rgba(0,0,0,0.45)]">
+            <section className="rounded-md border border-subtle bg-card p-5 card-impression">
               <h3 className="mb-3.5 flex items-center gap-2 border-b border-dashed border-subtle pb-3 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-meta">
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
                   <circle cx="12" cy="12" r="9" /><line x1="3" y1="12" x2="21" y2="12" />
@@ -693,7 +703,7 @@ export function SkillDetailPage() {
                   </span>
                 );
               })()}
-              <ul className="space-y-1.5 font-reading text-sm text-body">
+              <ul className="space-y-1.5 font-text text-sm text-body">
                 <li className="flex items-baseline gap-2.5">
                   <span className="min-w-[18px] text-right font-mono text-sm font-semibold text-strong">
                     {skill.sharedWithUsers.length}
@@ -729,7 +739,7 @@ export function SkillDetailPage() {
               <button
                 type="button"
                 onClick={() => setShowAdvancedModal(true)}
-                className="flex w-full items-center justify-between gap-2 rounded-md border border-subtle bg-card p-5 text-left font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-meta shadow-[0_2px_8px_-4px_rgba(26,24,18,0.06)] transition-colors hover:border-strong-edge hover:text-strong dark:shadow-[0_2px_12px_-6px_rgba(0,0,0,0.45)]"
+                className="card-letterpress flex w-full cursor-pointer items-center justify-between gap-2 rounded border border-subtle bg-card p-5 text-left font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-meta hover:border-strong-edge hover:text-strong"
               >
                 <span className="flex items-center gap-2">
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
@@ -747,7 +757,7 @@ export function SkillDetailPage() {
             {/* ── Metadata card ── identity + tags + source. Filler-
                 with-purpose: makes the right rail visually full
                 without resorting to an invisible spacer. */}
-            <section className="rounded-md border border-subtle bg-card p-5 shadow-[0_2px_8px_-4px_rgba(26,24,18,0.06)] dark:shadow-[0_2px_12px_-6px_rgba(0,0,0,0.45)]">
+            <section className="rounded-md border border-subtle bg-card p-5 card-impression">
               <h3 className="mb-3.5 flex items-center gap-2 border-b border-dashed border-subtle pb-3 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-meta">
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
                   <line x1="3" y1="6" x2="21" y2="6" />
@@ -757,7 +767,7 @@ export function SkillDetailPage() {
                 {t("skillDetail.cardMetadata", "Metadata")}
               </h3>
 
-              <dl className="space-y-2.5 font-reading text-sm text-body">
+              <dl className="space-y-2.5 font-text text-sm text-body">
                 {(() => {
                   const category =
                     typeof (skill.metadata as { category?: unknown })?.category === "string"
@@ -869,7 +879,7 @@ export function SkillDetailPage() {
 
             {/* ── Danger zone (owner only) ── */}
             {isOwner && (
-              <section className="rounded-md border border-subtle bg-card p-5 shadow-[0_2px_8px_-4px_rgba(26,24,18,0.06)] dark:shadow-[0_2px_12px_-6px_rgba(0,0,0,0.45)]">
+              <section className="rounded-md border border-subtle bg-card p-5 card-impression">
                 <h3 className="mb-3.5 flex items-center gap-2 border-b border-dashed border-danger/30 pb-3 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-danger">
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
                     <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
@@ -902,7 +912,7 @@ export function SkillDetailPage() {
         onClose={() => setShowSaveConfirm(false)}
         title={t("skillDetail.saveChanges")}
       >
-        <p className="mb-4 font-reading text-sm text-meta">
+        <p className="mb-4 font-text text-sm text-meta">
           {t("skillDetail.saveConfirm", { name: skill.name })}
         </p>
         <label className="flex cursor-pointer items-center gap-3 rounded-sm border border-subtle bg-elevated p-3 select-none">
@@ -922,8 +932,8 @@ export function SkillDetailPage() {
             />
           </button>
           <div>
-            <p className="font-reading text-sm text-strong">{t("skillDetail.skipValidation")}</p>
-            <p className="font-reading text-xs text-meta">{t("skillDetail.skipDescription")}</p>
+            <p className="font-text text-sm text-strong">{t("skillDetail.skipValidation")}</p>
+            <p className="font-text text-xs text-meta">{t("skillDetail.skipDescription")}</p>
           </div>
         </label>
         <div className="mt-6 flex justify-end gap-3">
@@ -1002,7 +1012,7 @@ export function SkillDetailPage() {
         onClose={() => setShowDeleteConfirm(false)}
         title={t("skillDetail.deleteTitle")}
       >
-        <p className="font-reading text-sm text-meta">
+        <p className="font-text text-sm text-meta">
           {t("skillDetail.deleteConfirm", { name: skill.name }).replace(/<\/?strong>/g, "")}
         </p>
         <div className="mt-6 flex justify-end gap-3">
@@ -1039,7 +1049,7 @@ export function SkillDetailPage() {
         onClose={() => setShowAuditStartedModal(false)}
         title={t("skillDetail.auditStartedTitle", "Audit started") as string}
       >
-        <p className="font-reading text-sm text-meta">
+        <p className="font-text text-sm text-meta">
           {t(
             "skillDetail.auditStartedBody",
             "We're running the audit in the background. It takes around 20-30 seconds — when it's done, a new entry will appear in the Audit history. You can close this dialog and keep working.",
@@ -1058,8 +1068,21 @@ export function SkillDetailPage() {
 }
 
 /** Audit verdict tile rendered inside the right-rail Audit card. */
-function AuditVerdictPill({ audit }: { audit?: AuditRecord }) {
+function AuditVerdictPill({ audit, running }: { audit?: AuditRecord; running?: boolean }) {
   const { t } = useTranslation();
+  // In-flight audit takes precedence over the cached completed result —
+  // even if there's a previous completed verdict on this version, surface
+  // the spinner while a new run is scoring.
+  if (running) {
+    return (
+      <div className="mb-3.5 flex items-center gap-3 rounded-sm border border-accent/30 bg-accent/5 p-3 font-mono text-[11px] uppercase tracking-wider text-accent">
+        <div className="flex h-8 w-8 items-center justify-center rounded-sm border border-accent/30" aria-hidden>
+          <span className="h-4 w-4 animate-spin rounded-full border-2 border-accent/30 border-t-accent" />
+        </div>
+        <span>{t("skillDetail.auditRunning", "Audit in progress")}</span>
+      </div>
+    );
+  }
   if (!audit || audit.status !== "completed") {
     return (
       <div className="mb-3.5 flex items-center gap-3 rounded-sm border border-strong-edge bg-elevated/60 p-3 font-mono text-[11px] uppercase tracking-wider text-meta">

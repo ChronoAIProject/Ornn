@@ -68,21 +68,21 @@ export function OAuthCallbackPage() {
         className="w-full max-w-md"
       >
         {state.status === "loading" && (
-          <div className="rounded-md border border-subtle bg-card p-8 text-center shadow-[0_2px_12px_-6px_rgba(0,0,0,0.18)]">
+          <div className="rounded-md border border-subtle bg-card p-8 text-center card-impression">
             <div className="mb-4 flex justify-center">
               <span className="inline-block h-10 w-10 animate-spin rounded-full border-2 border-accent border-t-transparent" />
             </div>
             <h2 className="font-display text-xl font-semibold tracking-tight text-strong">
               Completing authentication
             </h2>
-            <p className="mt-2 font-reading text-sm text-body">
+            <p className="mt-2 font-text text-sm text-body">
               Please wait while we verify your account.
             </p>
           </div>
         )}
 
         {state.status === "error" && (
-          <div className="rounded-md border border-danger/40 bg-card p-8 text-center shadow-[0_2px_12px_-6px_rgba(0,0,0,0.18)]">
+          <div className="rounded-md border border-danger/40 bg-card p-8 text-center card-impression">
             <div className="mb-4 flex justify-center">
               <div className="flex h-12 w-12 items-center justify-center rounded-sm border border-danger bg-danger-soft">
                 <svg
@@ -103,7 +103,7 @@ export function OAuthCallbackPage() {
             <h2 className="font-display text-xl font-semibold tracking-tight text-danger">
               Authentication failed
             </h2>
-            <p className="mt-2 font-reading text-sm leading-relaxed text-body">{state.message}</p>
+            <p className="mt-2 font-text text-sm leading-relaxed text-body">{state.message}</p>
             <Button
               variant="primary"
               onClick={() => navigate("/login", { replace: true })}

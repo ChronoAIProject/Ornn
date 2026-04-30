@@ -4,7 +4,7 @@
  * @module hooks/useAnalytics
  */
 
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { fetchSkillAnalytics, fetchSkillPulls } from "@/services/analyticsApi";
 import type {
   AnalyticsWindow,
@@ -57,5 +57,9 @@ export function useSkillPulls(
       }),
     enabled: Boolean(idOrName),
     staleTime: 60_000,
+    // Keep the previous bucket's data on the screen while a new bucket
+    // refetches — eliminates the unmount/remount flash when the user
+    // switches Hour ⇄ Day ⇄ Month.
+    placeholderData: keepPreviousData,
   });
 }

@@ -27,7 +27,7 @@ export function StepPreview({ files, fileContents, metadata, authorName }: StepP
       exit={{ opacity: 0, x: -20 }}
       transition={{ duration: 0.2 }}
     >
-      <h2 className="font-heading text-lg text-neon-cyan mb-6">
+      <h2 className="font-display text-lg text-accent mb-6">
         {t("guided.previewTitle")}
       </h2>
 

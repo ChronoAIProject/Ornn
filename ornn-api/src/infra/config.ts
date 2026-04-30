@@ -57,6 +57,19 @@ export interface SkillConfig {
    * list denies all cross-origin requests (same-origin still works).
    */
   readonly allowedOrigins: readonly string[];
+
+  /**
+   * Synthetic / out-of-catalogue NyxID service names that get appended
+   * to the bottom of every `GET /api/v1/me/nyxid-services` response so
+   * skill owners can tie a skill to a platform-side service that isn't
+   * (yet) in the catalogue. Parsed from the comma-separated
+   * `EXTRA_NYXID_SERVICES` env var.
+   *
+   * Each entry surfaces as a synthetic service with `tier: "admin"`,
+   * `id: "synthetic:<slug>"`, the trimmed name as the label. Default is
+   * a single-item array `["NyxID"]`.
+   */
+  readonly extraNyxidServices: readonly string[];
 }
 
 /** Parses "true"/"false"/"1"/"0" into a real boolean. */
@@ -101,6 +114,14 @@ const envSchema = z.object({
    *   ALLOWED_ORIGINS=https://app.ornn.xyz,http://localhost:5173
    */
   ALLOWED_ORIGINS: z.string().default(""),
+
+  /**
+   * Comma-separated synthetic NyxID services to append to the bottom of
+   * the picker. See `SkillConfig.extraNyxidServices`. Default is the
+   * single entry "NyxID"; future operators can extend it without code
+   * changes by setting e.g. `EXTRA_NYXID_SERVICES=NyxID,SomeOtherSvc`.
+   */
+  EXTRA_NYXID_SERVICES: z.string().default("NyxID"),
 });
 
 /**
@@ -159,6 +180,11 @@ export function loadConfig(): SkillConfig {
     maxPackageSizeBytes: env.MAX_PACKAGE_SIZE_BYTES,
 
     allowedOrigins: env.ALLOWED_ORIGINS
+      .split(",")
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0),
+
+    extraNyxidServices: env.EXTRA_NYXID_SERVICES
       .split(",")
       .map((s) => s.trim())
       .filter((s) => s.length > 0),

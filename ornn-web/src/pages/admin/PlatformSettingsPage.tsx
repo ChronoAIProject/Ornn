@@ -55,10 +55,10 @@ export function PlatformSettingsPage() {
     <PageTransition>
       <div className="mx-auto w-full max-w-3xl px-6 py-10">
         <header className="mb-6">
-          <h1 className="font-heading text-3xl text-text-primary">
+          <h1 className="font-display text-3xl text-strong">
             {t("platformSettings.title", "Platform settings")}
           </h1>
-          <p className="mt-1 font-body text-sm text-text-muted">
+          <p className="mt-1 font-text text-sm text-meta">
             {t(
               "platformSettings.subtitle",
               "Platform-wide knobs that affect every owner and reviewer. Changes take effect on the next audit run.",
@@ -67,11 +67,11 @@ export function PlatformSettingsPage() {
         </header>
 
         {isLoading ? (
-          <p className="py-16 text-center font-body text-sm text-text-muted">
+          <p className="py-16 text-center font-text text-sm text-meta">
             {t("platformSettings.loading", "Loading…")}
           </p>
         ) : isError ? (
-          <p className="py-16 text-center font-body text-sm text-neon-red">
+          <p className="py-16 text-center font-text text-sm text-danger">
             {t("platformSettings.loadFailed", "Could not load platform settings.")}
           </p>
         ) : (
@@ -79,7 +79,7 @@ export function PlatformSettingsPage() {
             <section className="space-y-2">
               <label
                 htmlFor="auditWaiverThreshold"
-                className="block font-mono text-[10px] uppercase tracking-[0.14em] text-text-muted"
+                className="block font-mono text-[10px] uppercase tracking-[0.14em] text-meta"
               >
                 {t("platformSettings.auditThresholdLabel", "Audit waiver threshold")}
               </label>
@@ -92,18 +92,18 @@ export function PlatformSettingsPage() {
                   step={0.1}
                   value={threshold}
                   onChange={(e) => setThreshold(e.target.value)}
-                  className="w-28 rounded-lg border border-neon-cyan/20 bg-bg-surface px-3 py-2 font-mono text-sm text-text-primary focus:outline-none focus:border-neon-cyan/60 focus:ring-2 focus:ring-neon-cyan/30"
+                  className="w-28 rounded border border-accent/20 bg-card px-3 py-2 font-mono text-sm text-strong focus:outline-none focus:border-accent/60 focus:ring-2 focus:ring-accent/30"
                 />
-                <span className="font-mono text-sm text-text-muted">/ 10</span>
+                <span className="font-mono text-sm text-meta">/ 10</span>
               </div>
-              <p className="font-body text-xs text-text-muted">
+              <p className="font-text text-xs text-meta">
                 {t(
                   "platformSettings.auditThresholdHint",
                   "Audit overall score at or above this cutoff auto-grants a new share. Below it, the grant becomes a waiver request that the owner must justify and a reviewer must approve.",
                 )}
               </p>
               {!valid && threshold !== "" && (
-                <p className="font-body text-xs text-neon-red">
+                <p className="font-text text-xs text-danger">
                   {t(
                     "platformSettings.auditThresholdInvalid",
                     "Must be a number between 0 and 10.",

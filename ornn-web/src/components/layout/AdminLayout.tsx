@@ -109,15 +109,15 @@ export function AdminLayout() {
   const breadcrumbs = getBreadcrumbs(location.pathname);
 
   return (
-    <div className="bg-grid min-h-screen bg-bg-deep">
+    <div className="bg-grid min-h-screen bg-page">
       {/* Top Bar */}
-      <header className="fixed top-0 z-40 w-full border-b border-neon-cyan/10 bg-bg-deep/80 backdrop-blur-md">
-        <div className="flex h-28 items-center justify-between px-4 lg:px-8">
+      <header className="fixed top-0 z-40 w-full border-b border-subtle bg-page/95 backdrop-blur-md">
+        <div className="flex h-[60px] items-center justify-between px-4 lg:px-8">
           {/* Logo / Back Link */}
           <NavLink to="/" className="flex items-center gap-3">
-            <Logo className="h-8 w-auto" />
-            <span className="font-heading text-lg tracking-wider text-neon-magenta">
-              Admin Panel
+            <Logo className="h-[26px] w-auto" />
+            <span className="font-display text-sm font-semibold uppercase tracking-[0.16em] text-accent">
+              Admin
             </span>
           </NavLink>
 
@@ -125,16 +125,16 @@ export function AdminLayout() {
           <nav className="hidden items-center gap-2 sm:flex">
             {breadcrumbs.map((crumb, idx) => (
               <span key={crumb.label} className="flex items-center gap-2">
-                {idx > 0 && <span className="text-text-muted">/</span>}
+                {idx > 0 && <span className="text-meta">/</span>}
                 {crumb.path && idx < breadcrumbs.length - 1 ? (
                   <NavLink
                     to={crumb.path}
-                    className="font-body text-sm text-text-muted hover:text-neon-cyan transition-colors"
+                    className="font-text text-sm text-meta hover:text-accent transition-colors"
                   >
                     {crumb.label}
                   </NavLink>
                 ) : (
-                  <span className="font-body text-sm text-text-primary">
+                  <span className="font-text text-sm text-strong">
                     {crumb.label}
                   </span>
                 )}
@@ -145,7 +145,7 @@ export function AdminLayout() {
           {/* Back to Main */}
           <NavLink
             to="/"
-            className="flex items-center gap-2 font-body text-sm text-text-muted hover:text-neon-cyan transition-colors"
+            className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.14em] text-meta transition-colors hover:text-accent"
           >
             <svg
               className="h-4 w-4"
@@ -165,9 +165,9 @@ export function AdminLayout() {
         </div>
       </header>
 
-      <div className="flex pt-28">
+      <div className="flex pt-[60px]">
         {/* Sidebar */}
-        <aside className="fixed left-0 top-28 z-30 hidden h-[calc(100vh-7rem)] w-60 border-r border-neon-cyan/10 bg-bg-deep lg:block">
+        <aside className="fixed left-0 top-[60px] z-30 hidden h-[calc(100vh-60px)] w-60 border-r border-subtle bg-page lg:block">
           <nav className="flex flex-col gap-1 p-4">
             {NAV_ITEMS.map((item) => (
               <NavLink
@@ -175,10 +175,10 @@ export function AdminLayout() {
                 to={item.path}
                 end={item.path === "/admin"}
                 className={({ isActive }) =>
-                  `flex items-center gap-3 rounded-lg px-4 py-2.5 font-body text-sm transition-all duration-200 ${
+                  `flex items-center gap-3 rounded-sm px-4 py-2.5 font-text text-sm transition-colors duration-150 ${
                     isActive
-                      ? "bg-neon-magenta/10 text-neon-magenta border border-neon-magenta/30 shadow-[0_0_10px_rgba(255,140,56,0.1)]"
-                      : "text-text-muted hover:bg-bg-elevated hover:text-text-primary border border-transparent"
+                      ? "border border-accent/30 bg-accent/10 text-accent"
+                      : "border border-transparent text-meta hover:bg-elevated hover:text-strong"
                   }`
                 }
               >
@@ -190,17 +190,17 @@ export function AdminLayout() {
         </aside>
 
         {/* Mobile Navigation */}
-        <nav className="fixed bottom-0 left-0 right-0 z-40 flex border-t border-neon-cyan/10 bg-bg-deep/95 backdrop-blur-md lg:hidden">
+        <nav className="fixed bottom-0 left-0 right-0 z-40 flex border-t border-subtle bg-page/95 backdrop-blur-md lg:hidden">
           {NAV_ITEMS.map((item) => (
             <NavLink
               key={item.path}
               to={item.path}
               end={item.path === "/admin"}
               className={({ isActive }) =>
-                `flex flex-1 flex-col items-center gap-1 py-3 text-xs transition-colors ${
+                `flex flex-1 flex-col items-center gap-1 py-3 font-mono text-[10px] uppercase tracking-[0.12em] transition-colors ${
                   isActive
-                    ? "text-neon-magenta"
-                    : "text-text-muted hover:text-text-primary"
+                    ? "text-accent"
+                    : "text-meta hover:text-strong"
                 }`
               }
             >
@@ -211,7 +211,7 @@ export function AdminLayout() {
         </nav>
 
         {/* Main Content */}
-        <main className="min-h-[calc(100vh-4rem)] flex-1 p-4 pb-20 lg:ml-60 lg:p-8 lg:pb-8">
+        <main className="min-h-[calc(100vh-60px)] flex-1 p-4 pb-20 lg:ml-60 lg:p-8 lg:pb-8">
           <motion.div
             key={location.pathname}
             initial={{ opacity: 0, y: 10 }}

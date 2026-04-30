@@ -104,7 +104,7 @@ function ReleaseAccordion({ lang }: { lang: Lang }) {
 
   return (
     <div className="my-8">
-      <h2 id={slugify(lang === "zh" ? "已发布版本" : "released-versions")} className="font-heading text-2xl font-bold text-neon-cyan mb-4">
+      <h2 id={slugify(lang === "zh" ? "已发布版本" : "released-versions")} className="font-display text-2xl font-bold text-accent mb-4">
         {lang === "zh" ? "已发布版本" : "Released Versions"}
       </h2>
       <div className="space-y-2">
@@ -114,19 +114,19 @@ function ReleaseAccordion({ lang }: { lang: Lang }) {
           return (
             <div
               key={release.version}
-              className="rounded-lg border border-neon-cyan/20 overflow-hidden transition-colors hover:border-neon-cyan/40"
+              className="rounded border border-accent/20 overflow-hidden transition-colors hover:border-accent/40"
             >
               <button
                 type="button"
                 onClick={() => handleToggle(release.version)}
-                className="flex w-full items-center gap-3 px-5 py-4 text-left cursor-pointer transition-colors hover:bg-neon-cyan/5"
+                className="flex w-full items-center gap-3 px-5 py-4 text-left cursor-pointer transition-colors hover:bg-accent/5"
               >
-                <ChevronIcon open={isOpen} className="h-4 w-4 text-text-muted shrink-0" />
+                <ChevronIcon open={isOpen} className="h-4 w-4 text-meta shrink-0" />
                 <div className="flex-1 min-w-0">
-                  <span className="font-heading text-base font-semibold text-text-primary">
+                  <span className="font-display text-base font-semibold text-strong">
                     v{release.version}
                   </span>
-                  <span className="font-body text-sm text-text-muted ml-2">
+                  <span className="font-text text-sm text-meta ml-2">
                     — {release.title}
                   </span>
                   {isLatest && (
@@ -135,10 +135,10 @@ function ReleaseAccordion({ lang }: { lang: Lang }) {
                     </span>
                   )}
                 </div>
-                <span className="font-mono text-xs text-text-muted shrink-0">{release.date}</span>
+                <span className="font-mono text-xs text-meta shrink-0">{release.date}</span>
               </button>
               {isOpen && (
-                <div className="px-5 pb-4 border-t border-neon-cyan/10">
+                <div className="px-5 pb-4 border-t border-accent/10">
                   {expandedContent ? (
                     <div className="markdown-body pt-3">
                       <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>
@@ -146,7 +146,7 @@ function ReleaseAccordion({ lang }: { lang: Lang }) {
                       </ReactMarkdown>
                     </div>
                   ) : (
-                    <p className="py-4 text-text-muted text-sm">{t("docs.loadFailed")}</p>
+                    <p className="py-4 text-meta text-sm">{t("docs.loadFailed")}</p>
                   )}
                 </div>
               )}
@@ -163,17 +163,17 @@ function ReleaseAccordion({ lang }: { lang: Lang }) {
 function VersionBadge() {
   const releasesUrl = "https://github.com/ChronoAIProject/Ornn/releases";
   return (
-    <div className="my-6 inline-flex flex-wrap items-center gap-3 rounded-lg border border-neon-cyan/20 bg-bg-elevated px-4 py-2">
+    <div className="my-6 inline-flex flex-wrap items-center gap-3 rounded border border-accent/20 bg-elevated px-4 py-2">
       <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
         Current version
       </span>
-      <span className="font-mono text-base text-neon-cyan">v{__APP_VERSION__}</span>
-      <span className="text-text-muted">·</span>
+      <span className="font-mono text-base text-accent">v{__APP_VERSION__}</span>
+      <span className="text-meta">·</span>
       <a
         href={releasesUrl}
         target="_blank"
         rel="noreferrer"
-        className="font-body text-sm text-text-muted transition-colors hover:text-text-primary"
+        className="font-text text-sm text-meta transition-colors hover:text-strong"
       >
         Release history on GitHub →
       </a>
@@ -306,11 +306,11 @@ function MermaidLightbox({ svg, onClose }: { svg: string; onClose: () => void })
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
       {/* Toolbar */}
       <div className="absolute top-4 right-4 z-10 flex items-center gap-2">
-        <button type="button" onClick={() => setScale((s) => Math.min(s + 0.25, 5))} className="rounded-lg bg-bg-elevated px-3 py-1.5 font-mono text-sm text-text-primary hover:bg-neon-cyan/20 transition-colors cursor-pointer">+</button>
-        <span className="rounded-lg bg-bg-elevated px-3 py-1.5 font-mono text-sm text-text-muted min-w-[4rem] text-center">{Math.round(scale * 100)}%</span>
-        <button type="button" onClick={() => setScale((s) => Math.max(s - 0.25, 0.2))} className="rounded-lg bg-bg-elevated px-3 py-1.5 font-mono text-sm text-text-primary hover:bg-neon-cyan/20 transition-colors cursor-pointer">−</button>
-        <button type="button" onClick={handleReset} className="rounded-lg bg-bg-elevated px-3 py-1.5 font-mono text-sm text-text-primary hover:bg-neon-cyan/20 transition-colors cursor-pointer">Reset</button>
-        <button type="button" onClick={onClose} className="rounded-lg bg-bg-elevated px-3 py-1.5 font-mono text-sm text-text-primary hover:bg-neon-cyan/20 transition-colors cursor-pointer">✕</button>
+        <button type="button" onClick={() => setScale((s) => Math.min(s + 0.25, 5))} className="rounded bg-elevated px-3 py-1.5 font-mono text-sm text-strong hover:bg-accent/20 transition-colors cursor-pointer">+</button>
+        <span className="rounded bg-elevated px-3 py-1.5 font-mono text-sm text-meta min-w-[4rem] text-center">{Math.round(scale * 100)}%</span>
+        <button type="button" onClick={() => setScale((s) => Math.max(s - 0.25, 0.2))} className="rounded bg-elevated px-3 py-1.5 font-mono text-sm text-strong hover:bg-accent/20 transition-colors cursor-pointer">−</button>
+        <button type="button" onClick={handleReset} className="rounded bg-elevated px-3 py-1.5 font-mono text-sm text-strong hover:bg-accent/20 transition-colors cursor-pointer">Reset</button>
+        <button type="button" onClick={onClose} className="rounded bg-elevated px-3 py-1.5 font-mono text-sm text-strong hover:bg-accent/20 transition-colors cursor-pointer">✕</button>
       </div>
       {/* Viewport */}
       <div
@@ -361,7 +361,7 @@ function MermaidBlock({ chart }: { chart: string }) {
     <>
       <div
         ref={containerRef}
-        className="mermaid-container group relative my-4 overflow-x-auto rounded-lg border border-neon-cyan/10 bg-bg-deep p-4 cursor-pointer [&_svg]:mx-auto [&_svg]:max-w-full"
+        className="mermaid-container group relative my-4 overflow-x-auto rounded border border-accent/10 bg-page p-4 cursor-pointer [&_svg]:mx-auto [&_svg]:max-w-full"
         onClick={() => setLightboxOpen(true)}
         dangerouslySetInnerHTML={{ __html: svg }}
       />
@@ -389,7 +389,7 @@ function CopyButton({ text }: { text: string }) {
     <button
       type="button"
       onClick={handleCopy}
-      className="absolute top-2 right-2 z-10 px-2 py-1 rounded text-xs font-mono transition-all cursor-pointer border border-neon-cyan/30 bg-bg-deep/80 text-text-muted hover:text-neon-cyan hover:border-neon-cyan/60"
+      className="absolute top-2 right-2 z-10 px-2 py-1 rounded text-xs font-mono transition-all cursor-pointer border border-accent/30 bg-page/80 text-meta hover:text-accent hover:border-accent/60"
     >
       {copied ? "Copied!" : "Copy"}
     </button>
@@ -516,7 +516,7 @@ function Sidebar({
   };
 
   return (
-    <nav className="w-64 shrink-0 border-r border-neon-cyan/10 overflow-y-auto py-4 pr-2">
+    <nav className="w-64 shrink-0 border-r border-accent/10 overflow-y-auto py-4 pr-2">
       {sections.map((section) => {
         const isExpanded = expanded.has(section.id);
         return (
@@ -528,7 +528,7 @@ function Sidebar({
             >
               <ChevronIcon
                 open={isExpanded}
-                className="h-4 w-4 shrink-0 text-text-muted group-hover:text-text-primary transition-colors"
+                className="h-4 w-4 shrink-0 text-meta group-hover:text-strong transition-colors"
               />
               <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-meta group-hover:text-strong transition-colors">
                 {section.label}
@@ -544,10 +544,10 @@ function Sidebar({
                       type="button"
                       onClick={() => onSelect(child.id, child.label)}
                       className={`
-                        w-full text-left px-3 py-2 rounded-md font-body text-base transition-all duration-150 cursor-pointer
+                        w-full text-left px-3 py-2 rounded-md font-text text-base transition-all duration-150 cursor-pointer
                         ${isActive
-                          ? "text-neon-cyan bg-neon-cyan/10 border-l-2 border-neon-cyan"
-                          : "text-text-muted hover:text-text-primary hover:bg-bg-elevated border-l-2 border-transparent"
+                          ? "text-accent bg-accent/10 border-l-2 border-accent"
+                          : "text-meta hover:text-strong hover:bg-elevated border-l-2 border-transparent"
                         }
                       `}
                     >
@@ -588,7 +588,7 @@ function TableOfContents({
       <h4 className="font-mono text-[10px] uppercase tracking-[0.16em] text-meta px-2 py-1.5 mb-2">
         {t("docs.onThisPage")}
       </h4>
-      <div className="space-y-0.5 border-l border-neon-cyan/10">
+      <div className="space-y-0.5 border-l border-accent/10">
         {tocItems.map((item) => {
           const isActive = item.id === activeHeadingId;
           const indent = item.level === 2 ? "pl-3" : item.level === 3 ? "pl-6" : "pl-9";
@@ -598,10 +598,10 @@ function TableOfContents({
               type="button"
               onClick={() => onSelect(item.id)}
               className={`
-                w-full text-left py-1.5 ${indent} font-body text-base leading-snug transition-colors duration-150 cursor-pointer truncate
+                w-full text-left py-1.5 ${indent} font-text text-base leading-snug transition-colors duration-150 cursor-pointer truncate
                 ${isActive
-                  ? "text-neon-cyan border-l-2 border-neon-cyan -ml-px"
-                  : "text-text-muted hover:text-text-primary"
+                  ? "text-accent border-l-2 border-accent -ml-px"
+                  : "text-meta hover:text-strong"
                 }
               `}
               title={item.text}

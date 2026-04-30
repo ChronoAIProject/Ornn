@@ -108,23 +108,23 @@ export function ActivitiesPage() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="font-heading text-2xl font-bold text-neon-magenta neon-magenta">
+        <h1 className="font-display text-2xl font-bold text-accent-support accent-support">
           Activities
         </h1>
-        <p className="mt-1 font-body text-text-muted">
+        <p className="mt-1 font-text text-meta">
           Platform activity feed and audit log
         </p>
       </div>
 
       {/* Filter */}
       <div className="flex items-center gap-4">
-        <label className="font-mono text-[10px] uppercase tracking-[0.14em] text-text-muted">
+        <label className="font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
           Filter by Action
         </label>
         <select
           value={actionFilter}
           onChange={(e) => handleActionFilterChange(e.target.value)}
-          className="neon-input rounded-lg px-4 py-2 font-body text-sm text-text-primary bg-bg-elevated border border-neon-cyan/20 focus:border-neon-cyan/50 outline-none transition-colors"
+          className="neon-input rounded px-4 py-2 font-text text-sm text-strong bg-elevated border border-accent/20 focus:border-accent/50 outline-none transition-colors"
         >
           {ACTION_TYPES.map((type) => (
             <option key={type.value} value={type.value}>
@@ -145,29 +145,29 @@ export function ActivitiesPage() {
             <Skeleton lines={10} />
           ) : error ? (
             <div className="py-8 text-center">
-              <p className="font-body text-neon-red">
+              <p className="font-text text-danger">
                 {error instanceof Error ? error.message : "Failed to load activities"}
               </p>
             </div>
           ) : data?.items.length === 0 ? (
-            <p className="py-8 text-center font-body text-text-muted">
+            <p className="py-8 text-center font-text text-meta">
               No activities found.
             </p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
-                  <tr className="border-b border-neon-cyan/20">
-                    <th className="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-[0.14em] text-text-muted">
+                  <tr className="border-b border-accent/20">
+                    <th className="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
                       Time
                     </th>
-                    <th className="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-[0.14em] text-text-muted">
+                    <th className="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
                       User
                     </th>
-                    <th className="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-[0.14em] text-text-muted">
+                    <th className="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
                       Action
                     </th>
-                    <th className="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-[0.14em] text-text-muted">
+                    <th className="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
                       Details
                     </th>
                   </tr>
@@ -176,22 +176,22 @@ export function ActivitiesPage() {
                   {data?.items.map((activity) => (
                     <tr
                       key={activity.id}
-                      className="border-b border-neon-cyan/10 transition-colors hover:bg-bg-elevated/50"
+                      className="border-b border-accent/10 transition-colors hover:bg-elevated/50"
                     >
-                      <td className="whitespace-nowrap px-4 py-3 font-body text-xs text-text-muted">
+                      <td className="whitespace-nowrap px-4 py-3 font-text text-xs text-meta">
                         {formatDateSGT(activity.createdAt)}
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
-                          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-bg-elevated text-xs text-text-muted">
+                          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-elevated text-xs text-meta">
                             {(activity.userDisplayName || activity.userEmail).charAt(0).toUpperCase()}
                           </div>
                           <div className="min-w-0">
-                            <p className="truncate font-body text-sm text-text-primary">
+                            <p className="truncate font-text text-sm text-strong">
                               {activity.userDisplayName || activity.userEmail}
                             </p>
                             {activity.userDisplayName && (
-                              <p className="truncate font-body text-xs text-text-muted">
+                              <p className="truncate font-text text-xs text-meta">
                                 {activity.userEmail}
                               </p>
                             )}
@@ -203,7 +203,7 @@ export function ActivitiesPage() {
                           {activity.action}
                         </Badge>
                       </td>
-                      <td className="px-4 py-3 font-body text-sm text-text-muted">
+                      <td className="px-4 py-3 font-text text-sm text-meta">
                         {activity.details && Object.keys(activity.details).length > 0
                           ? (activity.details.skillName as string) ?? JSON.stringify(activity.details)
                           : "—"}

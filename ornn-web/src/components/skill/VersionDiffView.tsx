@@ -39,7 +39,7 @@ function ModifiedFileDiff({ file }: { file: DiffFileModified }) {
   const { t } = useTranslation();
   if (!file.isText || file.fromContent === undefined || file.toContent === undefined) {
     return (
-      <p className="font-mono text-[11px] text-text-muted">
+      <p className="font-mono text-[11px] text-meta">
         {t("versionDiff.binaryHint", {
           defaultValue:
             "Binary file. {{from}} → {{to}} (hash {{fromHash}} → {{toHash}})",
@@ -62,12 +62,12 @@ function ModifiedFileDiff({ file }: { file: DiffFileModified }) {
           ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
           : chunk.removed
             ? "bg-rose-500/10 text-rose-700 dark:text-rose-300"
-            : "text-text-muted";
+            : "text-meta";
         return (
           <div key={idx} className={lineCls}>
             {lines.map((line, lineIdx) => (
               <div key={lineIdx} className="px-3 py-px whitespace-pre-wrap break-all">
-                <span className="select-none mr-2 text-text-muted/60">{sigil}</span>
+                <span className="select-none mr-2 text-meta/60">{sigil}</span>
                 {line || " "}
               </div>
             ))}
@@ -75,7 +75,7 @@ function ModifiedFileDiff({ file }: { file: DiffFileModified }) {
         );
       })}
       {file.truncated && (
-        <p className="border-t border-subtle px-3 py-1.5 text-[11px] text-text-muted italic">
+        <p className="border-t border-subtle px-3 py-1.5 text-[11px] text-meta italic">
           {t("versionDiff.truncated", "File content truncated at 64 KiB per side.")}
         </p>
       )}
@@ -102,9 +102,9 @@ function FileHeader({
         >
           {badge}
         </span>
-        <span className="truncate font-mono text-xs text-text-primary">{path}</span>
+        <span className="truncate font-mono text-xs text-strong">{path}</span>
       </div>
-      {meta && <span className="shrink-0 font-mono text-[10px] text-text-muted">{meta}</span>}
+      {meta && <span className="shrink-0 font-mono text-[10px] text-meta">{meta}</span>}
     </div>
   );
 }
@@ -120,11 +120,11 @@ function AddedFile({ file }: { file: DiffFileAdded }) {
         badgeCls="bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
       />
       {file.isText && file.content !== undefined ? (
-        <pre className="overflow-x-auto rounded border border-subtle bg-page p-3 font-mono text-[11px] leading-snug text-text-primary whitespace-pre-wrap break-all">
+        <pre className="overflow-x-auto rounded border border-subtle bg-page p-3 font-mono text-[11px] leading-snug text-strong whitespace-pre-wrap break-all">
           {file.content}
         </pre>
       ) : (
-        <p className="font-mono text-[11px] text-text-muted">
+        <p className="font-mono text-[11px] text-meta">
           {t("versionDiff.binaryAdded", {
             defaultValue: "Binary file ({{size}}).",
             size: formatBytes(file.bytes),
@@ -146,11 +146,11 @@ function RemovedFile({ file }: { file: DiffFileRemoved }) {
         badgeCls="bg-rose-500/15 text-rose-700 dark:text-rose-300"
       />
       {file.isText && file.content !== undefined ? (
-        <pre className="overflow-x-auto rounded border border-subtle bg-page p-3 font-mono text-[11px] leading-snug text-text-primary whitespace-pre-wrap break-all">
+        <pre className="overflow-x-auto rounded border border-subtle bg-page p-3 font-mono text-[11px] leading-snug text-strong whitespace-pre-wrap break-all">
           {file.content}
         </pre>
       ) : (
-        <p className="font-mono text-[11px] text-text-muted">
+        <p className="font-mono text-[11px] text-meta">
           {t("versionDiff.binaryRemoved", {
             defaultValue: "Binary file ({{size}}).",
             size: formatBytes(file.bytes),
@@ -183,7 +183,7 @@ export function VersionDiffView({ diff, showSummary = false, emptyLabel }: Versi
 
   if (isEmpty) {
     return (
-      <p className="font-body text-sm text-text-muted">
+      <p className="font-text text-sm text-meta">
         {emptyLabel ??
           (t("versionDiff.noChanges", "These two versions have identical files.") as string)}
       </p>
@@ -193,7 +193,7 @@ export function VersionDiffView({ diff, showSummary = false, emptyLabel }: Versi
   return (
     <div className="space-y-6">
       {showSummary && (
-        <p className="font-mono text-[11px] text-text-muted">
+        <p className="font-mono text-[11px] text-meta">
           {t("versionDiff.summary", {
             defaultValue:
               "{{added}} added · {{removed}} removed · {{modified}} modified · {{unchanged}} unchanged",
@@ -206,7 +206,7 @@ export function VersionDiffView({ diff, showSummary = false, emptyLabel }: Versi
       )}
       {f.modified.length > 0 && (
         <section className="space-y-3">
-          <h3 className="font-heading text-[11px] uppercase tracking-wider text-text-muted">
+          <h3 className="font-display text-[11px] uppercase tracking-wider text-meta">
             {t("versionDiff.modifiedHeading", {
               defaultValue: "Modified ({{count}})",
               count: f.modified.length,
@@ -221,7 +221,7 @@ export function VersionDiffView({ diff, showSummary = false, emptyLabel }: Versi
       )}
       {f.added.length > 0 && (
         <section className="space-y-3">
-          <h3 className="font-heading text-[11px] uppercase tracking-wider text-text-muted">
+          <h3 className="font-display text-[11px] uppercase tracking-wider text-meta">
             {t("versionDiff.addedHeading", {
               defaultValue: "Added ({{count}})",
               count: f.added.length,
@@ -236,7 +236,7 @@ export function VersionDiffView({ diff, showSummary = false, emptyLabel }: Versi
       )}
       {f.removed.length > 0 && (
         <section className="space-y-3">
-          <h3 className="font-heading text-[11px] uppercase tracking-wider text-text-muted">
+          <h3 className="font-display text-[11px] uppercase tracking-wider text-meta">
             {t("versionDiff.removedHeading", {
               defaultValue: "Removed ({{count}})",
               count: f.removed.length,

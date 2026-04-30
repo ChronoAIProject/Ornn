@@ -1,54 +1,65 @@
+import { useTranslation } from "react-i18next";
 import { BlueprintGrid } from "./BlueprintGrid";
 import { HighlighterMark } from "./HighlighterMark";
 
-type Row = {
+interface RowConfig {
   competitor: string;
-  them: string;
-  us: React.ReactNode;
+  themKey: string;
+  us: (t: (k: string) => string) => React.ReactNode;
   highlight?: boolean;
   themItalic?: boolean;
-};
+}
 
-const ROWS: Row[] = [
+const ROWS: RowConfig[] = [
   {
     competitor: "Composio",
-    them: "Ships pre-built tools Composio owns.",
-    us: (
+    themKey: "landing.compare.row1Them",
+    us: (t) => (
       <>
-        Hosts skills <strong className="font-medium text-ember">anyone</strong>{" "}
-        creates — you, your team, the world.
+        {t("landing.compare.row1UsPrefix")}{" "}
+        <strong className="font-medium text-ember">
+          {t("landing.compare.row1UsHighlight")}
+        </strong>{" "}
+        {t("landing.compare.row1UsSuffix")}
       </>
     ),
   },
   {
     competitor: "LangChain Hub",
-    them: "Shares prompt templates.",
-    us: (
+    themKey: "landing.compare.row2Them",
+    us: (t) => (
       <>
-        Shares{" "}
-        <strong className="font-medium text-ember">executable skills</strong>{" "}
-        with a sandboxed runtime and audited, versioned releases.
+        {t("landing.compare.row2UsPrefix")}{" "}
+        <strong className="font-medium text-ember">
+          {t("landing.compare.row2UsHighlight")}
+        </strong>{" "}
+        {t("landing.compare.row2UsSuffix")}
       </>
     ),
   },
   {
     competitor: "Anthropic Skills",
-    them: "Work only inside Claude.",
-    us: (
+    themKey: "landing.compare.row3Them",
+    us: (t) => (
       <>
-        <strong className="font-medium text-ember">Open format</strong> — not
-        Claude-locked. Skills travel with the agent that consumes them.
+        <strong className="font-medium text-ember">
+          {t("landing.compare.row3UsHighlight")}
+        </strong>{" "}
+        {t("landing.compare.row3UsSuffix")}
       </>
     ),
   },
   {
     competitor: "ORNN",
-    them: "Not a runtime — execution happens in the agent.",
+    themKey: "landing.compare.row4Them",
     themItalic: true,
-    us: (
+    us: (t) => (
       <>
-        ORNN is the <strong className="font-medium text-ember">registry</strong>
-        . It finds, versions, and audits.
+        {t("landing.compare.row4UsPrefix")}{" "}
+        <strong className="font-medium text-ember">
+          {t("landing.compare.row4UsHighlight")}
+        </strong>
+        {t("landing.compare.row4UsSuffix")}
       </>
     ),
     highlight: true,
@@ -56,6 +67,7 @@ const ROWS: Row[] = [
 ];
 
 export function VSComparisonSection() {
+  const { t } = useTranslation();
   return (
     <section
       id="compare"
@@ -65,12 +77,13 @@ export function VSComparisonSection() {
       <div className="relative mx-auto max-w-[1280px] px-6 sm:px-8">
         <div className="mb-12 max-w-[760px]">
           <h2 className="font-display-grotesk text-[clamp(36px,4vw,56px)] font-bold uppercase leading-[0.98] tracking-[-0.025em] text-parchment">
-            Not <HighlighterMark>that</HighlighterMark>.{" "}
-            <HighlighterMark>This.</HighlighterMark>
+            {t("landing.compare.headlineNot")}{" "}
+            <HighlighterMark>{t("landing.compare.headlineThat")}</HighlighterMark>
+            .{" "}
+            <HighlighterMark>{t("landing.compare.headlineThis")}</HighlighterMark>
           </h2>
           <p className="mt-5 text-[15px] leading-[1.6] text-bone">
-            A few things ORNN is often confused with, and what makes it
-            different.
+            {t("landing.compare.subhead")}
           </p>
         </div>
 
@@ -95,19 +108,19 @@ export function VSComparisonSection() {
               <div className="mt-3 grid gap-2.5 text-[13px] leading-snug">
                 <div>
                   <span className="mr-1.5 font-mono text-[9px] uppercase tracking-[0.22em] text-meta">
-                    Them
+                    {t("landing.compare.themLabel")}
                   </span>
                   <span
                     className={`text-bone ${r.themItalic ? "italic" : ""}`}
                   >
-                    {r.them}
+                    {t(r.themKey)}
                   </span>
                 </div>
                 <div>
                   <span className="mr-1.5 font-mono text-[9px] uppercase tracking-[0.22em] text-meta">
-                    Ornn
+                    {t("landing.compare.usLabel")}
                   </span>
-                  <span className="text-parchment">{r.us}</span>
+                  <span className="text-parchment">{r.us(t)}</span>
                 </div>
               </div>
             </div>
@@ -120,13 +133,13 @@ export function VSComparisonSection() {
             <thead>
               <tr>
                 <th className="border-b border-[color:var(--color-border-strong)] px-5 pb-3.5 pt-5 text-left font-mono text-[10px] font-medium uppercase tracking-[0.22em] text-meta">
-                  Often confused with
+                  {t("landing.compare.themHeader")}
                 </th>
                 <th className="border-b border-[color:var(--color-border-strong)] px-5 pb-3.5 pt-5 text-left font-mono text-[10px] font-medium uppercase tracking-[0.22em] text-meta">
-                  What they do
+                  {t("landing.compare.themDescHeader")}
                 </th>
                 <th className="border-b border-[color:var(--color-border-strong)] px-5 pb-3.5 pt-5 text-left font-mono text-[10px] font-medium uppercase tracking-[0.22em] text-meta">
-                  What ORNN does
+                  {t("landing.compare.usHeader")}
                 </th>
               </tr>
             </thead>
@@ -152,10 +165,10 @@ export function VSComparisonSection() {
                       r.themItalic ? "italic" : ""
                     }`}
                   >
-                    {r.them}
+                    {t(r.themKey)}
                   </td>
                   <td className="border-b border-[color:var(--color-border-subtle)] px-5 py-5 align-top text-sm text-parchment">
-                    {r.us}
+                    {r.us(t)}
                   </td>
                 </tr>
               ))}

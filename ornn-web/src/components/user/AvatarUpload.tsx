@@ -5,7 +5,6 @@
  */
 
 import { useRef, useState } from "react";
-import { motion } from "framer-motion";
 
 export interface AvatarUploadProps {
   /** Current avatar URL. */
@@ -102,22 +101,20 @@ export function AvatarUpload({
 
   return (
     <div className="relative inline-block">
-      <motion.button
+      <button
         type="button"
         onClick={handleClick}
         disabled={disabled || isLoading}
-        whileHover={disabled || isLoading ? undefined : { scale: 1.05 }}
-        whileTap={disabled || isLoading ? undefined : { scale: 0.95 }}
         className={`
           ${SIZE_CLASSES[size]}
           relative overflow-hidden rounded-full
-          border-2 border-dashed border-neon-cyan/30
-          bg-bg-surface
-          transition-all duration-200
+          border-2 border-dashed border-accent/30
+          bg-card
+          transition-colors duration-200
           ${
             disabled || isLoading
               ? "opacity-50 cursor-not-allowed"
-              : "cursor-pointer hover:border-neon-cyan/60 hover:shadow-[0_0_15px_rgba(255,107,0,0.2)]"
+              : "cursor-pointer hover:border-accent/60"
           }
         `}
       >
@@ -130,7 +127,7 @@ export function AvatarUpload({
         ) : (
           <div className="flex h-full w-full items-center justify-center">
             <svg
-              className={`${ICON_SIZES[size]} text-text-muted`}
+              className={`${ICON_SIZES[size]} text-meta`}
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -147,16 +144,16 @@ export function AvatarUpload({
 
         {/* Loading overlay */}
         {isLoading && (
-          <div className="absolute inset-0 flex items-center justify-center bg-bg-deep/80">
-            <span className="inline-block h-6 w-6 animate-spin rounded-full border-2 border-neon-cyan border-t-transparent" />
+          <div className="absolute inset-0 flex items-center justify-center bg-page/80">
+            <span className="inline-block h-6 w-6 animate-spin rounded-full border-2 border-accent border-t-transparent" />
           </div>
         )}
 
         {/* Hover overlay */}
         {!isLoading && (
-          <div className="absolute inset-0 flex items-center justify-center bg-bg-deep/60 opacity-0 transition-opacity hover:opacity-100">
+          <div className="absolute inset-0 flex items-center justify-center bg-page/60 opacity-0 transition-opacity hover:opacity-100">
             <svg
-              className="h-6 w-6 text-neon-cyan"
+              className="h-6 w-6 text-accent"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -176,25 +173,21 @@ export function AvatarUpload({
             </svg>
           </div>
         )}
-      </motion.button>
+      </button>
 
       {/* Remove button */}
       {displayUrl && !disabled && !isLoading && (
-        <motion.button
+        <button
           type="button"
           onClick={handleRemove}
-          initial={{ scale: 0 }}
-          animate={{ scale: 1 }}
-          whileHover={{ scale: 1.1 }}
-          whileTap={{ scale: 0.9 }}
           className="
             absolute -right-1 -top-1
             flex h-6 w-6 items-center justify-center
             rounded-full
-            border border-neon-red/50 bg-bg-deep
-            text-neon-red
+            border border-danger/50 bg-page
+            text-danger
             transition-colors
-            hover:border-neon-red hover:bg-neon-red/20
+            hover:border-danger hover:bg-danger/20
             cursor-pointer
           "
         >
@@ -211,7 +204,7 @@ export function AvatarUpload({
               d="M6 18L18 6M6 6l12 12"
             />
           </svg>
-        </motion.button>
+        </button>
       )}
 
       {/* Hidden file input */}

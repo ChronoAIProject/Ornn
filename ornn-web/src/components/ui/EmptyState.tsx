@@ -22,7 +22,7 @@ export function EmptyState({ title, description, action, className = "" }: Empty
         </svg>
       </div>
       <h3 className="mb-2 font-display text-xl font-semibold tracking-tight text-strong">{title}</h3>
-      {description && <p className="mb-6 max-w-md font-reading text-sm text-body">{description}</p>}
+      {description && <p className="mb-6 max-w-md font-text text-sm text-body">{description}</p>}
       {action}
     </div>
   );

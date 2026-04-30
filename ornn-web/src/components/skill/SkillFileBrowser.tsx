@@ -157,11 +157,11 @@ export function SkillFileBrowser({ skillId, version, isOwner }: SkillFileBrowser
 
   if (isLoading) {
     return (
-      <div className="flex gap-4">
-        <div className="w-1/3">
+      <div className="card-impression flex min-h-[400px] flex-col overflow-hidden rounded border border-subtle bg-card lg:flex-row">
+        <div className="border-b border-subtle p-4 lg:w-1/3 lg:border-b-0 lg:border-r">
           <Skeleton lines={8} />
         </div>
-        <div className="w-2/3">
+        <div className="min-w-0 flex-1 p-4">
           <Skeleton lines={12} />
         </div>
       </div>
@@ -170,29 +170,29 @@ export function SkillFileBrowser({ skillId, version, isOwner }: SkillFileBrowser
 
   if (error) {
     return (
-      <div className="flex items-center justify-center rounded-lg border border-neon-red/20 bg-bg-surface py-12">
-        <p className="font-body text-sm text-neon-red">
-          Failed to load files
-        </p>
+      <div className="card-impression flex items-center justify-center rounded border border-danger/30 bg-card py-12">
+        <p className="font-text text-sm text-danger">Failed to load files</p>
       </div>
     );
   }
 
   if (treeNodes.length === 0) {
     return (
-      <div className="flex items-center justify-center rounded-lg border border-neon-cyan/10 bg-bg-surface py-12">
-        <p className="font-body text-sm text-text-muted">
-          No package files available
-        </p>
+      <div className="card-impression flex items-center justify-center rounded border border-subtle bg-card py-12">
+        <p className="font-text text-sm text-meta">No package files available</p>
       </div>
     );
   }
 
+  // Unified panel: one rounded letterpressed surface holding the tree
+  // and the viewer side-by-side, separated by a single hairline. No
+  // double borders, no nested cards — the panel reads as one object.
   return (
     <div className="space-y-3">
-      <div className="flex flex-col lg:flex-row gap-4">
-        {/* Left: File tree */}
-        <div className="lg:w-1/3 rounded-lg border border-neon-cyan/10 bg-bg-surface min-h-[300px]">
+      <div className="card-impression flex min-h-[400px] flex-col overflow-hidden rounded border border-subtle bg-card lg:flex-row">
+        {/* Left: File tree — hairline divider on the right edge stands
+            in for the seam between the two halves. */}
+        <div className="border-b border-subtle lg:w-1/3 lg:shrink-0 lg:border-b-0 lg:border-r">
           <FileTree
             files={treeNodes}
             selectedId={selectedFileId}
@@ -200,8 +200,9 @@ export function SkillFileBrowser({ skillId, version, isOwner }: SkillFileBrowser
           />
         </div>
 
-        {/* Right: File viewer */}
-        <div className="lg:w-2/3">
+        {/* Right: File viewer — fills the remaining space without an
+            outer border (parent panel owns the border). */}
+        <div className="min-w-0 flex-1">
           {selectedFileId ? (
             isViewable ? (
               <SkillFileViewer
@@ -211,9 +212,9 @@ export function SkillFileBrowser({ skillId, version, isOwner }: SkillFileBrowser
                 onChange={isEditable ? handleContentChange : undefined}
               />
             ) : (
-              <div className="flex flex-col items-center justify-center h-full min-h-[300px] rounded-lg border border-neon-cyan/10 bg-bg-deep">
+              <div className="flex h-full min-h-[300px] flex-col items-center justify-center px-4">
                 <svg
-                  className="h-10 w-10 text-text-muted mb-3"
+                  className="mb-3 h-10 w-10 text-meta"
                   fill="none"
                   viewBox="0 0 24 24"
                   stroke="currentColor"
@@ -225,7 +226,7 @@ export function SkillFileBrowser({ skillId, version, isOwner }: SkillFileBrowser
                     d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
                   />
                 </svg>
-                <p className="font-body text-sm text-text-muted text-center px-4">
+                <p className="text-center font-text text-sm text-meta">
                   This file type cannot be viewed online.
                   <br />
                   Download the package to access it.
@@ -233,8 +234,8 @@ export function SkillFileBrowser({ skillId, version, isOwner }: SkillFileBrowser
               </div>
             )
           ) : (
-            <div className="flex items-center justify-center h-full min-h-[300px] rounded-lg border border-neon-cyan/10 bg-bg-deep">
-              <p className="font-body text-sm text-text-muted">
+            <div className="flex h-full min-h-[300px] items-center justify-center">
+              <p className="font-text text-sm text-meta">
                 Select a file to view its content
               </p>
             </div>

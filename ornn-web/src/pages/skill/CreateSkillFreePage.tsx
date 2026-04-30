@@ -6,7 +6,6 @@
 
 import { useState, useCallback, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { motion } from "framer-motion";
 import { PageTransition } from "@/components/layout/PageTransition";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -268,12 +267,12 @@ export function CreateSkillFreePage() {
 
   const statusBorderColor =
     pageState === "valid"
-      ? "border-neon-green/40"
+      ? "border-success/40"
       : pageState === "warning"
-        ? "border-neon-yellow/40"
+        ? "border-warning/40"
         : pageState === "invalid"
-          ? "border-neon-red/40"
-          : "border-neon-cyan/20";
+          ? "border-danger/40"
+          : "border-accent/20";
 
   return (
     <PageTransition>
@@ -282,25 +281,25 @@ export function CreateSkillFreePage() {
         {/* Back link */}
         <Link
           to="/skills/new"
-          className="flex items-center gap-2 mb-6 text-text-muted hover:text-neon-cyan transition-colors"
+          className="flex items-center gap-2 mb-6 text-meta hover:text-accent transition-colors"
         >
           <ArrowLeftIcon className="h-4 w-4" />
-          <span className="font-body text-sm">{t("free.backToModes")}</span>
+          <span className="font-text text-sm">{t("free.backToModes")}</span>
         </Link>
 
         {/* Title */}
         <div className="mb-8">
-          <h1 className="neon-magenta mb-2 font-heading text-2xl font-bold tracking-wider text-neon-magenta sm:text-3xl">
+          <h1 className="accent-support mb-2 font-display text-2xl font-bold tracking-wider text-accent-support sm:text-3xl">
             {t("free.title")}
           </h1>
-          <p className="font-body text-text-muted">
+          <p className="font-text text-meta">
             {t("free.subtitle")}
           </p>
         </div>
 
         {/* Drop zone */}
         <Card className="mb-6">
-          <motion.div
+          <div
             onDrop={handleDrop}
             onDragOver={(e) => {
               e.preventDefault();
@@ -308,20 +307,19 @@ export function CreateSkillFreePage() {
             }}
             onDragLeave={() => setIsDragging(false)}
             onClick={() => inputRef.current?.click()}
-            whileHover={{ borderColor: "rgba(255, 140, 56, 0.5)" }}
             className={`
-              flex cursor-pointer flex-col items-center justify-center rounded-xl
+              flex cursor-pointer flex-col items-center justify-center rounded
               border-2 border-dashed px-6 py-12 transition-colors
-              ${isDragging ? "border-neon-magenta bg-neon-magenta/5" : `${statusBorderColor} bg-bg-deep/50`}
+              ${isDragging ? "border-accent-support bg-accent-support/5" : `${statusBorderColor} bg-page/50 hover:border-accent-support/50`}
             `}
           >
-            <UploadIcon className="h-12 w-12 text-neon-magenta mb-4" />
+            <UploadIcon className="h-12 w-12 text-accent-support mb-4" />
             {zipFile ? (
               <div className="text-center">
-                <p className="font-mono text-sm text-neon-magenta">
+                <p className="font-mono text-sm text-accent-support">
                   {zipFile.name}
                 </p>
-                <p className="mt-1 text-xs text-text-muted">
+                <p className="mt-1 text-xs text-meta">
                   {formatFileSize(zipFile.size)}
                 </p>
                 <button
@@ -330,22 +328,22 @@ export function CreateSkillFreePage() {
                     e.stopPropagation();
                     handleReset();
                   }}
-                  className="mt-2 text-xs text-neon-red hover:underline cursor-pointer"
+                  className="mt-2 text-xs text-danger hover:underline cursor-pointer"
                 >
                   {t("free.changeFile")}
                 </button>
               </div>
             ) : (
               <div className="text-center">
-                <p className="font-body text-sm text-text-muted">
+                <p className="font-text text-sm text-meta">
                   {t("free.dropzone")}
                 </p>
-                <p className="mt-1 text-xs text-text-muted/60">
+                <p className="mt-1 text-xs text-meta/60">
                   {t("free.maxSize")}
                 </p>
               </div>
             )}
-          </motion.div>
+          </div>
           <input
             ref={inputRef}
             type="file"
@@ -362,8 +360,8 @@ export function CreateSkillFreePage() {
         {pageState === "validating" && (
           <Card className="mb-6">
             <div className="flex items-center justify-center py-8">
-              <span className="inline-block h-6 w-6 animate-spin rounded-full border-2 border-neon-cyan border-t-transparent mr-3" />
-              <p className="font-body text-sm text-text-muted">
+              <span className="inline-block h-6 w-6 animate-spin rounded-full border-2 border-accent border-t-transparent mr-3" />
+              <p className="font-text text-sm text-meta">
                 {t("free.validating")}
               </p>
             </div>
@@ -373,31 +371,31 @@ export function CreateSkillFreePage() {
         {/* Validation status banner (zip structure) */}
         {validationResult && pageState !== "validating" && (
           <div
-            className={`rounded-lg border p-4 mb-6 ${
+            className={`rounded border p-4 mb-6 ${
               pageState === "valid" && !hasFrontmatterErrors
-                ? "border-neon-green/40 bg-neon-green/5"
+                ? "border-success/40 bg-success/5"
                 : pageState === "warning" || hasFrontmatterErrors
-                  ? "border-neon-yellow/40 bg-neon-yellow/5"
-                  : "border-neon-red/40 bg-neon-red/5"
+                  ? "border-warning/40 bg-warning/5"
+                  : "border-danger/40 bg-danger/5"
             }`}
           >
             {validationResult.errors.map((err, i) => (
-              <p key={i} className="font-body text-sm text-neon-red">
+              <p key={i} className="font-text text-sm text-danger">
                 {err}
               </p>
             ))}
             {validationResult.warnings.map((warn, i) => (
-              <p key={i} className="font-body text-sm text-neon-yellow">
+              <p key={i} className="font-text text-sm text-warning">
                 {warn}
               </p>
             ))}
             {pageState === "valid" && !hasFrontmatterErrors && (
-              <p className="font-body text-sm text-neon-green">
+              <p className="font-text text-sm text-success">
                 {t("free.valid")}
               </p>
             )}
             {hasFrontmatterErrors && pageState !== "invalid" && (
-              <p className="font-body text-sm text-neon-yellow mt-1">
+              <p className="font-text text-sm text-warning mt-1">
                 {t("free.validWithErrors")}
               </p>
             )}
@@ -416,14 +414,14 @@ export function CreateSkillFreePage() {
         {zipFile && pageState !== "validating" && (
           <div className="mb-6 flex items-center justify-end gap-3">
             <label className="flex items-center gap-2 cursor-pointer select-none">
-              <span className="font-body text-xs text-text-muted">{t("free.skipValidation")}</span>
+              <span className="font-text text-xs text-meta">{t("free.skipValidation")}</span>
               <button
                 type="button"
                 role="switch"
                 aria-checked={skipValidation}
                 onClick={() => setSkipValidation((v) => !v)}
                 className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${
-                  skipValidation ? "bg-neon-cyan" : "bg-bg-elevated"
+                  skipValidation ? "bg-accent" : "bg-elevated"
                 }`}
               >
                 <span

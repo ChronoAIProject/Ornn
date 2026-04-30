@@ -46,10 +46,10 @@ function ChatMessage({ role, content }: { role: string; content: string }) {
   return (
     <div className={`flex ${role === "user" ? "justify-end" : "justify-start"}`}>
       <div
-        className={`max-w-[85%] rounded-lg px-3 py-2 font-body text-sm whitespace-pre-wrap ${
+        className={`max-w-[85%] rounded px-3 py-2 font-text text-sm whitespace-pre-wrap ${
           role === "user"
-            ? "bg-neon-cyan/10 border border-neon-cyan/20 text-text-primary"
-            : "bg-bg-elevated border border-neon-cyan/10 text-text-primary"
+            ? "bg-accent/10 border border-accent/20 text-strong"
+            : "bg-elevated border border-accent/10 text-strong"
         }`}
       >
         {content}
@@ -113,12 +113,12 @@ export function PlaygroundPage() {
       <PageTransition>
         <div className="flex items-center justify-center h-full">
           <div className="text-center">
-            <p className="font-body text-sm text-text-muted mb-4">
+            <p className="font-text text-sm text-meta mb-4">
               {t("playground.selectSkill")}
             </p>
             <Link
               to="/registry"
-              className="font-body text-sm text-neon-cyan hover:underline"
+              className="font-text text-sm text-accent hover:underline"
             >
               {t("playground.browseSkills")}
             </Link>
@@ -145,13 +145,13 @@ export function PlaygroundPage() {
         {/* Two-column layout */}
         <div className="flex flex-1 min-h-0 gap-4">
           {/* Left: Chat (40%) */}
-          <div className="flex w-[40%] shrink-0 flex-col min-w-0 min-h-0 rounded-lg border border-neon-cyan/10 bg-bg-elevated/30">
+          <div className="flex w-[40%] shrink-0 flex-col min-w-0 min-h-0 rounded border border-accent/10 bg-elevated/30">
             {/* Clear Chat button inside chat panel */}
             <div className="flex items-center justify-end px-3 py-1 shrink-0">
               <button
                 type="button"
                 onClick={clearChat}
-                className="font-body text-xs text-text-muted hover:text-neon-cyan transition-colors cursor-pointer"
+                className="font-text text-xs text-meta hover:text-accent transition-colors cursor-pointer"
               >
                 {t("playground.clearChat")}
               </button>
@@ -159,7 +159,7 @@ export function PlaygroundPage() {
             <div className="flex-1 min-h-0 overflow-y-auto space-y-3 px-3 py-2">
               {messages.length === 0 && !currentAssistantContent && (
                 <div className="flex flex-col items-center justify-center h-full text-center">
-                  <p className="font-body text-sm text-text-muted max-w-sm">
+                  <p className="font-text text-sm text-meta max-w-sm">
                     {needsEnvVars && !allEnvVarsFilled
                       ? t("playground.fillEnvVars")
                       : t("playground.askAbout", { name: skillName })}
@@ -178,7 +178,7 @@ export function PlaygroundPage() {
               {/* File outputs (images, etc.) */}
               {fileOutputs.map((file, idx) => (
                 <div key={`file-${idx}`} className="flex justify-start">
-                  <div className="max-w-[85%] rounded-lg border border-neon-cyan/20 bg-bg-elevated p-2">
+                  <div className="max-w-[85%] rounded border border-accent/20 bg-elevated p-2">
                     {file.mimeType.startsWith("image/") ? (
                       <div>
                         <img
@@ -186,14 +186,14 @@ export function PlaygroundPage() {
                           alt={file.path}
                           className="max-w-full rounded"
                         />
-                        <p className="font-mono text-xs text-text-muted mt-1">{file.path} ({Math.round(file.size / 1024)}KB)</p>
+                        <p className="font-mono text-xs text-meta mt-1">{file.path} ({Math.round(file.size / 1024)}KB)</p>
                       </div>
                     ) : (
                       <div className="flex items-center gap-2">
                         <a
                           href={`data:${file.mimeType};base64,${file.content}`}
                           download={file.path.split("/").pop()}
-                          className="font-mono text-xs text-neon-cyan hover:underline"
+                          className="font-mono text-xs text-accent hover:underline"
                         >
                           {file.path} ({Math.round(file.size / 1024)}KB)
                         </a>
@@ -204,8 +204,8 @@ export function PlaygroundPage() {
               ))}
 
               {error && (
-                <div className="border border-neon-red/30 bg-neon-red/5 rounded-lg p-3">
-                  <p className="font-body text-xs text-neon-red">{error}</p>
+                <div className="border border-danger/30 bg-danger/5 rounded p-3">
+                  <p className="font-text text-xs text-danger">{error}</p>
                 </div>
               )}
 
@@ -213,7 +213,7 @@ export function PlaygroundPage() {
             </div>
 
             {/* Chat input */}
-            <div className="shrink-0 border-t border-neon-cyan/10 px-1 pb-1">
+            <div className="shrink-0 border-t border-accent/10 px-1 pb-1">
               <ChatInput
                 onSend={handleSend}
                 onAbort={abort}
@@ -235,16 +235,16 @@ export function PlaygroundPage() {
             {/* Env vars form (only for runtime-based skills with env vars) */}
             {needsEnvVars && (
               <Card>
-                <h3 className="font-mono text-[11px] uppercase tracking-[0.16em] text-neon-cyan mb-3">
+                <h3 className="font-mono text-[11px] uppercase tracking-[0.16em] text-accent mb-3">
                   {t("playground.envVars")}
                 </h3>
-                <p className="font-body text-xs text-text-muted mb-3">
+                <p className="font-text text-xs text-meta mb-3">
                   {t("playground.envVarsDesc")}
                 </p>
                 <div className="space-y-2">
                   {envVarKeys.map((key) => (
                     <div key={key} className="flex items-center gap-3">
-                      <label className="font-mono text-xs text-text-primary w-48 shrink-0 truncate" title={key}>
+                      <label className="font-mono text-xs text-strong w-48 shrink-0 truncate" title={key}>
                         {key}
                       </label>
                       <input
@@ -252,7 +252,7 @@ export function PlaygroundPage() {
                         value={envVars[key] ?? ""}
                         onChange={(e) => handleEnvVarChange(key, e.target.value)}
                         placeholder={t("playground.enterValue")}
-                        className="flex-1 rounded border border-neon-cyan/20 bg-bg-deep px-2 py-1.5 font-mono text-xs text-text-primary placeholder:text-text-muted/50 focus:border-neon-cyan/50 focus:outline-none"
+                        className="flex-1 rounded border border-accent/20 bg-page px-2 py-1.5 font-mono text-xs text-strong placeholder:text-meta/50 focus:border-accent/50 focus:outline-none"
                       />
                       {envVars[key]?.trim() ? (
                         <Badge color="green">{t("common.set")}</Badge>
@@ -279,7 +279,7 @@ export function PlaygroundPage() {
                 />
               ) : (
                 <div className="flex items-center justify-center h-32">
-                  <p className="font-body text-xs text-text-muted">{t("playground.noPackage")}</p>
+                  <p className="font-text text-xs text-meta">{t("playground.noPackage")}</p>
                 </div>
               )}
             </div>
