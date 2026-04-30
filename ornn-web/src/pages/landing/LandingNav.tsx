@@ -1,17 +1,120 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
+import { motion, AnimatePresence } from "framer-motion";
 import { useThemeStore } from "@/stores/themeStore";
+import { useAuthStore, useIsAuthenticated, useCurrentUser, isAdmin } from "@/stores/authStore";
+import { logActivity } from "@/services/activityApi";
+import { config } from "@/config";
 import { EmberLink } from "./EmberButton";
+
+/** Derive NyxID home URL from the authorize URL env var. */
+function getNyxIdUrl(): string {
+  try {
+    const authorizeUrl = config.nyxidOauthAuthorizeUrl;
+    if (authorizeUrl) {
+      const url = new URL(authorizeUrl);
+      return url.origin;
+    }
+  } catch {
+    /* ignore */
+  }
+  return "https://nyx.chrono-ai.fun";
+}
+
+/**
+ * One row inside the desktop avatar dropdown — opens an external URL
+ * (NyxID portal sub-pages) in a new tab. Styled with landing tokens.
+ */
+function DropdownExternal({
+  href,
+  children,
+}: {
+  href: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      role="menuitem"
+      className="flex items-center px-4 py-2.5 font-text text-sm text-bone transition-colors hover:bg-[color:var(--surface-elevated)] hover:text-ember"
+    >
+      {children}
+    </a>
+  );
+}
+
+/** Same shape as DropdownExternal but for in-app routes. */
+function DropdownInternal({
+  to,
+  onClick,
+  children,
+}: {
+  to: string;
+  onClick?: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <Link
+      to={to}
+      onClick={onClick}
+      role="menuitem"
+      className="flex items-center px-4 py-2.5 font-text text-sm text-bone transition-colors hover:bg-[color:var(--surface-elevated)] hover:text-ember"
+    >
+      {children}
+    </Link>
+  );
+}
 
 /**
  * Top-level fixed nav. On md+ shows full nav inline; on mobile collapses
  * Registry/Build/Docs/Sign-in into a hamburger panel that drops below the
  * 60px nav row.
+ *
+ * When the user is authenticated, the desktop "Sign in" + "Get started"
+ * pair is replaced with an avatar dropdown (profile / services / orgs /
+ * NyxID portal / admin / sign out). Mobile follows the same swap inside
+ * the hamburger panel.
  */
 export function LandingNav() {
   const { theme, toggle } = useThemeStore();
   const [menuOpen, setMenuOpen] = useState(false);
   const closeMenu = () => setMenuOpen(false);
+
+  const isAuthenticated = useIsAuthenticated();
+  const user = useCurrentUser();
+
+  // Avatar dropdown — mirrors `Navbar.tsx`'s desktop user-menu but
+  // restyled in landing tokens. Closes on outside click + ESC.
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!userMenuOpen) return;
+    const onClick = (e: MouseEvent) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
+        setUserMenuOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setUserMenuOpen(false);
+    };
+    document.addEventListener("mousedown", onClick);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onClick);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [userMenuOpen]);
+
+  const handleLogout = async () => {
+    setUserMenuOpen(false);
+    closeMenu();
+    await logActivity("logout");
+    useAuthStore.getState().logout();
+  };
+
+  const initial = (user?.displayName || user?.email || "?").charAt(0).toUpperCase();
 
   return (
     <nav className="sticky top-0 z-50 border-b border-[color:var(--color-border-subtle)] [background-color:var(--surface-nav)] backdrop-blur-md">
@@ -121,13 +224,111 @@ export function LandingNav() {
             )}
           </button>
 
-          <EmberLink to="/login" variant="ghost">
-            Sign in
-          </EmberLink>
+          {isAuthenticated && user ? (
+            // Avatar trigger + dropdown. Uses landing-page tokens
+            // (parchment / bone / ember / page) so it sits inside the
+            // Forge Workshop palette without leaking the rest of the
+            // app's neon-cyan styling.
+            <div ref={userMenuRef} className="relative">
+              <button
+                type="button"
+                onClick={() => setUserMenuOpen((o) => !o)}
+                aria-haspopup="menu"
+                aria-expanded={userMenuOpen}
+                aria-label="Account menu"
+                className="focus-ring-ember flex items-center gap-2 rounded-[2px] border border-[color:var(--color-border-strong)] bg-transparent p-1 pr-2.5 transition-colors duration-200 hover:border-ember"
+              >
+                <span className="flex h-7 w-7 items-center justify-center overflow-hidden rounded-full bg-page text-ember">
+                  {user.avatarUrl ? (
+                    <img
+                      src={user.avatarUrl}
+                      alt=""
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <span className="font-display text-sm font-semibold">{initial}</span>
+                  )}
+                </span>
+                <svg
+                  className={`h-3 w-3 text-bone transition-transform duration-200 ${
+                    userMenuOpen ? "rotate-180" : ""
+                  }`}
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  aria-hidden="true"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
 
-          <EmberLink to="/login" variant="primary">
-            Get started
-          </EmberLink>
+              <AnimatePresence>
+                {userMenuOpen && (
+                  <motion.div
+                    role="menu"
+                    initial={{ opacity: 0, y: -8, scale: 0.97 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -8, scale: 0.97 }}
+                    transition={{ duration: 0.15, ease: "easeOut" }}
+                    className="absolute right-0 top-full mt-2 w-60 overflow-hidden rounded-[2px] border border-[color:var(--color-border-subtle)] bg-page shadow-[var(--card-shadow-rest)]"
+                  >
+                    {/* Identity card */}
+                    <div className="border-b border-[color:var(--color-border-subtle)] px-4 py-3">
+                      <p className="truncate font-display text-sm font-semibold text-parchment">
+                        {user.displayName}
+                      </p>
+                      <p className="truncate font-mono text-[11px] text-bone">{user.email}</p>
+                    </div>
+
+                    {/* Per-user external links — open the user's NyxID
+                        portal in a new tab so the landing surface stays
+                        focused on Ornn. */}
+                    <div className="py-1">
+                      <DropdownExternal href={`${getNyxIdUrl()}/settings`}>
+                        My Profile
+                      </DropdownExternal>
+                      <DropdownExternal href={`${getNyxIdUrl()}/services`}>
+                        My NyxID Services
+                      </DropdownExternal>
+                      <DropdownExternal href={`${getNyxIdUrl()}/orgs`}>
+                        My Organizations
+                      </DropdownExternal>
+                      <DropdownExternal href={getNyxIdUrl()}>NyxID Portal</DropdownExternal>
+                    </div>
+
+                    {isAdmin(user) && (
+                      <div className="border-t border-[color:var(--color-border-subtle)] py-1">
+                        <DropdownInternal to="/admin" onClick={() => setUserMenuOpen(false)}>
+                          Admin Panel
+                        </DropdownInternal>
+                      </div>
+                    )}
+
+                    <div className="border-t border-[color:var(--color-border-subtle)] py-1">
+                      <button
+                        type="button"
+                        onClick={handleLogout}
+                        className="flex w-full items-center px-4 py-2.5 text-left font-mono text-[11px] uppercase tracking-[0.14em] text-ember transition-colors hover:bg-[color:var(--surface-elevated)]"
+                      >
+                        Sign out
+                      </button>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          ) : (
+            <>
+              <EmberLink to="/login" variant="ghost">
+                Sign in
+              </EmberLink>
+
+              <EmberLink to="/login" variant="primary">
+                Get started
+              </EmberLink>
+            </>
+          )}
         </div>
 
         {/* Mobile-only hamburger — rightmost element on small viewports.
@@ -253,21 +454,74 @@ export function LandingNav() {
                 {theme === "light" ? "Light" : "Dark"}
               </span>
             </button>
-            <Link
-              to="/login"
-              onClick={closeMenu}
-              tabIndex={menuOpen ? 0 : -1}
-              className="py-3 font-mono text-[12px] uppercase tracking-[0.14em] text-parchment transition-colors hover:text-ember"
-            >
-              Sign in →
-            </Link>
-            <EmberLink
-              to="/login"
-              variant="primary"
-              className="!mt-2 !w-full !justify-center"
-            >
-              Get started
-            </EmberLink>
+            {isAuthenticated && user ? (
+              <>
+                {/* Identity row — same shape as the desktop dropdown's
+                    header so the user has the same anchor in both
+                    layouts. */}
+                <div className="flex items-center gap-3 border-b border-[color:var(--color-border-subtle)] py-3">
+                  <span className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-full bg-page text-ember">
+                    {user.avatarUrl ? (
+                      <img src={user.avatarUrl} alt="" className="h-full w-full object-cover" />
+                    ) : (
+                      <span className="font-display text-base font-semibold">{initial}</span>
+                    )}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-display text-sm font-semibold text-parchment">
+                      {user.displayName}
+                    </p>
+                    <p className="truncate font-mono text-[11px] text-bone">{user.email}</p>
+                  </div>
+                </div>
+                <a
+                  href={`${getNyxIdUrl()}/settings`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={closeMenu}
+                  tabIndex={menuOpen ? 0 : -1}
+                  className="border-b border-[color:var(--color-border-subtle)] py-3 font-text text-[16px] text-bone transition-colors hover:text-ember"
+                >
+                  My Profile
+                </a>
+                {isAdmin(user) && (
+                  <Link
+                    to="/admin"
+                    onClick={closeMenu}
+                    tabIndex={menuOpen ? 0 : -1}
+                    className="border-b border-[color:var(--color-border-subtle)] py-3 font-text text-[16px] text-bone transition-colors hover:text-ember"
+                  >
+                    Admin Panel
+                  </Link>
+                )}
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  tabIndex={menuOpen ? 0 : -1}
+                  className="flex items-center justify-start py-3 font-mono text-[12px] uppercase tracking-[0.14em] text-ember transition-colors hover:text-parchment"
+                >
+                  Sign out
+                </button>
+              </>
+            ) : (
+              <>
+                <Link
+                  to="/login"
+                  onClick={closeMenu}
+                  tabIndex={menuOpen ? 0 : -1}
+                  className="py-3 font-mono text-[12px] uppercase tracking-[0.14em] text-parchment transition-colors hover:text-ember"
+                >
+                  Sign in →
+                </Link>
+                <EmberLink
+                  to="/login"
+                  variant="primary"
+                  className="!mt-2 !w-full !justify-center"
+                >
+                  Get started
+                </EmberLink>
+              </>
+            )}
           </div>
         </div>
       </div>
