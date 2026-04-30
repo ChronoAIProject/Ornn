@@ -230,7 +230,7 @@ export function GenerateSkillModal({
           {/* Reference list */}
           <div className="space-y-2">
             {references.map((ref) => (
-              <div key={ref.id} className="flex items-center gap-3 px-3 py-2 rounded-lg border border-accent/10 bg-elevated/30">
+              <div key={ref.id} className="flex items-center gap-3 px-3 py-2 rounded border border-accent/10 bg-elevated/30">
                 <input
                   type="checkbox"
                   checked={ref.selected}

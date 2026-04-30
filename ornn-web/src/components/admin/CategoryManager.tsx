@@ -154,7 +154,7 @@ export function CategoryManager({
           >
             <motion.div
               layout
-              className="rounded-lg border border-accent/20 bg-card p-4 hover:border-accent/40 transition-colors"
+              className="rounded border border-accent/20 bg-card p-4 hover:border-accent/40 transition-colors"
             >
               <div className="flex items-start justify-between gap-4">
                 {/* Drag Handle */}

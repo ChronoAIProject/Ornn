@@ -107,7 +107,7 @@ export function MultiValueInput({
         )}
       </label>
 
-      <div className="neon-input flex flex-wrap gap-1.5 rounded-lg px-3 py-2">
+      <div className="neon-input flex flex-wrap gap-1.5 rounded px-3 py-2">
         {values.map((value) => (
           <Badge key={value} color={badgeColor}>
             {value}

@@ -12,7 +12,7 @@ export interface StreamingTokenDisplayProps {
 export function StreamingTokenDisplay({ tokens, className = "" }: StreamingTokenDisplayProps) {
   return (
     <div
-      className={`rounded-lg border border-accent/10 bg-page p-4 font-mono text-sm text-strong ${className}`}
+      className={`rounded border border-accent/10 bg-page p-4 font-mono text-sm text-strong ${className}`}
     >
       <pre className="whitespace-pre-wrap break-words">
         {tokens}

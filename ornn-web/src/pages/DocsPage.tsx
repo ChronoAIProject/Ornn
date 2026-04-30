@@ -114,7 +114,7 @@ function ReleaseAccordion({ lang }: { lang: Lang }) {
           return (
             <div
               key={release.version}
-              className="rounded-lg border border-accent/20 overflow-hidden transition-colors hover:border-accent/40"
+              className="rounded border border-accent/20 overflow-hidden transition-colors hover:border-accent/40"
             >
               <button
                 type="button"
@@ -163,7 +163,7 @@ function ReleaseAccordion({ lang }: { lang: Lang }) {
 function VersionBadge() {
   const releasesUrl = "https://github.com/ChronoAIProject/Ornn/releases";
   return (
-    <div className="my-6 inline-flex flex-wrap items-center gap-3 rounded-lg border border-accent/20 bg-elevated px-4 py-2">
+    <div className="my-6 inline-flex flex-wrap items-center gap-3 rounded border border-accent/20 bg-elevated px-4 py-2">
       <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
         Current version
       </span>
@@ -306,11 +306,11 @@ function MermaidLightbox({ svg, onClose }: { svg: string; onClose: () => void })
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
       {/* Toolbar */}
       <div className="absolute top-4 right-4 z-10 flex items-center gap-2">
-        <button type="button" onClick={() => setScale((s) => Math.min(s + 0.25, 5))} className="rounded-lg bg-elevated px-3 py-1.5 font-mono text-sm text-strong hover:bg-accent/20 transition-colors cursor-pointer">+</button>
-        <span className="rounded-lg bg-elevated px-3 py-1.5 font-mono text-sm text-meta min-w-[4rem] text-center">{Math.round(scale * 100)}%</span>
-        <button type="button" onClick={() => setScale((s) => Math.max(s - 0.25, 0.2))} className="rounded-lg bg-elevated px-3 py-1.5 font-mono text-sm text-strong hover:bg-accent/20 transition-colors cursor-pointer">−</button>
-        <button type="button" onClick={handleReset} className="rounded-lg bg-elevated px-3 py-1.5 font-mono text-sm text-strong hover:bg-accent/20 transition-colors cursor-pointer">Reset</button>
-        <button type="button" onClick={onClose} className="rounded-lg bg-elevated px-3 py-1.5 font-mono text-sm text-strong hover:bg-accent/20 transition-colors cursor-pointer">✕</button>
+        <button type="button" onClick={() => setScale((s) => Math.min(s + 0.25, 5))} className="rounded bg-elevated px-3 py-1.5 font-mono text-sm text-strong hover:bg-accent/20 transition-colors cursor-pointer">+</button>
+        <span className="rounded bg-elevated px-3 py-1.5 font-mono text-sm text-meta min-w-[4rem] text-center">{Math.round(scale * 100)}%</span>
+        <button type="button" onClick={() => setScale((s) => Math.max(s - 0.25, 0.2))} className="rounded bg-elevated px-3 py-1.5 font-mono text-sm text-strong hover:bg-accent/20 transition-colors cursor-pointer">−</button>
+        <button type="button" onClick={handleReset} className="rounded bg-elevated px-3 py-1.5 font-mono text-sm text-strong hover:bg-accent/20 transition-colors cursor-pointer">Reset</button>
+        <button type="button" onClick={onClose} className="rounded bg-elevated px-3 py-1.5 font-mono text-sm text-strong hover:bg-accent/20 transition-colors cursor-pointer">✕</button>
       </div>
       {/* Viewport */}
       <div
@@ -361,7 +361,7 @@ function MermaidBlock({ chart }: { chart: string }) {
     <>
       <div
         ref={containerRef}
-        className="mermaid-container group relative my-4 overflow-x-auto rounded-lg border border-accent/10 bg-page p-4 cursor-pointer [&_svg]:mx-auto [&_svg]:max-w-full"
+        className="mermaid-container group relative my-4 overflow-x-auto rounded border border-accent/10 bg-page p-4 cursor-pointer [&_svg]:mx-auto [&_svg]:max-w-full"
         onClick={() => setLightboxOpen(true)}
         dangerouslySetInnerHTML={{ __html: svg }}
       />

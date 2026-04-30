@@ -281,7 +281,7 @@ export function StepBasicInfo({
                           type="checkbox"
                           checked={field.value}
                           onChange={field.onChange}
-                          className="h-4 w-4 rounded border-text-muted/30 bg-page text-accent accent-accent cursor-pointer"
+                          className="h-4 w-4 rounded border-meta/30 bg-page text-accent accent-accent cursor-pointer"
                         />
                         <div>
                           <span className="font-text text-sm text-strong group-hover:text-accent transition-colors">
@@ -305,7 +305,7 @@ export function StepBasicInfo({
                           type="checkbox"
                           checked={field.value}
                           onChange={field.onChange}
-                          className="h-4 w-4 rounded border-text-muted/30 bg-page text-accent accent-accent cursor-pointer"
+                          className="h-4 w-4 rounded border-meta/30 bg-page text-accent accent-accent cursor-pointer"
                         />
                         <div>
                           <span className="font-text text-sm text-strong group-hover:text-accent transition-colors">

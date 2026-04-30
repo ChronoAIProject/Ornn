@@ -210,7 +210,7 @@ export function UsagePullsCard({
 
   return (
     <section
-      className={`rounded-xl border border-subtle bg-card p-4 ${className ?? ""}`}
+      className={`rounded border border-subtle bg-card p-4 ${className ?? ""}`}
     >
       <header className="mb-3 flex flex-wrap items-end justify-between gap-3">
         <div>

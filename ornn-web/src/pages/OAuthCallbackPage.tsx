@@ -68,7 +68,7 @@ export function OAuthCallbackPage() {
         className="w-full max-w-md"
       >
         {state.status === "loading" && (
-          <div className="rounded-md border border-subtle bg-card p-8 text-center shadow-[0_2px_12px_-6px_rgba(0,0,0,0.18)]">
+          <div className="rounded-md border border-subtle bg-card p-8 text-center card-impression">
             <div className="mb-4 flex justify-center">
               <span className="inline-block h-10 w-10 animate-spin rounded-full border-2 border-accent border-t-transparent" />
             </div>
@@ -82,7 +82,7 @@ export function OAuthCallbackPage() {
         )}
 
         {state.status === "error" && (
-          <div className="rounded-md border border-danger/40 bg-card p-8 text-center shadow-[0_2px_12px_-6px_rgba(0,0,0,0.18)]">
+          <div className="rounded-md border border-danger/40 bg-card p-8 text-center card-impression">
             <div className="mb-4 flex justify-center">
               <div className="flex h-12 w-12 items-center justify-center rounded-sm border border-danger bg-danger-soft">
                 <svg

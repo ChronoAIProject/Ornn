@@ -118,7 +118,7 @@ export function NotificationBell() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -10, scale: 0.95 }}
             transition={{ duration: 0.15, ease: "easeOut" }}
-            className="absolute right-0 top-full mt-2 w-80 overflow-hidden rounded-lg glass border border-accent/20 shadow-lg shadow-accent/10"
+            className="absolute right-0 top-full mt-2 w-80 overflow-hidden rounded glass border border-accent/20 card-impression"
           >
             <div className="flex items-center justify-between border-b border-accent/10 px-4 py-3">
               <span className="font-display text-sm uppercase tracking-wider text-strong">

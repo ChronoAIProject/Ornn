@@ -226,7 +226,7 @@ export function MarkdownEditor({
       )}
 
       {/* Editor container */}
-      <div className="rounded-lg border border-accent/20 bg-page overflow-hidden">
+      <div className="rounded border border-accent/20 bg-page overflow-hidden">
         {/* Toolbar */}
         <div className="flex items-center justify-between border-b border-accent/10 px-2 py-1.5 bg-card/50">
           {/* Formatting buttons */}

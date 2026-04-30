@@ -46,7 +46,7 @@ function ChatMessage({ role, content }: { role: string; content: string }) {
   return (
     <div className={`flex ${role === "user" ? "justify-end" : "justify-start"}`}>
       <div
-        className={`max-w-[85%] rounded-lg px-3 py-2 font-text text-sm whitespace-pre-wrap ${
+        className={`max-w-[85%] rounded px-3 py-2 font-text text-sm whitespace-pre-wrap ${
           role === "user"
             ? "bg-accent/10 border border-accent/20 text-strong"
             : "bg-elevated border border-accent/10 text-strong"
@@ -145,7 +145,7 @@ export function PlaygroundPage() {
         {/* Two-column layout */}
         <div className="flex flex-1 min-h-0 gap-4">
           {/* Left: Chat (40%) */}
-          <div className="flex w-[40%] shrink-0 flex-col min-w-0 min-h-0 rounded-lg border border-accent/10 bg-elevated/30">
+          <div className="flex w-[40%] shrink-0 flex-col min-w-0 min-h-0 rounded border border-accent/10 bg-elevated/30">
             {/* Clear Chat button inside chat panel */}
             <div className="flex items-center justify-end px-3 py-1 shrink-0">
               <button
@@ -178,7 +178,7 @@ export function PlaygroundPage() {
               {/* File outputs (images, etc.) */}
               {fileOutputs.map((file, idx) => (
                 <div key={`file-${idx}`} className="flex justify-start">
-                  <div className="max-w-[85%] rounded-lg border border-accent/20 bg-elevated p-2">
+                  <div className="max-w-[85%] rounded border border-accent/20 bg-elevated p-2">
                     {file.mimeType.startsWith("image/") ? (
                       <div>
                         <img
@@ -204,7 +204,7 @@ export function PlaygroundPage() {
               ))}
 
               {error && (
-                <div className="border border-danger/30 bg-danger/5 rounded-lg p-3">
+                <div className="border border-danger/30 bg-danger/5 rounded p-3">
                   <p className="font-text text-xs text-danger">{error}</p>
                 </div>
               )}

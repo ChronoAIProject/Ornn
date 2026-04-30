@@ -109,7 +109,7 @@ export function Sidebar({
           <button
             type="button"
             onClick={toggleCollapsed}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-meta transition-colors hover:bg-accent/10 hover:text-accent cursor-pointer"
+            className="flex h-8 w-8 items-center justify-center rounded text-meta transition-colors hover:bg-accent/10 hover:text-accent cursor-pointer"
             aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
           >
             <ChevronIcon
@@ -129,7 +129,7 @@ export function Sidebar({
           <button
             type="button"
             onClick={onMobileClose}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-meta transition-colors hover:bg-accent/10 hover:text-accent cursor-pointer"
+            className="flex h-8 w-8 items-center justify-center rounded text-meta transition-colors hover:bg-accent/10 hover:text-accent cursor-pointer"
             aria-label="Close sidebar"
           >
             <CloseIcon className="h-5 w-5" />
@@ -156,7 +156,7 @@ export function Sidebar({
                   to={item.to}
                   onClick={isMobile ? onMobileClose : undefined}
                   className={`
-                    group relative flex items-center gap-3 rounded-lg px-3 py-2.5
+                    group relative flex items-center gap-3 rounded px-3 py-2.5
                     font-text text-sm transition-all duration-200
                     ${collapsed && !isMobile ? "justify-center" : ""}
                     ${
@@ -172,7 +172,7 @@ export function Sidebar({
                     {active && (
                       <motion.div
                         layoutId={isMobile ? "sidebar-mobile-active" : "sidebar-active"}
-                        className="absolute -left-3 top-1/2 h-4 w-1 -translate-y-1/2 rounded-r bg-accent shadow-[0_0_8px_#FF6B00]"
+                        className="absolute -left-3 top-1/2 h-4 w-1 -translate-y-1/2 rounded-r bg-accent"
                       />
                     )}
                   </div>
@@ -202,7 +202,7 @@ export function Sidebar({
 
                   {/* Tooltip for collapsed state */}
                   {collapsed && !isMobile && (
-                    <div className="absolute left-full ml-2 hidden rounded-lg bg-elevated px-3 py-1.5 text-xs font-medium text-strong shadow-lg group-hover:block z-50 whitespace-nowrap">
+                    <div className="absolute left-full ml-2 hidden rounded bg-elevated px-3 py-1.5 text-xs font-medium text-strong card-impression group-hover:block z-50 whitespace-nowrap">
                       {item.label}
                       {item.badge && (
                         <span className="ml-2 text-accent-support">({item.badge})</span>
@@ -236,7 +236,7 @@ export function Sidebar({
               )}
             </div>
             {/* Tooltip */}
-            <div className="absolute left-full ml-2 hidden rounded-lg bg-elevated px-3 py-1.5 text-xs font-medium text-strong shadow-lg group-hover:block z-50 whitespace-nowrap">
+            <div className="absolute left-full ml-2 hidden rounded bg-elevated px-3 py-1.5 text-xs font-medium text-strong card-impression group-hover:block z-50 whitespace-nowrap">
               {user.displayName}
             </div>
           </div>

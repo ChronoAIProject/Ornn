@@ -51,7 +51,7 @@ export function TagInput({ tags, onChange, error, className = "" }: TagInputProp
       <label className="font-display text-xs uppercase tracking-wider text-meta">
         Tags ({tags.length}/{MAX_TAGS})
       </label>
-      <div className="neon-input flex flex-wrap gap-1.5 rounded-lg px-3 py-2">
+      <div className="neon-input flex flex-wrap gap-1.5 rounded px-3 py-2">
         {tags.map((tag) => (
           <Badge key={tag} color={getTagColor(tag)}>
             {tag}

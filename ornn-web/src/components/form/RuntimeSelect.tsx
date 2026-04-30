@@ -57,7 +57,7 @@ export function RuntimeSelect({
       )}
 
       {/* Checkbox list */}
-      <div className="neon-input rounded-lg p-3 space-y-2">
+      <div className="neon-input rounded p-3 space-y-2">
         {AVAILABLE_RUNTIMES.map((runtime) => {
           const isChecked = selected.includes(runtime);
           const info = RUNTIME_INFO[runtime];
@@ -70,7 +70,7 @@ export function RuntimeSelect({
                 type="checkbox"
                 checked={isChecked}
                 onChange={() => toggleRuntime(runtime)}
-                className="h-4 w-4 rounded border-text-muted/30 bg-page text-accent accent-accent cursor-pointer"
+                className="h-4 w-4 rounded border-meta/30 bg-page text-accent accent-accent cursor-pointer"
               />
               <span
                 className={`font-text text-sm transition-colors ${

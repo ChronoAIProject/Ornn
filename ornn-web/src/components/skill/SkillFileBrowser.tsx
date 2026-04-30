@@ -170,7 +170,7 @@ export function SkillFileBrowser({ skillId, version, isOwner }: SkillFileBrowser
 
   if (error) {
     return (
-      <div className="flex items-center justify-center rounded-lg border border-danger/20 bg-card py-12">
+      <div className="flex items-center justify-center rounded border border-danger/20 bg-card py-12">
         <p className="font-text text-sm text-danger">
           Failed to load files
         </p>
@@ -180,7 +180,7 @@ export function SkillFileBrowser({ skillId, version, isOwner }: SkillFileBrowser
 
   if (treeNodes.length === 0) {
     return (
-      <div className="flex items-center justify-center rounded-lg border border-accent/10 bg-card py-12">
+      <div className="flex items-center justify-center rounded border border-accent/10 bg-card py-12">
         <p className="font-text text-sm text-meta">
           No package files available
         </p>
@@ -192,7 +192,7 @@ export function SkillFileBrowser({ skillId, version, isOwner }: SkillFileBrowser
     <div className="space-y-3">
       <div className="flex flex-col lg:flex-row gap-4">
         {/* Left: File tree */}
-        <div className="lg:w-1/3 rounded-lg border border-accent/10 bg-card min-h-[300px]">
+        <div className="lg:w-1/3 rounded border border-accent/10 bg-card min-h-[300px]">
           <FileTree
             files={treeNodes}
             selectedId={selectedFileId}
@@ -211,7 +211,7 @@ export function SkillFileBrowser({ skillId, version, isOwner }: SkillFileBrowser
                 onChange={isEditable ? handleContentChange : undefined}
               />
             ) : (
-              <div className="flex flex-col items-center justify-center h-full min-h-[300px] rounded-lg border border-accent/10 bg-page">
+              <div className="flex flex-col items-center justify-center h-full min-h-[300px] rounded border border-accent/10 bg-page">
                 <svg
                   className="h-10 w-10 text-meta mb-3"
                   fill="none"
@@ -233,7 +233,7 @@ export function SkillFileBrowser({ skillId, version, isOwner }: SkillFileBrowser
               </div>
             )
           ) : (
-            <div className="flex items-center justify-center h-full min-h-[300px] rounded-lg border border-accent/10 bg-page">
+            <div className="flex items-center justify-center h-full min-h-[300px] rounded border border-accent/10 bg-page">
               <p className="font-text text-sm text-meta">
                 Select a file to view its content
               </p>

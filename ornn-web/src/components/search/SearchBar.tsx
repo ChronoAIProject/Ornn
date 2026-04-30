@@ -46,7 +46,7 @@ export function SearchBar({ className = "" }: SearchBarProps) {
               ? "Describe what you're looking for..."
               : "Search skills by name, description, or tags..."
           }
-          className="neon-input w-full rounded-xl py-3 pr-4 pl-12 font-text text-strong placeholder:text-meta/50"
+          className="neon-input w-full rounded py-3 pr-4 pl-12 font-text text-strong placeholder:text-meta/50"
         />
       </div>
 
@@ -56,7 +56,7 @@ export function SearchBar({ className = "" }: SearchBarProps) {
         onClick={() => setMode(isSemanticMode ? "keyword" : "semantic")}
         title={isSemanticMode ? "Switch to keyword search" : "Switch to semantic search"}
         className={`
-          flex items-center gap-2 shrink-0 rounded-xl border px-4 py-3 font-text text-sm transition-all
+          flex items-center gap-2 shrink-0 rounded border px-4 py-3 font-text text-sm transition-all
           ${isSemanticMode
             ? "border-accent-support/50 bg-accent-support/10 text-accent-support hover:bg-accent-support/20"
             : "border-accent/20 bg-elevated text-meta hover:text-strong hover:border-accent/40"

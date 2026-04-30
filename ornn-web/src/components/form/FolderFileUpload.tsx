@@ -6,7 +6,6 @@
  */
 
 import { useState, useRef, useCallback } from "react";
-import { motion } from "framer-motion";
 import { UPLOADABLE_FOLDERS, type UploadableFolder } from "@/types/skillPackage";
 import { formatFileSize } from "@/utils/formatters";
 import { useTranslation } from "react-i18next";
@@ -77,7 +76,7 @@ export function FolderFileUpload({
               type="button"
               onClick={() => setSelectedFolder(folder)}
               className={`
-                px-4 py-2 rounded-lg font-mono text-sm transition-all cursor-pointer
+                px-4 py-2 rounded font-mono text-sm transition-all cursor-pointer
                 ${
                   selectedFolder === folder
                     ? "bg-accent/10 border border-accent/40 text-accent"
@@ -91,22 +90,21 @@ export function FolderFileUpload({
         </div>
 
         {/* Drop zone */}
-        <motion.div
+        <div
           onDrop={handleDrop}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onClick={() => inputRef.current?.click()}
-          whileHover={{ borderColor: "rgba(255, 107, 0, 0.5)" }}
           className={`
-            flex-1 flex items-center justify-center rounded-lg border-2 border-dashed
+            flex-1 flex items-center justify-center rounded border-2 border-dashed
             px-4 py-4 cursor-pointer transition-colors min-h-[60px]
-            ${isDragging ? "border-accent bg-accent/5" : "border-accent/20 bg-page/50"}
+            ${isDragging ? "border-accent bg-accent/5" : "border-accent/20 bg-page/50 hover:border-accent/50"}
           `}
         >
           <p className="font-text text-sm text-meta">
             {t("guided.dropHint")}
           </p>
-        </motion.div>
+        </div>
         <input
           ref={inputRef}
           type="file"
@@ -137,7 +135,7 @@ export function FolderFileUpload({
                   {folderFiles.map((file, index) => (
                     <div
                       key={`${folder}-${file.name}-${index}`}
-                      className="flex items-center justify-between p-2 pl-4 rounded-lg bg-elevated border border-accent/10"
+                      className="flex items-center justify-between p-2 pl-4 rounded bg-elevated border border-accent/10"
                     >
                       <span className="font-mono text-sm text-strong truncate flex-1">
                         {file.name}

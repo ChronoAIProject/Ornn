@@ -495,7 +495,7 @@ export function SkillDetailPage() {
         <main className="flex flex-col gap-4 lg:flex-row">
 
           {/* Left: tabs + content. */}
-          <section className="flex min-h-0 flex-col overflow-hidden rounded-md border border-subtle bg-card shadow-[0_2px_8px_-4px_rgba(26,24,18,0.06)] lg:h-[80vh] lg:min-h-[640px] lg:max-h-[calc(100vh-140px)] lg:flex-1 lg:min-w-0 dark:shadow-[0_2px_12px_-6px_rgba(0,0,0,0.45)]">
+          <section className="card-impression flex min-h-0 flex-col overflow-hidden rounded border border-subtle bg-card lg:h-[80vh] lg:min-h-[640px] lg:max-h-[calc(100vh-140px)] lg:flex-1 lg:min-w-0">
             {/* Toolbar — VersionPicker carries its own "Version" label, so
                 no outer label here (we used to render two). Audit history
                 lives in the right-rail card now. */}
@@ -555,7 +555,7 @@ export function SkillDetailPage() {
           <aside className="flex flex-col gap-4 min-h-0 lg:h-[80vh] lg:min-h-[640px] lg:max-h-[calc(100vh-140px)] lg:w-[320px] lg:shrink-0 lg:overflow-y-auto lg:pr-1">
 
             {/* ── Audit card ── */}
-            <section className="rounded-md border border-subtle bg-card p-5 shadow-[0_2px_8px_-4px_rgba(26,24,18,0.06)] dark:shadow-[0_2px_12px_-6px_rgba(0,0,0,0.45)]">
+            <section className="rounded-md border border-subtle bg-card p-5 card-impression">
               <h3 className="mb-3.5 flex items-center gap-2 border-b border-dashed border-subtle pb-3 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-meta">
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></svg>
                 {t("skillDetail.cardAudit", "Audit")}
@@ -595,7 +595,7 @@ export function SkillDetailPage() {
 
             {/* ── Versions card ── */}
             {versionList.length > 0 && (
-              <section className="rounded-md border border-subtle bg-card p-5 shadow-[0_2px_8px_-4px_rgba(26,24,18,0.06)] dark:shadow-[0_2px_12px_-6px_rgba(0,0,0,0.45)]">
+              <section className="rounded-md border border-subtle bg-card p-5 card-impression">
                 <h3 className="mb-3.5 flex items-center gap-2 border-b border-dashed border-subtle pb-3 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-meta">
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
                     <path d="M21 16V8a2 2 0 0 0-1-1.7l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.7l7 4a2 2 0 0 0 2 0l7-4a2 2 0 0 0 1-1.7z" />
@@ -636,7 +636,7 @@ export function SkillDetailPage() {
             )}
 
             {/* ── Visibility card ── */}
-            <section className="rounded-md border border-subtle bg-card p-5 shadow-[0_2px_8px_-4px_rgba(26,24,18,0.06)] dark:shadow-[0_2px_12px_-6px_rgba(0,0,0,0.45)]">
+            <section className="rounded-md border border-subtle bg-card p-5 card-impression">
               <h3 className="mb-3.5 flex items-center gap-2 border-b border-dashed border-subtle pb-3 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-meta">
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
                   <circle cx="12" cy="12" r="9" /><line x1="3" y1="12" x2="21" y2="12" />
@@ -729,7 +729,7 @@ export function SkillDetailPage() {
               <button
                 type="button"
                 onClick={() => setShowAdvancedModal(true)}
-                className="flex w-full items-center justify-between gap-2 rounded-md border border-subtle bg-card p-5 text-left font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-meta shadow-[0_2px_8px_-4px_rgba(26,24,18,0.06)] transition-colors hover:border-strong-edge hover:text-strong dark:shadow-[0_2px_12px_-6px_rgba(0,0,0,0.45)]"
+                className="card-letterpress flex w-full cursor-pointer items-center justify-between gap-2 rounded border border-subtle bg-card p-5 text-left font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-meta hover:border-strong-edge hover:text-strong"
               >
                 <span className="flex items-center gap-2">
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
@@ -747,7 +747,7 @@ export function SkillDetailPage() {
             {/* ── Metadata card ── identity + tags + source. Filler-
                 with-purpose: makes the right rail visually full
                 without resorting to an invisible spacer. */}
-            <section className="rounded-md border border-subtle bg-card p-5 shadow-[0_2px_8px_-4px_rgba(26,24,18,0.06)] dark:shadow-[0_2px_12px_-6px_rgba(0,0,0,0.45)]">
+            <section className="rounded-md border border-subtle bg-card p-5 card-impression">
               <h3 className="mb-3.5 flex items-center gap-2 border-b border-dashed border-subtle pb-3 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-meta">
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
                   <line x1="3" y1="6" x2="21" y2="6" />
@@ -869,7 +869,7 @@ export function SkillDetailPage() {
 
             {/* ── Danger zone (owner only) ── */}
             {isOwner && (
-              <section className="rounded-md border border-subtle bg-card p-5 shadow-[0_2px_8px_-4px_rgba(26,24,18,0.06)] dark:shadow-[0_2px_12px_-6px_rgba(0,0,0,0.45)]">
+              <section className="rounded-md border border-subtle bg-card p-5 card-impression">
                 <h3 className="mb-3.5 flex items-center gap-2 border-b border-dashed border-danger/30 pb-3 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-danger">
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
                     <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />

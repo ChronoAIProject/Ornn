@@ -30,7 +30,7 @@ export function DeprecationBanner({
     <div
       role="alert"
       className={`
-        glass flex flex-col gap-2 rounded-xl border border-warning/40
+        glass flex flex-col gap-2 rounded border border-warning/40
         bg-warning/5 p-4
         ${className}
       `}

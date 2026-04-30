@@ -96,7 +96,7 @@ export function CreateSkillFromGitHubPage() {
           >
             <Card className="p-6">
               <div className="flex items-start gap-4 mb-6">
-                <div className="rounded-2xl border border-accent/30 bg-accent/10 p-3">
+                <div className="rounded border border-accent/30 bg-accent/10 p-3">
                   <GitHubMarkIcon className="h-8 w-8 text-accent" />
                 </div>
                 <div className="flex-1 min-w-0">
@@ -128,7 +128,7 @@ export function CreateSkillFromGitHubPage() {
                     placeholder="https://github.com/owner/repo/tree/main/path/to/skill"
                     value={githubUrl}
                     onChange={(e) => setGithubUrl(e.target.value)}
-                    className={`w-full rounded-lg border bg-card px-3 py-2 font-mono text-sm text-strong placeholder:text-meta focus:outline-none focus:ring-2 ${
+                    className={`w-full rounded border bg-card px-3 py-2 font-mono text-sm text-strong placeholder:text-meta focus:outline-none focus:ring-2 ${
                       submitted && !urlValid
                         ? "border-danger/40 focus:ring-danger/40"
                         : "border-accent/20 focus:border-accent/60 focus:ring-accent/30"

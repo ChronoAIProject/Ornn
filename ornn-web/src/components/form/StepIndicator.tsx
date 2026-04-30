@@ -98,10 +98,10 @@ export function StepIndicator({
                   ${isClickable ? "cursor-pointer" : "cursor-default"}
                   ${
                     isCompleted
-                      ? "bg-accent/20 border-accent text-accent shadow-[0_0_15px_rgba(255,107,0,0.4)]"
+                      ? "bg-accent/20 border-accent text-accent"
                       : isCurrent
-                      ? "bg-accent-support/20 border-accent-support text-accent-support shadow-[0_0_15px_rgba(255,140,56,0.4)]"
-                      : "bg-elevated border-text-muted/30 text-meta"
+                      ? "bg-accent-support/20 border-accent-support text-accent-support"
+                      : "bg-elevated border-meta/30 text-meta"
                   }
                 `}
               >

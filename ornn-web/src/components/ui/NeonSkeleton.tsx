@@ -38,7 +38,7 @@ const VARIANT_STYLES = {
   text: "rounded-md",
   circular: "rounded-full aspect-square",
   rectangular: "rounded-none",
-  rounded: "rounded-lg",
+  rounded: "rounded",
 } as const;
 
 /**

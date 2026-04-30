@@ -49,7 +49,7 @@ export function AdminGuard({ children }: AdminGuardProps) {
         animate={{ opacity: 1, scale: 1 }}
         className="flex flex-col items-center justify-center py-16"
       >
-        <div className="glass rounded-xl p-8 text-center max-w-md">
+        <div className="glass rounded p-8 text-center max-w-md">
           <div className="mb-4 flex justify-center">
             <div className="flex h-16 w-16 items-center justify-center rounded-full border-2 border-danger">
               <svg

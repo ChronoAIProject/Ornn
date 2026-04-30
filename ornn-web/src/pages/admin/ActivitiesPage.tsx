@@ -124,7 +124,7 @@ export function ActivitiesPage() {
         <select
           value={actionFilter}
           onChange={(e) => handleActionFilterChange(e.target.value)}
-          className="neon-input rounded-lg px-4 py-2 font-text text-sm text-strong bg-elevated border border-accent/20 focus:border-accent/50 outline-none transition-colors"
+          className="neon-input rounded px-4 py-2 font-text text-sm text-strong bg-elevated border border-accent/20 focus:border-accent/50 outline-none transition-colors"
         >
           {ACTION_TYPES.map((type) => (
             <option key={type.value} value={type.value}>

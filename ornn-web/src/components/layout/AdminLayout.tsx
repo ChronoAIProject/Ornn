@@ -175,9 +175,9 @@ export function AdminLayout() {
                 to={item.path}
                 end={item.path === "/admin"}
                 className={({ isActive }) =>
-                  `flex items-center gap-3 rounded-lg px-4 py-2.5 font-text text-sm transition-all duration-200 ${
+                  `flex items-center gap-3 rounded px-4 py-2.5 font-text text-sm transition-all duration-200 ${
                     isActive
-                      ? "bg-accent-support/10 text-accent-support border border-accent-support/30 shadow-[0_0_10px_rgba(255,140,56,0.1)]"
+                      ? "bg-accent-support/10 text-accent-support border border-accent-support/30"
                       : "text-meta hover:bg-elevated hover:text-strong border border-transparent"
                   }`
                 }

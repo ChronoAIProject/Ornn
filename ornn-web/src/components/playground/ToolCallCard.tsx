@@ -68,7 +68,7 @@ export function ToolCallCard({ toolCall, status }: ToolCallCardProps) {
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
       transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
-      className={`rounded-lg border bg-card/50 p-3 ${style.border}`}
+      className={`rounded border bg-card/50 p-3 ${style.border}`}
     >
       {/* Header */}
       <div className="flex items-center gap-2">

@@ -70,7 +70,7 @@ function UserMessage({ content }: { content: string }) {
       transition={{ duration: 0.15, ease: "easeOut" }}
       className="flex justify-end"
     >
-      <div className="max-w-[80%] rounded-xl rounded-br-sm border border-accent/30 bg-accent/5 px-4 py-3">
+      <div className="max-w-[80%] rounded rounded-br-sm border border-accent/30 bg-accent/5 px-4 py-3">
         <p className="whitespace-pre-wrap font-text text-sm text-strong">
           {content}
         </p>
@@ -100,7 +100,7 @@ function AssistantMessage({
     >
       <div className="max-w-[85%] space-y-3">
         {content && (
-          <div className="glass rounded-xl rounded-bl-sm px-4 py-3">
+          <div className="glass rounded rounded-bl-sm px-4 py-3">
             <div className="markdown-body text-sm">
               <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
@@ -145,7 +145,7 @@ function ToolResultMessage({
       className="flex justify-start"
     >
       <div
-        className={`max-w-[85%] rounded-lg border px-3 py-2 ${
+        className={`max-w-[85%] rounded border px-3 py-2 ${
           isRejection
             ? "border-danger/30 bg-danger/5"
             : "border-accent/20 bg-card/50"

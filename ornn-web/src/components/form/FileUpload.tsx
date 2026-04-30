@@ -1,5 +1,4 @@
 import { useRef, useState, useCallback } from "react";
-import { motion } from "framer-motion";
 import { formatFileSize } from "@/utils/formatters";
 import { MAX_FILE_SIZE_LABEL, MAX_FILE_SIZE_BYTES, ACCEPTED_FILE_TYPES } from "@/utils/constants";
 
@@ -81,7 +80,7 @@ export function FileUpload({ onFileSelect, error: externalError, className = "" 
       <label className="font-display text-xs uppercase tracking-wider text-meta">
         Package File
       </label>
-      <motion.div
+      <div
         onDrop={(e) => {
           handleDrop(e as unknown as React.DragEvent);
           const droppedFile = (e as unknown as React.DragEvent).dataTransfer?.files[0];
@@ -90,11 +89,10 @@ export function FileUpload({ onFileSelect, error: externalError, className = "" 
         onDragOver={(e) => handleDragOver(e as unknown as React.DragEvent)}
         onDragLeave={handleDragLeave}
         onClick={() => inputRef.current?.click()}
-        whileHover={{ borderColor: "rgba(255, 107, 0, 0.5)" }}
         className={`
-          flex cursor-pointer flex-col items-center justify-center rounded-xl
+          flex cursor-pointer flex-col items-center justify-center rounded
           border-2 border-dashed px-6 py-10 transition-colors
-          ${isDragging ? "border-accent bg-accent/5" : "border-accent/20 bg-page/50"}
+          ${isDragging ? "border-accent bg-accent/5" : "border-accent/20 bg-page/50 hover:border-accent/50"}
         `}
       >
         {file ? (
@@ -122,7 +120,7 @@ export function FileUpload({ onFileSelect, error: externalError, className = "" 
             </p>
           </div>
         )}
-      </motion.div>
+      </div>
       <input
         ref={inputRef}
         type="file"

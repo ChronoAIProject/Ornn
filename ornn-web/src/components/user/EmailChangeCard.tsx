@@ -179,7 +179,7 @@ export function EmailChangeCard({
             exit={{ opacity: 0 }}
             className="space-y-4"
           >
-            <div className="rounded-lg bg-card/50 p-4">
+            <div className="rounded bg-card/50 p-4">
               <p className="font-mono text-sm text-strong">{currentEmail}</p>
             </div>
             <div className="flex items-center justify-between">
@@ -359,7 +359,7 @@ export function EmailChangeCard({
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="mt-4 rounded-lg border border-danger/30 bg-danger/10 p-3"
+          className="mt-4 rounded border border-danger/30 bg-danger/10 p-3"
         >
           <p className="text-sm text-danger">{error}</p>
         </motion.div>

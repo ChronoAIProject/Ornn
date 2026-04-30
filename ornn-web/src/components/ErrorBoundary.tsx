@@ -155,7 +155,7 @@ export function ErrorFallback({
         className="max-w-lg w-full"
       >
         {/* Error card */}
-        <div className="glass rounded-xl overflow-hidden border border-danger/30 shadow-[0_0_30px_rgba(255,0,60,0.2)]">
+        <div className="glass rounded overflow-hidden border border-danger/30">
           {/* Glitch header */}
           <div className="bg-danger/10 border-b border-danger/20 px-6 py-4">
             <div className="flex items-center gap-3">
@@ -204,7 +204,7 @@ export function ErrorFallback({
                   </summary>
                   <div className="mt-3 space-y-3">
                     {/* Error message */}
-                    <div className="rounded-lg bg-page border border-danger/20 p-3">
+                    <div className="rounded bg-page border border-danger/20 p-3">
                       <p className="font-mono text-xs text-danger break-all">
                         {error.message}
                       </p>
@@ -212,7 +212,7 @@ export function ErrorFallback({
 
                     {/* Stack trace */}
                     {error.stack && (
-                      <div className="rounded-lg bg-page border border-accent/10 p-3 max-h-48 overflow-auto">
+                      <div className="rounded bg-page border border-accent/10 p-3 max-h-48 overflow-auto">
                         <pre className="font-mono text-xs text-meta whitespace-pre-wrap break-all">
                           {error.stack}
                         </pre>
@@ -221,7 +221,7 @@ export function ErrorFallback({
 
                     {/* Component stack */}
                     {errorInfo?.componentStack && (
-                      <div className="rounded-lg bg-page border border-accent/10 p-3 max-h-32 overflow-auto">
+                      <div className="rounded bg-page border border-accent/10 p-3 max-h-32 overflow-auto">
                         <p className="font-mono text-xs text-meta mb-1">
                           Component Stack:
                         </p>
@@ -238,39 +238,33 @@ export function ErrorFallback({
             {/* Actions */}
             <div className="flex flex-wrap gap-3">
               {onRetry && (
-                <motion.button
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
+                <button
                   onClick={onRetry}
-                  className="flex items-center gap-2 px-4 py-2 rounded-lg glass border border-accent/50 text-accent font-text text-sm font-semibold transition-all hover:border-accent hover:shadow-[0_0_15px_rgba(255,107,0,0.3)] cursor-pointer"
+                  className="cta-letterpress cta-letterpress--ghost flex cursor-pointer items-center gap-2 rounded-sm border border-accent/50 bg-card px-4 py-2 font-text text-sm font-semibold text-accent hover:border-accent"
                 >
                   <RefreshIcon className="h-4 w-4" />
                   Try Again
-                </motion.button>
+                </button>
               )}
 
               {onReload && (
-                <motion.button
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
+                <button
                   onClick={onReload}
-                  className="flex items-center gap-2 px-4 py-2 rounded-lg glass border border-accent-support/50 text-accent-support font-text text-sm font-semibold transition-all hover:border-accent-support hover:shadow-[0_0_15px_rgba(255,140,56,0.3)] cursor-pointer"
+                  className="cta-letterpress cta-letterpress--ghost flex cursor-pointer items-center gap-2 rounded-sm border border-accent-support/50 bg-card px-4 py-2 font-text text-sm font-semibold text-accent-support hover:border-accent-support"
                 >
                   <RefreshIcon className="h-4 w-4" />
                   Reload Page
-                </motion.button>
+                </button>
               )}
 
               {onGoHome && (
-                <motion.button
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
+                <button
                   onClick={onGoHome}
-                  className="flex items-center gap-2 px-4 py-2 rounded-lg text-meta font-text text-sm font-semibold transition-colors hover:text-strong cursor-pointer"
+                  className="flex cursor-pointer items-center gap-2 rounded-sm px-4 py-2 font-text text-sm font-semibold text-meta transition-colors hover:text-strong"
                 >
                   <HomeIcon className="h-4 w-4" />
                   Go Home
-                </motion.button>
+                </button>
               )}
             </div>
           </div>

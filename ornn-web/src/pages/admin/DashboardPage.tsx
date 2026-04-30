@@ -97,7 +97,7 @@ function StatCard({ label, value, icon, color, delay }: StatCardProps) {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3, delay }}
     >
-      <div className={`glass rounded-xl border p-5 ${COLOR_CLASSES[color]}`}>
+      <div className={`glass rounded border p-5 ${COLOR_CLASSES[color]}`}>
         <div className="flex items-center justify-between">
           <div>
             <p className="font-text text-xs uppercase tracking-wider text-meta">
@@ -107,7 +107,7 @@ function StatCard({ label, value, icon, color, delay }: StatCardProps) {
               {value.toLocaleString()}
             </p>
           </div>
-          <div className={`flex h-12 w-12 items-center justify-center rounded-lg ${COLOR_CLASSES[color]}`}>
+          <div className={`flex h-12 w-12 items-center justify-center rounded ${COLOR_CLASSES[color]}`}>
             {icon}
           </div>
         </div>
@@ -273,7 +273,7 @@ export function DashboardPage() {
               {recentActivities?.items.map((activity) => (
                 <div
                   key={activity.id}
-                  className="flex flex-col gap-2 rounded-lg border border-accent/10 bg-card p-3 sm:flex-row sm:items-center sm:gap-4"
+                  className="flex flex-col gap-2 rounded border border-accent/10 bg-card p-3 sm:flex-row sm:items-center sm:gap-4"
                 >
                   <span className="shrink-0 font-text text-xs text-meta">
                     {formatDateSGT(activity.createdAt)}

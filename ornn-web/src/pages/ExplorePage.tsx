@@ -214,7 +214,7 @@ export function ExplorePage() {
         <div className="shrink-0 flex justify-center">
           <div
             className={`
-              grid rounded-lg border border-accent/20 bg-elevated p-1 gap-1
+              grid rounded border border-accent/20 bg-elevated p-1 gap-1
               w-full max-w-3xl
               ${isAuthenticated ? "grid-cols-4" : "grid-cols-2"}
             `}

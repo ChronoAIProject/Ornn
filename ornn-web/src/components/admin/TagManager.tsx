@@ -202,7 +202,7 @@ export function TagManager({
             ?
           </p>
           {tagToDelete && tagToDelete.usageCount > 0 && (
-            <div className="rounded-lg border border-warning/30 bg-warning/10 p-3">
+            <div className="rounded border border-warning/30 bg-warning/10 p-3">
               <p className="font-text text-sm text-warning">
                 This tag is currently used by {tagToDelete.usageCount} skill(s).
                 Deleting it will remove it from all associated skills.

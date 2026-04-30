@@ -102,7 +102,7 @@ function ThemeToggle() {
     <button
       type="button"
       onClick={toggle}
-      className="hidden sm:flex items-center justify-center h-10 w-10 rounded-lg border border-accent/30 bg-card/50 text-meta transition-all duration-200 hover:text-accent hover:border-accent/50 cursor-pointer"
+      className="hidden sm:flex items-center justify-center h-10 w-10 rounded border border-accent/30 bg-card/50 text-meta transition-all duration-200 hover:text-accent hover:border-accent/50 cursor-pointer"
       title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
     >
       {theme === "dark" ? (
@@ -130,7 +130,7 @@ function GitHubLink() {
       href="https://github.com/ChronoAIProject/Ornn"
       target="_blank"
       rel="noopener noreferrer"
-      className="hidden sm:flex items-center justify-center h-10 w-10 rounded-lg border border-accent/30 bg-card/50 text-meta transition-all duration-200 hover:text-accent hover:border-accent/50"
+      className="hidden sm:flex items-center justify-center h-10 w-10 rounded border border-accent/30 bg-card/50 text-meta transition-all duration-200 hover:text-accent hover:border-accent/50"
       title="GitHub"
     >
       <GitHubIcon className="h-5 w-5" />
@@ -175,7 +175,7 @@ function LangDropdown() {
         </svg>
       </button>
       {open && (
-        <div className="absolute right-0 top-full mt-1 w-36 rounded-lg glass border border-accent/20 shadow-lg shadow-accent/10 py-1 z-50">
+        <div className="absolute right-0 top-full mt-1 w-36 rounded glass border border-accent/20 card-impression py-1 z-50">
           {LANGS.map((lang) => (
             <button
               key={lang.code}
@@ -208,7 +208,7 @@ function MobileLangToggle() {
     <button
       type="button"
       onClick={toggle}
-      className="flex w-full items-center gap-3 px-4 py-3 rounded-lg text-meta hover:bg-elevated hover:text-strong transition-colors cursor-pointer"
+      className="flex w-full items-center gap-3 px-4 py-3 rounded text-meta hover:bg-elevated hover:text-strong transition-colors cursor-pointer"
     >
       <span className="font-display text-sm">{isZh ? "EN" : "中"}</span>
       <span className="font-text text-sm font-medium">{isZh ? "English" : "中文"}</span>
@@ -224,7 +224,7 @@ function MobileThemeToggle() {
     <button
       type="button"
       onClick={toggle}
-      className="flex w-full items-center gap-3 px-4 py-3 rounded-lg text-meta hover:bg-elevated hover:text-strong transition-colors cursor-pointer"
+      className="flex w-full items-center gap-3 px-4 py-3 rounded text-meta hover:bg-elevated hover:text-strong transition-colors cursor-pointer"
     >
       {theme === "dark" ? <SunIcon className="h-5 w-5" /> : <MoonIcon className="h-5 w-5" />}
       <span className="font-text text-sm font-medium">
@@ -407,7 +407,7 @@ export function Navbar({ className = "" }: NavbarProps) {
                       animate={{ opacity: 1, y: 0, scale: 1 }}
                       exit={{ opacity: 0, y: -10, scale: 0.95 }}
                       transition={{ duration: 0.15, ease: "easeOut" }}
-                      className="absolute right-0 top-full mt-2 w-56 overflow-hidden rounded-lg glass border border-accent/20 shadow-lg shadow-accent/10"
+                      className="absolute right-0 top-full mt-2 w-56 overflow-hidden rounded glass border border-accent/20 card-impression"
                     >
                       {/* User Info */}
                       <div className="border-b border-accent/10 px-4 py-3">
@@ -513,7 +513,7 @@ export function Navbar({ className = "" }: NavbarProps) {
             {!isAuthenticated && (
               <Link
                 to="/login"
-                className="hidden sm:block rounded-lg px-5 py-2.5 border border-accent/50 font-text text-base font-semibold text-accent transition-all duration-200 hover:border-accent hover:shadow-[0_0_15px_rgba(255,107,0,0.3)]"
+                className="hidden sm:block rounded px-5 py-2.5 border border-accent/50 font-text text-base font-semibold text-accent transition-all duration-200 hover:border-accent"
               >
                 {t("nav.signIn")}
               </Link>
@@ -523,7 +523,7 @@ export function Navbar({ className = "" }: NavbarProps) {
             <button
               type="button"
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-              className="lg:hidden flex items-center justify-center h-10 w-10 rounded-lg border border-accent/30 bg-card/50 text-meta transition-colors hover:text-accent hover:border-accent/50 cursor-pointer"
+              className="lg:hidden flex items-center justify-center h-10 w-10 rounded border border-accent/30 bg-card/50 text-meta transition-colors hover:text-accent hover:border-accent/50 cursor-pointer"
               aria-label="Toggle mobile menu"
             >
               {isMobileMenuOpen ? (
@@ -608,7 +608,7 @@ export function Navbar({ className = "" }: NavbarProps) {
                         setIsMobileMenuOpen(false);
                       }}
                       className={`
-                        flex w-full items-center gap-3 px-4 py-3 rounded-lg transition-all cursor-pointer
+                        flex w-full items-center gap-3 px-4 py-3 rounded transition-all cursor-pointer
                         ${isActive
                           ? "text-accent bg-accent/10 border border-accent/30"
                           : "text-meta hover:bg-elevated hover:text-strong"
@@ -632,7 +632,7 @@ export function Navbar({ className = "" }: NavbarProps) {
                     {isAdmin(user) && (
                       <Link
                         to="/admin"
-                        className="flex items-center gap-3 px-4 py-3 rounded-lg text-meta hover:bg-elevated hover:text-strong transition-colors"
+                        className="flex items-center gap-3 px-4 py-3 rounded text-meta hover:bg-elevated hover:text-strong transition-colors"
                       >
                         <AdminIcon className="h-5 w-5" />
                         <span className="font-text text-sm font-medium">{t("nav.adminPanel")}</span>
@@ -642,7 +642,7 @@ export function Navbar({ className = "" }: NavbarProps) {
                     <Link
                       to="/services/my"
                       onClick={() => setIsMobileMenuOpen(false)}
-                      className="flex items-center gap-3 px-4 py-3 rounded-lg text-meta hover:bg-elevated hover:text-strong transition-colors"
+                      className="flex items-center gap-3 px-4 py-3 rounded text-meta hover:bg-elevated hover:text-strong transition-colors"
                     >
                       <span className="font-text text-sm font-medium">My NyxID Services</span>
                     </Link>
@@ -650,7 +650,7 @@ export function Navbar({ className = "" }: NavbarProps) {
                       <Link
                         to="/services/admin"
                         onClick={() => setIsMobileMenuOpen(false)}
-                        className="flex items-center gap-3 px-4 py-3 rounded-lg text-meta hover:bg-elevated hover:text-strong transition-colors"
+                        className="flex items-center gap-3 px-4 py-3 rounded text-meta hover:bg-elevated hover:text-strong transition-colors"
                       >
                         <span className="font-text text-sm font-medium">Admin NyxID Services</span>
                       </Link>
@@ -659,7 +659,7 @@ export function Navbar({ className = "" }: NavbarProps) {
                       href={getNyxIdUrl()}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex items-center gap-3 px-4 py-3 rounded-lg text-meta hover:bg-elevated hover:text-strong transition-colors"
+                      className="flex items-center gap-3 px-4 py-3 rounded text-meta hover:bg-elevated hover:text-strong transition-colors"
                     >
                       <NyxIdIcon className="h-5 w-5" />
                       <span className="font-text text-sm font-medium">{t("nav.goToNyxId")}</span>
@@ -668,7 +668,7 @@ export function Navbar({ className = "" }: NavbarProps) {
                     <button
                       type="button"
                       onClick={handleLogout}
-                      className="flex w-full items-center gap-3 px-4 py-3 rounded-lg text-danger hover:bg-danger/10 transition-colors cursor-pointer"
+                      className="flex w-full items-center gap-3 px-4 py-3 rounded text-danger hover:bg-danger/10 transition-colors cursor-pointer"
                     >
                       <LogoutIcon className="h-5 w-5" />
                       <span className="font-text text-sm font-medium">{t("nav.signOut")}</span>
@@ -677,7 +677,7 @@ export function Navbar({ className = "" }: NavbarProps) {
                 ) : (
                   <Link
                     to="/login"
-                    className="flex items-center justify-center gap-2 px-4 py-3 rounded-lg border border-accent/50 text-accent font-text text-sm font-semibold transition-all hover:border-accent hover:shadow-[0_0_15px_rgba(255,107,0,0.3)]"
+                    className="flex items-center justify-center gap-2 px-4 py-3 rounded border border-accent/50 text-accent font-text text-sm font-semibold transition-all hover:border-accent"
                   >
                     {t("nav.signIn")}
                   </Link>

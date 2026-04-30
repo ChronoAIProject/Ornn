@@ -78,7 +78,7 @@ export function SkillPublicToggle({
             relative ${toggleWidth} ${toggleHeight} rounded-full
             transition-all duration-200
             ${isPublic
-              ? "bg-success/20 border border-success/50 shadow-[0_0_8px_rgba(57,255,20,0.3)]"
+              ? "bg-success/20 border border-success/50"
               : "bg-elevated border border-accent/30"
             }
             ${disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer hover:border-accent"}
@@ -93,7 +93,7 @@ export function SkillPublicToggle({
             className={`
               absolute top-0.5 ${knobSize} rounded-full
               ${isPublic
-                ? "bg-success shadow-[0_0_6px_rgba(57,255,20,0.6)]"
+                ? "bg-success"
                 : "bg-accent/60"
               }
             `}
@@ -113,11 +113,11 @@ export function SkillPublicToggle({
               : "Are you sure you want to make this skill public? All users will be able to view it."}
           </p>
 
-          <div className="glass rounded-lg p-4 border border-accent/10">
+          <div className="glass rounded p-4 border border-accent/10">
             <div className="flex items-center gap-3">
               <div className={`
                 w-3 h-3 rounded-full
-                ${isPublic ? "bg-accent" : "bg-success shadow-[0_0_8px_rgba(57,255,20,0.5)]"}
+                ${isPublic ? "bg-accent" : "bg-success"}
               `} />
               <span className="font-text text-sm">
                 {isPublic

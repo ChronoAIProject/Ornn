@@ -50,7 +50,7 @@ export function ToolsInput({ tools, onChange, error, className = "" }: ToolsInpu
       </label>
 
       {/* Input with tag chips */}
-      <div className="neon-input flex flex-wrap gap-1.5 rounded-lg px-3 py-2">
+      <div className="neon-input flex flex-wrap gap-1.5 rounded px-3 py-2">
         {tools.map((tool) => (
           <Badge key={tool} color="cyan">
             {tool}
@@ -97,7 +97,7 @@ export function ToolsInput({ tools, onChange, error, className = "" }: ToolsInpu
       </div>
 
       {/* Warning banner */}
-      <div className="rounded-lg border border-warning/20 bg-warning/5 p-3 mt-1">
+      <div className="rounded border border-warning/20 bg-warning/5 p-3 mt-1">
         <p className="font-text text-xs text-warning">
           Ensure that the tools you list are available in your target Claude client
           environment. Skills referencing unavailable tools will fail at runtime.

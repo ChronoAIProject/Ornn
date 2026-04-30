@@ -71,7 +71,7 @@ export function GitHubOriginChip({
 
   return (
     <div
-      className={`flex flex-wrap items-center gap-3 rounded-lg border border-accent/20 bg-card/40 px-3 py-2 ${
+      className={`flex flex-wrap items-center gap-3 rounded border border-accent/20 bg-card/40 px-3 py-2 ${
         className ?? ""
       }`}
     >
@@ -111,7 +111,7 @@ export function GitHubOriginChip({
           type="button"
           onClick={onRefresh}
           disabled={isRefreshing}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-accent/30 px-3 py-1 font-text text-xs text-strong transition-colors hover:bg-accent/10 cursor-pointer disabled:opacity-50"
+          className="inline-flex items-center gap-1.5 rounded border border-accent/30 px-3 py-1 font-text text-xs text-strong transition-colors hover:bg-accent/10 cursor-pointer disabled:opacity-50"
         >
           <RefreshIcon
             className={`h-3.5 w-3.5 text-meta ${isRefreshing ? "animate-spin" : ""}`}

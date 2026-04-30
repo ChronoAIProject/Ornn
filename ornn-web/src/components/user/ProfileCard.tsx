@@ -149,7 +149,7 @@ export function ProfileCard({
               disabled={isLoading}
               rows={3}
               className={`
-                neon-input rounded-lg px-4 py-2.5 font-text text-strong
+                neon-input rounded px-4 py-2.5 font-text text-strong
                 placeholder:text-meta/50 resize-none
                 ${errors.bio ? "border-b-danger!" : ""}
               `}
@@ -164,7 +164,7 @@ export function ProfileCard({
             <motion.div
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="rounded-lg border border-danger/30 bg-danger/10 p-3"
+              className="rounded border border-danger/30 bg-danger/10 p-3"
             >
               <p className="text-sm text-danger">{error}</p>
             </motion.div>
@@ -221,7 +221,7 @@ export function ProfileCard({
 
           {/* Bio */}
           {user.bio && (
-            <div className="rounded-lg bg-card/50 p-4">
+            <div className="rounded bg-card/50 p-4">
               <p className="font-text text-sm text-strong whitespace-pre-wrap">
                 {user.bio}
               </p>

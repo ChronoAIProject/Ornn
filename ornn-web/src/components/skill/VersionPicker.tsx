@@ -77,7 +77,7 @@ export function VersionPicker({
         aria-haspopup="listbox"
         aria-expanded={open}
         className={`
-          glass inline-flex items-center gap-2 rounded-lg
+          glass inline-flex items-center gap-2 rounded
           border border-accent/20 bg-elevated
           px-3 py-1.5 font-text text-sm text-strong
           cursor-pointer transition-colors
@@ -108,9 +108,9 @@ export function VersionPicker({
             transition={{ duration: 0.12, ease: "easeOut" }}
             className="
               absolute left-0 top-full mt-1 z-20 min-w-[14rem]
-              glass rounded-lg border border-accent/30
+              glass rounded border border-accent/30
               bg-card/95 backdrop-blur-md
-              shadow-[0_4px_24px_rgba(0,0,0,0.3)]
+              card-impression
               py-1 overflow-hidden
             "
           >

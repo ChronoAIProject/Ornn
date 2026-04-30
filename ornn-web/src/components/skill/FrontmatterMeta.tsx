@@ -83,7 +83,7 @@ export function FrontmatterMeta({
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.25, ease: "easeOut" }}
-      className={`glass space-y-4 rounded-lg border border-accent/10 p-4 ${className}`}
+      className={`glass space-y-4 rounded border border-accent/10 p-4 ${className}`}
     >
       {hasRuntimes && (
         <MetaSection title="Runtime">

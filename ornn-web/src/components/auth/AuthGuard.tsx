@@ -48,11 +48,11 @@ export function AuthGuard({ children }: AuthGuardProps) {
         <div className="mx-auto max-w-[1280px] px-4 pt-20 pb-12 sm:px-6">
           <div className="space-y-6">
             <Skeleton className="h-10 w-48" />
-            <Skeleton className="h-64 w-full rounded-xl" />
+            <Skeleton className="h-64 w-full rounded" />
             <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-              <Skeleton className="h-48 rounded-xl" />
-              <Skeleton className="h-48 rounded-xl" />
-              <Skeleton className="h-48 rounded-xl" />
+              <Skeleton className="h-48 rounded" />
+              <Skeleton className="h-48 rounded" />
+              <Skeleton className="h-48 rounded" />
             </div>
           </div>
         </div>

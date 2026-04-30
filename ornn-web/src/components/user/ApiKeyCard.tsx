@@ -109,7 +109,7 @@ export function ApiKeyCard({
         {apiKey ? (
           <div className="space-y-4">
             {/* Key Info */}
-            <div className="rounded-lg bg-card/50 p-4">
+            <div className="rounded bg-card/50 p-4">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="font-mono text-sm text-strong">
@@ -176,7 +176,7 @@ export function ApiKeyCard({
           <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="mt-4 rounded-lg border border-danger/30 bg-danger/10 p-3"
+            className="mt-4 rounded border border-danger/30 bg-danger/10 p-3"
           >
             <p className="text-sm text-danger">{error}</p>
           </motion.div>
@@ -190,7 +190,7 @@ export function ApiKeyCard({
         title="API Key Generated"
       >
         <div className="space-y-4">
-          <div className="rounded-lg border border-warning/30 bg-warning/10 p-3">
+          <div className="rounded border border-warning/30 bg-warning/10 p-3">
             <p className="text-sm text-warning">
               Make sure to copy your API key now. You will not be able to see it
               again!
@@ -198,7 +198,7 @@ export function ApiKeyCard({
           </div>
 
           <div className="relative">
-            <div className="rounded-lg bg-page p-4 pr-12 font-mono text-sm text-strong break-all">
+            <div className="rounded bg-page p-4 pr-12 font-mono text-sm text-strong break-all">
               {newKey}
             </div>
             <button
@@ -206,7 +206,7 @@ export function ApiKeyCard({
               onClick={handleCopy}
               className="
                 absolute right-2 top-1/2 -translate-y-1/2
-                rounded-lg p-2
+                rounded p-2
                 text-meta hover:text-accent
                 transition-colors
                 cursor-pointer

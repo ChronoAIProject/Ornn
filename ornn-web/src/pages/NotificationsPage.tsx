@@ -64,7 +64,7 @@ export function NotificationsPage() {
             <button
               type="button"
               onClick={() => setUnreadOnly((v) => !v)}
-              className={`rounded-lg border px-3 py-1.5 font-text text-sm transition-colors cursor-pointer ${
+              className={`rounded border px-3 py-1.5 font-text text-sm transition-colors cursor-pointer ${
                 unreadOnly
                   ? "border-accent/60 bg-accent/10 text-accent"
                   : "border-accent/20 bg-card/50 text-meta hover:text-strong"
@@ -78,7 +78,7 @@ export function NotificationsPage() {
               type="button"
               onClick={() => markAll.mutate()}
               disabled={!hasUnread || markAll.isPending}
-              className="rounded-lg border border-accent/20 bg-card/50 px-3 py-1.5 font-text text-sm text-meta transition-colors hover:text-strong disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
+              className="rounded border border-accent/20 bg-card/50 px-3 py-1.5 font-text text-sm text-meta transition-colors hover:text-strong disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
             >
               {t("notifications.markAllRead", "Mark all read")}
             </button>
@@ -94,13 +94,13 @@ export function NotificationsPage() {
             {t("notifications.loadFailed", "Could not load notifications.")}
           </div>
         ) : items.length === 0 ? (
-          <div className="rounded-lg border border-accent/10 bg-card/30 py-16 text-center font-text text-sm text-meta">
+          <div className="rounded border border-accent/10 bg-card/30 py-16 text-center font-text text-sm text-meta">
             {unreadOnly
               ? t("notifications.noUnread", "No unread notifications.")
               : t("notifications.empty", "You're all caught up.")}
           </div>
         ) : (
-          <ul className="divide-y divide-accent/10 overflow-hidden rounded-lg border border-accent/10 bg-card/30">
+          <ul className="divide-y divide-accent/10 overflow-hidden rounded border border-accent/10 bg-card/30">
             {items.map((n) => (
               <li key={n._id}>
                 <button

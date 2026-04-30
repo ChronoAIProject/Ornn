@@ -139,7 +139,7 @@ export function CreateSkillGenerativePage() {
         {/* Main two-column layout — left chat narrower, right preview wider */}
         <div className="flex flex-1 min-h-0 gap-4 pb-2">
           {/* Left: Chat panel (35%) */}
-          <div className="flex w-[35%] shrink-0 flex-col min-w-0 min-h-0 rounded-lg border border-accent/10 bg-elevated/30">
+          <div className="flex w-[35%] shrink-0 flex-col min-w-0 min-h-0 rounded border border-accent/10 bg-elevated/30">
             {/* Chat messages area — scrolls independently */}
             <div className="flex-1 min-h-0 overflow-y-auto space-y-4 px-3 py-3">
               {!hasMessages && (
@@ -206,7 +206,7 @@ export function CreateSkillGenerativePage() {
                     onClick={handleSave}
                     loading={createMutation.isPending}
                     disabled={hasFrontmatterErrors}
-                    className="border-success/50 text-success hover:border-success hover:shadow-[0_0_15px_rgba(57,255,20,0.3)]"
+                    className="border-success/50 text-success hover:border-success"
                   >
                     {t("generative.saveSkill")}
                   </Button>

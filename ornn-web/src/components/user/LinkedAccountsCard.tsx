@@ -129,7 +129,7 @@ export function LinkedAccountsCard({
             return (
               <div
                 key={provider}
-                className="flex items-center justify-between rounded-lg bg-card/50 p-4"
+                className="flex items-center justify-between rounded bg-card/50 p-4"
               >
                 <div className="flex items-center gap-3">
                   <div className={`${info.color}`}>{info.icon}</div>
@@ -178,7 +178,7 @@ export function LinkedAccountsCard({
           <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="mt-4 rounded-lg border border-danger/30 bg-danger/10 p-3"
+            className="mt-4 rounded border border-danger/30 bg-danger/10 p-3"
           >
             <p className="text-sm text-danger">{error}</p>
           </motion.div>

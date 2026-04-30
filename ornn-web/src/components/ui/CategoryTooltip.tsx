@@ -67,7 +67,7 @@ export function CategoryTooltip({ className = "" }: CategoryTooltipProps) {
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
             transition={{ duration: 0.15 }}
-            className="absolute left-6 top-0 z-50 w-72 rounded-md border border-strong-edge bg-card p-4 shadow-[0_18px_40px_-18px_rgba(0,0,0,0.35)]"
+            className="absolute left-6 top-0 z-50 w-72 rounded-md border border-strong-edge bg-card p-4 card-impression"
           >
             <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-meta mb-3">
               Skill Categories

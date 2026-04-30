@@ -60,7 +60,7 @@ export function SettingsPage() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3 }}
-          className="glass rounded-xl border border-accent/20 p-6"
+          className="glass rounded border border-accent/20 p-6"
         >
           <div className="flex items-center gap-4">
             {/* Avatar */}
@@ -110,7 +110,7 @@ export function SettingsPage() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3, delay: 0.1 }}
-            className="glass rounded-xl border border-accent/20 p-6"
+            className="glass rounded border border-accent/20 p-6"
           >
             <h3 className="font-mono text-[11px] uppercase tracking-[0.16em] text-strong mb-3">
               {t("settings.accountMgmt")}
@@ -122,7 +122,7 @@ export function SettingsPage() {
               href={NYXID_SETTINGS_URL}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 rounded-lg border border-accent/50 px-4 py-2 font-text text-sm font-semibold text-accent transition-all duration-200 hover:border-accent hover:shadow-[0_0_15px_rgba(255,107,0,0.3)]"
+              className="inline-flex items-center gap-2 rounded border border-accent/50 px-4 py-2 font-text text-sm font-semibold text-accent transition-all duration-200 hover:border-accent"
             >
               {t("settings.openNyxID")}
               <ExternalLinkIcon className="h-4 w-4" />

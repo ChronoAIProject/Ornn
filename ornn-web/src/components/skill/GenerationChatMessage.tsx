@@ -47,7 +47,7 @@ function UserBubble({ content }: { content: string }) {
       transition={{ duration: 0.15, ease: "easeOut" }}
       className="flex justify-end"
     >
-      <div className="max-w-[80%] rounded-xl rounded-br-sm border border-accent/30 bg-accent/5 px-4 py-3">
+      <div className="max-w-[80%] rounded rounded-br-sm border border-accent/30 bg-accent/5 px-4 py-3">
         <p className="whitespace-pre-wrap font-text text-sm text-strong">
           {content}
         </p>
@@ -65,7 +65,7 @@ function StreamingBubble({ content }: { content: string }) {
       transition={{ duration: 0.15, ease: "easeOut" }}
       className="flex justify-start"
     >
-      <div className="glass max-w-[85%] rounded-xl rounded-bl-sm px-4 py-3">
+      <div className="glass max-w-[85%] rounded rounded-bl-sm px-4 py-3">
         {content ? (
           <pre className="whitespace-pre-wrap font-mono text-xs text-strong/80">
             {content}
@@ -99,7 +99,7 @@ function CompleteBubble({
       transition={{ duration: 0.15, ease: "easeOut" }}
       className="flex justify-start"
     >
-      <div className="glass max-w-[85%] rounded-xl rounded-bl-sm px-4 py-3">
+      <div className="glass max-w-[85%] rounded rounded-bl-sm px-4 py-3">
         {skillName ? (
           <div className="space-y-1">
             <p className="font-text text-sm text-strong">
@@ -128,7 +128,7 @@ function ErrorBubble({ content }: { content: string }) {
       transition={{ duration: 0.15, ease: "easeOut" }}
       className="flex justify-start"
     >
-      <div className="max-w-[85%] rounded-xl rounded-bl-sm border border-danger/30 bg-danger/5 px-4 py-3">
+      <div className="max-w-[85%] rounded rounded-bl-sm border border-danger/30 bg-danger/5 px-4 py-3">
         <p className="font-text text-sm text-danger">{content.replace(/^Error:\s*/, "")}</p>
       </div>
     </motion.div>

@@ -6,7 +6,6 @@
 
 import { useState, useCallback, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { motion } from "framer-motion";
 import { PageTransition } from "@/components/layout/PageTransition";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -300,7 +299,7 @@ export function CreateSkillFreePage() {
 
         {/* Drop zone */}
         <Card className="mb-6">
-          <motion.div
+          <div
             onDrop={handleDrop}
             onDragOver={(e) => {
               e.preventDefault();
@@ -308,11 +307,10 @@ export function CreateSkillFreePage() {
             }}
             onDragLeave={() => setIsDragging(false)}
             onClick={() => inputRef.current?.click()}
-            whileHover={{ borderColor: "rgba(255, 140, 56, 0.5)" }}
             className={`
-              flex cursor-pointer flex-col items-center justify-center rounded-xl
+              flex cursor-pointer flex-col items-center justify-center rounded
               border-2 border-dashed px-6 py-12 transition-colors
-              ${isDragging ? "border-accent-support bg-accent-support/5" : `${statusBorderColor} bg-page/50`}
+              ${isDragging ? "border-accent-support bg-accent-support/5" : `${statusBorderColor} bg-page/50 hover:border-accent-support/50`}
             `}
           >
             <UploadIcon className="h-12 w-12 text-accent-support mb-4" />
@@ -345,7 +343,7 @@ export function CreateSkillFreePage() {
                 </p>
               </div>
             )}
-          </motion.div>
+          </div>
           <input
             ref={inputRef}
             type="file"
@@ -373,7 +371,7 @@ export function CreateSkillFreePage() {
         {/* Validation status banner (zip structure) */}
         {validationResult && pageState !== "validating" && (
           <div
-            className={`rounded-lg border p-4 mb-6 ${
+            className={`rounded border p-4 mb-6 ${
               pageState === "valid" && !hasFrontmatterErrors
                 ? "border-success/40 bg-success/5"
                 : pageState === "warning" || hasFrontmatterErrors

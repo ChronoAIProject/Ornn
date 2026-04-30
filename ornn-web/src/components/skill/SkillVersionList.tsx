@@ -65,10 +65,10 @@ function AuditPill({
   if (!audit) {
     return (
       <span
-        className="inline-flex items-center gap-1 rounded-full border border-text-muted/30 bg-text-muted/10 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-meta"
+        className="inline-flex items-center gap-1 rounded-full border border-meta/30 bg-meta/10 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-meta"
         title={notAuditedLabel}
       >
-        <span className="h-1.5 w-1.5 rounded-full bg-text-muted/60" aria-hidden />
+        <span className="h-1.5 w-1.5 rounded-full bg-meta/60" aria-hidden />
         ?
       </span>
     );
@@ -145,7 +145,7 @@ export function SkillVersionList({
   }
 
   return (
-    <div className={`glass rounded-xl p-5 space-y-3 ${className}`}>
+    <div className={`glass rounded p-5 space-y-3 ${className}`}>
       <p className="font-display text-[11px] uppercase tracking-wider text-meta">
         {t("skillDetail.versions")}
       </p>
@@ -157,7 +157,7 @@ export function SkillVersionList({
             <li
               key={v.version}
               className={`
-                rounded-lg border p-2.5 transition-colors
+                rounded border p-2.5 transition-colors
                 ${
                   isCurrent
                     ? "border-accent/40 bg-accent/5"
@@ -287,7 +287,7 @@ export function SkillVersionList({
               rows={3}
               placeholder={t("skillDetail.deprecationNotePlaceholder")}
               className="
-                neon-input w-full rounded-lg px-3 py-2 font-text text-sm
+                neon-input w-full rounded px-3 py-2 font-text text-sm
                 text-strong resize-y
               "
             />

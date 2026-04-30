@@ -210,7 +210,7 @@ export function SkillPackagePreview({
     <div className={`flex flex-col ${className}`}>
       {/* Metadata summary bar */}
       {metadata && (
-        <div className="glass rounded-lg border border-accent/10 p-4 mb-4">
+        <div className="glass rounded border border-accent/10 p-4 mb-4">
           <div className="flex flex-wrap items-center gap-3">
             <h3 className="font-display text-lg text-strong">
               {metadata.name}
@@ -240,7 +240,7 @@ export function SkillPackagePreview({
       {/* Two-column layout with draggable divider */}
       <ResizablePanes className="flex-1 min-h-0" style={{ minHeight: "300px" }}>
         {/* Left: File tree */}
-        <div className="rounded-lg border border-accent/10 bg-card overflow-hidden flex flex-col h-full">
+        <div className="rounded border border-accent/10 bg-card overflow-hidden flex flex-col h-full">
           <FileTree
             files={files}
             selectedId={selectedFileId}
@@ -267,7 +267,7 @@ export function SkillPackagePreview({
               className="h-full"
             />
           ) : (
-            <div className="flex items-center justify-center h-full rounded-lg border border-accent/10 bg-page">
+            <div className="flex items-center justify-center h-full rounded border border-accent/10 bg-page">
               <p className="font-text text-sm text-meta">
                 Select a file to view its content
               </p>

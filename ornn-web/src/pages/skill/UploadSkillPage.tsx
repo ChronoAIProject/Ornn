@@ -86,7 +86,7 @@ const MODE_CARDS: ModeCardConfig[] = [
     accentColor: "text-accent",
     accentBg: "bg-accent/10",
     accentBorder: "border-accent/30",
-    accentGlow: "group-hover:shadow-[0_0_20px_rgba(255,107,0,0.3)]",
+    accentGlow: "",
     bulletsKey: "upload.guidedBullets",
     ctaKey: "upload.startGuided",
     route: "/skills/new/guided",
@@ -100,7 +100,7 @@ const MODE_CARDS: ModeCardConfig[] = [
     accentColor: "text-accent-support",
     accentBg: "bg-accent-support/10",
     accentBorder: "border-accent-support/30",
-    accentGlow: "group-hover:shadow-[0_0_20px_rgba(255,140,56,0.3)]",
+    accentGlow: "",
     bulletsKey: "upload.freeBullets",
     ctaKey: "upload.startFree",
     route: "/skills/new/free",
@@ -114,7 +114,7 @@ const MODE_CARDS: ModeCardConfig[] = [
     accentColor: "text-warning",
     accentBg: "bg-warning/10",
     accentBorder: "border-warning/30",
-    accentGlow: "group-hover:shadow-[0_0_20px_rgba(255,184,0,0.3)]",
+    accentGlow: "",
     bulletsKey: "upload.genBullets",
     ctaKey: "upload.startGen",
     route: "/skills/new/generate",
@@ -128,7 +128,7 @@ const MODE_CARDS: ModeCardConfig[] = [
     accentColor: "text-accent",
     accentBg: "bg-accent/10",
     accentBorder: "border-accent/30",
-    accentGlow: "group-hover:shadow-[0_0_20px_rgba(34,211,238,0.3)]",
+    accentGlow: "",
     bulletsKey: "upload.githubBullets",
     ctaKey: "upload.startGithub",
     route: "/skills/new/from-github",
@@ -176,7 +176,7 @@ export function UploadSkillPage() {
                   */}
                   <div className="flex flex-col items-center text-center p-4 h-full">
                     <div
-                      className={`mb-6 p-4 rounded-2xl ${card.accentBg} border ${card.accentBorder} ${card.accentGlow} transition-all`}
+                      className={`mb-6 p-4 rounded ${card.accentBg} border ${card.accentBorder} ${card.accentGlow} transition-all`}
                     >
                       <Icon className={`h-12 w-12 ${card.accentColor}`} />
                     </div>

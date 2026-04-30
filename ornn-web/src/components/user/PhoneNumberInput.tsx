@@ -165,9 +165,9 @@ export function PhoneNumberInput({
             className="
               absolute left-0 top-full z-50 mt-1
               max-h-64 w-64 overflow-hidden
-              rounded-lg
+              rounded
               glass border border-accent/20
-              shadow-lg shadow-accent/10
+              card-impression
             "
           >
             {/* Search Input */}

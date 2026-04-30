@@ -156,7 +156,7 @@ export function EditSkillPage() {
             <div className="space-y-4">
               <div
                 onClick={() => fileInputRef.current?.click()}
-                className="flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-accent/20 bg-page/50 px-6 py-8 transition-colors hover:border-accent/40"
+                className="flex cursor-pointer flex-col items-center justify-center rounded border-2 border-dashed border-accent/20 bg-page/50 px-6 py-8 transition-colors hover:border-accent/40"
               >
                 {zipFile ? (
                   <div className="text-center">

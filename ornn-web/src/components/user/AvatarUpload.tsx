@@ -5,7 +5,6 @@
  */
 
 import { useRef, useState } from "react";
-import { motion } from "framer-motion";
 
 export interface AvatarUploadProps {
   /** Current avatar URL. */
@@ -102,22 +101,20 @@ export function AvatarUpload({
 
   return (
     <div className="relative inline-block">
-      <motion.button
+      <button
         type="button"
         onClick={handleClick}
         disabled={disabled || isLoading}
-        whileHover={disabled || isLoading ? undefined : { scale: 1.05 }}
-        whileTap={disabled || isLoading ? undefined : { scale: 0.95 }}
         className={`
           ${SIZE_CLASSES[size]}
           relative overflow-hidden rounded-full
           border-2 border-dashed border-accent/30
           bg-card
-          transition-all duration-200
+          transition-colors duration-200
           ${
             disabled || isLoading
               ? "opacity-50 cursor-not-allowed"
-              : "cursor-pointer hover:border-accent/60 hover:shadow-[0_0_15px_rgba(255,107,0,0.2)]"
+              : "cursor-pointer hover:border-accent/60"
           }
         `}
       >
@@ -176,17 +173,13 @@ export function AvatarUpload({
             </svg>
           </div>
         )}
-      </motion.button>
+      </button>
 
       {/* Remove button */}
       {displayUrl && !disabled && !isLoading && (
-        <motion.button
+        <button
           type="button"
           onClick={handleRemove}
-          initial={{ scale: 0 }}
-          animate={{ scale: 1 }}
-          whileHover={{ scale: 1.1 }}
-          whileTap={{ scale: 0.9 }}
           className="
             absolute -right-1 -top-1
             flex h-6 w-6 items-center justify-center
@@ -211,7 +204,7 @@ export function AvatarUpload({
               d="M6 18L18 6M6 6l12 12"
             />
           </svg>
-        </motion.button>
+        </button>
       )}
 
       {/* Hidden file input */}

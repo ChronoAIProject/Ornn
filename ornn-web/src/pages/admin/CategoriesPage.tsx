@@ -83,7 +83,7 @@ export function CategoriesPage() {
       {/* Info Card */}
       <Card>
         <div className="flex items-start gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-accent/10">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded bg-accent/10">
             <svg
               className="h-5 w-5 text-accent"
               fill="none"

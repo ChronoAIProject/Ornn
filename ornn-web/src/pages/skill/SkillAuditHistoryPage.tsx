@@ -60,7 +60,7 @@ function ScoreCell({ score }: { score: AuditScore }) {
   const warn = score.score < 5;
   return (
     <div
-      className={`rounded-lg border px-3 py-2 ${
+      className={`rounded border px-3 py-2 ${
         warn ? "border-warning/30 bg-warning/5" : "border-accent/15 bg-card/40"
       }`}
     >
@@ -89,7 +89,7 @@ function FindingRow({ f }: { f: AuditFinding }) {
         ? "text-warning border-warning/30 bg-warning/5"
         : "text-meta border-accent/15 bg-card/30";
   return (
-    <div className={`flex flex-col gap-1 rounded-lg border px-3 py-2 ${severityStyle}`}>
+    <div className={`flex flex-col gap-1 rounded border px-3 py-2 ${severityStyle}`}>
       <div className="flex items-center gap-2">
         <span className="font-mono text-[10px] uppercase tracking-[0.14em]">{f.severity}</span>
         <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
@@ -114,7 +114,7 @@ function RunningRow({ record }: { record: AuditRecord }) {
     ? record.createdAt
     : createdAt.toLocaleString();
   return (
-    <div className="flex items-center gap-3 rounded-lg border border-accent/20 bg-card/40 px-4 py-3">
+    <div className="flex items-center gap-3 rounded border border-accent/20 bg-card/40 px-4 py-3">
       <span
         aria-hidden
         className="h-3 w-3 shrink-0 animate-spin rounded-full border-2 border-accent/30 border-t-accent"
@@ -141,7 +141,7 @@ function FailedRow({ record }: { record: AuditRecord }) {
     ? record.createdAt
     : createdAt.toLocaleString();
   return (
-    <div className="flex flex-col gap-1 rounded-lg border border-danger/30 bg-danger/5 px-4 py-3">
+    <div className="flex flex-col gap-1 rounded border border-danger/30 bg-danger/5 px-4 py-3">
       <div className="flex items-center gap-3">
         <span aria-hidden className="h-2.5 w-2.5 shrink-0 rounded-full bg-danger" />
         <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-danger">
@@ -173,7 +173,7 @@ function HistoryRow({ record, defaultOpen }: { record: AuditRecord; defaultOpen:
     : createdAt.toLocaleString();
 
   return (
-    <div className={`rounded-lg border ${style.ring} ${style.bg}`}>
+    <div className={`rounded border ${style.ring} ${style.bg}`}>
       <button
         type="button"
         onClick={() => setExpanded((v) => !v)}

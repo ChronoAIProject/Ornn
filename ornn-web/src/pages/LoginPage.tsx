@@ -52,7 +52,7 @@ export function LoginPage() {
             </p>
           </div>
 
-          <div className="rounded-md border border-subtle bg-card p-8 shadow-[0_2px_12px_-6px_rgba(0,0,0,0.18)]">
+          <div className="rounded-md border border-subtle bg-card p-8 card-impression">
             <div className="space-y-6 text-center">
               <p className="font-text text-sm leading-relaxed text-body">
                 {t("login.desc")}

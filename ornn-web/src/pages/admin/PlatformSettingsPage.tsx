@@ -92,7 +92,7 @@ export function PlatformSettingsPage() {
                   step={0.1}
                   value={threshold}
                   onChange={(e) => setThreshold(e.target.value)}
-                  className="w-28 rounded-lg border border-accent/20 bg-card px-3 py-2 font-mono text-sm text-strong focus:outline-none focus:border-accent/60 focus:ring-2 focus:ring-accent/30"
+                  className="w-28 rounded border border-accent/20 bg-card px-3 py-2 font-mono text-sm text-strong focus:outline-none focus:border-accent/60 focus:ring-2 focus:ring-accent/30"
                 />
                 <span className="font-mono text-sm text-meta">/ 10</span>
               </div>
