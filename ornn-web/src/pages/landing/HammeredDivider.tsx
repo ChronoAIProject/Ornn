@@ -12,8 +12,14 @@ export function HammeredDivider({ className = "" }: { className?: string }) {
 }
 
 /**
- * Section break with a callout number, mono label, and architectural rules.
- * Use between major sections to add workshop-document feel.
+ * Section break with a callout number, mono label, welded-seam hairline
+ * with rivet dots, and ember + arc accent bars.
+ *
+ * Forge Workshop pattern (DESIGN.md → Material & Print Vocabulary →
+ * Welded-seam section dividers): a thin pure rule reads as generic
+ * SaaS divider; the rivet dots at 25%/75% plus the bi-tonal accent
+ * (56px ember at the start, 28px arc at the end) plant industrial-
+ * publication identity.
  */
 export function SectionRule({
   num,
@@ -32,11 +38,18 @@ export function SectionRule({
       <span className="font-mono text-[10px] tabular-nums text-meta tracking-[0.18em]">
         {num}
       </span>
-      <span className="h-px flex-1 bg-[color:var(--color-border-subtle)]" />
+      {/* Welded-seam hairline with two rivet dots at 25% / 75% */}
+      <span className="relative h-px flex-1 bg-[color:var(--color-border-subtle)]">
+        <span className="pointer-events-none absolute left-1/4 top-1/2 h-[3px] w-[3px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[color:var(--color-border-stronger)]" />
+        <span className="pointer-events-none absolute left-3/4 top-1/2 h-[3px] w-[3px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[color:var(--color-border-stronger)]" />
+      </span>
       <span className="font-mono text-[10px] uppercase tracking-[0.32em] text-meta">
         {label}
       </span>
-      <span className="h-px w-12 bg-ember" />
+      {/* Bi-tonal accent: 56px ember + 28px arc — primary heat then secondary
+          arc-blue, matches v3 standalone's welded-seam closing seam. */}
+      <span className="h-px w-14 bg-ember" />
+      <span className="h-px w-7 bg-[color:var(--color-arc)]" />
     </div>
   );
 }

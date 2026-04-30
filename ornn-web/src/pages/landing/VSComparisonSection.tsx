@@ -1,4 +1,5 @@
 import { BlueprintGrid } from "./BlueprintGrid";
+import { HighlighterMark } from "./HighlighterMark";
 
 type Row = {
   competitor: string;
@@ -63,9 +64,9 @@ export function VSComparisonSection() {
       <BlueprintGrid />
       <div className="relative mx-auto max-w-[1280px] px-6 sm:px-8">
         <div className="mb-12 max-w-[760px]">
-          <h2 className="font-display text-[clamp(36px,5vw,72px)] font-light leading-none tracking-[-0.03em] text-parchment">
-            Not <em className="italic font-normal text-ember">that</em>.{" "}
-            <em className="italic font-normal text-ember">This.</em>
+          <h2 className="font-display-grotesk text-[clamp(36px,5.4vw,72px)] font-bold uppercase leading-[0.98] tracking-[-0.025em] text-parchment">
+            Not <HighlighterMark>that</HighlighterMark>.{" "}
+            <HighlighterMark>This.</HighlighterMark>
           </h2>
           <p className="mt-5 text-[15px] leading-[1.6] text-bone">
             A few things ORNN is often confused with, and what makes it
@@ -85,7 +86,7 @@ export function VSComparisonSection() {
               }`}
             >
               <div
-                className={`font-display text-[24px] font-light tracking-[-0.015em] ${
+                className={`font-display-grotesk text-[20px] font-bold uppercase tracking-[-0.015em] ${
                   r.highlight ? "text-ember" : "text-parchment"
                 }`}
               >
@@ -140,7 +141,7 @@ export function VSComparisonSection() {
                   }
                 >
                   <td
-                    className={`w-[200px] border-b border-[color:var(--color-border-subtle)] px-5 py-5 align-top font-display text-[22px] font-light tracking-[-0.015em] ${
+                    className={`w-[200px] border-b border-[color:var(--color-border-subtle)] px-5 py-5 align-top font-display-grotesk text-[18px] font-bold uppercase tracking-[-0.015em] ${
                       r.highlight ? "text-ember" : "text-parchment"
                     }`}
                   >

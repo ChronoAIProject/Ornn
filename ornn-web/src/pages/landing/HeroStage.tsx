@@ -12,6 +12,7 @@ import { RepoRail } from "./RepoRail";
 import { HeroChyron } from "./HeroChyron";
 import { Stamp } from "./Stamp";
 import { EmberLink } from "./EmberButton";
+import { HighlighterMark } from "./HighlighterMark";
 import { RAIL_SKILLS, type RailTarget } from "./skillsData";
 
 /** Scroll-scrub thresholds — copied verbatim from the reference script. */
@@ -224,18 +225,22 @@ function ScrubHero() {
     const railRect = railRef.current?.getBoundingClientRect();
     const railBelow =
       phoneRect && railRect ? railRect.top >= phoneRect.bottom - 8 : false;
-    // Anchor Y for mobile: top edge of the rail aside. All wires emerge
-    // from this line regardless of where individual rows have scrolled
-    // inside the rail's max-height list. Without this, rows that have
-    // scrolled out of the rail's visible window report rects in the
-    // middle of the phone area, making wires appear to start mid-screen.
+    // Anchor wire origins to the RAIL CONTAINER's outer edge — never the
+    // row's interior position. The rail-list internally auto-scrolls to
+    // keep the firing row visible (see scrollTo below); without this
+    // anchor, landed wires would slide with the internal scroll and
+    // appear to "move with scroll" instead of staying tied to the
+    // registry window. Per DESIGN.md → Hero-Only Patterns + Material
+    // & Print Vocabulary.
+    //
+    // Mobile (railBelow): rail sits below the phone — emerge from rail's
+    //   TOP edge, fanned across width by index.
+    // Desktop: rail sits to the right of the phone — emerge from rail's
+    //   LEFT (phone-facing) edge, fanned across height by index.
     const railTopY = railRect ? railRect.top - sr.top : 0;
-    // Spread the mobile wire origins across the rail's width so each
-    // skill emerges from a different point along the registry's top
-    // edge — the curves arc gracefully into the phone instead of all
-    // stacking on a single vertical line.
     const railLeftX = railRect ? railRect.left - sr.left : 0;
     const railWidth = railRect ? railRect.width : sr.width;
+    const railHeight = railRect ? railRect.height : sr.height;
 
     // ── 16 items ──
     let installed = 0;
@@ -250,20 +255,20 @@ function ScrubHero() {
       const target = targetEls.current[skill.target];
       if (!path || !chip || !row || !target) continue;
 
-      const rRow = row.getBoundingClientRect();
       const rTar = target.getBoundingClientRect();
       const tx = rTar.left + rTar.width / 2 - sr.left;
       const ty = rTar.top + rTar.height / 2 - sr.top;
-      // Origin: rail row's LEFT edge (desktop, side-by-side) or — on
-      // mobile — a unique point along the rail's top edge so wires
-      // fan out into the phone instead of stacking on one vertical line.
+      // Origin: rail container's outer phone-facing edge — fanned by
+      // index so the 16 wires read as parallel arcs, not stacked. NEVER
+      // the row's interior bounding rect — that scrolls with the
+      // rail-list and would drag landed wires.
       const spread = (i + 0.5) / RAIL_SKILLS.length;
       const ox = railBelow
         ? railLeftX + (0.06 + spread * 0.88) * railWidth
-        : rRow.left - sr.left;
+        : railLeftX;
       const oy = railBelow
         ? railTopY
-        : rRow.top - sr.top + rRow.height / 2;
+        : railTopY + (0.08 + spread * 0.84) * railHeight;
       const dx = tx - ox;
       const c1x = ox + dx * 0.35;
       const c1y = oy;
@@ -425,10 +430,13 @@ function ScrubHero() {
               <div className="mb-5 max-[720px]:mb-2">
                 <Stamp dot>NOW FORGING · v 0.9.3</Stamp>
               </div>
-              <h1 className="font-display text-[clamp(40px,4.2vw,56px)] font-light leading-[0.96] tracking-[-0.03em] text-parchment max-[720px]:text-[clamp(26px,7.5vw,32px)]">
-                Start with <em className="italic font-normal text-ember">nothing</em>.
+              {/* Forge Workshop display: Space Grotesk Bold UPPERCASE
+                  with HighlighterMark on emphasis nouns. Replaces the
+                  legacy italic-Fraunces-ember signature per DESIGN.md. */}
+              <h1 className="font-display-grotesk text-[clamp(40px,4.6vw,64px)] font-bold uppercase leading-[0.98] tracking-[-0.025em] text-parchment max-[720px]:text-[clamp(28px,8vw,36px)]">
+                Start with <HighlighterMark>nothing</HighlighterMark>.
                 <br />
-                Ship with <em className="italic font-normal text-ember">everything</em>.
+                Ship with <HighlighterMark>everything</HighlighterMark>.
               </h1>
               <p className="mt-4 max-w-[340px] font-text text-[14px] leading-[1.55] text-bone max-[720px]:hidden">
                 A registry of composable skills. Watch a blank screen equip
@@ -500,7 +508,7 @@ function ScrubHero() {
           className="pointer-events-none absolute left-1/2 top-1/2 z-[32] -translate-x-1/2 -translate-y-1/2 text-center opacity-0 transition-opacity duration-500 data-[on=true]:pointer-events-auto data-[on=true]:opacity-100"
         >
           <div className="flex max-w-[500px] flex-col items-center gap-4 rounded-[4px] border border-[color:var(--color-border-strong)] [background-color:var(--surface-overlay)] px-10 py-8 backdrop-blur-[14px]">
-            <div className="font-display text-[26px] italic font-normal leading-[1.1] text-parchment">
+            <div className="font-display-grotesk text-[28px] font-bold uppercase leading-[1.0] tracking-[-0.02em] text-parchment">
               Your product. Your agent.
               <br />
               Fully equipped.
@@ -554,10 +562,11 @@ function StaticHero() {
           <div className="grid items-center gap-10 sm:gap-12 lg:grid-cols-[1fr_320px]">
             <div className="flex flex-col items-start gap-5 sm:gap-6">
               <Stamp dot>NOW FORGING · v 0.9.3</Stamp>
-              <h1 className="font-display text-[clamp(34px,8vw,72px)] font-light leading-[0.96] tracking-[-0.03em] text-parchment">
-                Start with <em className="italic font-normal text-ember">nothing</em>.
+              {/* Static / reduced-motion hero — same Forge Workshop display */}
+              <h1 className="font-display-grotesk text-[clamp(34px,8.4vw,76px)] font-bold uppercase leading-[0.98] tracking-[-0.025em] text-parchment">
+                Start with <HighlighterMark>nothing</HighlighterMark>.
                 <br />
-                Ship with <em className="italic font-normal text-ember">everything</em>.
+                Ship with <HighlighterMark>everything</HighlighterMark>.
               </h1>
               <p className="max-w-[440px] font-text text-[14px] leading-[1.55] text-bone sm:text-base">
                 A registry of composable skills. Install what you need; skip what

@@ -3,14 +3,18 @@ import type { ComponentPropsWithoutRef, ReactNode } from "react";
 
 type Variant = "primary" | "ghost";
 
+/* Forge Workshop letterpress treatment — see DESIGN.md.
+   Per-state shadows + press-down hover/active live in the .cta-letterpress
+   utility (neon.css). Variants only set color / border / fill; movement and
+   shadow are inherited. */
 const base =
-  "inline-flex items-center gap-2.5 rounded-[2px] px-[22px] py-3 font-mono text-xs font-semibold uppercase tracking-[0.12em] transition-[transform,box-shadow,border-color,color] duration-200 border cursor-pointer select-none";
+  "cta-letterpress inline-flex items-center gap-2.5 rounded-[2px] px-[22px] py-3 font-mono text-xs font-semibold uppercase tracking-[0.12em] border cursor-pointer select-none";
 
 const variants: Record<Variant, string> = {
   primary:
-    "border-ember bg-ember text-obsidian hover:-translate-y-px hover:shadow-[0_0_32px_-6px_rgb(255_106_26/0.6)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ember focus-visible:ring-offset-2 focus-visible:ring-offset-page",
+    "border-[color:var(--color-accent-muted)] bg-ember text-obsidian",
   ghost:
-    "border-[color:var(--color-border-strong)] bg-transparent text-parchment hover:border-ember hover:text-ember focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ember focus-visible:ring-offset-2 focus-visible:ring-offset-page",
+    "cta-letterpress--ghost border-[color:var(--color-border-strong)] bg-transparent text-parchment hover:border-ember hover:text-ember",
 };
 
 type CommonProps = {

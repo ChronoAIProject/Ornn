@@ -68,7 +68,7 @@ export function AnimatedTerminal() {
   }, []);
 
   return (
-    <div className="overflow-hidden rounded-[4px] border border-[color:var(--color-border-strong)] [background-color:var(--surface-code)] font-mono text-[13px] shadow-[0_20px_60px_-20px_rgb(0_0_0/0.6),0_0_0_1px_rgb(255_106_26/0.08)]">
+    <div className="card-letterpress overflow-hidden rounded-[4px] border border-[color:var(--color-border-strong)] [background-color:var(--surface-code)] font-mono text-[13px]">
       <div className="flex items-center gap-2 border-b border-[color:var(--color-border-subtle)] bg-graphite px-3.5 py-2.5">
         <span className="h-[9px] w-[9px] rounded-full bg-[#c94a4a]" />
         <span className="h-[9px] w-[9px] rounded-full bg-[#c9a64a]" />

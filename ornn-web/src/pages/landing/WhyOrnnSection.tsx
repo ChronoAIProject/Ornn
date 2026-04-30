@@ -1,4 +1,5 @@
 import { BlueprintGrid, RegMark } from "./BlueprintGrid";
+import { HighlighterMark } from "./HighlighterMark";
 
 /**
  * "Why ornn" — three editorial pillars under the hero.
@@ -9,12 +10,10 @@ export function WhyOrnnSection() {
       <BlueprintGrid />
       <div className="relative mx-auto max-w-[1280px] px-6 sm:px-8">
         <div className="pb-8 pt-8 sm:pb-10 sm:pt-12">
-          <h2 className="max-w-[900px] font-display text-[clamp(36px,5vw,72px)] font-light leading-none tracking-[-0.03em] text-parchment">
+          <h2 className="max-w-[900px] font-display-grotesk text-[clamp(36px,5.4vw,72px)] font-bold uppercase leading-[0.98] tracking-[-0.025em] text-parchment">
             Stop copy-pasting prompts.
             <br />
-            <em className="italic font-normal text-ember">
-              Install skills like packages.
-            </em>
+            Install <HighlighterMark>skills</HighlighterMark> like packages.
           </h2>
         </div>
 
@@ -23,7 +22,7 @@ export function WhyOrnnSection() {
             num="I"
             title={
               <>
-                Pull, <em className="italic font-normal text-ember">don&apos;t</em>
+                Pull, <HighlighterMark>don&apos;t</HighlighterMark>
                 <br />
                 paste.
               </>
@@ -48,7 +47,7 @@ export function WhyOrnnSection() {
               <>
                 Generate skills
                 <br />
-                <em className="italic font-normal text-ember">from a prompt</em>.
+                <HighlighterMark>from a prompt</HighlighterMark>.
               </>
             }
             body={
@@ -69,7 +68,7 @@ export function WhyOrnnSection() {
             title={
               <>
                 Portable by{" "}
-                <em className="italic font-normal text-ember">format</em>.
+                <HighlighterMark>format</HighlighterMark>.
               </>
             }
             body={
@@ -118,7 +117,7 @@ function Pillar({
           Pillar · {num}
         </div>
       </div>
-      <h3 className="mb-4 mt-5 font-display text-[32px] font-light leading-[1.1] tracking-[-0.02em] text-parchment">
+      <h3 className="mb-4 mt-5 font-display-grotesk text-[32px] font-bold uppercase leading-[1.0] tracking-[-0.02em] text-parchment">
         {title}
       </h3>
       <p className="text-sm leading-[1.6] text-bone">{body}</p>

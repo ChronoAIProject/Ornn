@@ -2,6 +2,7 @@ import { SkillCard } from "./SkillCard";
 import { CatalogRow } from "./CatalogRow";
 import { HammeredDivider } from "./HammeredDivider";
 import { EmberLink } from "./EmberButton";
+import { HighlighterMark } from "./HighlighterMark";
 import { useCatalogSkills, useFeaturedSkills } from "./useFeaturedSkills";
 import { CATALOG_DEFAULT, FEATURED_DEFAULT } from "./skillsData";
 
@@ -20,8 +21,8 @@ export function FeaturedSkillsSection() {
       <div className="mx-auto max-w-[1280px] px-6 sm:px-8">
         <div className="mb-12 flex flex-wrap items-end justify-between gap-6">
           <div>
-            <h2 className="font-display text-[clamp(40px,5vw,72px)] font-light leading-none tracking-[-0.03em] text-parchment">
-              Skills, <em className="italic font-normal text-ember">freshly forged</em>.
+            <h2 className="font-display-grotesk text-[clamp(40px,5.4vw,72px)] font-bold uppercase leading-[0.98] tracking-[-0.025em] text-parchment">
+              Skills, <HighlighterMark variant="gold">freshly forged</HighlighterMark>.
             </h2>
           </div>
           <EmberLink to="/registry" variant="ghost">

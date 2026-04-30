@@ -17,10 +17,18 @@ import { VSComparisonSection } from "@/pages/landing/VSComparisonSection";
 import { PublishSection } from "@/pages/landing/PublishSection";
 import { LandingFooter } from "@/pages/landing/LandingFooter";
 import { SectionRule } from "@/pages/landing/HammeredDivider";
+import { HighlighterMarkFilter } from "@/pages/landing/HighlighterMark";
+import { LandingChrome } from "@/pages/landing/LandingChrome";
 
 export function LandingPage() {
   return (
-    <div className="min-h-screen bg-page font-text text-body antialiased">
+    <div className="landing-route min-h-screen bg-page font-text text-body antialiased">
+      {/* Forge Workshop chrome — page-corner registration marks + drafting
+          overlay (light-mode page-edge dim rulers). Scoped to .landing-route
+          so app-shell pages do NOT inherit. */}
+      <LandingChrome />
+      {/* Singleton SVG turbulence filter referenced by every <HighlighterMark> */}
+      <HighlighterMarkFilter />
       <LandingNav />
       <main>
         <HeroStage />

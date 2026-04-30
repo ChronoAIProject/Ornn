@@ -21,7 +21,7 @@ export const RepoRail = forwardRef<HTMLElement, Props>(function RepoRail(
   return (
     <aside
       ref={railRef}
-      className="relative z-[7] h-fit max-w-[360px] w-full self-center justify-self-end overflow-hidden rounded-[4px] border border-[color:var(--color-border-subtle)] [background-color:var(--surface-rail)] shadow-[0_30px_80px_-30px_rgb(0_0_0/0.7)] backdrop-blur-[10px] transition-opacity duration-500 data-[dimmed=true]:opacity-[0.45] max-[720px]:max-w-full max-[720px]:justify-self-stretch"
+      className="card-letterpress relative z-[7] h-fit max-w-[360px] w-full self-center justify-self-end overflow-hidden rounded-[4px] border border-[color:var(--color-border-subtle)] [background-color:var(--surface-rail)] backdrop-blur-[10px] transition-opacity duration-500 data-[dimmed=true]:opacity-[0.45] max-[720px]:max-w-full max-[720px]:justify-self-stretch"
     >
       {/* Head */}
       <div className="flex items-center gap-2.5 border-b border-[color:var(--color-border-subtle)] [background-color:var(--surface-rail-head)] px-3.5 py-3 max-[720px]:py-2">

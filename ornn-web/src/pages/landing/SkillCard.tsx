@@ -5,7 +5,7 @@ export function SkillCard({ skill }: { skill: FeaturedSkill }) {
   return (
     <Link
       to={`/skills/${skill.slug}`}
-      className="group/card flex min-h-[260px] flex-col border border-[color:var(--color-border-subtle)] bg-graphite px-6 pb-6 pt-7 no-underline text-inherit transition-[border-color,transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:border-ember hover:shadow-[0_12px_40px_-16px_rgb(255_106_26/0.3)]"
+      className="card-letterpress group/card flex min-h-[260px] flex-col border border-[color:var(--color-border-subtle)] bg-graphite px-6 pb-6 pt-7 no-underline text-inherit hover:border-ember"
     >
       <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-ember">
         ⟶ {skill.tag}
