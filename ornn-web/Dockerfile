@@ -1,16 +1,26 @@
-FROM oven/bun:latest AS build
+# Pin bun explicitly. `oven/bun:latest` floats and bun's workspace
+# hoister behaviour has shifted between releases — earlier we saw
+# `bun install` silently skip hoistable deps (e.g. `zustand`) when
+# sibling workspaces were stubbed with empty `dependencies` blocks,
+# then `bun run build` blew up at typecheck with "Cannot find module
+# 'zustand'". Pinning here + copying the real sibling package.jsons
+# below makes the install reproducible across CI / local / fresh dev
+# machines.
+FROM oven/bun:1.3.13 AS build
 WORKDIR /app
 
 # Copy workspace root package files
 COPY package.json bun.lock ./
 
-# Copy frontend package
+# Copy every workspace package.json the lockfile references. We used to
+# stub ornn-api / ornn-sdk to skip pulling their deps for the frontend
+# build, but that's exactly what tripped the hoister: bun.lock was
+# resolved against the real package.jsons, and the stubs (no deps) made
+# bun think hoistable transitive deps weren't needed. Copying the real
+# files keeps the lockfile + workspace graph consistent.
 COPY ornn-web/package.json ornn-web/
-
-# Stub sibling workspaces (required by bun workspace resolution) —
-# only ornn-web's dep graph is actually needed for the frontend build.
-RUN mkdir -p ornn-api && echo '{"name":"ornn-api","version":"2.0.0","private":true}' > ornn-api/package.json
-RUN mkdir -p ornn-sdk && echo '{"name":"@chronoai/ornn-sdk","version":"1.0.0","private":true}' > ornn-sdk/package.json
+COPY ornn-api/package.json ornn-api/
+COPY ornn-sdk/package.json ornn-sdk/
 
 RUN bun install
 
