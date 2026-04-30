@@ -18,7 +18,23 @@ jobs:
       - run: bun install --frozen-lockfile
 
       - name: Check for changeset
+        env:
+          HEAD_REF: ${{ github.head_ref }}
         run: |
+          # Bot-opened release / sync PRs are exempt — they're deterministic
+          # replays of state already on `main` (the release-bump itself, or
+          # the sync of that bump back to develop). They don't introduce
+          # user-facing changes that need a fresh changeset, and the squash
+          # merge of develop → main means the 3-dot diff used below can't
+          # see the deletions of consumed changesets that the bump commit
+          # made on main.
+          case "$HEAD_REF" in
+            sync/post-release-v*|release/*)
+              echo "Skipping changeset check — bot-opened release branch '$HEAD_REF'"
+              exit 0
+              ;;
+          esac
+
           # Get list of changeset files added in this PR
           CHANGESETS=$(git diff --name-only origin/develop...HEAD -- '.changeset/*.md' | grep -v README.md || true)
 
