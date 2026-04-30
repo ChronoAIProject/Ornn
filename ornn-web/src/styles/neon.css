@@ -1,6 +1,44 @@
 @import "tailwindcss";
 @import "highlight.js/styles/tokyo-night-dark.css";
 
+/* Space Grotesk — Forge Workshop display voice on landing surfaces.
+   Supersedes Fraunces italic-ember on landing per DESIGN.md (2026-04-29).
+   Italic Fraunces stays loaded via PP Editorial New for app-shell during
+   the separate migration. */
+@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap");
+
+/* PP Editorial New — drop .woff2 files into ornn-web/public/fonts/ and the
+   browser will pick them up. Until the files exist, the font-display token
+   silently falls through to Newsreader. */
+@font-face {
+  font-family: "PP Editorial New";
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+  src: url("/fonts/PPEditorialNew-Regular.woff2") format("woff2");
+}
+@font-face {
+  font-family: "PP Editorial New";
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+  src: url("/fonts/PPEditorialNew-Italic.woff2") format("woff2");
+}
+@font-face {
+  font-family: "PP Editorial New";
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+  src: url("/fonts/PPEditorialNew-Ultralight.woff2") format("woff2");
+}
+@font-face {
+  font-family: "PP Editorial New";
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+  src: url("/fonts/PPEditorialNew-Ultrabold.woff2") format("woff2");
+}
+
 @theme {
   /* ── Legacy neon-* tokens — REMAPPED to Editorial Forge values during
    *    the design migration. Component code that still references
@@ -9,19 +47,19 @@
    *    without touching component source. New work should use the
    *    semantic tokens below (bg-page / text-strong / text-accent /
    *    font-display / font-reading). ── */
-  --color-neon-cyan: #FF6A1A;     /* was Orbitron-era #FF6B00 — now matches accent */
-  --color-neon-magenta: #E8B341;  /* was #FF8C38 — now accent-support */
-  --color-neon-yellow: #E8B341;   /* was #FFB800 — now warning */
-  --color-neon-green: #7FA06A;    /* was #39ff14 — now mineral success */
-  --color-neon-red: #C96B5A;      /* was #ff003c — now kiln danger */
-  --color-bg-deep: #0A0907;       /* was #0a0a0f — now page */
-  --color-bg-surface: #17150F;    /* was #131313 — now panel/card */
-  --color-bg-elevated: #26221B;   /* was #1e1e1e — now elevated */
-  --color-text-primary: #F1ECDE;  /* was #e8e8e8 — now strong */
-  --color-text-muted: #6B6254;    /* was #7a7a7a — now meta */
+  --color-neon-cyan: #FF7322;     /* was Orbitron-era — now Forge Workshop ember */
+  --color-neon-magenta: #E8B341;  /* now accent-support / molten */
+  --color-neon-yellow: #E8B341;   /* now warning */
+  --color-neon-green: #7FA06A;    /* mineral success */
+  --color-neon-red: #C96B5A;      /* kiln danger */
+  --color-bg-deep: #0B0907;       /* page */
+  --color-bg-surface: #14110B;    /* panel / card */
+  --color-bg-elevated: #221E16;   /* elevated */
+  --color-text-primary: #F1ECDE;  /* strong */
+  --color-text-muted: #6B6254;    /* meta */
 
-  --font-heading: "Fraunces", Georgia, serif;          /* was Orbitron */
-  --font-body: "Inter", system-ui, sans-serif;         /* was Rajdhani */
+  --font-heading: "Fraunces", Georgia, serif;          /* legacy app-shell display — landing uses Space Grotesk */
+  --font-body: "Inter", system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
 
   /* ── Editorial Forge tokens (DESIGN.md, light-first) ──
@@ -32,20 +70,25 @@
    *   text-accent, bg-accent, border-accent
    *   text-success / warning / danger / info
    *   border-subtle, border-strong
-   * Plus Fraunces / Inter via font-display, font-reading.
+   * Plus Fraunces / Inter via font-display, font-text, font-ui.
    */
-  --color-page: #0A0907;
-  --color-panel: #17150F;
-  --color-card: #17150F;
-  --color-elevated: #26221B;
+  --color-page: #0B0907;
+  --color-panel: #14110B;
+  --color-card: #1A1610;
+  --color-elevated: #221E16;
   --color-strong: #F1ECDE;
   --color-body: #C9BFAD;
   --color-meta: #6B6254;
-  --color-accent: #FF6A1A;
-  --color-accent-muted: #C94A0E;
+  --color-accent: #FF7322;
+  --color-accent-muted: #C9460D;                     /* lower-heat ember; press-shadow color */
   --color-accent-support: #E8B341;
+  --color-accent-secondary: #5BC8E8;                 /* arc-blue (welding light) — secondary diagrammatic accent */
+  --color-shadow-press: rgba(0, 0, 0, 0.55);         /* letterpress impression on cards */
   --color-subtle: rgba(201, 191, 173, 0.12);
   --color-strong-edge: rgba(201, 191, 173, 0.22);
+  --color-border-subtle: rgb(201 191 173 / 0.12);    /* alias for landing components */
+  --color-border-strong: rgb(201 191 173 / 0.22);    /* alias for landing components */
+  --color-border-stronger: rgb(201 191 173 / 0.34);  /* rivet dots, welded-seam markers */
   --color-success: #7FA06A;
   --color-success-soft: rgba(127, 160, 106, 0.12);
   --color-warning: #E8B341;
@@ -54,39 +97,113 @@
   --color-danger-soft: rgba(201, 107, 90, 0.12);
   --color-info: #8A97A3;
   --color-info-soft: rgba(138, 151, 163, 0.12);
-  --color-code-bg: #0A0907;
+  --color-code-bg: #08070A;
+  --color-code-surface: #08070A;                     /* alias for landing components */
 
-  --font-display: "Fraunces", Georgia, serif;
+  /* Material primitives — used for arbitrary-value tokens on the landing */
+  --color-obsidian: #0B0907;
+  --color-graphite: #14110B;
+  --color-iron: #221E16;
+  --color-steel: #3A3328;
+  --color-ash: #6B6254;
+  --color-bone: #C9BFAD;
+  --color-parchment: #F1ECDE;
+  --color-ember: #FF7322;
+  --color-ember-dim: #C9460D;
+  --color-ember-deep: #7A2308;                       /* deep burnt-sienna for letterpress card-shadow */
+  --color-molten: #E8B341;
+  --color-arc: #5BC8E8;                              /* arc-blue — secondary diagrammatic accent */
+  --color-arc-dim: #3A8FB8;
+  --color-arc-glow: rgba(91, 200, 232, 0.28);
+  --color-arc-soft: rgba(91, 200, 232, 0.10);
+  --color-ember-glow: rgba(255, 115, 34, 0.30);      /* hero floor / pulse glows */
+
+  --font-display: "Fraunces", Georgia, serif;        /* legacy display, app-shell only */
+  --font-display-grotesk: "Space Grotesk", "Inter", system-ui, sans-serif;  /* Forge Workshop display, landing only */
   --font-reading: "Inter", system-ui, sans-serif;
+  --font-text: "Inter", system-ui, sans-serif;       /* alias used by landing components */
+  --font-ui: "Inter", system-ui, sans-serif;         /* alias used by nav / footer */
+
+  /* Component shadow tokens — letterpress hard-offset (Forge Workshop).
+     No soft drop shadows on cards or CTAs; never inline arbitrary shadow strings.
+     Per-state contract: rest carries impression, hover translates INTO impression
+     (shadow shrinks), active fully sinks. See DESIGN.md → Material & Print Vocabulary. */
+  --button-primary-shadow-rest:   4px 4px 0 0 var(--color-accent-muted);
+  --button-primary-shadow-hover:  2px 2px 0 0 var(--color-accent-muted);
+  --button-primary-shadow-active: 0 0 0 0 transparent;
+  --button-ghost-shadow-rest:     3px 3px 0 0 var(--color-border-stronger);
+  --button-ghost-shadow-hover:    1.5px 1.5px 0 0 var(--color-accent);
+  --button-focus-ring:            0 0 0 2px var(--color-page), 0 0 0 4px var(--color-accent);
+  --card-shadow-rest:             5px 5px 0 0 var(--color-shadow-press), inset 0 0 0 1px var(--color-border-subtle);
+  --card-shadow-hover:            2px 2px 0 0 var(--color-shadow-press), inset 0 0 0 1px var(--color-border-strong);
+
+  /* Theme-aware gradients used by HeroStage and other landing surfaces.
+     Light-mode overrides live in [data-theme="light"] below. */
+  --gradient-hero:
+    radial-gradient(ellipse 70% 55% at 50% 95%, rgb(255 115 34 / 0.22), transparent 60%),
+    radial-gradient(ellipse 40% 30% at 50% 80%, rgb(232 179 65 / 0.10), transparent 70%),
+    linear-gradient(180deg, #0B0907 0%, #0E0D0B 40%, #14110B 100%);
+  --gradient-hero-floor:
+    linear-gradient(rgb(201 191 173 / 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(201 191 173 / 0.04) 1px, transparent 1px);
+  --gradient-publish: linear-gradient(135deg, #14110B 0%, #0E0D0B 60%);
+  --gradient-styled-media:
+    radial-gradient(ellipse 80% 70% at 30% 40%, rgb(255 115 34 / 0.45), transparent 60%),
+    radial-gradient(ellipse 60% 50% at 70% 70%, rgb(232 179 65 / 0.3), transparent 70%),
+    linear-gradient(135deg, #14110B, #221E16);
+  --surface-styled-card: #140F0A;
+  --surface-code: #0a0907; /* terminal — stays dark in both themes per DESIGN.md */
+
+  /* Translucent rail surfaces — flip per theme */
+  --surface-rail: rgb(20 15 10 / 0.55);
+  --surface-rail-head: rgb(14 13 11 / 0.7);
+  --surface-rail-search: rgb(14 13 11 / 0.45);
+  --surface-rail-fade: linear-gradient(180deg, transparent, rgb(14 13 11 / 0.9));
+
+  /* Translucent nav surface (legacy) — landing nav now uses bg-page directly */
+  --surface-nav: rgb(14 13 11 / 0.72);
+
+  /* Translucent overlay panel — used by hero's final CTA card */
+  --surface-overlay: rgb(14 13 11 / 0.82);
+
+  /* Blueprint / drafting paper grid — applied behind editorial sections */
+  --pattern-grid:
+    linear-gradient(rgb(201 191 173 / 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(201 191 173 / 0.045) 1px, transparent 1px);
+  --pattern-grid-size: 48px 48px;
 }
 
-/* ──────── Light mode overrides — Editorial Forge bright (flagship) ──────── */
+/* ──────── Light mode overrides — Forge Workshop (cool steel paper) ──────── */
 [data-theme="light"] {
-  /* Legacy aliases mapped to bright Editorial Forge values */
-  --color-bg-deep: #F5EFE1;       /* parchment page */
-  --color-bg-surface: #EBE4D3;    /* warm panel */
-  --color-bg-elevated: #E9E2CE;   /* elevated paper */
-  --color-text-primary: #1A1812;  /* ink */
-  --color-text-muted: #8A7F6C;    /* meta */
-  --color-neon-cyan: #C94A0E;     /* ember (deeper for paper contrast) */
-  --color-neon-magenta: #B8861A;  /* accent-support (brass) */
-  --color-neon-yellow: #A97818;   /* warning (brass deeper) */
-  --color-neon-green: #5F7A46;    /* success (oxidized) */
-  --color-neon-red: #9E4E42;      /* danger (kiln) */
+  /* Legacy aliases mapped to Forge Workshop bright values.
+     Page bg cooled from warm parchment to cool steel paper per
+     DESIGN.md Differentiation Guardrails (B ≥ G ≥ R, never warm). */
+  --color-bg-deep: #EAECEC;       /* cool steel paper (was warm #F5EFE1) */
+  --color-bg-surface: #DCDFDF;    /* cool panel */
+  --color-bg-elevated: #EDEFEF;   /* elevated cool paper */
+  --color-text-primary: #14130E;  /* ink (slightly stronger than warm 1A1812) */
+  --color-text-muted: #7E776B;    /* cool gray meta */
+  --color-neon-cyan: #D9461A;     /* ember (v3 brighter) */
+  --color-neon-magenta: #B8861A;  /* molten brass */
+  --color-neon-yellow: #A97818;   /* warning brass deeper */
+  --color-neon-green: #5F7A46;    /* success oxidized */
+  --color-neon-red: #9E4E42;      /* danger kiln */
 
-  /* Editorial Forge — bright (flagship) */
-  --color-page: #F5EFE1;
-  --color-panel: #EBE4D3;
-  --color-card: #FFFBF0;
-  --color-elevated: #E9E2CE;
-  --color-strong: #1A1812;
-  --color-body: #5E5544;
-  --color-meta: #8A7F6C;
-  --color-accent: #C94A0E;
-  --color-accent-muted: #A33A08;
+  /* Forge Workshop — bright (flagship) */
+  --color-page: #EAECEC;
+  --color-panel: #DCDFDF;
+  --color-card: #FFFFFF;
+  --color-elevated: #EDEFEF;
+  --color-strong: #14130E;
+  --color-body: #4A453B;
+  --color-meta: #7E776B;
+  --color-accent: #D9461A;
+  --color-accent-muted: #B33912;                     /* press-shadow color on primary CTAs */
   --color-accent-support: #B8861A;
-  --color-subtle: rgba(26, 24, 18, 0.10);
-  --color-strong-edge: rgba(26, 24, 18, 0.22);
+  --color-accent-secondary: #2B7791;                 /* arc-blue (welding light, light mode) */
+  --color-shadow-press: rgba(110, 34, 7, 0.13);      /* deep ember letterpress impression on light */
+  --color-subtle: rgba(20, 19, 14, 0.08);
+  --color-strong-edge: rgba(20, 19, 14, 0.18);
   --color-success: #5F7A46;
   --color-success-soft: rgba(95, 122, 70, 0.10);
   --color-warning: #A97818;
@@ -95,20 +212,99 @@
   --color-danger-soft: rgba(158, 78, 66, 0.10);
   --color-info: #5D6973;
   --color-info-soft: rgba(93, 105, 115, 0.10);
-  --color-code-bg: #1A1612;
+  --color-code-bg: #14110B;
+  --color-border-subtle: rgb(20 19 14 / 0.08);
+  --color-border-strong: rgb(20 19 14 / 0.18);
+  --color-border-stronger: rgb(20 19 14 / 0.40);
+  --color-code-surface: #14110B;                      /* deliberately stays dark per DESIGN.md */
+
+  /* Material primitives — Forge Workshop cool steel family */
+  --color-obsidian: #EAECEC;
+  --color-graphite: #DCDFDF;
+  --color-iron: #CECECE;
+  --color-steel: #B8B8B8;
+  --color-ash: #7E776B;
+  --color-bone: #4A453B;
+  --color-parchment: #14130E;
+  --color-ember: #D9461A;
+  --color-ember-dim: #B33912;
+  --color-ember-deep: #6E2207;                       /* slightly deeper for paper contrast */
+  --color-molten: #B8861A;
+  --color-arc: #2B7791;                              /* arc-blue — secondary, light mode */
+  --color-arc-dim: #1A5670;
+  --color-arc-glow: rgba(43, 119, 145, 0.22);
+  --color-arc-soft: rgba(43, 119, 145, 0.10);
+  --color-ember-glow: rgba(217, 70, 26, 0.22);       /* light-mode ember pulse */
+
+  --font-display: "Fraunces", Georgia, serif;        /* legacy app-shell display */
+  --font-display-grotesk: "Space Grotesk", "Inter", system-ui, sans-serif;
+  --font-reading: "Inter", system-ui, sans-serif;
+  --font-text: "Inter", system-ui, sans-serif;
+  --font-ui: "Inter", system-ui, sans-serif;
+
+  /* Component shadow tokens — light-mode letterpress (deep-ember impression) */
+  --button-primary-shadow-rest:   4px 4px 0 0 var(--color-accent-muted);
+  --button-primary-shadow-hover:  2px 2px 0 0 var(--color-accent-muted);
+  --button-primary-shadow-active: 0 0 0 0 transparent;
+  --button-ghost-shadow-rest:     3px 3px 0 0 var(--color-border-stronger);
+  --button-ghost-shadow-hover:    1.5px 1.5px 0 0 var(--color-accent);
+  --button-focus-ring:            0 0 0 2px var(--color-page), 0 0 0 4px var(--color-accent);
+  --card-shadow-rest:             5px 5px 0 0 var(--color-shadow-press), inset 0 0 0 1px var(--color-border-subtle);
+  --card-shadow-hover:            2px 2px 0 0 var(--color-shadow-press), inset 0 0 0 1px var(--color-border-strong);
+
+  /* Theme-aware gradients — cool steel paper in light mode (Forge Workshop) */
+  --gradient-hero:
+    radial-gradient(ellipse 70% 55% at 50% 95%, rgb(217 70 26 / 0.18), transparent 60%),
+    radial-gradient(ellipse 40% 30% at 50% 80%, rgb(184 134 26 / 0.10), transparent 70%),
+    linear-gradient(180deg, #FFFFFF 0%, #EAECEC 40%, #DCDFDF 100%);
+  --gradient-hero-floor:
+    linear-gradient(rgb(20 19 14 / 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(20 19 14 / 0.06) 1px, transparent 1px);
+  --gradient-publish: linear-gradient(135deg, #FFFFFF 0%, #DCDFDF 60%);
+  --gradient-styled-media:
+    radial-gradient(ellipse 80% 70% at 30% 40%, rgb(217 70 26 / 0.40), transparent 60%),
+    radial-gradient(ellipse 60% 50% at 70% 70%, rgb(184 134 26 / 0.25), transparent 70%),
+    linear-gradient(135deg, #FFFFFF, #DCDFDF);
+  --surface-styled-card: #FFFFFF;
+  /* --surface-code intentionally stays dark in light mode per DESIGN.md */
+
+  --surface-rail: rgb(255 255 255 / 0.92);
+  --surface-rail-head: rgb(220 223 223 / 0.85);
+  --surface-rail-search: rgb(234 236 236 / 0.55);
+  --surface-rail-fade: linear-gradient(180deg, transparent, rgb(234 236 236 / 0.95));
+
+  --surface-nav: rgb(234 236 236 / 0.88);
+  --surface-overlay: rgb(255 255 255 / 0.94);
+
+  --pattern-grid:
+    linear-gradient(rgb(20 19 14 / 0.055) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(20 19 14 / 0.055) 1px, transparent 1px);
 }
 
-/* Base */
-body {
-  font-family: var(--font-body);
+/* Forge Workshop v3 — landing surfaces remap --font-display to Space Grotesk
+   so the existing `font-display` Tailwind utility resolves to the v3 voice
+   without requiring per-component className changes. App-shell pages still
+   inherit Fraunces from :root during the separate migration window. */
+.landing-route {
+  --font-display: var(--font-display-grotesk);
 }
 
-h1, h2, h3, h4, h5, h6 {
-  font-family: var(--font-heading);
-}
+/* Base — wrapped in @layer base so Tailwind utility classes (font-display,
+   font-mono, font-text) can override per-element on the landing while legacy
+   pages keep their Orbitron/Rajdhani defaults. Without the layer wrap,
+   bare element selectors are unlayered and outrank layered utilities. */
+@layer base {
+  body {
+    font-family: var(--font-body);
+  }
 
-code, pre {
-  font-family: var(--font-mono);
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-heading);
+  }
+
+  code, pre {
+    font-family: var(--font-mono);
+  }
 }
 
 /* Editorial Forge — accent text emphasis (no glow, restrained per DESIGN.md) */
@@ -447,4 +643,275 @@ code, pre {
 .hljs-type,
 .hljs-title {
   color: #E8B341 !important;
+}
+
+/* ──────── Forge Workshop letterpress component utilities ──────── */
+/* Per DESIGN.md: cards / buttons use hard-offset impression shadows.
+   Hover translates INTO the impression (press DOWN, never lift).
+   Active fully sinks. Focus-visible stacks an outer ring over the
+   press shadow with sufficient contrast in both themes. Disabled
+   removes the press impression entirely. Reduced-motion suppresses
+   the translate; shadow swap alone communicates press. */
+
+.cta-letterpress {
+  box-shadow: var(--button-primary-shadow-rest);
+  transition: transform 140ms ease, box-shadow 140ms ease, background-color 200ms,
+    color 200ms, border-color 200ms;
+}
+.cta-letterpress:hover {
+  transform: translate(2px, 2px);
+  box-shadow: var(--button-primary-shadow-hover);
+}
+.cta-letterpress:active {
+  transform: translate(4px, 4px);
+  box-shadow: var(--button-primary-shadow-active);
+}
+.cta-letterpress:focus-visible {
+  outline: none;
+  /* Press shadow is preserved via the appropriate state declaration above;
+     the focus ring stacks ON TOP via the :focus-visible state-aware shadow. */
+  box-shadow: var(--button-primary-shadow-rest), var(--button-focus-ring);
+}
+.cta-letterpress:focus-visible:hover {
+  box-shadow: var(--button-primary-shadow-hover), var(--button-focus-ring);
+}
+.cta-letterpress:focus-visible:active {
+  box-shadow: var(--button-primary-shadow-active), var(--button-focus-ring);
+}
+.cta-letterpress:disabled,
+.cta-letterpress[aria-disabled="true"] {
+  /* Disabled CTAs MUST NOT carry a press impression — would misread as actionable. */
+  transform: none;
+  box-shadow: inset 0 0 0 1px var(--color-border-subtle);
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Ghost variant — ink-line letterpress impression instead of ember press */
+.cta-letterpress--ghost {
+  box-shadow: var(--button-ghost-shadow-rest);
+}
+.cta-letterpress--ghost:hover {
+  transform: translate(1.5px, 1.5px);
+  box-shadow: var(--button-ghost-shadow-hover);
+}
+.cta-letterpress--ghost:active {
+  transform: translate(3px, 3px);
+  box-shadow: var(--button-primary-shadow-active);
+}
+.cta-letterpress--ghost:focus-visible {
+  box-shadow: var(--button-ghost-shadow-rest), var(--button-focus-ring);
+}
+.cta-letterpress--ghost:focus-visible:hover {
+  box-shadow: var(--button-ghost-shadow-hover), var(--button-focus-ring);
+}
+
+/* Reduced-motion — suppress translate; shadow swap alone communicates press. */
+@media (prefers-reduced-motion: reduce) {
+  .cta-letterpress,
+  .cta-letterpress:hover,
+  .cta-letterpress:active,
+  .cta-letterpress--ghost,
+  .cta-letterpress--ghost:hover,
+  .cta-letterpress--ghost:active {
+    transform: none;
+  }
+}
+
+/* ──────── Landing-only chrome — registration marks + drafting overlay ──────── */
+/* Scoped to `.landing-route` (set by LandingPage). App-shell pages do NOT
+   inherit any of this. Per DESIGN.md → Material & Print Vocabulary. */
+
+/* Drafting overlay: light-mode-only blueprint grid backdrop on the body.
+   Renders as a fixed background painted across the whole viewport so the
+   grid scrolls with content seamlessly. Dark mode hides this — workshop
+   signal there comes from --gradient-hero patina. */
+.landing-drafting-overlay {
+  display: none;
+}
+[data-theme="light"] .landing-route .landing-drafting-overlay {
+  display: block;
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background-image:
+    linear-gradient(rgba(20, 19, 14, 0.038) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(20, 19, 14, 0.038) 1px, transparent 1px);
+  background-size: 32px 32px;
+  background-attachment: fixed;
+}
+
+/* Page-edge dimension rulers — light only.
+   14px wide strips down both viewport edges with dashed tick every 64px. */
+.landing-edge-rule {
+  display: none;
+}
+[data-theme="light"] .landing-route .landing-edge-rule {
+  display: block;
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  width: 14px;
+  pointer-events: none;
+  background-image: linear-gradient(
+    to bottom,
+    rgba(20, 19, 14, 0.18) 1px,
+    transparent 1px
+  );
+  background-size: 100% 64px;
+  opacity: 0.55;
+  z-index: 1;
+}
+[data-theme="light"] .landing-route .landing-edge-rule--left {
+  left: 0;
+  border-right: 1px solid rgba(20, 19, 14, 0.08);
+}
+[data-theme="light"] .landing-route .landing-edge-rule--right {
+  right: 0;
+  border-left: 1px solid rgba(20, 19, 14, 0.08);
+}
+
+/* Page-corner registration marks — both themes.
+   14px ember crosshair (cross + ring) at all four viewport corners.
+   Top corners offset 78px (below 64px sticky nav) so they sit at the
+   page-content area's corners, not buried under the nav strip. */
+.landing-route .landing-page-regs {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+}
+.landing-route .landing-page-reg {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+}
+.landing-route .landing-page-reg::before,
+.landing-route .landing-page-reg::after {
+  content: "";
+  position: absolute;
+  background: var(--color-ember);
+  opacity: 0.55;
+}
+.landing-route .landing-page-reg::before {
+  left: 0;
+  top: 50%;
+  height: 1px;
+  width: 100%;
+  transform: translateY(-50%);
+}
+.landing-route .landing-page-reg::after {
+  left: 50%;
+  top: 0;
+  width: 1px;
+  height: 100%;
+  transform: translateX(-50%);
+}
+.landing-route .landing-page-reg-ring {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  border: 1px solid var(--color-ember);
+  opacity: 0.55;
+  transform: translate(-50%, -50%);
+}
+.landing-route .landing-page-reg--tl { top: 78px; left: 14px; }
+.landing-route .landing-page-reg--tr { top: 78px; right: 14px; }
+.landing-route .landing-page-reg--bl { bottom: 14px; left: 14px; }
+.landing-route .landing-page-reg--br { bottom: 14px; right: 14px; }
+
+/* Hide registration marks on narrow screens — corner real estate is precious */
+@media (max-width: 720px) {
+  .landing-route .landing-page-regs {
+    display: none;
+  }
+}
+
+/* ──────── HighlighterMark — hand-applied translucent emphasis ──────── */
+/* Forge Workshop brand emphasis pattern (DESIGN.md → Signature Emphasis).
+   Replaces the legacy italic-Fraunces-ember signature on landing surfaces.
+   A translucent ember (or arc, restricted) wash sitting OVER the text via
+   asymmetric border-radius + SVG turbulence-filtered organic edges, with
+   mix-blend-mode multiply (light) / screen (dark) so the text shows
+   through tinted. Shared filter is mounted once via <HighlighterMarkFilter />.
+   Per-instance variation via :nth-of-type so adjacent marks don't read as stamped. */
+
+.highlighter-mark {
+  position: relative;
+  display: inline-block;
+  isolation: isolate;
+  font-weight: inherit;
+  color: inherit;
+  white-space: nowrap;
+  z-index: 0;
+}
+.highlighter-mark::before {
+  content: "";
+  position: absolute;
+  left: -0.16em;
+  right: -0.16em;
+  top: 0.04em;
+  bottom: 0;
+  background: var(--color-ember);
+  opacity: 0.5;
+  z-index: 1;                 /* IN FRONT of the text */
+  pointer-events: none;
+  border-radius: 9px 14px 7px 11px / 11px 6px 14px 8px;
+  transform: rotate(-0.7deg) skewX(-1.5deg);
+  filter: url(#ornn-highlighter-rough) blur(0.5px);
+  mix-blend-mode: multiply;
+}
+[data-theme="dark"] .highlighter-mark::before {
+  mix-blend-mode: screen;
+  opacity: 0.42;
+}
+.highlighter-mark:nth-of-type(2n)::before {
+  border-radius: 13px 7px 14px 9px / 6px 14px 8px 13px;
+  transform: rotate(0.5deg) skewX(1.4deg);
+  filter: url(#ornn-highlighter-rough) blur(0.6px);
+}
+.highlighter-mark:nth-of-type(3n)::before {
+  border-radius: 7px 13px 10px 14px / 13px 8px 11px 9px;
+  transform: rotate(-0.3deg) skewX(-1deg);
+}
+.highlighter-mark--gold::before { background: var(--color-molten); }
+.highlighter-mark--arc::before  { background: var(--color-arc); }
+
+/* Card letterpress — paired with --card-shadow-rest / --card-shadow-hover.
+   Apply via .card-letterpress on any landing card / panel / terminal that
+   currently uses inline `shadow-[...]` Tailwind arbitrary syntax. */
+.card-letterpress {
+  box-shadow: var(--card-shadow-rest);
+  transition: transform 140ms ease, box-shadow 140ms ease, border-color 200ms;
+}
+.card-letterpress:hover {
+  transform: translate(2px, 2px);
+  box-shadow: var(--card-shadow-hover);
+}
+.card-letterpress:focus-visible {
+  outline: none;
+  box-shadow: var(--card-shadow-rest), var(--button-focus-ring);
+}
+.card-letterpress:focus-visible:hover {
+  box-shadow: var(--card-shadow-hover), var(--button-focus-ring);
+}
+@media (prefers-reduced-motion: reduce) {
+  .card-letterpress,
+  .card-letterpress:hover {
+    transform: none;
+  }
+}
+
+/* Reusable focus ring for landing links and rows that don't carry a press
+   shadow (e.g. text nav, footer links, catalog rows). Matches DESIGN.md
+   --button-focus-ring: page-color halo + ember outer for visibility against
+   any landing surface in either theme. */
+.focus-ring-ember:focus-visible {
+  outline: none;
+  box-shadow: var(--button-focus-ring);
+  border-radius: 2px;
 }

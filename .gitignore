@@ -19,3 +19,4 @@ __pycache__/
 *.egg-info/
 .pytest_cache/
 build/
+.gstack/
