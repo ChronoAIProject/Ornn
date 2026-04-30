@@ -105,7 +105,7 @@ export function NotificationBell() {
       >
         <BellIcon className="h-5 w-5" />
         {unread > 0 && (
-          <span className="absolute -right-0.5 -top-0.5 min-w-[1.25rem] rounded-full border-2 border-bg-surface bg-danger px-1 font-heading text-[10px] font-bold leading-4 text-white">
+          <span className="absolute -right-0.5 -top-0.5 min-w-[1.25rem] rounded-full border-2 border-bg-surface bg-danger px-1 font-display text-[10px] font-bold leading-4 text-white">
             {badgeLabel}
           </span>
         )}
@@ -121,7 +121,7 @@ export function NotificationBell() {
             className="absolute right-0 top-full mt-2 w-80 overflow-hidden rounded-lg glass border border-accent/20 shadow-lg shadow-accent/10"
           >
             <div className="flex items-center justify-between border-b border-accent/10 px-4 py-3">
-              <span className="font-heading text-sm uppercase tracking-wider text-strong">
+              <span className="font-display text-sm uppercase tracking-wider text-strong">
                 {t("notifications.title", "Notifications")}
               </span>
               {unread > 0 && (
@@ -129,7 +129,7 @@ export function NotificationBell() {
                   type="button"
                   onClick={() => markAll.mutate()}
                   disabled={markAll.isPending}
-                  className="font-body text-xs text-meta transition-colors hover:text-accent cursor-pointer disabled:opacity-50"
+                  className="font-text text-xs text-meta transition-colors hover:text-accent cursor-pointer disabled:opacity-50"
                 >
                   {t("notifications.markAllRead", "Mark all read")}
                 </button>
@@ -138,11 +138,11 @@ export function NotificationBell() {
 
             <div className="max-h-96 overflow-y-auto">
               {isLoading ? (
-                <div className="px-4 py-6 text-center font-body text-sm text-meta">
+                <div className="px-4 py-6 text-center font-text text-sm text-meta">
                   {t("notifications.loading", "Loading…")}
                 </div>
               ) : visibleItems.length === 0 ? (
-                <div className="px-4 py-6 text-center font-body text-sm text-meta">
+                <div className="px-4 py-6 text-center font-text text-sm text-meta">
                   {t("notifications.empty", "You're all caught up.")}
                 </div>
               ) : (
@@ -162,7 +162,7 @@ export function NotificationBell() {
                         <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-accent" />
                       )}
                       <span
-                        className={`font-body text-sm leading-snug ${
+                        className={`font-text text-sm leading-snug ${
                           n.readAt ? "text-meta" : "text-strong"
                         }`}
                       >
@@ -184,7 +184,7 @@ export function NotificationBell() {
                   setOpen(false);
                   navigate("/notifications");
                 }}
-                className="flex w-full items-center justify-center px-4 py-2.5 font-body text-sm text-accent transition-colors hover:bg-accent/5 cursor-pointer"
+                className="flex w-full items-center justify-center px-4 py-2.5 font-text text-sm text-accent transition-colors hover:bg-accent/5 cursor-pointer"
               >
                 {t("notifications.viewAll", "View all")}
               </button>

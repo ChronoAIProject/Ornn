@@ -51,15 +51,15 @@ export function DeprecationBanner({
           />
         </svg>
         <div className="flex-1 min-w-0">
-          <p className="font-heading text-sm text-warning">
+          <p className="font-display text-sm text-warning">
             {t("skillDetail.deprecationBannerTitle", { version })}
           </p>
           {note ? (
-            <p className="mt-1 font-body text-sm text-strong/90">
+            <p className="mt-1 font-text text-sm text-strong/90">
               {t("skillDetail.deprecationBannerBody", { note })}
             </p>
           ) : (
-            <p className="mt-1 font-body text-sm text-meta">
+            <p className="mt-1 font-text text-sm text-meta">
               {t("skillDetail.deprecationWarning")}
             </p>
           )}
@@ -71,7 +71,7 @@ export function DeprecationBanner({
             type="button"
             onClick={onViewLatest}
             className="
-              font-body text-sm text-warning hover:text-warning/80
+              font-text text-sm text-warning hover:text-warning/80
               underline underline-offset-2 transition-colors cursor-pointer
             "
           >

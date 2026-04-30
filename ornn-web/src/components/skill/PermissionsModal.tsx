@@ -238,10 +238,10 @@ export function PermissionsModal({ isOpen, onClose, skill }: PermissionsModalPro
                 className="mt-1 h-4 w-4 shrink-0 rounded border-accent/40 accent-accent"
               />
               <div className="flex-1">
-                <p className="font-heading text-base text-strong">
+                <p className="font-display text-base text-strong">
                   {t("permissions.publicTitle", "Public")}
                 </p>
-                <p className="mt-0.5 font-body text-sm text-meta">
+                <p className="mt-0.5 font-text text-sm text-meta">
                   {t(
                     "permissions.publicDesc",
                     "Anyone on Ornn can find and use this skill, including unauthenticated visitors.",
@@ -261,10 +261,10 @@ export function PermissionsModal({ isOpen, onClose, skill }: PermissionsModalPro
               accent="limited"
               className="p-4"
             >
-              <p className="font-heading text-base text-strong">
+              <p className="font-display text-base text-strong">
                 {t("permissions.orgsTitle", "Shared with organizations")}
               </p>
-              <p className="mt-0.5 font-body text-sm text-meta">
+              <p className="mt-0.5 font-text text-sm text-meta">
                 {t(
                   "permissions.orgsDesc",
                   "Every admin and member of a checked org can see and use this skill.",
@@ -276,7 +276,7 @@ export function PermissionsModal({ isOpen, onClose, skill }: PermissionsModalPro
                 }`}
               >
                 {allOrgOptions.length === 0 && (
-                  <p className="font-body text-xs text-meta italic">
+                  <p className="font-text text-xs text-meta italic">
                     {t("permissions.noOrgs", "No organizations to choose from.")}
                   </p>
                 )}
@@ -293,7 +293,7 @@ export function PermissionsModal({ isOpen, onClose, skill }: PermissionsModalPro
                         onChange={() => toggleOrg(org.userId)}
                         className="h-4 w-4 rounded border-accent/40 accent-accent"
                       />
-                      <span className="font-body text-sm text-strong truncate">
+                      <span className="font-text text-sm text-strong truncate">
                         {org.displayName}
                       </span>
                       {!org.isMember && (
@@ -313,10 +313,10 @@ export function PermissionsModal({ isOpen, onClose, skill }: PermissionsModalPro
               accent="limited"
               className="p-4"
             >
-              <p className="font-heading text-base text-strong">
+              <p className="font-display text-base text-strong">
                 {t("permissions.usersTitle", "Shared with specific users")}
               </p>
-              <p className="mt-0.5 font-body text-sm text-meta">
+              <p className="mt-0.5 font-text text-sm text-meta">
                 {t(
                   "permissions.usersDesc",
                   "Search by email. Only users who have signed into Ornn appear here.",
@@ -344,7 +344,7 @@ export function PermissionsModal({ isOpen, onClose, skill }: PermissionsModalPro
                   </span>
                 ))}
                 {sharedUsers.length === 0 && (
-                  <p className="font-body text-xs text-meta italic w-full">
+                  <p className="font-text text-xs text-meta italic w-full">
                     {t("permissions.noUsersYet", "No users added yet.")}
                   </p>
                 )}
@@ -360,7 +360,7 @@ export function PermissionsModal({ isOpen, onClose, skill }: PermissionsModalPro
                   placeholder={
                     t("permissions.searchPlaceholder", "type an email to find a user...") as string
                   }
-                  className="w-full glass rounded-lg border border-accent/20 bg-elevated px-3 py-2 font-body text-sm text-strong focus:outline-none focus:border-accent/60"
+                  className="w-full glass rounded-lg border border-accent/20 bg-elevated px-3 py-2 font-text text-sm text-strong focus:outline-none focus:border-accent/60"
                   disabled={isPublic}
                 />
                 {userInputFocused && suggestions.length > 0 && (
@@ -373,7 +373,7 @@ export function PermissionsModal({ isOpen, onClose, skill }: PermissionsModalPro
                           e.preventDefault();
                           addUser(s);
                         }}
-                        className="flex w-full items-center gap-2 px-3 py-2 text-left font-body text-sm hover:bg-accent/10 cursor-pointer"
+                        className="flex w-full items-center gap-2 px-3 py-2 text-left font-text text-sm hover:bg-accent/10 cursor-pointer"
                       >
                         <span className="text-strong truncate">
                           {s.displayName || s.email}
@@ -391,10 +391,10 @@ export function PermissionsModal({ isOpen, onClose, skill }: PermissionsModalPro
 
           <SectionHeader label={t("permissions.levelPrivate", "Private access") as string} />
           <TierCard active={privateActive} dimmed={isPublic} accent="private">
-            <p className="font-heading text-base text-strong">
+            <p className="font-display text-base text-strong">
               {t("permissions.privateTitle", "Private")}
             </p>
-            <p className="mt-0.5 font-body text-sm text-meta">
+            <p className="mt-0.5 font-text text-sm text-meta">
               {t(
                 "permissions.privateDesc",
                 "Only you and platform admins can see this skill. Active when nothing above is set.",

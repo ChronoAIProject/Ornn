@@ -72,10 +72,10 @@ export function CategoriesPage() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="font-heading text-2xl font-bold text-accent-support accent-support">
+        <h1 className="font-display text-2xl font-bold text-accent-support accent-support">
           Categories
         </h1>
-        <p className="mt-1 font-body text-meta">
+        <p className="mt-1 font-text text-meta">
           Manage skill categories based on execution requirements
         </p>
       </div>
@@ -99,13 +99,13 @@ export function CategoriesPage() {
             </svg>
           </div>
           <div>
-            <h3 className="font-heading text-sm font-medium text-strong">
+            <h3 className="font-display text-sm font-medium text-strong">
               About Categories
             </h3>
-            <p className="mt-1 font-body text-sm text-meta">
+            <p className="mt-1 font-text text-sm text-meta">
               Categories classify skills based on the client capabilities required to execute them:
             </p>
-            <ul className="mt-2 space-y-1 font-body text-sm text-meta">
+            <ul className="mt-2 space-y-1 font-text text-sm text-meta">
               <li>
                 <span className="text-accent">plain</span> - No tools or runtime needed
               </li>
@@ -134,7 +134,7 @@ export function CategoriesPage() {
             <Skeleton lines={6} />
           ) : error ? (
             <div className="py-8 text-center">
-              <p className="font-body text-danger">
+              <p className="font-text text-danger">
                 {error instanceof Error ? error.message : "Failed to load categories"}
               </p>
             </div>

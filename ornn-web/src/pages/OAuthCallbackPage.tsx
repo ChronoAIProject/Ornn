@@ -75,7 +75,7 @@ export function OAuthCallbackPage() {
             <h2 className="font-display text-xl font-semibold tracking-tight text-strong">
               Completing authentication
             </h2>
-            <p className="mt-2 font-reading text-sm text-body">
+            <p className="mt-2 font-text text-sm text-body">
               Please wait while we verify your account.
             </p>
           </div>
@@ -103,7 +103,7 @@ export function OAuthCallbackPage() {
             <h2 className="font-display text-xl font-semibold tracking-tight text-danger">
               Authentication failed
             </h2>
-            <p className="mt-2 font-reading text-sm leading-relaxed text-body">{state.message}</p>
+            <p className="mt-2 font-text text-sm leading-relaxed text-body">{state.message}</p>
             <Button
               variant="primary"
               onClick={() => navigate("/login", { replace: true })}

@@ -24,10 +24,10 @@ export function StepContent({ form }: StepContentProps) {
       exit={{ opacity: 0, x: -20 }}
       transition={{ duration: 0.2 }}
     >
-      <h2 className="font-heading text-lg text-accent mb-6">
+      <h2 className="font-display text-lg text-accent mb-6">
         {t("guided.contentTitle")}
       </h2>
-      <p className="font-body text-sm text-meta mb-4">
+      <p className="font-text text-sm text-meta mb-4">
         {t("guided.contentDesc")}
       </p>
 

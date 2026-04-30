@@ -104,7 +104,7 @@ function ReleaseAccordion({ lang }: { lang: Lang }) {
 
   return (
     <div className="my-8">
-      <h2 id={slugify(lang === "zh" ? "已发布版本" : "released-versions")} className="font-heading text-2xl font-bold text-accent mb-4">
+      <h2 id={slugify(lang === "zh" ? "已发布版本" : "released-versions")} className="font-display text-2xl font-bold text-accent mb-4">
         {lang === "zh" ? "已发布版本" : "Released Versions"}
       </h2>
       <div className="space-y-2">
@@ -123,10 +123,10 @@ function ReleaseAccordion({ lang }: { lang: Lang }) {
               >
                 <ChevronIcon open={isOpen} className="h-4 w-4 text-meta shrink-0" />
                 <div className="flex-1 min-w-0">
-                  <span className="font-heading text-base font-semibold text-strong">
+                  <span className="font-display text-base font-semibold text-strong">
                     v{release.version}
                   </span>
-                  <span className="font-body text-sm text-meta ml-2">
+                  <span className="font-text text-sm text-meta ml-2">
                     — {release.title}
                   </span>
                   {isLatest && (
@@ -173,7 +173,7 @@ function VersionBadge() {
         href={releasesUrl}
         target="_blank"
         rel="noreferrer"
-        className="font-body text-sm text-meta transition-colors hover:text-strong"
+        className="font-text text-sm text-meta transition-colors hover:text-strong"
       >
         Release history on GitHub →
       </a>
@@ -544,7 +544,7 @@ function Sidebar({
                       type="button"
                       onClick={() => onSelect(child.id, child.label)}
                       className={`
-                        w-full text-left px-3 py-2 rounded-md font-body text-base transition-all duration-150 cursor-pointer
+                        w-full text-left px-3 py-2 rounded-md font-text text-base transition-all duration-150 cursor-pointer
                         ${isActive
                           ? "text-accent bg-accent/10 border-l-2 border-accent"
                           : "text-meta hover:text-strong hover:bg-elevated border-l-2 border-transparent"
@@ -598,7 +598,7 @@ function TableOfContents({
               type="button"
               onClick={() => onSelect(item.id)}
               className={`
-                w-full text-left py-1.5 ${indent} font-body text-base leading-snug transition-colors duration-150 cursor-pointer truncate
+                w-full text-left py-1.5 ${indent} font-text text-base leading-snug transition-colors duration-150 cursor-pointer truncate
                 ${isActive
                   ? "text-accent border-l-2 border-accent -ml-px"
                   : "text-meta hover:text-strong"

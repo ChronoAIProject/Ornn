@@ -337,7 +337,7 @@ export function FileTree({
     <div className={`flex flex-col h-full ${className}`}>
       {/* Header */}
       <div className="flex items-center px-3 py-2 border-b border-accent/10">
-        <span className="font-heading text-xs uppercase tracking-wider text-meta">
+        <span className="font-display text-xs uppercase tracking-wider text-meta">
           Files
         </span>
       </div>
@@ -367,13 +367,13 @@ export function FileTree({
         {/* Empty state */}
         {files.length === 0 && !isCreating && (
           <div className="px-4 py-8 text-center">
-            <p className="font-body text-sm text-meta mb-2">
+            <p className="font-text text-sm text-meta mb-2">
               No files yet
             </p>
             <button
               type="button"
               onClick={() => setIsCreating({ type: "file", parentId: null })}
-              className="font-body text-sm text-accent hover:underline cursor-pointer"
+              className="font-text text-sm text-accent hover:underline cursor-pointer"
             >
               Create your first file
             </button>

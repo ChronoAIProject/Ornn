@@ -223,7 +223,7 @@ export function GenerateSkillModal({
     <Modal isOpen={isOpen} title="Generate Skill" onClose={handleClose}>
       {step === "select" && (
         <div className="space-y-4">
-          <p className="font-body text-sm text-meta">
+          <p className="font-text text-sm text-meta">
             Select references to include in skill generation for <strong className="text-strong">{serviceName}</strong>.
           </p>
 
@@ -278,7 +278,7 @@ export function GenerateSkillModal({
                 className="hidden"
               />
             </div>
-            {urlError && <p className="font-body text-xs text-danger">{urlError}</p>}
+            {urlError && <p className="font-text text-xs text-danger">{urlError}</p>}
           </div>
 
           {/* Proceed */}
@@ -298,8 +298,8 @@ export function GenerateSkillModal({
             <div className="absolute inset-0 border-2 border-accent/20 rounded-full" />
             <div className="absolute inset-0 border-2 border-transparent border-t-accent rounded-full animate-spin" />
           </div>
-          <p className="font-body text-sm text-strong">{currentStepMsg}</p>
-          <p className="font-body text-xs text-meta">This may take 30-60 seconds...</p>
+          <p className="font-text text-sm text-strong">{currentStepMsg}</p>
+          <p className="font-text text-xs text-meta">This may take 30-60 seconds...</p>
         </div>
       )}
 
@@ -310,8 +310,8 @@ export function GenerateSkillModal({
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
             </svg>
           </div>
-          <p className="font-body text-sm text-strong">Skill generated successfully!</p>
-          <p className="font-body text-xs text-meta">Redirecting to System Skills...</p>
+          <p className="font-text text-sm text-strong">Skill generated successfully!</p>
+          <p className="font-text text-xs text-meta">Redirecting to System Skills...</p>
         </div>
       )}
 
@@ -324,8 +324,8 @@ export function GenerateSkillModal({
               </svg>
             </div>
             <div>
-              <p className="font-body text-sm text-strong">Generation failed</p>
-              <p className="font-body text-xs text-danger">{errorMsg}</p>
+              <p className="font-text text-sm text-strong">Generation failed</p>
+              <p className="font-text text-xs text-danger">{errorMsg}</p>
             </div>
           </div>
           <div className="flex justify-end gap-3">

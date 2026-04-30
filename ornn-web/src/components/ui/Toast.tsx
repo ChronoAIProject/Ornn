@@ -114,7 +114,7 @@ function ToastItem({ toast }: ToastItemProps) {
           <div className={`shrink-0 mt-0.5 ${styles.icon}`}>
             <Icon className="h-5 w-5" />
           </div>
-          <p className="flex-1 font-reading text-sm leading-relaxed text-strong">
+          <p className="flex-1 font-text text-sm leading-relaxed text-strong">
             {toast.message}
           </p>
           <button

@@ -146,7 +146,7 @@ export function SkillVersionList({
 
   return (
     <div className={`glass rounded-xl p-5 space-y-3 ${className}`}>
-      <p className="font-heading text-[11px] uppercase tracking-wider text-meta">
+      <p className="font-display text-[11px] uppercase tracking-wider text-meta">
         {t("skillDetail.versions")}
       </p>
       <ul className="space-y-1.5">
@@ -196,7 +196,7 @@ export function SkillVersionList({
                       />
                     )}
                   </div>
-                  <div className="mt-0.5 font-body text-xs text-meta truncate">
+                  <div className="mt-0.5 font-text text-xs text-meta truncate">
                     {formatDateSGT(v.createdOn)}
                     {v.createdByDisplayName ? ` · ${v.createdByDisplayName}` : ""}
                   </div>
@@ -208,7 +208,7 @@ export function SkillVersionList({
                     disabled={isMutating}
                     className="
                       shrink-0 rounded border border-transparent px-2 py-1
-                      font-body text-xs text-meta
+                      font-text text-xs text-meta
                       hover:text-warning hover:border-warning/30
                       disabled:opacity-50 disabled:cursor-not-allowed
                       transition-colors cursor-pointer
@@ -249,7 +249,7 @@ export function SkillVersionList({
                       }
                       className="
                         shrink-0 rounded border border-transparent px-2 py-1
-                        font-body text-xs text-meta
+                        font-text text-xs text-meta
                         hover:text-danger hover:border-danger/40
                         disabled:opacity-50 disabled:cursor-not-allowed
                         disabled:hover:text-meta disabled:hover:border-transparent
@@ -275,7 +275,7 @@ export function SkillVersionList({
           <div className="space-y-2">
             <label
               htmlFor="deprecation-note"
-              className="font-heading text-[11px] uppercase tracking-wider text-meta"
+              className="font-display text-[11px] uppercase tracking-wider text-meta"
             >
               {t("skillDetail.deprecationNoteLabel")}
             </label>
@@ -287,14 +287,14 @@ export function SkillVersionList({
               rows={3}
               placeholder={t("skillDetail.deprecationNotePlaceholder")}
               className="
-                neon-input w-full rounded-lg px-3 py-2 font-body text-sm
+                neon-input w-full rounded-lg px-3 py-2 font-text text-sm
                 text-strong resize-y
               "
             />
           </div>
         )}
         {modalTarget?.isDeprecated && modalTarget.deprecationNote && (
-          <p className="font-body text-sm text-meta">
+          <p className="font-text text-sm text-meta">
             {t("skillDetail.deprecationBannerBody", { note: modalTarget.deprecationNote })}
           </p>
         )}
@@ -320,7 +320,7 @@ export function SkillVersionList({
           }) as string
         }
       >
-        <p className="font-body text-sm text-meta">
+        <p className="font-text text-sm text-meta">
           {t("skillDetail.deleteVersionConfirm", {
             defaultValue:
               "Are you sure you want to delete v{{version}}? The version's package zip and audit history are removed and this cannot be undone.",

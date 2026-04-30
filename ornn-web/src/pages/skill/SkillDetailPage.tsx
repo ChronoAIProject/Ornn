@@ -467,7 +467,7 @@ export function SkillDetailPage() {
                   { v: skill.version, score: v.overallScore.toFixed(1) },
                 );
           return (
-            <div className={`flex shrink-0 items-center justify-between gap-3 rounded-sm border px-4 py-2 font-reading text-xs ${tone}`}>
+            <div className={`flex shrink-0 items-center justify-between gap-3 rounded-sm border px-4 py-2 font-text text-xs ${tone}`}>
               <span className="min-w-0 truncate">{message}</span>
               <Link
                 to={`/skills/${encodeURIComponent(skill.name || skill.guid)}/audits?version=${encodeURIComponent(skill.version)}`}
@@ -525,7 +525,7 @@ export function SkillDetailPage() {
               {packageLoading ? (
                 <div className="p-6"><Skeleton lines={8} /></div>
               ) : packageError ? (
-                <p className="py-12 text-center font-reading text-sm text-meta">
+                <p className="py-12 text-center font-text text-sm text-meta">
                   {t("skillDetail.failedPackage")}
                 </p>
               ) : packageFiles.length > 0 || addedPaths.length > 0 ? (
@@ -541,7 +541,7 @@ export function SkillDetailPage() {
                   className="h-full"
                 />
               ) : (
-                <p className="py-12 text-center font-reading text-sm text-meta">
+                <p className="py-12 text-center font-text text-sm text-meta">
                   {t("skillDetail.noPackage")}
                 </p>
               )}
@@ -693,7 +693,7 @@ export function SkillDetailPage() {
                   </span>
                 );
               })()}
-              <ul className="space-y-1.5 font-reading text-sm text-body">
+              <ul className="space-y-1.5 font-text text-sm text-body">
                 <li className="flex items-baseline gap-2.5">
                   <span className="min-w-[18px] text-right font-mono text-sm font-semibold text-strong">
                     {skill.sharedWithUsers.length}
@@ -757,7 +757,7 @@ export function SkillDetailPage() {
                 {t("skillDetail.cardMetadata", "Metadata")}
               </h3>
 
-              <dl className="space-y-2.5 font-reading text-sm text-body">
+              <dl className="space-y-2.5 font-text text-sm text-body">
                 {(() => {
                   const category =
                     typeof (skill.metadata as { category?: unknown })?.category === "string"
@@ -902,7 +902,7 @@ export function SkillDetailPage() {
         onClose={() => setShowSaveConfirm(false)}
         title={t("skillDetail.saveChanges")}
       >
-        <p className="mb-4 font-reading text-sm text-meta">
+        <p className="mb-4 font-text text-sm text-meta">
           {t("skillDetail.saveConfirm", { name: skill.name })}
         </p>
         <label className="flex cursor-pointer items-center gap-3 rounded-sm border border-subtle bg-elevated p-3 select-none">
@@ -922,8 +922,8 @@ export function SkillDetailPage() {
             />
           </button>
           <div>
-            <p className="font-reading text-sm text-strong">{t("skillDetail.skipValidation")}</p>
-            <p className="font-reading text-xs text-meta">{t("skillDetail.skipDescription")}</p>
+            <p className="font-text text-sm text-strong">{t("skillDetail.skipValidation")}</p>
+            <p className="font-text text-xs text-meta">{t("skillDetail.skipDescription")}</p>
           </div>
         </label>
         <div className="mt-6 flex justify-end gap-3">
@@ -1002,7 +1002,7 @@ export function SkillDetailPage() {
         onClose={() => setShowDeleteConfirm(false)}
         title={t("skillDetail.deleteTitle")}
       >
-        <p className="font-reading text-sm text-meta">
+        <p className="font-text text-sm text-meta">
           {t("skillDetail.deleteConfirm", { name: skill.name }).replace(/<\/?strong>/g, "")}
         </p>
         <div className="mt-6 flex justify-end gap-3">
@@ -1039,7 +1039,7 @@ export function SkillDetailPage() {
         onClose={() => setShowAuditStartedModal(false)}
         title={t("skillDetail.auditStartedTitle", "Audit started") as string}
       >
-        <p className="font-reading text-sm text-meta">
+        <p className="font-text text-sm text-meta">
           {t(
             "skillDetail.auditStartedBody",
             "We're running the audit in the background. It takes around 20-30 seconds — when it's done, a new entry will appear in the Audit history. You can close this dialog and keep working.",

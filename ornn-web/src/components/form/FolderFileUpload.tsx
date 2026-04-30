@@ -103,7 +103,7 @@ export function FolderFileUpload({
             ${isDragging ? "border-accent bg-accent/5" : "border-accent/20 bg-page/50"}
           `}
         >
-          <p className="font-body text-sm text-meta">
+          <p className="font-text text-sm text-meta">
             {t("guided.dropHint")}
           </p>
         </motion.div>
@@ -125,11 +125,11 @@ export function FolderFileUpload({
           const folderFiles = files.get(folder) ?? [];
           return (
             <div key={folder}>
-              <p className="font-heading text-xs uppercase tracking-wider text-meta mb-2">
+              <p className="font-display text-xs uppercase tracking-wider text-meta mb-2">
                 {FOLDER_LABELS[folder]}
               </p>
               {folderFiles.length === 0 ? (
-                <p className="font-body text-xs text-meta/50 pl-4">
+                <p className="font-text text-xs text-meta/50 pl-4">
                   {t("guided.noFiles")}
                 </p>
               ) : (
@@ -142,7 +142,7 @@ export function FolderFileUpload({
                       <span className="font-mono text-sm text-strong truncate flex-1">
                         {file.name}
                       </span>
-                      <span className="font-body text-xs text-meta mx-3 shrink-0">
+                      <span className="font-text text-xs text-meta mx-3 shrink-0">
                         {formatFileSize(file.size)}
                       </span>
                       <button

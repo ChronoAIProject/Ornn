@@ -314,10 +314,10 @@ export function CreateSkillGuidedPage() {
         </nav>
         {/* Header */}
         <div className="mb-8">
-          <h1 className="accent mb-2 font-heading text-2xl font-bold tracking-wider text-accent sm:text-3xl">
+          <h1 className="accent mb-2 font-display text-2xl font-bold tracking-wider text-accent sm:text-3xl">
             {t("guided.header")}
           </h1>
-          <p className="font-body text-meta">
+          <p className="font-text text-meta">
             {t("guided.headerDesc")}
           </p>
         </div>

@@ -1,8 +1,8 @@
 /**
- * Modal — Editorial Forge primitive.
+ * Modal — Forge Workshop primitive.
  *
  * Backdrop fades in, dialog springs in. Surface is paper / forged metal
- * with a hairline border. Title uses Fraunces (display).
+ * with a hairline border. Title uses Space Grotesk (display).
  *
  * @module components/ui/Modal
  */

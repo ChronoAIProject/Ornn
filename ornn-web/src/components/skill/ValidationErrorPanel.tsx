@@ -44,12 +44,12 @@ export function ValidationErrorPanel({
 
         <div className="flex-1 space-y-3">
           {/* Title */}
-          <h3 className="font-heading text-sm uppercase tracking-wider text-danger">
+          <h3 className="font-display text-sm uppercase tracking-wider text-danger">
             {title}
           </h3>
 
           {/* Error count */}
-          <p className="font-body text-xs text-meta">
+          <p className="font-text text-xs text-meta">
             {errors.length} {errors.length === 1 ? "error" : "errors"}{" "}
             found. Fix all errors before saving.
           </p>
@@ -63,7 +63,7 @@ export function ValidationErrorPanel({
                   {err.field || "root"}
                 </span>
                 {/* Error message */}
-                <span className="font-body text-sm text-strong">
+                <span className="font-text text-sm text-strong">
                   {err.message}
                 </span>
               </li>

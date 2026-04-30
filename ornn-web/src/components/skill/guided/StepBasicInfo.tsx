@@ -75,7 +75,7 @@ export function StepBasicInfo({
       exit={{ opacity: 0, x: -20 }}
       transition={{ duration: 0.2 }}
     >
-      <h2 className="font-heading text-lg text-accent mb-6">
+      <h2 className="font-display text-lg text-accent mb-6">
         {t("guided.basicTitle")}
       </h2>
       <form className="space-y-6">
@@ -252,7 +252,7 @@ export function StepBasicInfo({
             onClick={() => setShowAdvanced((prev) => !prev)}
             className="flex w-full items-center justify-between py-2 text-left cursor-pointer group"
           >
-            <span className="font-heading text-xs uppercase tracking-wider text-meta group-hover:text-accent transition-colors">
+            <span className="font-display text-xs uppercase tracking-wider text-meta group-hover:text-accent transition-colors">
               {t("guided.advancedSettings")}
             </span>
             <ChevronIcon
@@ -284,10 +284,10 @@ export function StepBasicInfo({
                           className="h-4 w-4 rounded border-text-muted/30 bg-page text-accent accent-accent cursor-pointer"
                         />
                         <div>
-                          <span className="font-body text-sm text-strong group-hover:text-accent transition-colors">
+                          <span className="font-text text-sm text-strong group-hover:text-accent transition-colors">
                             {t("guided.disableModelInvocation")}
                           </span>
-                          <p className="font-body text-xs text-meta mt-0.5">
+                          <p className="font-text text-xs text-meta mt-0.5">
                             {t("guided.disableModelInvocationDesc")}
                           </p>
                         </div>
@@ -308,10 +308,10 @@ export function StepBasicInfo({
                           className="h-4 w-4 rounded border-text-muted/30 bg-page text-accent accent-accent cursor-pointer"
                         />
                         <div>
-                          <span className="font-body text-sm text-strong group-hover:text-accent transition-colors">
+                          <span className="font-text text-sm text-strong group-hover:text-accent transition-colors">
                             {t("guided.userInvocable")}
                           </span>
-                          <p className="font-body text-xs text-meta mt-0.5">
+                          <p className="font-text text-xs text-meta mt-0.5">
                             {t("guided.userInvocableDesc")}
                           </p>
                         </div>

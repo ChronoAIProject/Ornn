@@ -79,7 +79,7 @@ export function CategoryTooltip({ className = "" }: CategoryTooltipProps) {
                     <p className={`font-mono text-[10px] font-semibold uppercase tracking-[0.12em] ${CATEGORY_COLORS[key]}`}>
                       {info.label}
                     </p>
-                    <p className="font-reading text-xs leading-relaxed text-body mt-0.5">
+                    <p className="font-text text-xs leading-relaxed text-body mt-0.5">
                       {info.description}
                     </p>
                   </div>

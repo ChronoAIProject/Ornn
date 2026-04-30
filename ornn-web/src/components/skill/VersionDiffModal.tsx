@@ -92,7 +92,7 @@ export function VersionDiffModal({
       className="!max-w-4xl"
     >
       {!enoughVersions ? (
-        <p className="font-body text-sm text-meta">
+        <p className="font-text text-sm text-meta">
           {t(
             "versionDiff.needTwoVersions",
             "This skill only has one version — there's nothing to compare yet.",
@@ -102,7 +102,7 @@ export function VersionDiffModal({
         <div className="space-y-4">
           <div className="flex flex-wrap items-end gap-3">
             <label className="space-y-1">
-              <span className="block font-heading text-[10px] uppercase tracking-wider text-meta">
+              <span className="block font-display text-[10px] uppercase tracking-wider text-meta">
                 {t("versionDiff.fromLabel", "From")}
               </span>
               <select
@@ -128,7 +128,7 @@ export function VersionDiffModal({
             </span>
 
             <label className="space-y-1">
-              <span className="block font-heading text-[10px] uppercase tracking-wider text-meta">
+              <span className="block font-display text-[10px] uppercase tracking-wider text-meta">
                 {t("versionDiff.toLabel", "To")}
               </span>
               <select
@@ -151,7 +151,7 @@ export function VersionDiffModal({
           </div>
 
           {sameVersion && (
-            <p className="font-body text-sm text-meta">
+            <p className="font-text text-sm text-meta">
               {t(
                 "versionDiff.sameVersion",
                 "Pick two different versions to see a diff.",
@@ -160,13 +160,13 @@ export function VersionDiffModal({
           )}
 
           {!sameVersion && (isLoading || isFetching) && !data && (
-            <p className="font-body text-sm text-meta">
+            <p className="font-text text-sm text-meta">
               {t("versionDiff.loading", "Computing diff…")}
             </p>
           )}
 
           {!sameVersion && error && (
-            <p className="font-body text-sm text-danger">
+            <p className="font-text text-sm text-danger">
               {error instanceof Error
                 ? error.message
                 : t("versionDiff.error", "Failed to compute diff.")}

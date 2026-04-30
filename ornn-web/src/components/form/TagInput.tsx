@@ -48,7 +48,7 @@ export function TagInput({ tags, onChange, error, className = "" }: TagInputProp
 
   return (
     <div className={`flex flex-col gap-1.5 ${className}`}>
-      <label className="font-heading text-xs uppercase tracking-wider text-meta">
+      <label className="font-display text-xs uppercase tracking-wider text-meta">
         Tags ({tags.length}/{MAX_TAGS})
       </label>
       <div className="neon-input flex flex-wrap gap-1.5 rounded-lg px-3 py-2">
@@ -71,7 +71,7 @@ export function TagInput({ tags, onChange, error, className = "" }: TagInputProp
           onKeyDown={handleKeyDown}
           placeholder={tags.length < MAX_TAGS ? "Type + Enter" : "Max tags reached"}
           disabled={tags.length >= MAX_TAGS}
-          className="min-w-[100px] flex-1 border-none bg-transparent font-body text-sm text-strong outline-none placeholder:text-meta/50"
+          className="min-w-[100px] flex-1 border-none bg-transparent font-text text-sm text-strong outline-none placeholder:text-meta/50"
         />
       </div>
       {error && <span className="text-xs text-danger">{error}</span>}

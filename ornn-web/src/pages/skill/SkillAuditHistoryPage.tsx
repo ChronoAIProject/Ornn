@@ -76,7 +76,7 @@ function ScoreCell({ score }: { score: AuditScore }) {
           {score.score}/10
         </span>
       </div>
-      <p className="mt-1 font-body text-xs text-meta leading-snug">{score.rationale}</p>
+      <p className="mt-1 font-text text-xs text-meta leading-snug">{score.rationale}</p>
     </div>
   );
 }
@@ -102,7 +102,7 @@ function FindingRow({ f }: { f: AuditFinding }) {
           </span>
         )}
       </div>
-      <p className="font-body text-sm text-strong/90">{f.message}</p>
+      <p className="font-text text-sm text-strong/90">{f.message}</p>
     </div>
   );
 }
@@ -123,11 +123,11 @@ function RunningRow({ record }: { record: AuditRecord }) {
         {t("audit.statusRunning", "Running")}
       </span>
       <span className="font-mono text-xs text-meta">v{record.version}</span>
-      <span className="font-body text-xs text-meta hidden sm:inline">
+      <span className="font-text text-xs text-meta hidden sm:inline">
         {timestampLabel}
       </span>
       <div className="flex-1" />
-      <span className="font-body text-xs text-meta">
+      <span className="font-text text-xs text-meta">
         {t("audit.runningHint", "Scoring against the audit engine…")}
       </span>
     </div>
@@ -148,12 +148,12 @@ function FailedRow({ record }: { record: AuditRecord }) {
           {t("audit.statusFailed", "Failed")}
         </span>
         <span className="font-mono text-xs text-meta">v{record.version}</span>
-        <span className="font-body text-xs text-meta hidden sm:inline">
+        <span className="font-text text-xs text-meta hidden sm:inline">
           {timestampLabel}
         </span>
       </div>
       {record.errorMessage && (
-        <p className="font-body text-xs text-meta break-words">
+        <p className="font-text text-xs text-meta break-words">
           {record.errorMessage}
         </p>
       )}
@@ -187,11 +187,11 @@ function HistoryRow({ record, defaultOpen }: { record: AuditRecord; defaultOpen:
           {record.overallScore.toFixed(1)} / 10
         </span>
         <span className="font-mono text-xs text-meta">v{record.version}</span>
-        <span className="font-body text-xs text-meta hidden sm:inline">
+        <span className="font-text text-xs text-meta hidden sm:inline">
           {timestampLabel}
         </span>
         <div className="flex-1" />
-        <span className="font-body text-xs text-meta hidden sm:inline">
+        <span className="font-text text-xs text-meta hidden sm:inline">
           {record.findings.length}{" "}
           {record.findings.length === 1
             ? t("audit.findingOne", "finding")
@@ -230,7 +230,7 @@ function HistoryRow({ record, defaultOpen }: { record: AuditRecord; defaultOpen:
               </span>
             </h4>
             {record.findings.length === 0 ? (
-              <p className="font-body text-sm text-meta">
+              <p className="font-text text-sm text-meta">
                 {t("audit.noFindings", "No findings — the auditor had nothing to flag.")}
               </p>
             ) : (
@@ -242,7 +242,7 @@ function HistoryRow({ record, defaultOpen }: { record: AuditRecord; defaultOpen:
             )}
           </section>
 
-          <p className="font-body text-xs text-meta">
+          <p className="font-text text-xs text-meta">
             {t("audit.model", "Model")}: <span className="font-mono">{record.model}</span>
             {" · "}
             {t("audit.triggeredBy", "Triggered by")}:{" "}
@@ -278,7 +278,7 @@ export function SkillAuditHistoryPage() {
     <PageTransition>
       <div className="h-full overflow-y-auto">
         <div className="mx-auto w-full max-w-5xl px-4 py-6">
-        <nav className="mb-4 font-body text-xs text-meta">
+        <nav className="mb-4 font-text text-xs text-meta">
           <Link
             to={`/skills/${encodeURIComponent(idOrName)}`}
             className="hover:text-accent transition-colors"
@@ -289,7 +289,7 @@ export function SkillAuditHistoryPage() {
 
         <header className="mb-6 flex items-center gap-4">
           <div className="min-w-0 flex-1">
-            <h1 className="font-heading text-2xl text-strong truncate">
+            <h1 className="font-display text-2xl text-strong truncate">
               {displayName}
             </h1>
             <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
@@ -314,12 +314,12 @@ export function SkillAuditHistoryPage() {
 
         <Card className="p-4">
           {isLoading ? (
-            <p className="py-12 text-center font-body text-sm text-meta">
+            <p className="py-12 text-center font-text text-sm text-meta">
               {t("audit.historyLoading", "Loading audit history…")}
             </p>
           ) : isError ? (
             <div className="py-12 text-center">
-              <p className="font-body text-sm text-danger">
+              <p className="font-text text-sm text-danger">
                 {t("audit.historyError", "Could not load audit history.")}
               </p>
               <Button
@@ -331,7 +331,7 @@ export function SkillAuditHistoryPage() {
               </Button>
             </div>
           ) : !items || items.length === 0 ? (
-            <p className="py-12 text-center font-body text-sm text-meta">
+            <p className="py-12 text-center font-text text-sm text-meta">
               {isAdminUser
                 ? t(
                     "audit.historyEmptyCanTrigger",

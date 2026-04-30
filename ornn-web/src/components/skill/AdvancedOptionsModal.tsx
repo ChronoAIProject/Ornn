@@ -182,7 +182,7 @@ function NyxidServiceBindingPanel({
 
   return (
     <div className="flex h-full flex-col gap-4">
-      <p className="font-body text-sm text-meta">
+      <p className="font-text text-sm text-meta">
         {t(
           "nyxidService.intro",
           "Binding a skill to a NyxID admin service marks it as a system skill (forced public). Binding to one of your personal services leaves the privacy alone.",
@@ -205,7 +205,7 @@ function NyxidServiceBindingPanel({
         />
 
         {isLoading ? (
-          <p className="font-body text-xs text-meta">
+          <p className="font-text text-xs text-meta">
             {t("common.loading", "Loading...")}
           </p>
         ) : (
@@ -253,7 +253,7 @@ function NyxidServiceBindingPanel({
             )}
 
             {adminServices.length === 0 && personalServices.length === 0 && (
-              <p className="font-body text-xs text-meta italic">
+              <p className="font-text text-xs text-meta italic">
                 {t(
                   "nyxidService.noServices",
                   "No NyxID services available. Ask a platform admin or register one in NyxID.",
@@ -264,7 +264,7 @@ function NyxidServiceBindingPanel({
         )}
 
         {willForcePublic && (
-          <div className="rounded border border-warning/40 bg-warning-soft p-3 font-body text-xs text-warning">
+          <div className="rounded border border-warning/40 bg-warning-soft p-3 font-text text-xs text-warning">
             {t(
               "nyxidService.willForcePublic",
               "Binding to an admin service will force this skill to be public. Other share settings (users / orgs) are kept but ignored while the skill is public.",
@@ -431,7 +431,7 @@ function GithubLinkPanel({ skill, onClose }: { skill: SkillDetail; onClose: () =
             <h3 className="font-display text-lg font-semibold text-strong">
               {t("githubLink.previewTitle", "Sync preview") as string}
             </h3>
-            <p className="font-body text-xs text-meta">
+            <p className="font-text text-xs text-meta">
               {t("githubLink.previewSubtitle", {
                 defaultValue:
                   "Apply this sync to publish v{{version}} of {{name}} from the linked GitHub source.",
@@ -447,7 +447,7 @@ function GithubLinkPanel({ skill, onClose }: { skill: SkillDetail; onClose: () =
         </div>
 
         <div className="flex items-center justify-between gap-3 border-t border-subtle pt-3">
-          <label className="inline-flex items-center gap-2 font-body text-xs text-meta">
+          <label className="inline-flex items-center gap-2 font-text text-xs text-meta">
             <input
               type="checkbox"
               checked={skipValidation}
@@ -475,7 +475,7 @@ function GithubLinkPanel({ skill, onClose }: { skill: SkillDetail; onClose: () =
   // ── Edit mode ────────────────────────────────────────────────────────
   return (
     <div className="flex h-full flex-col gap-4">
-      <p className="font-body text-sm text-meta">
+      <p className="font-text text-sm text-meta">
         {t(
           "githubLink.intro",
           "Point this skill at a folder in a public GitHub repo. Saving the link does not pull anything; click Sync afterwards to preview changes and publish a new version.",
@@ -486,7 +486,7 @@ function GithubLinkPanel({ skill, onClose }: { skill: SkillDetail; onClose: () =
         <div className="space-y-2">
           <label
             htmlFor="github-url"
-            className="block font-heading text-[10px] uppercase tracking-wider text-meta"
+            className="block font-display text-[10px] uppercase tracking-wider text-meta"
           >
             {t("githubLink.urlLabel", "GitHub folder URL")}
           </label>
@@ -503,7 +503,7 @@ function GithubLinkPanel({ skill, onClose }: { skill: SkillDetail; onClose: () =
               focus:outline-none focus:border-strong
             "
           />
-          <p className="font-body text-[11px] text-meta">
+          <p className="font-text text-[11px] text-meta">
             {t(
               "githubLink.urlHelp",
               "Use the folder URL (the /tree/<ref>/<path> form). The skill's SKILL.md must be at the root of that folder. Default branch and repo-root URLs work too.",
@@ -511,7 +511,7 @@ function GithubLinkPanel({ skill, onClose }: { skill: SkillDetail; onClose: () =
           </p>
         </div>
 
-        <label className="inline-flex items-start gap-2 font-body text-sm text-meta">
+        <label className="inline-flex items-start gap-2 font-text text-sm text-meta">
           <input
             type="checkbox"
             checked={skipValidation}
@@ -519,7 +519,7 @@ function GithubLinkPanel({ skill, onClose }: { skill: SkillDetail; onClose: () =
             className="mt-1"
           />
           <span>
-            <span className="block font-heading text-xs text-strong">
+            <span className="block font-display text-xs text-strong">
               {t("githubLink.skipValidationLabel", "Skip Ornn package validation")}
             </span>
             <span className="block text-[11px]">
@@ -533,11 +533,11 @@ function GithubLinkPanel({ skill, onClose }: { skill: SkillDetail; onClose: () =
 
         {isLinked && (
           <div className="rounded border border-subtle bg-elevated p-3">
-            <p className="font-heading text-[10px] uppercase tracking-wider text-meta">
+            <p className="font-display text-[10px] uppercase tracking-wider text-meta">
               {t("githubLink.currentlyLinked", "Currently linked")}
             </p>
             <p className="mt-1 font-mono text-xs text-strong break-all">{initialUrl}</p>
-            <p className="mt-1 font-body text-[11px] text-meta">
+            <p className="mt-1 font-text text-[11px] text-meta">
               {lastSyncedAt
                 ? t("githubLink.lastSyncedAt", {
                     defaultValue: "Last synced {{when}}",
@@ -613,14 +613,14 @@ function ServiceOption({ label, description, tier, selected, onSelect }: Service
       }`}
     >
       <div className="flex items-center justify-between gap-2">
-        <span className="font-heading text-sm text-strong">{label}</span>
+        <span className="font-display text-sm text-strong">{label}</span>
         {tierBadge && (
           <span className="font-mono text-[10px] uppercase tracking-widest text-meta">
             {tierBadge}
           </span>
         )}
       </div>
-      <p className="mt-0.5 font-body text-xs text-meta line-clamp-2">{description}</p>
+      <p className="mt-0.5 font-text text-xs text-meta line-clamp-2">{description}</p>
     </button>
   );
 }

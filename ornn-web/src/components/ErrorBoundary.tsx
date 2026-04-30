@@ -173,7 +173,7 @@ export function ErrorFallback({
                 <GlitchIcon className="h-8 w-8 text-danger" />
               </motion.div>
               <div>
-                <h1 className="font-heading text-xl text-danger tracking-wider">
+                <h1 className="font-display text-xl text-danger tracking-wider">
                   {title}
                 </h1>
                 <p className="font-mono text-xs text-danger/70">
@@ -186,7 +186,7 @@ export function ErrorFallback({
           {/* Content */}
           <div className="p-6 space-y-6">
             {/* Message */}
-            <p className="font-body text-strong leading-relaxed">
+            <p className="font-text text-strong leading-relaxed">
               {message}
             </p>
 
@@ -199,7 +199,7 @@ export function ErrorFallback({
                 className="overflow-hidden"
               >
                 <details className="group">
-                  <summary className="cursor-pointer font-body text-sm text-meta hover:text-accent transition-colors">
+                  <summary className="cursor-pointer font-text text-sm text-meta hover:text-accent transition-colors">
                     View technical details
                   </summary>
                   <div className="mt-3 space-y-3">
@@ -242,7 +242,7 @@ export function ErrorFallback({
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
                   onClick={onRetry}
-                  className="flex items-center gap-2 px-4 py-2 rounded-lg glass border border-accent/50 text-accent font-body text-sm font-semibold transition-all hover:border-accent hover:shadow-[0_0_15px_rgba(255,107,0,0.3)] cursor-pointer"
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg glass border border-accent/50 text-accent font-text text-sm font-semibold transition-all hover:border-accent hover:shadow-[0_0_15px_rgba(255,107,0,0.3)] cursor-pointer"
                 >
                   <RefreshIcon className="h-4 w-4" />
                   Try Again
@@ -254,7 +254,7 @@ export function ErrorFallback({
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
                   onClick={onReload}
-                  className="flex items-center gap-2 px-4 py-2 rounded-lg glass border border-accent-support/50 text-accent-support font-body text-sm font-semibold transition-all hover:border-accent-support hover:shadow-[0_0_15px_rgba(255,140,56,0.3)] cursor-pointer"
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg glass border border-accent-support/50 text-accent-support font-text text-sm font-semibold transition-all hover:border-accent-support hover:shadow-[0_0_15px_rgba(255,140,56,0.3)] cursor-pointer"
                 >
                   <RefreshIcon className="h-4 w-4" />
                   Reload Page
@@ -266,7 +266,7 @@ export function ErrorFallback({
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
                   onClick={onGoHome}
-                  className="flex items-center gap-2 px-4 py-2 rounded-lg text-meta font-body text-sm font-semibold transition-colors hover:text-strong cursor-pointer"
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg text-meta font-text text-sm font-semibold transition-colors hover:text-strong cursor-pointer"
                 >
                   <HomeIcon className="h-4 w-4" />
                   Go Home

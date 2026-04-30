@@ -68,11 +68,11 @@ export function AuditHistoryCard({ idOrName, version, className }: AuditHistoryC
       className={`glass flex w-full items-center justify-between gap-3 rounded-xl border border-accent/15 p-4 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-70 enabled:hover:border-accent/40 enabled:hover:bg-accent/5 enabled:cursor-pointer ${className ?? ""}`}
     >
       <div className="flex min-w-0 flex-col gap-1">
-        <h3 className="font-heading text-sm uppercase tracking-wider text-strong">
+        <h3 className="font-display text-sm uppercase tracking-wider text-strong">
           {t("audit.historyHeading", "Audit history")}
         </h3>
         <p
-          className={`font-body text-xs ${
+          className={`font-text text-xs ${
             isError ? "text-danger" : "text-meta"
           }`}
         >

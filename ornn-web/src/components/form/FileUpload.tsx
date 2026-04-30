@@ -78,7 +78,7 @@ export function FileUpload({ onFileSelect, error: externalError, className = "" 
 
   return (
     <div className={`flex flex-col gap-1.5 ${className}`}>
-      <label className="font-heading text-xs uppercase tracking-wider text-meta">
+      <label className="font-display text-xs uppercase tracking-wider text-meta">
         Package File
       </label>
       <motion.div
@@ -114,7 +114,7 @@ export function FileUpload({ onFileSelect, error: externalError, className = "" 
           </div>
         ) : (
           <div className="text-center">
-            <p className="font-body text-sm text-meta">
+            <p className="font-text text-sm text-meta">
               Drag & drop or click to browse
             </p>
             <p className="mt-1 text-xs text-meta/60">

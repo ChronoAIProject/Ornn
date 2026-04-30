@@ -132,7 +132,7 @@ export function CreateSkillGenerativePage() {
             className="flex items-center gap-2 text-meta hover:text-accent transition-colors"
           >
             <ArrowLeftIcon className="h-4 w-4" />
-            <span className="font-body text-sm">{t("generative.backToModes")}</span>
+            <span className="font-text text-sm">{t("generative.backToModes")}</span>
           </Link>
         </div>
 
@@ -149,10 +149,10 @@ export function CreateSkillGenerativePage() {
                   className="flex flex-col items-center justify-center h-full text-center"
                 >
                   <SparkleIcon className="h-12 w-12 text-accent/30 mb-4" />
-                  <p className="font-body text-sm text-meta max-w-sm">
+                  <p className="font-text text-sm text-meta max-w-sm">
                     {t("generative.desc")}
                   </p>
-                  <p className="font-body text-xs text-meta/60 mt-3">
+                  <p className="font-text text-xs text-meta/60 mt-3">
                     {t("generative.note")}
                   </p>
                 </motion.div>
@@ -214,7 +214,7 @@ export function CreateSkillGenerativePage() {
               </div>
             ) : (
               <div className="flex items-center justify-center h-full">
-                <p className="font-body text-xs text-meta">
+                <p className="font-text text-xs text-meta">
                   {t("generative.emptyPreview")}
                 </p>
               </div>

@@ -285,15 +285,15 @@ export function CreateSkillFreePage() {
           className="flex items-center gap-2 mb-6 text-meta hover:text-accent transition-colors"
         >
           <ArrowLeftIcon className="h-4 w-4" />
-          <span className="font-body text-sm">{t("free.backToModes")}</span>
+          <span className="font-text text-sm">{t("free.backToModes")}</span>
         </Link>
 
         {/* Title */}
         <div className="mb-8">
-          <h1 className="accent-support mb-2 font-heading text-2xl font-bold tracking-wider text-accent-support sm:text-3xl">
+          <h1 className="accent-support mb-2 font-display text-2xl font-bold tracking-wider text-accent-support sm:text-3xl">
             {t("free.title")}
           </h1>
-          <p className="font-body text-meta">
+          <p className="font-text text-meta">
             {t("free.subtitle")}
           </p>
         </div>
@@ -337,7 +337,7 @@ export function CreateSkillFreePage() {
               </div>
             ) : (
               <div className="text-center">
-                <p className="font-body text-sm text-meta">
+                <p className="font-text text-sm text-meta">
                   {t("free.dropzone")}
                 </p>
                 <p className="mt-1 text-xs text-meta/60">
@@ -363,7 +363,7 @@ export function CreateSkillFreePage() {
           <Card className="mb-6">
             <div className="flex items-center justify-center py-8">
               <span className="inline-block h-6 w-6 animate-spin rounded-full border-2 border-accent border-t-transparent mr-3" />
-              <p className="font-body text-sm text-meta">
+              <p className="font-text text-sm text-meta">
                 {t("free.validating")}
               </p>
             </div>
@@ -382,22 +382,22 @@ export function CreateSkillFreePage() {
             }`}
           >
             {validationResult.errors.map((err, i) => (
-              <p key={i} className="font-body text-sm text-danger">
+              <p key={i} className="font-text text-sm text-danger">
                 {err}
               </p>
             ))}
             {validationResult.warnings.map((warn, i) => (
-              <p key={i} className="font-body text-sm text-warning">
+              <p key={i} className="font-text text-sm text-warning">
                 {warn}
               </p>
             ))}
             {pageState === "valid" && !hasFrontmatterErrors && (
-              <p className="font-body text-sm text-success">
+              <p className="font-text text-sm text-success">
                 {t("free.valid")}
               </p>
             )}
             {hasFrontmatterErrors && pageState !== "invalid" && (
-              <p className="font-body text-sm text-warning mt-1">
+              <p className="font-text text-sm text-warning mt-1">
                 {t("free.validWithErrors")}
               </p>
             )}
@@ -416,7 +416,7 @@ export function CreateSkillFreePage() {
         {zipFile && pageState !== "validating" && (
           <div className="mb-6 flex items-center justify-end gap-3">
             <label className="flex items-center gap-2 cursor-pointer select-none">
-              <span className="font-body text-xs text-meta">{t("free.skipValidation")}</span>
+              <span className="font-text text-xs text-meta">{t("free.skipValidation")}</span>
               <button
                 type="button"
                 role="switch"

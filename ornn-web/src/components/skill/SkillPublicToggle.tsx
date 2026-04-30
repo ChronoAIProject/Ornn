@@ -67,7 +67,7 @@ export function SkillPublicToggle({
   return (
     <>
       <div className={`flex items-center gap-2 ${className}`}>
-        <span className="text-xs font-body text-meta uppercase tracking-wide">
+        <span className="text-xs font-text text-meta uppercase tracking-wide">
           {isPublic ? "Public" : "Private"}
         </span>
         <button
@@ -107,7 +107,7 @@ export function SkillPublicToggle({
         title={isPublic ? "Make Skill Private?" : "Make Skill Public?"}
       >
         <div className="space-y-4">
-          <p className="font-body text-strong">
+          <p className="font-text text-strong">
             {isPublic
               ? "Are you sure you want to make this skill private? Other users will no longer be able to view it."
               : "Are you sure you want to make this skill public? All users will be able to view it."}
@@ -119,7 +119,7 @@ export function SkillPublicToggle({
                 w-3 h-3 rounded-full
                 ${isPublic ? "bg-accent" : "bg-success shadow-[0_0_8px_rgba(57,255,20,0.5)]"}
               `} />
-              <span className="font-body text-sm">
+              <span className="font-text text-sm">
                 {isPublic
                   ? "Skill will become private"
                   : "Skill will become public"}

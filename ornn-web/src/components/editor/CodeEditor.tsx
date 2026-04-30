@@ -275,10 +275,10 @@ export function CodeEditor({
               className="flex items-center justify-center h-full"
             >
               <div className="text-center">
-                <p className="font-body text-lg text-meta mb-2">
+                <p className="font-text text-lg text-meta mb-2">
                   No file open
                 </p>
-                <p className="font-body text-sm text-meta/70">
+                <p className="font-text text-sm text-meta/70">
                   Select a file from the tree to edit
                 </p>
               </div>

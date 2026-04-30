@@ -76,7 +76,7 @@ export function GitHubOriginChip({
       }`}
     >
       <GitHubMarkIcon className="h-4 w-4 text-strong" />
-      <span className="font-heading text-xs uppercase tracking-wider text-meta">
+      <span className="font-display text-xs uppercase tracking-wider text-meta">
         {t("githubOrigin.label", "Synced from GitHub")}
       </span>
       <a
@@ -89,7 +89,7 @@ export function GitHubOriginChip({
         {source.repo}
         {sha ? <span className="text-meta">@{sha}</span> : null}
       </a>
-      <span className="font-body text-xs text-meta">
+      <span className="font-text text-xs text-meta">
         · {t("githubOrigin.ref", "ref")}:{" "}
         <span className="font-mono">{refLabel}</span>
         {source.path && (
@@ -101,7 +101,7 @@ export function GitHubOriginChip({
         )}
       </span>
       {syncedLabel && (
-        <span className="font-body text-xs text-meta">
+        <span className="font-text text-xs text-meta">
           · {t("githubOrigin.syncedAt", "synced")} {syncedLabel}
         </span>
       )}
@@ -111,7 +111,7 @@ export function GitHubOriginChip({
           type="button"
           onClick={onRefresh}
           disabled={isRefreshing}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-accent/30 px-3 py-1 font-body text-xs text-strong transition-colors hover:bg-accent/10 cursor-pointer disabled:opacity-50"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-accent/30 px-3 py-1 font-text text-xs text-strong transition-colors hover:bg-accent/10 cursor-pointer disabled:opacity-50"
         >
           <RefreshIcon
             className={`h-3.5 w-3.5 text-meta ${isRefreshing ? "animate-spin" : ""}`}

@@ -83,7 +83,7 @@ export function CreateSkillFromGitHubPage() {
         <div className="mx-auto w-full max-w-2xl">
           <Link
             to="/skills/new"
-            className="inline-flex items-center gap-2 font-body text-sm text-meta transition-colors hover:text-strong mb-4"
+            className="inline-flex items-center gap-2 font-text text-sm text-meta transition-colors hover:text-strong mb-4"
           >
             <ArrowLeftIcon className="h-4 w-4" />
             {t("githubImport.backToModes", "Back to creation modes")}
@@ -100,10 +100,10 @@ export function CreateSkillFromGitHubPage() {
                   <GitHubMarkIcon className="h-8 w-8 text-accent" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h1 className="font-heading text-2xl text-accent">
+                  <h1 className="font-display text-2xl text-accent">
                     {t("githubImport.title", "Import from GitHub")}
                   </h1>
-                  <p className="mt-1 font-body text-sm text-meta">
+                  <p className="mt-1 font-text text-sm text-meta">
                     {t(
                       "githubImport.subtitle",
                       "Publish a skill from a folder in a public GitHub repo. Subsequent updates can be re-synced from the same link in one click.",
@@ -136,14 +136,14 @@ export function CreateSkillFromGitHubPage() {
                     autoComplete="off"
                     spellCheck={false}
                   />
-                  <p className="mt-1 font-body text-xs text-meta">
+                  <p className="mt-1 font-text text-xs text-meta">
                     {t(
                       "githubImport.urlHint",
                       "Use the folder URL (the /tree/<ref>/<path> form). The skill's SKILL.md must sit at the root of that folder. Default-branch and repo-root URLs work too.",
                     )}
                   </p>
                   {submitted && !urlValid && (
-                    <p className="mt-1 font-body text-xs text-danger">
+                    <p className="mt-1 font-text text-xs text-danger">
                       {t(
                         "githubImport.urlInvalid",
                         "Enter a github.com URL (e.g. https://github.com/owner/repo/tree/main/path).",
@@ -152,7 +152,7 @@ export function CreateSkillFromGitHubPage() {
                   )}
                 </div>
 
-                <label className="flex cursor-pointer items-start gap-2 font-body text-sm text-meta">
+                <label className="flex cursor-pointer items-start gap-2 font-text text-sm text-meta">
                   <input
                     type="checkbox"
                     checked={skipValidation}
@@ -160,7 +160,7 @@ export function CreateSkillFromGitHubPage() {
                     className="h-4 w-4 mt-1 accent-accent"
                   />
                   <span>
-                    <span className="block font-heading text-xs text-strong">
+                    <span className="block font-display text-xs text-strong">
                       {t("githubImport.skipValidationLabel", "Skip Ornn package validation")}
                     </span>
                     <span className="block text-[11px]">

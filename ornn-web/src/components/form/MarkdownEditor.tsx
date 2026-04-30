@@ -220,7 +220,7 @@ export function MarkdownEditor({
     <div className={`space-y-2 ${className}`}>
       {/* Label */}
       {label && (
-        <label className="block font-heading text-xs uppercase tracking-wider text-meta">
+        <label className="block font-display text-xs uppercase tracking-wider text-meta">
           {label}
         </label>
       )}
@@ -254,7 +254,7 @@ export function MarkdownEditor({
               type="button"
               onClick={() => setIsPreview(!isPreview)}
               className={`
-                flex items-center gap-1.5 px-2 py-1 rounded text-sm font-body
+                flex items-center gap-1.5 px-2 py-1 rounded text-sm font-text
                 transition-colors cursor-pointer
                 ${isPreview
                   ? "text-accent bg-accent/10"
@@ -298,7 +298,7 @@ export function MarkdownEditor({
                   </Markdown>
                 </div>
               ) : (
-                <p className="text-meta font-body text-sm italic">
+                <p className="text-meta font-text text-sm italic">
                   Nothing to preview yet...
                 </p>
               )}
@@ -330,11 +330,11 @@ export function MarkdownEditor({
 
       {/* Error message */}
       {error && (
-        <p className="text-xs text-danger font-body">{error}</p>
+        <p className="text-xs text-danger font-text">{error}</p>
       )}
 
       {/* Help text */}
-      <p className="text-xs text-meta font-body">
+      <p className="text-xs text-meta font-text">
         Supports Markdown formatting. Use **bold**, _italic_, `code`, and more.
       </p>
     </div>

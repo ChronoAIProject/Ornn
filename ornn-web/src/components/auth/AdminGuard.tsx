@@ -67,10 +67,10 @@ export function AdminGuard({ children }: AdminGuardProps) {
               </svg>
             </div>
           </div>
-          <h2 className="mb-2 font-heading text-xl text-danger">
+          <h2 className="mb-2 font-display text-xl text-danger">
             Access Denied
           </h2>
-          <p className="mb-6 font-body text-meta">
+          <p className="mb-6 font-text text-meta">
             You do not have permission to access this page. Please contact an
             administrator if you believe this is an error.
           </p>

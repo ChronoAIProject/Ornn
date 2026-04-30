@@ -72,10 +72,10 @@ export function UsersPage() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="font-heading text-2xl font-bold text-accent-support accent-support">
+        <h1 className="font-display text-2xl font-bold text-accent-support accent-support">
           Users
         </h1>
-        <p className="mt-1 font-body text-meta">
+        <p className="mt-1 font-text text-meta">
           Platform users and their activity
         </p>
       </div>
@@ -91,12 +91,12 @@ export function UsersPage() {
             <Skeleton lines={10} />
           ) : error ? (
             <div className="py-8 text-center">
-              <p className="font-body text-danger">
+              <p className="font-text text-danger">
                 {error instanceof Error ? error.message : "Failed to load users"}
               </p>
             </div>
           ) : data?.items.length === 0 ? (
-            <p className="py-8 text-center font-body text-meta">
+            <p className="py-8 text-center font-text text-meta">
               No users found.
             </p>
           ) : (
@@ -133,12 +133,12 @@ export function UsersPage() {
                           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-elevated text-sm font-semibold text-accent">
                             {(user.displayName || user.email).charAt(0).toUpperCase()}
                           </div>
-                          <span className="font-body text-sm font-medium text-strong">
+                          <span className="font-text text-sm font-medium text-strong">
                             {user.displayName || "-"}
                           </span>
                         </div>
                       </td>
-                      <td className="px-4 py-3 font-body text-sm text-meta">
+                      <td className="px-4 py-3 font-text text-sm text-meta">
                         {user.email}
                       </td>
                       <td className="px-4 py-3">
@@ -147,7 +147,7 @@ export function UsersPage() {
                       <td className="px-4 py-3">
                         <Badge color="magenta">{user.activityCount}</Badge>
                       </td>
-                      <td className="whitespace-nowrap px-4 py-3 font-body text-xs text-meta">
+                      <td className="whitespace-nowrap px-4 py-3 font-text text-xs text-meta">
                         {user.lastActiveAt ? formatDateSGT(user.lastActiveAt) : "-"}
                       </td>
                     </tr>

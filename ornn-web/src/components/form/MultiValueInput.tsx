@@ -98,7 +98,7 @@ export function MultiValueInput({
 
   return (
     <div className={`flex flex-col gap-1.5 ${className}`}>
-      <label className="font-heading text-xs uppercase tracking-wider text-meta">
+      <label className="font-display text-xs uppercase tracking-wider text-meta">
         {label}
         {max < 50 && (
           <span className="ml-2 font-mono">
@@ -130,12 +130,12 @@ export function MultiValueInput({
           onKeyDown={handleKeyDown}
           placeholder={values.length < max ? placeholder : "Max reached"}
           disabled={values.length >= max}
-          className="min-w-[100px] flex-1 border-none bg-transparent font-body text-sm text-strong outline-none placeholder:text-meta/50"
+          className="min-w-[100px] flex-1 border-none bg-transparent font-text text-sm text-strong outline-none placeholder:text-meta/50"
         />
       </div>
 
       {helperText && !displayError && (
-        <p className="text-xs text-meta/60 font-body">{helperText}</p>
+        <p className="text-xs text-meta/60 font-text">{helperText}</p>
       )}
 
       {displayError && (

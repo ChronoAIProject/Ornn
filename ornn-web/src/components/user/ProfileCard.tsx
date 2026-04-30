@@ -103,7 +103,7 @@ export function ProfileCard({
   return (
     <Card className="p-6">
       <div className="mb-6 flex items-center justify-between">
-        <h2 className="font-heading text-lg text-accent">Profile</h2>
+        <h2 className="font-display text-lg text-accent">Profile</h2>
         {!isEditing && (
           <Button
             variant="secondary"
@@ -141,7 +141,7 @@ export function ProfileCard({
 
           {/* Bio */}
           <div className="flex flex-col gap-1.5">
-            <label className="font-heading text-xs uppercase tracking-wider text-meta">
+            <label className="font-display text-xs uppercase tracking-wider text-meta">
               Bio
             </label>
             <textarea
@@ -149,7 +149,7 @@ export function ProfileCard({
               disabled={isLoading}
               rows={3}
               className={`
-                neon-input rounded-lg px-4 py-2.5 font-body text-strong
+                neon-input rounded-lg px-4 py-2.5 font-text text-strong
                 placeholder:text-meta/50 resize-none
                 ${errors.bio ? "border-b-danger!" : ""}
               `}
@@ -203,14 +203,14 @@ export function ProfileCard({
                 />
               ) : (
                 <div className="flex h-full w-full items-center justify-center">
-                  <span className="font-heading text-2xl text-meta">
+                  <span className="font-display text-2xl text-meta">
                     {user.displayName.charAt(0).toUpperCase()}
                   </span>
                 </div>
               )}
             </div>
             <div>
-              <h3 className="font-heading text-lg text-strong">
+              <h3 className="font-display text-lg text-strong">
                 {user.displayName}
               </h3>
               <p className="font-mono text-sm text-meta">
@@ -222,7 +222,7 @@ export function ProfileCard({
           {/* Bio */}
           {user.bio && (
             <div className="rounded-lg bg-card/50 p-4">
-              <p className="font-body text-sm text-strong whitespace-pre-wrap">
+              <p className="font-text text-sm text-strong whitespace-pre-wrap">
                 {user.bio}
               </p>
             </div>

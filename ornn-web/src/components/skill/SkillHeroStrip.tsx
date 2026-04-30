@@ -7,8 +7,8 @@
  * / pulls count), owner line, and a primary CTA + kebab menu for secondary
  * actions.
  *
- * Styled in the Editorial Forge language (DESIGN.md): Fraunces title, Inter
- * body, JetBrains Mono pills, ember accent, hairline borders, 2-4px radii.
+ * Styled in the Forge Workshop language (DESIGN.md): Space Grotesk display,
+ * Inter body, JetBrains Mono pills, ember accent, hairline borders, 2-4px radii.
  *
  * @module components/skill/SkillHeroStrip
  */
@@ -158,7 +158,7 @@ export function SkillHeroStrip({
             {skill.name}
           </h1>
           {skill.description && (
-            <p className="mt-2 max-w-[64ch] font-reading text-sm leading-relaxed text-body">
+            <p className="mt-2 max-w-[64ch] font-text text-sm leading-relaxed text-body">
               {skill.description}
             </p>
           )}
@@ -210,7 +210,7 @@ export function SkillHeroStrip({
             {ownerAvatarUrl ? (
               <img src={ownerAvatarUrl} alt="" className="h-[18px] w-[18px] rounded-full object-cover" />
             ) : (
-              <span className="inline-flex h-[18px] w-[18px] items-center justify-center rounded-full bg-accent text-page text-[10px] font-bold font-reading">
+              <span className="inline-flex h-[18px] w-[18px] items-center justify-center rounded-full bg-accent text-page text-[10px] font-bold font-text">
                 {ownerDisplayName.charAt(0).toUpperCase()}
               </span>
             )}

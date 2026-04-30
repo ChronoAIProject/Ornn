@@ -123,7 +123,7 @@ export function Sidebar({
       {/* Mobile header */}
       {isMobile && (
         <div className="flex h-14 items-center justify-between border-b border-accent/10 px-4">
-          <span className="font-heading text-sm uppercase tracking-wider text-accent">
+          <span className="font-display text-sm uppercase tracking-wider text-accent">
             Navigation
           </span>
           <button
@@ -157,7 +157,7 @@ export function Sidebar({
                   onClick={isMobile ? onMobileClose : undefined}
                   className={`
                     group relative flex items-center gap-3 rounded-lg px-3 py-2.5
-                    font-body text-sm transition-all duration-200
+                    font-text text-sm transition-all duration-200
                     ${collapsed && !isMobile ? "justify-center" : ""}
                     ${
                       active
@@ -229,7 +229,7 @@ export function Sidebar({
                 />
               ) : (
                 <div className="flex h-full w-full items-center justify-center">
-                  <span className="font-heading text-xs text-accent">
+                  <span className="font-display text-xs text-accent">
                     {user.displayName.charAt(0).toUpperCase()}
                   </span>
                 </div>

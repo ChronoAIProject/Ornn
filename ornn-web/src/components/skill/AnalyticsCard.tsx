@@ -42,11 +42,11 @@ function Stat({
 }) {
   return (
     <div>
-      <p className="font-heading text-[11px] uppercase tracking-wider text-meta mb-0.5">
+      <p className="font-display text-[11px] uppercase tracking-wider text-meta mb-0.5">
         {label}
       </p>
-      <p className="font-heading text-lg text-strong leading-tight">{value}</p>
-      {hint && <p className="font-body text-xs text-meta mt-0.5">{hint}</p>}
+      <p className="font-display text-lg text-strong leading-tight">{value}</p>
+      {hint && <p className="font-text text-xs text-meta mt-0.5">{hint}</p>}
     </div>
   );
 }
@@ -73,7 +73,7 @@ export function AnalyticsCard({ idOrName, version, className }: AnalyticsCardPro
   return (
     <div className={`glass rounded-xl p-5 space-y-4 ${className ?? ""}`}>
       <div className="flex items-center justify-between gap-3">
-        <p className="font-heading text-[11px] uppercase tracking-wider text-meta">
+        <p className="font-display text-[11px] uppercase tracking-wider text-meta">
           {t("analytics.heading", "Usage")}
         </p>
         <div className="flex overflow-hidden rounded-md border border-accent/20">
@@ -95,17 +95,17 @@ export function AnalyticsCard({ idOrName, version, className }: AnalyticsCardPro
       </div>
 
       {isLoading ? (
-        <p className="font-body text-sm text-meta">{t("analytics.loading", "Loading…")}</p>
+        <p className="font-text text-sm text-meta">{t("analytics.loading", "Loading…")}</p>
       ) : isError ? (
-        <p className="font-body text-sm text-danger">
+        <p className="font-text text-sm text-danger">
           {t("analytics.loadFailed", "Could not load analytics.")}
         </p>
       ) : !data ? (
-        <p className="font-body text-sm text-meta">
+        <p className="font-text text-sm text-meta">
           {t("analytics.unavailable", "Analytics unavailable for this skill.")}
         </p>
       ) : showEmpty ? (
-        <p className="font-body text-sm text-meta">
+        <p className="font-text text-sm text-meta">
           {t(
             "analytics.empty",
             "No executions recorded in this window yet.",
@@ -153,7 +153,7 @@ export function AnalyticsCard({ idOrName, version, className }: AnalyticsCardPro
 
           {data.topErrorCodes.length > 0 && (
             <div>
-              <p className="font-heading text-[11px] uppercase tracking-wider text-meta mb-1.5">
+              <p className="font-display text-[11px] uppercase tracking-wider text-meta mb-1.5">
                 {t("analytics.topErrors", "Top errors")}
               </p>
               <ul className="space-y-1">

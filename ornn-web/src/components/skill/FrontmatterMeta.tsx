@@ -36,7 +36,7 @@ function MetaSection({
 }) {
   return (
     <div>
-      <h4 className="mb-2 font-heading text-xs uppercase tracking-wider text-meta">
+      <h4 className="mb-2 font-display text-xs uppercase tracking-wider text-meta">
         {title}
       </h4>
       {children}
@@ -135,7 +135,7 @@ export function FrontmatterMeta({
 
       {hasCompat && (
         <MetaSection title="Compatibility">
-          <p className="font-body text-sm text-strong">
+          <p className="font-text text-sm text-strong">
             {compatibility}
           </p>
         </MetaSection>

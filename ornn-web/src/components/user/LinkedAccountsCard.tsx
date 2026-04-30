@@ -116,7 +116,7 @@ export function LinkedAccountsCard({
   return (
     <>
       <Card className="p-6">
-        <h2 className="mb-6 font-heading text-lg text-accent">
+        <h2 className="mb-6 font-display text-lg text-accent">
           Linked Accounts
         </h2>
 
@@ -134,7 +134,7 @@ export function LinkedAccountsCard({
                 <div className="flex items-center gap-3">
                   <div className={`${info.color}`}>{info.icon}</div>
                   <div>
-                    <h3 className="font-body text-sm font-semibold text-strong">
+                    <h3 className="font-text text-sm font-semibold text-strong">
                       {info.name}
                     </h3>
                     {linked ? (
@@ -199,11 +199,11 @@ export function LinkedAccountsCard({
         title="Unlink Account"
       >
         <div className="space-y-4">
-          <p className="font-body text-strong">
+          <p className="font-text text-strong">
             Are you sure you want to unlink your{" "}
             {unlinkConfirm ? PROVIDER_INFO[unlinkConfirm].name : ""} account?
           </p>
-          <p className="font-body text-sm text-meta">
+          <p className="font-text text-sm text-meta">
             You will no longer be able to sign in using this account.
           </p>
           <div className="flex justify-end gap-3 pt-4">

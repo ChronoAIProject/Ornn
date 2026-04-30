@@ -71,7 +71,7 @@ function UserMessage({ content }: { content: string }) {
       className="flex justify-end"
     >
       <div className="max-w-[80%] rounded-xl rounded-br-sm border border-accent/30 bg-accent/5 px-4 py-3">
-        <p className="whitespace-pre-wrap font-body text-sm text-strong">
+        <p className="whitespace-pre-wrap font-text text-sm text-strong">
           {content}
         </p>
       </div>
@@ -153,7 +153,7 @@ function ToolResultMessage({
       >
         <div className="flex items-center gap-2">
           <ToolIcon className="h-3.5 w-3.5 shrink-0 text-meta" />
-          <span className="font-heading text-[10px] uppercase tracking-wider text-meta">
+          <span className="font-display text-[10px] uppercase tracking-wider text-meta">
             Tool Result{toolCallId ? ` (${toolCallId.slice(0, 8)})` : ""}
           </span>
         </div>

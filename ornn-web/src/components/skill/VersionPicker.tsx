@@ -68,7 +68,7 @@ export function VersionPicker({
 
   return (
     <div ref={containerRef} className={`relative ${className}`}>
-      <span className="font-heading text-[11px] uppercase tracking-wider text-meta mr-2">
+      <span className="font-display text-[11px] uppercase tracking-wider text-meta mr-2">
         {t("skillDetail.version")}
       </span>
       <button
@@ -79,7 +79,7 @@ export function VersionPicker({
         className={`
           glass inline-flex items-center gap-2 rounded-lg
           border border-accent/20 bg-elevated
-          px-3 py-1.5 font-body text-sm text-strong
+          px-3 py-1.5 font-text text-sm text-strong
           cursor-pointer transition-colors
           hover:border-accent/50
           focus:outline-none focus:border-accent/70
@@ -129,7 +129,7 @@ export function VersionPicker({
                     onClick={() => pick(v.version)}
                     className={`
                       flex w-full items-center gap-2 px-3 py-2
-                      font-body text-sm text-left cursor-pointer transition-colors
+                      font-text text-sm text-left cursor-pointer transition-colors
                       ${
                         isCurrent
                           ? "bg-accent/10 text-accent"

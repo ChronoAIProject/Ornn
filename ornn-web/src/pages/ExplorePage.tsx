@@ -336,7 +336,7 @@ function TabButton({ label, count, active, onClick }: TabButtonProps) {
       type="button"
       onClick={onClick}
       className={`
-        w-full px-3 py-2 rounded-md font-body text-sm transition-all cursor-pointer
+        w-full px-3 py-2 rounded-md font-text text-sm transition-all cursor-pointer
         inline-flex items-center justify-center gap-2 whitespace-nowrap
         ${active
           ? "bg-accent/20 text-accent border border-accent/50"
@@ -658,7 +658,7 @@ function FilterSection({ title, children }: { title: string; children: React.Rea
 
 function FilterEmpty({ children }: { children: React.ReactNode }) {
   return (
-    <p className="font-body text-xs text-meta italic">{children}</p>
+    <p className="font-text text-xs text-meta italic">{children}</p>
   );
 }
 
@@ -679,7 +679,7 @@ function FilterChip({ label, count, selected, onClick }: FilterChipProps) {
       type="button"
       onClick={onClick}
       className={`
-        inline-flex items-center gap-2 px-2.5 py-1 rounded-full border font-body text-xs transition-all cursor-pointer
+        inline-flex items-center gap-2 px-2.5 py-1 rounded-full border font-text text-xs transition-all cursor-pointer
         ${selected
           ? "border-accent/60 bg-accent/15 text-accent"
           : "border-accent/15 bg-elevated text-strong hover:border-accent/40"}

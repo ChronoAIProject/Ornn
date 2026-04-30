@@ -114,7 +114,7 @@ export function TagManager({
 
       {/* Predefined Tags */}
       <div>
-        <h3 className="mb-3 font-heading text-sm uppercase tracking-wider text-accent">
+        <h3 className="mb-3 font-display text-sm uppercase tracking-wider text-accent">
           Predefined Tags ({predefinedTags.length})
         </h3>
         <div className="flex flex-wrap gap-2">
@@ -129,7 +129,7 @@ export function TagManager({
                 transition={{ duration: 0.2 }}
                 className="group relative"
               >
-                <span className="inline-flex items-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-3 py-1.5 font-body text-sm text-accent">
+                <span className="inline-flex items-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-3 py-1.5 font-text text-sm text-accent">
                   {tag.name}
                   <span className="text-xs text-accent/60">
                     ({tag.usageCount})
@@ -158,7 +158,7 @@ export function TagManager({
             ))}
           </AnimatePresence>
           {predefinedTags.length === 0 && (
-            <p className="font-body text-sm text-meta">
+            <p className="font-text text-sm text-meta">
               No predefined tags yet. Add some to help users categorize skills.
             </p>
           )}
@@ -168,7 +168,7 @@ export function TagManager({
       {/* Custom Tags (Read-only info) */}
       {customTags.length > 0 && (
         <div>
-          <h3 className="mb-3 font-heading text-sm uppercase tracking-wider text-meta">
+          <h3 className="mb-3 font-display text-sm uppercase tracking-wider text-meta">
             User-Created Tags ({customTags.length})
           </h3>
           <div className="flex flex-wrap gap-2">
@@ -181,7 +181,7 @@ export function TagManager({
               <Badge color="muted">+{customTags.length - 30} more</Badge>
             )}
           </div>
-          <p className="mt-2 font-body text-xs text-meta">
+          <p className="mt-2 font-text text-xs text-meta">
             These tags were created by users and cannot be edited from here.
           </p>
         </div>
@@ -194,7 +194,7 @@ export function TagManager({
         title="Delete Tag?"
       >
         <div className="space-y-4">
-          <p className="font-body text-strong">
+          <p className="font-text text-strong">
             Are you sure you want to delete the tag{" "}
             <span className="font-semibold text-accent">
               {tagToDelete?.name}
@@ -203,7 +203,7 @@ export function TagManager({
           </p>
           {tagToDelete && tagToDelete.usageCount > 0 && (
             <div className="rounded-lg border border-warning/30 bg-warning/10 p-3">
-              <p className="font-body text-sm text-warning">
+              <p className="font-text text-sm text-warning">
                 This tag is currently used by {tagToDelete.usageCount} skill(s).
                 Deleting it will remove it from all associated skills.
               </p>

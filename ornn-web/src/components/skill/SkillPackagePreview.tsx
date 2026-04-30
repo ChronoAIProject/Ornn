@@ -212,7 +212,7 @@ export function SkillPackagePreview({
       {metadata && (
         <div className="glass rounded-lg border border-accent/10 p-4 mb-4">
           <div className="flex flex-wrap items-center gap-3">
-            <h3 className="font-heading text-lg text-strong">
+            <h3 className="font-display text-lg text-strong">
               {metadata.name}
             </h3>
             <Badge color={CATEGORY_BADGE_COLORS[metadata.metadata.category]}>
@@ -224,13 +224,13 @@ export function SkillPackagePreview({
               </Badge>
             ))}
             {authorName && (
-              <span className="font-body text-xs text-meta ml-auto">
+              <span className="font-text text-xs text-meta ml-auto">
                 by {authorName}
               </span>
             )}
           </div>
           {metadata.description && (
-            <p className="font-body text-sm text-meta mt-2">
+            <p className="font-text text-sm text-meta mt-2">
               {metadata.description}
             </p>
           )}
@@ -268,7 +268,7 @@ export function SkillPackagePreview({
             />
           ) : (
             <div className="flex items-center justify-center h-full rounded-lg border border-accent/10 bg-page">
-              <p className="font-body text-sm text-meta">
+              <p className="font-text text-sm text-meta">
                 Select a file to view its content
               </p>
             </div>

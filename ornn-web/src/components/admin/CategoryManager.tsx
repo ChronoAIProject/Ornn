@@ -119,7 +119,7 @@ export function CategoryManager({
     <div className="space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <p className="font-body text-sm text-meta">
+        <p className="font-text text-sm text-meta">
           Drag to reorder. Categories determine skill classification.
         </p>
         <div className="flex gap-2">
@@ -175,12 +175,12 @@ export function CategoryManager({
 
                   <div>
                     <div className="flex items-center gap-2">
-                      <h4 className="font-heading text-sm font-medium text-strong">
+                      <h4 className="font-display text-sm font-medium text-strong">
                         {category.name}
                       </h4>
                       <Badge color="muted">{category.slug}</Badge>
                     </div>
-                    <p className="mt-1 font-body text-xs text-meta">
+                    <p className="mt-1 font-text text-xs text-meta">
                       {category.description}
                     </p>
                   </div>
@@ -212,7 +212,7 @@ export function CategoryManager({
 
       {items.length === 0 && (
         <Card>
-          <p className="py-8 text-center font-body text-meta">
+          <p className="py-8 text-center font-text text-meta">
             No categories yet. Create your first category to get started.
           </p>
         </Card>
@@ -245,7 +245,7 @@ export function CategoryManager({
           />
 
           {formError && (
-            <p className="font-body text-sm text-danger">{formError}</p>
+            <p className="font-text text-sm text-danger">{formError}</p>
           )}
 
           <div className="flex justify-end gap-3 pt-2">
@@ -275,14 +275,14 @@ export function CategoryManager({
         title="Delete Category?"
       >
         <div className="space-y-4">
-          <p className="font-body text-strong">
+          <p className="font-text text-strong">
             Are you sure you want to delete{" "}
             <span className="font-semibold text-accent">
               {categoryToDelete?.name}
             </span>
             ?
           </p>
-          <p className="font-body text-sm text-meta">
+          <p className="font-text text-sm text-meta">
             This action cannot be undone.
           </p>
           <div className="flex justify-end gap-3 pt-2">

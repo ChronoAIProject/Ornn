@@ -214,10 +214,10 @@ export function UsagePullsCard({
     >
       <header className="mb-3 flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h3 className="font-heading text-sm uppercase tracking-wider text-strong">
+          <h3 className="font-display text-sm uppercase tracking-wider text-strong">
             {t("analytics.usageHeading", "Skill Usage")}
           </h3>
-          <p className="mt-0.5 font-body text-xs text-meta">
+          <p className="mt-0.5 font-text text-xs text-meta">
             {t(
               "analytics.usageSubtitle",
               "Pulls over time. api = SDK / CLI / agent · web = detail-page download · playground = in-product trial.",
@@ -260,15 +260,15 @@ export function UsagePullsCard({
       </div>
 
       {isLoading ? (
-        <p className="py-12 text-center font-body text-xs text-meta">
+        <p className="py-12 text-center font-text text-xs text-meta">
           {t("analytics.loading", "Loading analytics…")}
         </p>
       ) : isError ? (
-        <p className="py-12 text-center font-body text-xs text-danger">
+        <p className="py-12 text-center font-text text-xs text-danger">
           {t("analytics.loadFailed", "Could not load analytics.")}
         </p>
       ) : rows.length === 0 ? (
-        <p className="py-12 text-center font-body text-xs text-meta">
+        <p className="py-12 text-center font-text text-xs text-meta">
           {t("analytics.noUsage", "No usage in this range.")}
         </p>
       ) : (

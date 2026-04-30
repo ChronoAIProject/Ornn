@@ -34,7 +34,7 @@ export function RuntimeSelect({
 
   return (
     <div className={`flex flex-col gap-1.5 ${className}`}>
-      <label className="font-heading text-xs uppercase tracking-wider text-meta">
+      <label className="font-display text-xs uppercase tracking-wider text-meta">
         Runtime Environments
       </label>
 
@@ -73,7 +73,7 @@ export function RuntimeSelect({
                 className="h-4 w-4 rounded border-text-muted/30 bg-page text-accent accent-accent cursor-pointer"
               />
               <span
-                className={`font-body text-sm transition-colors ${
+                className={`font-text text-sm transition-colors ${
                   isChecked
                     ? "text-warning"
                     : "text-meta group-hover:text-strong"

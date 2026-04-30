@@ -114,7 +114,7 @@ export function StepIndicator({
                     <CheckIcon className="h-5 w-5" />
                   </motion.div>
                 ) : (
-                  <span className="font-heading text-sm font-bold">
+                  <span className="font-display text-sm font-bold">
                     {index + 1}
                   </span>
                 )}
@@ -163,14 +163,14 @@ export function StepIndicator({
             >
               <p
                 className={`
-                  font-body text-sm font-medium transition-colors
+                  font-text text-sm font-medium transition-colors
                   ${isCurrent ? "text-accent-support" : isCompleted ? "text-accent" : "text-meta"}
                 `}
               >
                 {step.label}
               </p>
               {step.description && (
-                <p className="font-body text-xs text-meta mt-0.5">
+                <p className="font-text text-xs text-meta mt-0.5">
                   {step.description}
                 </p>
               )}
@@ -213,11 +213,11 @@ export function CompactStepIndicator({
 
       {/* Step text */}
       <div className="shrink-0 text-right">
-        <p className="font-body text-xs text-meta">
+        <p className="font-text text-xs text-meta">
           Step {currentStep + 1} of {totalSteps}
         </p>
         {currentLabel && (
-          <p className="font-body text-sm text-accent">{currentLabel}</p>
+          <p className="font-text text-sm text-accent">{currentLabel}</p>
         )}
       </div>
     </div>

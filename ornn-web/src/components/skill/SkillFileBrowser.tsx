@@ -171,7 +171,7 @@ export function SkillFileBrowser({ skillId, version, isOwner }: SkillFileBrowser
   if (error) {
     return (
       <div className="flex items-center justify-center rounded-lg border border-danger/20 bg-card py-12">
-        <p className="font-body text-sm text-danger">
+        <p className="font-text text-sm text-danger">
           Failed to load files
         </p>
       </div>
@@ -181,7 +181,7 @@ export function SkillFileBrowser({ skillId, version, isOwner }: SkillFileBrowser
   if (treeNodes.length === 0) {
     return (
       <div className="flex items-center justify-center rounded-lg border border-accent/10 bg-card py-12">
-        <p className="font-body text-sm text-meta">
+        <p className="font-text text-sm text-meta">
           No package files available
         </p>
       </div>
@@ -225,7 +225,7 @@ export function SkillFileBrowser({ skillId, version, isOwner }: SkillFileBrowser
                     d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
                   />
                 </svg>
-                <p className="font-body text-sm text-meta text-center px-4">
+                <p className="font-text text-sm text-meta text-center px-4">
                   This file type cannot be viewed online.
                   <br />
                   Download the package to access it.
@@ -234,7 +234,7 @@ export function SkillFileBrowser({ skillId, version, isOwner }: SkillFileBrowser
             )
           ) : (
             <div className="flex items-center justify-center h-full min-h-[300px] rounded-lg border border-accent/10 bg-page">
-              <p className="font-body text-sm text-meta">
+              <p className="font-text text-sm text-meta">
                 Select a file to view its content
               </p>
             </div>

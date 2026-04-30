@@ -73,13 +73,13 @@ export function ToolCallCard({ toolCall, status }: ToolCallCardProps) {
       {/* Header */}
       <div className="flex items-center gap-2">
         <ToolIcon className="h-4 w-4 text-meta" />
-        <span className="font-heading text-xs uppercase tracking-wider text-strong">
+        <span className="font-display text-xs uppercase tracking-wider text-strong">
           {toolCall.name}
         </span>
 
         {/* Status badge */}
         <span
-          className={`ml-auto rounded-full px-2 py-0.5 font-heading text-[10px] uppercase tracking-wider ${style.badge}`}
+          className={`ml-auto rounded-full px-2 py-0.5 font-display text-[10px] uppercase tracking-wider ${style.badge}`}
         >
           {isAutoExecute ? "Auto-executed" : style.label}
         </span>

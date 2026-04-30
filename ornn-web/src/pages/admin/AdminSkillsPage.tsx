@@ -126,10 +126,10 @@ export function AdminSkillsPage() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="font-heading text-2xl font-bold text-accent-support accent-support">
+        <h1 className="font-display text-2xl font-bold text-accent-support accent-support">
           Skills
         </h1>
-        <p className="mt-1 font-body text-meta">
+        <p className="mt-1 font-text text-meta">
           {userIdFromUrl
             ? "Skills for selected user"
             : "Manage all platform skills"}
@@ -178,12 +178,12 @@ export function AdminSkillsPage() {
             <Skeleton lines={10} />
           ) : error ? (
             <div className="py-8 text-center">
-              <p className="font-body text-danger">
+              <p className="font-text text-danger">
                 {error instanceof Error ? error.message : "Failed to load skills"}
               </p>
             </div>
           ) : data?.items.length === 0 ? (
-            <p className="py-8 text-center font-body text-meta">
+            <p className="py-8 text-center font-text text-meta">
               No skills found.
             </p>
           ) : (
@@ -219,17 +219,17 @@ export function AdminSkillsPage() {
                       className="cursor-pointer border-b border-accent/10 transition-colors hover:bg-elevated/50"
                     >
                       <td className="px-4 py-3">
-                        <span className="font-heading text-sm font-medium text-accent hover:underline">
+                        <span className="font-display text-sm font-medium text-accent hover:underline">
                           {skill.name}
                         </span>
                       </td>
                       <td className="px-4 py-3">
                         <div className="min-w-0">
-                          <p className="truncate font-body text-sm text-strong">
+                          <p className="truncate font-text text-sm text-strong">
                             {skill.createdByDisplayName || skill.createdByEmail}
                           </p>
                           {skill.createdByDisplayName && (
-                            <p className="truncate font-body text-xs text-meta">
+                            <p className="truncate font-text text-xs text-meta">
                               {skill.createdByEmail}
                             </p>
                           )}
@@ -252,7 +252,7 @@ export function AdminSkillsPage() {
                           )}
                         </div>
                       </td>
-                      <td className="whitespace-nowrap px-4 py-3 font-body text-xs text-meta">
+                      <td className="whitespace-nowrap px-4 py-3 font-text text-xs text-meta">
                         {formatDateSGT(skill.createdOn)}
                       </td>
                       <td className="px-4 py-3">
@@ -289,14 +289,14 @@ export function AdminSkillsPage() {
         title="Delete Skill?"
       >
         <div className="space-y-4">
-          <p className="font-body text-strong">
+          <p className="font-text text-strong">
             Are you sure you want to delete{" "}
             <span className="font-semibold text-accent">
               {deleteTarget?.name}
             </span>
             ?
           </p>
-          <p className="font-body text-sm text-meta">
+          <p className="font-text text-sm text-meta">
             This action cannot be undone. The skill will be permanently removed from the platform.
           </p>
           <div className="flex justify-end gap-3 pt-2">

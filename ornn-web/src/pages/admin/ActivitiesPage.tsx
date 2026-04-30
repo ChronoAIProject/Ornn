@@ -108,10 +108,10 @@ export function ActivitiesPage() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="font-heading text-2xl font-bold text-accent-support accent-support">
+        <h1 className="font-display text-2xl font-bold text-accent-support accent-support">
           Activities
         </h1>
-        <p className="mt-1 font-body text-meta">
+        <p className="mt-1 font-text text-meta">
           Platform activity feed and audit log
         </p>
       </div>
@@ -124,7 +124,7 @@ export function ActivitiesPage() {
         <select
           value={actionFilter}
           onChange={(e) => handleActionFilterChange(e.target.value)}
-          className="neon-input rounded-lg px-4 py-2 font-body text-sm text-strong bg-elevated border border-accent/20 focus:border-accent/50 outline-none transition-colors"
+          className="neon-input rounded-lg px-4 py-2 font-text text-sm text-strong bg-elevated border border-accent/20 focus:border-accent/50 outline-none transition-colors"
         >
           {ACTION_TYPES.map((type) => (
             <option key={type.value} value={type.value}>
@@ -145,12 +145,12 @@ export function ActivitiesPage() {
             <Skeleton lines={10} />
           ) : error ? (
             <div className="py-8 text-center">
-              <p className="font-body text-danger">
+              <p className="font-text text-danger">
                 {error instanceof Error ? error.message : "Failed to load activities"}
               </p>
             </div>
           ) : data?.items.length === 0 ? (
-            <p className="py-8 text-center font-body text-meta">
+            <p className="py-8 text-center font-text text-meta">
               No activities found.
             </p>
           ) : (
@@ -178,7 +178,7 @@ export function ActivitiesPage() {
                       key={activity.id}
                       className="border-b border-accent/10 transition-colors hover:bg-elevated/50"
                     >
-                      <td className="whitespace-nowrap px-4 py-3 font-body text-xs text-meta">
+                      <td className="whitespace-nowrap px-4 py-3 font-text text-xs text-meta">
                         {formatDateSGT(activity.createdAt)}
                       </td>
                       <td className="px-4 py-3">
@@ -187,11 +187,11 @@ export function ActivitiesPage() {
                             {(activity.userDisplayName || activity.userEmail).charAt(0).toUpperCase()}
                           </div>
                           <div className="min-w-0">
-                            <p className="truncate font-body text-sm text-strong">
+                            <p className="truncate font-text text-sm text-strong">
                               {activity.userDisplayName || activity.userEmail}
                             </p>
                             {activity.userDisplayName && (
-                              <p className="truncate font-body text-xs text-meta">
+                              <p className="truncate font-text text-xs text-meta">
                                 {activity.userEmail}
                               </p>
                             )}
@@ -203,7 +203,7 @@ export function ActivitiesPage() {
                           {activity.action}
                         </Badge>
                       </td>
-                      <td className="px-4 py-3 font-body text-sm text-meta">
+                      <td className="px-4 py-3 font-text text-sm text-meta">
                         {activity.details && Object.keys(activity.details).length > 0
                           ? (activity.details.skillName as string) ?? JSON.stringify(activity.details)
                           : "—"}

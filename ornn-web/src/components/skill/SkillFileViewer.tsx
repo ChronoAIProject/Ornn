@@ -95,7 +95,7 @@ export function SkillFileViewer({
           <BinaryFileIcon className="h-12 w-12 text-meta mb-3" />
           <p className="font-mono text-sm text-strong">{filename}</p>
           {fileSize !== undefined && (
-            <p className="font-body text-xs text-meta mt-1">
+            <p className="font-text text-xs text-meta mt-1">
               {formatFileSize(fileSize)} (binary file)
             </p>
           )}

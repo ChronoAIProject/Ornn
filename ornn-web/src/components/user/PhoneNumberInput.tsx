@@ -97,7 +97,7 @@ export function PhoneNumberInput({
             flex items-center gap-1 rounded-l-lg
             px-3 py-2.5
             bg-page/80 border-b-2 border-r
-            font-body text-sm text-strong
+            font-text text-sm text-strong
             transition-all duration-200
             ${
               error
@@ -138,7 +138,7 @@ export function PhoneNumberInput({
             flex-1 rounded-r-lg
             px-4 py-2.5
             bg-page/80 border-b-2
-            font-body text-strong
+            font-text text-strong
             placeholder:text-meta/50
             transition-all duration-200
             focus:outline-none
@@ -181,7 +181,7 @@ export function PhoneNumberInput({
                 className="
                   w-full rounded-md
                   bg-page/50 px-3 py-2
-                  font-body text-sm text-strong
+                  font-text text-sm text-strong
                   placeholder:text-meta/50
                   focus:outline-none focus:ring-1 focus:ring-accent/50
                 "
@@ -198,7 +198,7 @@ export function PhoneNumberInput({
                     onClick={() => handleCountrySelect(country.dialCode)}
                     className={`
                       flex w-full items-center gap-3 px-3 py-2
-                      font-body text-sm text-left
+                      font-text text-sm text-left
                       transition-colors
                       ${
                         selectedCode === country.dialCode

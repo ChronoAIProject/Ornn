@@ -104,7 +104,7 @@ export function ApiKeyCard({
   return (
     <>
       <Card className="p-6">
-        <h2 className="mb-6 font-heading text-lg text-accent">API Key</h2>
+        <h2 className="mb-6 font-display text-lg text-accent">API Key</h2>
 
         {apiKey ? (
           <div className="space-y-4">
@@ -157,7 +157,7 @@ export function ApiKeyCard({
           </div>
         ) : (
           <div className="space-y-4">
-            <p className="font-body text-sm text-meta">
+            <p className="font-text text-sm text-meta">
               Generate an API key to access the Skill Search API from external
               applications.
             </p>

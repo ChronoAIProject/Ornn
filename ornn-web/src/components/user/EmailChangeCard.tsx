@@ -168,7 +168,7 @@ export function EmailChangeCard({
 
   return (
     <Card className="p-6">
-      <h2 className="mb-6 font-heading text-lg text-accent">Primary Email</h2>
+      <h2 className="mb-6 font-display text-lg text-accent">Primary Email</h2>
 
       <AnimatePresence mode="wait">
         {step === "idle" && (
@@ -208,7 +208,7 @@ export function EmailChangeCard({
             className="space-y-4"
           >
             <div className="text-center">
-              <p className="font-body text-sm text-meta">
+              <p className="font-text text-sm text-meta">
                 Enter the 6-digit code sent to
               </p>
               <p className="font-mono text-sm text-accent">{currentEmail}</p>
@@ -233,7 +233,7 @@ export function EmailChangeCard({
                 onClick={handleResendOtp}
                 disabled={cooldown > 0 || isLoading}
                 className={`
-                  font-body text-sm
+                  font-text text-sm
                   ${
                     cooldown > 0 || isLoading
                       ? "text-meta cursor-not-allowed"
@@ -247,7 +247,7 @@ export function EmailChangeCard({
                 type="button"
                 onClick={handleCancel}
                 disabled={isLoading}
-                className="font-body text-sm text-meta hover:text-strong cursor-pointer"
+                className="font-text text-sm text-meta hover:text-strong cursor-pointer"
               >
                 Cancel
               </button>
@@ -264,7 +264,7 @@ export function EmailChangeCard({
           >
             <form onSubmit={handleSubmit(handleNewEmailSubmit)} className="space-y-4">
               <div className="text-center">
-                <p className="font-body text-sm text-meta">
+                <p className="font-text text-sm text-meta">
                   Enter your new email address
                 </p>
               </div>
@@ -307,7 +307,7 @@ export function EmailChangeCard({
             className="space-y-4"
           >
             <div className="text-center">
-              <p className="font-body text-sm text-meta">
+              <p className="font-text text-sm text-meta">
                 Enter the 6-digit code sent to
               </p>
               <p className="font-mono text-sm text-accent">{newEmail}</p>
@@ -332,7 +332,7 @@ export function EmailChangeCard({
                 onClick={handleResendOtp}
                 disabled={cooldown > 0 || isLoading}
                 className={`
-                  font-body text-sm
+                  font-text text-sm
                   ${
                     cooldown > 0 || isLoading
                       ? "text-meta cursor-not-allowed"
@@ -346,7 +346,7 @@ export function EmailChangeCard({
                 type="button"
                 onClick={handleCancel}
                 disabled={isLoading}
-                className="font-body text-sm text-meta hover:text-strong cursor-pointer"
+                className="font-text text-sm text-meta hover:text-strong cursor-pointer"
               >
                 Cancel
               </button>

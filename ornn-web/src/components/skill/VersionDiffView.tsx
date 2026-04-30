@@ -183,7 +183,7 @@ export function VersionDiffView({ diff, showSummary = false, emptyLabel }: Versi
 
   if (isEmpty) {
     return (
-      <p className="font-body text-sm text-meta">
+      <p className="font-text text-sm text-meta">
         {emptyLabel ??
           (t("versionDiff.noChanges", "These two versions have identical files.") as string)}
       </p>
@@ -206,7 +206,7 @@ export function VersionDiffView({ diff, showSummary = false, emptyLabel }: Versi
       )}
       {f.modified.length > 0 && (
         <section className="space-y-3">
-          <h3 className="font-heading text-[11px] uppercase tracking-wider text-meta">
+          <h3 className="font-display text-[11px] uppercase tracking-wider text-meta">
             {t("versionDiff.modifiedHeading", {
               defaultValue: "Modified ({{count}})",
               count: f.modified.length,
@@ -221,7 +221,7 @@ export function VersionDiffView({ diff, showSummary = false, emptyLabel }: Versi
       )}
       {f.added.length > 0 && (
         <section className="space-y-3">
-          <h3 className="font-heading text-[11px] uppercase tracking-wider text-meta">
+          <h3 className="font-display text-[11px] uppercase tracking-wider text-meta">
             {t("versionDiff.addedHeading", {
               defaultValue: "Added ({{count}})",
               count: f.added.length,
@@ -236,7 +236,7 @@ export function VersionDiffView({ diff, showSummary = false, emptyLabel }: Versi
       )}
       {f.removed.length > 0 && (
         <section className="space-y-3">
-          <h3 className="font-heading text-[11px] uppercase tracking-wider text-meta">
+          <h3 className="font-display text-[11px] uppercase tracking-wider text-meta">
             {t("versionDiff.removedHeading", {
               defaultValue: "Removed ({{count}})",
               count: f.removed.length,

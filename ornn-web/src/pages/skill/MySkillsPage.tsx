@@ -91,7 +91,7 @@ export function MySkillsPage() {
       {/* Skills count */}
       {data && !isLoading && (
         <div className="mb-2 shrink-0">
-          <p className="font-body text-xs text-meta">
+          <p className="font-text text-xs text-meta">
             {t("mySkills.skillsFound", { count: data.total, unit: data.total === 1 ? t("common.skill") : t("common.skills") })}
           </p>
         </div>
@@ -162,7 +162,7 @@ export function MySkillsPage() {
         title={t("mySkills.deleteTitle")}
       >
         <div className="space-y-4">
-          <p className="font-body text-strong">
+          <p className="font-text text-strong">
             {t("mySkills.deleteConfirm", { name: skillToDelete?.name }).replace(/<\/?strong>/g, "")}
           </p>
 

@@ -100,10 +100,10 @@ function StatCard({ label, value, icon, color, delay }: StatCardProps) {
       <div className={`glass rounded-xl border p-5 ${COLOR_CLASSES[color]}`}>
         <div className="flex items-center justify-between">
           <div>
-            <p className="font-body text-xs uppercase tracking-wider text-meta">
+            <p className="font-text text-xs uppercase tracking-wider text-meta">
               {label}
             </p>
-            <p className={`mt-2 font-heading text-3xl font-bold ${COLOR_CLASSES[color].split(" ")[0]}`}>
+            <p className={`mt-2 font-display text-3xl font-bold ${COLOR_CLASSES[color].split(" ")[0]}`}>
               {value.toLocaleString()}
             </p>
           </div>
@@ -150,10 +150,10 @@ export function DashboardPage() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="font-heading text-2xl font-bold text-accent-support accent-support">
+        <h1 className="font-display text-2xl font-bold text-accent-support accent-support">
           Dashboard
         </h1>
-        <p className="mt-1 font-body text-meta">
+        <p className="mt-1 font-text text-meta">
           Platform overview and recent activity
         </p>
       </div>
@@ -170,7 +170,7 @@ export function DashboardPage() {
       ) : error ? (
         <Card>
           <div className="py-8 text-center">
-            <p className="font-body text-danger">
+            <p className="font-text text-danger">
               {error instanceof Error ? error.message : "Failed to load dashboard data"}
             </p>
           </div>
@@ -243,12 +243,12 @@ export function DashboardPage() {
       >
         <Card>
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="font-heading text-lg font-semibold text-accent">
+            <h2 className="font-display text-lg font-semibold text-accent">
               Recent Activity
             </h2>
             <a
               href="/admin/activities"
-              className="font-body text-sm text-meta hover:text-accent transition-colors"
+              className="font-text text-sm text-meta hover:text-accent transition-colors"
             >
               View all
             </a>
@@ -258,14 +258,14 @@ export function DashboardPage() {
             <Skeleton lines={5} />
           ) : activitiesError ? (
             <div className="py-8 text-center">
-              <p className="font-body text-danger">
+              <p className="font-text text-danger">
                 {activitiesError instanceof Error
                   ? activitiesError.message
                   : "Failed to load activities"}
               </p>
             </div>
           ) : recentActivities?.items.length === 0 ? (
-            <p className="py-8 text-center font-body text-meta">
+            <p className="py-8 text-center font-text text-meta">
               No recent activity.
             </p>
           ) : (
@@ -275,17 +275,17 @@ export function DashboardPage() {
                   key={activity.id}
                   className="flex flex-col gap-2 rounded-lg border border-accent/10 bg-card p-3 sm:flex-row sm:items-center sm:gap-4"
                 >
-                  <span className="shrink-0 font-body text-xs text-meta">
+                  <span className="shrink-0 font-text text-xs text-meta">
                     {formatDateSGT(activity.createdAt)}
                   </span>
-                  <span className="font-body text-sm text-strong">
+                  <span className="font-text text-sm text-strong">
                     {activity.userEmail}
                   </span>
                   <Badge color={getActionBadgeColor(activity.action)}>
                     {activity.action}
                   </Badge>
                   {activity.details && Object.keys(activity.details).length > 0 && (
-                    <span className="font-body text-sm text-meta">
+                    <span className="font-text text-sm text-meta">
                       {(activity.details as Record<string, unknown>).skillName as string ?? JSON.stringify(activity.details)}
                     </span>
                   )}

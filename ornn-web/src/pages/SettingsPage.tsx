@@ -43,10 +43,10 @@ export function SettingsPage() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="font-heading text-2xl font-bold text-accent accent">
+            <h1 className="font-display text-2xl font-bold text-accent accent">
               {t("settings.title")}
             </h1>
-            <p className="mt-1 font-body text-meta">
+            <p className="mt-1 font-text text-meta">
               {t("settings.subtitle")}
             </p>
           </div>
@@ -73,7 +73,7 @@ export function SettingsPage() {
                 />
               ) : (
                 <div className="flex h-full w-full items-center justify-center">
-                  <span className="font-heading text-xl text-accent">
+                  <span className="font-display text-xl text-accent">
                     {user.displayName.charAt(0).toUpperCase()}
                   </span>
                 </div>
@@ -82,7 +82,7 @@ export function SettingsPage() {
 
             {/* Info */}
             <div className="min-w-0 flex-1">
-              <p className="font-body text-lg font-semibold text-strong truncate">
+              <p className="font-text text-lg font-semibold text-strong truncate">
                 {user.displayName}
               </p>
               <p className="font-mono text-sm text-meta truncate">
@@ -93,7 +93,7 @@ export function SettingsPage() {
                   {user.roles.map((role) => (
                     <span
                       key={role}
-                      className="rounded-full bg-accent/10 px-2 py-0.5 font-body text-xs text-accent"
+                      className="rounded-full bg-accent/10 px-2 py-0.5 font-text text-xs text-accent"
                     >
                       {role}
                     </span>
@@ -115,14 +115,14 @@ export function SettingsPage() {
             <h3 className="font-mono text-[11px] uppercase tracking-[0.16em] text-strong mb-3">
               {t("settings.accountMgmt")}
             </h3>
-            <p className="font-body text-sm text-meta mb-4">
+            <p className="font-text text-sm text-meta mb-4">
               {t("settings.accountDesc")}
             </p>
             <a
               href={NYXID_SETTINGS_URL}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 rounded-lg border border-accent/50 px-4 py-2 font-body text-sm font-semibold text-accent transition-all duration-200 hover:border-accent hover:shadow-[0_0_15px_rgba(255,107,0,0.3)]"
+              className="inline-flex items-center gap-2 rounded-lg border border-accent/50 px-4 py-2 font-text text-sm font-semibold text-accent transition-all duration-200 hover:border-accent hover:shadow-[0_0_15px_rgba(255,107,0,0.3)]"
             >
               {t("settings.openNyxID")}
               <ExternalLinkIcon className="h-4 w-4" />

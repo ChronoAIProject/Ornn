@@ -46,7 +46,7 @@ function ChatMessage({ role, content }: { role: string; content: string }) {
   return (
     <div className={`flex ${role === "user" ? "justify-end" : "justify-start"}`}>
       <div
-        className={`max-w-[85%] rounded-lg px-3 py-2 font-body text-sm whitespace-pre-wrap ${
+        className={`max-w-[85%] rounded-lg px-3 py-2 font-text text-sm whitespace-pre-wrap ${
           role === "user"
             ? "bg-accent/10 border border-accent/20 text-strong"
             : "bg-elevated border border-accent/10 text-strong"
@@ -113,12 +113,12 @@ export function PlaygroundPage() {
       <PageTransition>
         <div className="flex items-center justify-center h-full">
           <div className="text-center">
-            <p className="font-body text-sm text-meta mb-4">
+            <p className="font-text text-sm text-meta mb-4">
               {t("playground.selectSkill")}
             </p>
             <Link
               to="/registry"
-              className="font-body text-sm text-accent hover:underline"
+              className="font-text text-sm text-accent hover:underline"
             >
               {t("playground.browseSkills")}
             </Link>
@@ -151,7 +151,7 @@ export function PlaygroundPage() {
               <button
                 type="button"
                 onClick={clearChat}
-                className="font-body text-xs text-meta hover:text-accent transition-colors cursor-pointer"
+                className="font-text text-xs text-meta hover:text-accent transition-colors cursor-pointer"
               >
                 {t("playground.clearChat")}
               </button>
@@ -159,7 +159,7 @@ export function PlaygroundPage() {
             <div className="flex-1 min-h-0 overflow-y-auto space-y-3 px-3 py-2">
               {messages.length === 0 && !currentAssistantContent && (
                 <div className="flex flex-col items-center justify-center h-full text-center">
-                  <p className="font-body text-sm text-meta max-w-sm">
+                  <p className="font-text text-sm text-meta max-w-sm">
                     {needsEnvVars && !allEnvVarsFilled
                       ? t("playground.fillEnvVars")
                       : t("playground.askAbout", { name: skillName })}
@@ -205,7 +205,7 @@ export function PlaygroundPage() {
 
               {error && (
                 <div className="border border-danger/30 bg-danger/5 rounded-lg p-3">
-                  <p className="font-body text-xs text-danger">{error}</p>
+                  <p className="font-text text-xs text-danger">{error}</p>
                 </div>
               )}
 
@@ -238,7 +238,7 @@ export function PlaygroundPage() {
                 <h3 className="font-mono text-[11px] uppercase tracking-[0.16em] text-accent mb-3">
                   {t("playground.envVars")}
                 </h3>
-                <p className="font-body text-xs text-meta mb-3">
+                <p className="font-text text-xs text-meta mb-3">
                   {t("playground.envVarsDesc")}
                 </p>
                 <div className="space-y-2">
@@ -279,7 +279,7 @@ export function PlaygroundPage() {
                 />
               ) : (
                 <div className="flex items-center justify-center h-32">
-                  <p className="font-body text-xs text-meta">{t("playground.noPackage")}</p>
+                  <p className="font-text text-xs text-meta">{t("playground.noPackage")}</p>
                 </div>
               )}
             </div>

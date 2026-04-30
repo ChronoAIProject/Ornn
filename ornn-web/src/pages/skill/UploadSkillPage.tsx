@@ -148,7 +148,7 @@ export function UploadSkillPage() {
         <BackLink label={t("common.back", "Back")} />
       </nav>
       <div className="max-w-5xl mx-auto flex-1 flex flex-col justify-center">
-        <p className="font-body text-base text-meta text-center mb-6">
+        <p className="font-text text-base text-meta text-center mb-6">
           {t("upload.chooseMode")}
         </p>
 
@@ -182,12 +182,12 @@ export function UploadSkillPage() {
                     </div>
 
                     <h2
-                      className={`font-heading text-xl ${card.accentColor} mb-3`}
+                      className={`font-display text-xl ${card.accentColor} mb-3`}
                     >
                       {t(card.titleKey)}
                     </h2>
 
-                    <p className="font-body text-meta mb-6">
+                    <p className="font-text text-meta mb-6">
                       {t(card.descKey)}
                     </p>
 

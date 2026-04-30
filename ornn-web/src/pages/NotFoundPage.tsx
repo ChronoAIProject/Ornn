@@ -1,7 +1,7 @@
 /**
- * 404 Page — Editorial Forge.
+ * 404 Page — Forge Workshop.
  *
- * Big Fraunces numeric, ember accent, Inter explanation, mono "go home"
+ * Big Space Grotesk numeric, ember accent, Inter explanation, mono "go home"
  * button via the Button primitive.
  *
  * @module pages/NotFoundPage
@@ -22,7 +22,7 @@ export function NotFoundPage() {
         <h1 className="mb-4 font-display text-7xl font-semibold tracking-tight text-accent">
           {t("notFound.code")}
         </h1>
-        <p className="mb-8 max-w-md font-reading text-base leading-relaxed text-body">
+        <p className="mb-8 max-w-md font-text text-base leading-relaxed text-body">
           {t("notFound.message")}
         </p>
         <Button onClick={() => navigate("/")}>{t("notFound.goHome")}</Button>

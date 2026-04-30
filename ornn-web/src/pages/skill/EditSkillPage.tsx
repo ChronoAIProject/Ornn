@@ -108,7 +108,7 @@ export function EditSkillPage() {
             </h3>
             <div className="flex items-center justify-between">
               <div>
-                <p className="font-body text-sm text-strong">
+                <p className="font-text text-sm text-strong">
                   {t("editSkill.currentVisibility", "Current visibility:")}{" "}
                   <Badge color={skill.isPrivate ? "cyan" : "green"}>
                     {skill.isPrivate
@@ -116,7 +116,7 @@ export function EditSkillPage() {
                       : t("editSkill.badgePublic", "Public")}
                   </Badge>
                 </p>
-                <p className="mt-1 font-body text-xs text-meta">
+                <p className="mt-1 font-text text-xs text-meta">
                   {skill.isPrivate
                     ? t(
                         "editSkill.privateDesc",
@@ -146,7 +146,7 @@ export function EditSkillPage() {
             <h3 className="mb-4 font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-meta border-b border-dashed border-subtle pb-3">
               {t("editSkill.updatePackageHeading", "Update Package")}
             </h3>
-            <p className="mb-4 font-body text-xs text-meta">
+            <p className="mb-4 font-text text-xs text-meta">
               {t(
                 "editSkill.updatePackageDesc",
                 "Upload a new ZIP package to replace the current skill contents. Tags, description, and metadata are extracted from the SKILL.md inside the ZIP.",
@@ -176,7 +176,7 @@ export function EditSkillPage() {
                   </div>
                 ) : (
                   <div className="text-center">
-                    <p className="font-body text-sm text-meta">
+                    <p className="font-text text-sm text-meta">
                       {t("editSkill.selectZip", "Click to select a .zip file")}
                     </p>
                     <p className="mt-1 text-xs text-meta/60">

@@ -50,10 +50,10 @@ export function NotificationsPage() {
       <div className="mx-auto w-full max-w-4xl px-6 py-10">
         <header className="mb-6 flex flex-wrap items-center justify-between gap-4">
           <div>
-            <h1 className="font-heading text-3xl font-bold text-strong">
+            <h1 className="font-display text-3xl font-bold text-strong">
               {t("notifications.title", "Notifications")}
             </h1>
-            <p className="mt-1 font-body text-sm text-meta">
+            <p className="mt-1 font-text text-sm text-meta">
               {t(
                 "notifications.subtitle",
                 "Share reviews, audit verdicts, and admin actions on your skills.",
@@ -64,7 +64,7 @@ export function NotificationsPage() {
             <button
               type="button"
               onClick={() => setUnreadOnly((v) => !v)}
-              className={`rounded-lg border px-3 py-1.5 font-body text-sm transition-colors cursor-pointer ${
+              className={`rounded-lg border px-3 py-1.5 font-text text-sm transition-colors cursor-pointer ${
                 unreadOnly
                   ? "border-accent/60 bg-accent/10 text-accent"
                   : "border-accent/20 bg-card/50 text-meta hover:text-strong"
@@ -78,7 +78,7 @@ export function NotificationsPage() {
               type="button"
               onClick={() => markAll.mutate()}
               disabled={!hasUnread || markAll.isPending}
-              className="rounded-lg border border-accent/20 bg-card/50 px-3 py-1.5 font-body text-sm text-meta transition-colors hover:text-strong disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
+              className="rounded-lg border border-accent/20 bg-card/50 px-3 py-1.5 font-text text-sm text-meta transition-colors hover:text-strong disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
             >
               {t("notifications.markAllRead", "Mark all read")}
             </button>
@@ -86,15 +86,15 @@ export function NotificationsPage() {
         </header>
 
         {isLoading ? (
-          <div className="py-16 text-center font-body text-sm text-meta">
+          <div className="py-16 text-center font-text text-sm text-meta">
             {t("notifications.loading", "Loading…")}
           </div>
         ) : isError ? (
-          <div className="py-16 text-center font-body text-sm text-danger">
+          <div className="py-16 text-center font-text text-sm text-danger">
             {t("notifications.loadFailed", "Could not load notifications.")}
           </div>
         ) : items.length === 0 ? (
-          <div className="rounded-lg border border-accent/10 bg-card/30 py-16 text-center font-body text-sm text-meta">
+          <div className="rounded-lg border border-accent/10 bg-card/30 py-16 text-center font-text text-sm text-meta">
             {unreadOnly
               ? t("notifications.noUnread", "No unread notifications.")
               : t("notifications.empty", "You're all caught up.")}
@@ -121,7 +121,7 @@ export function NotificationsPage() {
                             {CATEGORY_LABEL[n.category] ?? n.category}
                           </span>
                           <span
-                            className={`font-body text-sm font-medium leading-snug ${
+                            className={`font-text text-sm font-medium leading-snug ${
                               n.readAt ? "text-meta" : "text-strong"
                             }`}
                           >
@@ -129,7 +129,7 @@ export function NotificationsPage() {
                           </span>
                         </div>
                         {n.body && (
-                          <p className="font-body text-sm leading-snug text-meta">
+                          <p className="font-text text-sm leading-snug text-meta">
                             {n.body}
                           </p>
                         )}

@@ -107,7 +107,7 @@ export function SkillCard({
     >
       {/* Title + permission/system badges */}
       <div className="mb-3 flex items-start justify-between gap-2">
-        <h3 className="min-w-0 font-heading text-lg font-semibold text-accent truncate">
+        <h3 className="min-w-0 font-display text-lg font-semibold text-accent truncate">
           {skill.name}
         </h3>
         <div className="flex shrink-0 items-center gap-1.5 flex-wrap justify-end">
@@ -133,18 +133,18 @@ export function SkillCard({
           non-owned skill. Rendered only when the backend populated
           `myAccessReason` with a grant-based value. */}
       {skill.myAccessReason === "shared-via-org" && (
-        <p className="mb-2 font-body text-[11px] uppercase tracking-wider text-meta">
+        <p className="mb-2 font-text text-[11px] uppercase tracking-wider text-meta">
           Via organization
         </p>
       )}
       {skill.myAccessReason === "shared-direct" && (
-        <p className="mb-2 font-body text-[11px] uppercase tracking-wider text-meta">
+        <p className="mb-2 font-text text-[11px] uppercase tracking-wider text-meta">
           Shared by {displayName}
         </p>
       )}
 
       {/* Description — fixed 2 lines, break long words */}
-      <p className="mb-4 font-body text-sm leading-relaxed text-meta line-clamp-2 break-words">
+      <p className="mb-4 font-text text-sm leading-relaxed text-meta line-clamp-2 break-words">
         {skill.description}
       </p>
 
