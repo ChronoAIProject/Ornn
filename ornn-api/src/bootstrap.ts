@@ -219,9 +219,15 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   const analyticsService = new AnalyticsService({ analyticsRepo });
   const analyticsRoutes = createAnalyticsRoutes({ analyticsService, skillService });
 
-  // ---- Domain: Platform settings (admin-editable thresholds) ----
+  // ---- Domain: Platform settings (admin-editable thresholds + mirror coords) ----
   const platformSettingsRepo = new PlatformSettingsRepository(db);
-  const platformSettingsService = new PlatformSettingsService(platformSettingsRepo);
+  const platformSettingsService = new PlatformSettingsService(platformSettingsRepo, {
+    githubMirror: {
+      owner: config.mirror.repoOwner,
+      repo: config.mirror.repoName,
+      branch: config.mirror.defaultBranch,
+    },
+  });
   const platformSettingsRoutes = createPlatformSettingsRoutes({ platformSettingsService });
 
   // ---- Domain: GitHub Mirror ----
@@ -229,6 +235,11 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   // handlers as a fire-and-forget hook target. The MirrorService's
   // `enabled` flag short-circuits all operations when the feature is
   // off, so callers don't need to null-check.
+  //
+  // Repo coordinates are resolved at call time from
+  // `platformSettingsService` (DB-wins-with-configmap-fallback), so an
+  // admin patch via `POST /api/v1/github/repo` lands on the next sync
+  // without a redeploy.
   const mirrorService = (() => {
     if (!config.mirror.enabled) {
       return new MirrorService(
@@ -238,8 +249,7 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
           skillRepo,
           skillService,
           ornnPublicOrigin: config.ornnPublicOrigin,
-          mirrorRepoOwner: config.mirror.repoOwner,
-          mirrorRepoName: config.mirror.repoName,
+          platformSettingsService,
         },
         false,
       );
@@ -249,10 +259,9 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
       privateKey: config.mirror.privateKey,
       installationId: config.mirror.installationId,
     });
-    const github = new GitHubMirrorClient(auth, {
-      owner: config.mirror.repoOwner,
-      repo: config.mirror.repoName,
-      defaultBranch: config.mirror.defaultBranch,
+    const github = new GitHubMirrorClient(auth, async () => {
+      const cfg = await platformSettingsService.getGithubMirrorRepo();
+      return { owner: cfg.owner, repo: cfg.repo, defaultBranch: cfg.branch };
     });
     return new MirrorService(
       {
@@ -260,14 +269,16 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
         skillRepo,
         skillService,
         ornnPublicOrigin: config.ornnPublicOrigin,
-        mirrorRepoOwner: config.mirror.repoOwner,
-        mirrorRepoName: config.mirror.repoName,
+        platformSettingsService,
       },
       true,
     );
   })();
   const mirrorRoutes = createMirrorRoutes({
     mirrorService: config.mirror.enabled ? mirrorService : undefined,
+    platformSettingsService,
+    skillRepo,
+    mirrorEnabled: config.mirror.enabled,
   });
 
   // Skill routes — sharing is now a direct PUT /permissions write; the

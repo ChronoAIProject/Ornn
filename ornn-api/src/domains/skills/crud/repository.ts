@@ -372,6 +372,139 @@ export class SkillRepository {
   }
 
   /**
+   * Stamp `mirrorSync` on a single skill after a successful publish or
+   * reconcile commit lands on the GitHub mirror. `syncedAt` is wall-clock
+   * server time; `commitSha` is the GitHub commit SHA so the UI can build
+   * an audit link `<owner>/<repo>/commit/<sha>`.
+   *
+   * Pass `null` to clear the field (skill removed from mirror — e.g.
+   * flipped private, deleted, or admin reset).
+   */
+  async setMirrorSyncState(
+    guid: string,
+    state: { version: string; syncedAt: Date; commitSha: string } | null,
+  ): Promise<void> {
+    if (state === null) {
+      await this.collection.updateOne({ _id: guid as unknown as Document["_id"] }, {
+        $unset: { mirrorSync: "" },
+      });
+      return;
+    }
+    await this.collection.updateOne({ _id: guid as unknown as Document["_id"] }, {
+      $set: { mirrorSync: state },
+    });
+  }
+
+  /**
+   * Bulk variant for `MirrorService.reconcileAll`. One MongoDB roundtrip
+   * for any number of skills. Each entry sets or unsets the field per
+   * the same rules as the single setter.
+   */
+  async setMirrorSyncStateBulk(
+    updates: Array<{
+      guid: string;
+      state: { version: string; syncedAt: Date; commitSha: string } | null;
+    }>,
+  ): Promise<void> {
+    if (updates.length === 0) return;
+    const ops = updates.map(({ guid, state }) =>
+      state === null
+        ? {
+            updateOne: {
+              filter: { _id: guid as unknown as Document["_id"] },
+              update: { $unset: { mirrorSync: "" } },
+            },
+          }
+        : {
+            updateOne: {
+              filter: { _id: guid as unknown as Document["_id"] },
+              update: { $set: { mirrorSync: state } },
+            },
+          },
+    );
+    await this.collection.bulkWrite(ops, { ordered: false });
+  }
+
+  /**
+   * Clear `mirrorSync` on every skill that has it. Used when an admin
+   * re-points the mirror to a different `<owner>/<repo>` — the existing
+   * stamps point at commit SHAs in the *old* repo, so the audit links
+   * would be wrong if we kept them. Next reconcile re-stamps everything
+   * fresh against the new repo.
+   */
+  async clearAllMirrorSyncStamps(): Promise<void> {
+    await this.collection.updateMany(
+      { mirrorSync: { $exists: true } },
+      { $unset: { mirrorSync: "" } },
+    );
+  }
+
+  /**
+   * Heal stale `mirrorSync` stamps. Any skill that's currently
+   * `isPrivate: true` should never carry a mirror stamp — if it does,
+   * a privacy-flip hook fired-and-forgot but never landed (process
+   * crash, transient GitHub error, etc.). `reconcileAll` calls this
+   * at the start of every run so the stamp set converges with reality
+   * even when an incremental hook drops on the floor.
+   */
+  async clearMirrorSyncForIneligibleSkills(): Promise<void> {
+    await this.collection.updateMany(
+      { isPrivate: true, mirrorSync: { $exists: true } },
+      { $unset: { mirrorSync: "" } },
+    );
+  }
+
+  /**
+   * Mirror status counters used by the admin overview. One aggregation
+   * pass over the eligible-for-mirror set:
+   *   - `eligible` — total public + system skills
+   *   - `synced` — eligible skills with `mirrorSync.version === latestVersion`
+   *   - `lagging` — eligible skills with stale `mirrorSync.version`
+   *   - `neverSynced` — eligible skills with no `mirrorSync` field
+   *   - `oldestUnsyncedAt` — `createdOn` of the oldest never-synced skill,
+   *     or `null` when nothing is pending. Surfaces "is the cron stuck"
+   *     to the operator.
+   */
+  async getMirrorCounts(): Promise<{
+    eligible: number;
+    synced: number;
+    lagging: number;
+    neverSynced: number;
+    oldestUnsyncedAt: Date | null;
+  }> {
+    const docs = await this.collection
+      .find({ isPrivate: false })
+      .project({ latestVersion: 1, mirrorSync: 1, createdOn: 1 })
+      .toArray();
+    let synced = 0;
+    let lagging = 0;
+    let neverSynced = 0;
+    let oldestUnsyncedAt: Date | null = null;
+    for (const d of docs) {
+      if (!d.mirrorSync || typeof d.mirrorSync.version !== "string") {
+        neverSynced += 1;
+        const createdOn = d.createdOn instanceof Date ? d.createdOn : null;
+        if (createdOn && (oldestUnsyncedAt === null || createdOn < oldestUnsyncedAt)) {
+          oldestUnsyncedAt = createdOn;
+        }
+        continue;
+      }
+      if (d.mirrorSync.version === d.latestVersion) {
+        synced += 1;
+      } else {
+        lagging += 1;
+      }
+    }
+    return {
+      eligible: docs.length,
+      synced,
+      lagging,
+      neverSynced,
+      oldestUnsyncedAt,
+    };
+  }
+
+  /**
    * Aggregate grants on skills owned by `userId` — which orgs and
    * users show up as grantees, with per-target skill counts. Used by
    * the registry My-Skills filter row.
@@ -761,6 +894,19 @@ function mapDoc(doc: Document | null): SkillDocument | null {
     nyxidServiceSlug: typeof doc.nyxidServiceSlug === "string" ? doc.nyxidServiceSlug : null,
     nyxidServiceLabel: typeof doc.nyxidServiceLabel === "string" ? doc.nyxidServiceLabel : null,
     isSystemSkill: doc.isSystemSkill === true,
+    mirrorSync:
+      doc.mirrorSync &&
+      typeof doc.mirrorSync.version === "string" &&
+      typeof doc.mirrorSync.commitSha === "string"
+        ? {
+            version: doc.mirrorSync.version,
+            syncedAt:
+              doc.mirrorSync.syncedAt instanceof Date
+                ? doc.mirrorSync.syncedAt
+                : new Date(doc.mirrorSync.syncedAt),
+            commitSha: doc.mirrorSync.commitSha,
+          }
+        : undefined,
   };
 }
 

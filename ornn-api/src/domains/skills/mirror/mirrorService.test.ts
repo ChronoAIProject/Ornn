@@ -23,6 +23,20 @@ import type { GitHubMirrorClient, TreeEntry } from "./githubMirrorClient";
 import type { SkillRepository } from "../crud/repository";
 import type { SkillService } from "../crud/service";
 import type { SkillDocument } from "../../../shared/types/index";
+import type { PlatformSettingsService } from "../../platform/service";
+
+/** Stub for the PlatformSettingsService dep — returns a fixed repo. */
+function makeFakePlatformSettings(
+  cfg: { owner: string; repo: string; branch: string } = {
+    owner: "ChronoAIProject",
+    repo: "ornn-skills",
+    branch: "main",
+  },
+): PlatformSettingsService {
+  return {
+    getGithubMirrorRepo: mock(async () => cfg),
+  } as unknown as PlatformSettingsService;
+}
 
 /**
  * Same git blob SHA1 algorithm `MirrorService` uses internally —
@@ -122,6 +136,9 @@ function makeFakeRepo(skills: SkillDocument[] = []): SkillRepository {
     findAllEligibleForMirror: mock(async () =>
       skills.filter((s) => s.isPrivate === false),
     ),
+    setMirrorSyncState: mock(async () => {}),
+    setMirrorSyncStateBulk: mock(async () => {}),
+    clearMirrorSyncForIneligibleSkills: mock(async () => {}),
   } as unknown as SkillRepository;
 }
 
@@ -168,8 +185,7 @@ describe("MirrorService disabled", () => {
         skillRepo: makeFakeRepo([makeSkill()]),
         skillService: makeFakeSkillService({}),
         ornnPublicOrigin: "https://example",
-        mirrorRepoOwner: "ChronoAIProject",
-        mirrorRepoName: "ornn-skills",
+        platformSettingsService: makeFakePlatformSettings(),
       },
       false,
     );
@@ -187,8 +203,7 @@ describe("MirrorService disabled", () => {
         skillRepo: makeFakeRepo([makeSkill()]),
         skillService: makeFakeSkillService({}),
         ornnPublicOrigin: "https://example",
-        mirrorRepoOwner: "ChronoAIProject",
-        mirrorRepoName: "ornn-skills",
+        platformSettingsService: makeFakePlatformSettings(),
       },
       false,
     );
@@ -215,8 +230,7 @@ describe("MirrorService privacy regression", () => {
           "g-pub": { "SKILL.md": "# pub" },
         }),
         ornnPublicOrigin: "https://example",
-        mirrorRepoOwner: "ChronoAIProject",
-        mirrorRepoName: "ornn-skills",
+        platformSettingsService: makeFakePlatformSettings(),
       },
       true,
     );
@@ -240,8 +254,7 @@ describe("MirrorService privacy regression", () => {
         skillRepo: makeFakeRepo([skill]),
         skillService: makeFakeSkillService({}),
         ornnPublicOrigin: "https://example",
-        mirrorRepoOwner: "ChronoAIProject",
-        mirrorRepoName: "ornn-skills",
+        platformSettingsService: makeFakePlatformSettings(),
       },
       true,
     );
@@ -263,8 +276,7 @@ describe("MirrorService privacy regression", () => {
         skillRepo: makeFakeRepo([skill]),
         skillService: makeFakeSkillService({}),
         ornnPublicOrigin: "https://example",
-        mirrorRepoOwner: "ChronoAIProject",
-        mirrorRepoName: "ornn-skills",
+        platformSettingsService: makeFakePlatformSettings(),
       },
       true,
     );
@@ -314,8 +326,7 @@ describe("MirrorService idempotency", () => {
         skillRepo: makeFakeRepo([skill]),
         skillService: makeFakeSkillService({ g1: skillFiles }),
         ornnPublicOrigin: "https://example",
-        mirrorRepoOwner: "ChronoAIProject",
-        mirrorRepoName: "ornn-skills",
+        platformSettingsService: makeFakePlatformSettings(),
       },
       true,
     );

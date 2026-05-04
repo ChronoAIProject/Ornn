@@ -40,6 +40,8 @@ import { SkillService } from "../src/domains/skills/crud/service";
 import { GitHubAppAuth } from "../src/domains/skills/mirror/githubAppAuth";
 import { GitHubMirrorClient } from "../src/domains/skills/mirror/githubMirrorClient";
 import { MirrorService } from "../src/domains/skills/mirror/mirrorService";
+import { PlatformSettingsRepository } from "../src/domains/platform/repository";
+import { PlatformSettingsService } from "../src/domains/platform/service";
 
 async function main(): Promise<void> {
   const logger = pino({ level: "info" }).child({ service: "reconcile-mirror" });
@@ -75,15 +77,26 @@ async function main(): Promise<void> {
       storageBucket: config.storageBucket,
     });
 
+    // Same DB-backed-with-configmap-fallback wiring as the API pod.
+    // Each cron run is a fresh process, so we read DB state once at
+    // the start and use it for the whole reconcile.
+    const platformSettingsRepo = new PlatformSettingsRepository(mongo.db);
+    const platformSettingsService = new PlatformSettingsService(platformSettingsRepo, {
+      githubMirror: {
+        owner: config.mirror.repoOwner,
+        repo: config.mirror.repoName,
+        branch: config.mirror.defaultBranch,
+      },
+    });
+
     const auth = new GitHubAppAuth({
       appId: config.mirror.appId,
       privateKey: config.mirror.privateKey,
       installationId: config.mirror.installationId,
     });
-    const github = new GitHubMirrorClient(auth, {
-      owner: config.mirror.repoOwner,
-      repo: config.mirror.repoName,
-      defaultBranch: config.mirror.defaultBranch,
+    const github = new GitHubMirrorClient(auth, async () => {
+      const cfg = await platformSettingsService.getGithubMirrorRepo();
+      return { owner: cfg.owner, repo: cfg.repo, defaultBranch: cfg.branch };
     });
     const mirror = new MirrorService(
       {
@@ -91,8 +104,7 @@ async function main(): Promise<void> {
         skillRepo,
         skillService,
         ornnPublicOrigin: config.ornnPublicOrigin,
-        mirrorRepoOwner: config.mirror.repoOwner,
-        mirrorRepoName: config.mirror.repoName,
+        platformSettingsService,
       },
       true,
     );

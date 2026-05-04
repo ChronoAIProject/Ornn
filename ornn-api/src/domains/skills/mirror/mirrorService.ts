@@ -28,6 +28,7 @@ import { GitHubMirrorClient, type TreeEntry } from "./githubMirrorClient";
 import type { SkillRepository } from "../crud/repository";
 import type { SkillService } from "../crud/service";
 import type { SkillDocument } from "../../../shared/types/index";
+import type { PlatformSettingsService } from "../../platform/service";
 
 const logger = pino({ level: "info" }).child({ module: "mirrorService" });
 
@@ -38,16 +39,12 @@ export interface MirrorServiceDeps {
   /** `https://ornn.chrono-ai.fun` (no trailing slash). Used in the per-skill README footer. */
   ornnPublicOrigin: string;
   /**
-   * GitHub mirror coordinates surfaced in the auto-generated READMEs
-   * so the `npx skills add <owner>/<repo>/<name>` snippet always
-   * reflects the operator's actual mirror repo, not a hardcoded
-   * `ChronoAIProject/ornn-skills` placeholder. Sourced from the
-   * `GITHUB_MIRROR_REPO_OWNER` + `GITHUB_MIRROR_REPO_NAME` env vars
-   * on the configmap; whatever you change there flows into the next
-   * sync's README content.
+   * Source of truth for the mirror's repo coordinates. Read on every
+   * sync so an admin patch via `POST /api/v1/github/repo` takes effect
+   * on the next operation without a redeploy. Cached for 30s by the
+   * service itself, so repeated reads inside one sync are cheap.
    */
-  mirrorRepoOwner: string;
-  mirrorRepoName: string;
+  platformSettingsService: PlatformSettingsService;
 }
 
 export interface ReconcileResult {
@@ -82,6 +79,11 @@ export class MirrorService {
    * could change a skill's eligibility OR its content. Decides whether
    * to publish or remove based on the current DB state. Always
    * fire-and-forget from the route — never blocks the user response.
+   *
+   * Owns the un-mirror DB-clear path: `removeSkill(name)` itself never
+   * touches the DB (it has to support the just-deleted-doc case), so
+   * when un-mirror is the result of a privacy flip on an existing doc,
+   * `syncSkill` clears the stamp here.
    */
   async syncSkill(guid: string): Promise<void> {
     if (!this.enabled) return;
@@ -93,8 +95,9 @@ export class MirrorService {
     if (MirrorService.isEligible(skill)) {
       await this.publishSkill(guid);
     } else {
-      // Skill exists but is now private → remove from mirror.
+      // Skill exists but is now private → remove from mirror + clear DB stamp.
       await this.removeSkill(skill.name);
+      await this.deps.skillRepo.setMirrorSyncState(guid, null);
     }
   }
 
@@ -104,6 +107,11 @@ export class MirrorService {
    * Mirror or refresh a single skill's folder. No-op when the skill
    * isn't eligible (private), or when the skill doesn't exist anymore
    * (caller probably wanted `removeSkill`).
+   *
+   * Stamps `mirrorSync` on the skill doc when an actual commit lands.
+   * No-op commits (content already matched) leave the existing stamp
+   * untouched — its `commitSha` still points at the most recent commit
+   * that actually changed this skill, which is the correct audit link.
    */
   async publishSkill(guid: string): Promise<void> {
     if (!this.enabled) return;
@@ -121,7 +129,14 @@ export class MirrorService {
       return;
     }
     const desired = await this.buildSkillFolder(skill);
-    await this.commitSkillFolderChange(skill.name, desired, "publish");
+    const commit = await this.commitSkillFolderChange(skill.name, desired, "publish");
+    if (commit) {
+      await this.deps.skillRepo.setMirrorSyncState(guid, {
+        version: skill.latestVersion,
+        syncedAt: commit.committedAt,
+        commitSha: commit.sha,
+      });
+    }
   }
 
   /**
@@ -139,23 +154,37 @@ export class MirrorService {
    * containing all add/update/remove deltas. Idempotent — running
    * twice in a row with no Ornn changes between produces zero new
    * commits the second time (one read of the tree, no writes).
+   *
+   * Stamps `mirrorSync` on every skill whose folder changed in this
+   * commit. Skills whose content was unchanged keep their existing
+   * stamp (already correct). Heals stale stamps at the start: any
+   * `isPrivate: true` skill carrying a leftover `mirrorSync` (because
+   * its un-mirror hook dropped on the floor) gets cleared, so the
+   * cron is the safety net for incremental-hook failures.
    */
   async reconcileAll(): Promise<ReconcileResult> {
     if (!this.enabled) {
       return { added: 0, updated: 0, removed: 0, unchanged: 0 };
     }
+
+    // Heal stale stamps before doing anything else.
+    await this.deps.skillRepo.clearMirrorSyncForIneligibleSkills();
+
     const eligible = await this.deps.skillRepo.findAllEligibleForMirror();
     logger.info({ count: eligible.length }, "reconcileAll: found eligible skills");
 
-    // Build the desired full state in memory.
+    // Build the desired full state in memory + name → guid/version index
+    // so we can stamp `mirrorSync` on the skills that get touched.
     const desired = new Map<string, string>(); // path → content
+    const skillByName = new Map<string, { guid: string; version: string }>();
     for (const skill of eligible) {
+      skillByName.set(skill.name, { guid: skill.guid, version: skill.latestVersion });
       const folder = await this.buildSkillFolder(skill);
       for (const [relPath, content] of folder) {
         desired.set(`${skill.name}/${relPath}`, content);
       }
     }
-    desired.set("README.md", this.repoReadme());
+    desired.set("README.md", await this.repoReadme());
 
     // Read current state of the mirror.
     const headCommit = await this.deps.github.getDefaultBranchHead();
@@ -170,6 +199,7 @@ export class MirrorService {
     // Diff.
     const result: ReconcileResult = { added: 0, updated: 0, removed: 0, unchanged: 0 };
     const changes: TreeEntry[] = [];
+    const touchedSkillNames = new Set<string>();
     for (const [path, content] of desired) {
       const existingSha = currentByPath.get(path)?.sha;
       const desiredSha = computeGitBlobSha(content);
@@ -183,6 +213,8 @@ export class MirrorService {
       // free if the content is identical to one already stored.
       const newSha = await this.deps.github.createBlob(content);
       changes.push({ path, mode: "100644", type: "blob", sha: newSha });
+      const folderName = pathSkillFolder(path);
+      if (folderName && skillByName.has(folderName)) touchedSkillNames.add(folderName);
       if (existingSha) result.updated++;
       else result.added++;
     }
@@ -199,12 +231,29 @@ export class MirrorService {
       return result;
     }
 
-    await this.writeCommitAndTag({
+    const commit = await this.writeCommitAndTag({
       changes,
       parentCommit: headCommit,
       message: `mirror: reconcile (added=${result.added}, updated=${result.updated}, removed=${result.removed})`,
     });
     logger.info({ ...result }, "reconcileAll: committed");
+
+    // Stamp every touched skill with the new commit. Single bulk write.
+    if (touchedSkillNames.size > 0) {
+      const updates = [...touchedSkillNames].map((name) => {
+        const meta = skillByName.get(name)!;
+        return {
+          guid: meta.guid,
+          state: {
+            version: meta.version,
+            syncedAt: commit.committedAt,
+            commitSha: commit.sha,
+          },
+        };
+      });
+      await this.deps.skillRepo.setMirrorSyncStateBulk(updates);
+    }
+
     return result;
   }
 
@@ -233,18 +282,29 @@ export class MirrorService {
       if (path.toLowerCase() === "readme.md") continue;
       out.set(path, content);
     }
-    out.set("README.md", this.skillReadme(skill));
+    out.set("README.md", await this.skillReadme(skill));
     return out;
   }
 
-  /** `<owner>/<repo>` shorthand used in install snippets. */
-  private get repoSlug(): string {
-    return `${this.deps.mirrorRepoOwner}/${this.deps.mirrorRepoName}`;
+  /** `<owner>/<repo>` shorthand used in install snippets. Resolved at
+   * call time from the platform-settings cache so an admin re-point
+   * propagates into READMEs on the next sync. */
+  private async getRepoSlug(): Promise<string> {
+    const cfg = await this.deps.platformSettingsService.getGithubMirrorRepo();
+    return `${cfg.owner}/${cfg.repo}`;
   }
 
-  private skillReadme(skill: SkillDocument): string {
+  /** Mirror repo name on its own. Used as the H1 in the top-level
+   * README (`# ornn-skills`). */
+  private async getRepoName(): Promise<string> {
+    const cfg = await this.deps.platformSettingsService.getGithubMirrorRepo();
+    return cfg.repo;
+  }
+
+  private async skillReadme(skill: SkillDocument): Promise<string> {
     const url = `${this.deps.ornnPublicOrigin}/skills/${encodeURIComponent(skill.name)}`;
     const ts = new Date().toISOString();
+    const slug = await this.getRepoSlug();
     return [
       `# ${skill.name}`,
       "",
@@ -262,7 +322,7 @@ export class MirrorService {
       "## Install",
       "",
       "```bash",
-      `npx skills add ${this.repoSlug}/${skill.name}`,
+      `npx skills add ${slug}/${skill.name}`,
       "```",
       "",
       "## Use",
@@ -273,9 +333,11 @@ export class MirrorService {
     ].join("\n");
   }
 
-  private repoReadme(): string {
+  private async repoReadme(): Promise<string> {
+    const slug = await this.getRepoSlug();
+    const name = await this.getRepoName();
     return [
-      `# ${this.deps.mirrorRepoName}`,
+      `# ${name}`,
       "",
       "Auto-generated, **read-only** mirror of public + system skills from",
       `[Ornn](${this.deps.ornnPublicOrigin}).`,
@@ -283,7 +345,7 @@ export class MirrorService {
       "## Install a skill",
       "",
       "```bash",
-      `npx skills add ${this.repoSlug}/<skill-name>`,
+      `npx skills add ${slug}/<skill-name>`,
       "```",
       "",
       "Each subdirectory carries a `SKILL.md` and any references / scripts /",
@@ -321,23 +383,30 @@ export class MirrorService {
    * Common path shared by `publishSkill` and `removeSkill` — produces
    * a per-skill incremental commit. `desired === null` is the remove
    * case; otherwise it's a publish.
+   *
+   * Returns `{ sha, committedAt }` when a commit lands, or `null` when
+   * the operation was a no-op (no diff) or got deferred to a full
+   * reconcile (first-push bootstrap). Callers use the return value to
+   * decide whether to stamp `mirrorSync` on the DB.
    */
   private async commitSkillFolderChange(
     skillName: string,
     desired: Map<string, string> | null,
     op: "publish" | "remove",
-  ): Promise<void> {
+  ): Promise<{ sha: string; committedAt: Date } | null> {
     const headCommit = await this.deps.github.getDefaultBranchHead();
     if (!headCommit) {
       // First-ever push — bootstrap requires an initial commit. Defer
       // to reconcile so the bootstrap commit reflects the entire
       // current Ornn catalogue, not just one skill in isolation.
+      // Reconcile stamps everything itself; we return null here so
+      // the caller doesn't double-stamp.
       logger.warn(
         { skillName, op },
         "commitSkillFolderChange: mirror branch missing — running reconcileAll instead",
       );
       await this.reconcileAll();
-      return;
+      return null;
     }
     const currentTreeSha = await this.deps.github.getCommitTreeSha(headCommit);
     const currentTree = await this.deps.github.getRecursiveTree(currentTreeSha);
@@ -368,7 +437,7 @@ export class MirrorService {
     } else {
       if (currentInFolder.length === 0) {
         logger.info({ skillName }, "removeSkill: folder absent, no-op");
-        return;
+        return null;
       }
       for (const e of currentInFolder) {
         changes.push({ path: e.path, mode: "100644", type: "blob", sha: null as unknown as string });
@@ -377,10 +446,10 @@ export class MirrorService {
 
     if (changes.length === 0) {
       logger.info({ skillName, op }, "commitSkillFolderChange: no diff, skipping commit");
-      return;
+      return null;
     }
 
-    await this.writeCommitAndTag({
+    const commit = await this.writeCommitAndTag({
       changes,
       parentCommit: headCommit,
       message:
@@ -389,13 +458,14 @@ export class MirrorService {
           : `mirror: remove ${skillName}`,
     });
     logger.info({ skillName, op, changes: changes.length }, "commitSkillFolderChange: committed");
+    return commit;
   }
 
   private async writeCommitAndTag(opts: {
     changes: TreeEntry[];
     parentCommit: string | null;
     message: string;
-  }): Promise<void> {
+  }): Promise<{ sha: string; committedAt: Date }> {
     const { changes, parentCommit, message } = opts;
     const baseTree = parentCommit
       ? await this.deps.github.getCommitTreeSha(parentCommit)
@@ -411,13 +481,26 @@ export class MirrorService {
     } else {
       await this.deps.github.createBranchRef(commitSha);
     }
-    const ts = new Date().toISOString().replace(/[:.]/g, "-");
+    const committedAt = new Date();
+    const ts = committedAt.toISOString().replace(/[:.]/g, "-");
     await this.deps.github.createAnnotatedTag({
       tagName: `sync-${ts}`,
       message: `${message}\n\nSynced from ornn-api at ${ts}`,
       objectSha: commitSha,
     });
+    return { sha: commitSha, committedAt };
   }
+}
+
+/**
+ * Tree paths shaped like `<skill-name>/SKILL.md` ⇒ "skill-name". Returns
+ * null for top-level paths (e.g. `README.md`) which don't belong to any
+ * skill and shouldn't trigger a `mirrorSync` stamp.
+ */
+function pathSkillFolder(path: string): string | null {
+  const idx = path.indexOf("/");
+  if (idx <= 0) return null;
+  return path.slice(0, idx);
 }
 
 /**
