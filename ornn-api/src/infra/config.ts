@@ -171,8 +171,15 @@ const envSchema = z.object({
    * Public origin agents and humans use to reach Ornn (no trailing
    * slash). Only used by the mirror service today, but generally
    * useful for any link generation. Default works for local dev.
+   *
+   * Coerce empty string → undefined so a `.env` line that's commented
+   * out (envsubst injects literal "") still falls through to the
+   * default instead of failing `.url()` validation at boot.
    */
-  ORNN_PUBLIC_ORIGIN: z.string().url().default("https://ornn.chrono-ai.fun"),
+  ORNN_PUBLIC_ORIGIN: z.preprocess(
+    (v) => (v === "" ? undefined : v),
+    z.string().url().default("https://ornn.chrono-ai.fun"),
+  ),
 });
 
 /**
