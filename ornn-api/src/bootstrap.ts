@@ -11,7 +11,7 @@ import { cors } from "hono/cors";
 import { join } from "node:path";
 import { readFileSync } from "node:fs";
 import pino from "pino";
-import type { SkillConfig } from "./infra/config";
+import { type SkillConfig, assertMirrorConfigComplete } from "./infra/config";
 
 const pkg = JSON.parse(readFileSync(join(import.meta.dir, "..", "package.json"), "utf-8"));
 
@@ -75,6 +75,12 @@ import { createAdminRoutes } from "./domains/admin/routes";
 // Domain: Skill Format
 import { createFormatRoutes } from "./domains/skills/format/routes";
 
+// Domain: GitHub Mirror (public + system skill auto-mirror)
+import { GitHubAppAuth } from "./domains/skills/mirror/githubAppAuth";
+import { GitHubMirrorClient } from "./domains/skills/mirror/githubMirrorClient";
+import { MirrorService } from "./domains/skills/mirror/mirrorService";
+import { createMirrorRoutes } from "./domains/skills/mirror/routes";
+
 // Domain: Me (caller-scoped endpoints)
 import { createMeRoutes } from "./domains/me/routes";
 
@@ -113,6 +119,11 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   }).child({ service: "ornn-api" });
 
   logger.info("Bootstrapping ornn-api service...");
+
+  // Validate the mirror config up front (loud) — otherwise an
+  // ENABLED-but-misconfigured deployment would only fail at first
+  // publish hook fire-and-forget, where the failure gets swallowed.
+  assertMirrorConfigComplete(config);
 
   // ---- Database Connections ----
   const mongo: MongoConnection = await connectMongo(config.mongodbUri, config.mongodbDb);
@@ -213,6 +224,43 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   const platformSettingsService = new PlatformSettingsService(platformSettingsRepo);
   const platformSettingsRoutes = createPlatformSettingsRoutes({ platformSettingsService });
 
+  // ---- Domain: GitHub Mirror ----
+  // Built before the skill routes so we can inject it into the route
+  // handlers as a fire-and-forget hook target. The MirrorService's
+  // `enabled` flag short-circuits all operations when the feature is
+  // off, so callers don't need to null-check.
+  const mirrorService = (() => {
+    if (!config.mirror.enabled) {
+      return new MirrorService(
+        {
+          // The deps are unused when disabled; pass placeholders.
+          github: undefined as unknown as GitHubMirrorClient,
+          skillRepo,
+          skillService,
+          ornnPublicOrigin: config.ornnPublicOrigin,
+        },
+        false,
+      );
+    }
+    const auth = new GitHubAppAuth({
+      appId: config.mirror.appId,
+      privateKey: config.mirror.privateKey,
+      installationId: config.mirror.installationId,
+    });
+    const github = new GitHubMirrorClient(auth, {
+      owner: config.mirror.repoOwner,
+      repo: config.mirror.repoName,
+      defaultBranch: config.mirror.defaultBranch,
+    });
+    return new MirrorService(
+      { github, skillRepo, skillService, ornnPublicOrigin: config.ornnPublicOrigin },
+      true,
+    );
+  })();
+  const mirrorRoutes = createMirrorRoutes({
+    mirrorService: config.mirror.enabled ? mirrorService : undefined,
+  });
+
   // Skill routes — sharing is now a direct PUT /permissions write; the
   // audit signal is surfaced as a per-version label, not a gate.
   const skillRoutes = createSkillRoutes({
@@ -223,6 +271,7 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
     activityRepo,
     nyxidServiceClient,
     extraNyxidServices: config.extraNyxidServices,
+    mirrorService,
   });
 
   // ---- Domain: Skill Search ----
@@ -346,6 +395,7 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   // single request even when multiple routes call `readUserOrgMemberships`.
   apiApp.use("*", nyxidOrgLookupMiddleware(nyxidOrgsClient));
   apiApp.route("/", skillRoutes);
+  apiApp.route("/", mirrorRoutes);
   apiApp.route("/", auditRoutes);
   apiApp.route("/", notificationRoutes);
   apiApp.route("/", analyticsRoutes);

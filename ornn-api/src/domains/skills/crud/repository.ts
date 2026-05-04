@@ -357,6 +357,21 @@ export class SkillRepository {
   }
 
   /**
+   * Skills that should be reflected on the GitHub mirror — strictly
+   * `isPrivate: false`. System skills (admin-NyxID-service-tied) are a
+   * subset of this since `isSystemSkill: true` enforces `isPrivate:
+   * false` at the tie-time invariant. The query is intentionally
+   * narrow: ANY mismatch between this predicate and the mirror's
+   * eligibility check would leak private skills onto a public GitHub
+   * repo, so the predicate stays in one place
+   * (`MirrorService.isEligible`) and this query mirrors it exactly.
+   */
+  async findAllEligibleForMirror(): Promise<SkillDocument[]> {
+    const docs = await this.collection.find({ isPrivate: false }).toArray();
+    return docs.map((d) => mapDoc(d)!);
+  }
+
+  /**
    * Aggregate grants on skills owned by `userId` — which orgs and
    * users show up as grantees, with per-target skill counts. Used by
    * the registry My-Skills filter row.
