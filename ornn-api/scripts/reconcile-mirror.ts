@@ -86,7 +86,14 @@ async function main(): Promise<void> {
       defaultBranch: config.mirror.defaultBranch,
     });
     const mirror = new MirrorService(
-      { github, skillRepo, skillService, ornnPublicOrigin: config.ornnPublicOrigin },
+      {
+        github,
+        skillRepo,
+        skillService,
+        ornnPublicOrigin: config.ornnPublicOrigin,
+        mirrorRepoOwner: config.mirror.repoOwner,
+        mirrorRepoName: config.mirror.repoName,
+      },
       true,
     );
 

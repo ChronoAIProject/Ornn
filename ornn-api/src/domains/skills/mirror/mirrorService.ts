@@ -37,6 +37,17 @@ export interface MirrorServiceDeps {
   skillService: SkillService;
   /** `https://ornn.chrono-ai.fun` (no trailing slash). Used in the per-skill README footer. */
   ornnPublicOrigin: string;
+  /**
+   * GitHub mirror coordinates surfaced in the auto-generated READMEs
+   * so the `npx skills add <owner>/<repo>/<name>` snippet always
+   * reflects the operator's actual mirror repo, not a hardcoded
+   * `ChronoAIProject/ornn-skills` placeholder. Sourced from the
+   * `GITHUB_MIRROR_REPO_OWNER` + `GITHUB_MIRROR_REPO_NAME` env vars
+   * on the configmap; whatever you change there flows into the next
+   * sync's README content.
+   */
+  mirrorRepoOwner: string;
+  mirrorRepoName: string;
 }
 
 export interface ReconcileResult {
@@ -226,6 +237,11 @@ export class MirrorService {
     return out;
   }
 
+  /** `<owner>/<repo>` shorthand used in install snippets. */
+  private get repoSlug(): string {
+    return `${this.deps.mirrorRepoOwner}/${this.deps.mirrorRepoName}`;
+  }
+
   private skillReadme(skill: SkillDocument): string {
     const url = `${this.deps.ornnPublicOrigin}/skills/${encodeURIComponent(skill.name)}`;
     const ts = new Date().toISOString();
@@ -246,7 +262,7 @@ export class MirrorService {
       "## Install",
       "",
       "```bash",
-      `npx skills add ChronoAIProject/ornn-skills/${skill.name}`,
+      `npx skills add ${this.repoSlug}/${skill.name}`,
       "```",
       "",
       "## Use",
@@ -259,7 +275,7 @@ export class MirrorService {
 
   private repoReadme(): string {
     return [
-      "# ornn-skills",
+      `# ${this.deps.mirrorRepoName}`,
       "",
       "Auto-generated, **read-only** mirror of public + system skills from",
       `[Ornn](${this.deps.ornnPublicOrigin}).`,
@@ -267,7 +283,7 @@ export class MirrorService {
       "## Install a skill",
       "",
       "```bash",
-      "npx skills add ChronoAIProject/ornn-skills/<skill-name>",
+      `npx skills add ${this.repoSlug}/<skill-name>`,
       "```",
       "",
       "Each subdirectory carries a `SKILL.md` and any references / scripts /",

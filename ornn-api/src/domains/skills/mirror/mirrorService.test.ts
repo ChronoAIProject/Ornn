@@ -168,6 +168,8 @@ describe("MirrorService disabled", () => {
         skillRepo: makeFakeRepo([makeSkill()]),
         skillService: makeFakeSkillService({}),
         ornnPublicOrigin: "https://example",
+        mirrorRepoOwner: "ChronoAIProject",
+        mirrorRepoName: "ornn-skills",
       },
       false,
     );
@@ -185,6 +187,8 @@ describe("MirrorService disabled", () => {
         skillRepo: makeFakeRepo([makeSkill()]),
         skillService: makeFakeSkillService({}),
         ornnPublicOrigin: "https://example",
+        mirrorRepoOwner: "ChronoAIProject",
+        mirrorRepoName: "ornn-skills",
       },
       false,
     );
@@ -211,6 +215,8 @@ describe("MirrorService privacy regression", () => {
           "g-pub": { "SKILL.md": "# pub" },
         }),
         ornnPublicOrigin: "https://example",
+        mirrorRepoOwner: "ChronoAIProject",
+        mirrorRepoName: "ornn-skills",
       },
       true,
     );
@@ -234,6 +240,8 @@ describe("MirrorService privacy regression", () => {
         skillRepo: makeFakeRepo([skill]),
         skillService: makeFakeSkillService({}),
         ornnPublicOrigin: "https://example",
+        mirrorRepoOwner: "ChronoAIProject",
+        mirrorRepoName: "ornn-skills",
       },
       true,
     );
@@ -255,6 +263,8 @@ describe("MirrorService privacy regression", () => {
         skillRepo: makeFakeRepo([skill]),
         skillService: makeFakeSkillService({}),
         ornnPublicOrigin: "https://example",
+        mirrorRepoOwner: "ChronoAIProject",
+        mirrorRepoName: "ornn-skills",
       },
       true,
     );
@@ -304,6 +314,8 @@ describe("MirrorService idempotency", () => {
         skillRepo: makeFakeRepo([skill]),
         skillService: makeFakeSkillService({ g1: skillFiles }),
         ornnPublicOrigin: "https://example",
+        mirrorRepoOwner: "ChronoAIProject",
+        mirrorRepoName: "ornn-skills",
       },
       true,
     );

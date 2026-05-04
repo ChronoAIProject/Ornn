@@ -238,6 +238,8 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
           skillRepo,
           skillService,
           ornnPublicOrigin: config.ornnPublicOrigin,
+          mirrorRepoOwner: config.mirror.repoOwner,
+          mirrorRepoName: config.mirror.repoName,
         },
         false,
       );
@@ -253,7 +255,14 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
       defaultBranch: config.mirror.defaultBranch,
     });
     return new MirrorService(
-      { github, skillRepo, skillService, ornnPublicOrigin: config.ornnPublicOrigin },
+      {
+        github,
+        skillRepo,
+        skillService,
+        ornnPublicOrigin: config.ornnPublicOrigin,
+        mirrorRepoOwner: config.mirror.repoOwner,
+        mirrorRepoName: config.mirror.repoName,
+      },
       true,
     );
   })();
