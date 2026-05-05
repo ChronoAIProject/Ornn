@@ -112,8 +112,10 @@ export interface AgentSealScan {
   findings: AgentSealFinding[];
   /** ISO-8601 timestamp the scan completed. */
   scannedAt: string;
-  /** AgentSeal toolkit version, e.g. "agentseal-0.4.1". */
+  /** AgentSeal toolkit version, e.g. "agentseal-0.9.6". */
   version: string;
+  /** Number of files actually walked by the scanner. */
+  scannedFiles?: number;
 }
 
 /**

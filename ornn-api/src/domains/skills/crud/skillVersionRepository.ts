@@ -46,12 +46,14 @@ export interface CreateSkillVersionData {
 export interface AgentsealScanRecord {
   /** 0–100 scan-time trust score. */
   score: number;
-  /** Raw findings array straight from `agentseal guard --output json`. */
+  /** Findings array from the per-file SkillScanner sweep. */
   findings: ReadonlyArray<Record<string, unknown>>;
   /** ISO timestamp of when the scan completed. */
   scannedAt: string;
   /** Pinned `agentseal` package version that produced this scan. */
   agentsealVersion: string;
+  /** Count of files actually walked (text-like, under size cap). */
+  scannedFiles?: number;
 }
 
 export class SkillVersionRepository {
@@ -266,10 +268,15 @@ function mapScan(raw: unknown): AgentsealScanRecord | null {
   if (score === null || findings === null || scannedAt === null || agentsealVersion === null) {
     return null;
   }
+  const scannedFiles =
+    typeof r.scannedFiles === "number" && Number.isFinite(r.scannedFiles)
+      ? Math.max(0, Math.round(r.scannedFiles))
+      : undefined;
   return {
     score,
     findings: findings as ReadonlyArray<Record<string, unknown>>,
     scannedAt,
     agentsealVersion,
+    ...(scannedFiles !== undefined ? { scannedFiles } : {}),
   };
 }

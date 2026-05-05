@@ -94,7 +94,24 @@ export interface UserQuotaDocument {
  */
 export type ChargeOutcome = "success" | "skill_error" | "system_error";
 
-/** Audit-trail entry for an admin grant. Bulk grants spawn N rows. */
+/**
+ * Single grant row — both the audit trail entry AND the active credit
+ * ledger. Each grant is **additive**: `amount` is added on top of the
+ * recipient's existing credits, never set/replaced. Bulk grants spawn
+ * N rows.
+ *
+ * Lifetime semantics:
+ *   - `expiresAt` is the absolute deadline (UTC). After it passes, the
+ *     grant's remaining (`amount - consumed`) drops out of the user's
+ *     active balance. Set to `null` for a grant that never expires.
+ *   - `consumed` is incremented (never decremented) when calls draw
+ *     against this grant. When `consumed === amount` the grant is
+ *     considered drained.
+ *
+ * Active balance for a user/surface is:
+ *   Σ (amount − consumed) over rows where consumed < amount AND
+ *     (expiresAt is null OR expiresAt > now)
+ */
 export interface QuotaGrantAudit {
   _id: string;
   adminUserId: string;
@@ -102,7 +119,13 @@ export interface QuotaGrantAudit {
   adminDisplayName: string;
   targetUserId: string;
   surface: Surface;
+  /** Original grant amount (immutable after insert). */
   amount: number;
+  /** How much of `amount` has been spent. Starts at 0. */
+  consumed: number;
+  /** Absolute UTC expiry. `null` = never expires. */
+  expiresAt: Date | null;
+  /** Audit timestamp (also the grant's start of life). */
   createdAt: Date;
   note?: string;
 }

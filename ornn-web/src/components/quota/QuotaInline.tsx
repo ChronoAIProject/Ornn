@@ -2,13 +2,15 @@
  * QuotaInline — in-context surface display + soft 80% warning banner.
  *
  * Sits at the top of the playground / skill-gen pages and renders one of
- * three states based on the cached caller quota:
+ * four states based on the cached caller quota:
  *
- *  - admin-bypass:  rendered nothing (admins bypass the counter).
+ *  - admin-bypass:  compact "ADMIN · UNLIMITED" stamp (admins bypass
+ *                   the counter on the backend).
  *  - normal:        compact "X / Y left" stamp with reset hint.
  *  - warning:       full-width banner at 80% of monthly base, copy
  *                   directing the user to the QuotaChip drawer for
  *                   detail.
+ *  - exhausted:     rendered nothing (the over-limit page takes over).
  *
  * @module components/quota/QuotaInline
  */
@@ -36,7 +38,37 @@ function totalRemaining(s: SurfaceSnapshot): number {
 
 export function QuotaInline({ surface, className = "" }: QuotaInlineProps) {
   const { data: quota } = useMyQuota();
-  if (!quota || quota.isAdmin) return null;
+  if (!quota) return null;
+
+  // Admin bypass — show a stable "UNLIMITED" stamp so admins still get
+  // visual confirmation of their own quota state in the surface header.
+  if (quota.isAdmin) {
+    return (
+      <span
+        role="status"
+        aria-label="Admin — quota unlimited"
+        title="Admin · Unlimited usage"
+        className={`inline-flex items-center gap-2 rounded-sm border border-accent/40 bg-accent/5 px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.14em] text-accent ${className}`}
+      >
+        <svg
+          className="h-3 w-3 opacity-90"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M5 12h14" />
+          <path d="M19 5v14" />
+        </svg>
+        <span>Admin</span>
+        <span className="text-meta">·</span>
+        <span>Unlimited {SURFACE_LABEL[surface]}</span>
+      </span>
+    );
+  }
   const snap = surface === "playground" ? quota.playground : quota.skillGen;
 
   const remaining = totalRemaining(snap);

@@ -24,7 +24,6 @@ import { useThemeStore } from "@/stores/themeStore";
 import { logActivity } from "@/services/activityApi";
 import { Logo } from "@/components/brand/Logo";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
-import { QuotaChip } from "@/components/quota/QuotaChip";
 import { HighlighterMark } from "@/pages/landing/HighlighterMark";
 import { config } from "@/config";
 
@@ -249,7 +248,7 @@ export function Navbar({ className = "" }: NavbarProps) {
             {theme === "light" ? <MoonIcon className="h-4 w-4" /> : <SunIcon className="h-4 w-4" />}
           </button>
 
-          {isAuthenticated && <QuotaChip />}
+          {/* Quota indicators moved to RootLayout's breadcrumb rail. */}
           {isAuthenticated && <NotificationBell />}
 
           {isAuthenticated && user ? (

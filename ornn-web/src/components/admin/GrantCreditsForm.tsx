@@ -32,6 +32,7 @@ export function GrantCreditsForm({
 }: GrantCreditsFormProps) {
   const [playground, setPlayground] = useState("");
   const [skillGen, setSkillGen] = useState("");
+  const [periodMonths, setPeriodMonths] = useState("");
   const [note, setNote] = useState("");
   const grant = useGrantQuota();
   const addToast = useToastStore((s) => s.addToast);
@@ -40,6 +41,8 @@ export function GrantCreditsForm({
     e.preventDefault();
     const pg = Number(playground);
     const sg = Number(skillGen);
+    const monthsRaw = periodMonths.trim();
+    const months = monthsRaw === "" ? null : Number(monthsRaw);
     if ((!pg || pg <= 0) && (!sg || sg <= 0)) {
       addToast({
         type: "warning",
@@ -47,12 +50,31 @@ export function GrantCreditsForm({
       });
       return;
     }
+    if (months !== null && (!Number.isInteger(months) || months <= 0 || months > 60)) {
+      addToast({
+        type: "warning",
+        message: "Period must be a positive whole number of months (1–60), or empty for no expiry.",
+      });
+      return;
+    }
     try {
       if (pg > 0) {
-        await grant.mutateAsync({ userId, surface: "playground", amount: pg, note: note || undefined });
+        await grant.mutateAsync({
+          userId,
+          surface: "playground",
+          amount: pg,
+          periodMonths: months,
+          note: note || undefined,
+        });
       }
       if (sg > 0) {
-        await grant.mutateAsync({ userId, surface: "skillGen", amount: sg, note: note || undefined });
+        await grant.mutateAsync({
+          userId,
+          surface: "skillGen",
+          amount: sg,
+          periodMonths: months,
+          note: note || undefined,
+        });
       }
       const summary = [
         pg > 0 ? `+${pg} playground` : null,
@@ -60,12 +82,14 @@ export function GrantCreditsForm({
       ]
         .filter(Boolean)
         .join(", ");
+      const period = months ? ` (${months} month${months === 1 ? "" : "s"})` : " (never expires)";
       addToast({
         type: "success",
-        message: `Granted ${summary} to ${displayName || email}.`,
+        message: `Granted ${summary}${period} to ${displayName || email}.`,
       });
       setPlayground("");
       setSkillGen("");
+      setPeriodMonths("");
       setNote("");
       onGranted?.();
     } catch (err) {
@@ -83,12 +107,15 @@ export function GrantCreditsForm({
     >
       <header className="mb-3">
         <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-accent">
-          [§ GRANT — BETA CREDITS]
+          [§ GRANT — ADD CREDITS]
         </p>
         <p className="mt-1 font-text text-sm text-strong">
           {displayName || email}
         </p>
         <p className="font-mono text-[11px] text-meta">{email}</p>
+        <p className="mt-1.5 font-text text-[11px] text-meta">
+          Each grant is <span className="font-semibold text-strong">additive</span> — repeated grants stack on top of existing credits, never replace them.
+        </p>
       </header>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -121,6 +148,25 @@ export function GrantCreditsForm({
           />
         </label>
       </div>
+
+      <label className="mt-3 flex flex-col gap-1.5">
+        <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
+          Period (months) — optional
+        </span>
+        <input
+          type="number"
+          min={1}
+          max={60}
+          step={1}
+          value={periodMonths}
+          onChange={(e) => setPeriodMonths(e.target.value)}
+          placeholder="e.g. 3 — leave blank to never expire"
+          className="w-full rounded-sm border border-subtle bg-card px-3 py-2 font-mono text-sm text-strong focus:border-accent focus:outline-none"
+        />
+        <span className="font-mono text-[10px] text-meta">
+          After this many months, unused credits from this grant drop out of the user's balance. Empty = never expires.
+        </span>
+      </label>
 
       <label className="mt-3 flex flex-col gap-1.5">
         <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-meta">

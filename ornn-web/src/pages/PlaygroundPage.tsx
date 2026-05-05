@@ -173,40 +173,61 @@ export function PlaygroundPage() {
   return (
     <PageTransition>
       <div className="flex flex-col h-full py-1">
-        {/* Surface header — quota inline + model picker. The 80% warning
-            banner replaces the inline stamp at threshold; admins see
-            nothing because both components self-skip. */}
-        <div className="mb-2 flex flex-wrap items-center justify-between gap-3 shrink-0">
-          <QuotaInline surface="playground" />
-          <ModelPicker
-            surface="playground"
-            onChange={setPickedModelId}
-            className="ml-auto"
-          />
+        {/* Surface header — bracketed section label on the left, quota
+            inline in the middle (admins skip), model picker pinned right.
+            The 80% warning banner replaces the inline stamp at threshold. */}
+        <div className="mb-3 flex flex-wrap items-center gap-3 shrink-0 border-b border-subtle pb-2">
+          <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-meta">
+            [§&nbsp;PLAYGROUND]
+          </span>
+          <span aria-hidden="true" className="h-px w-6 bg-accent/40" />
+          <span className="font-mono text-[11px] text-strong truncate max-w-[24rem]" title={skillName}>
+            {skillName}
+          </span>
+          <div className="ml-auto flex items-center gap-3">
+            <QuotaInline surface="playground" />
+            <ModelPicker
+              surface="playground"
+              onChange={setPickedModelId}
+            />
+          </div>
         </div>
 
         {/* Two-column layout */}
         <div className="flex flex-1 min-h-0 gap-4">
           {/* Left: Chat (40%) */}
           <div className="flex w-[40%] shrink-0 flex-col min-w-0 min-h-0 rounded border border-accent/10 bg-elevated/30">
-            {/* Clear Chat button inside chat panel */}
-            <div className="flex items-center justify-end px-3 py-1 shrink-0">
+            {/* Chat panel header band — bracketed label on left, clear-chat ghost action on right */}
+            <div className="flex items-center justify-between px-3 py-1.5 shrink-0 border-b border-accent/10 bg-page/40">
+              <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-meta">
+                [&nbsp;CHAT&nbsp;]
+              </span>
               <button
                 type="button"
                 onClick={clearChat}
-                className="font-text text-xs text-meta hover:text-accent transition-colors cursor-pointer"
+                disabled={messages.length === 0}
+                className="font-mono text-[10px] uppercase tracking-[0.14em] text-meta hover:text-accent transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 {t("playground.clearChat")}
               </button>
             </div>
             <div className="flex-1 min-h-0 overflow-y-auto space-y-3 px-3 py-2">
               {messages.length === 0 && !currentAssistantContent && (
-                <div className="flex flex-col items-center justify-center h-full text-center">
-                  <p className="font-text text-sm text-meta max-w-sm">
+                <div className="flex flex-col items-center justify-center h-full text-center px-4">
+                  <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-accent/70 mb-2">
+                    [&nbsp;READY&nbsp;]
+                  </span>
+                  <span aria-hidden="true" className="h-px w-12 bg-accent/30 mb-3" />
+                  <p className="font-text text-sm text-strong max-w-sm leading-relaxed">
                     {needsEnvVars && !allEnvVarsFilled
                       ? t("playground.fillEnvVars")
                       : t("playground.askAbout", { name: skillName })}
                   </p>
+                  {!(needsEnvVars && !allEnvVarsFilled) && (
+                    <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-meta mt-3">
+                      Enter to send · Shift + Enter for newline
+                    </p>
+                  )}
                 </div>
               )}
 
@@ -273,8 +294,58 @@ export function PlaygroundPage() {
             </div>
           </div>
 
-          {/* Right: Env vars + Skill preview (60%) — fill height */}
-          <div className="flex-1 flex flex-col min-w-0 min-h-0 gap-4">
+          {/* Right: Skill info + Env vars + Skill preview (60%) — fill height */}
+          <div className="flex-1 flex flex-col min-w-0 min-h-0 gap-3">
+            {/* Compact skill info card — name, description, identity row.
+                Mirrors the SkillHeroStrip silhouette (icon + body) so the
+                playground reads as a sibling of the skill detail page,
+                without the heavy hero CTA chrome. */}
+            {skill && (
+              <Card>
+                <div className="flex items-start gap-3">
+                  <div
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-sm border border-strong-edge bg-warning-soft text-accent"
+                    aria-hidden
+                  >
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="16 18 22 12 16 6" />
+                      <polyline points="8 6 2 12 8 18" />
+                    </svg>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                      <h2 className="font-display text-base font-semibold leading-tight text-strong tracking-tight">
+                        {skill.name}
+                      </h2>
+                      <span className="inline-flex items-center rounded-sm border border-strong-edge px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.14em] text-strong">
+                        v{skill.version}
+                      </span>
+                      {typeof (skill.metadata as Record<string, unknown> | null)?.category === "string" && (
+                        <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
+                          {(skill.metadata as Record<string, unknown>).category as string}
+                        </span>
+                      )}
+                    </div>
+                    {skill.description && (
+                      <p className="mt-1.5 font-text text-xs leading-relaxed text-body line-clamp-3">
+                        {skill.description}
+                      </p>
+                    )}
+                    {skill.tags && skill.tags.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-x-2 gap-y-0.5 font-mono text-[10px] text-meta">
+                        {skill.tags.slice(0, 6).map((tag) => (
+                          <span key={tag}>#{tag}</span>
+                        ))}
+                        {skill.tags.length > 6 && (
+                          <span>+{skill.tags.length - 6} more</span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </Card>
+            )}
+
             {/* Env vars form (only for runtime-based skills with env vars) */}
             {needsEnvVars && (
               <Card>
@@ -308,23 +379,37 @@ export function PlaygroundPage() {
               </Card>
             )}
 
-            {/* Skill preview — fill remaining height */}
-            <div className="flex-1 min-h-0 flex flex-col">
-              {packageLoading ? (
-                <Card><Skeleton lines={8} /></Card>
-              ) : packageFiles.length > 0 ? (
-                <SkillPackagePreview
-                  files={packageFiles}
-                  fileContents={packageContents}
-                  metadata={null}
-                  editable={false}
-                  className="h-full"
-                />
-              ) : (
-                <div className="flex items-center justify-center h-32">
-                  <p className="font-text text-xs text-meta">{t("playground.noPackage")}</p>
-                </div>
-              )}
+            {/* Skill preview — fill remaining height. Bracketed [PACKAGE]
+                label wraps the existing files+viewer combo so it reads
+                as a sibling of the [CHAT] panel on the left. */}
+            <div className="flex-1 min-h-0 flex flex-col rounded border border-accent/10 bg-elevated/30 overflow-hidden">
+              <div className="flex items-center justify-between px-3 py-1.5 shrink-0 border-b border-accent/10 bg-page/40">
+                <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-meta">
+                  [&nbsp;PACKAGE&nbsp;]
+                </span>
+                {skill && (
+                  <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-meta truncate" title={skill.name}>
+                    {skill.name}@v{skill.version}
+                  </span>
+                )}
+              </div>
+              <div className="flex-1 min-h-0 flex flex-col">
+                {packageLoading ? (
+                  <Card><Skeleton lines={8} /></Card>
+                ) : packageFiles.length > 0 ? (
+                  <SkillPackagePreview
+                    files={packageFiles}
+                    fileContents={packageContents}
+                    metadata={null}
+                    editable={false}
+                    className="h-full"
+                  />
+                ) : (
+                  <div className="flex items-center justify-center h-32">
+                    <p className="font-text text-xs text-meta">{t("playground.noPackage")}</p>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>

@@ -87,6 +87,7 @@ async function main(): Promise<void> {
         repo: config.mirror.repoName,
         branch: config.mirror.defaultBranch,
       },
+      encryptionKey: config.encryptionKey,
     });
 
     const auth = new GitHubAppAuth({

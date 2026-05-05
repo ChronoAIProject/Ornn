@@ -12,16 +12,27 @@
  *
  * @module domains/platform/service
  */
+import pino from "pino";
+import { decryptSecret, encryptSecret } from "../../infra/crypto";
 import type { PlatformSettingsRepository } from "./repository";
 import {
   DEFAULT_PLATFORM_SETTINGS,
   type GithubMirrorRepoConfig,
+  type LlmProviderConfig,
   type PlatformSettings,
 } from "./types";
+
+const logger = pino({ level: "info" }).child({ module: "platformSettingsService" });
 
 export interface PlatformSettingsDefaults {
   /** GitHub mirror coordinates from the configmap. Never empty in prod. */
   githubMirror: GithubMirrorRepoConfig;
+  /**
+   * Master passphrase used to encrypt/decrypt at-rest secrets (LLM
+   * `apiKey`, etc.). Sourced from `ENCRYPTION_KEY` env. Required —
+   * the service never sees plaintext at the DB layer.
+   */
+  encryptionKey: string;
 }
 
 export class PlatformSettingsService {
@@ -40,12 +51,30 @@ export class PlatformSettingsService {
     const now = Date.now();
     if (this.cache && now < this.cache.expiresAt) return this.cache.settings;
     const stored = await this.repo.get();
+    // Decrypt the LLM provider apiKey at the service boundary — every
+    // downstream consumer sees plaintext. Failures are non-fatal: an
+    // unreadable secret degrades to "no apiKey set" so the rest of the
+    // system (including the admin UI) keeps working.
+    const llmRaw = stored.llmProvider ?? DEFAULT_PLATFORM_SETTINGS.llmProvider;
+    let llmApiKey = "";
+    try {
+      llmApiKey = decryptSecret(llmRaw.apiKey ?? "", this.defaults.encryptionKey);
+    } catch (err) {
+      logger.error(
+        { err: (err as Error).message },
+        "Failed to decrypt LLM provider apiKey — treating as unset",
+      );
+    }
     const settings: PlatformSettings = {
       auditWaiverThreshold:
         typeof stored.auditWaiverThreshold === "number"
           ? stored.auditWaiverThreshold
           : DEFAULT_PLATFORM_SETTINGS.auditWaiverThreshold,
       githubMirror: stored.githubMirror ?? this.defaults.githubMirror,
+      llmProvider: {
+        gatewayUrl: llmRaw.gatewayUrl ?? "",
+        apiKey: llmApiKey,
+      },
     };
     this.cache = { settings, expiresAt: now + this.cacheTtlMs };
     return settings;
@@ -60,8 +89,27 @@ export class PlatformSettingsService {
     return (await this.get()).githubMirror;
   }
 
+  /** Convenience accessor used by `NyxLlmClient` on every LLM call. */
+  async getLlmProviderConfig(): Promise<LlmProviderConfig> {
+    return (await this.get()).llmProvider;
+  }
+
   async patch(partial: Partial<PlatformSettings>): Promise<PlatformSettings> {
-    await this.repo.patch(partial);
+    // Encrypt the LLM apiKey before persisting. The patch layer sees
+    // plaintext from the route; the repo only ever stores ciphertext.
+    type MutablePatch = { -readonly [K in keyof PlatformSettings]?: PlatformSettings[K] };
+    const toStore: MutablePatch = { ...partial };
+    if (partial.llmProvider) {
+      const enc = encryptSecret(
+        partial.llmProvider.apiKey ?? "",
+        this.defaults.encryptionKey,
+      );
+      toStore.llmProvider = {
+        gatewayUrl: partial.llmProvider.gatewayUrl ?? "",
+        apiKey: enc,
+      };
+    }
+    await this.repo.patch(toStore);
     // Bust the cache so the next read pulls the fresh value through the
     // merge layer (which re-applies defaults for fields the admin
     // didn't set).

@@ -622,8 +622,17 @@ export function SkillDetailPage() {
             {/* ── AgentSeal trust score (#253) ── third-party-verifiable
                 security signal. Sits next to the Audit card so the two
                 trust signals read as siblings; both follow the same tile
-                silhouette inside their card. */}
-            <AgentSealTrustBadge scan={skill.agentsealScan ?? null} />
+                silhouette inside their card. Admins see a Rescan button
+                in the card header to manually re-trigger the scan
+                (catches false positives, picks up newer AgentSeal rules
+                without waiting for a new publish). */}
+            <AgentSealTrustBadge
+              scan={skill.agentsealScan ?? null}
+              skillIdOrName={skill.name || skill.guid}
+              version={skill.version}
+              canRescan={isAdmin(user)}
+              onRescanned={() => refetch()}
+            />
 
             {/* ── Versions card ── */}
             {versionList.length > 0 && (

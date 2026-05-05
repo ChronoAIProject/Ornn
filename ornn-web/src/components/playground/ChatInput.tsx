@@ -1,15 +1,13 @@
 /**
  * Chat Input Component.
  * Auto-resizing textarea with Enter=send, Shift+Enter=newline.
- * Shows stop button during streaming. Includes model selector dropdown.
+ * Shows stop button during streaming. Model selection lives in the
+ * page-level ModelPicker (top-right surface header).
  * @module components/playground/ChatInput
  */
 
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { usePlaygroundStore } from "@/stores/playgroundStore";
-import { AVAILABLE_MODELS, type AvailableModelId } from "@/types/playground";
-import { track } from "@/lib/analytics";
 
 export interface ChatInputProps {
   onSend: (content: string) => void;
@@ -33,9 +31,6 @@ export function ChatInput({
   const { t } = useTranslation();
   const [value, setValue] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-
-  const selectedModel = usePlaygroundStore((s) => s.selectedModel);
-  const setSelectedModel = usePlaygroundStore((s) => s.setSelectedModel);
 
   /** Resize textarea to fit content. */
   const adjustHeight = useCallback(() => {
@@ -70,30 +65,7 @@ export function ChatInput({
 
   return (
     <div className="px-2 pb-2 pt-2">
-      {/* Model selector */}
-      <div className="mb-2 flex items-center gap-2">
-        <label className="font-display text-[10px] uppercase tracking-wider text-meta">
-          {t("chatInput.model")}
-        </label>
-        <select
-          value={selectedModel}
-          onChange={(e) => {
-            const next = e.target.value as AvailableModelId;
-            setSelectedModel(next);
-            track("model.selected", { modelId: next, surface: "playground" });
-          }}
-          disabled={isStreaming}
-          className="neon-input cursor-pointer appearance-none rounded-md px-2 py-1 font-mono text-xs text-strong disabled:opacity-50"
-        >
-          {AVAILABLE_MODELS.map((m) => (
-            <option key={m.id} value={m.id} className="bg-page">
-              {m.label} ({m.provider})
-            </option>
-          ))}
-        </select>
-      </div>
-
-      {/* Input row */}
+      {/* Input row — model selection lives in the page header (ModelPicker). */}
       <div className="flex items-end gap-2">
         <div className="relative flex-1">
           <textarea

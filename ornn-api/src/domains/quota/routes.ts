@@ -26,6 +26,7 @@ import {
 import { validateBody, getValidatedBody } from "../../middleware/validate";
 import { AppError } from "../../shared/types/index";
 import type { ActivityRepository } from "../admin/activityRepository";
+import type { AdminUsersRepository } from "../admin-users/repository";
 import type { QuotaService } from "./service";
 import {
   QUOTA_ADMIN_PERMISSION,
@@ -39,10 +40,26 @@ const logger = pino({ level: "info" }).child({ module: "quotaRoutes" });
 
 const surfaceSchema = z.enum(SURFACES);
 
+/**
+ * Grant period in months. Optional — null/missing means the grant
+ * never expires (legacy behavior). When set, must be a positive
+ * integer ≤ 60 (5 years) — anything longer is almost certainly a
+ * typo and we'd rather force a deliberate retry than silently
+ * issue a 100-year grant.
+ */
+const periodMonthsSchema = z
+  .number()
+  .int()
+  .positive()
+  .max(60)
+  .nullable()
+  .optional();
+
 const grantSchema = z.object({
   userId: z.string().min(1),
   surface: surfaceSchema,
   amount: z.number().int().positive().max(100_000),
+  periodMonths: periodMonthsSchema,
   note: z.string().max(500).optional(),
 });
 
@@ -50,16 +67,25 @@ const bulkGrantSchema = z.object({
   userIds: z.array(z.string().min(1)).min(1).max(500),
   surface: surfaceSchema,
   amount: z.number().int().positive().max(100_000),
+  periodMonths: periodMonthsSchema,
   note: z.string().max(500).optional(),
 });
 
 export interface QuotaRoutesConfig {
   readonly quotaService: QuotaService;
   readonly activityRepo: ActivityRepository;
+  /**
+   * Lazy display cache populated by the auth setup layer whenever it
+   * sees the admin permission on an authenticated request. Used here
+   * to mark `/admin/quota/users` rows with `isAdmin: true` so the UI
+   * can render an "Unlimited" stamp. NyxID remains authoritative on
+   * the hot path — this is purely a display hint.
+   */
+  readonly adminUsersRepo: AdminUsersRepository;
 }
 
 export function createQuotaRoutes(config: QuotaRoutesConfig): Hono<{ Variables: AuthVariables }> {
-  const { quotaService, activityRepo } = config;
+  const { quotaService, activityRepo, adminUsersRepo } = config;
   const app = new Hono<{ Variables: AuthVariables }>();
   const auth = nyxidAuthMiddleware();
 
@@ -93,10 +119,34 @@ export function createQuotaRoutes(config: QuotaRoutesConfig): Hono<{ Variables: 
       const userPool = await activityRepo.searchUsersByEmail(q, pageSize * 5);
       const slice = userPool.slice((page - 1) * pageSize, page * pageSize);
       const userIds = slice.map((u) => u.userId);
-      const quotaDocs = await Promise.all(
-        userIds.map((id) => quotaService.getUserQuota(id)),
+      const now = new Date();
+      const [quotaDocs, knownAdminUserIds] = await Promise.all([
+        Promise.all(userIds.map((id) => quotaService.getUserQuota(id))),
+        adminUsersRepo.listUserIds(),
+      ]);
+      // Active credits per (user, surface) from the ledger — sum of
+      // remaining capacity across non-expired grants. Computed in
+      // parallel so a 20-row page costs ~one Mongo aggregation
+      // round-trip per user not 40.
+      const activeCreditsByUser = await Promise.all(
+        userIds.map(async (id) => ({
+          playground: await quotaService.getCreditsBalance(id, "playground", now),
+          skillGen: await quotaService.getCreditsBalance(id, "skillGen", now),
+        })),
       );
-      const items = slice.map((u, i) => decorateAdminRow(u, quotaDocs[i]));
+      const limits = {
+        playground: quotaService.surfaceLimits("playground"),
+        skillGen: quotaService.surfaceLimits("skillGen"),
+      };
+      const items = slice.map((u, i) =>
+        decorateAdminRow(
+          u,
+          quotaDocs[i],
+          knownAdminUserIds.has(u.userId),
+          activeCreditsByUser[i],
+          limits,
+        ),
+      );
       return c.json({
         data: {
           items,
@@ -121,7 +171,7 @@ export function createQuotaRoutes(config: QuotaRoutesConfig): Hono<{ Variables: 
     async (c) => {
       const authCtx = getAuth(c);
       const body = getValidatedBody<z.infer<typeof grantSchema>>(c);
-      const { auditId } = await quotaService.grant({
+      const { auditId, expiresAt } = await quotaService.grant({
         admin: {
           userId: authCtx.userId,
           email: authCtx.email,
@@ -130,6 +180,7 @@ export function createQuotaRoutes(config: QuotaRoutesConfig): Hono<{ Variables: 
         targetUserId: body.userId,
         surface: body.surface,
         amount: body.amount,
+        periodMonths: body.periodMonths,
         note: body.note,
       });
       logger.info(
@@ -138,10 +189,20 @@ export function createQuotaRoutes(config: QuotaRoutesConfig): Hono<{ Variables: 
           targetUserId: body.userId,
           surface: body.surface,
           amount: body.amount,
+          periodMonths: body.periodMonths,
         },
         "Admin issued quota grant",
       );
-      return c.json({ data: { auditId, applied: 1 }, error: null });
+      return c.json(
+        {
+          data: {
+            auditId,
+            applied: 1,
+            expiresAt: expiresAt ? expiresAt.toISOString() : null,
+          },
+          error: null,
+        },
+      );
     },
   );
 
@@ -166,6 +227,7 @@ export function createQuotaRoutes(config: QuotaRoutesConfig): Hono<{ Variables: 
         targetUserIds: unique,
         surface: body.surface,
         amount: body.amount,
+        periodMonths: body.periodMonths,
         note: body.note,
       });
       const applied = results.filter((r) => r.ok).length;
@@ -230,34 +292,64 @@ interface AdminRow {
   userId: string;
   email: string;
   displayName: string;
+  /**
+   * True when the row's email is in the admin allow-list. Drives the UI
+   * to render an "Unlimited" stamp instead of usage counters + grant
+   * actions. NyxID remains authoritative on the hot path.
+   */
+  isAdmin: boolean;
   playground: SurfaceSummary;
   skillGen: SurfaceSummary;
 }
 
 interface SurfaceSummary {
+  /** Monthly usage so far this window. */
   monthlyUsed: number;
+  /** Original monthly base allotment — what this user gets each rollover. */
+  monthlyLimit: number;
+  /** Daily usage so far this window. */
   dailyUsed: number;
+  /** Daily ceiling for this surface. */
+  dailyLimit: number;
+  /**
+   * Total active credits = legacy non-expiring `creditsBalance` PLUS
+   * sum of unused capacity across all active grants in the ledger.
+   * This is the "granted bonus" the admin can see and add to.
+   */
   creditsBalance: number;
 }
 
 function decorateAdminRow(
   user: { userId: string; email: string; displayName: string },
   quota: UserQuotaDocument,
+  isAdmin: boolean,
+  active: { playground: number; skillGen: number },
+  limits: {
+    playground: { monthlyBase: number; dailyCeiling: number };
+    skillGen: { monthlyBase: number; dailyCeiling: number };
+  },
 ): AdminRow {
   return {
     userId: user.userId,
     email: user.email,
     displayName: user.displayName,
-    playground: summarize(quota.playground),
-    skillGen: summarize(quota.skillGen),
+    isAdmin,
+    playground: summarize(quota.playground, active.playground, limits.playground),
+    skillGen: summarize(quota.skillGen, active.skillGen, limits.skillGen),
   };
 }
 
-function summarize(c: SurfaceCounter): SurfaceSummary {
+function summarize(
+  c: SurfaceCounter,
+  activeCredits: number,
+  limits: { monthlyBase: number; dailyCeiling: number },
+): SurfaceSummary {
   return {
     monthlyUsed: c.monthlyUsed,
+    monthlyLimit: limits.monthlyBase,
     dailyUsed: c.dailyUsed,
-    creditsBalance: c.creditsBalance,
+    dailyLimit: limits.dailyCeiling,
+    creditsBalance: activeCredits,
   };
 }
 

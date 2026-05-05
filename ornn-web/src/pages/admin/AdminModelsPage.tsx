@@ -17,6 +17,7 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Badge } from "@/components/ui/Badge";
+import { LlmProviderConfigCard } from "@/components/admin/LlmProviderConfigCard";
 import { useToastStore } from "@/stores/toastStore";
 import {
   useAdminModels,
@@ -260,6 +261,16 @@ export function AdminModelsPage() {
           </Button>
         </div>
       </div>
+
+      {/* LLM provider override — sits above the catalog so admins see
+          which gateway the models are actually being served from. */}
+      <motion.div
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.25, delay: 0.05 }}
+      >
+        <LlmProviderConfigCard />
+      </motion.div>
 
       <div className="flex items-center gap-3">
         <input

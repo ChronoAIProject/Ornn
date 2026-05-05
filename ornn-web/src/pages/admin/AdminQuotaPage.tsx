@@ -75,16 +75,21 @@ export function AdminQuotaPage() {
     });
   };
 
+  // Admin rows are excluded from selection — granting credits to an
+  // admin (who already bypasses the counter) is meaningless. Both the
+  // per-row checkbox and the "Select page" header skip them.
+  const grantableItems = items.filter((u) => !u.isAdmin);
   const allOnPageSelected =
-    items.length > 0 && items.every((u) => selectedIds.has(u.userId));
+    grantableItems.length > 0 &&
+    grantableItems.every((u) => selectedIds.has(u.userId));
 
   const togglePage = () => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
       if (allOnPageSelected) {
-        items.forEach((u) => next.delete(u.userId));
+        grantableItems.forEach((u) => next.delete(u.userId));
       } else {
-        items.forEach((u) => next.add(u.userId));
+        grantableItems.forEach((u) => next.add(u.userId));
       }
       return next;
     });
@@ -117,6 +122,37 @@ export function AdminQuotaPage() {
           >
             Grant credits to selected
           </Button>
+        </div>
+      </div>
+
+      {/* Admin self-quota banner — admins bypass the counter on the
+          backend; surface that here so the page reads unambiguously as
+          "manage other users' quotas, your own is unlimited". */}
+      <div
+        role="status"
+        className="flex items-center gap-3 rounded border border-accent/30 bg-accent/5 px-4 py-3"
+      >
+        <svg
+          className="h-4 w-4 shrink-0 text-accent"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M5 12h14" />
+          <path d="M19 5v14" />
+        </svg>
+        <div className="flex-1">
+          <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-accent">
+            Admin · Unlimited
+          </p>
+          <p className="mt-0.5 font-text text-xs leading-relaxed text-body">
+            Your own playground and skill-gen usage bypasses every counter and
+            ceiling. This page manages quota for everyone else.
+          </p>
         </div>
       </div>
 
@@ -169,10 +205,10 @@ export function AdminQuotaPage() {
                       User
                     </th>
                     <th className="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
-                      Playground (used / credits)
+                      Playground · used / limit · +bonus
                     </th>
                     <th className="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
-                      Skill-gen (used / credits)
+                      Skill-gen · used / limit · +bonus
                     </th>
                     <th className="px-4 py-3"></th>
                   </tr>
@@ -184,49 +220,126 @@ export function AdminQuotaPage() {
                       <Fragment key={u.userId}>
                         <tr className="border-b border-accent/10 hover:bg-elevated/40">
                           <td className="px-3 py-3">
-                            <input
-                              type="checkbox"
-                              checked={selectedIds.has(u.userId)}
-                              onChange={() => toggleSelected(u.userId)}
-                              aria-label={`Select ${u.email}`}
-                              className="h-3.5 w-3.5 cursor-pointer accent-[var(--color-accent-primary)]"
-                            />
+                            {u.isAdmin ? (
+                              // Admins can't be selected — bulk grant skips them.
+                              <span className="inline-block h-3.5 w-3.5" aria-hidden />
+                            ) : (
+                              <input
+                                type="checkbox"
+                                checked={selectedIds.has(u.userId)}
+                                onChange={() => toggleSelected(u.userId)}
+                                aria-label={`Select ${u.email}`}
+                                className="h-3.5 w-3.5 cursor-pointer accent-[var(--color-accent-primary)]"
+                              />
+                            )}
                           </td>
                           <td className="px-4 py-3">
-                            <p className="font-text text-sm text-strong">
-                              {u.displayName || "—"}
-                            </p>
+                            <div className="flex items-center gap-2">
+                              <p className="font-text text-sm text-strong">
+                                {u.displayName || "—"}
+                              </p>
+                              {u.isAdmin && (
+                                <span
+                                  title="Admin · ornn:admin:skill"
+                                  className="inline-flex items-center gap-1 rounded-sm border border-accent/40 bg-accent/5 px-1.5 py-0.5 font-mono text-[9px] font-semibold uppercase tracking-[0.14em] text-accent"
+                                >
+                                  Admin
+                                </span>
+                              )}
+                            </div>
                             <p className="font-mono text-[11px] text-meta">
                               {u.email}
                             </p>
                           </td>
-                          <td className="px-4 py-3 font-mono text-[12px] text-strong">
-                            {u.playground.monthlyUsed} used · daily{" "}
-                            {u.playground.dailyUsed} ·{" "}
-                            <span className="text-accent">
-                              +{u.playground.creditsBalance}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 font-mono text-[12px] text-strong">
-                            {u.skillGen.monthlyUsed} used · daily{" "}
-                            {u.skillGen.dailyUsed} ·{" "}
-                            <span className="text-accent">
-                              +{u.skillGen.creditsBalance}
-                            </span>
-                          </td>
-                          <td className="whitespace-nowrap px-4 py-3 text-right">
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setExpandedUserId(expanded ? null : u.userId)
-                              }
-                              className="font-mono text-[11px] uppercase tracking-[0.14em] text-accent hover:text-accent-muted"
+                          {u.isAdmin ? (
+                            <td
+                              colSpan={2}
+                              className="px-4 py-3 font-mono text-[11px] uppercase tracking-[0.14em] text-accent"
                             >
-                              {expanded ? "Close" : "Grant"}
-                            </button>
+                              <span className="inline-flex items-center gap-2">
+                                <svg
+                                  className="h-3 w-3"
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  aria-hidden
+                                >
+                                  <path d="M5 12h14" />
+                                  <path d="M19 5v14" />
+                                </svg>
+                                Unlimited — quota bypassed for both surfaces
+                              </span>
+                            </td>
+                          ) : (
+                            <>
+                              <td className="px-4 py-3 font-mono text-[12px] text-strong">
+                                <span title="Used / monthly base limit">
+                                  {u.playground.monthlyUsed}
+                                  <span className="text-meta">
+                                    {" "}/ {u.playground.monthlyLimit}
+                                  </span>
+                                </span>
+                                <span className="text-meta opacity-60">{" · "}</span>
+                                <span
+                                  className="text-meta"
+                                  title="Daily used / daily ceiling"
+                                >
+                                  d {u.playground.dailyUsed}/{u.playground.dailyLimit}
+                                </span>
+                                <span className="text-meta opacity-60">{" · "}</span>
+                                <span
+                                  className="text-accent"
+                                  title="Active granted bonus credits"
+                                >
+                                  +{u.playground.creditsBalance}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3 font-mono text-[12px] text-strong">
+                                <span title="Used / monthly base limit">
+                                  {u.skillGen.monthlyUsed}
+                                  <span className="text-meta">
+                                    {" "}/ {u.skillGen.monthlyLimit}
+                                  </span>
+                                </span>
+                                <span className="text-meta opacity-60">{" · "}</span>
+                                <span
+                                  className="text-meta"
+                                  title="Daily used / daily ceiling"
+                                >
+                                  d {u.skillGen.dailyUsed}/{u.skillGen.dailyLimit}
+                                </span>
+                                <span className="text-meta opacity-60">{" · "}</span>
+                                <span
+                                  className="text-accent"
+                                  title="Active granted bonus credits"
+                                >
+                                  +{u.skillGen.creditsBalance}
+                                </span>
+                              </td>
+                            </>
+                          )}
+                          <td className="whitespace-nowrap px-4 py-3 text-right">
+                            {u.isAdmin ? (
+                              <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-meta/60">
+                                —
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setExpandedUserId(expanded ? null : u.userId)
+                                }
+                                className="font-mono text-[11px] uppercase tracking-[0.14em] text-accent hover:text-accent-muted"
+                              >
+                                {expanded ? "Close" : "Grant"}
+                              </button>
+                            )}
                           </td>
                         </tr>
-                        {expanded && (
+                        {expanded && !u.isAdmin && (
                           <tr className="border-b border-accent/10 bg-elevated/20">
                             <td />
                             <td colSpan={4} className="px-4 py-4">

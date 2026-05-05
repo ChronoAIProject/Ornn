@@ -152,21 +152,90 @@ export interface NyxLlmClientConfig {
   tokenUrl: string;
   clientId: string;
   clientSecret: string;
+  /**
+   * Optional async resolver of admin-overridable LLM provider config.
+   * Returned values WIN over the constructor-time env config:
+   *   - `gatewayUrl` (non-empty) replaces the env gateway.
+   *   - `apiKey` (non-empty) replaces the SA token-exchange flow with a
+   *     direct Bearer header.
+   *
+   * Resolved before every LLM request so admin updates take effect on
+   * the next call without restarting the pod. Caching is the resolver's
+   * responsibility (PlatformSettingsService caches platform settings
+   * for ~30s, which doubles as our LLM-config cache TTL).
+   *
+   * Failure of the resolver is non-fatal — we fall back to env. The
+   * scenario "DB is down" should never break LLM service.
+   */
+  overrideResolver?: () => Promise<LlmProviderOverride>;
+}
+
+/** Subset of fields the platform-settings layer surfaces as overrides. */
+export interface LlmProviderOverride {
+  gatewayUrl: string;
+  apiKey: string;
 }
 
 export class NyxLlmClient {
-  private readonly gatewayUrl: string;
+  private readonly envGatewayUrl: string;
   private readonly tokenUrl: string;
   private readonly clientId: string;
   private readonly clientSecret: string;
+  private readonly overrideResolver?: () => Promise<LlmProviderOverride>;
   private cachedToken: CachedToken | null = null;
 
   constructor(config: NyxLlmClientConfig) {
-    this.gatewayUrl = config.gatewayUrl;
+    this.envGatewayUrl = config.gatewayUrl;
     this.tokenUrl = config.tokenUrl;
     this.clientId = config.clientId;
     this.clientSecret = config.clientSecret;
-    logger.info({ gatewayUrl: config.gatewayUrl, tokenUrl: config.tokenUrl }, "NyxLlmClient initialized with SA credentials");
+    this.overrideResolver = config.overrideResolver;
+    logger.info(
+      {
+        gatewayUrl: config.gatewayUrl,
+        tokenUrl: config.tokenUrl,
+        runtimeOverrideEnabled: Boolean(config.overrideResolver),
+      },
+      "NyxLlmClient initialized with SA credentials",
+    );
+  }
+
+  /**
+   * Resolve the effective gateway URL + auth header for the current
+   * call. Reads the admin-overridable platform settings (when wired)
+   * and falls back to constructor-time env values on any failure.
+   */
+  private async resolveCallTarget(): Promise<{
+    gatewayUrl: string;
+    authHeader: string;
+  }> {
+    let override: LlmProviderOverride | null = null;
+    if (this.overrideResolver) {
+      try {
+        override = await this.overrideResolver();
+      } catch (err) {
+        logger.warn(
+          { err: (err as Error).message },
+          "LLM override resolver threw — falling back to env config",
+        );
+      }
+    }
+
+    const gatewayUrl =
+      override?.gatewayUrl && override.gatewayUrl.trim().length > 0
+        ? override.gatewayUrl.trim().replace(/\/+$/, "")
+        : this.envGatewayUrl;
+
+    if (override?.apiKey && override.apiKey.trim().length > 0) {
+      // Direct bearer key — skip SA token exchange entirely.
+      return {
+        gatewayUrl,
+        authHeader: `Bearer ${override.apiKey.trim()}`,
+      };
+    }
+
+    const token = await this.getAccessToken();
+    return { gatewayUrl, authHeader: `Bearer ${token}` };
   }
 
   /**
@@ -226,8 +295,8 @@ export class NyxLlmClient {
    * Returns an AsyncIterable of SSE events.
    */
   async *stream(params: NyxLlmStreamParams): AsyncIterable<ResponsesApiStreamEvent> {
-    const token = await this.getAccessToken();
-    logger.info({ model: params.model }, "Starting LLM stream request");
+    const { gatewayUrl, authHeader } = await this.resolveCallTarget();
+    logger.info({ model: params.model, gatewayUrl }, "Starting LLM stream request");
 
     const body: Record<string, unknown> = {
       model: params.model,
@@ -245,10 +314,10 @@ export class NyxLlmClient {
       body.tools = params.tools;
     }
 
-    const response = await fetch(`${this.gatewayUrl}/responses`, {
+    const response = await fetch(`${gatewayUrl}/responses`, {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${token}`,
+        "Authorization": authHeader,
         "Content-Type": "application/json",
       },
       body: JSON.stringify(body),
@@ -274,8 +343,8 @@ export class NyxLlmClient {
    * Returns the output array from the response.
    */
   async complete(params: NyxLlmCompleteParams): Promise<ResponsesApiOutput[]> {
-    const token = await this.getAccessToken();
-    logger.info({ model: params.model }, "Starting LLM complete request");
+    const { gatewayUrl, authHeader } = await this.resolveCallTarget();
+    logger.info({ model: params.model, gatewayUrl }, "Starting LLM complete request");
 
     const body: Record<string, unknown> = {
       model: params.model,
@@ -293,10 +362,10 @@ export class NyxLlmClient {
       body.tools = params.tools;
     }
 
-    const response = await fetch(`${this.gatewayUrl}/responses`, {
+    const response = await fetch(`${gatewayUrl}/responses`, {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${token}`,
+        "Authorization": authHeader,
         "Content-Type": "application/json",
       },
       body: JSON.stringify(body),

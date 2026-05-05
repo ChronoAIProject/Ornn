@@ -30,21 +30,30 @@ WORKDIR /app
 # global pip installs. Pin the version explicitly so trust scores are
 # reproducible across a known rule set; bumping it is intentional and
 # shows up in CHANGELOG.
-ARG AGENTSEAL_VERSION=0.5.0
+#
+# We don't use the agentseal CLI directly — its `guard` subcommand is
+# designed to scan installed agent configs on a developer's machine,
+# not arbitrary skill packages. Instead `scan_skill.py` (copied below)
+# imports `agentseal.skill_scanner.SkillScanner` and runs it per file
+# in an extracted skill ZIP. Ornn-api spawns this script as a subprocess.
+ARG AGENTSEAL_VERSION=0.9.6
 ENV AGENTSEAL_VERSION=${AGENTSEAL_VERSION}
 ENV AGENTSEAL_VENV=/opt/agentseal
 RUN apt-get update \
  && apt-get install -y --no-install-recommends python3 python3-venv \
  && python3 -m venv "$AGENTSEAL_VENV" \
  && "$AGENTSEAL_VENV/bin/pip" install --no-cache-dir "agentseal==${AGENTSEAL_VERSION}" \
- && ln -sf "$AGENTSEAL_VENV/bin/agentseal" /usr/local/bin/agentseal \
  && apt-get clean \
  && rm -rf /var/lib/apt/lists/*
 
-# Surface the canonical command path so ornn-api's config defaults work
-# without operator overrides. AGENTSEAL_COMMAND can still be overridden
-# at runtime by the deployment.
-ENV AGENTSEAL_COMMAND=/usr/local/bin/agentseal
+# Skill-scan wrapper — invoked by ornn-api as `python scan_skill.py <zip>`.
+COPY ornn-api/scripts/scan_skill.py /opt/agentseal/scan_skill.py
+
+# Surface the canonical interpreter + script paths so ornn-api's config
+# defaults work without operator overrides. Both can be overridden at
+# runtime by the deployment if a sidecar / different layout is preferred.
+ENV AGENTSEAL_PYTHON=/opt/agentseal/bin/python
+ENV AGENTSEAL_SCRIPT=/opt/agentseal/scan_skill.py
 
 COPY --from=install /app /app
 

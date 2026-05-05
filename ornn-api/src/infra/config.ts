@@ -71,6 +71,7 @@ export interface SkillConfig {
    */
   readonly extraNyxidServices: readonly string[];
 
+
   // PostHog (server-side product analytics) — see #252
   /**
    * PostHog project API key. When absent the analytics module no-ops
@@ -94,14 +95,18 @@ export interface SkillConfig {
 
   // AgentSeal (subprocess-based skill scanner) — see #253
   /**
-   * Absolute path or PATH name of the `agentseal` CLI. Defaults to
-   * `agentseal`; container builds bake the binary into the image.
+   * Path to the python interpreter that has `agentseal` installed.
+   * Defaults to `/opt/agentseal/bin/python` per the Dockerfile.
    */
-  readonly agentsealCommand: string;
+  readonly agentsealPython: string;
   /**
-   * Hard timeout for a single `agentseal guard` run. The process is
-   * killed past this deadline and the scan is recorded as a failure.
-   * Default 60s.
+   * Path to the `scan_skill.py` wrapper baked into the image. Defaults
+   * to `/opt/agentseal/scan_skill.py` per the Dockerfile.
+   */
+  readonly agentsealScript: string;
+  /**
+   * Hard timeout for a single skill scan. The process is killed past
+   * this deadline and the scan is recorded as a failure. Default 60s.
    */
   readonly agentsealTimeoutMs: number;
   /**
@@ -166,6 +171,14 @@ export interface SkillConfig {
    * No-trailing-slash, validated.
    */
   readonly ornnPublicOrigin: string;
+
+  /**
+   * Master passphrase for AES-256-GCM at-rest secret encryption (LLM
+   * provider apiKey, future operator-pasted secrets). Falls back to a
+   * dev sentinel when `ENCRYPTION_KEY` is unset — production deployments
+   * MUST override.
+   */
+  readonly encryptionKey: string;
 }
 
 /** Parses "true"/"false"/"1"/"0" into a real boolean. */
@@ -219,6 +232,13 @@ const envSchema = z.object({
    */
   EXTRA_NYXID_SERVICES: z.string().default("NyxID"),
 
+  /**
+   * Master passphrase for the at-rest secret cipher (AES-256-GCM via
+   * scrypt-derived key). MUST be at least 32 chars in prod; a known
+   * dev sentinel is used when unset so local first-boot doesn't fail.
+   */
+  ENCRYPTION_KEY: z.string().min(0).default(""),
+
   // ---- PostHog (server-side product analytics, #252) ----
   POSTHOG_API_KEY: z.string().default(""),
   POSTHOG_PROJECT_ID: z.string().default(""),
@@ -226,7 +246,8 @@ const envSchema = z.object({
   POSTHOG_ERROR_SAMPLE_RATE: z.coerce.number().min(0).max(1).default(0.1),
 
   // ---- AgentSeal (skill trust scanner, #253) ----
-  AGENTSEAL_COMMAND: z.string().min(1).default("agentseal"),
+  AGENTSEAL_PYTHON: z.string().min(1).default("/opt/agentseal/bin/python"),
+  AGENTSEAL_SCRIPT: z.string().min(1).default("/opt/agentseal/scan_skill.py"),
   AGENTSEAL_TIMEOUT_MS: z.coerce.number().int().positive().default(60_000),
   /**
    * Toggle for the publish-time scan. Defaults to true — operators
@@ -339,12 +360,21 @@ export function loadConfig(): SkillConfig {
       .map((s) => s.trim())
       .filter((s) => s.length > 0),
 
+    // Dev sentinel — operators set ENCRYPTION_KEY=<32+ chars> in any
+    // non-dev cluster. We log a warning at boot when this fallback is
+    // active so it can't stay quietly insecure for long.
+    encryptionKey:
+      env.ENCRYPTION_KEY.trim().length > 0
+        ? env.ENCRYPTION_KEY.trim()
+        : "ornn-dev-encryption-key-DO-NOT-USE-IN-PRODUCTION-32chars",
+
     posthogApiKey: env.POSTHOG_API_KEY.trim() ? env.POSTHOG_API_KEY.trim() : null,
     posthogProjectId: env.POSTHOG_PROJECT_ID.trim() ? env.POSTHOG_PROJECT_ID.trim() : null,
     posthogHost: env.POSTHOG_HOST,
     posthogErrorSampleRate: env.POSTHOG_ERROR_SAMPLE_RATE,
 
-    agentsealCommand: env.AGENTSEAL_COMMAND,
+    agentsealPython: env.AGENTSEAL_PYTHON,
+    agentsealScript: env.AGENTSEAL_SCRIPT,
     agentsealTimeoutMs: env.AGENTSEAL_TIMEOUT_MS,
     // booleanFromEnv treats "missing" as false. AgentSeal should be ON
     // by default; ops opts OUT explicitly with `AGENTSEAL_ENABLED=false`.

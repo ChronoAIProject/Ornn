@@ -76,6 +76,13 @@ export class QuotaRepository {
       await this.grants.createIndex({ targetUserId: 1, createdAt: -1 });
       await this.grants.createIndex({ adminUserId: 1, createdAt: -1 });
       await this.grants.createIndex({ createdAt: -1 });
+      // Active-grants index — covers `sumActiveCredits` and
+      // `tryConsumeActiveGrant`. Sparse on `expiresAt` so non-expiring
+      // grants index without a fake date sentinel.
+      await this.grants.createIndex(
+        { targetUserId: 1, surface: 1, expiresAt: 1, createdAt: 1 },
+        { name: "active_grants_lookup" },
+      );
     } catch (err) {
       logger.warn({ err }, "quota indexes ensureIndexes failed — proceeding anyway");
     }
@@ -125,15 +132,15 @@ export class QuotaRepository {
   }
 
   /**
-   * Atomically increment a surface's `monthlyUsed` and `dailyUsed` by 1
-   * and (when monthly base is exhausted) decrement `creditsBalance`.
-   * Caller passes the already-decided `decrementCredit` flag so the
-   * service layer owns the deduction-order policy.
+   * Increment a surface's `monthlyUsed` and `dailyUsed` by 1. The
+   * service layer is responsible for separately consuming a credit
+   * (legacy bucket OR active grant ledger) when the monthly base is
+   * exhausted — see `tryDecrementLegacyCredits` and
+   * `tryConsumeActiveGrant`.
    */
-  async charge(params: {
+  async chargeMonthly(params: {
     userId: string;
     surface: Surface;
-    decrementCredit: boolean;
     now?: Date;
   }): Promise<void> {
     const now = params.now ?? new Date();
@@ -141,18 +148,13 @@ export class QuotaRepository {
     const monthly = currentMonthlyMarker(now);
     const daily = currentDailyMarker(now);
 
-    const inc: Record<string, number> = {
-      [`${surface}.monthlyUsed`]: 1,
-      [`${surface}.dailyUsed`]: 1,
-    };
-    if (params.decrementCredit) {
-      inc[`${surface}.creditsBalance`] = -1;
-    }
-
     await this.quotas.updateOne(
       { userId: params.userId },
       {
-        $inc: inc,
+        $inc: {
+          [`${surface}.monthlyUsed`]: 1,
+          [`${surface}.dailyUsed`]: 1,
+        },
         $set: {
           [`${surface}.monthlyResetMarker`]: monthly,
           [`${surface}.dailyResetMarker`]: daily,
@@ -164,44 +166,109 @@ export class QuotaRepository {
   }
 
   /**
-   * Add `amount` credits to a user's surface bucket. Atomic. Used by
-   * both the per-user grant route and bulk grant route.
+   * Atomically decrement `creditsBalance` (legacy non-expiring bucket)
+   * if positive. Returns true on success, false when no legacy balance
+   * was available — caller should fall through to the grant ledger.
    */
-  async addCredits(params: {
+  async tryDecrementLegacyCredits(params: {
     userId: string;
     surface: Surface;
-    amount: number;
     now?: Date;
-  }): Promise<void> {
+  }): Promise<boolean> {
     const now = params.now ?? new Date();
-    const monthly = currentMonthlyMarker(now);
-    const daily = currentDailyMarker(now);
-    const other = otherSurface(params.surface);
-    await this.quotas.updateOne(
-      { userId: params.userId },
+    const r = await this.quotas.updateOne(
       {
-        $inc: { [`${params.surface}.creditsBalance`]: params.amount },
-        $set: { updatedAt: now },
-        $setOnInsert: {
-          userId: params.userId,
-          [other]: freshSurfaceCounter(now),
-          [`${params.surface}.monthlyUsed`]: 0,
-          [`${params.surface}.dailyUsed`]: 0,
-          [`${params.surface}.monthlyResetMarker`]: monthly,
-          [`${params.surface}.dailyResetMarker`]: daily,
-        },
+        userId: params.userId,
+        [`${params.surface}.creditsBalance`]: { $gt: 0 },
       },
-      { upsert: true },
+      {
+        $inc: { [`${params.surface}.creditsBalance`]: -1 },
+        $set: { updatedAt: now },
+      },
     );
+    return r.modifiedCount === 1;
   }
 
-  async logGrant(params: {
+  /**
+   * Find the oldest active grant (consumed < amount AND not expired)
+   * for the user/surface and increment its `consumed` by 1. Atomic
+   * findOneAndUpdate so two parallel charges can't double-spend the
+   * same row's last credit.
+   *
+   * Returns true on success, false when no active grant has capacity.
+   */
+  async tryConsumeActiveGrant(params: {
+    userId: string;
+    surface: Surface;
+    now?: Date;
+  }): Promise<boolean> {
+    const now = params.now ?? new Date();
+    const r = await this.grants.findOneAndUpdate(
+      {
+        targetUserId: params.userId,
+        surface: params.surface,
+        $expr: { $lt: ["$consumed", "$amount"] },
+        $or: [{ expiresAt: null }, { expiresAt: { $gt: now } }],
+      },
+      { $inc: { consumed: 1 } },
+      // Sort oldest first so admins can predict expiry-vs-consumption
+      // ordering ("the credits I gave you 6 months ago drain first").
+      { sort: { createdAt: 1 }, returnDocument: "after" },
+    );
+    return r !== null;
+  }
+
+  /**
+   * Sum `(amount - consumed)` over all active grants for the user/
+   * surface. Active = not yet drained AND not yet expired.
+   */
+  async sumActiveCredits(
+    userId: string,
+    surface: Surface,
+    now: Date = new Date(),
+  ): Promise<number> {
+    const cursor = this.grants.aggregate<{ total: number }>([
+      {
+        $match: {
+          targetUserId: userId,
+          surface,
+          $expr: { $lt: ["$consumed", "$amount"] },
+          $or: [{ expiresAt: null }, { expiresAt: { $gt: now } }],
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          total: {
+            $sum: {
+              $subtract: [
+                "$amount",
+                { $ifNull: ["$consumed", 0] },
+              ],
+            },
+          },
+        },
+      },
+    ]);
+    const rows = await cursor.toArray();
+    return rows[0]?.total ?? 0;
+  }
+
+  /**
+   * Insert a grant row. The grant is the only source of truth for
+   * credits — `creditsBalance` on the user counter doc is legacy and
+   * never written here. `expiresAt: null` = never expires.
+   *
+   * Returns the new grant `_id`.
+   */
+  async recordGrant(params: {
     adminUserId: string;
     adminEmail: string;
     adminDisplayName: string;
     targetUserId: string;
     surface: Surface;
     amount: number;
+    expiresAt: Date | null;
     note?: string;
     now?: Date;
   }): Promise<string> {
@@ -215,6 +282,8 @@ export class QuotaRepository {
       targetUserId: params.targetUserId,
       surface: params.surface,
       amount: params.amount,
+      consumed: 0,
+      expiresAt: params.expiresAt,
       createdAt: now,
       ...(params.note ? { note: params.note } : {}),
     };
@@ -225,8 +294,9 @@ export class QuotaRepository {
         targetUserId: params.targetUserId,
         surface: params.surface,
         amount: params.amount,
+        expiresAt: params.expiresAt,
       },
-      "Quota grant logged",
+      "Quota grant recorded (active credits ledger)",
     );
     return id;
   }
