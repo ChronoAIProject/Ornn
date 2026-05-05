@@ -110,6 +110,30 @@ export interface SkillConfig {
    */
   readonly agentsealEnabled: boolean;
 
+  // ---- Universal API audit (issue #245) ----
+  /**
+   * How long audit records live in MongoDB before the TTL index expires
+   * them. Mirrored by the MinIO bucket lifecycle policy (configured
+   * out-of-band) so the offloaded bodies expire on the same cadence.
+   */
+  readonly auditRetentionDays: number;
+  /**
+   * MinIO bucket where redacted request / response bodies are
+   * gzip-uploaded for write ops and 4xx/5xx responses.
+   */
+  readonly auditMinioBucket: string;
+  /**
+   * Cutoff for inline-vs-MinIO. Bodies with redacted-JSON byte length
+   * above this go to MinIO; smaller bodies live in the Mongo doc.
+   */
+  readonly auditBodyInlineMaxBytes: number;
+  /**
+   * Extra field-name regex patterns OR-d into the global redaction
+   * blacklist. The defaults (`password|token|apiKey|secret|key|
+   * credential`) always apply; this list extends them.
+   */
+  readonly auditGlobalRedactPatterns: readonly string[];
+
   /**
    * GitHub mirror config — when enabled, every public / system skill
    * gets one-way mirrored to a GitHub monorepo so the
@@ -210,6 +234,19 @@ const envSchema = z.object({
    * env, so we override below in `loadConfig`.)
    */
   AGENTSEAL_ENABLED: booleanFromEnv,
+
+  // ---- Universal API audit (issue #245) ----
+  /** Days to retain audit records before TTL expiry. */
+  AUDIT_RETENTION_DAYS: z.coerce.number().int().positive().default(90),
+  /** MinIO bucket for offloaded audit bodies. */
+  MINIO_AUDIT_BUCKET: z.string().min(1).default("ornn-audit"),
+  /** Max KB to keep inline in the Mongo doc; bigger spills to MinIO. */
+  AUDIT_BODY_INLINE_MAX_KB: z.coerce.number().int().positive().default(16),
+  /**
+   * Comma-separated extra blacklist patterns. Combined with the built-in
+   * defaults (`password|token|apiKey|secret|key|credential`).
+   */
+  AUDIT_GLOBAL_REDACT_PATTERNS: z.string().default(""),
 
   // ───────────── GitHub mirror (public / system skills) ───────────────
   // Disabled by default; flipping GITHUB_MIRROR_ENABLED=true requires
@@ -313,6 +350,14 @@ export function loadConfig(): SkillConfig {
     // by default; ops opts OUT explicitly with `AGENTSEAL_ENABLED=false`.
     agentsealEnabled:
       process.env.AGENTSEAL_ENABLED === undefined ? true : env.AGENTSEAL_ENABLED,
+
+    auditRetentionDays: env.AUDIT_RETENTION_DAYS,
+    auditMinioBucket: env.MINIO_AUDIT_BUCKET,
+    auditBodyInlineMaxBytes: env.AUDIT_BODY_INLINE_MAX_KB * 1024,
+    auditGlobalRedactPatterns: env.AUDIT_GLOBAL_REDACT_PATTERNS
+      .split(",")
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0),
 
     mirror: {
       enabled: env.GITHUB_MIRROR_ENABLED,

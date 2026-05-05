@@ -20,6 +20,13 @@ const pkg = JSON.parse(readFileSync(join(import.meta.dir, "..", "package.json"),
 import { proxyAuthSetup, nyxidOrgLookupMiddleware } from "./middleware/nyxidAuth";
 import { requestIdMiddleware, getRequestId } from "./middleware/requestId";
 
+// Universal API audit (issue #245)
+import {
+  auditMiddleware,
+  ApiAuditRepository,
+  AuditBodyStorage,
+} from "./middleware/audit";
+
 // Infrastructure
 import { connectMongo, type MongoConnection } from "./infra/db/mongodb";
 import { createAnalyticsEmitter } from "./infra/analytics";
@@ -184,6 +191,16 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   const categoryRepo = new CategoryRepository(db);
   const tagRepo = new TagRepository(db);
   const activityRepo = new ActivityRepository(db);
+
+  // ---- Universal API audit (issue #245) ----
+  // Built early so the middleware can mount on `apiApp` below. Indexes
+  // ensured fire-and-forget — a Mongo hiccup at startup must not block
+  // the API from serving traffic; audit failures degrade silently.
+  const apiAuditRepository = new ApiAuditRepository(db, config.auditRetentionDays);
+  void apiAuditRepository.ensureIndexes().catch((err) =>
+    logger.warn({ err }, "api_audit indexes ensureIndexes failed — proceeding anyway"),
+  );
+  const auditBodyStorage = new AuditBodyStorage(storageClient, config.auditMinioBucket);
 
   // ---- Domain: Skill CRUD ----
   const skillService = new SkillService({
@@ -462,6 +479,40 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   // ---- API routes — all traffic via NyxID proxy, trust proxy headers ----
   const apiApp = new Hono();
   apiApp.use("*", proxyAuthSetup());
+  // Universal API audit — runs after `proxyAuthSetup` so the
+  // caller-type resolver can read `c.var.auth`. Fail-isolated: errors
+  // inside the audit pipeline never propagate to the business response.
+  apiApp.use(
+    "*",
+    auditMiddleware({
+      repository: apiAuditRepository,
+      bodyStorage: auditBodyStorage,
+      bodyInlineMaxBytes: config.auditBodyInlineMaxBytes,
+      extraBlacklistPatterns: config.auditGlobalRedactPatterns,
+      logger,
+      // Resolve auth shape from the Hono context. Auth-setup middleware
+      // populates `auth` with `userAccessToken` only when the NyxID
+      // proxy forwarded a user Bearer alongside the identity token —
+      // i.e. agent flows; browser cookie sessions leave it undefined.
+      resolveAuthHint: (c) => {
+        const auth = c.get("auth") as
+          | { userId?: string; userAccessToken?: string }
+          | undefined;
+        if (!auth?.userId) {
+          return {
+            hasAuth: false,
+            hasForwardedUserToken: false,
+            callerIdentity: null,
+          };
+        }
+        return {
+          hasAuth: true,
+          hasForwardedUserToken: Boolean(auth.userAccessToken),
+          callerIdentity: auth.userId,
+        };
+      },
+    }),
+  );
   // Lazy, per-request memoized org lookup. Mounted once here so every domain
   // route sees the same cached result — avoids re-querying NyxID within a
   // single request even when multiple routes call `readUserOrgMemberships`.
