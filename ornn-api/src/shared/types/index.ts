@@ -151,6 +151,25 @@ export interface SkillDocument {
    * accepted if NyxID flips a service's visibility — re-tie refreshes.
    */
   isSystemSkill?: boolean;
+  /**
+   * Per-skill GitHub mirror state. Set by `MirrorService` after a
+   * successful publish/reconcile commit lands; unset (`$unset`) when
+   * the skill is removed from the mirror (privacy flipped to private,
+   * skill deleted, or admin reset).
+   *
+   * Absent ⇒ this skill has never been mirrored, or was un-mirrored.
+   * Present ⇒ the named version was committed to the GitHub mirror at
+   * `syncedAt` under `commitSha`.
+   *
+   * `version` may lag behind `latestVersion` between a fresh publish
+   * and the next mirror sync — the frontend uses that gap to render a
+   * "lagging" chip.
+   */
+  mirrorSync?: {
+    version: string;
+    syncedAt: Date;
+    commitSha: string;
+  };
 }
 
 /**
@@ -323,6 +342,24 @@ export interface SkillDetailResponse {
    * renders a color-coded badge from this — see DESIGN.md.
    */
   agentsealScan?: AgentsealScanSnapshot | null;
+  /**
+   * Per-skill GitHub mirror state. Absent ⇒ never mirrored (or
+   * un-mirrored after a privacy flip / explicit reset). Present ⇒ the
+   * named version was committed to the GitHub mirror at `syncedAt`.
+   * `commitSha` is the GitHub commit pointer for that sync, suitable
+   * for an audit-link from the UI.
+   *
+   * Front-end chip semantics:
+   *   - skill `isPrivate` ⇒ chip hidden entirely
+   *   - `mirrorSync` absent ⇒ "Never synced"
+   *   - `mirrorSync.version === SkillDetailResponse.version` ⇒ "Synced"
+   *   - `mirrorSync.version !== version` ⇒ "Lagging" (mirror push pending)
+   */
+  mirrorSync?: {
+    version: string;
+    syncedAt: string;
+    commitSha: string;
+  };
 }
 
 export interface SkillSearchItem {

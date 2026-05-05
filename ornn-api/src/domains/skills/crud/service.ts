@@ -1274,6 +1274,15 @@ export class SkillService {
       nyxidServiceSlug: skill.nyxidServiceSlug ?? null,
       nyxidServiceLabel: skill.nyxidServiceLabel ?? null,
       isSystemSkill: skill.isSystemSkill === true,
+      ...(skill.mirrorSync && skill.mirrorSync.syncedAt instanceof Date
+        ? {
+            mirrorSync: {
+              version: skill.mirrorSync.version,
+              syncedAt: skill.mirrorSync.syncedAt.toISOString(),
+              commitSha: skill.mirrorSync.commitSha,
+            },
+          }
+        : {}),
     };
   }
 
