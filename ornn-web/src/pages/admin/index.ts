@@ -11,3 +11,5 @@ export { UsersPage } from "./UsersPage";
 export { AdminSkillsPage } from "./AdminSkillsPage";
 export { PlatformSettingsPage } from "./PlatformSettingsPage";
 export { MirrorPage } from "./MirrorPage";
+export { AdminModelsPage } from "./AdminModelsPage";
+export { AdminQuotaPage } from "./AdminQuotaPage";

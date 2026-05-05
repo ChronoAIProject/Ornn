@@ -4,7 +4,7 @@
  * @module pages/CreateSkillGenerativePage
  */
 
-import { useRef, useEffect, useMemo } from "react";
+import { useRef, useEffect, useMemo, useState, useCallback } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { PageTransition } from "@/components/layout/PageTransition";
@@ -13,8 +13,12 @@ import { ChatInput } from "@/components/playground/ChatInput";
 import { SkillPackagePreview } from "@/components/skill/SkillPackagePreview";
 import { ValidationErrorPanel } from "@/components/skill/ValidationErrorPanel";
 import { GenerationChatMessage } from "@/components/skill/GenerationChatMessage";
+import { ModelPicker } from "@/components/models/ModelPicker";
+import { OverLimitPage } from "@/components/quota/OverLimitPage";
+import { QuotaInline } from "@/components/quota/QuotaInline";
 import { useSkillGeneration } from "@/hooks/useSkillGeneration";
 import { useCreateSkill } from "@/hooks/useSkills";
+import { useMyQuota } from "@/hooks/useQuota";
 import { useToastStore } from "@/stores/toastStore";
 import { useAuthStore } from "@/stores/authStore";
 import { track } from "@/lib/analytics";
@@ -57,6 +61,24 @@ export function CreateSkillGenerativePage() {
   const generation = useSkillGeneration();
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Caller quota — drives the soft warning + over-limit gate. Admins
+  // bypass via `quota.isAdmin` inside the components.
+  const { data: quotaSnapshot } = useMyQuota();
+  const skillGenSnap = quotaSnapshot?.skillGen;
+  const isOverLimit =
+    Boolean(skillGenSnap) &&
+    !quotaSnapshot?.isAdmin &&
+    skillGenSnap!.monthly.remaining + skillGenSnap!.credits.balance <= 0;
+
+  // Picked model — picker writes to localStorage, we just hold the
+  // resolved id so sendMessage can forward it.
+  const [pickedModelId, setPickedModelId] = useState<string | null>(null);
+
+  const handleSend = useCallback(
+    (content: string) => generation.sendMessage(content, pickedModelId ?? undefined),
+    [generation, pickedModelId],
+  );
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
@@ -131,6 +153,14 @@ export function CreateSkillGenerativePage() {
     ? t("generative.placeholder")
     : "Describe the skill you want to create... (Enter to send)";
 
+  if (isOverLimit && skillGenSnap) {
+    return (
+      <PageTransition>
+        <OverLimitPage surface="skillGen" snapshot={skillGenSnap} />
+      </PageTransition>
+    );
+  }
+
   return (
     <PageTransition>
       <div className="flex flex-col h-full">
@@ -143,6 +173,11 @@ export function CreateSkillGenerativePage() {
             <ArrowLeftIcon className="h-4 w-4" />
             <span className="font-text text-sm">{t("generative.backToModes")}</span>
           </Link>
+          <ModelPicker surface="skillGen" onChange={setPickedModelId} />
+        </div>
+
+        <div className="mb-2 shrink-0">
+          <QuotaInline surface="skillGen" />
         </div>
 
         {/* Main two-column layout — left chat narrower, right preview wider */}
@@ -177,7 +212,7 @@ export function CreateSkillGenerativePage() {
             {/* Chat input (fixed at bottom) */}
             <div className="shrink-0 border-t border-accent/10 px-1 pb-1">
               <ChatInput
-                onSend={generation.sendMessage}
+                onSend={handleSend}
                 onAbort={generation.abort}
                 disabled={isGenerating}
                 isStreaming={isGenerating}

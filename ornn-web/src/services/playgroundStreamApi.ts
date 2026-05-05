@@ -15,6 +15,7 @@ export interface ChatStreamParams {
   messages: Array<{ role: string; content: string }>;
   skillId?: string;
   envVars?: Record<string, string>;
+  modelId?: string;
 }
 
 export interface StreamHandle {
@@ -64,6 +65,7 @@ export function streamChat(
           messages: params.messages,
           skillId: params.skillId,
           envVars: params.envVars,
+          modelId: params.modelId,
         }),
         signal: controller.signal,
       });
