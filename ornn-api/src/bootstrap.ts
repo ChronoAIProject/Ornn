@@ -99,6 +99,17 @@ import { PlatformSettingsRepository } from "./domains/platform/repository";
 import { PlatformSettingsService } from "./domains/platform/service";
 import { createPlatformSettingsRoutes } from "./domains/platform/routes";
 
+// Domain: Quota (per-user playground / skill-gen counters + admin grants)
+import { QuotaRepository } from "./domains/quota/repository";
+import { QuotaService } from "./domains/quota/service";
+import { createQuotaRoutes } from "./domains/quota/routes";
+
+// Domain: Models (admin-curated Chrono LLM catalog + user picker)
+import { ModelsRepository } from "./domains/models/repository";
+import { ModelsService } from "./domains/models/service";
+import { createModelsRoutes } from "./domains/models/routes";
+import { NyxLlmCatalogClient } from "./clients/nyxid/llmCatalog";
+
 // OpenAPI spec
 import { buildSpec } from "./openapi/specBuilder";
 
@@ -247,6 +258,31 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   });
   const platformSettingsRoutes = createPlatformSettingsRoutes({ platformSettingsService });
 
+  // ---- Domain: Quota (per-user playground / skill-gen counters + admin grants) ----
+  const quotaRepo = new QuotaRepository(db);
+  void quotaRepo.ensureIndexes().catch((err) =>
+    logger.warn({ err }, "quota indexes ensureIndexes failed — proceeding anyway"),
+  );
+  const quotaService = new QuotaService({ repo: quotaRepo });
+  const quotaRoutes = createQuotaRoutes({ quotaService, activityRepo });
+
+  // ---- Domain: Models (admin-curated Chrono LLM catalog + user picker) ----
+  const modelsRepo = new ModelsRepository(db);
+  void modelsRepo.ensureIndexes().catch((err) =>
+    logger.warn({ err }, "models indexes ensureIndexes failed — proceeding anyway"),
+  );
+  // The catalog client speaks to NyxID's Chrono LLM proxy. Refresh
+  // happens on demand from the admin UI; no scheduled cron.
+  const llmCatalogClient = new NyxLlmCatalogClient({
+    proxyBaseUrl: config.nyxidBaseUrl,
+    saTokenProvider,
+  });
+  const modelsService = new ModelsService({
+    repo: modelsRepo,
+    catalogClient: llmCatalogClient,
+  });
+  const modelsRoutes = createModelsRoutes({ modelsService });
+
   // ---- Domain: GitHub Mirror ----
   // Built before the skill routes so we can inject it into the route
   // handlers as a fire-and-forget hook target. The MirrorService's
@@ -334,6 +370,8 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   const generationRoutes = createGenerationRoutes({
     generationService,
     keepAliveIntervalMs: config.sseKeepAliveIntervalMs,
+    quotaService,
+    modelsService,
   });
 
   // ---- Domain: Playground ----
@@ -351,6 +389,8 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
     keepAliveIntervalMs: config.sseKeepAliveIntervalMs,
     analyticsService,
     skillService,
+    quotaService,
+    modelsService,
   });
 
   // ---- Domain: Admin ----
@@ -475,6 +515,8 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   apiApp.route("/", playgroundRoutes);
   apiApp.route("/", adminRoutes);
   apiApp.route("/", platformSettingsRoutes);
+  apiApp.route("/", quotaRoutes);
+  apiApp.route("/", modelsRoutes);
   apiApp.route("/", formatRoutes);
   apiApp.route("/", createMeRoutes({
     nyxidBaseUrl: config.nyxidBaseUrl,
