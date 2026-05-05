@@ -33,6 +33,27 @@ export interface CreateSkillVersionData {
   releaseNotes?: string | null;
 }
 
+/**
+ * Persisted shape for AgentSeal results (#253). Lives on the version
+ * document so a skill's per-version trust score can be surfaced on the
+ * detail page without a separate collection.
+ *
+ * The `findings` shape is intentionally permissive — the AgentSeal CLI
+ * is the source of truth for finding structure, and it evolves between
+ * pinned versions. We carry whatever it emits, raw, so the UI can render
+ * future fields without a schema migration.
+ */
+export interface AgentsealScanRecord {
+  /** 0–100 scan-time trust score. */
+  score: number;
+  /** Raw findings array straight from `agentseal guard --output json`. */
+  findings: ReadonlyArray<Record<string, unknown>>;
+  /** ISO timestamp of when the scan completed. */
+  scannedAt: string;
+  /** Pinned `agentseal` package version that produced this scan. */
+  agentsealVersion: string;
+}
+
 export class SkillVersionRepository {
   private readonly collection: Collection;
 
@@ -48,6 +69,13 @@ export class SkillVersionRepository {
     await this.collection.createIndex(
       { skillGuid: 1, majorVersion: -1, minorVersion: -1 },
       { name: "skill_versions_latest_lookup" },
+    );
+    // AgentSeal admin queries — "show me everything below 70". Sparse so
+    // the index doesn't bloat with versions that haven't been scanned
+    // yet (legacy rows from before #253, or rows where the scan failed).
+    await this.collection.createIndex(
+      { "agentsealScan.score": 1 },
+      { name: "skill_versions_agentseal_score", sparse: true },
     );
   }
 
@@ -128,6 +156,46 @@ export class SkillVersionRepository {
   }
 
   /**
+   * Persist (or refresh) the AgentSeal trust-score record for a single
+   * version. v1 is warn-only — the publish path calls this fire-and-forget
+   * so any failure is logged upstream and does not block the publish.
+   *
+   * Returns the updated document or null when the version doesn't exist
+   * (ignored by the caller; we don't 404 because publish-path callers hold
+   * the version they just wrote).
+   */
+  async setAgentsealScan(
+    skillGuid: string,
+    version: string,
+    scan: AgentsealScanRecord,
+  ): Promise<SkillVersionDocument | null> {
+    const result = await this.collection.findOneAndUpdate(
+      { _id: `${skillGuid}@${version}` as never },
+      { $set: { agentsealScan: scan } },
+      { returnDocument: "after" },
+    );
+    const updated = mapDoc(result);
+    if (!updated) {
+      logger.warn(
+        { skillGuid, version },
+        "AgentSeal scan persist: version row not found (skipping)",
+      );
+      return null;
+    }
+    logger.info(
+      {
+        skillGuid,
+        version,
+        score: scan.score,
+        findings: scan.findings.length,
+        agentsealVersion: scan.agentsealVersion,
+      },
+      "AgentSeal scan persisted on skill version",
+    );
+    return updated;
+  }
+
+  /**
    * Toggle the deprecation flag on a single version. When `isDeprecated` is
    * false the `deprecationNote` is cleared (empty note is never sticky).
    * 404s via AppError if the version row does not exist.
@@ -184,5 +252,24 @@ function mapDoc(doc: Document | null): SkillVersionDocument | null {
     isDeprecated: doc.isDeprecated === true,
     deprecationNote: doc.deprecationNote ?? null,
     releaseNotes: typeof doc.releaseNotes === "string" ? doc.releaseNotes : null,
+    agentsealScan: mapScan(doc.agentsealScan),
+  };
+}
+
+function mapScan(raw: unknown): AgentsealScanRecord | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  const score = typeof r.score === "number" ? r.score : null;
+  const findings = Array.isArray(r.findings) ? r.findings : null;
+  const scannedAt = typeof r.scannedAt === "string" ? r.scannedAt : null;
+  const agentsealVersion = typeof r.agentsealVersion === "string" ? r.agentsealVersion : null;
+  if (score === null || findings === null || scannedAt === null || agentsealVersion === null) {
+    return null;
+  }
+  return {
+    score,
+    findings: findings as ReadonlyArray<Record<string, unknown>>,
+    scannedAt,
+    agentsealVersion,
   };
 }

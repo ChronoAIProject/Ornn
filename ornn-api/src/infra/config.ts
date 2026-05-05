@@ -70,6 +70,45 @@ export interface SkillConfig {
    * a single-item array `["NyxID"]`.
    */
   readonly extraNyxidServices: readonly string[];
+
+  // PostHog (server-side product analytics) — see #252
+  /**
+   * PostHog project API key. When absent the analytics module no-ops
+   * (`enabled === false`) so dev/CI runs don't pollute the dashboard.
+   * Read from `POSTHOG_API_KEY`.
+   */
+  readonly posthogApiKey: string | null;
+  /** Optional project id. Currently informational; logged on emit. */
+  readonly posthogProjectId: string | null;
+  /**
+   * PostHog host. Defaults to the EU cloud (`https://eu.i.posthog.com`)
+   * so launch traffic lands in the GDPR region from day one.
+   */
+  readonly posthogHost: string;
+  /**
+   * Sample rate for `api.error` 5xx events, in `[0, 1]`. Default `0.1` —
+   * every 5xx still logs locally; only ~10% are forwarded to PostHog so
+   * a thundering herd can't burn the project quota.
+   */
+  readonly posthogErrorSampleRate: number;
+
+  // AgentSeal (subprocess-based skill scanner) — see #253
+  /**
+   * Absolute path or PATH name of the `agentseal` CLI. Defaults to
+   * `agentseal`; container builds bake the binary into the image.
+   */
+  readonly agentsealCommand: string;
+  /**
+   * Hard timeout for a single `agentseal guard` run. The process is
+   * killed past this deadline and the scan is recorded as a failure.
+   * Default 60s.
+   */
+  readonly agentsealTimeoutMs: number;
+  /**
+   * When false, the publish path skips the scan entirely. Lets ops
+   * disable scanning on a hot deploy without redeploying. Default true.
+   */
+  readonly agentsealEnabled: boolean;
 }
 
 /** Parses "true"/"false"/"1"/"0" into a real boolean. */
@@ -122,6 +161,22 @@ const envSchema = z.object({
    * changes by setting e.g. `EXTRA_NYXID_SERVICES=NyxID,SomeOtherSvc`.
    */
   EXTRA_NYXID_SERVICES: z.string().default("NyxID"),
+
+  // ---- PostHog (server-side product analytics, #252) ----
+  POSTHOG_API_KEY: z.string().default(""),
+  POSTHOG_PROJECT_ID: z.string().default(""),
+  POSTHOG_HOST: z.string().url().default("https://eu.i.posthog.com"),
+  POSTHOG_ERROR_SAMPLE_RATE: z.coerce.number().min(0).max(1).default(0.1),
+
+  // ---- AgentSeal (skill trust scanner, #253) ----
+  AGENTSEAL_COMMAND: z.string().min(1).default("agentseal"),
+  AGENTSEAL_TIMEOUT_MS: z.coerce.number().int().positive().default(60_000),
+  /**
+   * Toggle for the publish-time scan. Defaults to true — operators
+   * opt OUT, not in. (booleanFromEnv defaults to false on missing
+   * env, so we override below in `loadConfig`.)
+   */
+  AGENTSEAL_ENABLED: booleanFromEnv,
 });
 
 /**
@@ -188,5 +243,17 @@ export function loadConfig(): SkillConfig {
       .split(",")
       .map((s) => s.trim())
       .filter((s) => s.length > 0),
+
+    posthogApiKey: env.POSTHOG_API_KEY.trim() ? env.POSTHOG_API_KEY.trim() : null,
+    posthogProjectId: env.POSTHOG_PROJECT_ID.trim() ? env.POSTHOG_PROJECT_ID.trim() : null,
+    posthogHost: env.POSTHOG_HOST,
+    posthogErrorSampleRate: env.POSTHOG_ERROR_SAMPLE_RATE,
+
+    agentsealCommand: env.AGENTSEAL_COMMAND,
+    agentsealTimeoutMs: env.AGENTSEAL_TIMEOUT_MS,
+    // booleanFromEnv treats "missing" as false. AgentSeal should be ON
+    // by default; ops opts OUT explicitly with `AGENTSEAL_ENABLED=false`.
+    agentsealEnabled:
+      process.env.AGENTSEAL_ENABLED === undefined ? true : env.AGENTSEAL_ENABLED,
   };
 }
