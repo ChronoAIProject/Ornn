@@ -165,14 +165,50 @@ export class ActivityRepository {
     userIds: string[],
   ): Promise<Array<{ userId: string; email: string; displayName: string }>> {
     if (userIds.length === 0) return [];
+    // Same "latest non-empty" pattern as `aggregateUsers` — the naive
+    // $last surfaces the single most-recent row's labels, which can
+    // legitimately be empty when the most recent JWT lacked email/name.
     const pipeline = [
       { $match: { userId: { $in: userIds } } },
+      { $sort: { createdAt: -1 as const } },
       {
         $group: {
           _id: "$userId",
-          email: { $last: "$userEmail" },
-          displayName: { $last: "$userDisplayName" },
+          emails: { $push: "$userEmail" },
+          displayNames: { $push: "$userDisplayName" },
           lastActiveAt: { $max: "$createdAt" },
+        },
+      },
+      {
+        $project: {
+          _id: 1,
+          email: {
+            $first: {
+              $filter: {
+                input: "$emails",
+                cond: {
+                  $and: [
+                    { $ne: ["$$this", null] },
+                    { $ne: ["$$this", ""] },
+                  ],
+                },
+              },
+            },
+          },
+          displayName: {
+            $first: {
+              $filter: {
+                input: "$displayNames",
+                cond: {
+                  $and: [
+                    { $ne: ["$$this", null] },
+                    { $ne: ["$$this", ""] },
+                  ],
+                },
+              },
+            },
+          },
+          lastActiveAt: 1,
         },
       },
     ];
@@ -189,21 +225,65 @@ export class ActivityRepository {
   /**
    * Aggregate unique users from activities + skill ownership.
    * Returns user summaries with last activity time and skill count.
+   *
+   * For each unique `userId`, surface the most-recent NON-EMPTY email
+   * + displayName from the activity history. The naive $last picks the
+   * single most-recent row, which means a user whose latest activity
+   * happened to be authenticated by a JWT lacking `email`/`name`
+   * claims (some admin / proxy / SA-flavored login paths emit those
+   * empty) shows up blank in the admin user list — even though they
+   * have many earlier activities with the labels populated.
    */
   async aggregateUsers(
     skillCollection: Collection,
     page: number,
     pageSize: number,
   ): Promise<{ items: UserSummary[]; total: number }> {
-    // Get unique users from activities
     const pipeline = [
+      // Sort desc so $push below preserves newest-first order, and the
+      // "first non-empty" projection downstream picks the most-recent
+      // populated value rather than any older one.
+      { $sort: { createdAt: -1 as const } },
       {
         $group: {
           _id: "$userId",
-          email: { $last: "$userEmail" },
-          displayName: { $last: "$userDisplayName" },
+          emails: { $push: "$userEmail" },
+          displayNames: { $push: "$userDisplayName" },
           lastActiveAt: { $max: "$createdAt" },
           activityCount: { $sum: 1 },
+        },
+      },
+      {
+        $project: {
+          _id: 1,
+          email: {
+            $first: {
+              $filter: {
+                input: "$emails",
+                cond: {
+                  $and: [
+                    { $ne: ["$$this", null] },
+                    { $ne: ["$$this", ""] },
+                  ],
+                },
+              },
+            },
+          },
+          displayName: {
+            $first: {
+              $filter: {
+                input: "$displayNames",
+                cond: {
+                  $and: [
+                    { $ne: ["$$this", null] },
+                    { $ne: ["$$this", ""] },
+                  ],
+                },
+              },
+            },
+          },
+          lastActiveAt: 1,
+          activityCount: 1,
         },
       },
       { $sort: { lastActiveAt: -1 as const } },
