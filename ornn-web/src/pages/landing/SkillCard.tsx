@@ -16,9 +16,18 @@ export function SkillCard({ skill }: { skill: FeaturedSkill }) {
       <div className="flex-grow text-[13px] leading-[1.55] text-bone">
         {skill.desc}
       </div>
-      <div className="mt-3 rounded-[2px] border border-[color:var(--color-border-subtle)] bg-obsidian px-2.5 py-2 font-mono text-[11px] text-parchment before:text-ember before:content-['$_']">
-        {skill.install}
-      </div>
+      {skill.tags.length > 0 && (
+        <div className="mt-3 flex flex-wrap items-center gap-1.5">
+          {skill.tags.map((tag) => (
+            <span
+              key={tag}
+              className="inline-flex items-center rounded-[2px] border border-[color:var(--color-border-subtle)] bg-obsidian px-2 py-1 font-mono text-[10px] tracking-[0.04em] text-bone"
+            >
+              {tag}
+            </span>
+          ))}
+        </div>
+      )}
       <div className="mt-4 flex justify-between border-t border-dashed border-[color:var(--color-border-strong)] pt-3.5 font-mono text-[11px] text-meta">
         <span>
           {skill.author} · {skill.version}

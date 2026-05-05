@@ -17,7 +17,6 @@ import { VSComparisonSection } from "@/pages/landing/VSComparisonSection";
 import { PublishSection } from "@/pages/landing/PublishSection";
 import { LandingFooter } from "@/pages/landing/LandingFooter";
 import { SectionRule } from "@/pages/landing/HammeredDivider";
-import { HighlighterMarkFilter } from "@/pages/landing/HighlighterMark";
 import { LandingChrome } from "@/pages/landing/LandingChrome";
 
 export function LandingPage() {
@@ -27,8 +26,8 @@ export function LandingPage() {
           overlay (light-mode page-edge dim rulers). Scoped to .landing-route
           so app-shell pages do NOT inherit. */}
       <LandingChrome />
-      {/* Singleton SVG turbulence filter referenced by every <HighlighterMark> */}
-      <HighlighterMarkFilter />
+      {/* SVG turbulence filter for <HighlighterMark> is mounted once at
+          the app root in App.tsx so app-shell pages share it. */}
       <LandingNav />
       <main>
         <HeroStage />
