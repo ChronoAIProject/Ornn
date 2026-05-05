@@ -102,6 +102,10 @@ export async function startHarness(): Promise<Harness> {
     maxPackageSizeBytes: 10 * 1024 * 1024,
     allowedOrigins: [],
     extraNyxidServices: [],
+    auditRetentionDays: 90,
+    auditMinioBucket: "ornn-audit-test",
+    auditBodyInlineMaxBytes: 16 * 1024,
+    auditGlobalRedactPatterns: [],
     mirror: {
       enabled: false,
       appId: "",
