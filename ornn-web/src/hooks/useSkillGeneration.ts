@@ -37,8 +37,10 @@ interface GenerationState {
 }
 
 export interface UseSkillGenerationReturn extends GenerationState {
-  /** Send a message (user prompt) to the generation stream */
-  sendMessage: (content: string) => void;
+  /** Send a message (user prompt) to the generation stream. Optional
+   * `modelId` overrides the surface default — picker passes the
+   * caller's preferred model in. */
+  sendMessage: (content: string, modelId?: string) => void;
   /** Abort current stream */
   abort: () => void;
   /** Reset to input phase */
@@ -260,7 +262,7 @@ export function useSkillGeneration(): UseSkillGenerationReturn {
   }, [cancelFlush]);
 
   const sendMessage = useCallback(
-    (content: string) => {
+    (content: string, modelId?: string) => {
       abort();
       tokenBufferRef.current = "";
 
@@ -270,6 +272,7 @@ export function useSkillGeneration(): UseSkillGenerationReturn {
       track("skill_gen.started", {
         promptLength: content.length,
         turn: conversationHistoryRef.current.length / 2 + 1,
+        modelId: modelId ?? null,
       });
 
       const userMsgId = crypto.randomUUID();
@@ -306,7 +309,7 @@ export function useSkillGeneration(): UseSkillGenerationReturn {
       }));
 
       const handle = generateSkillStream(
-        { messages: messagesForApi },
+        { messages: messagesForApi, modelId },
         handleEvent,
       );
       abortRef.current = handle.abort;

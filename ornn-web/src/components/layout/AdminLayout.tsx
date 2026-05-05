@@ -8,6 +8,7 @@ import { Outlet, NavLink, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
 import { ToastContainer } from "@/components/ui/Toast";
 import { Logo } from "@/components/brand/Logo";
+import { QuotaChip } from "@/components/quota/QuotaChip";
 
 interface NavItem {
   path: string;
@@ -49,6 +50,24 @@ const NAV_ITEMS: NavItem[] = [
     icon: (
       <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+      </svg>
+    ),
+  },
+  {
+    path: "/admin/models",
+    label: "Models",
+    icon: (
+      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.75 17 9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2Z" />
+      </svg>
+    ),
+  },
+  {
+    path: "/admin/quota",
+    label: "Quota",
+    icon: (
+      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 3v18h18M7 14l4-4 4 4 5-5" />
       </svg>
     ),
   },
@@ -104,6 +123,10 @@ function getBreadcrumbs(pathname: string): Array<{ label: string; path?: string 
     breadcrumbs.push({ label: "Users" });
   } else if (pathname.startsWith("/admin/skills")) {
     breadcrumbs.push({ label: "Skills" });
+  } else if (pathname.startsWith("/admin/models")) {
+    breadcrumbs.push({ label: "Models" });
+  } else if (pathname.startsWith("/admin/quota")) {
+    breadcrumbs.push({ label: "Quota" });
   } else if (pathname.startsWith("/admin/categories")) {
     breadcrumbs.push({ label: "Categories" });
   } else if (pathname.startsWith("/admin/tags")) {
@@ -151,11 +174,13 @@ export function AdminLayout() {
             ))}
           </nav>
 
-          {/* Back to Main */}
-          <NavLink
-            to="/"
-            className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.14em] text-meta transition-colors hover:text-accent"
-          >
+          {/* Right cluster: quota chip + back to main */}
+          <div className="flex items-center gap-3">
+            <QuotaChip className="hidden md:inline-flex" />
+            <NavLink
+              to="/"
+              className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.14em] text-meta transition-colors hover:text-accent"
+            >
             <svg
               className="h-4 w-4"
               fill="none"
@@ -170,7 +195,8 @@ export function AdminLayout() {
               />
             </svg>
             Exit Admin
-          </NavLink>
+            </NavLink>
+          </div>
         </div>
       </header>
 

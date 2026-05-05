@@ -122,7 +122,12 @@ export function usePlaygroundChat() {
   );
 
   const sendMessage = useCallback(
-    (content: string, skillId?: string, envVars?: Record<string, string>) => {
+    (
+      content: string,
+      skillId?: string,
+      envVars?: Record<string, string>,
+      modelId?: string,
+    ) => {
       streamRef.current?.abort();
       tokenBufferRef.current = "";
       cancelFlush();
@@ -140,11 +145,12 @@ export function usePlaygroundChat() {
         skillId: skillId ?? null,
         promptLength: content.length,
         hasEnvVars: Boolean(envVars && Object.keys(envVars).length),
+        modelId: modelId ?? null,
       });
 
       const msgs = usePlaygroundStore.getState().messages;
       const mapped = msgs.map((m) => ({ role: m.role, content: m.content }));
-      const handle = streamChat({ messages: mapped, skillId, envVars }, handleEvent);
+      const handle = streamChat({ messages: mapped, skillId, envVars, modelId }, handleEvent);
       streamRef.current = handle;
     },
     [handleEvent, cancelFlush],

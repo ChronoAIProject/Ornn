@@ -132,6 +132,12 @@ const AdminPlatformSettingsPage = lazy(() =>
 const AdminMirrorPage = lazy(() =>
   import("@/pages/admin").then((m) => ({ default: m.MirrorPage })),
 );
+const AdminModelsPage = lazy(() =>
+  import("@/pages/admin").then((m) => ({ default: m.AdminModelsPage })),
+);
+const AdminQuotaPage = lazy(() =>
+  import("@/pages/admin").then((m) => ({ default: m.AdminQuotaPage })),
+);
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -201,6 +207,8 @@ const router = createBrowserRouter(
             <Route path="/admin/tags" element={<AdminTagsPage />} />
             <Route path="/admin/settings" element={<AdminPlatformSettingsPage />} />
             <Route path="/admin/mirror" element={<AdminMirrorPage />} />
+            <Route path="/admin/models" element={<AdminModelsPage />} />
+            <Route path="/admin/quota" element={<AdminQuotaPage />} />
           </Route>
         </Route>
       </Route>

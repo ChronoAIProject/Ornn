@@ -12,9 +12,13 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { Badge } from "@/components/ui/Badge";
 import { ChatInput } from "@/components/playground/ChatInput";
 import { SkillPackagePreview } from "@/components/skill/SkillPackagePreview";
+import { ModelPicker } from "@/components/models/ModelPicker";
+import { OverLimitPage } from "@/components/quota/OverLimitPage";
+import { QuotaInline } from "@/components/quota/QuotaInline";
 import { useSkill } from "@/hooks/useSkills";
 import { useSkillPackage } from "@/hooks/useSkillPackage";
 import { usePlaygroundChat } from "@/hooks/usePlaygroundChat";
+import { useMyQuota } from "@/hooks/useQuota";
 import { useTranslation } from "react-i18next";
 
 /** Extract env var keys from skill metadata */
@@ -84,6 +88,20 @@ export function PlaygroundPage() {
     setEnvVars((prev) => ({ ...prev, [key]: value }));
   }, []);
 
+  // Picked model (forwarded with each send). Picker maintains the
+  // localStorage source of truth — we just hold the latest value here so
+  // the chat hook can pass it to the SSE endpoint.
+  const [pickedModelId, setPickedModelId] = useState<string | null>(null);
+
+  // Caller quota — drives the soft warning + over-limit gate. Admins
+  // bypass via `quota.isAdmin` inside the components.
+  const { data: quotaSnapshot } = useMyQuota();
+  const playgroundSnap = quotaSnapshot?.playground;
+  const isOverLimit =
+    Boolean(playgroundSnap) &&
+    !quotaSnapshot?.isAdmin &&
+    playgroundSnap!.monthly.remaining + playgroundSnap!.credits.balance <= 0;
+
   // Chat
   const {
     messages,
@@ -103,9 +121,14 @@ export function PlaygroundPage() {
   }, [messages, currentAssistantContent]);
 
   const handleSend = useCallback((content: string) => {
-    // Pass skillId and envVars with the message
-    sendMessage(content, skillName ?? undefined, needsEnvVars ? envVars : undefined);
-  }, [sendMessage, skillName, envVars, needsEnvVars]);
+    // Pass skillId, envVars, and the user's picked model with each message.
+    sendMessage(
+      content,
+      skillName ?? undefined,
+      needsEnvVars ? envVars : undefined,
+      pickedModelId ?? undefined,
+    );
+  }, [sendMessage, skillName, envVars, needsEnvVars, pickedModelId]);
 
   // No skill specified
   if (!skillName) {
@@ -139,9 +162,29 @@ export function PlaygroundPage() {
     );
   }
 
+  if (isOverLimit && playgroundSnap) {
+    return (
+      <PageTransition>
+        <OverLimitPage surface="playground" snapshot={playgroundSnap} />
+      </PageTransition>
+    );
+  }
+
   return (
     <PageTransition>
       <div className="flex flex-col h-full py-1">
+        {/* Surface header — quota inline + model picker. The 80% warning
+            banner replaces the inline stamp at threshold; admins see
+            nothing because both components self-skip. */}
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-3 shrink-0">
+          <QuotaInline surface="playground" />
+          <ModelPicker
+            surface="playground"
+            onChange={setPickedModelId}
+            className="ml-auto"
+          />
+        </div>
+
         {/* Two-column layout */}
         <div className="flex flex-1 min-h-0 gap-4">
           {/* Left: Chat (40%) */}
