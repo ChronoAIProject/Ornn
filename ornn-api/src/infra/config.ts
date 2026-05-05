@@ -70,6 +70,30 @@ export interface SkillConfig {
    * a single-item array `["NyxID"]`.
    */
   readonly extraNyxidServices: readonly string[];
+
+  // ---- Universal API audit (issue #245) ----
+  /**
+   * How long audit records live in MongoDB before the TTL index expires
+   * them. Mirrored by the MinIO bucket lifecycle policy (configured
+   * out-of-band) so the offloaded bodies expire on the same cadence.
+   */
+  readonly auditRetentionDays: number;
+  /**
+   * MinIO bucket where redacted request / response bodies are
+   * gzip-uploaded for write ops and 4xx/5xx responses.
+   */
+  readonly auditMinioBucket: string;
+  /**
+   * Cutoff for inline-vs-MinIO. Bodies with redacted-JSON byte length
+   * above this go to MinIO; smaller bodies live in the Mongo doc.
+   */
+  readonly auditBodyInlineMaxBytes: number;
+  /**
+   * Extra field-name regex patterns OR-d into the global redaction
+   * blacklist. The defaults (`password|token|apiKey|secret|key|
+   * credential`) always apply; this list extends them.
+   */
+  readonly auditGlobalRedactPatterns: readonly string[];
 }
 
 /** Parses "true"/"false"/"1"/"0" into a real boolean. */
@@ -122,6 +146,19 @@ const envSchema = z.object({
    * changes by setting e.g. `EXTRA_NYXID_SERVICES=NyxID,SomeOtherSvc`.
    */
   EXTRA_NYXID_SERVICES: z.string().default("NyxID"),
+
+  // ---- Universal API audit (issue #245) ----
+  /** Days to retain audit records before TTL expiry. */
+  AUDIT_RETENTION_DAYS: z.coerce.number().int().positive().default(90),
+  /** MinIO bucket for offloaded audit bodies. */
+  MINIO_AUDIT_BUCKET: z.string().min(1).default("ornn-audit"),
+  /** Max KB to keep inline in the Mongo doc; bigger spills to MinIO. */
+  AUDIT_BODY_INLINE_MAX_KB: z.coerce.number().int().positive().default(16),
+  /**
+   * Comma-separated extra blacklist patterns. Combined with the built-in
+   * defaults (`password|token|apiKey|secret|key|credential`).
+   */
+  AUDIT_GLOBAL_REDACT_PATTERNS: z.string().default(""),
 });
 
 /**
@@ -185,6 +222,14 @@ export function loadConfig(): SkillConfig {
       .filter((s) => s.length > 0),
 
     extraNyxidServices: env.EXTRA_NYXID_SERVICES
+      .split(",")
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0),
+
+    auditRetentionDays: env.AUDIT_RETENTION_DAYS,
+    auditMinioBucket: env.MINIO_AUDIT_BUCKET,
+    auditBodyInlineMaxBytes: env.AUDIT_BODY_INLINE_MAX_KB * 1024,
+    auditGlobalRedactPatterns: env.AUDIT_GLOBAL_REDACT_PATTERNS
       .split(",")
       .map((s) => s.trim())
       .filter((s) => s.length > 0),
