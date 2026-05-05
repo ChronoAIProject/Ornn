@@ -17,7 +17,11 @@
  */
 export type Surface = "playground" | "skillGen";
 
-export const SURFACES: readonly Surface[] = ["playground", "skillGen"] as const;
+/**
+ * Literal tuple form so Zod's `z.enum(...)` can pin the union exactly.
+ * The `as const` keeps the literal types intact for `z.enum`.
+ */
+export const SURFACES = ["playground", "skillGen"] as const;
 
 /**
  * Per-surface limits applied as a hard wall. Defaults below come from
