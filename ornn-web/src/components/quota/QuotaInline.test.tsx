@@ -39,10 +39,13 @@ function snapshot(overrides: Partial<QuotaSnapshot["playground"]> = {}): QuotaSn
 }
 
 describe("QuotaInline", () => {
-  it("renders nothing for admins", () => {
+  it("renders an unlimited stamp for admins", () => {
     useMyQuota.mockReturnValue({ data: { ...snapshot(), isAdmin: true } });
-    const { container } = render(<QuotaInline surface="playground" />);
-    expect(container.firstChild).toBeNull();
+    render(<QuotaInline surface="playground" />);
+    expect(
+      screen.getByRole("status", { name: /admin — quota unlimited/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/unlimited playground/i)).toBeInTheDocument();
   });
 
   it("shows compact stamp under threshold", () => {

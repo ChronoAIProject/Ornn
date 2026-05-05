@@ -321,7 +321,3 @@ export class QuotaRepository {
     return { items, total };
   }
 }
-
-function otherSurface(s: Surface): Surface {
-  return s === "playground" ? "skillGen" : "playground";
-}

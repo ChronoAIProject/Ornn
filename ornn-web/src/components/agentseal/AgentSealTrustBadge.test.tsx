@@ -1,5 +1,18 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
+
+// The badge imports `apiPost` from `@/services/apiClient` for the rescan
+// button. That module's transitive `authStore` import calls
+// `useAuthStore.getState().initialize()` at load time, which crashes
+// under jsdom because Zustand's persist middleware can't write to
+// localStorage. Render tests for the badge don't need either.
+vi.mock("@/services/apiClient", () => ({ apiPost: vi.fn() }));
+vi.mock("@/stores/toastStore", () => ({
+  useToastStore: Object.assign(() => () => {}, {
+    getState: () => ({ addToast: () => {} }),
+  }),
+}));
+
 import { AgentSealTrustBadge } from "./AgentSealTrustBadge";
 import type { AgentSealScan } from "@/types/domain";
 
@@ -31,7 +44,7 @@ describe("AgentSealTrustBadge", () => {
 
   it("shows '0 findings' when the scan ran clean", () => {
     render(<AgentSealTrustBadge scan={makeScan({ findings: [] })} />);
-    expect(screen.getByRole("button", { name: /no findings/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /clean — 0 findings/i })).toBeInTheDocument();
   });
 
   it("expands the findings list when the toggle is clicked", () => {

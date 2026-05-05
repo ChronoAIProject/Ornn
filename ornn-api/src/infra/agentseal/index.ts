@@ -108,7 +108,7 @@ export class AgentSealScanner implements IAgentSealScanner {
 
     // Stage the ZIP on disk; the wrapper script extracts it itself.
     let workdir: string | null = null;
-    let zipPath: string | null = null;
+    let zipPath: string;
     try {
       workdir = await mkdtemp(join(tmpdir(), "ornn-agentseal-"));
       zipPath = join(workdir, "skill.zip");
