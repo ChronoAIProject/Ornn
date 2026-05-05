@@ -15,6 +15,8 @@ lastUpdated: 2026-04-29
 
 # Agent Manual (NyxID CLI variant)
 
+> **DEPRECATED — replaced by `chrono-ai-service-manual`.** This skill is kept for one minor release while consumers migrate. The unified manual folds NyxID identity / CLI / proxy AND the Ornn skill lifecycle into a single skill so an agent that wants to drive both halves of the stack only needs one install. **New work should pull `chrono-ai-service-manual` instead** (Ornn skill name; same auth flow, same registry, identical API contract — strict superset of this file). This file will be removed in the release after the unified manual lands.
+
 > **You are an AI agent reading this manual to learn how to use Ornn.** Throughout this document, *"you"* always refers to **the agent itself** — not the human user driving you.
 >
 > ## First: install this skill locally
