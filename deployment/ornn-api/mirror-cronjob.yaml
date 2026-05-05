@@ -1,0 +1,43 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: ornn-mirror-reconcile
+  namespace: ${NAMESPACE}
+spec:
+  # Every hour at :17 — offset from common scrape windows so we don't
+  # collide with backup / monitoring spikes.
+  schedule: "17 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      ttlSecondsAfterFinished: 3600
+      template:
+        metadata:
+          labels:
+            app: ornn-api
+            role: mirror-reconcile
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: reconcile
+              image: ${ORNN_API_IMAGE}
+              imagePullPolicy: ${IMAGE_PULL_POLICY}
+              # Same envFrom as the main ornn-api Deployment — the
+              # script re-uses every config the long-running service
+              # needs (mongo + storage + GitHub App credentials).
+              envFrom:
+                - configMapRef:
+                    name: ornn-api-config
+                - secretRef:
+                    name: ornn-api-secret
+              command: ["bun", "run", "scripts/reconcile-mirror.ts"]
+              resources:
+                requests:
+                  cpu: "50m"
+                  memory: "128Mi"
+                limits:
+                  cpu: "500m"
+                  memory: "512Mi"

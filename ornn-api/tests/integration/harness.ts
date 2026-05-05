@@ -102,6 +102,16 @@ export async function startHarness(): Promise<Harness> {
     maxPackageSizeBytes: 10 * 1024 * 1024,
     allowedOrigins: [],
     extraNyxidServices: [],
+    mirror: {
+      enabled: false,
+      appId: "",
+      privateKey: "",
+      installationId: "",
+      repoOwner: "ChronoAIProject",
+      repoName: "ornn-skills",
+      defaultBranch: "main",
+    },
+    ornnPublicOrigin: "http://test.invalid",
   };
 
   const { app, shutdown } = await bootstrap(config);
