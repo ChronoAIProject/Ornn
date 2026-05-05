@@ -170,7 +170,12 @@ export class PlaygroundChatService {
     userId: string,
     request: PlaygroundChatRequest,
     abortSignal?: AbortSignal,
+    options?: { modelId?: string },
   ): AsyncGenerator<PlaygroundChatEvent> {
+    // Resolved model id (already validated by the route). Falls back
+    // to service-level default for tests / internal callers that don't
+    // go through the model picker.
+    const model = options?.modelId ?? this.defaultModel;
     const input = this.buildInput(request);
 
     // Inject system prompt as developer message (instructions field is ignored by upstream LLM)
@@ -202,7 +207,7 @@ export class PlaygroundChatService {
     for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
       try {
         const streamEvents = this.llmClient.stream({
-          model: this.defaultModel,
+          model,
           input,
           max_output_tokens: this.maxOutputTokens,
           temperature: this.temperature,

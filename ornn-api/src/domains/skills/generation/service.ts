@@ -60,12 +60,16 @@ export class SkillGenerationService {
 
   /**
    * Direct generation streaming. Streams tokens via SSE events.
-   * Uses Nyx Provider Responses API format.
+   * Uses Nyx Provider Responses API format. `modelOverride` (when set)
+   * picks an admin-curated model; otherwise the service-level default
+   * applies.
    */
   async *generateStream(
     query: string,
     signal?: AbortSignal,
+    modelOverride?: string,
   ): AsyncIterable<SkillStreamEvent> {
+    const model = modelOverride ?? this.defaultModel;
     if (signal?.aborted) {
       yield { type: "error", message: "Request aborted" };
       return;
@@ -83,7 +87,7 @@ export class SkillGenerationService {
 
     try {
       const streamEvents = this.llmClient.stream({
-        model: this.defaultModel,
+        model,
         input,
         max_output_tokens: this.maxOutputTokens,
         temperature: this.temperature,
@@ -123,7 +127,7 @@ export class SkillGenerationService {
           ];
 
           const outputs = await this.llmClient.complete({
-            model: this.defaultModel,
+            model,
             input: retryInput,
             max_output_tokens: this.maxOutputTokens,
             temperature: this.temperature,
@@ -164,7 +168,9 @@ export class SkillGenerationService {
   async *generateStreamWithHistory(
     messages: Array<{ role: "user" | "assistant"; content: string }>,
     signal?: AbortSignal,
+    modelOverride?: string,
   ): AsyncIterable<SkillStreamEvent> {
+    const model = modelOverride ?? this.defaultModel;
     if (signal?.aborted) {
       yield { type: "error", message: "Request aborted" };
       return;
@@ -194,7 +200,7 @@ export class SkillGenerationService {
 
     try {
       const streamEvents = this.llmClient.stream({
-        model: this.defaultModel,
+        model,
         input,
         max_output_tokens: this.maxOutputTokens,
         temperature: this.temperature,
@@ -242,7 +248,9 @@ export class SkillGenerationService {
     specContent: string,
     options?: { endpoints?: string[]; description?: string },
     signal?: AbortSignal,
+    modelOverride?: string,
   ): AsyncIterable<SkillStreamEvent> {
+    const model = modelOverride ?? this.defaultModel;
     if (signal?.aborted) {
       yield { type: "error", message: "Request aborted" };
       return;
@@ -260,7 +268,7 @@ export class SkillGenerationService {
 
     try {
       const streamEvents = this.llmClient.stream({
-        model: this.defaultModel,
+        model,
         input,
         max_output_tokens: this.maxOutputTokens,
         temperature: this.temperature,
@@ -307,7 +315,9 @@ export class SkillGenerationService {
     code: string,
     options?: { framework?: string; description?: string; sourceUrl?: string },
     signal?: AbortSignal,
+    modelOverride?: string,
   ): AsyncIterable<SkillStreamEvent> {
+    const model = modelOverride ?? this.defaultModel;
     if (signal?.aborted) {
       yield { type: "error", message: "Request aborted" };
       return;
@@ -325,7 +335,7 @@ export class SkillGenerationService {
 
     try {
       const streamEvents = this.llmClient.stream({
-        model: this.defaultModel,
+        model,
         input,
         max_output_tokens: this.maxOutputTokens,
         temperature: this.temperature,
