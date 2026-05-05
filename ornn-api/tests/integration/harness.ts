@@ -106,6 +106,16 @@ export async function startHarness(): Promise<Harness> {
     auditMinioBucket: "ornn-audit-test",
     auditBodyInlineMaxBytes: 16 * 1024,
     auditGlobalRedactPatterns: [],
+    mirror: {
+      enabled: false,
+      appId: "",
+      privateKey: "",
+      installationId: "",
+      repoOwner: "ChronoAIProject",
+      repoName: "ornn-skills",
+      defaultBranch: "main",
+    },
+    ornnPublicOrigin: "http://test.invalid",
   };
 
   const { app, shutdown } = await bootstrap(config);
