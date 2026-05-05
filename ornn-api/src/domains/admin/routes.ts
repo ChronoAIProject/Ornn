@@ -11,7 +11,9 @@ import type { AdminService } from "./service";
 import type { ActivityRepository, ActivityAction } from "./activityRepository";
 import type { SkillRepository } from "../skills/crud/repository";
 import type { SkillService } from "../skills/crud/service";
+import type { SkillVersionRepository } from "../skills/crud/skillVersionRepository";
 import type { SkillGenerationService } from "../skills/generation/service";
+import type { IAgentSealScanner } from "../../infra/agentseal";
 import {
   type AuthVariables,
   nyxidAuthMiddleware,
@@ -45,16 +47,28 @@ export interface AdminRoutesConfig {
   skillRepo: SkillRepository;
   skillService: SkillService;
   /**
+   * Skill-version repository — used by the admin AgentSeal endpoints to
+   * list low-score versions efficiently via the
+   * `agentsealScan.score` index.
+   */
+  skillVersionRepo?: SkillVersionRepository;
+  /**
    * Legacy injection slot — retained so the bootstrap wiring doesn't need
    * to change if admin system-skill endpoints are re-added later in a
    * tag-based form. Currently unused.
    */
   generationService?: SkillGenerationService;
   nyxidTokenUrl?: string;
+  /**
+   * AgentSeal scanner (#253). When omitted the rescan endpoint replies
+   * with 503; in dev/CI without the binary, ops can still operate the
+   * admin panel but won't see new scans.
+   */
+  agentsealScanner?: IAgentSealScanner;
 }
 
 export function createAdminRoutes(config: AdminRoutesConfig): Hono<{ Variables: AuthVariables }> {
-  const { adminService, activityRepo, skillRepo, skillService } = config;
+  const { adminService, activityRepo, skillRepo, skillService, agentsealScanner } = config;
   const app = new Hono<{ Variables: AuthVariables }>();
 
   const auth = nyxidAuthMiddleware();
@@ -221,6 +235,68 @@ export function createAdminRoutes(config: AdminRoutesConfig): Hono<{ Variables: 
 
       logger.info({ guid, adminUserId: authCtx.userId }, "Skill deleted by admin");
       return c.json({ data: { success: true }, error: null });
+    },
+  );
+
+  // =========================================================================
+  // AgentSeal — admin manual rescan (#253)
+  //
+  // Lets a platform admin manually re-trigger the trust-score scan on a
+  // single skill version. Catches false positives, picks up newer
+  // AgentSeal rules without waiting for the next publish.
+  //
+  // POST /admin/skills/:idOrName/versions/:version/agentseal-rescan
+  // 503 when the scanner isn't wired (dev/CI without the binary).
+  // =========================================================================
+
+  app.post(
+    "/admin/skills/:idOrName/versions/:version/agentseal-rescan",
+    requirePermission("ornn:admin:skill"),
+    async (c) => {
+      const idOrName = c.req.param("idOrName");
+      const version = c.req.param("version");
+      const authCtx = getAuth(c);
+
+      if (!agentsealScanner) {
+        logger.warn(
+          { idOrName, version, adminUserId: authCtx.userId },
+          "AgentSeal rescan requested but no scanner is wired",
+        );
+        return c.json(
+          {
+            data: null,
+            error: {
+              code: "AGENTSEAL_DISABLED",
+              message: "AgentSeal scanner is not configured on this deployment",
+            },
+          },
+          503,
+        );
+      }
+
+      const result = await skillService.rescanVersion(idOrName, version);
+
+      activityRepo
+        .log(authCtx.userId, authCtx.email, authCtx.displayName, "skill:agentseal_rescan", {
+          skillId: result.skillGuid,
+          skillName: result.skillName,
+          version: result.version,
+          score: result.scan?.score ?? null,
+          findings: result.scan?.findings.length ?? 0,
+          adminAction: true,
+        })
+        .catch((err) => logger.warn({ err }, "Failed to log skill:agentseal_rescan activity"));
+
+      logger.info(
+        {
+          skillGuid: result.skillGuid,
+          version: result.version,
+          score: result.scan?.score ?? null,
+          adminUserId: authCtx.userId,
+        },
+        "AgentSeal rescan complete",
+      );
+      return c.json({ data: result, error: null });
     },
   );
 

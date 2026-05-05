@@ -240,6 +240,27 @@ export interface SkillVersionDocument {
    * omitted it.
    */
   releaseNotes?: string | null;
+  /**
+   * AgentSeal scan record (#253). Persisted on first publish + every
+   * subsequent version publish. Null when the scan hasn't run yet
+   * (legacy versions or rows where AgentSeal failed / was disabled).
+   * v1 is warn-only — score is advisory, not a gate.
+   */
+  agentsealScan?: AgentsealScanSnapshot | null;
+}
+
+/**
+ * Persisted-on-version-doc snapshot of an AgentSeal `guard` run.
+ */
+export interface AgentsealScanSnapshot {
+  /** 0–100. */
+  score: number;
+  /** Raw findings array from `agentseal guard --output json`. */
+  findings: ReadonlyArray<Record<string, unknown>>;
+  /** ISO timestamp of completion. */
+  scannedAt: string;
+  /** Pinned AgentSeal package version. */
+  agentsealVersion: string;
 }
 
 export interface SkillMetadata {
@@ -315,6 +336,12 @@ export interface SkillDetailResponse {
   nyxidServiceLabel?: string | null;
   /** Cached: true iff tied to an admin/platform-wide NyxID service. */
   isSystemSkill?: boolean;
+  /**
+   * AgentSeal trust score for the resolved version (#253). Null when
+   * the version hasn't been scanned (legacy / disabled). Frontend
+   * renders a color-coded badge from this — see DESIGN.md.
+   */
+  agentsealScan?: AgentsealScanSnapshot | null;
   /**
    * Per-skill GitHub mirror state. Absent ⇒ never mirrored (or
    * un-mirrored after a privacy flip / explicit reset). Present ⇒ the

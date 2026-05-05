@@ -29,6 +29,8 @@ import {
 
 // Infrastructure
 import { connectMongo, type MongoConnection } from "./infra/db/mongodb";
+import { createAnalyticsEmitter } from "./infra/analytics";
+import { AgentSealScanner } from "./infra/agentseal";
 
 
 // Clients
@@ -138,6 +140,25 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
 
   logger.info("Bootstrapping ornn-api service...");
 
+  // ---- PostHog product analytics (#252). Sink is Noop when no API key.
+  const analyticsEmitter = createAnalyticsEmitter(
+    {
+      posthogApiKey: config.posthogApiKey,
+      posthogHost: config.posthogHost,
+      posthogProjectId: config.posthogProjectId,
+      posthogErrorSampleRate: config.posthogErrorSampleRate,
+    },
+    logger,
+  );
+
+  // ---- AgentSeal trust scanner (#253). Subprocess wrapper.
+  const agentsealScanner = new AgentSealScanner({
+    command: config.agentsealCommand,
+    timeoutMs: config.agentsealTimeoutMs,
+    enabled: config.agentsealEnabled,
+    logger,
+  });
+
   // Validate the mirror config up front (loud) — otherwise an
   // ENABLED-but-misconfigured deployment would only fail at first
   // publish hook fire-and-forget, where the failure gets swallowed.
@@ -198,6 +219,8 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
     skillVersionRepo,
     storageClient,
     storageBucket: config.storageBucket,
+    analyticsEmitter,
+    agentsealScanner,
   });
 
   // ---- Domain: Notifications (built before AuditService so the audit
@@ -340,6 +363,7 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
     skillService,
     skillRepo,
     analyticsService,
+    analyticsEmitter,
     maxFileSize: config.maxPackageSizeBytes,
     activityRepo,
     nyxidServiceClient,
@@ -400,8 +424,10 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
     activityRepo,
     skillRepo,
     skillService,
+    skillVersionRepo,
     generationService,
     nyxidTokenUrl: config.nyxidTokenUrl,
+    agentsealScanner,
   });
 
   // ---- Domain: Skill Format ----
@@ -449,8 +475,26 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   // service, so `instanceof` is sufficient (no more duck-typing).
   app.onError((err, c) => {
     const requestId = getRequestId(c);
+    // userId is optional on auth-context; use null distinct id when absent.
+    const authCtx = (c.get as (k: string) => unknown)("auth") as
+      | { userId?: string }
+      | undefined;
+    const userId = authCtx?.userId ?? null;
+
     if (err instanceof AppError) {
       logger.warn({ requestId, code: err.code, status: err.statusCode }, err.message);
+      // 5xx AppErrors are still real server failures — emit api.error
+      // (sampled) so PostHog has the same fidelity as runtime crashes.
+      if (err.statusCode >= 500) {
+        analyticsEmitter.trackApiError({
+          userId,
+          statusCode: err.statusCode,
+          errorCode: err.code,
+          method: c.req.method,
+          path: c.req.path,
+          requestId,
+        });
+      }
       return c.json(
         { data: null, error: { code: err.code, message: err.message } },
         err.statusCode as any,
@@ -458,6 +502,14 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
     }
 
     logger.error({ requestId, err }, "Unhandled error");
+    analyticsEmitter.trackApiError({
+      userId,
+      statusCode: 500,
+      errorCode: "INTERNAL_ERROR",
+      method: c.req.method,
+      path: c.req.path,
+      requestId,
+    });
     return c.json(
       { data: null, error: { code: "INTERNAL_ERROR", message: "Internal server error" } },
       500,
@@ -580,6 +632,13 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   // ---- Shutdown ----
   async function shutdown(): Promise<void> {
     logger.info("Shutting down ornn-api...");
+    // Drain PostHog buffer before closing Mongo — losing buffered events
+    // is the most common cause of "missing api.error" complaints.
+    try {
+      await analyticsEmitter.shutdown();
+    } catch (err) {
+      logger.warn({ err }, "Analytics shutdown failed — continuing");
+    }
     await mongo.close();
     logger.info("ornn-api shutdown complete");
   }

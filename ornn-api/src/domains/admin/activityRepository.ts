@@ -21,7 +21,8 @@ export type ActivityAction =
   | "skill:refresh"
   | "skill:nyxid_service_tie"
   | "skill:source_link"
-  | "skill:source_unlink";
+  | "skill:source_unlink"
+  | "skill:agentseal_rescan";
 
 export interface ActivityDocument {
   _id: string;

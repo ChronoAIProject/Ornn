@@ -13,6 +13,7 @@ import type { SkillService } from "./service";
 import type { SkillRepository } from "./repository";
 import type { ActivityRepository } from "../../admin/activityRepository";
 import type { AnalyticsService } from "../../analytics/service";
+import type { AnalyticsEmitter } from "../../../infra/analytics";
 import type { NyxidServiceClient } from "../../../clients/nyxid/service";
 import {
   type AuthVariables,
@@ -66,6 +67,12 @@ export interface SkillRoutesConfig {
    * Errors are swallowed in the service layer, never surfaced to clients.
    */
   analyticsService?: AnalyticsService;
+  /**
+   * PostHog product-analytics emitter (#252). Optional — same fire-and-
+   * forget treatment as `analyticsService`. Used to emit
+   * `api.skill.pull` per pull/json/detail hit.
+   */
+  analyticsEmitter?: AnalyticsEmitter;
   maxFileSize: number;
   activityRepo?: ActivityRepository;
   /**
@@ -97,7 +104,17 @@ export interface SkillRoutesConfig {
 const SYNTHETIC_NYXID_SERVICE_PREFIX = "synthetic:";
 
 export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: AuthVariables }> {
-  const { skillService, skillRepo, analyticsService, maxFileSize, activityRepo, nyxidServiceClient, extraNyxidServices, mirrorService } = config;
+  const {
+    skillService,
+    skillRepo,
+    analyticsService,
+    analyticsEmitter,
+    maxFileSize,
+    activityRepo,
+    nyxidServiceClient,
+    extraNyxidServices,
+    mirrorService,
+  } = config;
   const app = new Hono<{ Variables: AuthVariables }>();
 
   /**
@@ -469,15 +486,24 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
       if (analyticsService && authCtx) {
         void skillService
           .getSkill(idOrName)
-          .then((skill) =>
+          .then((skill) => {
             analyticsService.recordPull({
               skillGuid: skill.guid,
               skillName: skill.name,
               skillVersion: skill.version,
               userId: authCtx.userId,
               source: "api",
-            }),
-          )
+            });
+            // PostHog mirror (#252) — `callerType: "api"` is the
+            // single most useful split in the funnel (agents vs humans).
+            analyticsEmitter?.trackSkillPull({
+              userId: authCtx.userId,
+              skillId: skill.guid,
+              skillName: skill.name,
+              skillVersion: skill.version,
+              callerType: "api",
+            });
+          })
           .catch(() => {
             /* analytics failures must not surface to the caller */
           });
@@ -608,6 +634,13 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
       // — recording the GET here is a reasonable proxy for "user pulled
       // via the web UI". Fire-and-forget.
       if (analyticsService && authCtx) {
+        analyticsEmitter?.trackSkillPull({
+          userId: authCtx.userId,
+          skillId: skill.guid,
+          skillName: skill.name,
+          skillVersion: skill.version,
+          callerType: "web",
+        });
         void analyticsService.recordPull({
           skillGuid: skill.guid,
           skillName: skill.name,
