@@ -25,6 +25,29 @@ export interface PlatformSettings {
    * trail, not a one-click in the admin UI.
    */
   readonly githubMirror: GithubMirrorRepoConfig;
+  /**
+   * LLM provider override. Empty fields fall back to env (the
+   * Chrono LLM gateway via NyxID SA token exchange). When `gatewayUrl`
+   * is set, every playground / skill-gen LLM call hits that endpoint
+   * instead. When `apiKey` is set, calls authenticate with that bearer
+   * token instead of the SA token-exchange flow — useful for pointing
+   * at OpenAI / Anthropic / a self-hosted proxy directly.
+   *
+   * Resolved on every LLM call (no pod restart needed), but cached for
+   * the same TTL the rest of platform settings use.
+   */
+  readonly llmProvider: LlmProviderConfig;
+}
+
+export interface LlmProviderConfig {
+  /** LLM gateway base URL. Empty string = use env `NYX_LLM_GATEWAY_URL`. */
+  readonly gatewayUrl: string;
+  /**
+   * Direct bearer API key. Empty string = use NyxID SA token-exchange
+   * flow against env credentials. Stored in MongoDB, redacted from the
+   * GET response (the API only echoes whether it's set).
+   */
+  readonly apiKey: string;
 }
 
 /**
@@ -50,5 +73,9 @@ export const DEFAULT_PLATFORM_SETTINGS: PlatformSettings = {
     owner: "",
     repo: "",
     branch: "",
+  },
+  llmProvider: {
+    gatewayUrl: "",
+    apiKey: "",
   },
 };

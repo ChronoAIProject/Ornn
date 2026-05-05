@@ -1,80 +1,137 @@
 /**
- * QuotaChip — ambient quota counter pill in the top nav.
+ * QuotaChip — ambient quota indicator that lives in the breadcrumb-row
+ * right rail (`RootLayout`) on every authenticated page.
  *
- * Shows the playground surface's remaining count by default (the
- * higher-volume surface). Click to open the QuotaSummary drawer with
- * the full breakdown across both surfaces. Hidden for admins (they
- * bypass the counter entirely) and for anonymous callers.
+ * Renders **both** surfaces as a paired pill group — playground and
+ * skill-generation — so the user sees their full quota posture at a
+ * glance without opening the drawer. Click any pill to expand the full
+ * `QuotaSummary` breakdown.
  *
- * The chip turns warning-toned when the playground surface crosses the
- * 80% threshold and danger-toned at zero. This visual state is kept in
- * lockstep with the soft-warning banner / over-limit page so the user
- * sees one consistent signal across the app.
+ * Each pill independently colors itself by its own surface state:
+ *   - admin:   ember "∞ Unlimited" stamp
+ *   - exhausted: danger tone
+ *   - warning (≥80% used): warning tone
+ *   - normal:  neutral tone
+ *
+ * Hidden entirely for anonymous callers.
  *
  * @module components/quota/QuotaChip
  */
 
 import { useState } from "react";
+import type { QuotaSnapshot, Surface, SurfaceSnapshot } from "@/services/quotaApi";
 import { useMyQuota } from "@/hooks/useQuota";
 import { QuotaSummary } from "./QuotaSummary";
+
+const SURFACE_LABEL: Record<Surface, string> = {
+  playground: "Playground",
+  skillGen: "Skill-gen",
+};
 
 function nfmt(n: number): string {
   return n.toLocaleString("en-US");
 }
 
-export function QuotaChip({ className = "" }: { className?: string }) {
+interface SurfacePillProps {
+  surface: Surface;
+  snapshot: SurfaceSnapshot;
+  isAdmin: boolean;
+  onOpen: () => void;
+}
+
+/** A single surface's pill — always part of the paired chip group. */
+function SurfacePill({ surface, snapshot, isAdmin, onOpen }: SurfacePillProps) {
+  if (isAdmin) {
+    return (
+      <button
+        type="button"
+        onClick={onOpen}
+        aria-label={`${SURFACE_LABEL[surface]} quota — admin unlimited`}
+        title={`${SURFACE_LABEL[surface]} · Unlimited (admin bypass)`}
+        className="
+          inline-flex h-7 items-center gap-1.5 rounded-sm border border-accent/40 bg-accent/5
+          px-2 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-accent
+          transition-colors duration-150 hover:bg-accent/10 cursor-pointer
+          focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent
+        "
+      >
+        <span className="opacity-70">{SURFACE_LABEL[surface]}</span>
+        <span aria-hidden className="text-meta opacity-60">·</span>
+        <span aria-hidden className="text-base leading-none">∞</span>
+      </button>
+    );
+  }
+
+  const remaining = snapshot.monthly.remaining + snapshot.credits.balance;
+  const tone =
+    remaining <= 0 ? "danger" : snapshot.warning ? "warning" : "ok";
+
+  const toneClass =
+    tone === "danger"
+      ? "border-danger/50 text-danger hover:border-danger hover:bg-danger/5"
+      : tone === "warning"
+      ? "border-warning/50 text-warning hover:border-warning hover:bg-warning/5"
+      : "border-subtle text-strong hover:border-accent hover:bg-elevated/40";
+
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      aria-label={`${SURFACE_LABEL[surface]} quota — ${nfmt(Math.max(0, remaining))} of ${nfmt(snapshot.monthly.limit)} remaining`}
+      title={`${SURFACE_LABEL[surface]}: ${nfmt(Math.max(0, remaining))} / ${nfmt(snapshot.monthly.limit)} this month`}
+      className={`
+        inline-flex h-7 items-center gap-1.5 rounded-sm border bg-transparent
+        px-2 font-mono text-[10px] font-semibold uppercase tracking-[0.12em]
+        transition-colors duration-150 cursor-pointer
+        focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent
+        ${toneClass}
+      `}
+    >
+      <span className="opacity-70">{SURFACE_LABEL[surface]}</span>
+      <span aria-hidden className="opacity-50">·</span>
+      <span>{nfmt(Math.max(0, remaining))}</span>
+      <span className="text-meta opacity-70">/{nfmt(snapshot.monthly.limit)}</span>
+    </button>
+  );
+}
+
+interface QuotaChipProps {
+  className?: string;
+}
+
+export function QuotaChip({ className = "" }: QuotaChipProps) {
   const { data: quota } = useMyQuota();
   const [open, setOpen] = useState(false);
 
   if (!quota) return null;
-  if (quota.isAdmin) return null;
 
-  const playground = quota.playground;
-  const remaining = playground.monthly.remaining + playground.credits.balance;
-  const tone =
-    remaining <= 0 ? "danger" : playground.warning ? "warning" : "ok";
+  const isAdmin = quota.isAdmin;
 
-  const toneClass =
-    tone === "danger"
-      ? "border-danger/50 text-danger hover:border-danger"
-      : tone === "warning"
-      ? "border-warning/50 text-warning hover:border-warning"
-      : "border-strong-edge text-strong hover:border-accent";
-
+  // For admin, the drawer's per-surface bars don't carry useful info —
+  // but we still allow opening it so the visual "click → see detail"
+  // affordance remains consistent across modes.
   return (
     <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        aria-label="Quota usage details"
-        className={`
-          group inline-flex h-9 items-center gap-2 rounded-sm border bg-transparent
-          px-2.5 font-mono text-[10px] font-semibold uppercase tracking-[0.14em]
-          transition-colors duration-200
-          focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent
-          ${toneClass}
-          ${className}
-        `}
+      <div
+        role="group"
+        aria-label="Quota usage"
+        className={`inline-flex items-center gap-1.5 ${className}`}
       >
-        <svg
-          className="h-3.5 w-3.5 shrink-0 opacity-80"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          aria-hidden="true"
-        >
-          <path d="M12 2v4M5 8l2.5 2.5M2 16h4M19 8l-2.5 2.5M22 16h-4" />
-          <circle cx="12" cy="16" r="6" />
-          <path d="M12 13v3l2 1" />
-        </svg>
-        <span>{nfmt(Math.max(0, remaining))}</span>
-        <span className="text-meta">/{nfmt(playground.monthly.limit)}</span>
-      </button>
+        <SurfacePill
+          surface="playground"
+          snapshot={quota.playground}
+          isAdmin={isAdmin}
+          onOpen={() => setOpen(true)}
+        />
+        <SurfacePill
+          surface="skillGen"
+          snapshot={quota.skillGen}
+          isAdmin={isAdmin}
+          onOpen={() => setOpen(true)}
+        />
+      </div>
 
-      <QuotaSummary isOpen={open} onClose={() => setOpen(false)} quota={quota} />
+      <QuotaSummary isOpen={open} onClose={() => setOpen(false)} quota={quota as QuotaSnapshot} />
     </>
   );
 }

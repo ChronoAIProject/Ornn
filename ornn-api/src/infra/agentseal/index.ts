@@ -1,7 +1,7 @@
 /**
  * AgentSeal subprocess scanner (issue #253).
  *
- * Wraps `agentseal guard --output json` behind a tiny `IAgentSealScanner`
+ * Wraps `python scan_skill.py <zip-path>` behind a tiny `IAgentSealScanner`
  * interface so:
  *   1. The publish path can call it without knowing how the binary is
  *      invoked.
@@ -9,19 +9,29 @@
  *   3. Operators can flip `AGENTSEAL_ENABLED=false` and the implementation
  *      degrades to a no-scan that doesn't block publishing.
  *
- * Concurrency: each call spawns its own subprocess and pipes the package
- * bytes via stdin (`--package -`) so multiple publishes don't collide on
- * a shared workdir. The CLI is read-only against its arguments — no
- * side-effects on the host filesystem.
+ * Why a Python wrapper, not the agentseal CLI:
+ *   `agentseal guard` is designed to scan installed agent configs on a
+ *   developer's machine, NOT arbitrary skill packages. The `agentseal`
+ *   package does ship a library-level `SkillScanner` class that runs
+ *   the same threat-detection rules per file, which is exactly what we
+ *   want — the wrapper script (`ornn-api/scripts/scan_skill.py`) calls
+ *   that class on every text-like file in the extracted ZIP and emits
+ *   one JSON line.
  *
- * v1 is warn-only — failures (timeout, crash, malformed output) are
- * logged but never thrown into the publish path. The caller treats
- * `result === null` as "no scan available" and persists nothing.
+ * Concurrency: each call spawns its own subprocess + writes the ZIP to
+ * a unique temp file, so multiple publishes don't collide.
+ *
+ * v1 is warn-only — failures (timeout, crash, malformed output, missing
+ * binary) are logged but never thrown into the publish path. The caller
+ * treats `result === null` as "no scan available" and persists nothing.
  *
  * @module infra/agentseal
  */
 
 import { spawn } from "node:child_process";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import pino, { type Logger } from "pino";
 
 const moduleLogger = pino({ level: "info" }).child({ module: "agentseal" });
@@ -31,19 +41,21 @@ export interface ScanInput {
   readonly skillGuid: string;
   /** Version label being scanned. */
   readonly version: string;
-  /** Raw ZIP bytes of the skill package. Piped to AgentSeal via stdin. */
+  /** Raw ZIP bytes of the skill package. Written to a temp file before scan. */
   readonly zipBuffer: Uint8Array;
 }
 
 export interface ScanResult {
   /** Trust score 0–100, clamped at parse time. */
   readonly score: number;
-  /** Raw findings array — passed through verbatim from the CLI. */
+  /** Raw findings array — passed through verbatim from the wrapper. */
   readonly findings: ReadonlyArray<Record<string, unknown>>;
   /** ISO timestamp of when the scan completed. */
   readonly scannedAt: string;
   /** Pinned `agentseal` package version that produced this scan. */
   readonly agentsealVersion: string;
+  /** Count of files the scanner actually walked (excluding binaries / oversized). */
+  readonly scannedFiles: number;
 }
 
 /**
@@ -57,8 +69,10 @@ export interface IAgentSealScanner {
 }
 
 export interface AgentSealScannerConfig {
-  /** Path or PATH name of the agentseal CLI. Defaults to `agentseal`. */
-  readonly command: string;
+  /** Path to the python interpreter (e.g. `/opt/agentseal/bin/python`). */
+  readonly python: string;
+  /** Path to `scan_skill.py` baked into the image. */
+  readonly script: string;
   /** Hard timeout, ms. Default 60_000 from config. */
   readonly timeoutMs: number;
   /** Master kill-switch. When false `scan()` short-circuits to null. */
@@ -67,13 +81,15 @@ export interface AgentSealScannerConfig {
 }
 
 export class AgentSealScanner implements IAgentSealScanner {
-  private readonly command: string;
+  private readonly python: string;
+  private readonly script: string;
   private readonly timeoutMs: number;
   private readonly enabled: boolean;
   private readonly logger: Logger;
 
   constructor(cfg: AgentSealScannerConfig) {
-    this.command = cfg.command;
+    this.python = cfg.python;
+    this.script = cfg.script;
     this.timeoutMs = cfg.timeoutMs;
     this.enabled = cfg.enabled;
     this.logger = (cfg.logger ?? moduleLogger).child({ module: "agentseal" });
@@ -89,9 +105,26 @@ export class AgentSealScanner implements IAgentSealScanner {
     }
 
     const startedAt = Date.now();
+
+    // Stage the ZIP on disk; the wrapper script extracts it itself.
+    let workdir: string | null = null;
+    let zipPath: string;
+    try {
+      workdir = await mkdtemp(join(tmpdir(), "ornn-agentseal-"));
+      zipPath = join(workdir, "skill.zip");
+      await writeFile(zipPath, Buffer.from(input.zipBuffer));
+    } catch (err) {
+      this.logger.error({ err, skillGuid: input.skillGuid }, "Failed to stage skill ZIP for scan");
+      // Best-effort cleanup
+      if (workdir) {
+        await rm(workdir, { recursive: true, force: true }).catch(() => {});
+      }
+      return null;
+    }
+
     let raw: string;
     try {
-      raw = await this.runGuardSubprocess(input);
+      raw = await this.runScannerSubprocess(zipPath);
     } catch (err) {
       this.logger.error(
         {
@@ -103,15 +136,22 @@ export class AgentSealScanner implements IAgentSealScanner {
         "AgentSeal subprocess failed",
       );
       return null;
+    } finally {
+      // Always clean up — never leak temp dirs even on success.
+      if (workdir) {
+        rm(workdir, { recursive: true, force: true }).catch((err) => {
+          this.logger.warn({ err, workdir }, "Failed to clean AgentSeal temp dir");
+        });
+      }
     }
 
-    const parsed = parseGuardOutput(raw);
+    const parsed = parseSkillScanOutput(raw);
     if (!parsed) {
       this.logger.warn(
         {
           skillGuid: input.skillGuid,
           version: input.version,
-          // Truncate to avoid mega-logs on misconfigured CLIs.
+          // Truncate to avoid mega-logs on misconfigured wrappers.
           rawSnippet: raw.slice(0, 500),
         },
         "AgentSeal output failed to parse — skipping persist",
@@ -122,8 +162,9 @@ export class AgentSealScanner implements IAgentSealScanner {
     const result: ScanResult = {
       score: parsed.score,
       findings: parsed.findings,
-      scannedAt: new Date().toISOString(),
+      scannedAt: parsed.scannedAt ?? new Date().toISOString(),
       agentsealVersion: parsed.agentsealVersion,
+      scannedFiles: parsed.scannedFiles,
     };
 
     this.logger.info(
@@ -141,17 +182,14 @@ export class AgentSealScanner implements IAgentSealScanner {
   }
 
   /**
-   * Spawn `agentseal guard --output json --package -`, pipe the ZIP via
-   * stdin, collect stdout, kill on timeout. Errors thrown here are
-   * caught and logged by `scan()`.
+   * Spawn `python scan_skill.py <zip-path>`, collect stdout, kill on
+   * timeout. Errors thrown here are caught and logged by `scan()`.
    */
-  private runGuardSubprocess(input: ScanInput): Promise<string> {
+  private runScannerSubprocess(zipPath: string): Promise<string> {
     return new Promise<string>((resolve, reject) => {
-      const child = spawn(
-        this.command,
-        ["guard", "--output", "json", "--package", "-"],
-        { stdio: ["pipe", "pipe", "pipe"] },
-      );
+      const child = spawn(this.python, [this.script, zipPath], {
+        stdio: ["ignore", "pipe", "pipe"],
+      });
 
       let stdout = "";
       let stderr = "";
@@ -195,7 +233,11 @@ export class AgentSealScanner implements IAgentSealScanner {
         if (settled) return;
         settled = true;
         clearTimeout(killTimer);
-        if (code !== 0) {
+        // The wrapper emits JSON on both success (exit 0) and structured
+        // errors (non-zero). Surface stdout regardless so the parser can
+        // see the `error` field. If stdout is empty, fall back to stderr
+        // for the failure message.
+        if (code !== 0 && !stdout.trim()) {
           reject(
             new Error(
               `AgentSeal exited ${code}: ${stderr.slice(0, 500) || "<empty stderr>"}`,
@@ -205,39 +247,27 @@ export class AgentSealScanner implements IAgentSealScanner {
         }
         resolve(stdout);
       });
-
-      // Pipe the ZIP bytes in. AgentSeal's stdin reader closes when
-      // it sees EOF, so we end() once the buffer is written.
-      try {
-        child.stdin.write(Buffer.from(input.zipBuffer));
-        child.stdin.end();
-      } catch (err) {
-        if (settled) return;
-        settled = true;
-        clearTimeout(killTimer);
-        reject(err);
-      }
     });
   }
 }
 
+interface ParsedScan {
+  score: number;
+  findings: Array<Record<string, unknown>>;
+  agentsealVersion: string;
+  scannedAt?: string;
+  scannedFiles: number;
+}
+
 /**
- * Parse `agentseal guard --output json` output. The CLI's exact key
- * names have shifted between releases (`score` vs `trustScore`); we
- * accept either and clamp the score into 0–100.
+ * Parse the wrapper script's JSON output. Surfaces `null` on any shape
+ * mismatch so the caller can degrade silently without persisting bogus
+ * scores.
  *
  * Exported for tests.
  */
-export function parseGuardOutput(raw: string): ScanResult | null {
-  let stripped = raw.trim();
-  // Strip ```json … ``` fences if the CLI ever emits them.
-  if (stripped.startsWith("```")) {
-    const start = stripped.indexOf("\n");
-    const end = stripped.lastIndexOf("```");
-    if (start > -1 && end > start) {
-      stripped = stripped.slice(start + 1, end).trim();
-    }
-  }
+export function parseSkillScanOutput(raw: string): ParsedScan | null {
+  const stripped = raw.trim();
   if (!stripped) return null;
 
   let json: unknown;
@@ -249,14 +279,12 @@ export function parseGuardOutput(raw: string): ScanResult | null {
   if (!json || typeof json !== "object" || Array.isArray(json)) return null;
   const obj = json as Record<string, unknown>;
 
-  const rawScore =
-    typeof obj.score === "number"
-      ? obj.score
-      : typeof obj.trustScore === "number"
-        ? obj.trustScore
-        : null;
+  // Wrapper signals failure with `{"error": "..."}` and exits non-zero.
+  // Treat as soft failure — never persist.
+  if (typeof obj.error === "string") return null;
+
+  const rawScore = typeof obj.score === "number" ? obj.score : null;
   if (rawScore === null || Number.isNaN(rawScore)) return null;
-  // Clamp into 0–100 and round to integer for stable display.
   const score = Math.max(0, Math.min(100, Math.round(rawScore)));
 
   const rawFindings = Array.isArray(obj.findings) ? obj.findings : [];
@@ -268,16 +296,13 @@ export function parseGuardOutput(raw: string): ScanResult | null {
   }
 
   const agentsealVersion =
-    typeof obj.agentsealVersion === "string"
-      ? obj.agentsealVersion
-      : typeof obj.version === "string"
-        ? obj.version
-        : "unknown";
+    typeof obj.agentsealVersion === "string" ? obj.agentsealVersion : "unknown";
+  const scannedAt =
+    typeof obj.scannedAt === "string" ? obj.scannedAt : undefined;
+  const scannedFiles =
+    typeof obj.scannedFiles === "number" && Number.isFinite(obj.scannedFiles)
+      ? Math.max(0, Math.round(obj.scannedFiles))
+      : 0;
 
-  return {
-    score,
-    findings,
-    scannedAt: new Date(0).toISOString(), // placeholder; caller restamps
-    agentsealVersion,
-  };
+  return { score, findings, agentsealVersion, scannedAt, scannedFiles };
 }

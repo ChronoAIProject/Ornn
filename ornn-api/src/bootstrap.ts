@@ -18,6 +18,7 @@ const pkg = JSON.parse(readFileSync(join(import.meta.dir, "..", "package.json"),
 
 // Auth setup
 import { proxyAuthSetup, nyxidOrgLookupMiddleware } from "./middleware/nyxidAuth";
+import { AdminUsersRepository } from "./domains/admin-users/repository";
 import { requestIdMiddleware, getRequestId } from "./middleware/requestId";
 
 // Universal API audit (issue #245)
@@ -151,9 +152,14 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
     logger,
   );
 
-  // ---- AgentSeal trust scanner (#253). Subprocess wrapper.
+  // ---- AgentSeal trust scanner (#253). Subprocess wrapper —
+  // `agentseal guard` doesn't accept skill packages, so we ship a small
+  // Python wrapper (`/opt/agentseal/scan_skill.py`) that imports
+  // `agentseal.skill_scanner.SkillScanner` directly and runs it per
+  // file in the extracted ZIP.
   const agentsealScanner = new AgentSealScanner({
-    command: config.agentsealCommand,
+    python: config.agentsealPython,
+    script: config.agentsealScript,
     timeoutMs: config.agentsealTimeoutMs,
     enabled: config.agentsealEnabled,
     logger,
@@ -188,11 +194,20 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
     config.sandboxServiceUrl,
     needsSandboxProxyAuth ? getSaAccessToken : undefined,
   );
+  // The platform-settings service is wired ~80 lines below this point.
+  // We can't pass a `platformSettingsService` reference here (forward
+  // dependency), so we hold a mutable slot and the resolver closes over
+  // it. By the time the first LLM request fires, the slot is populated.
+  let llmOverrideSource: { getLlmProviderConfig: () => Promise<{ gatewayUrl: string; apiKey: string }> } | null = null;
   const nyxLlmClient = new NyxLlmClient({
     gatewayUrl: config.nyxLlmGatewayUrl,
     tokenUrl: config.nyxidTokenUrl,
     clientId: config.nyxidClientId,
     clientSecret: config.nyxidClientSecret,
+    overrideResolver: async () => {
+      if (!llmOverrideSource) return { gatewayUrl: "", apiKey: "" };
+      return llmOverrideSource.getLlmProviderConfig();
+    },
   });
 
   // ---- Repositories ----
@@ -202,6 +217,18 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   const categoryRepo = new CategoryRepository(db);
   const tagRepo = new TagRepository(db);
   const activityRepo = new ActivityRepository(db);
+
+  // ---- Admin-users tracker ----
+  // Lazy display cache: every time we see a request authenticated with
+  // the admin permission, upsert the user into `admin_users`. Read by
+  // `/admin/quota/users` (and any other admin list endpoint that needs
+  // to mark known admins) so the UI can show "Unlimited" without
+  // round-tripping NyxID per row. NyxID remains authoritative on the
+  // hot path — this collection is never used for permission checks.
+  const adminUsersRepo = new AdminUsersRepository(db);
+  void adminUsersRepo.ensureIndexes().catch((err) =>
+    logger.warn({ err }, "admin_users indexes ensureIndexes failed — proceeding anyway"),
+  );
 
   // ---- Universal API audit (issue #245) ----
   // Built early so the middleware can mount on `apiApp` below. Indexes
@@ -278,16 +305,30 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
       repo: config.mirror.repoName,
       branch: config.mirror.defaultBranch,
     },
+    encryptionKey: config.encryptionKey,
   });
   const platformSettingsRoutes = createPlatformSettingsRoutes({ platformSettingsService });
+
+  // Now that platformSettingsService exists, hand it to the LLM client
+  // so admin overrides take effect on the next LLM call without a
+  // restart. The closure captured by `overrideResolver` above reads
+  // through this slot.
+  llmOverrideSource = platformSettingsService;
 
   // ---- Domain: Quota (per-user playground / skill-gen counters + admin grants) ----
   const quotaRepo = new QuotaRepository(db);
   void quotaRepo.ensureIndexes().catch((err) =>
     logger.warn({ err }, "quota indexes ensureIndexes failed — proceeding anyway"),
   );
-  const quotaService = new QuotaService({ repo: quotaRepo });
-  const quotaRoutes = createQuotaRoutes({ quotaService, activityRepo });
+  const quotaService = new QuotaService({
+    repo: quotaRepo,
+    notificationService,
+  });
+  const quotaRoutes = createQuotaRoutes({
+    quotaService,
+    activityRepo,
+    adminUsersRepo,
+  });
 
   // ---- Domain: Models (admin-curated Chrono LLM catalog + user picker) ----
   const modelsRepo = new ModelsRepository(db);
@@ -518,7 +559,23 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
 
   // ---- API routes — all traffic via NyxID proxy, trust proxy headers ----
   const apiApp = new Hono();
-  apiApp.use("*", proxyAuthSetup());
+  apiApp.use(
+    "*",
+    proxyAuthSetup({
+      // Lazy admin-user tracking: whenever we see a request authenticated
+      // with the admin permission, upsert the user. Fire-and-forget;
+      // failure is logged inside the repo and never bubbles up.
+      onAuthSeen: (auth) => {
+        if (auth.permissions.includes("ornn:admin:skill")) {
+          void adminUsersRepo.upsert({
+            userId: auth.userId,
+            email: auth.email,
+            displayName: auth.displayName,
+          });
+        }
+      },
+    }),
+  );
   // Universal API audit — runs after `proxyAuthSetup` so the
   // caller-type resolver can read `c.var.auth`. Fail-isolated: errors
   // inside the audit pipeline never propagate to the business response.

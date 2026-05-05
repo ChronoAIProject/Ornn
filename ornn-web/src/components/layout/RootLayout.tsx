@@ -2,6 +2,8 @@ import { Outlet, useLocation, useParams, Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Navbar } from "./Navbar";
 import { ToastContainer } from "@/components/ui/Toast";
+import { QuotaChip } from "@/components/quota/QuotaChip";
+import { useIsAuthenticated } from "@/stores/authStore";
 import { useSkill } from "@/hooks/useSkills";
 
 /** Build breadcrumb segments from current route — every crumb is clickable */
@@ -95,39 +97,45 @@ function useBreadcrumbs() {
 
 export function RootLayout() {
   const crumbs = useBreadcrumbs();
+  const isAuthenticated = useIsAuthenticated();
 
   return (
     <div className="flex flex-col h-screen bg-page bg-grid overflow-hidden">
       <Navbar />
       {/* Breadcrumb navigation — hide when only root crumb. Width matches
           LandingNav (max-w-[1280px] mx-auto px-6 sm:px-8) so app-shell
-          horizontal rhythm aligns with the landing surface. */}
+          horizontal rhythm aligns with the landing surface. The right
+          rail hosts the QuotaChip (paired playground + skill-gen pills)
+          when authenticated. */}
       {crumbs.length > 1 && (
       <div className="mx-auto w-full max-w-[1280px] shrink-0 px-6 sm:px-8 pt-3 pb-2">
-        <nav className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.08em]">
-          {crumbs.map((crumb, i) => {
-            const isLast = i === crumbs.length - 1;
-            return (
-              <span key={i} className="flex items-center gap-2">
-                {i > 0 && (
-                  <span className="text-meta opacity-50 select-none">/</span>
-                )}
-                {isLast ? (
-                  <span className="text-accent font-medium">
-                    {crumb.label}
-                  </span>
-                ) : (
-                  <Link
-                    to={crumb.to ?? "#"}
-                    className="text-meta hover:text-strong transition-colors duration-150"
-                  >
-                    {crumb.label}
-                  </Link>
-                )}
-              </span>
-            );
-          })}
-        </nav>
+        <div className="flex items-center justify-between gap-4">
+          <nav className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.08em]">
+            {crumbs.map((crumb, i) => {
+              const isLast = i === crumbs.length - 1;
+              return (
+                <span key={i} className="flex items-center gap-2">
+                  {i > 0 && (
+                    <span className="text-meta opacity-50 select-none">/</span>
+                  )}
+                  {isLast ? (
+                    <span className="text-accent font-medium">
+                      {crumb.label}
+                    </span>
+                  ) : (
+                    <Link
+                      to={crumb.to ?? "#"}
+                      className="text-meta hover:text-strong transition-colors duration-150"
+                    >
+                      {crumb.label}
+                    </Link>
+                  )}
+                </span>
+              );
+            })}
+          </nav>
+          {isAuthenticated && <QuotaChip />}
+        </div>
       </div>
       )}
       <main className="mx-auto w-full max-w-[1280px] flex-1 min-h-0 px-6 sm:px-8 overflow-hidden">

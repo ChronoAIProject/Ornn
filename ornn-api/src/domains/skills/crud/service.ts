@@ -1041,6 +1041,7 @@ export class SkillService {
       findings: result.findings,
       scannedAt: result.scannedAt,
       agentsealVersion: result.agentsealVersion,
+      scannedFiles: result.scannedFiles,
     });
     return {
       skillGuid: skill.guid,
@@ -1069,6 +1070,7 @@ export class SkillService {
         findings: result.findings,
         scannedAt: result.scannedAt,
         agentsealVersion: result.agentsealVersion,
+        scannedFiles: result.scannedFiles,
       });
     } catch (err) {
       logger.warn(

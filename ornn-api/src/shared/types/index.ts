@@ -250,17 +250,19 @@ export interface SkillVersionDocument {
 }
 
 /**
- * Persisted-on-version-doc snapshot of an AgentSeal `guard` run.
+ * Persisted-on-version-doc snapshot of an AgentSeal scan run.
  */
 export interface AgentsealScanSnapshot {
-  /** 0–100. */
+  /** 0–100. Computed from severity-weighted finding penalties. */
   score: number;
-  /** Raw findings array from `agentseal guard --output json`. */
+  /** Findings array from the per-file SkillScanner sweep. */
   findings: ReadonlyArray<Record<string, unknown>>;
   /** ISO timestamp of completion. */
   scannedAt: string;
   /** Pinned AgentSeal package version. */
   agentsealVersion: string;
+  /** Count of files actually scanned in this run. Optional for back-compat. */
+  scannedFiles?: number;
 }
 
 export interface SkillMetadata {

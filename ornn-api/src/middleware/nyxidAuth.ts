@@ -112,6 +112,24 @@ function decodeJwtPayload(token: string): IdentityAssertionPayload | null {
 // ---------------------------------------------------------------------------
 
 /**
+ * Optional callback fired immediately after `c.set("auth", ...)` on
+ * every request that successfully resolves an identity. Used by the
+ * admin-users tracker to lazily upsert a row whenever a user
+ * authenticates with the `ornn:admin:skill` permission, so admin
+ * lookups (`/admin/quota/users`, etc.) can mark known admins without
+ * a per-row NyxID round-trip.
+ *
+ * Implementations MUST return immediately (fire-and-forget). Failure
+ * to track must NEVER fail the request — log and swallow.
+ */
+export type AuthSeenHook = (auth: AuthContext) => void;
+
+export interface ProxyAuthSetupOptions {
+  /** Fired after the auth context is set on the request. */
+  onAuthSeen?: AuthSeenHook;
+}
+
+/**
  * NyxID proxy auth setup.
  *
  * Primary: decodes X-NyxID-Identity-Token JWT to extract userId, email,
@@ -119,8 +137,14 @@ function decodeJwtPayload(token: string): IdentityAssertionPayload | null {
  *
  * Fallback: reads X-NyxID-* headers (for backward compatibility or when
  * identity propagation mode is "headers").
+ *
+ * If `onAuthSeen` is provided, it's invoked synchronously after the
+ * auth context is set so callers can lazy-track which users have ever
+ * authenticated (e.g. populating `admin_users` for the admin UI).
+ * The callback must not throw.
  */
-export function proxyAuthSetup() {
+export function proxyAuthSetup(options: ProxyAuthSetupOptions = {}) {
+  const { onAuthSeen } = options;
   return createMiddleware<{ Variables: AuthVariables }>(async (c, next) => {
     // Capture the user's original access token if the proxy forwarded it.
     // Needed later to call NyxID /orgs on the caller's behalf. Optional —
@@ -146,6 +170,11 @@ export function proxyAuthSetup() {
           userAccessToken,
         };
         c.set("auth", auth);
+        try {
+          onAuthSeen?.(auth);
+        } catch (e) {
+          logger.warn({ error: (e as Error).message }, "onAuthSeen hook threw");
+        }
         logger.debug({ userId: auth.userId, roles: auth.roles }, "Authenticated via identity token");
         await next();
         return;
@@ -165,6 +194,11 @@ export function proxyAuthSetup() {
         userAccessToken,
       };
       c.set("auth", auth);
+      try {
+        onAuthSeen?.(auth);
+      } catch (e) {
+        logger.warn({ error: (e as Error).message }, "onAuthSeen hook threw");
+      }
       logger.debug({ userId: auth.userId }, "Authenticated via proxy headers (no RBAC data)");
     }
 

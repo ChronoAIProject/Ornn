@@ -41,8 +41,32 @@ export interface AdminQuotaRow {
   userId: string;
   email: string;
   displayName: string;
-  playground: { monthlyUsed: number; dailyUsed: number; creditsBalance: number };
-  skillGen: { monthlyUsed: number; dailyUsed: number; creditsBalance: number };
+  /**
+   * True when this user carries the `ornn:admin:skill` permission per
+   * the lazily-tracked `admin_users` collection (populated by the auth
+   * setup layer whenever an admin authenticates). Drives the UI to
+   * render "Admin · Unlimited" instead of usage counters and disables
+   * the per-row Grant action.
+   */
+  isAdmin: boolean;
+  playground: AdminQuotaSurfaceStatus;
+  skillGen: AdminQuotaSurfaceStatus;
+}
+
+export interface AdminQuotaSurfaceStatus {
+  /** Calls used in the current monthly window. */
+  monthlyUsed: number;
+  /** Original monthly base — what the user gets each rollover. */
+  monthlyLimit: number;
+  /** Calls used in the current daily window. */
+  dailyUsed: number;
+  /** Daily ceiling for this surface. */
+  dailyLimit: number;
+  /**
+   * Total active granted credits = legacy non-expiring bucket PLUS
+   * sum of unused capacity across active grants in the ledger.
+   */
+  creditsBalance: number;
 }
 
 export interface AdminQuotaPage {
@@ -73,24 +97,33 @@ export interface GrantInput {
   userId: string;
   surface: Surface;
   amount: number;
+  /**
+   * How many UTC months the grant stays active before unused capacity
+   * drops out of the balance. Omit / set null to grant credits that
+   * never expire.
+   */
+  periodMonths?: number | null;
   note?: string;
 }
 
-export async function grantQuota(input: GrantInput): Promise<{ auditId: string }> {
-  const res = await apiPost<{ auditId: string; applied: number }>(
+export async function grantQuota(
+  input: GrantInput,
+): Promise<{ auditId: string; expiresAt: string | null }> {
+  const res = await apiPost<{ auditId: string; applied: number; expiresAt: string | null }>(
     "/api/v1/admin/quota/grant",
     input,
   );
   if (!res.data) {
     throw new Error("Grant response missing");
   }
-  return { auditId: res.data.auditId };
+  return { auditId: res.data.auditId, expiresAt: res.data.expiresAt ?? null };
 }
 
 export interface BulkGrantInput {
   userIds: string[];
   surface: Surface;
   amount: number;
+  periodMonths?: number | null;
   note?: string;
 }
 

@@ -122,6 +122,40 @@ export class NotificationService {
     });
   }
 
+  /**
+   * Recipient-side notification fired every time an admin grants credits
+   * (single or bulk path) to a user's playground / skill-gen surface.
+   * Surfaces the new balance so the user knows what they just received.
+   */
+  async notifyQuotaCreditsGranted(params: {
+    targetUserId: string;
+    surface: "playground" | "skillGen";
+    amount: number;
+    note?: string;
+    adminDisplayName: string;
+  }): Promise<void> {
+    const surfaceLabel =
+      params.surface === "playground" ? "playground" : "skill-generation";
+    const amountStr = params.amount.toLocaleString("en-US");
+    const title = `Admin granted you +${amountStr} ${surfaceLabel} credits`;
+    const body = params.note
+      ? `Granted by ${params.adminDisplayName}. Note: ${params.note}`
+      : `Granted by ${params.adminDisplayName}. Credits never expire and stack on top of your monthly base.`;
+    await this.emit(params.targetUserId, {
+      category: "quota.credits_granted",
+      title,
+      body,
+      // No deep link target today — settings/profile would be the
+      // closest match; leaving undefined so the bell renders the
+      // notification without a click affordance.
+      data: {
+        surface: params.surface,
+        amount: params.amount,
+        adminDisplayName: params.adminDisplayName,
+      },
+    });
+  }
+
   private async emit(
     userId: string,
     payload: {
