@@ -8,6 +8,7 @@ import { useCallback, useRef, useEffect } from "react";
 import { usePlaygroundStore } from "@/stores/playgroundStore";
 import { streamChat, type StreamHandle } from "@/services/playgroundStreamApi";
 import type { PlaygroundChatEvent, FileOutput } from "@/types/playground";
+import { track } from "@/lib/analytics";
 
 /** Minimum interval (ms) between text-delta flushes to avoid re-render storms. */
 const TOKEN_FLUSH_INTERVAL_MS = 50;
@@ -100,6 +101,7 @@ export function usePlaygroundChat() {
           }
           s.setError(event.message);
           s.setStreaming(false);
+          track("playground.run.failed", { error: event.message });
           break;
 
         case "finish":
@@ -110,6 +112,9 @@ export function usePlaygroundChat() {
           }
           s.finalizeAssistantMessage();
           s.setStreaming(false);
+          track("playground.run.completed", {
+            finishReason: event.finishReason,
+          });
           break;
       }
     },
@@ -127,6 +132,15 @@ export function usePlaygroundChat() {
       s.setStreaming(true);
       s.setError(null);
       s.startAssistantMessage();
+
+      // playground.run fires on every send. Pair with run.completed /
+      // run.failed events emitted from the SSE finish/error handlers
+      // for funnel analysis (sends → completes → fails).
+      track("playground.run", {
+        skillId: skillId ?? null,
+        promptLength: content.length,
+        hasEnvVars: Boolean(envVars && Object.keys(envVars).length),
+      });
 
       const msgs = usePlaygroundStore.getState().messages;
       const mapped = msgs.map((m) => ({ role: m.role, content: m.content }));

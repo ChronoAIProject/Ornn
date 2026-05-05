@@ -23,6 +23,7 @@ import { StepPreview } from "@/components/skill/guided/StepPreview";
 import { useCreateSkill } from "@/hooks/useSkills";
 import { useToastStore } from "@/stores/toastStore";
 import { useAuthStore } from "@/stores/authStore";
+import { track } from "@/lib/analytics";
 import { buildSkillMd } from "@/utils/frontmatterBuilder";
 import { buildFileTreeFromFolders, readUploadedFileContents } from "@/utils/fileTreeBuilder";
 import { basicInfoSchema, contentSchema, type BasicInfoData, type ContentData } from "@/utils/skillCreateSchemas";
@@ -290,6 +291,14 @@ export function CreateSkillGuidedPage() {
 
     try {
       const skill = await createMutation.mutateAsync({ zipFile });
+      track("skill.created", {
+        skillId: skill.guid,
+        source: "guided",
+      });
+      track("skill.published", {
+        skillId: skill.guid,
+        source: "guided",
+      });
       addToast({
         type: "success",
         message: t("guided.saveSuccess", { name: skill.name }),

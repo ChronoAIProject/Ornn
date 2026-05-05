@@ -30,3 +30,9 @@ data:
   NYXID_OAUTH_REDIRECT_URI: "${NYXID_OAUTH_REDIRECT_URI}"
   NYXID_LOGOUT_URL: "${NYXID_LOGOUT_URL}"
   NYXID_SETTINGS_URL: "${NYXID_SETTINGS_URL}"
+  # PostHog browser SDK config. Empty values disable analytics — useful
+  # for previews and local dev. Read by 40-envsubst-config-js.sh and
+  # injected into window.__ORNN_CONFIG__.
+  POSTHOG_API_KEY: "${POSTHOG_API_KEY}"
+  POSTHOG_PROJECT_ID: "${POSTHOG_PROJECT_ID}"
+  POSTHOG_HOST: "${POSTHOG_HOST}"

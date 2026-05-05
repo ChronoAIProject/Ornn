@@ -5,5 +5,8 @@ window.__ORNN_CONFIG__ = {
   nyxidOauthClientId: "${NYXID_OAUTH_CLIENT_ID}",
   nyxidOauthRedirectUri: "${NYXID_OAUTH_REDIRECT_URI}",
   nyxidLogoutUrl: "${NYXID_LOGOUT_URL}",
-  nyxidSettingsUrl: "${NYXID_SETTINGS_URL}"
+  nyxidSettingsUrl: "${NYXID_SETTINGS_URL}",
+  posthogApiKey: "${POSTHOG_API_KEY}",
+  posthogProjectId: "${POSTHOG_PROJECT_ID}",
+  posthogHost: "${POSTHOG_HOST}"
 };

@@ -17,6 +17,7 @@ import { useSkillGeneration } from "@/hooks/useSkillGeneration";
 import { useCreateSkill } from "@/hooks/useSkills";
 import { useToastStore } from "@/stores/toastStore";
 import { useAuthStore } from "@/stores/authStore";
+import { track } from "@/lib/analytics";
 import { useTranslation } from "react-i18next";
 import { extractFrontmatter } from "@/utils/frontmatter";
 import {
@@ -102,6 +103,14 @@ export function CreateSkillGenerativePage() {
 
     try {
       const skill = await createMutation.mutateAsync({ zipFile });
+      track("skill.created", {
+        skillId: skill.guid,
+        source: "generative",
+      });
+      track("skill.published", {
+        skillId: skill.guid,
+        source: "generative",
+      });
       addToast({
         type: "success",
         message: t("generative.saveSuccess", { name: skill.name }),

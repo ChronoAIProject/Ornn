@@ -11,6 +11,7 @@ import { parseGenerationOutput } from "@/utils/generationParser";
 import type { GenerationStreamEvent } from "@/types/streaming";
 import type { GenerationPhase, SkillMetadata } from "@/types/skillPackage";
 import type { FileNode } from "@/components/editor/FileTree";
+import { track } from "@/lib/analytics";
 
 /** Minimum interval (ms) between token state flushes */
 const TOKEN_FLUSH_INTERVAL_MS = 50;
@@ -142,6 +143,7 @@ export function useSkillGeneration(): UseSkillGenerationReturn {
           break;
 
         case "generation_complete": {
+          track("skill_gen.completed", { outcome: "success" });
           const { files, contents, metadata } = parseGenerationOutput(
             event.raw,
           );
@@ -200,6 +202,10 @@ export function useSkillGeneration(): UseSkillGenerationReturn {
           break;
 
         case "error": {
+          track("skill_gen.completed", {
+            outcome: "error",
+            error: event.message,
+          });
           const currentAssistantId = assistantMsgIdRef.current;
           setState((prev) => {
             const messages = prev.chatMessages.map((msg) => {
@@ -257,6 +263,14 @@ export function useSkillGeneration(): UseSkillGenerationReturn {
     (content: string) => {
       abort();
       tokenBufferRef.current = "";
+
+      // Fire skill_gen.started on every send — covers initial prompt
+      // AND every refinement turn so the funnel measures multi-turn
+      // generation depth, not just first prompts.
+      track("skill_gen.started", {
+        promptLength: content.length,
+        turn: conversationHistoryRef.current.length / 2 + 1,
+      });
 
       const userMsgId = crypto.randomUUID();
       const assistantMsgId = crypto.randomUUID();

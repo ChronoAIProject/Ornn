@@ -31,6 +31,7 @@ import { useRefreshSkillFromSource } from "@/hooks/useSkills";
 import { useStartAudit, useAuditSummaryByVersion, useSkillAuditHistory } from "@/hooks/useAudit";
 import { useSkillPulls } from "@/hooks/useAnalytics";
 import { SkillVersionList } from "@/components/skill/SkillVersionList";
+import { AgentSealTrustBadge } from "@/components/agentseal/AgentSealTrustBadge";
 import { PermissionsModal } from "@/components/skill/PermissionsModal";
 import { AdvancedOptionsModal } from "@/components/skill/AdvancedOptionsModal";
 import { VersionDiffModal } from "@/components/skill/VersionDiffModal";
@@ -47,6 +48,7 @@ import { useCurrentUser, useIsAuthenticated, isAdmin } from "@/stores/authStore"
 import { useToastStore } from "@/stores/toastStore";
 import { buildFileTreeFromEntries, type FileTreeEntry } from "@/utils/fileTreeBuilder";
 import { buildTrySkillPrompt } from "@/lib/buildTrySkillPrompt";
+import { track } from "@/lib/analytics";
 import { useTranslation } from "react-i18next";
 import type { FileNode } from "@/components/editor/FileTree";
 import type { AuditRecord } from "@/types/audit";
@@ -287,6 +289,10 @@ export function SkillDetailPage() {
       const blob = await newZip.generateAsync({ type: "blob" });
       const zipFile = new File([blob], `${skill.name}.zip`, { type: "application/zip" });
       await updatePackageMutation.mutateAsync({ zipFile, skipValidation: skip });
+      track("skill.version_published", {
+        skillId: skill.guid,
+        skipValidation: skip,
+      });
       addToast({ type: "success", message: t("skillDetail.updateSuccess") });
       setEditedContents(new Map());
       setAddedPaths([]);
@@ -605,6 +611,12 @@ export function SkillDetailPage() {
                 </Link>
               </div>
             </section>
+
+            {/* ── AgentSeal trust score (#253) ── third-party-verifiable
+                security signal. Sits next to the Audit card so the two
+                trust signals read as siblings; both follow the same tile
+                silhouette inside their card. */}
+            <AgentSealTrustBadge scan={skill.agentsealScan ?? null} />
 
             {/* ── Versions card ── */}
             {versionList.length > 0 && (
