@@ -53,6 +53,7 @@ const logger = pino({ level: "info" }).child({ module: "mirrorRoutes" });
  */
 const OWNER_RE = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/;
 const REPO_RE = /^[A-Za-z0-9._-]{1,100}$/;
+// eslint-disable-next-line no-control-regex -- intentional: rejects branch names containing C0 control chars or DEL.
 const BRANCH_RE = /^[^\x00-\x1f\x7f]{1,250}$/;
 
 export interface MirrorRoutesConfig {
