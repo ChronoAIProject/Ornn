@@ -18,6 +18,7 @@ import {
   createBrowserRouter,
   createRoutesFromElements,
   Navigate,
+  Outlet,
   Route,
   RouterProvider,
 } from "react-router-dom";
@@ -28,6 +29,24 @@ import { AuthGuard } from "@/components/auth/AuthGuard";
 import { AdminGuard } from "@/components/auth/AdminGuard";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { HighlighterMarkFilter } from "@/pages/landing/HighlighterMark";
+import { PostHogProvider } from "@/components/analytics/PostHogProvider";
+import { CookieConsentBanner } from "@/components/analytics/CookieConsentBanner";
+
+/**
+ * Top-level wrapper rendered as the root route's element. Lives INSIDE
+ * the router tree so child analytics hooks (`useLocation`) work, and
+ * renders the consent banner above every page. PostHogProvider has no
+ * DOM output — it just wires init / identify / pageview tracking.
+ */
+function AnalyticsRoot() {
+  return (
+    <>
+      <PostHogProvider />
+      <Outlet />
+      <CookieConsentBanner />
+    </>
+  );
+}
 
 // Route-level code split. Each lazy() call becomes its own async chunk.
 // Pages export named members, so the import() is unwrapped to a default.
@@ -133,7 +152,7 @@ function RouteFallback() {
 // stable across renders.
 const router = createBrowserRouter(
   createRoutesFromElements(
-    <Route>
+    <Route element={<AnalyticsRoot />}>
       {/* Public routes (no auth) */}
       <Route path="/login" element={<LoginPage />} />
       <Route path="/oauth/callback" element={<OAuthCallbackPage />} />

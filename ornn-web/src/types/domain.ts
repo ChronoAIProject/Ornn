@@ -73,6 +73,13 @@ export interface SkillDetail extends SkillSummary {
   /** True iff tied to an admin/platform NyxID service. System skills are always public. */
   isSystemSkill?: boolean;
   /**
+   * AgentSeal scan result for the *currently-resolved* version. Optional —
+   * older skills predate the scanner; new versions land with this populated
+   * by the publish path on the backend (#253). Findings live alongside the
+   * score so the UI can render an expandable detail list under the badge.
+   */
+  agentsealScan?: AgentSealScan | null;
+  /**
    * Per-skill GitHub mirror state. Absent ⇒ never mirrored, or
    * un-mirrored after a privacy flip / admin reset. Present ⇒ the
    * named version was committed to the configured GitHub mirror at
@@ -89,6 +96,44 @@ export interface SkillDetail extends SkillSummary {
     version: string;
     syncedAt: string;
     commitSha: string;
+  };
+}
+
+/**
+ * AgentSeal scan output as persisted on the skill version document.
+ * Mirrors the spec in #253 — score is 0–100, findings are AgentSeal's own
+ * structured output, scannedAt is ISO-8601, version pins the AgentSeal
+ * release that produced the score so badges remain reproducible.
+ */
+export interface AgentSealScan {
+  /** Score 0–100, higher is safer. Mapped to bands by `agentsealBand`. */
+  score: number;
+  /** Findings list. Empty array = scan ran clean. */
+  findings: AgentSealFinding[];
+  /** ISO-8601 timestamp the scan completed. */
+  scannedAt: string;
+  /** AgentSeal toolkit version, e.g. "agentseal-0.4.1". */
+  version: string;
+}
+
+/**
+ * One AgentSeal finding. Field names mirror AgentSeal's SARIF-adjacent
+ * output. Severity is bucketed at the badge level; raw rule id + message
+ * surface in the expandable findings list.
+ */
+export interface AgentSealFinding {
+  /** AgentSeal rule id, e.g. `prompt-injection-zw-bidi`. */
+  ruleId: string;
+  /** Human label for the rule, e.g. "Bidi / zero-width injection". */
+  title: string;
+  /** Severity bucket. AgentSeal bands these; we keep the raw string. */
+  severity: "critical" | "high" | "medium" | "low" | "info";
+  /** One-line summary the user sees. */
+  message: string;
+  /** Optional file + line — when present, the finding is locatable. */
+  location?: {
+    file: string;
+    line?: number;
   };
 }
 

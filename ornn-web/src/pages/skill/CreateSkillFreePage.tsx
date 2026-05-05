@@ -13,6 +13,7 @@ import { SkillPackagePreview } from "@/components/skill/SkillPackagePreview";
 import { ValidationErrorPanel } from "@/components/skill/ValidationErrorPanel";
 import { useCreateSkill } from "@/hooks/useSkills";
 import { useToastStore } from "@/stores/toastStore";
+import { track } from "@/lib/analytics";
 import {
   validateSkillZip,
   type ZipValidationResult,
@@ -250,6 +251,20 @@ export function CreateSkillFreePage() {
 
     try {
       const skill = await createMutation.mutateAsync({ zipFile, skipValidation });
+      // Skills land published-by-default on create — emit both the
+      // creation event (for the funnel) and the publish event (for the
+      // "first version live" milestone). Backend separately emits
+      // server-side `api.skill.published`, so this is the client-side
+      // intent signal only.
+      track("skill.created", {
+        skillId: skill.guid,
+        source: "upload",
+        skipValidation,
+      });
+      track("skill.published", {
+        skillId: skill.guid,
+        source: "upload",
+      });
       addToast({
         type: "success",
         message: t("free.uploadSuccess", { name: skill.name }),

@@ -25,6 +25,7 @@ import { Button } from "@/components/ui/Button";
 import { ArrowLeftIcon } from "@/components/icons";
 import { usePullSkillFromGitHub } from "@/hooks/useSkills";
 import { useToastStore } from "@/stores/toastStore";
+import { track } from "@/lib/analytics";
 
 function GitHubMarkIcon({ className }: { className?: string }) {
   return (
@@ -61,6 +62,14 @@ export function CreateSkillFromGitHubPage() {
     if (!urlValid) return;
     try {
       const skill = await pull.mutateAsync({ githubUrl: trimmed, skipValidation });
+      track("skill.created", {
+        skillId: skill.guid,
+        source: "github",
+      });
+      track("skill.published", {
+        skillId: skill.guid,
+        source: "github",
+      });
       addToast({
         type: "success",
         message: t("githubImport.success", "Skill pulled from GitHub.") as string,

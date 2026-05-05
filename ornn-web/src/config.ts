@@ -21,6 +21,12 @@ export interface OrnnConfig {
   nyxidOauthRedirectUri: string;
   nyxidLogoutUrl: string;
   nyxidSettingsUrl: string;
+  /** PostHog public project key (`phc_…`). Empty disables analytics. */
+  posthogApiKey: string;
+  /** PostHog project id — informational, surfaced in logs only. */
+  posthogProjectId: string;
+  /** PostHog ingest host (e.g. https://eu.i.posthog.com). Empty disables analytics. */
+  posthogHost: string;
 }
 
 declare global {
@@ -58,4 +64,10 @@ export const config: OrnnConfig = {
     runtime.nyxidSettingsUrl ??
     import.meta.env.VITE_NYXID_SETTINGS_URL ??
     "",
+  posthogApiKey:
+    runtime.posthogApiKey ?? import.meta.env.VITE_POSTHOG_API_KEY ?? "",
+  posthogProjectId:
+    runtime.posthogProjectId ?? import.meta.env.VITE_POSTHOG_PROJECT_ID ?? "",
+  posthogHost:
+    runtime.posthogHost ?? import.meta.env.VITE_POSTHOG_HOST ?? "",
 };

@@ -22,7 +22,7 @@ fi
 
 entrypoint_log "info: rendering $output from $template"
 
-envsubst '${API_BASE_URL} ${NYXID_OAUTH_AUTHORIZE_URL} ${NYXID_OAUTH_TOKEN_URL} ${NYXID_OAUTH_CLIENT_ID} ${NYXID_OAUTH_REDIRECT_URI} ${NYXID_LOGOUT_URL} ${NYXID_SETTINGS_URL}' \
+envsubst '${API_BASE_URL} ${NYXID_OAUTH_AUTHORIZE_URL} ${NYXID_OAUTH_TOKEN_URL} ${NYXID_OAUTH_CLIENT_ID} ${NYXID_OAUTH_REDIRECT_URI} ${NYXID_LOGOUT_URL} ${NYXID_SETTINGS_URL} ${POSTHOG_API_KEY} ${POSTHOG_PROJECT_ID} ${POSTHOG_HOST}' \
     < "$template" > "$output"
 
 # Drop the template so it isn't served publicly.

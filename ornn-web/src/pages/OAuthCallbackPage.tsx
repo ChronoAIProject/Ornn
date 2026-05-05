@@ -11,6 +11,7 @@ import { motion } from "framer-motion";
 import { Button } from "@/components/ui/Button";
 import { useAuthStore } from "@/stores/authStore";
 import { logActivity } from "@/services/activityApi";
+import { track } from "@/lib/analytics";
 
 type CallbackState =
   | { status: "loading" }
@@ -47,6 +48,11 @@ export function OAuthCallbackPage() {
       try {
         await useAuthStore.getState().handleNyxIDCallback(code);
         logActivity("login");
+        // Emit login.completed once the OAuth handshake settles. We
+        // can't distinguish first-login vs returning-login from the
+        // browser — the backend will emit a separate signup.completed
+        // event when it sees a brand-new user record.
+        track("login.completed", { provider: "nyxid" });
         const redirectTo = sessionStorage.getItem("login_redirect") || "/registry";
         sessionStorage.removeItem("login_redirect");
         navigate(redirectTo, { replace: true });

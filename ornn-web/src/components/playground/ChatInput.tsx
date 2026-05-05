@@ -9,6 +9,7 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { usePlaygroundStore } from "@/stores/playgroundStore";
 import { AVAILABLE_MODELS, type AvailableModelId } from "@/types/playground";
+import { track } from "@/lib/analytics";
 
 export interface ChatInputProps {
   onSend: (content: string) => void;
@@ -76,7 +77,11 @@ export function ChatInput({
         </label>
         <select
           value={selectedModel}
-          onChange={(e) => setSelectedModel(e.target.value as AvailableModelId)}
+          onChange={(e) => {
+            const next = e.target.value as AvailableModelId;
+            setSelectedModel(next);
+            track("model.selected", { modelId: next, surface: "playground" });
+          }}
           disabled={isStreaming}
           className="neon-input cursor-pointer appearance-none rounded-md px-2 py-1 font-mono text-xs text-strong disabled:opacity-50"
         >
