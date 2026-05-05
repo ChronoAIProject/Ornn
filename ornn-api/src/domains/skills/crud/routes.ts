@@ -13,6 +13,7 @@ import type { SkillService } from "./service";
 import type { SkillRepository } from "./repository";
 import type { ActivityRepository } from "../../admin/activityRepository";
 import type { AnalyticsService } from "../../analytics/service";
+import type { AnalyticsEmitter } from "../../../infra/analytics";
 import type { NyxidServiceClient } from "../../../clients/nyxid/service";
 import {
   type AuthVariables,
@@ -66,6 +67,12 @@ export interface SkillRoutesConfig {
    * Errors are swallowed in the service layer, never surfaced to clients.
    */
   analyticsService?: AnalyticsService;
+  /**
+   * PostHog product-analytics emitter (#252). Optional — same fire-and-
+   * forget treatment as `analyticsService`. Used to emit
+   * `api.skill.pull` per pull/json/detail hit.
+   */
+  analyticsEmitter?: AnalyticsEmitter;
   maxFileSize: number;
   activityRepo?: ActivityRepository;
   /**
@@ -83,14 +90,52 @@ export interface SkillRoutesConfig {
    * services (tying forces `isPrivate: false`).
    */
   extraNyxidServices: readonly string[];
+  /**
+   * GitHub mirror service. Optional — when undefined OR when its
+   * `enabled` flag is false, every mutation hook is a no-op. When
+   * enabled, every successful skill mutation fires a fire-and-forget
+   * `syncSkill` call to keep `ChronoAIProject/ornn-skills` in lockstep
+   * with Ornn's public + system skill set.
+   */
+  mirrorService?: import("../mirror/mirrorService").MirrorService;
 }
 
 /** Marker prefix for synthetic NyxID-service ids. See `extraNyxidServices`. */
 const SYNTHETIC_NYXID_SERVICE_PREFIX = "synthetic:";
 
 export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: AuthVariables }> {
-  const { skillService, skillRepo, analyticsService, maxFileSize, activityRepo, nyxidServiceClient, extraNyxidServices } = config;
+  const {
+    skillService,
+    skillRepo,
+    analyticsService,
+    analyticsEmitter,
+    maxFileSize,
+    activityRepo,
+    nyxidServiceClient,
+    extraNyxidServices,
+    mirrorService,
+  } = config;
   const app = new Hono<{ Variables: AuthVariables }>();
+
+  /**
+   * Fire-and-forget mirror sync. Use this from any successful skill
+   * mutation so the GitHub mirror catches up without blocking the
+   * user-facing response. Errors are swallowed + logged — the mirror
+   * is best-effort; the hourly reconciliation cron picks up anything
+   * the webhook drops.
+   */
+  const fireMirrorSync = (guid: string): void => {
+    if (!mirrorService) return;
+    mirrorService
+      .syncSkill(guid)
+      .catch((err) => logger.warn({ err, guid }, "mirror syncSkill failed"));
+  };
+  const fireMirrorRemove = (name: string): void => {
+    if (!mirrorService) return;
+    mirrorService
+      .removeSkill(name)
+      .catch((err) => logger.warn({ err, name }, "mirror removeSkill failed"));
+  };
 
   /**
    * Resolve a synthetic-service id (from the `EXTRA_NYXID_SERVICES`
@@ -168,6 +213,12 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
         skillId: result.guid,
         skillName: skill.name,
       }).catch((err) => logger.warn({ err }, "Failed to log skill:create activity"));
+
+      // New skills are always private at creation time (visibility is
+      // managed afterwards), so this sync is a no-op for now — but
+      // calling it eagerly keeps the contract uniform and lets the
+      // mirror service log the "considered + skipped" decision.
+      fireMirrorSync(result.guid);
 
       return c.json({ data: skill, error: null });
     },
@@ -251,6 +302,11 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
           })
           .catch((err) => logger.warn({ err }, "Failed to log skill:create activity"));
 
+        // Same as the ZIP create path — new skills start private, so
+        // this sync is a no-op until visibility is flipped. Stays here
+        // so the contract is uniform across both create flows.
+        fireMirrorSync(guid);
+
         return c.json({ data: skill, error: null });
       } catch (err) {
         if (err instanceof AppError) throw err;
@@ -329,6 +385,10 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
             },
           )
           .catch((err) => logger.warn({ err }, "Failed to log skill:refresh activity"));
+
+        // Refresh bumps version + replaces files → mirror needs to
+        // re-extract.
+        fireMirrorSync(guid);
 
         return c.json({ data: refreshed, error: null });
       } catch (err) {
@@ -426,15 +486,24 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
       if (analyticsService && authCtx) {
         void skillService
           .getSkill(idOrName)
-          .then((skill) =>
+          .then((skill) => {
             analyticsService.recordPull({
               skillGuid: skill.guid,
               skillName: skill.name,
               skillVersion: skill.version,
               userId: authCtx.userId,
               source: "api",
-            }),
-          )
+            });
+            // PostHog mirror (#252) — `callerType: "api"` is the
+            // single most useful split in the funnel (agents vs humans).
+            analyticsEmitter?.trackSkillPull({
+              userId: authCtx.userId,
+              skillId: skill.guid,
+              skillName: skill.name,
+              skillVersion: skill.version,
+              callerType: "api",
+            });
+          })
           .catch(() => {
             /* analytics failures must not surface to the caller */
           });
@@ -565,6 +634,13 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
       // — recording the GET here is a reasonable proxy for "user pulled
       // via the web UI". Fire-and-forget.
       if (analyticsService && authCtx) {
+        analyticsEmitter?.trackSkillPull({
+          userId: authCtx.userId,
+          skillId: skill.guid,
+          skillName: skill.name,
+          skillVersion: skill.version,
+          callerType: "web",
+        });
         void analyticsService.recordPull({
           skillGuid: skill.guid,
           skillName: skill.name,
@@ -629,6 +705,10 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
           deprecationChange: true,
         })
         .catch((err) => logger.warn({ err }, "Failed to log skill:deprecation activity"));
+
+      // Deprecation toggle on the latest version → README footer
+      // refresh on the mirror.
+      fireMirrorSync(result.skillGuid);
 
       return c.json({ data: result, error: null });
     },
@@ -717,6 +797,11 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
         ...(isPrivate !== undefined ? { isPrivate } : {}),
       }).catch((err) => logger.warn({ err }, `Failed to log ${action} activity`));
 
+      // ZIP update OR privacy flip — both demand a mirror sync. The
+      // umbrella decides between publish vs remove based on the new
+      // `isPrivate` state.
+      fireMirrorSync(guid);
+
       return c.json({ data: result, error: null });
     },
   );
@@ -778,6 +863,10 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
           sharedWithOrgs: updated.sharedWithOrgs.length,
         })
         .catch((err) => logger.warn({ err }, "Failed to log skill:permissions_change activity"));
+
+      // Permissions change can flip eligibility — sync handles both
+      // public→private (remove from mirror) and private→public (add).
+      fireMirrorSync(guid);
 
       return c.json({ data: { skill: updated }, error: null });
     },
@@ -857,6 +946,11 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
           isSystemSkill: updated.isSystemSkill === true,
         })
         .catch((err) => logger.warn({ err }, "Failed to log skill:nyxid_service_tie activity"));
+
+      // Tie to admin service forces isPrivate=false → previously-private
+      // skill becomes mirror-eligible. Conversely an untie can leave a
+      // system skill back at private. Sync handles both directions.
+      fireMirrorSync(guid);
 
       return c.json({ data: { skill: updated }, error: null });
     },
@@ -995,12 +1089,19 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
         );
       }
       logger.info({ guid }, "Skill delete via API");
+      // Capture name BEFORE deletion so we can scrub the mirror folder
+      // — `findByGuid` post-delete returns null, leaving us no key.
+      const skillNameForMirror = skill.name;
       await skillService.deleteSkill(guid);
 
       activityRepo?.log(authCtx.userId, authCtx.email, authCtx.displayName, "skill:delete", {
         skillId: guid,
         skillName: skill?.name ?? guid,
       }).catch((err) => logger.warn({ err }, "Failed to log skill:delete activity"));
+
+      // Mirror cleanup: directly remove by name (skill doc is gone, so
+      // the umbrella `syncSkill` would no-op).
+      fireMirrorRemove(skillNameForMirror);
 
       return c.json({ data: { success: true }, error: null });
     },
@@ -1054,6 +1155,13 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
         .catch((err) =>
           logger.warn({ err }, "Failed to log skill:version_delete activity"),
         );
+
+      // Per-issue policy refuses deletion of the latest version, so
+      // the latest pointer never moves here — but cron reconcile will
+      // eventually catch any drift. For symmetry with the other
+      // mutation routes we still fire a sync; the umbrella will
+      // diff-and-no-op when nothing visible to the mirror changed.
+      fireMirrorSync(skill.guid);
 
       return c.json({ data: { success: true }, error: null });
     },

@@ -20,3 +20,16 @@ data:
   MAX_PACKAGE_SIZE_BYTES: "${MAX_PACKAGE_SIZE_BYTES}"
   ALLOWED_ORIGINS: "${ALLOWED_ORIGINS}"
   EXTRA_NYXID_SERVICES: "${EXTRA_NYXID_SERVICES}"
+  # PostHog (non-secret config — host + sample rate). API key + project
+  # id live in secret.yaml so they don't end up in `kubectl describe`.
+  POSTHOG_HOST: "${POSTHOG_HOST}"
+  POSTHOG_ERROR_SAMPLE_RATE: "${POSTHOG_ERROR_SAMPLE_RATE}"
+  # AgentSeal scanner (#253). Binary baked into the image; this just
+  # controls the runtime kill-switch and the per-scan timeout.
+  AGENTSEAL_ENABLED: "${AGENTSEAL_ENABLED}"
+  AGENTSEAL_TIMEOUT_MS: "${AGENTSEAL_TIMEOUT_MS}"
+  GITHUB_MIRROR_ENABLED: "${GITHUB_MIRROR_ENABLED}"
+  GITHUB_MIRROR_REPO_OWNER: "${GITHUB_MIRROR_REPO_OWNER}"
+  GITHUB_MIRROR_REPO_NAME: "${GITHUB_MIRROR_REPO_NAME}"
+  GITHUB_MIRROR_DEFAULT_BRANCH: "${GITHUB_MIRROR_DEFAULT_BRANCH}"
+  ORNN_PUBLIC_ORIGIN: "${ORNN_PUBLIC_ORIGIN}"

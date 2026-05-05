@@ -11,7 +11,7 @@ import { cors } from "hono/cors";
 import { join } from "node:path";
 import { readFileSync } from "node:fs";
 import pino from "pino";
-import type { SkillConfig } from "./infra/config";
+import { type SkillConfig, assertMirrorConfigComplete } from "./infra/config";
 
 const pkg = JSON.parse(readFileSync(join(import.meta.dir, "..", "package.json"), "utf-8"));
 
@@ -20,8 +20,17 @@ const pkg = JSON.parse(readFileSync(join(import.meta.dir, "..", "package.json"),
 import { proxyAuthSetup, nyxidOrgLookupMiddleware } from "./middleware/nyxidAuth";
 import { requestIdMiddleware, getRequestId } from "./middleware/requestId";
 
+// Universal API audit (issue #245)
+import {
+  auditMiddleware,
+  ApiAuditRepository,
+  AuditBodyStorage,
+} from "./middleware/audit";
+
 // Infrastructure
 import { connectMongo, type MongoConnection } from "./infra/db/mongodb";
+import { createAnalyticsEmitter } from "./infra/analytics";
+import { AgentSealScanner } from "./infra/agentseal";
 
 
 // Clients
@@ -75,6 +84,12 @@ import { createAdminRoutes } from "./domains/admin/routes";
 // Domain: Skill Format
 import { createFormatRoutes } from "./domains/skills/format/routes";
 
+// Domain: GitHub Mirror (public + system skill auto-mirror)
+import { GitHubAppAuth } from "./domains/skills/mirror/githubAppAuth";
+import { GitHubMirrorClient } from "./domains/skills/mirror/githubMirrorClient";
+import { MirrorService } from "./domains/skills/mirror/mirrorService";
+import { createMirrorRoutes } from "./domains/skills/mirror/routes";
+
 // Domain: Me (caller-scoped endpoints)
 import { createMeRoutes } from "./domains/me/routes";
 
@@ -85,6 +100,17 @@ import { createUserRoutes } from "./domains/users/routes";
 import { PlatformSettingsRepository } from "./domains/platform/repository";
 import { PlatformSettingsService } from "./domains/platform/service";
 import { createPlatformSettingsRoutes } from "./domains/platform/routes";
+
+// Domain: Quota (per-user playground / skill-gen counters + admin grants)
+import { QuotaRepository } from "./domains/quota/repository";
+import { QuotaService } from "./domains/quota/service";
+import { createQuotaRoutes } from "./domains/quota/routes";
+
+// Domain: Models (admin-curated Chrono LLM catalog + user picker)
+import { ModelsRepository } from "./domains/models/repository";
+import { ModelsService } from "./domains/models/service";
+import { createModelsRoutes } from "./domains/models/routes";
+import { NyxLlmCatalogClient } from "./clients/nyxid/llmCatalog";
 
 // OpenAPI spec
 import { buildSpec } from "./openapi/specBuilder";
@@ -113,6 +139,30 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   }).child({ service: "ornn-api" });
 
   logger.info("Bootstrapping ornn-api service...");
+
+  // ---- PostHog product analytics (#252). Sink is Noop when no API key.
+  const analyticsEmitter = createAnalyticsEmitter(
+    {
+      posthogApiKey: config.posthogApiKey,
+      posthogHost: config.posthogHost,
+      posthogProjectId: config.posthogProjectId,
+      posthogErrorSampleRate: config.posthogErrorSampleRate,
+    },
+    logger,
+  );
+
+  // ---- AgentSeal trust scanner (#253). Subprocess wrapper.
+  const agentsealScanner = new AgentSealScanner({
+    command: config.agentsealCommand,
+    timeoutMs: config.agentsealTimeoutMs,
+    enabled: config.agentsealEnabled,
+    logger,
+  });
+
+  // Validate the mirror config up front (loud) — otherwise an
+  // ENABLED-but-misconfigured deployment would only fail at first
+  // publish hook fire-and-forget, where the failure gets swallowed.
+  assertMirrorConfigComplete(config);
 
   // ---- Database Connections ----
   const mongo: MongoConnection = await connectMongo(config.mongodbUri, config.mongodbDb);
@@ -153,12 +203,24 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   const tagRepo = new TagRepository(db);
   const activityRepo = new ActivityRepository(db);
 
+  // ---- Universal API audit (issue #245) ----
+  // Built early so the middleware can mount on `apiApp` below. Indexes
+  // ensured fire-and-forget — a Mongo hiccup at startup must not block
+  // the API from serving traffic; audit failures degrade silently.
+  const apiAuditRepository = new ApiAuditRepository(db, config.auditRetentionDays);
+  void apiAuditRepository.ensureIndexes().catch((err) =>
+    logger.warn({ err }, "api_audit indexes ensureIndexes failed — proceeding anyway"),
+  );
+  const auditBodyStorage = new AuditBodyStorage(storageClient, config.auditMinioBucket);
+
   // ---- Domain: Skill CRUD ----
   const skillService = new SkillService({
     skillRepo,
     skillVersionRepo,
     storageClient,
     storageBucket: config.storageBucket,
+    analyticsEmitter,
+    agentsealScanner,
   });
 
   // ---- Domain: Notifications (built before AuditService so the audit
@@ -208,10 +270,92 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   const analyticsService = new AnalyticsService({ analyticsRepo });
   const analyticsRoutes = createAnalyticsRoutes({ analyticsService, skillService });
 
-  // ---- Domain: Platform settings (admin-editable thresholds) ----
+  // ---- Domain: Platform settings (admin-editable thresholds + mirror coords) ----
   const platformSettingsRepo = new PlatformSettingsRepository(db);
-  const platformSettingsService = new PlatformSettingsService(platformSettingsRepo);
+  const platformSettingsService = new PlatformSettingsService(platformSettingsRepo, {
+    githubMirror: {
+      owner: config.mirror.repoOwner,
+      repo: config.mirror.repoName,
+      branch: config.mirror.defaultBranch,
+    },
+  });
   const platformSettingsRoutes = createPlatformSettingsRoutes({ platformSettingsService });
+
+  // ---- Domain: Quota (per-user playground / skill-gen counters + admin grants) ----
+  const quotaRepo = new QuotaRepository(db);
+  void quotaRepo.ensureIndexes().catch((err) =>
+    logger.warn({ err }, "quota indexes ensureIndexes failed — proceeding anyway"),
+  );
+  const quotaService = new QuotaService({ repo: quotaRepo });
+  const quotaRoutes = createQuotaRoutes({ quotaService, activityRepo });
+
+  // ---- Domain: Models (admin-curated Chrono LLM catalog + user picker) ----
+  const modelsRepo = new ModelsRepository(db);
+  void modelsRepo.ensureIndexes().catch((err) =>
+    logger.warn({ err }, "models indexes ensureIndexes failed — proceeding anyway"),
+  );
+  // The catalog client speaks to NyxID's Chrono LLM proxy. Refresh
+  // happens on demand from the admin UI; no scheduled cron.
+  const llmCatalogClient = new NyxLlmCatalogClient({
+    proxyBaseUrl: config.nyxidBaseUrl,
+    saTokenProvider,
+  });
+  const modelsService = new ModelsService({
+    repo: modelsRepo,
+    catalogClient: llmCatalogClient,
+  });
+  const modelsRoutes = createModelsRoutes({ modelsService });
+
+  // ---- Domain: GitHub Mirror ----
+  // Built before the skill routes so we can inject it into the route
+  // handlers as a fire-and-forget hook target. The MirrorService's
+  // `enabled` flag short-circuits all operations when the feature is
+  // off, so callers don't need to null-check.
+  //
+  // Repo coordinates are resolved at call time from
+  // `platformSettingsService` (DB-wins-with-configmap-fallback), so an
+  // admin patch via `POST /api/v1/github/repo` lands on the next sync
+  // without a redeploy.
+  const mirrorService = (() => {
+    if (!config.mirror.enabled) {
+      return new MirrorService(
+        {
+          // The deps are unused when disabled; pass placeholders.
+          github: undefined as unknown as GitHubMirrorClient,
+          skillRepo,
+          skillService,
+          ornnPublicOrigin: config.ornnPublicOrigin,
+          platformSettingsService,
+        },
+        false,
+      );
+    }
+    const auth = new GitHubAppAuth({
+      appId: config.mirror.appId,
+      privateKey: config.mirror.privateKey,
+      installationId: config.mirror.installationId,
+    });
+    const github = new GitHubMirrorClient(auth, async () => {
+      const cfg = await platformSettingsService.getGithubMirrorRepo();
+      return { owner: cfg.owner, repo: cfg.repo, defaultBranch: cfg.branch };
+    });
+    return new MirrorService(
+      {
+        github,
+        skillRepo,
+        skillService,
+        ornnPublicOrigin: config.ornnPublicOrigin,
+        platformSettingsService,
+      },
+      true,
+    );
+  })();
+  const mirrorRoutes = createMirrorRoutes({
+    mirrorService: config.mirror.enabled ? mirrorService : undefined,
+    platformSettingsService,
+    skillRepo,
+    mirrorEnabled: config.mirror.enabled,
+  });
 
   // Skill routes — sharing is now a direct PUT /permissions write; the
   // audit signal is surfaced as a per-version label, not a gate.
@@ -219,10 +363,12 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
     skillService,
     skillRepo,
     analyticsService,
+    analyticsEmitter,
     maxFileSize: config.maxPackageSizeBytes,
     activityRepo,
     nyxidServiceClient,
     extraNyxidServices: config.extraNyxidServices,
+    mirrorService,
   });
 
   // ---- Domain: Skill Search ----
@@ -248,6 +394,8 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   const generationRoutes = createGenerationRoutes({
     generationService,
     keepAliveIntervalMs: config.sseKeepAliveIntervalMs,
+    quotaService,
+    modelsService,
   });
 
   // ---- Domain: Playground ----
@@ -265,6 +413,8 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
     keepAliveIntervalMs: config.sseKeepAliveIntervalMs,
     analyticsService,
     skillService,
+    quotaService,
+    modelsService,
   });
 
   // ---- Domain: Admin ----
@@ -274,8 +424,10 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
     activityRepo,
     skillRepo,
     skillService,
+    skillVersionRepo,
     generationService,
     nyxidTokenUrl: config.nyxidTokenUrl,
+    agentsealScanner,
   });
 
   // ---- Domain: Skill Format ----
@@ -323,8 +475,26 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   // service, so `instanceof` is sufficient (no more duck-typing).
   app.onError((err, c) => {
     const requestId = getRequestId(c);
+    // userId is optional on auth-context; use null distinct id when absent.
+    const authCtx = (c.get as (k: string) => unknown)("auth") as
+      | { userId?: string }
+      | undefined;
+    const userId = authCtx?.userId ?? null;
+
     if (err instanceof AppError) {
       logger.warn({ requestId, code: err.code, status: err.statusCode }, err.message);
+      // 5xx AppErrors are still real server failures — emit api.error
+      // (sampled) so PostHog has the same fidelity as runtime crashes.
+      if (err.statusCode >= 500) {
+        analyticsEmitter.trackApiError({
+          userId,
+          statusCode: err.statusCode,
+          errorCode: err.code,
+          method: c.req.method,
+          path: c.req.path,
+          requestId,
+        });
+      }
       return c.json(
         { data: null, error: { code: err.code, message: err.message } },
         err.statusCode as any,
@@ -332,6 +502,14 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
     }
 
     logger.error({ requestId, err }, "Unhandled error");
+    analyticsEmitter.trackApiError({
+      userId,
+      statusCode: 500,
+      errorCode: "INTERNAL_ERROR",
+      method: c.req.method,
+      path: c.req.path,
+      requestId,
+    });
     return c.json(
       { data: null, error: { code: "INTERNAL_ERROR", message: "Internal server error" } },
       500,
@@ -341,11 +519,46 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   // ---- API routes — all traffic via NyxID proxy, trust proxy headers ----
   const apiApp = new Hono();
   apiApp.use("*", proxyAuthSetup());
+  // Universal API audit — runs after `proxyAuthSetup` so the
+  // caller-type resolver can read `c.var.auth`. Fail-isolated: errors
+  // inside the audit pipeline never propagate to the business response.
+  apiApp.use(
+    "*",
+    auditMiddleware({
+      repository: apiAuditRepository,
+      bodyStorage: auditBodyStorage,
+      bodyInlineMaxBytes: config.auditBodyInlineMaxBytes,
+      extraBlacklistPatterns: config.auditGlobalRedactPatterns,
+      logger,
+      // Resolve auth shape from the Hono context. Auth-setup middleware
+      // populates `auth` with `userAccessToken` only when the NyxID
+      // proxy forwarded a user Bearer alongside the identity token —
+      // i.e. agent flows; browser cookie sessions leave it undefined.
+      resolveAuthHint: (c) => {
+        const auth = c.get("auth") as
+          | { userId?: string; userAccessToken?: string }
+          | undefined;
+        if (!auth?.userId) {
+          return {
+            hasAuth: false,
+            hasForwardedUserToken: false,
+            callerIdentity: null,
+          };
+        }
+        return {
+          hasAuth: true,
+          hasForwardedUserToken: Boolean(auth.userAccessToken),
+          callerIdentity: auth.userId,
+        };
+      },
+    }),
+  );
   // Lazy, per-request memoized org lookup. Mounted once here so every domain
   // route sees the same cached result — avoids re-querying NyxID within a
   // single request even when multiple routes call `readUserOrgMemberships`.
   apiApp.use("*", nyxidOrgLookupMiddleware(nyxidOrgsClient));
   apiApp.route("/", skillRoutes);
+  apiApp.route("/", mirrorRoutes);
   apiApp.route("/", auditRoutes);
   apiApp.route("/", notificationRoutes);
   apiApp.route("/", analyticsRoutes);
@@ -354,6 +567,8 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   apiApp.route("/", playgroundRoutes);
   apiApp.route("/", adminRoutes);
   apiApp.route("/", platformSettingsRoutes);
+  apiApp.route("/", quotaRoutes);
+  apiApp.route("/", modelsRoutes);
   apiApp.route("/", formatRoutes);
   apiApp.route("/", createMeRoutes({
     nyxidBaseUrl: config.nyxidBaseUrl,
@@ -417,6 +632,13 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   // ---- Shutdown ----
   async function shutdown(): Promise<void> {
     logger.info("Shutting down ornn-api...");
+    // Drain PostHog buffer before closing Mongo — losing buffered events
+    // is the most common cause of "missing api.error" complaints.
+    try {
+      await analyticsEmitter.shutdown();
+    } catch (err) {
+      logger.warn({ err }, "Analytics shutdown failed — continuing");
+    }
     await mongo.close();
     logger.info("ornn-api shutdown complete");
   }

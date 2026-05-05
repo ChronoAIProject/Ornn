@@ -24,6 +24,7 @@ import { SkillPackagePreview } from "@/components/skill/SkillPackagePreview";
 import { VersionPicker } from "@/components/skill/VersionPicker";
 import { DeprecationBanner } from "@/components/skill/DeprecationBanner";
 import { GitHubOriginChip } from "@/components/skill/GitHubOriginChip";
+import { MirrorInstallCard } from "@/components/skill/MirrorInstallCard";
 import { UsagePullsCard } from "@/components/skill/UsagePullsCard";
 import { SkillHeroStrip } from "@/components/skill/SkillHeroStrip";
 import { BackLink } from "@/components/layout/BackLink";
@@ -440,6 +441,12 @@ export function SkillDetailPage() {
             onRefresh={() => refreshMutation.mutate({ guid: skill.guid })}
           />
         )}
+
+        {/* ── Mirror install snippet ── */}
+        {/* Hidden for private skills, when mirror is disabled, and during the
+            initial repo-config fetch — see MirrorInstallCard for the full
+            visibility rules. */}
+        <MirrorInstallCard className="shrink-0" skill={skill} />
 
         {/* ── Hero strip ── */}
         <SkillHeroStrip

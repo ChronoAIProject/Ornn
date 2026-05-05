@@ -18,6 +18,8 @@ import { validateSkillFrontmatter } from "../../../shared/schemas/skillFrontmatt
 import { resolveZipRoot } from "../../../shared/utils/zip";
 import { parseVersion, isGreater } from "./version";
 import { diffSkillInterface, type InterfaceChange } from "./interfaceDiff";
+import type { AnalyticsEmitter } from "../../../infra/analytics";
+import type { IAgentSealScanner } from "../../../infra/agentseal";
 import { parse as parseYaml } from "yaml";
 import JSZip from "jszip";
 import pino from "pino";
@@ -45,6 +47,18 @@ export interface SkillServiceDeps {
   skillVersionRepo: SkillVersionRepository;
   storageClient: IStorageClient;
   storageBucket: string;
+  /**
+   * PostHog emitter for `api.skill.published` (#252). Optional — when
+   * absent the publish path skips the emit. Always async/safe; failures
+   * never bubble up.
+   */
+  analyticsEmitter?: AnalyticsEmitter;
+  /**
+   * AgentSeal scanner (#253). Invoked on first-create and every publish.
+   * Result is persisted on the version doc; failures are warn-only and
+   * never block the publish path.
+   */
+  agentsealScanner?: IAgentSealScanner;
 }
 
 export class SkillService {
@@ -52,12 +66,16 @@ export class SkillService {
   private readonly skillVersionRepo: SkillVersionRepository;
   private readonly storageClient: IStorageClient;
   private readonly storageBucket: string;
+  private readonly analyticsEmitter?: AnalyticsEmitter;
+  private readonly agentsealScanner?: IAgentSealScanner;
 
   constructor(deps: SkillServiceDeps) {
     this.skillRepo = deps.skillRepo;
     this.skillVersionRepo = deps.skillVersionRepo;
     this.storageClient = deps.storageClient;
     this.storageBucket = deps.storageBucket;
+    this.analyticsEmitter = deps.analyticsEmitter;
+    this.agentsealScanner = deps.agentsealScanner;
   }
 
   async createSkill(
@@ -148,6 +166,19 @@ export class SkillService {
       createdByDisplayName: options?.userDisplayName,
       releaseNotes,
     });
+
+    // 8. Fire-and-forget product-analytics + AgentSeal trust scan. Both are
+    //    deliberately not awaited so a slow PostHog backend or AgentSeal
+    //    subprocess can't block the response. Failures inside either path
+    //    are caught and logged at the dependency layer.
+    this.analyticsEmitter?.trackSkillPublished({
+      userId,
+      skillId: guid,
+      skillName: name,
+      skillVersion: version,
+      isNewSkill: true,
+    });
+    void this.runAgentsealScan(guid, version, zipBuffer);
 
     return { guid };
   }
@@ -395,6 +426,16 @@ export class SkillService {
         createdByDisplayName: options.userDisplayName,
         releaseNotes,
       });
+
+      // Fire-and-forget analytics + scan on every version publish.
+      this.analyticsEmitter?.trackSkillPublished({
+        userId,
+        skillId: guid,
+        skillName: name,
+        skillVersion: version,
+        isNewSkill: false,
+      });
+      void this.runAgentsealScan(guid, version, options.zipBuffer);
 
       Object.assign(updateData, {
         name,
@@ -952,6 +993,91 @@ export class SkillService {
     };
   }
 
+  /**
+   * Manually re-trigger an AgentSeal scan on a single version (#253). Used
+   * by the admin endpoint when a false positive needs re-checking after a
+   * rule update or an AgentSeal version bump. Synchronous (admin waits
+   * for the scan); on success the persisted record is returned.
+   *
+   * Throws AppError.notFound when the skill or version doesn't exist.
+   * Returns `{ scan: null }` when the scanner itself failed (timeout,
+   * crash, output unparseable). Authorization is enforced by the caller.
+   */
+  async rescanVersion(
+    idOrName: string,
+    version: string,
+  ): Promise<{
+    skillGuid: string;
+    skillName: string;
+    version: string;
+    scan: import("../../../shared/types/index").AgentsealScanSnapshot | null;
+  }> {
+    parseVersion(version);
+    const skill = await this.findSkillByIdOrName(idOrName);
+    const versionDoc = await this.skillVersionRepo.findBySkillAndVersion(skill.guid, version);
+    if (!versionDoc) {
+      throw AppError.notFound(
+        "SKILL_VERSION_NOT_FOUND",
+        `Version '${version}' not found for skill '${skill.name}'`,
+      );
+    }
+
+    if (!this.agentsealScanner) {
+      logger.warn({ skillGuid: skill.guid, version }, "AgentSeal rescan called without scanner — returning null");
+      return { skillGuid: skill.guid, skillName: skill.name, version, scan: null };
+    }
+
+    const zipBuffer = await this.downloadPackage(versionDoc.storageKey);
+    const result = await this.agentsealScanner.scan({
+      skillGuid: skill.guid,
+      version,
+      zipBuffer,
+    });
+    if (!result) {
+      return { skillGuid: skill.guid, skillName: skill.name, version, scan: null };
+    }
+    const updated = await this.skillVersionRepo.setAgentsealScan(skill.guid, version, {
+      score: result.score,
+      findings: result.findings,
+      scannedAt: result.scannedAt,
+      agentsealVersion: result.agentsealVersion,
+    });
+    return {
+      skillGuid: skill.guid,
+      skillName: skill.name,
+      version,
+      scan: updated?.agentsealScan ?? null,
+    };
+  }
+
+  /**
+   * Fire-and-forget AgentSeal scan launched from the create + update
+   * publish paths. Catches every error so a failed scan never bubbles
+   * into the response (v1 is warn-only).
+   */
+  private async runAgentsealScan(
+    skillGuid: string,
+    version: string,
+    zipBuffer: Uint8Array,
+  ): Promise<void> {
+    if (!this.agentsealScanner) return;
+    try {
+      const result = await this.agentsealScanner.scan({ skillGuid, version, zipBuffer });
+      if (!result) return; // already logged at scanner level
+      await this.skillVersionRepo.setAgentsealScan(skillGuid, version, {
+        score: result.score,
+        findings: result.findings,
+        scannedAt: result.scannedAt,
+        agentsealVersion: result.agentsealVersion,
+      });
+    } catch (err) {
+      logger.warn(
+        { err, skillGuid, version },
+        "AgentSeal scan/persist failed — publish unaffected (v1 is warn-only)",
+      );
+    }
+  }
+
   // ==========================================================================
   // Private helpers
   // ==========================================================================
@@ -1143,10 +1269,20 @@ export class SkillService {
               : {}),
           }
         : undefined,
+      agentsealScan: effectiveOverlay?.agentsealScan ?? null,
       nyxidServiceId: skill.nyxidServiceId ?? null,
       nyxidServiceSlug: skill.nyxidServiceSlug ?? null,
       nyxidServiceLabel: skill.nyxidServiceLabel ?? null,
       isSystemSkill: skill.isSystemSkill === true,
+      ...(skill.mirrorSync && skill.mirrorSync.syncedAt instanceof Date
+        ? {
+            mirrorSync: {
+              version: skill.mirrorSync.version,
+              syncedAt: skill.mirrorSync.syncedAt.toISOString(),
+              commitSha: skill.mirrorSync.commitSha,
+            },
+          }
+        : {}),
     };
   }
 

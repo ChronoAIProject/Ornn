@@ -15,6 +15,8 @@ lastUpdated: 2026-04-29
 
 # Agent Manual (HTTPS variant)
 
+> **DEPRECATED — replaced by `chrono-ai-service-manual`.** This skill is kept for one minor release while consumers migrate. The unified manual folds NyxID identity / proxy AND the Ornn skill lifecycle into a single skill so an agent that wants to drive both halves of the stack only needs one install. The CLI vs HTTP distinction is preserved as a §-level switch inside `chrono-ai-service-manual` (§0.6 "Transport choice"), so HTTP-only agents lose nothing by switching. **New work should pull `chrono-ai-service-manual` instead.** This file will be removed in the release after the unified manual lands.
+
 > **You are an AI agent reading this manual to learn how to use Ornn.** Throughout this document, *"you"* always refers to **the agent itself** — not the human user driving you.
 >
 > ## First: install this skill locally

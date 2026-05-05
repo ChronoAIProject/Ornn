@@ -25,6 +25,27 @@ FROM oven/bun:1.3.13
 
 WORKDIR /app
 
+# AgentSeal trust scanner (#253) — installed via pip into an isolated
+# venv at /opt/agentseal so we don't fight Debian 12's PEP-668 ban on
+# global pip installs. Pin the version explicitly so trust scores are
+# reproducible across a known rule set; bumping it is intentional and
+# shows up in CHANGELOG.
+ARG AGENTSEAL_VERSION=0.5.0
+ENV AGENTSEAL_VERSION=${AGENTSEAL_VERSION}
+ENV AGENTSEAL_VENV=/opt/agentseal
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends python3 python3-venv \
+ && python3 -m venv "$AGENTSEAL_VENV" \
+ && "$AGENTSEAL_VENV/bin/pip" install --no-cache-dir "agentseal==${AGENTSEAL_VERSION}" \
+ && ln -sf "$AGENTSEAL_VENV/bin/agentseal" /usr/local/bin/agentseal \
+ && apt-get clean \
+ && rm -rf /var/lib/apt/lists/*
+
+# Surface the canonical command path so ornn-api's config defaults work
+# without operator overrides. AGENTSEAL_COMMAND can still be overridden
+# at runtime by the deployment.
+ENV AGENTSEAL_COMMAND=/usr/local/bin/agentseal
+
 COPY --from=install /app /app
 
 # Copy source code

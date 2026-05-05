@@ -79,6 +79,24 @@ export interface SkillDetail extends SkillSummary {
    * score so the UI can render an expandable detail list under the badge.
    */
   agentsealScan?: AgentSealScan | null;
+  /**
+   * Per-skill GitHub mirror state. Absent ⇒ never mirrored, or
+   * un-mirrored after a privacy flip / admin reset. Present ⇒ the
+   * named version was committed to the configured GitHub mirror at
+   * `syncedAt`. `commitSha` is the commit pointer for that sync —
+   * suitable for an audit-link chip.
+   *
+   * Display: hidden entirely when `isPrivate` (those never mirror).
+   * When public/system, the chip reads:
+   *   - "Synced" when `mirrorSync.version === version`
+   *   - "Lagging" when `mirrorSync.version !== version` (mirror push pending)
+   *   - "Never synced" when `mirrorSync` is absent
+   */
+  mirrorSync?: {
+    version: string;
+    syncedAt: string;
+    commitSha: string;
+  };
 }
 
 /**

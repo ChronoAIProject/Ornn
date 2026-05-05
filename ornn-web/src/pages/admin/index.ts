@@ -10,3 +10,4 @@ export { ActivitiesPage } from "./ActivitiesPage";
 export { UsersPage } from "./UsersPage";
 export { AdminSkillsPage } from "./AdminSkillsPage";
 export { PlatformSettingsPage } from "./PlatformSettingsPage";
+export { MirrorPage } from "./MirrorPage";
