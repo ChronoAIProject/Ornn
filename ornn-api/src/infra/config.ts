@@ -70,6 +70,63 @@ export interface SkillConfig {
    * a single-item array `["NyxID"]`.
    */
   readonly extraNyxidServices: readonly string[];
+
+  // ---- Universal API audit (issue #245) ----
+  /**
+   * How long audit records live in MongoDB before the TTL index expires
+   * them. Mirrored by the MinIO bucket lifecycle policy (configured
+   * out-of-band) so the offloaded bodies expire on the same cadence.
+   */
+  readonly auditRetentionDays: number;
+  /**
+   * MinIO bucket where redacted request / response bodies are
+   * gzip-uploaded for write ops and 4xx/5xx responses.
+   */
+  readonly auditMinioBucket: string;
+  /**
+   * Cutoff for inline-vs-MinIO. Bodies with redacted-JSON byte length
+   * above this go to MinIO; smaller bodies live in the Mongo doc.
+   */
+  readonly auditBodyInlineMaxBytes: number;
+  /**
+   * Extra field-name regex patterns OR-d into the global redaction
+   * blacklist. The defaults (`password|token|apiKey|secret|key|
+   * credential`) always apply; this list extends them.
+   */
+  readonly auditGlobalRedactPatterns: readonly string[];
+
+  /**
+   * GitHub mirror config — when enabled, every public / system skill
+   * gets one-way mirrored to a GitHub monorepo so the
+   * `npx skills add <owner>/<repo>/<name>` install path works for
+   * Ornn skills. See `domains/skills/mirror/`.
+   *
+   * `mirrorEnabled` gates the whole feature — when false (default), no
+   * mirror calls are made even if the other fields are set. Lets
+   * operators stage credentials in advance of flipping the switch.
+   */
+  readonly mirror: {
+    readonly enabled: boolean;
+    /** GitHub App numeric id (visible on the App settings page). */
+    readonly appId: string;
+    /** PEM-formatted RSA private key for the App. */
+    readonly privateKey: string;
+    /** Installation id for `<owner>/<repo>` (org-wide installation). */
+    readonly installationId: string;
+    /** Mirror repo owner — typically `ChronoAIProject`. */
+    readonly repoOwner: string;
+    /** Mirror repo name — typically `ornn-skills`. */
+    readonly repoName: string;
+    /** Default branch on the mirror — typically `main`. */
+    readonly defaultBranch: string;
+  };
+
+  /**
+   * Origin used in mirror READMEs to link back to the canonical Ornn
+   * page (`<origin>/skills/<name>`). E.g. `https://ornn.chrono-ai.fun`.
+   * No-trailing-slash, validated.
+   */
+  readonly ornnPublicOrigin: string;
 }
 
 /** Parses "true"/"false"/"1"/"0" into a real boolean. */
@@ -122,6 +179,44 @@ const envSchema = z.object({
    * changes by setting e.g. `EXTRA_NYXID_SERVICES=NyxID,SomeOtherSvc`.
    */
   EXTRA_NYXID_SERVICES: z.string().default("NyxID"),
+
+  // ---- Universal API audit (issue #245) ----
+  /** Days to retain audit records before TTL expiry. */
+  AUDIT_RETENTION_DAYS: z.coerce.number().int().positive().default(90),
+  /** MinIO bucket for offloaded audit bodies. */
+  MINIO_AUDIT_BUCKET: z.string().min(1).default("ornn-audit"),
+  /** Max KB to keep inline in the Mongo doc; bigger spills to MinIO. */
+  AUDIT_BODY_INLINE_MAX_KB: z.coerce.number().int().positive().default(16),
+  /**
+   * Comma-separated extra blacklist patterns. Combined with the built-in
+   * defaults (`password|token|apiKey|secret|key|credential`).
+   */
+  AUDIT_GLOBAL_REDACT_PATTERNS: z.string().default(""),
+
+  // ───────────── GitHub mirror (public / system skills) ───────────────
+  // Disabled by default; flipping GITHUB_MIRROR_ENABLED=true requires
+  // all four credential vars below to be present (validated at boot).
+  GITHUB_MIRROR_ENABLED: booleanFromEnv,
+  GITHUB_APP_ID: z.string().optional(),
+  GITHUB_APP_PRIVATE_KEY: z.string().optional(),
+  GITHUB_APP_INSTALLATION_ID: z.string().optional(),
+  GITHUB_MIRROR_REPO_OWNER: z.string().default("ChronoAIProject"),
+  GITHUB_MIRROR_REPO_NAME: z.string().default("ornn-skills"),
+  GITHUB_MIRROR_DEFAULT_BRANCH: z.string().default("main"),
+
+  /**
+   * Public origin agents and humans use to reach Ornn (no trailing
+   * slash). Only used by the mirror service today, but generally
+   * useful for any link generation. Default works for local dev.
+   *
+   * Coerce empty string → undefined so a `.env` line that's commented
+   * out (envsubst injects literal "") still falls through to the
+   * default instead of failing `.url()` validation at boot.
+   */
+  ORNN_PUBLIC_ORIGIN: z.preprocess(
+    (v) => (v === "" ? undefined : v),
+    z.string().url().default("https://ornn.chrono-ai.fun"),
+  ),
 });
 
 /**
@@ -188,5 +283,46 @@ export function loadConfig(): SkillConfig {
       .split(",")
       .map((s) => s.trim())
       .filter((s) => s.length > 0),
+
+    auditRetentionDays: env.AUDIT_RETENTION_DAYS,
+    auditMinioBucket: env.MINIO_AUDIT_BUCKET,
+    auditBodyInlineMaxBytes: env.AUDIT_BODY_INLINE_MAX_KB * 1024,
+    auditGlobalRedactPatterns: env.AUDIT_GLOBAL_REDACT_PATTERNS
+      .split(",")
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0),
+
+    mirror: {
+      enabled: env.GITHUB_MIRROR_ENABLED,
+      appId: env.GITHUB_APP_ID ?? "",
+      // GitHub Apps emit PEM with literal `\n`s sometimes when the key is
+      // pasted into a single-line env var; expand them so RS256 signing
+      // sees the real linebreaks. No-op when the value already has real
+      // newlines (e.g. when sourced from a multi-line k8s secret).
+      privateKey: (env.GITHUB_APP_PRIVATE_KEY ?? "").replace(/\\n/g, "\n"),
+      installationId: env.GITHUB_APP_INSTALLATION_ID ?? "",
+      repoOwner: env.GITHUB_MIRROR_REPO_OWNER,
+      repoName: env.GITHUB_MIRROR_REPO_NAME,
+      defaultBranch: env.GITHUB_MIRROR_DEFAULT_BRANCH,
+    },
+    ornnPublicOrigin: env.ORNN_PUBLIC_ORIGIN.replace(/\/+$/, ""),
   };
+}
+
+/**
+ * Throws if `mirror.enabled === true` but credentials are missing.
+ * Called from bootstrap so failure is loud at startup, not at first
+ * publish-hook fire-and-forget (which would silently swallow it).
+ */
+export function assertMirrorConfigComplete(config: SkillConfig): void {
+  if (!config.mirror.enabled) return;
+  const missing: string[] = [];
+  if (!config.mirror.appId) missing.push("GITHUB_APP_ID");
+  if (!config.mirror.privateKey) missing.push("GITHUB_APP_PRIVATE_KEY");
+  if (!config.mirror.installationId) missing.push("GITHUB_APP_INSTALLATION_ID");
+  if (missing.length > 0) {
+    throw new Error(
+      `GITHUB_MIRROR_ENABLED=true but the following are unset: ${missing.join(", ")}`,
+    );
+  }
 }
