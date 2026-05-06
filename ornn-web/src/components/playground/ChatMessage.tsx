@@ -70,8 +70,12 @@ function UserMessage({ content }: { content: string }) {
       transition={{ duration: 0.15, ease: "easeOut" }}
       className="flex justify-end"
     >
-      <div className="max-w-[80%] rounded rounded-br-sm border border-accent/30 bg-accent/5 px-4 py-3">
-        <p className="whitespace-pre-wrap font-text text-sm text-strong">
+      {/* User turn — ember-tinted bubble per Forge palette.
+          Background is the warm-soft accent fill; border picks up the
+          ember at low opacity so the bubble reads as warm "speaker"
+          contrasted against the assistant's cool card. */}
+      <div className="max-w-[80%] rounded-2xl border border-accent/30 bg-warning-soft px-4 py-2.5">
+        <p className="whitespace-pre-wrap font-text text-[15px] leading-7 text-strong">
           {content}
         </p>
       </div>
@@ -98,10 +102,13 @@ function AssistantMessage({
       transition={{ duration: 0.15, ease: "easeOut" }}
       className="flex justify-start"
     >
-      <div className="max-w-[85%] space-y-3">
+      <div className="max-w-[88%] space-y-3">
         {content && (
-          <div className="bg-card rounded rounded-bl-sm px-4 py-3">
-            <div className="markdown-body text-sm">
+          /* Soft bubble — distinct from the user's tinted bubble but
+             quieter (subtle border + card bg), so the assistant turn
+             reads as a "speaker" without competing for attention. */
+          <div className="rounded-2xl border border-subtle bg-card px-4 py-3">
+            <div className="markdown-body text-[15px] leading-7">
               <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
                 rehypePlugins={[rehypeSanitize, rehypeHighlight]}
@@ -109,7 +116,7 @@ function AssistantMessage({
                 {content}
               </ReactMarkdown>
               {isStreaming && (
-                <span className="inline-block h-4 w-1.5 animate-blink bg-accent/80" />
+                <span className="ml-0.5 inline-block h-[18px] w-[2px] -mb-1 animate-blink bg-accent/80 align-text-bottom" />
               )}
             </div>
           </div>

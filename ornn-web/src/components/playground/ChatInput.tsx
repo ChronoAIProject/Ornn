@@ -84,49 +84,55 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
   const canSend = value.trim().length > 0 && !disabled;
 
   return (
-    <div className="px-2 pb-2 pt-2">
-      {/* Input row — model selection lives in the page header (ModelPicker). */}
-      <div className="flex items-end gap-2">
-        <div className="relative flex-1">
-          <textarea
-            ref={textareaRef}
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
-            onKeyDown={handleKeyDown}
-            disabled={disabled}
-            placeholder={
-              customPlaceholder
-                ?? (disabled
-                  ? isStreaming
-                    ? t("chatInput.generating")
-                    : t("chatInput.awaitingTool")
-                  : t("chatInput.placeholder"))
-            }
-            rows={1}
-            className="neon-input w-full resize-none rounded px-4 py-3 pr-12 font-text text-sm text-strong placeholder:text-meta/50 disabled:opacity-50"
-            style={{ maxHeight: `${MAX_HEIGHT_PX}px` }}
-            aria-label="Chat message input"
-          />
-        </div>
+    <div className="px-1 pb-2 pt-2">
+      {/* ChatGPT-style composer — single rounded surface, send button
+          docked inside on the right. Ember focus ring marks the active
+          state without competing with the conversation above. */}
+      <div
+        className={`relative flex items-end gap-2 rounded-2xl border bg-card px-3 py-2 transition-colors ${
+          disabled
+            ? "border-subtle/60"
+            : "border-subtle focus-within:border-accent/60 focus-within:ring-1 focus-within:ring-accent/30"
+        }`}
+      >
+        <textarea
+          ref={textareaRef}
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={handleKeyDown}
+          disabled={disabled}
+          placeholder={
+            customPlaceholder
+              ?? (disabled
+                ? isStreaming
+                  ? t("chatInput.generating")
+                  : t("chatInput.awaitingTool")
+                : t("chatInput.placeholder"))
+          }
+          rows={1}
+          className="flex-1 resize-none bg-transparent px-1.5 py-1.5 font-text text-[15px] leading-6 text-strong placeholder:text-meta/60 focus:outline-none disabled:opacity-50"
+          style={{ maxHeight: `${MAX_HEIGHT_PX}px` }}
+          aria-label="Chat message input"
+        />
 
         {isStreaming ? (
           <button
             type="button"
             onClick={onAbort}
-            className="cta-letterpress cta-letterpress--ghost cursor-pointer rounded-sm border border-danger/50 bg-card px-4 py-3 font-text text-sm font-semibold text-danger hover:border-danger"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-danger/50 bg-card text-danger transition-colors hover:border-danger"
             aria-label={t("chatInput.stopGeneration")}
           >
-            <StopIcon className="h-5 w-5" />
+            <StopIcon className="h-4 w-4" />
           </button>
         ) : (
           <button
             type="button"
             onClick={handleSend}
             disabled={!canSend}
-            className={`cta-letterpress cta-letterpress--ghost cursor-pointer rounded-sm border bg-card px-4 py-3 font-text text-sm font-semibold ${
+            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-colors ${
               canSend
-                ? "border-accent/50 text-accent hover:border-accent"
-                : "border-meta/20 text-meta/40 cursor-not-allowed"
+                ? "bg-accent text-page hover:bg-accent/90"
+                : "cursor-not-allowed bg-elevated text-meta/40"
             }`}
             aria-label={t("chatInput.sendMessage")}
           >
