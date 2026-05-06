@@ -61,16 +61,17 @@ function isRuntimeBased(metadata: Record<string, unknown> | null): boolean {
   return category === "runtime-based" || category === "mixed";
 }
 
-/** Pre-token streaming indicator. */
+/** Pre-token streaming indicator — three pulsing ember dots, spring-in. */
 function ThinkingBubble() {
   return (
     <motion.div
-      initial={{ opacity: 0, y: 6 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.15, ease: "easeOut" }}
+      initial={{ opacity: 0, y: 8, scale: 0.98 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.96 }}
+      transition={{ type: "spring", stiffness: 320, damping: 28, mass: 0.6 }}
       className="flex justify-start"
     >
-      <div className="rounded rounded-bl-sm bg-card px-4 py-3">
+      <div className="rounded-2xl border border-subtle bg-card px-4 py-3">
         <div className="flex items-center gap-1.5" aria-label="Generating">
           <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent/70" style={{ animationDelay: "0ms" }} />
           <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent/70" style={{ animationDelay: "150ms" }} />

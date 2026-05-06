@@ -23,10 +23,24 @@ export interface ChatMessageProps {
   isStreaming?: boolean;
 }
 
+/**
+ * Message entrance choreography. Tuned for chat: each new turn lands
+ * with a brief rise + soft scale-in (98 → 100%) on a low-stiffness
+ * spring. The values are intentionally small — a chat transcript
+ * crossfading wildly between turns is distracting, but a fully-static
+ * pop-in feels mechanical. This sits in the middle.
+ */
 const messageVariants = {
-  hidden: { opacity: 0, y: 10 },
-  visible: { opacity: 1, y: 0 },
+  hidden: { opacity: 0, y: 8, scale: 0.98 },
+  visible: { opacity: 1, y: 0, scale: 1 },
 };
+
+const messageTransition = {
+  type: "spring",
+  stiffness: 320,
+  damping: 28,
+  mass: 0.6,
+} as const;
 
 export function ChatMessage({
   message,
@@ -67,7 +81,7 @@ function UserMessage({ content }: { content: string }) {
       variants={messageVariants}
       initial="hidden"
       animate="visible"
-      transition={{ duration: 0.15, ease: "easeOut" }}
+      transition={messageTransition}
       className="flex justify-end"
     >
       {/* User turn — ember-tinted bubble per Forge palette.
@@ -99,7 +113,7 @@ function AssistantMessage({
       variants={messageVariants}
       initial="hidden"
       animate="visible"
-      transition={{ duration: 0.15, ease: "easeOut" }}
+      transition={messageTransition}
       className="flex justify-start"
     >
       <div className="max-w-[88%] space-y-3">
@@ -148,7 +162,7 @@ function ToolResultMessage({
       variants={messageVariants}
       initial="hidden"
       animate="visible"
-      transition={{ duration: 0.15, ease: "easeOut" }}
+      transition={messageTransition}
       className="flex justify-start"
     >
       <div

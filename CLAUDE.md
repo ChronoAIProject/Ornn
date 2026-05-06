@@ -325,10 +325,11 @@ Issue tracker: https://github.com/ChronoAIProject/Ornn/issues
 2. **Default assignee:** every issue MUST be assigned to `chronoai-shining`.
 3. **Title prefix:** every issue title MUST start with a category tag — one of `[Bug]`, `[Feature]`, `[CI/CD]`, `[Docs]`, `[Misc]`. Example: `[Feature] Skill composition & chaining`.
 4. **No duplicates.** Before creating a new issue, search the existing issue list. If duplicates are found, keep one and close the others with a comment `Duplicate of #N`.
-5. **PR ↔ issue linkage:**
-   - Every PR MUST tag the issue(s) it resolves in the PR body (use `Closes #123` / `Fixes #123`).
-   - When the PR merges, all tagged issues MUST be closed.
-   - If a PR solves something with no existing issue, create the issue first, then tag it in the PR.
+5. **PR ↔ issue linkage — load-bearing, no exceptions.**
+   - Every PR MUST link to at least one GitHub issue. The PR body uses `Closes #N` / `Fixes #N` (or `Resolves #N`) so the issue auto-closes on merge — do not link with prose like "this addresses #N", that does NOT auto-close.
+   - **Issue-first workflow.** Before opening a PR, check whether a matching issue already exists. If one exists: link it. If none exists: **STOP, create the issue first** with the right `[Bug]` / `[Feature]` / `[CI/CD]` / `[Docs]` / `[Misc]` title prefix, default assignee, and at least one topic label, **then** open the PR linking it. A PR without an issue link must be amended with one before merge.
+   - When the PR merges, all linked issues MUST be closed (the `Closes` / `Fixes` keyword takes care of this automatically).
+   - This rule applies to **every** PR — features, bugfixes, refactors, docs, CI/CD, infra, design polish. There are no "trivial enough to skip the issue" exceptions.
 6. **Cross-references:** when issues are related or have an execution order, add explicit references in the issue body (`Depends on #X`, `Blocks #Y`, `Related to #Z`).
 7. **Milestones for large work:** any large feature or code change MUST have a milestone, and all related issues MUST be attached to it.
 8. **Milestone deadlines:** every milestone MUST have a `due_on` date.
