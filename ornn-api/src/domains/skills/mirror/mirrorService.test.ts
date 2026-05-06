@@ -25,16 +25,26 @@ import type { SkillService } from "../crud/service";
 import type { SkillDocument } from "../../../shared/types/index";
 import type { PlatformSettingsService } from "../../platform/service";
 
-/** Stub for the PlatformSettingsService dep — returns a fixed repo. */
+/** Stub for the PlatformSettingsService dep — returns a fixed mirror config. */
 function makeFakePlatformSettings(
-  cfg: { owner: string; repo: string; branch: string } = {
-    owner: "ChronoAIProject",
-    repo: "ornn-skills",
-    branch: "main",
-  },
+  overrides: {
+    enabled?: boolean;
+    owner?: string;
+    repo?: string;
+    branch?: string;
+  } = {},
 ): PlatformSettingsService {
+  const cfg = {
+    enabled: overrides.enabled ?? true,
+    owner: overrides.owner ?? "ChronoAIProject",
+    repo: overrides.repo ?? "ornn-skills",
+    branch: overrides.branch ?? "main",
+    appId: "12345",
+    installationId: "67890",
+    appPrivateKey: "test-key",
+  };
   return {
-    getGithubMirrorRepo: mock(async () => cfg),
+    getGithubMirrorConfig: mock(async () => cfg),
   } as unknown as PlatformSettingsService;
 }
 
@@ -179,16 +189,13 @@ describe("MirrorService.isEligible", () => {
 describe("MirrorService disabled", () => {
   it("syncSkill is a no-op when enabled=false (no calls anywhere)", async () => {
     const { github, calls } = makeFakeGithub();
-    const svc = new MirrorService(
-      {
-        github,
-        skillRepo: makeFakeRepo([makeSkill()]),
-        skillService: makeFakeSkillService({}),
-        ornnPublicOrigin: "https://example",
-        platformSettingsService: makeFakePlatformSettings(),
-      },
-      false,
-    );
+    const svc = new MirrorService({
+      githubClientForTest: github,
+      skillRepo: makeFakeRepo([makeSkill()]),
+      skillService: makeFakeSkillService({}),
+      ornnPublicOrigin: "https://example",
+      platformSettingsService: makeFakePlatformSettings({ enabled: false }),
+    });
     await svc.syncSkill("guid-1");
     expect(calls.blobs.length).toBe(0);
     expect(calls.trees.length).toBe(0);
@@ -197,16 +204,13 @@ describe("MirrorService disabled", () => {
   });
   it("reconcileAll returns zero counts when enabled=false", async () => {
     const { github } = makeFakeGithub();
-    const svc = new MirrorService(
-      {
-        github,
-        skillRepo: makeFakeRepo([makeSkill()]),
-        skillService: makeFakeSkillService({}),
-        ornnPublicOrigin: "https://example",
-        platformSettingsService: makeFakePlatformSettings(),
-      },
-      false,
-    );
+    const svc = new MirrorService({
+      githubClientForTest: github,
+      skillRepo: makeFakeRepo([makeSkill()]),
+      skillService: makeFakeSkillService({}),
+      ornnPublicOrigin: "https://example",
+      platformSettingsService: makeFakePlatformSettings({ enabled: false }),
+    });
     const result = await svc.reconcileAll();
     expect(result).toEqual({ added: 0, updated: 0, removed: 0, unchanged: 0 });
   });
@@ -222,18 +226,15 @@ describe("MirrorService privacy regression", () => {
       sharedWithUsers: ["u2", "u3"],
     });
     const { github, calls } = makeFakeGithub();
-    const svc = new MirrorService(
-      {
-        github,
-        skillRepo: makeFakeRepo([publicSkill, privateSkill]),
-        skillService: makeFakeSkillService({
-          "g-pub": { "SKILL.md": "# pub" },
-        }),
-        ornnPublicOrigin: "https://example",
-        platformSettingsService: makeFakePlatformSettings(),
-      },
-      true,
-    );
+    const svc = new MirrorService({
+      githubClientForTest: github,
+      skillRepo: makeFakeRepo([publicSkill, privateSkill]),
+      skillService: makeFakeSkillService({
+        "g-pub": { "SKILL.md": "# pub" },
+      }),
+      ornnPublicOrigin: "https://example",
+      platformSettingsService: makeFakePlatformSettings(),
+    });
     await svc.reconcileAll();
     // Verify no blob payload contains the private skill's name as a path prefix.
     for (const tree of calls.trees) {
@@ -248,16 +249,13 @@ describe("MirrorService privacy regression", () => {
   it("publishSkill on a private skill is a no-op (caller passed wrong guid)", async () => {
     const skill = makeSkill({ guid: "g-priv", isPrivate: true });
     const { github, calls } = makeFakeGithub();
-    const svc = new MirrorService(
-      {
-        github,
-        skillRepo: makeFakeRepo([skill]),
-        skillService: makeFakeSkillService({}),
-        ornnPublicOrigin: "https://example",
-        platformSettingsService: makeFakePlatformSettings(),
-      },
-      true,
-    );
+    const svc = new MirrorService({
+      githubClientForTest: github,
+      skillRepo: makeFakeRepo([skill]),
+      skillService: makeFakeSkillService({}),
+      ornnPublicOrigin: "https://example",
+      platformSettingsService: makeFakePlatformSettings(),
+    });
     await svc.publishSkill("g-priv");
     expect(calls.blobs.length).toBe(0);
     expect(calls.commits.length).toBe(0);
@@ -270,16 +268,13 @@ describe("MirrorService privacy regression", () => {
       { path: "flip/SKILL.md", mode: "100644", type: "blob", sha: "old-sha" },
     ];
     const { github, calls } = makeFakeGithub({ currentTree });
-    const svc = new MirrorService(
-      {
-        github,
-        skillRepo: makeFakeRepo([skill]),
-        skillService: makeFakeSkillService({}),
-        ornnPublicOrigin: "https://example",
-        platformSettingsService: makeFakePlatformSettings(),
-      },
-      true,
-    );
+    const svc = new MirrorService({
+      githubClientForTest: github,
+      skillRepo: makeFakeRepo([skill]),
+      skillService: makeFakeSkillService({}),
+      ornnPublicOrigin: "https://example",
+      platformSettingsService: makeFakePlatformSettings(),
+    });
     await svc.syncSkill("g-flip");
     // Expect one tree create with a sha:null entry for flip/SKILL.md.
     expect(calls.trees.length).toBe(1);
@@ -320,16 +315,13 @@ describe("MirrorService idempotency", () => {
       },
     ];
     const { github, calls } = makeFakeGithub({ currentTree });
-    const svc = new MirrorService(
-      {
-        github,
-        skillRepo: makeFakeRepo([skill]),
-        skillService: makeFakeSkillService({ g1: skillFiles }),
-        ornnPublicOrigin: "https://example",
-        platformSettingsService: makeFakePlatformSettings(),
-      },
-      true,
-    );
+    const svc = new MirrorService({
+      githubClientForTest: github,
+      skillRepo: makeFakeRepo([skill]),
+      skillService: makeFakeSkillService({ g1: skillFiles }),
+      ornnPublicOrigin: "https://example",
+      platformSettingsService: makeFakePlatformSettings(),
+    });
     const result = await svc.reconcileAll();
     // SKILL.md should be unchanged. The two READMEs (skill + repo) embed
     // a timestamp / content that won't match the placeholder shas, so

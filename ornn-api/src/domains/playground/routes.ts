@@ -5,7 +5,6 @@
  */
 
 import { Hono } from "hono";
-import { streamSSE } from "hono/streaming";
 import { z } from "zod";
 import type { PlaygroundChatService, PlaygroundChatRequest } from "./chatService";
 import type { SkillService } from "../skills/crud/service";
@@ -127,65 +126,120 @@ export function createPlaygroundRoutes(config: PlaygroundRoutesConfig): Hono<{ V
           });
       }
 
-      c.header("Cache-Control", "no-cache");
-      c.header("Connection", "keep-alive");
-      c.header("X-Accel-Buffering", "no");
+      // Outcome tracks whether the run reached the skill-side. Skill
+      // errors (script ran + threw) charge; system errors (LLM API
+      // timeout, infra 5xx) do not. Default `system_error` is the
+      // safe fallback — only flips to `success` if the stream
+      // completes cleanly.
+      let outcome: ChargeOutcome = "system_error";
 
-      return streamSSE(c, async (stream) => {
-        const keepAlive = setInterval(() => {
-          stream.writeSSE({ data: "", event: "keepalive" }).catch(() => {});
-        }, keepAliveIntervalMs);
+      const encoder = new TextEncoder();
+      const signal = c.req.raw.signal;
+      const chatRequest: PlaygroundChatRequest = parsed;
 
-        // Outcome tracks whether the run reached the skill-side. Skill
-        // errors (script ran + threw) charge; system errors (LLM API
-        // timeout, infra 5xx) do not. Default `system_error` is the
-        // safe fallback — only flips to `success` if the stream
-        // completes cleanly.
-        let outcome: ChargeOutcome = "system_error";
-
-        try {
-          const signal = c.req.raw.signal;
-          const chatRequest: PlaygroundChatRequest = parsed;
-
-          for await (const event of chatService.chat(authCtx.userId, chatRequest, signal, {
-            modelId: resolvedModelId,
-          })) {
-            await stream.writeSSE({ data: JSON.stringify(event) });
-            // The chat service emits a `tool-result` once the sandbox
-            // finishes. Even if the script errored, the run reached
-            // the skill — that's a chargeable outcome per #250.
-            if (event.type === "tool-result") outcome = "skill_error";
-            // A clean finish flips the bucket to `success`.
-            if (event.type === "finish") {
-              const reason = (event as { finishReason?: string }).finishReason;
-              if (reason === "stop") outcome = "success";
+      // Manual ReadableStream rather than Hono's `streamSSE` helper
+      // because the helper batches `writeSSE` calls under Bun. Critical
+      // detail: `start` MUST be synchronous and the async pump runs in
+      // a deferred task — if `start` is `async`, Bun (and the WHATWG
+      // streams spec on most engines) holds response headers until the
+      // start promise resolves, defeating token-by-token streaming.
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          let closed = false;
+          const closeOnce = () => {
+            if (closed) return;
+            closed = true;
+            try {
+              controller.close();
+            } catch {
+              /* already closed */
             }
-          }
-        } catch (err) {
-          const message = err instanceof Error ? err.message : "Chat stream failed";
-          logger.error({ userId: authCtx.userId, err: message }, "Chat stream error");
-          await stream.writeSSE({
-            data: JSON.stringify({ type: "error", message }),
-          });
-        } finally {
-          clearInterval(keepAlive);
-          // Charge on completion. Admin bypass + outcome filtering
-          // handled inside the service. Errors here must not surface
-          // to the caller — the response already streamed.
-          await quotaService
-            .chargeOnCompletion({
-              userId: authCtx.userId,
-              permissions: authCtx.permissions,
-              surface: "playground",
-              outcome,
-            })
-            .catch((err) => {
-              logger.warn(
-                { userId: authCtx.userId, err: (err as Error).message },
-                "Quota charge after playground chat failed",
-              );
-            });
-        }
+          };
+          const write = (frame: string) => {
+            if (closed) return;
+            try {
+              controller.enqueue(encoder.encode(frame));
+            } catch {
+              /* writer gone — caller aborted */
+              closed = true;
+            }
+          };
+          const writeEvent = (payload: unknown) => {
+            write(`data: ${JSON.stringify(payload)}\n\n`);
+          };
+
+          // Pre-flush a fat comment frame to force every layer in the
+          // chain (Bun's response buffer, NyxID's reqwest stream, the
+          // browser's `response.body` reader) to commit headers + start
+          // delivering chunks. Some intermediaries hold output until
+          // ~2-4KB lands or until they think the response is "real".
+          // SSE comments (lines starting with `:`) are spec-mandated
+          // ignores in the browser parser, so this is invisible to the
+          // application.
+          const padding = " ".repeat(2048);
+          write(`: stream-open ${Date.now()} ${padding}\n\n`);
+
+          // Keepalive to defeat idle-timeout proxies during LLM warmup.
+          const keepAlive = setInterval(() => {
+            write(`: keepalive ${Date.now()}\n\n`);
+          }, keepAliveIntervalMs);
+
+          const onAbort = () => {
+            clearInterval(keepAlive);
+            closeOnce();
+          };
+          signal.addEventListener("abort", onAbort);
+
+          // Async pump — runs as a deferred task so `start` returns
+          // synchronously. Bun commits response headers as soon as the
+          // first byte is enqueued (the `: stream-open` above).
+          (async () => {
+            try {
+              for await (const event of chatService.chat(authCtx.userId, chatRequest, signal, {
+                modelId: resolvedModelId,
+              })) {
+                writeEvent(event);
+                if (event.type === "tool-result") outcome = "skill_error";
+                if (event.type === "finish") {
+                  const reason = (event as { finishReason?: string }).finishReason;
+                  if (reason === "stop") outcome = "success";
+                }
+              }
+            } catch (err) {
+              const message = err instanceof Error ? err.message : "Chat stream failed";
+              logger.error({ userId: authCtx.userId, err: message }, "Chat stream error");
+              writeEvent({ type: "error", message });
+            } finally {
+              signal.removeEventListener("abort", onAbort);
+              clearInterval(keepAlive);
+              closeOnce();
+              await quotaService
+                .chargeOnCompletion({
+                  userId: authCtx.userId,
+                  permissions: authCtx.permissions,
+                  surface: "playground",
+                  outcome,
+                })
+                .catch((err) => {
+                  logger.warn(
+                    { userId: authCtx.userId, err: (err as Error).message },
+                    "Quota charge after playground chat failed",
+                  );
+                });
+            }
+          })();
+        },
+      });
+
+      return new Response(body, {
+        status: 200,
+        headers: {
+          "Content-Type": "text/event-stream; charset=utf-8",
+          "Cache-Control": "no-cache, no-transform",
+          Connection: "keep-alive",
+          // Tell intermediate proxies (nginx, NyxID) NOT to buffer.
+          "X-Accel-Buffering": "no",
+        },
       });
     },
   );

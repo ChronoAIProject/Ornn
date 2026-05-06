@@ -10,8 +10,15 @@ import { streamChat, type StreamHandle } from "@/services/playgroundStreamApi";
 import type { PlaygroundChatEvent, FileOutput } from "@/types/playground";
 import { track } from "@/lib/analytics";
 
-/** Minimum interval (ms) between text-delta flushes to avoid re-render storms. */
-const TOKEN_FLUSH_INTERVAL_MS = 50;
+/**
+ * Token flush mode.
+ *
+ * Was previously 50ms batching to avoid re-render storms, but that
+ * coalesced ~3 tokens per render at typical LLM speeds — visibly chunky.
+ * Set to 0 for true per-token rendering. Re-enable batching here if a
+ * faster LLM (>200 tok/sec) ever overwhelms React's reconciler.
+ */
+const TOKEN_FLUSH_INTERVAL_MS = 0;
 
 /** Trigger a browser file download from a base64-encoded FileOutput. */
 function triggerFileDownload(file: FileOutput) {
@@ -58,13 +65,20 @@ export function usePlaygroundChat() {
 
       switch (event.type) {
         case "text-delta":
-          // Batch token updates to reduce re-renders
-          tokenBufferRef.current += event.delta;
-          if (flushTimerRef.current === null) {
-            flushTimerRef.current = setTimeout(
-              flushTokenBuffer,
-              TOKEN_FLUSH_INTERVAL_MS,
-            );
+          // Per-token render — synchronous append for typewriter feel.
+          // If `TOKEN_FLUSH_INTERVAL_MS` ever goes back > 0 we re-enable
+          // the buffer + timer below; for now the buffer path is just
+          // a fallback for tools that flush mid-message.
+          if (TOKEN_FLUSH_INTERVAL_MS === 0) {
+            s.appendAssistantDelta(event.delta);
+          } else {
+            tokenBufferRef.current += event.delta;
+            if (flushTimerRef.current === null) {
+              flushTimerRef.current = setTimeout(
+                flushTokenBuffer,
+                TOKEN_FLUSH_INTERVAL_MS,
+              );
+            }
           }
           break;
 

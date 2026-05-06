@@ -146,8 +146,21 @@ export function auditMiddleware(
     // Capture response body lazily. We clone the response so we don't
     // drain the stream the client is still reading. When `keepBodies`
     // is false we skip the clone+read entirely.
+    //
+    // SSE responses are excluded: `await clone().text()` here would
+    // wait for the entire stream to drain before this middleware
+    // returns, which Hono interprets as "response not ready yet" and
+    // holds the response from the client. Net effect: the client
+    // receives all SSE events in one batch at the end instead of
+    // token-by-token. Audits for streaming endpoints record metadata
+    // only (status, duration, route, request body); the response
+    // body is intentionally null for these — capturing N thousand
+    // tokens per chat into Mongo / MinIO would be costly and not
+    // particularly useful.
+    const resContentType = c.res.headers.get("content-type") ?? "";
+    const isSseResponse = resContentType.toLowerCase().includes("text/event-stream");
     let capturedResText: string | null = null;
-    if (keepBodies) {
+    if (keepBodies && !isSseResponse) {
       try {
         capturedResText = await c.res.clone().text();
       } catch (err) {

@@ -10,14 +10,14 @@
  *      public skill page.
  *
  *   2. Admin write — `POST /github/repo`
- *      Patch the mirror coords at runtime. Refuses to abandon an
+ *      Patch the full mirror config at runtime: kill switch, repo
+ *      coords, GitHub App credentials. Refuses to abandon an
  *      already-mirrored repo unless `confirmAbandonOldRepo: true` is
  *      explicitly passed in the body. Clears every skill's
- *      `mirrorSync` stamp on success — those stamps point at commit
- *      SHAs in the old repo, so the audit links would be wrong if we
- *      kept them; the next reconcile re-stamps everything against the
- *      new repo. The configmap-side enable flag is intentionally NOT
- *      exposed here — it stays an ops-controlled kill switch.
+ *      `mirrorSync` stamp on owner/repo change — those stamps point
+ *      at commit SHAs in the old repo, so the audit links would be
+ *      wrong if we kept them; the next reconcile re-stamps everything
+ *      against the new repo.
  *
  *   3. Admin operations — `POST /admin/mirror/reconcile`,
  *      `GET /admin/mirror/status`
@@ -37,6 +37,7 @@ import {
   requirePermission,
 } from "../../../middleware/nyxidAuth";
 import { AppError } from "../../../shared/types/index";
+import { isMidMaskSentinel, midMaskSecret } from "../../../infra/crypto";
 import type { MirrorService, ReconcileResult } from "./mirrorService";
 import type { PlatformSettingsService } from "../../platform/service";
 import type { SkillRepository } from "../crud/repository";
@@ -55,18 +56,20 @@ const OWNER_RE = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/;
 const REPO_RE = /^[A-Za-z0-9._-]{1,100}$/;
 // eslint-disable-next-line no-control-regex -- intentional: rejects branch names containing C0 control chars or DEL.
 const BRANCH_RE = /^[^\x00-\x1f\x7f]{1,250}$/;
+const APP_ID_RE = /^[0-9]{1,15}$/;
+const INSTALLATION_ID_RE = /^[0-9]{1,20}$/;
 
 export interface MirrorRoutesConfig {
   /**
-   * The mirror service. Optional so deployments with the feature
-   * disabled can still mount the route — admin ops return 503 in that
-   * case rather than 404, so operators get a clear error message.
+   * The mirror service. Always provided — runtime config (not boot-
+   * time env) decides whether ops actually do anything. The service
+   * self-gates via `getActiveClient()` and no-ops when disabled or
+   * incomplete.
    */
-  mirrorService?: MirrorService;
+  mirrorService: MirrorService;
   /**
-   * Platform-settings service for runtime-mutable mirror coords.
-   * Required even when `mirrorService` is undefined so the public GET
-   * still works (returns the configmap defaults).
+   * Platform-settings service for runtime-mutable mirror config.
+   * Source of truth for enabled + repo coords + App credentials.
    */
   platformSettingsService: PlatformSettingsService;
   /**
@@ -74,9 +77,6 @@ export interface MirrorRoutesConfig {
    * status endpoint's mirror-counts aggregation.
    */
   skillRepo: SkillRepository;
-  /** True iff the mirror feature is enabled in this deployment. Surfaced on
-   * the public GET so the frontend can hide install snippets when off. */
-  mirrorEnabled: boolean;
 }
 
 interface ReconcileRunState {
@@ -91,7 +91,7 @@ interface ReconcileRunState {
 export function createMirrorRoutes(
   config: MirrorRoutesConfig,
 ): Hono<{ Variables: AuthVariables }> {
-  const { mirrorService, platformSettingsService, skillRepo, mirrorEnabled } = config;
+  const { mirrorService, platformSettingsService, skillRepo } = config;
   const app = new Hono<{ Variables: AuthVariables }>();
   const auth = nyxidAuthMiddleware();
 
@@ -111,18 +111,19 @@ export function createMirrorRoutes(
   /**
    * Public-read mirror coordinates. Used by the SkillDetailPage install
    * snippet — anonymous viewers must be able to render `npx skills add
-   * <owner>/<repo>/<skill>`. The response always includes the current
-   * coords (DB-or-configmap fallback) plus the `enabled` flag so the
-   * frontend can hide the snippet when the feature is off.
+   * <owner>/<repo>/<skill>`. The response includes the current coords
+   * plus the `enabled` flag so the frontend can hide the snippet when
+   * the feature is off. Sensitive fields (App credentials) are NOT
+   * surfaced here.
    */
   app.get("/github/repo", async (c) => {
-    const cfg = await platformSettingsService.getGithubMirrorRepo();
+    const cfg = await platformSettingsService.getGithubMirrorConfig();
     return c.json({
       data: {
         owner: cfg.owner,
         repo: cfg.repo,
         branch: cfg.branch,
-        enabled: mirrorEnabled,
+        enabled: cfg.enabled,
       },
       error: null,
     });
@@ -131,14 +132,16 @@ export function createMirrorRoutes(
   // ────────────────────────── Admin: POST /github/repo ──────────────────────────
 
   /**
-   * Admin patch of the mirror coordinates. When the new coords would
-   * abandon a non-empty mirror, the body MUST also include
-   * `confirmAbandonOldRepo: true` — destructive enough to deserve an
-   * explicit double-tap, not destructive enough to refuse outright.
+   * Admin patch of the full mirror config. Accepts any subset of:
+   *   - `enabled` (bool kill switch)
+   *   - `owner` / `repo` / `branch` (repo coords; abandon-confirm
+   *     applies on owner/repo change)
+   *   - `appId` / `installationId` (string)
+   *   - `appPrivateKey` (string; bullet character is the
+   *     "preserve existing" sentinel — round-tripping the mid-masked
+   *     value preserves the stored key)
    *
-   * On success, every skill's `mirrorSync` stamp is cleared (old commit
-   * SHAs would no longer resolve in the new repo). The next reconcile
-   * re-stamps everything against the new target.
+   * Fields not present in the body are preserved.
    */
   app.post(
     "/github/repo",
@@ -146,31 +149,94 @@ export function createMirrorRoutes(
     requirePermission("ornn:admin:skill"),
     async (c) => {
       const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
-      const owner = typeof body.owner === "string" ? body.owner.trim() : "";
-      const repo = typeof body.repo === "string" ? body.repo.trim() : "";
-      const branch = typeof body.branch === "string" ? body.branch.trim() : "";
+      const current = await platformSettingsService.getGithubMirrorConfig();
       const confirmAbandonOldRepo = body.confirmAbandonOldRepo === true;
 
-      if (!OWNER_RE.test(owner)) {
-        throw AppError.badRequest(
-          "INVALID_OWNER",
-          "'owner' must be 1–39 chars of letters/digits/dashes, no leading/trailing dash.",
-        );
-      }
-      if (!REPO_RE.test(repo)) {
-        throw AppError.badRequest(
-          "INVALID_REPO",
-          "'repo' must be 1–100 chars of letters/digits/dot/dash/underscore.",
-        );
-      }
-      if (!BRANCH_RE.test(branch)) {
-        throw AppError.badRequest(
-          "INVALID_BRANCH",
-          "'branch' must be a non-empty string up to 250 chars, no control chars.",
-        );
+      // ---- enabled ----
+      let enabled = current.enabled;
+      if ("enabled" in body) {
+        if (typeof body.enabled !== "boolean") {
+          throw AppError.badRequest("INVALID_SETTING", "'enabled' must be a boolean.");
+        }
+        enabled = body.enabled;
       }
 
-      const current = await platformSettingsService.getGithubMirrorRepo();
+      // ---- owner / repo / branch ----
+      let owner = current.owner;
+      let repo = current.repo;
+      let branch = current.branch;
+      if ("owner" in body) {
+        const v = typeof body.owner === "string" ? body.owner.trim() : "";
+        if (v.length > 0 && !OWNER_RE.test(v)) {
+          throw AppError.badRequest(
+            "INVALID_OWNER",
+            "'owner' must be 1–39 chars of letters/digits/dashes, no leading/trailing dash.",
+          );
+        }
+        owner = v;
+      }
+      if ("repo" in body) {
+        const v = typeof body.repo === "string" ? body.repo.trim() : "";
+        if (v.length > 0 && !REPO_RE.test(v)) {
+          throw AppError.badRequest(
+            "INVALID_REPO",
+            "'repo' must be 1–100 chars of letters/digits/dot/dash/underscore.",
+          );
+        }
+        repo = v;
+      }
+      if ("branch" in body) {
+        const v = typeof body.branch === "string" ? body.branch.trim() : "";
+        if (v.length > 0 && !BRANCH_RE.test(v)) {
+          throw AppError.badRequest(
+            "INVALID_BRANCH",
+            "'branch' must be a non-empty string up to 250 chars, no control chars.",
+          );
+        }
+        branch = v;
+      }
+
+      // ---- App credentials ----
+      let appId = current.appId;
+      let installationId = current.installationId;
+      let appPrivateKey = current.appPrivateKey;
+      if ("appId" in body) {
+        const v = typeof body.appId === "string" ? body.appId.trim() : "";
+        if (v.length > 0 && !APP_ID_RE.test(v)) {
+          throw AppError.badRequest(
+            "INVALID_SETTING",
+            "'appId' must be 1–15 digits.",
+          );
+        }
+        appId = v;
+      }
+      if ("installationId" in body) {
+        const v = typeof body.installationId === "string" ? body.installationId.trim() : "";
+        if (v.length > 0 && !INSTALLATION_ID_RE.test(v)) {
+          throw AppError.badRequest(
+            "INVALID_SETTING",
+            "'installationId' must be 1–20 digits.",
+          );
+        }
+        installationId = v;
+      }
+      if ("appPrivateKey" in body) {
+        const v = body.appPrivateKey;
+        if (typeof v !== "string") {
+          throw AppError.badRequest(
+            "INVALID_SETTING",
+            "'appPrivateKey' must be a string (empty = clear).",
+          );
+        }
+        if (isMidMaskSentinel(v)) {
+          // Round-trip of the mid-masked display value — keep stored key.
+          appPrivateKey = current.appPrivateKey;
+        } else {
+          appPrivateKey = v;
+        }
+      }
+
+      // Abandon-confirm only triggers on owner/repo change.
       const wouldAbandonOldRepo = owner !== current.owner || repo !== current.repo;
       if (wouldAbandonOldRepo) {
         const counts = await skillRepo.getMirrorCounts();
@@ -185,8 +251,16 @@ export function createMirrorRoutes(
         }
       }
 
-      await platformSettingsService.patch({
-        githubMirror: { owner, repo, branch },
+      const updated = await platformSettingsService.patch({
+        githubMirror: {
+          enabled,
+          owner,
+          repo,
+          branch,
+          appId,
+          installationId,
+          appPrivateKey,
+        },
       });
       if (wouldAbandonOldRepo) {
         // Existing stamps point at commit SHAs in the now-abandoned
@@ -199,7 +273,15 @@ export function createMirrorRoutes(
         );
       }
       return c.json({
-        data: { owner, repo, branch, enabled: mirrorEnabled },
+        data: {
+          enabled: updated.githubMirror.enabled,
+          owner: updated.githubMirror.owner,
+          repo: updated.githubMirror.repo,
+          branch: updated.githubMirror.branch,
+          appId: updated.githubMirror.appId,
+          installationId: updated.githubMirror.installationId,
+          appPrivateKey: midMaskSecret(updated.githubMirror.appPrivateKey),
+        },
         error: null,
       });
     },
@@ -224,14 +306,16 @@ export function createMirrorRoutes(
     auth,
     requirePermission("ornn:admin:skill"),
     async (c) => {
-      if (!mirrorService) {
+      const runtime = await mirrorService.getRuntimeState();
+      if (!runtime.enabled || !runtime.configured) {
         return c.json(
           {
             data: null,
             error: {
               code: "MIRROR_DISABLED",
-              message:
-                "GitHub mirror is not enabled in this deployment. Set GITHUB_MIRROR_ENABLED=true and supply credentials.",
+              message: !runtime.enabled
+                ? "GitHub mirror is disabled. Flip the kill switch in the admin UI to enable."
+                : "GitHub mirror is missing required credentials. Set owner/repo/branch + GitHub App credentials in the admin UI.",
             },
           },
           503,
@@ -306,12 +390,9 @@ export function createMirrorRoutes(
 
   /**
    * Snapshot for the admin overview UI. Combines the in-process
-   * reconcile state (most recent run started/finished/duration/result/
-   * error) with the DB-side mirror counts (eligible + synced + lagging
-   * + never-synced + oldest-unsynced timestamp).
-   *
-   * Returns the configured repo coords too so the page header can
-   * render `<owner>/<repo>` without a second round-trip.
+   * reconcile state, the DB-side mirror counts, and the full mirror
+   * config (App private key mid-masked) so the page can render the
+   * settings form pre-populated without a second round-trip.
    */
   app.get(
     "/admin/mirror/status",
@@ -320,12 +401,15 @@ export function createMirrorRoutes(
     async (c) => {
       const [counts, cfg] = await Promise.all([
         skillRepo.getMirrorCounts(),
-        platformSettingsService.getGithubMirrorRepo(),
+        platformSettingsService.getGithubMirrorConfig(),
       ]);
       return c.json({
         data: {
-          enabled: mirrorEnabled,
+          enabled: cfg.enabled,
           repo: { owner: cfg.owner, repo: cfg.repo, branch: cfg.branch },
+          appId: cfg.appId,
+          installationId: cfg.installationId,
+          appPrivateKey: midMaskSecret(cfg.appPrivateKey),
           counts: {
             eligible: counts.eligible,
             synced: counts.synced,

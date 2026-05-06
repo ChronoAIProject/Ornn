@@ -24,6 +24,7 @@
 
 import { createHash } from "node:crypto";
 import pino from "pino";
+import { GitHubAppAuth } from "./githubAppAuth";
 import { GitHubMirrorClient, type TreeEntry } from "./githubMirrorClient";
 import type { SkillRepository } from "../crud/repository";
 import type { SkillService } from "../crud/service";
@@ -33,18 +34,25 @@ import type { PlatformSettingsService } from "../../platform/service";
 const logger = pino({ level: "info" }).child({ module: "mirrorService" });
 
 export interface MirrorServiceDeps {
-  github: GitHubMirrorClient;
   skillRepo: SkillRepository;
   skillService: SkillService;
   /** `https://ornn.chrono-ai.fun` (no trailing slash). Used in the per-skill README footer. */
   ornnPublicOrigin: string;
   /**
-   * Source of truth for the mirror's repo coordinates. Read on every
-   * sync so an admin patch via `POST /api/v1/github/repo` takes effect
-   * on the next operation without a redeploy. Cached for 30s by the
-   * service itself, so repeated reads inside one sync are cheap.
+   * Source of truth for the mirror config — kill switch, repo coords,
+   * App credentials. Read on every sync so an admin patch via the admin
+   * UI takes effect on the next operation without a redeploy. Cached
+   * for 30s by the service itself, so repeated reads inside one sync
+   * are cheap.
    */
   platformSettingsService: PlatformSettingsService;
+  /**
+   * Optional override — used by tests to inject a stub
+   * `GitHubMirrorClient` without going through the GitHub App auth
+   * factory. When set, the runtime cred fingerprint check is skipped
+   * and `enabled` from DB still gates whether anything runs.
+   */
+  githubClientForTest?: GitHubMirrorClient;
 }
 
 export interface ReconcileResult {
@@ -55,18 +63,79 @@ export interface ReconcileResult {
 }
 
 /**
- * Test seam — `mirror.enabled` short-circuits the whole class. When
- * `false`, every public method is a no-op so the publish path is safe
- * to call regardless of config.
+ * Mirror service — runtime-aware. Every public method first asks
+ * `PlatformSettingsService` for the current mirror config; if disabled
+ * or missing any of the four App fields, the call no-ops. The active
+ * `GitHubMirrorClient` is cached by credential fingerprint so admin-
+ * pasted creds take effect on the next call without recreating the
+ * client on every blob/tree request.
  */
 export class MirrorService {
-  private readonly enabled: boolean;
+  private cachedClient: { fingerprint: string; client: GitHubMirrorClient } | null = null;
 
-  constructor(
-    private readonly deps: MirrorServiceDeps,
-    enabled: boolean,
-  ) {
-    this.enabled = enabled;
+  constructor(private readonly deps: MirrorServiceDeps) {
+    if (deps.githubClientForTest) {
+      this.cachedClient = { fingerprint: "test", client: deps.githubClientForTest };
+    }
+  }
+
+  /**
+   * Reads current mirror settings; returns the active client if the
+   * mirror is enabled AND every required field is set, else null.
+   * Rebuilds the client when credentials change so admin updates take
+   * effect on the next call.
+   */
+  private async getActiveClient(): Promise<GitHubMirrorClient | null> {
+    if (this.deps.githubClientForTest) {
+      // Test seam: still gate on `enabled` so the disabled-short-circuit
+      // assertion can be exercised without rebuilding the auth chain.
+      const cfg = await this.deps.platformSettingsService.getGithubMirrorConfig();
+      return cfg.enabled ? this.deps.githubClientForTest : null;
+    }
+    const cfg = await this.deps.platformSettingsService.getGithubMirrorConfig();
+    if (!cfg.enabled) return null;
+    if (!cfg.appId || !cfg.installationId || !cfg.appPrivateKey) return null;
+    if (!cfg.owner || !cfg.repo || !cfg.branch) return null;
+    const fp = fingerprintCfg(cfg);
+    if (this.cachedClient && this.cachedClient.fingerprint === fp) {
+      return this.cachedClient.client;
+    }
+    const auth = new GitHubAppAuth({
+      appId: cfg.appId,
+      privateKey: cfg.appPrivateKey,
+      installationId: cfg.installationId,
+    });
+    const client = new GitHubMirrorClient(auth, async () => ({
+      owner: cfg.owner,
+      repo: cfg.repo,
+      defaultBranch: cfg.branch,
+    }));
+    this.cachedClient = { fingerprint: fp, client };
+    logger.info(
+      { owner: cfg.owner, repo: cfg.repo, branch: cfg.branch },
+      "Mirror client (re)initialized from DB-backed config",
+    );
+    return client;
+  }
+
+  /** Plaintext snapshot of the current mirror state — used by routes for status responses. */
+  async getRuntimeState(): Promise<{
+    enabled: boolean;
+    configured: boolean;
+    owner: string;
+    repo: string;
+    branch: string;
+  }> {
+    const cfg = await this.deps.platformSettingsService.getGithubMirrorConfig();
+    const configured =
+      !!cfg.appId && !!cfg.installationId && !!cfg.appPrivateKey && !!cfg.owner && !!cfg.repo;
+    return {
+      enabled: cfg.enabled,
+      configured,
+      owner: cfg.owner,
+      repo: cfg.repo,
+      branch: cfg.branch,
+    };
   }
 
   /** Eligibility predicate. Single source of truth across all paths. */
@@ -86,7 +155,7 @@ export class MirrorService {
    * `syncSkill` clears the stamp here.
    */
   async syncSkill(guid: string): Promise<void> {
-    if (!this.enabled) return;
+    if (!(await this.getActiveClient())) return;
     const skill = await this.deps.skillRepo.findByGuid(guid);
     if (!skill) {
       logger.warn({ guid }, "syncSkill: skill not found, treating as remove");
@@ -114,7 +183,8 @@ export class MirrorService {
    * that actually changed this skill, which is the correct audit link.
    */
   async publishSkill(guid: string): Promise<void> {
-    if (!this.enabled) return;
+    const client = await this.getActiveClient();
+    if (!client) return;
     const skill = await this.deps.skillRepo.findByGuid(guid);
     if (!skill) {
       logger.warn({ guid }, "publishSkill: skill not found, skipping");
@@ -129,7 +199,7 @@ export class MirrorService {
       return;
     }
     const desired = await this.buildSkillFolder(skill);
-    const commit = await this.commitSkillFolderChange(skill.name, desired, "publish");
+    const commit = await this.commitSkillFolderChange(client, skill.name, desired, "publish");
     if (commit) {
       await this.deps.skillRepo.setMirrorSyncState(guid, {
         version: skill.latestVersion,
@@ -144,8 +214,9 @@ export class MirrorService {
    * folder isn't present (idempotent).
    */
   async removeSkill(name: string): Promise<void> {
-    if (!this.enabled) return;
-    await this.commitSkillFolderChange(name, null, "remove");
+    const client = await this.getActiveClient();
+    if (!client) return;
+    await this.commitSkillFolderChange(client, name, null, "remove");
   }
 
   /**
@@ -163,7 +234,8 @@ export class MirrorService {
    * cron is the safety net for incremental-hook failures.
    */
   async reconcileAll(): Promise<ReconcileResult> {
-    if (!this.enabled) {
+    const client = await this.getActiveClient();
+    if (!client) {
       return { added: 0, updated: 0, removed: 0, unchanged: 0 };
     }
 
@@ -187,10 +259,10 @@ export class MirrorService {
     desired.set("README.md", await this.repoReadme());
 
     // Read current state of the mirror.
-    const headCommit = await this.deps.github.getDefaultBranchHead();
+    const headCommit = await client.getDefaultBranchHead();
     const currentEntries: TreeEntry[] = headCommit
-      ? await this.deps.github
-          .getRecursiveTree(await this.deps.github.getCommitTreeSha(headCommit))
+      ? await client
+          .getRecursiveTree(await client.getCommitTreeSha(headCommit))
           .then((entries) => entries.filter((e) => e.type === "blob"))
       : [];
     const currentByPath = new Map<string, TreeEntry>();
@@ -211,7 +283,7 @@ export class MirrorService {
       // existing blob with the same SHA elsewhere in the tree, but
       // GitHub deduplicates blob storage by SHA anyway — uploading is
       // free if the content is identical to one already stored.
-      const newSha = await this.deps.github.createBlob(content);
+      const newSha = await client.createBlob(content);
       changes.push({ path, mode: "100644", type: "blob", sha: newSha });
       const folderName = pathSkillFolder(path);
       if (folderName && skillByName.has(folderName)) touchedSkillNames.add(folderName);
@@ -231,7 +303,7 @@ export class MirrorService {
       return result;
     }
 
-    const commit = await this.writeCommitAndTag({
+    const commit = await this.writeCommitAndTag(client, {
       changes,
       parentCommit: headCommit,
       message: `mirror: reconcile (added=${result.added}, updated=${result.updated}, removed=${result.removed})`,
@@ -290,14 +362,14 @@ export class MirrorService {
    * call time from the platform-settings cache so an admin re-point
    * propagates into READMEs on the next sync. */
   private async getRepoSlug(): Promise<string> {
-    const cfg = await this.deps.platformSettingsService.getGithubMirrorRepo();
+    const cfg = await this.deps.platformSettingsService.getGithubMirrorConfig();
     return `${cfg.owner}/${cfg.repo}`;
   }
 
   /** Mirror repo name on its own. Used as the H1 in the top-level
    * README (`# ornn-skills`). */
   private async getRepoName(): Promise<string> {
-    const cfg = await this.deps.platformSettingsService.getGithubMirrorRepo();
+    const cfg = await this.deps.platformSettingsService.getGithubMirrorConfig();
     return cfg.repo;
   }
 
@@ -390,11 +462,12 @@ export class MirrorService {
    * decide whether to stamp `mirrorSync` on the DB.
    */
   private async commitSkillFolderChange(
+    client: GitHubMirrorClient,
     skillName: string,
     desired: Map<string, string> | null,
     op: "publish" | "remove",
   ): Promise<{ sha: string; committedAt: Date } | null> {
-    const headCommit = await this.deps.github.getDefaultBranchHead();
+    const headCommit = await client.getDefaultBranchHead();
     if (!headCommit) {
       // First-ever push — bootstrap requires an initial commit. Defer
       // to reconcile so the bootstrap commit reflects the entire
@@ -408,8 +481,8 @@ export class MirrorService {
       await this.reconcileAll();
       return null;
     }
-    const currentTreeSha = await this.deps.github.getCommitTreeSha(headCommit);
-    const currentTree = await this.deps.github.getRecursiveTree(currentTreeSha);
+    const currentTreeSha = await client.getCommitTreeSha(headCommit);
+    const currentTree = await client.getRecursiveTree(currentTreeSha);
     const folderPrefix = `${skillName}/`;
     const currentInFolder = currentTree
       .filter((e) => e.type === "blob" && e.path.startsWith(folderPrefix))
@@ -426,7 +499,7 @@ export class MirrorService {
         const existing = currentInFolder.find((e) => e.path === fullPath);
         const desiredSha = computeGitBlobSha(content);
         if (existing?.sha === desiredSha) continue;
-        const newSha = await this.deps.github.createBlob(content);
+        const newSha = await client.createBlob(content);
         changes.push({ path: fullPath, mode: "100644", type: "blob", sha: newSha });
       }
       for (const e of currentInFolder) {
@@ -449,7 +522,7 @@ export class MirrorService {
       return null;
     }
 
-    const commit = await this.writeCommitAndTag({
+    const commit = await this.writeCommitAndTag(client, {
       changes,
       parentCommit: headCommit,
       message:
@@ -461,35 +534,56 @@ export class MirrorService {
     return commit;
   }
 
-  private async writeCommitAndTag(opts: {
-    changes: TreeEntry[];
-    parentCommit: string | null;
-    message: string;
-  }): Promise<{ sha: string; committedAt: Date }> {
+  private async writeCommitAndTag(
+    client: GitHubMirrorClient,
+    opts: {
+      changes: TreeEntry[];
+      parentCommit: string | null;
+      message: string;
+    },
+  ): Promise<{ sha: string; committedAt: Date }> {
     const { changes, parentCommit, message } = opts;
     const baseTree = parentCommit
-      ? await this.deps.github.getCommitTreeSha(parentCommit)
+      ? await client.getCommitTreeSha(parentCommit)
       : null;
-    const newTreeSha = await this.deps.github.createTree(changes, baseTree);
-    const commitSha = await this.deps.github.createCommit({
+    const newTreeSha = await client.createTree(changes, baseTree);
+    const commitSha = await client.createCommit({
       message,
       treeSha: newTreeSha,
       parents: parentCommit ? [parentCommit] : [],
     });
     if (parentCommit) {
-      await this.deps.github.updateDefaultBranch(commitSha);
+      await client.updateDefaultBranch(commitSha);
     } else {
-      await this.deps.github.createBranchRef(commitSha);
+      await client.createBranchRef(commitSha);
     }
     const committedAt = new Date();
     const ts = committedAt.toISOString().replace(/[:.]/g, "-");
-    await this.deps.github.createAnnotatedTag({
+    await client.createAnnotatedTag({
       tagName: `sync-${ts}`,
       message: `${message}\n\nSynced from ornn-api at ${ts}`,
       objectSha: commitSha,
     });
     return { sha: commitSha, committedAt };
   }
+}
+
+/**
+ * Stable hash over the credentials + repo coordinates so the cached
+ * client is invalidated when an admin pastes new App creds. Hashing the
+ * private key avoids holding raw key material in a string concat that
+ * could end up in a log or stack trace.
+ */
+function fingerprintCfg(cfg: {
+  appId: string;
+  installationId: string;
+  appPrivateKey: string;
+  owner: string;
+  repo: string;
+  branch: string;
+}): string {
+  const keyHash = createHash("sha256").update(cfg.appPrivateKey).digest("hex").slice(0, 12);
+  return `${cfg.appId}:${cfg.installationId}:${keyHash}:${cfg.owner}/${cfg.repo}@${cfg.branch}`;
 }
 
 /**
