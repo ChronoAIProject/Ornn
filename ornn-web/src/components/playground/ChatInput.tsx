@@ -6,7 +6,7 @@
  * @module components/playground/ChatInput
  */
 
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, forwardRef, useImperativeHandle } from "react";
 import { useTranslation } from "react-i18next";
 
 export interface ChatInputProps {
@@ -18,16 +18,23 @@ export interface ChatInputProps {
   placeholder?: string;
 }
 
+export interface ChatInputHandle {
+  /** Replace the current textarea value (used by suggestion-prompt clicks). */
+  setValue: (text: string) => void;
+  /** Move focus into the textarea. */
+  focus: () => void;
+}
+
 /** Maximum textarea height before scrolling. */
 const MAX_HEIGHT_PX = 200;
 
-export function ChatInput({
+export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput({
   onSend,
   onAbort,
   disabled,
   isStreaming,
   placeholder: customPlaceholder,
-}: ChatInputProps) {
+}, ref) {
   const { t } = useTranslation();
   const [value, setValue] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -43,6 +50,19 @@ export function ChatInput({
   useEffect(() => {
     adjustHeight();
   }, [value, adjustHeight]);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      setValue: (text: string) => {
+        setValue(text);
+        // Defer focus so the new value's height calculation lands first.
+        requestAnimationFrame(() => textareaRef.current?.focus());
+      },
+      focus: () => textareaRef.current?.focus(),
+    }),
+    [],
+  );
 
   const handleSend = useCallback(() => {
     const trimmed = value.trim();
@@ -116,7 +136,7 @@ export function ChatInput({
       </div>
     </div>
   );
-}
+});
 
 function SendIcon({ className }: { className?: string }) {
   return (

@@ -20,9 +20,9 @@ import {
   fetchGithubRepo,
   fetchMirrorStatus,
   triggerMirrorReconcile,
-  updateGithubRepo,
+  updateMirrorConfig,
   type GithubRepoConfig,
-  type GithubRepoUpdatePayload,
+  type MirrorConfigUpdatePayload,
   type MirrorStatus,
 } from "@/services/githubMirrorApi";
 
@@ -37,12 +37,12 @@ export function useGithubRepo() {
   });
 }
 
-export function useUpdateGithubRepo() {
+export function useUpdateMirrorConfig() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (payload: GithubRepoUpdatePayload) => updateGithubRepo(payload),
-    onSuccess: (updated) => {
-      qc.setQueryData(REPO_KEY, updated);
+    mutationFn: (payload: MirrorConfigUpdatePayload) => updateMirrorConfig(payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: REPO_KEY });
       qc.invalidateQueries({ queryKey: STATUS_KEY });
     },
   });

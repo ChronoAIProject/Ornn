@@ -3,6 +3,11 @@
  * in-memory with a short TTL so the permission path can read the current
  * threshold cheaply.
  *
+ * Everything operator-flippable lives here — kill switches, repo
+ * coordinates, sensitive credentials. The pod's only env-side
+ * dependencies are bootstrap secrets (Mongo URI, NyxID SA, encryption
+ * passphrase). No configmap.
+ *
  * @module domains/platform/types
  */
 
@@ -14,17 +19,16 @@ export interface PlatformSettings {
    */
   readonly auditWaiverThreshold: number;
   /**
-   * GitHub mirror repo coordinates. Sourced from the configmap at boot
-   * (`GITHUB_MIRROR_REPO_OWNER` / `_REPO_NAME` / `_DEFAULT_BRANCH`) and
-   * surfaced here so admins can re-point the mirror at runtime via the
-   * admin UI without a redeploy. The configmap is the *seed*; once an
-   * admin patches via the API the DB value wins thereafter.
+   * Full GitHub mirror config — kill switch, repo coords, App credentials.
+   * The MirrorService reads this on every operation; an admin patch via
+   * the admin UI takes effect on the next sync without a redeploy.
    *
-   * The kill switch (`GITHUB_MIRROR_ENABLED`) deliberately stays in the
-   * configmap — flipping it is an ops decision that should leave a k8s
-   * trail, not a one-click in the admin UI.
+   * `appPrivateKey` is encrypted at rest (AES-256-GCM via `infra/crypto`,
+   * scrypt-derived from `ENCRYPTION_KEY`); the routes layer mid-masks it
+   * on read so the operator can sanity-check which key is in place
+   * without exposing the body.
    */
-  readonly githubMirror: GithubMirrorRepoConfig;
+  readonly githubMirror: GithubMirrorConfig;
   /**
    * LLM provider override. Empty fields fall back to env (the
    * Chrono LLM gateway via NyxID SA token exchange). When `gatewayUrl`
@@ -44,35 +48,50 @@ export interface LlmProviderConfig {
   readonly gatewayUrl: string;
   /**
    * Direct bearer API key. Empty string = use NyxID SA token-exchange
-   * flow against env credentials. Stored in MongoDB, redacted from the
-   * GET response (the API only echoes whether it's set).
+   * flow against env credentials. Stored in MongoDB encrypted; the GET
+   * response mid-masks it (first 4 + last 4 chars, bullets in middle).
    */
   readonly apiKey: string;
 }
 
 /**
- * The three fields that point the mirror at a specific GitHub repo.
- * No `enabled` flag here — that lives in the configmap by design (see
- * `PlatformSettings.githubMirror` doc above).
+ * Full GitHub mirror config. Operator-flippable end-to-end via the admin
+ * UI; no env / configmap fallback — empty fields mean "not configured"
+ * and the MirrorService no-ops.
  */
-export interface GithubMirrorRepoConfig {
+export interface GithubMirrorConfig {
+  /** Master kill switch. When false, every mirror op is a no-op. */
+  readonly enabled: boolean;
   readonly owner: string;
   readonly repo: string;
   readonly branch: string;
+  /** GitHub App numeric id (visible on the App settings page). */
+  readonly appId: string;
+  /** Installation id for `<owner>/<repo>` (org-wide installation). */
+  readonly installationId: string;
+  /**
+   * RSA private key in PEM format. Encrypted at rest; the routes layer
+   * mid-masks it on read. Empty string = "no key set".
+   */
+  readonly appPrivateKey: string;
 }
 
 /**
- * Sentinel default. Never read directly — `PlatformSettingsService` is
- * constructed with configmap-derived defaults that override these. The
- * empty strings here exist so `PlatformSettings` can be fully populated
- * even before the service has been wired (e.g. unit tests on the repo).
+ * Sentinel default. Returned by `PlatformSettingsService.get()` when the
+ * DB row is missing fields — empty strings + `enabled: false` so a
+ * fresh deployment with no admin-set settings has the mirror cleanly
+ * disabled until an operator flips it on via the UI.
  */
 export const DEFAULT_PLATFORM_SETTINGS: PlatformSettings = {
   auditWaiverThreshold: 6.0,
   githubMirror: {
+    enabled: false,
     owner: "",
     repo: "",
     branch: "",
+    appId: "",
+    installationId: "",
+    appPrivateKey: "",
   },
   llmProvider: {
     gatewayUrl: "",

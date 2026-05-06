@@ -2,16 +2,16 @@
  * Client for the GitHub mirror admin surface and its single
  * public-read endpoint.
  *
- * Three operations:
+ *   - `fetchGithubRepo()` — public, returns the configured mirror coords
+ *     + enabled flag. SkillDetailPage reads this so the
+ *     `npx skills add` snippet renders to anonymous viewers.
  *
- *   - `fetchGithubRepo()` — public, returns the configured mirror
- *     coords + enabled flag. SkillDetailPage reads this so the
- *     `npx skills add` snippet can be rendered to anonymous viewers.
- *
- *   - `updateGithubRepo()` — admin, patches the mirror coords. Pass
- *     `confirmAbandonOldRepo: true` if the change would orphan a
- *     non-empty mirror (server returns `OLD_REPO_NOT_CONFIRMED` 409
- *     otherwise).
+ *   - `updateMirrorConfig()` — admin, patches the full mirror config
+ *     (kill switch + repo coords + GitHub App credentials). Pass any
+ *     subset; missing fields are preserved server-side. Pass
+ *     `confirmAbandonOldRepo: true` if changing `owner`/`repo` would
+ *     orphan a non-empty mirror (otherwise the server returns
+ *     `OLD_REPO_NOT_CONFIRMED` 409).
  *
  *   - `fetchMirrorStatus()` / `triggerMirrorReconcile()` — admin
  *     overview + manual reconcile kickoff. Reconcile is fire-and-
@@ -27,17 +27,39 @@ export interface GithubRepoConfig {
   owner: string;
   repo: string;
   branch: string;
-  /** Configmap kill switch — when false the mirror feature is off in
-   * this deployment, regardless of what `owner`/`repo` say. */
+  /** DB-backed kill switch — when false the mirror feature is off,
+   * regardless of what `owner`/`repo` say. Flipped via the admin UI. */
   enabled: boolean;
 }
 
-export interface GithubRepoUpdatePayload {
+/**
+ * Admin payload — every field optional. Server preserves anything the
+ * caller doesn't include. `appPrivateKey` carrying any bullet (`•`) is
+ * the round-trip sentinel for "preserve existing key" — real PEMs
+ * never contain it.
+ */
+export interface MirrorConfigUpdatePayload {
+  enabled?: boolean;
+  owner?: string;
+  repo?: string;
+  branch?: string;
+  appId?: string;
+  installationId?: string;
+  appPrivateKey?: string;
+  /** Required when changing owner/repo would abandon a non-empty mirror. */
+  confirmAbandonOldRepo?: boolean;
+}
+
+/** Full mirror config as returned to admins. `appPrivateKey` is mid-masked. */
+export interface AdminMirrorConfig {
+  enabled: boolean;
   owner: string;
   repo: string;
   branch: string;
-  /** Required when changing owner/repo would abandon a non-empty mirror. */
-  confirmAbandonOldRepo?: boolean;
+  appId: string;
+  installationId: string;
+  /** Mid-masked: first 4 + last 4 chars, bullets in middle. */
+  appPrivateKey: string;
 }
 
 export interface MirrorReconcileResult {
@@ -50,6 +72,10 @@ export interface MirrorReconcileResult {
 export interface MirrorStatus {
   enabled: boolean;
   repo: { owner: string; repo: string; branch: string };
+  appId: string;
+  installationId: string;
+  /** Mid-masked. */
+  appPrivateKey: string;
   counts: {
     /** Skills that are eligible for the mirror (`isPrivate: false`). */
     eligible: number;
@@ -77,10 +103,10 @@ export async function fetchGithubRepo(): Promise<GithubRepoConfig> {
   return res.data!;
 }
 
-export async function updateGithubRepo(
-  payload: GithubRepoUpdatePayload,
-): Promise<GithubRepoConfig> {
-  const res = await apiPost<GithubRepoConfig>("/api/v1/github/repo", payload);
+export async function updateMirrorConfig(
+  payload: MirrorConfigUpdatePayload,
+): Promise<AdminMirrorConfig> {
+  const res = await apiPost<AdminMirrorConfig>("/api/v1/github/repo", payload);
   return res.data!;
 }
 

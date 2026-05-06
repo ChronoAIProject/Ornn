@@ -140,32 +140,6 @@ export interface SkillConfig {
   readonly auditGlobalRedactPatterns: readonly string[];
 
   /**
-   * GitHub mirror config — when enabled, every public / system skill
-   * gets one-way mirrored to a GitHub monorepo so the
-   * `npx skills add <owner>/<repo>/<name>` install path works for
-   * Ornn skills. See `domains/skills/mirror/`.
-   *
-   * `mirrorEnabled` gates the whole feature — when false (default), no
-   * mirror calls are made even if the other fields are set. Lets
-   * operators stage credentials in advance of flipping the switch.
-   */
-  readonly mirror: {
-    readonly enabled: boolean;
-    /** GitHub App numeric id (visible on the App settings page). */
-    readonly appId: string;
-    /** PEM-formatted RSA private key for the App. */
-    readonly privateKey: string;
-    /** Installation id for `<owner>/<repo>` (org-wide installation). */
-    readonly installationId: string;
-    /** Mirror repo owner — typically `ChronoAIProject`. */
-    readonly repoOwner: string;
-    /** Mirror repo name — typically `ornn-skills`. */
-    readonly repoName: string;
-    /** Default branch on the mirror — typically `main`. */
-    readonly defaultBranch: string;
-  };
-
-  /**
    * Origin used in mirror READMEs to link back to the canonical Ornn
    * page (`<origin>/skills/<name>`). E.g. `https://ornn.chrono-ai.fun`.
    * No-trailing-slash, validated.
@@ -268,17 +242,6 @@ const envSchema = z.object({
    * defaults (`password|token|apiKey|secret|key|credential`).
    */
   AUDIT_GLOBAL_REDACT_PATTERNS: z.string().default(""),
-
-  // ───────────── GitHub mirror (public / system skills) ───────────────
-  // Disabled by default; flipping GITHUB_MIRROR_ENABLED=true requires
-  // all four credential vars below to be present (validated at boot).
-  GITHUB_MIRROR_ENABLED: booleanFromEnv,
-  GITHUB_APP_ID: z.string().optional(),
-  GITHUB_APP_PRIVATE_KEY: z.string().optional(),
-  GITHUB_APP_INSTALLATION_ID: z.string().optional(),
-  GITHUB_MIRROR_REPO_OWNER: z.string().default("ChronoAIProject"),
-  GITHUB_MIRROR_REPO_NAME: z.string().default("ornn-skills"),
-  GITHUB_MIRROR_DEFAULT_BRANCH: z.string().default("main"),
 
   /**
    * Public origin agents and humans use to reach Ornn (no trailing
@@ -389,37 +352,6 @@ export function loadConfig(): SkillConfig {
       .map((s) => s.trim())
       .filter((s) => s.length > 0),
 
-    mirror: {
-      enabled: env.GITHUB_MIRROR_ENABLED,
-      appId: env.GITHUB_APP_ID ?? "",
-      // GitHub Apps emit PEM with literal `\n`s sometimes when the key is
-      // pasted into a single-line env var; expand them so RS256 signing
-      // sees the real linebreaks. No-op when the value already has real
-      // newlines (e.g. when sourced from a multi-line k8s secret).
-      privateKey: (env.GITHUB_APP_PRIVATE_KEY ?? "").replace(/\\n/g, "\n"),
-      installationId: env.GITHUB_APP_INSTALLATION_ID ?? "",
-      repoOwner: env.GITHUB_MIRROR_REPO_OWNER,
-      repoName: env.GITHUB_MIRROR_REPO_NAME,
-      defaultBranch: env.GITHUB_MIRROR_DEFAULT_BRANCH,
-    },
     ornnPublicOrigin: env.ORNN_PUBLIC_ORIGIN.replace(/\/+$/, ""),
   };
-}
-
-/**
- * Throws if `mirror.enabled === true` but credentials are missing.
- * Called from bootstrap so failure is loud at startup, not at first
- * publish-hook fire-and-forget (which would silently swallow it).
- */
-export function assertMirrorConfigComplete(config: SkillConfig): void {
-  if (!config.mirror.enabled) return;
-  const missing: string[] = [];
-  if (!config.mirror.appId) missing.push("GITHUB_APP_ID");
-  if (!config.mirror.privateKey) missing.push("GITHUB_APP_PRIVATE_KEY");
-  if (!config.mirror.installationId) missing.push("GITHUB_APP_INSTALLATION_ID");
-  if (missing.length > 0) {
-    throw new Error(
-      `GITHUB_MIRROR_ENABLED=true but the following are unset: ${missing.join(", ")}`,
-    );
-  }
 }

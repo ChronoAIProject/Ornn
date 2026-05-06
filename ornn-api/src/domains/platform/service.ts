@@ -4,11 +4,11 @@
  * MirrorService's per-commit repo-coords lookup) don't hit Mongo on
  * every call.
  *
- * Layers a configmap-driven default set under whatever the DB stores,
- * so a fresh deployment with no admin-set DB row falls back to what
- * the configmap says. Once an admin patches via PATCH /admin/settings
- * (or POST /api/v1/github/repo for the mirror block), the DB value
- * wins thereafter.
+ * Decrypts at-rest secrets (LLM provider `apiKey`, GitHub App
+ * `appPrivateKey`) at the service boundary on read; encrypts on write.
+ * Every downstream consumer sees plaintext. Failures are non-fatal: an
+ * unreadable secret degrades to "no value set" so the rest of the
+ * system keeps working.
  *
  * @module domains/platform/service
  */
@@ -17,7 +17,7 @@ import { decryptSecret, encryptSecret } from "../../infra/crypto";
 import type { PlatformSettingsRepository } from "./repository";
 import {
   DEFAULT_PLATFORM_SETTINGS,
-  type GithubMirrorRepoConfig,
+  type GithubMirrorConfig,
   type LlmProviderConfig,
   type PlatformSettings,
 } from "./types";
@@ -25,12 +25,10 @@ import {
 const logger = pino({ level: "info" }).child({ module: "platformSettingsService" });
 
 export interface PlatformSettingsDefaults {
-  /** GitHub mirror coordinates from the configmap. Never empty in prod. */
-  githubMirror: GithubMirrorRepoConfig;
   /**
    * Master passphrase used to encrypt/decrypt at-rest secrets (LLM
-   * `apiKey`, etc.). Sourced from `ENCRYPTION_KEY` env. Required —
-   * the service never sees plaintext at the DB layer.
+   * `apiKey`, GitHub App `appPrivateKey`). Sourced from `ENCRYPTION_KEY`
+   * env. Required — the service never sees plaintext at the DB layer.
    */
   encryptionKey: string;
 }
@@ -51,10 +49,7 @@ export class PlatformSettingsService {
     const now = Date.now();
     if (this.cache && now < this.cache.expiresAt) return this.cache.settings;
     const stored = await this.repo.get();
-    // Decrypt the LLM provider apiKey at the service boundary — every
-    // downstream consumer sees plaintext. Failures are non-fatal: an
-    // unreadable secret degrades to "no apiKey set" so the rest of the
-    // system (including the admin UI) keeps working.
+
     const llmRaw = stored.llmProvider ?? DEFAULT_PLATFORM_SETTINGS.llmProvider;
     let llmApiKey = "";
     try {
@@ -65,12 +60,35 @@ export class PlatformSettingsService {
         "Failed to decrypt LLM provider apiKey — treating as unset",
       );
     }
+
+    const mirrorRaw = stored.githubMirror ?? DEFAULT_PLATFORM_SETTINGS.githubMirror;
+    let appPrivateKey = "";
+    try {
+      appPrivateKey = decryptSecret(
+        mirrorRaw.appPrivateKey ?? "",
+        this.defaults.encryptionKey,
+      );
+    } catch (err) {
+      logger.error(
+        { err: (err as Error).message },
+        "Failed to decrypt GitHub App private key — treating as unset",
+      );
+    }
+
     const settings: PlatformSettings = {
       auditWaiverThreshold:
         typeof stored.auditWaiverThreshold === "number"
           ? stored.auditWaiverThreshold
           : DEFAULT_PLATFORM_SETTINGS.auditWaiverThreshold,
-      githubMirror: stored.githubMirror ?? this.defaults.githubMirror,
+      githubMirror: {
+        enabled: typeof mirrorRaw.enabled === "boolean" ? mirrorRaw.enabled : false,
+        owner: mirrorRaw.owner ?? "",
+        repo: mirrorRaw.repo ?? "",
+        branch: mirrorRaw.branch ?? "",
+        appId: mirrorRaw.appId ?? "",
+        installationId: mirrorRaw.installationId ?? "",
+        appPrivateKey,
+      },
       llmProvider: {
         gatewayUrl: llmRaw.gatewayUrl ?? "",
         apiKey: llmApiKey,
@@ -84,8 +102,8 @@ export class PlatformSettingsService {
     return (await this.get()).auditWaiverThreshold;
   }
 
-  /** Convenience accessor used by `MirrorService` and the new `/github/repo` route. */
-  async getGithubMirrorRepo(): Promise<GithubMirrorRepoConfig> {
+  /** Full mirror config — kill switch + repo coords + App credentials. */
+  async getGithubMirrorConfig(): Promise<GithubMirrorConfig> {
     return (await this.get()).githubMirror;
   }
 
@@ -95,7 +113,7 @@ export class PlatformSettingsService {
   }
 
   async patch(partial: Partial<PlatformSettings>): Promise<PlatformSettings> {
-    // Encrypt the LLM apiKey before persisting. The patch layer sees
+    // Encrypt sensitive fields before persisting. The patch layer sees
     // plaintext from the route; the repo only ever stores ciphertext.
     type MutablePatch = { -readonly [K in keyof PlatformSettings]?: PlatformSettings[K] };
     const toStore: MutablePatch = { ...partial };
@@ -107,6 +125,21 @@ export class PlatformSettingsService {
       toStore.llmProvider = {
         gatewayUrl: partial.llmProvider.gatewayUrl ?? "",
         apiKey: enc,
+      };
+    }
+    if (partial.githubMirror) {
+      const enc = encryptSecret(
+        partial.githubMirror.appPrivateKey ?? "",
+        this.defaults.encryptionKey,
+      );
+      toStore.githubMirror = {
+        enabled: !!partial.githubMirror.enabled,
+        owner: partial.githubMirror.owner ?? "",
+        repo: partial.githubMirror.repo ?? "",
+        branch: partial.githubMirror.branch ?? "",
+        appId: partial.githubMirror.appId ?? "",
+        installationId: partial.githubMirror.installationId ?? "",
+        appPrivateKey: enc,
       };
     }
     await this.repo.patch(toStore);

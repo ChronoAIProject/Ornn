@@ -23,17 +23,21 @@ export interface PlatformSettingsRoutesConfig {
 }
 
 /**
- * Mid-mask the apiKey on response so the admin sees which key is in
- * place (head + tail) without the body leaking through logs or
+ * Mid-mask sensitive secrets on response so the admin sees which value
+ * is in place (head + tail) without the body leaking through logs or
  * `kubectl describe`. Bullet character is the sentinel for "preserve
  * existing on PATCH" — legitimate keys never contain it.
  */
-function maskLlmProvider(settings: PlatformSettings): PlatformSettings {
+export function maskSensitiveSettings(settings: PlatformSettings): PlatformSettings {
   return {
     ...settings,
     llmProvider: {
       gatewayUrl: settings.llmProvider.gatewayUrl,
       apiKey: midMaskSecret(settings.llmProvider.apiKey),
+    },
+    githubMirror: {
+      ...settings.githubMirror,
+      appPrivateKey: midMaskSecret(settings.githubMirror.appPrivateKey),
     },
   };
 }
@@ -47,7 +51,7 @@ export function createPlatformSettingsRoutes(
 
   app.get("/admin/settings", auth, requirePermission("ornn:admin:skill"), async (c) => {
     const settings = await platformSettingsService.get();
-    return c.json({ data: maskLlmProvider(settings), error: null });
+    return c.json({ data: maskSensitiveSettings(settings), error: null });
   });
 
   app.patch("/admin/settings", auth, requirePermission("ornn:admin:skill"), async (c) => {
@@ -135,7 +139,7 @@ export function createPlatformSettingsRoutes(
     }
 
     const updated = await platformSettingsService.patch(patch);
-    return c.json({ data: maskLlmProvider(updated), error: null });
+    return c.json({ data: maskSensitiveSettings(updated), error: null });
   });
 
   return app;

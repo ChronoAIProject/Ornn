@@ -1,22 +1,26 @@
 /**
  * /admin/mirror — GitHub mirror operations console.
  *
- * Three blocks stacked:
+ * Five blocks stacked:
  *
- *   1. **Status header** — feature enabled flag + current `<owner>/<repo>`
- *      (with a click-through to the GitHub repo) + last reconcile run.
+ *   1. **Status header** — feature enabled flag (DB-backed, flippable
+ *      below) + current `<owner>/<repo>` (with a click-through to the
+ *      GitHub repo) + last reconcile run.
  *   2. **Counts grid** — eligible / synced / lagging / never-synced
  *      cards with a tooltip explaining each. The "oldest unsynced"
  *      timestamp surfaces the worst lag in the system, so an operator
  *      can spot a stuck cron from the dashboard alone.
  *   3. **Reconcile button** — triggers a fire-and-forget run; the
- *      status auto-polls on a 5s interval while a run is in progress
- *      (see `useMirrorStatus`).
- *   4. **Repo settings form** — owner / repo / branch inputs. Editing
- *      requires explicit confirmation when the change would orphan an
- *      already-mirrored repo (existing skill stamps point at commit
- *      SHAs in the OLD repo; abandoning means clearing all stamps and
- *      letting the next reconcile re-publish everything).
+ *      status auto-polls on a 5s interval while a run is in progress.
+ *   4. **Repo settings form** — enable toggle + owner / repo / branch.
+ *      Editing requires explicit confirmation when the change would
+ *      orphan an already-mirrored repo (existing skill stamps point
+ *      at commit SHAs in the OLD repo; abandoning means clearing all
+ *      stamps and letting the next reconcile re-publish everything).
+ *   5. **GitHub App credentials** — App ID + Installation ID + App
+ *      Private Key (PEM). The private key is encrypted at rest and
+ *      mid-masked on read; round-tripping the masked value preserves
+ *      the stored key.
  *
  * @module pages/admin/MirrorPage
  */
@@ -28,13 +32,13 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import {
-  useGithubRepo,
   useMirrorStatus,
   useTriggerReconcile,
-  useUpdateGithubRepo,
+  useUpdateMirrorConfig,
 } from "@/hooks/useGithubMirror";
 import { useToastStore } from "@/stores/toastStore";
 import { ApiClientError } from "@/services/apiClient";
+import { MirrorSetupHelp } from "@/components/admin/MirrorSetupHelp";
 
 function formatTime(iso: string | null): string {
   if (!iso) return "—";
@@ -58,6 +62,15 @@ function formatDuration(ms: number | null): string {
   const min = Math.floor(ms / 60_000);
   const sec = Math.floor((ms % 60_000) / 1000);
   return `${min}m ${sec}s`;
+}
+
+/**
+ * Mid-mask sentinel: server returns the persisted private key with `•`
+ * characters in the middle. Real PEMs never contain that character, so
+ * any round-trip carrying a bullet means "preserve existing".
+ */
+function isMaskedKey(v: string): boolean {
+  return v.includes("•");
 }
 
 interface CountCardProps {
@@ -93,51 +106,69 @@ export function MirrorPage() {
   const { t } = useTranslation();
   const addToast = useToastStore((s) => s.addToast);
 
-  const { data: repoCfg } = useGithubRepo();
   const { data: status, isLoading: statusLoading, isError: statusError } = useMirrorStatus();
   const triggerReconcile = useTriggerReconcile();
-  const updateRepo = useUpdateGithubRepo();
+  const updateConfig = useUpdateMirrorConfig();
 
-  // Repo settings form local state. Seeded from `repoCfg` once it
-  // loads. We keep the form independent so admins can revert edits.
+  // ── Repo settings form local state ──
+  // Seeded from `status` once it loads. Form is independent so admins
+  // can revert edits before saving.
+  const [enabled, setEnabled] = useState(false);
   const [owner, setOwner] = useState("");
   const [repo, setRepo] = useState("");
   const [branch, setBranch] = useState("");
   const [confirmModalOpen, setConfirmModalOpen] = useState(false);
 
-  useEffect(() => {
-    if (repoCfg) {
-      setOwner(repoCfg.owner);
-      setRepo(repoCfg.repo);
-      setBranch(repoCfg.branch);
-    }
-  }, [repoCfg]);
+  // ── App credentials form local state ──
+  const [appId, setAppId] = useState("");
+  const [installationId, setInstallationId] = useState("");
+  const [appPrivateKey, setAppPrivateKey] = useState("");
 
-  const dirty =
-    !!repoCfg &&
-    (owner.trim() !== repoCfg.owner ||
-      repo.trim() !== repoCfg.repo ||
-      branch.trim() !== repoCfg.branch);
+  useEffect(() => {
+    if (status) {
+      setEnabled(status.enabled);
+      setOwner(status.repo.owner);
+      setRepo(status.repo.repo);
+      setBranch(status.repo.branch);
+      setAppId(status.appId);
+      setInstallationId(status.installationId);
+      setAppPrivateKey(status.appPrivateKey);
+    }
+  }, [status]);
+
+  const repoFormDirty =
+    !!status &&
+    (enabled !== status.enabled ||
+      owner.trim() !== status.repo.owner ||
+      repo.trim() !== status.repo.repo ||
+      branch.trim() !== status.repo.branch);
+
+  const credsFormDirty =
+    !!status &&
+    (appId.trim() !== status.appId ||
+      installationId.trim() !== status.installationId ||
+      appPrivateKey !== status.appPrivateKey);
 
   const wouldChangeRepo =
-    !!repoCfg &&
-    (owner.trim() !== repoCfg.owner || repo.trim() !== repoCfg.repo);
+    !!status &&
+    (owner.trim() !== status.repo.owner || repo.trim() !== status.repo.repo);
 
   const stampedCount =
     status?.counts ? status.counts.synced + status.counts.lagging : 0;
 
-  const handleSaveClick = () => {
-    if (!dirty) return;
+  const handleSaveRepoClick = () => {
+    if (!repoFormDirty) return;
     if (wouldChangeRepo && stampedCount > 0) {
       setConfirmModalOpen(true);
       return;
     }
-    void doSave(false);
+    void doSaveRepo(false);
   };
 
-  const doSave = async (confirmAbandon: boolean) => {
+  const doSaveRepo = async (confirmAbandon: boolean) => {
     try {
-      await updateRepo.mutateAsync({
+      await updateConfig.mutateAsync({
+        enabled,
         owner: owner.trim(),
         repo: repo.trim(),
         branch: branch.trim(),
@@ -146,18 +177,42 @@ export function MirrorPage() {
       setConfirmModalOpen(false);
       addToast({
         type: "success",
-        message: t("adminMirror.saved", "Mirror coords updated. Stamps cleared; next reconcile will re-publish."),
+        message: wouldChangeRepo
+          ? t(
+              "adminMirror.savedAbandon",
+              "Mirror coords updated. Stamps cleared; next reconcile will re-publish.",
+            )
+          : t("adminMirror.savedRepo", "Mirror settings saved."),
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      const code =
-        err instanceof ApiClientError ? err.code : null;
+      const code = err instanceof ApiClientError ? err.code : null;
       // Surface the abandon-confirm path even if the modal was bypassed.
       if (code === "OLD_REPO_NOT_CONFIRMED") {
         setConfirmModalOpen(true);
       } else {
         addToast({ type: "error", message });
       }
+    }
+  };
+
+  const doSaveCreds = async () => {
+    if (!credsFormDirty) return;
+    try {
+      await updateConfig.mutateAsync({
+        appId: appId.trim(),
+        installationId: installationId.trim(),
+        // If the field still carries a bullet, the server preserves the
+        // existing key (round-trip of the mid-masked display value).
+        appPrivateKey,
+      });
+      addToast({
+        type: "success",
+        message: t("adminMirror.savedCreds", "GitHub App credentials saved."),
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      addToast({ type: "error", message });
     }
   };
 
@@ -179,14 +234,18 @@ export function MirrorPage() {
 
   const lastRun = status?.lastReconcile;
   const reconcileRunning = lastRun?.status === "running";
+  const credsConfigured = !!status && !!status.appId && !!status.installationId && !!status.appPrivateKey;
 
   return (
     <PageTransition>
       <div className="mx-auto w-full max-w-5xl px-6 py-10">
         <header className="mb-6">
-          <h1 className="font-display text-3xl text-strong">
-            {t("adminMirror.title", "GitHub Mirror")}
-          </h1>
+          <div className="flex items-start gap-2">
+            <h1 className="font-display text-3xl text-strong">
+              {t("adminMirror.title", "GitHub Mirror")}
+            </h1>
+            <MirrorSetupHelp className="mt-2" />
+          </div>
           <p className="mt-1 font-text text-sm text-meta">
             {t(
               "adminMirror.subtitle",
@@ -206,7 +265,7 @@ export function MirrorPage() {
           </p>
         )}
 
-        {status && repoCfg && (
+        {status && (
           <div className="space-y-6">
             {/* ── Status header ── */}
             <Card className="flex flex-wrap items-start justify-between gap-4 p-5">
@@ -219,7 +278,7 @@ export function MirrorPage() {
                   />
                   {status.enabled
                     ? t("adminMirror.featureOn", "Feature enabled")
-                    : t("adminMirror.featureOff", "Feature disabled (kill switch in configmap)")}
+                    : t("adminMirror.featureOff", "Feature disabled — flip the toggle below to enable")}
                 </div>
                 <a
                   href={`https://github.com/${status.repo.owner}/${status.repo.repo}`}
@@ -311,10 +370,20 @@ export function MirrorPage() {
                     "The hourly cron at :17 runs the same operation. Hit this when you can't wait — fire-and-forget, the page polls until it lands.",
                   )}
                 </p>
+                {!credsConfigured && status.enabled && (
+                  <p className="mt-1 font-text text-xs text-warning">
+                    {t(
+                      "adminMirror.credsMissing",
+                      "GitHub App credentials are missing — fill the form below before reconciling.",
+                    )}
+                  </p>
+                )}
               </div>
               <Button
                 onClick={handleReconcile}
-                disabled={!status.enabled || reconcileRunning || triggerReconcile.isPending}
+                disabled={
+                  !status.enabled || !credsConfigured || reconcileRunning || triggerReconcile.isPending
+                }
                 loading={triggerReconcile.isPending || reconcileRunning}
               >
                 {reconcileRunning
@@ -332,10 +401,29 @@ export function MirrorPage() {
                 <p className="mt-1 font-text text-xs text-meta">
                   {t(
                     "adminMirror.repoFormSubtitle",
-                    "Where mirrored skills land. The kill switch (GITHUB_MIRROR_ENABLED) stays in the configmap by design.",
+                    "Where mirrored skills land + master kill switch. All settings are stored in the database; no redeploy required.",
                   )}
                 </p>
               </div>
+              <label className="flex items-center gap-3 rounded border border-accent/20 bg-card px-3 py-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={enabled}
+                  onChange={(e) => setEnabled(e.target.checked)}
+                  className="h-4 w-4 cursor-pointer accent-accent"
+                />
+                <div>
+                  <div className="font-mono text-[11px] uppercase tracking-[0.14em] text-strong">
+                    {t("adminMirror.fieldEnabled", "Mirror enabled")}
+                  </div>
+                  <div className="font-text text-xs text-meta">
+                    {t(
+                      "adminMirror.fieldEnabledHint",
+                      "Master kill switch. When off, every mirror operation no-ops regardless of credentials.",
+                    )}
+                  </div>
+                </div>
+              </label>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                 <label className="block">
                   <div className="mb-1 font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
@@ -388,9 +476,100 @@ export function MirrorPage() {
                       )}
                 </p>
                 <Button
-                  onClick={handleSaveClick}
-                  disabled={!dirty}
-                  loading={updateRepo.isPending}
+                  onClick={handleSaveRepoClick}
+                  disabled={!repoFormDirty}
+                  loading={updateConfig.isPending}
+                >
+                  {t("common.save", "Save")}
+                </Button>
+              </div>
+            </Card>
+
+            {/* ── GitHub App credentials ── */}
+            <Card className="space-y-4 p-5">
+              <div>
+                <h2 className="font-display text-base text-strong">
+                  {t("adminMirror.credsTitle", "GitHub App credentials")}
+                </h2>
+                <p className="mt-1 font-text text-xs text-meta">
+                  {t(
+                    "adminMirror.credsSubtitle",
+                    "App ID, Installation ID, and the RSA private key (PEM) the mirror service uses to mint installation tokens. The private key is encrypted at rest and mid-masked on read — leave it masked to keep the existing key, paste a fresh PEM to replace.",
+                  )}
+                </p>
+              </div>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <label className="block">
+                  <div className="mb-1 font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
+                    {t("adminMirror.fieldAppId", "App ID")}
+                  </div>
+                  <input
+                    type="text"
+                    value={appId}
+                    onChange={(e) => setAppId(e.target.value)}
+                    placeholder="123456"
+                    inputMode="numeric"
+                    className="w-full rounded border border-accent/20 bg-card px-3 py-2 font-mono text-sm text-strong focus:outline-none focus:border-accent/60 focus:ring-2 focus:ring-accent/30"
+                  />
+                  <div className="mt-1 font-text text-[11px] text-meta">
+                    {t("adminMirror.fieldAppIdHint", "Numeric, from the App settings page on GitHub.")}
+                  </div>
+                </label>
+                <label className="block">
+                  <div className="mb-1 font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
+                    {t("adminMirror.fieldInstallationId", "Installation ID")}
+                  </div>
+                  <input
+                    type="text"
+                    value={installationId}
+                    onChange={(e) => setInstallationId(e.target.value)}
+                    placeholder="78901234"
+                    inputMode="numeric"
+                    className="w-full rounded border border-accent/20 bg-card px-3 py-2 font-mono text-sm text-strong focus:outline-none focus:border-accent/60 focus:ring-2 focus:ring-accent/30"
+                  />
+                  <div className="mt-1 font-text text-[11px] text-meta">
+                    {t(
+                      "adminMirror.fieldInstallationIdHint",
+                      "From `gh api /user/installations` or the App settings page.",
+                    )}
+                  </div>
+                </label>
+              </div>
+              <label className="block">
+                <div className="mb-1 font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
+                  {t("adminMirror.fieldPrivateKey", "App private key (PEM)")}
+                </div>
+                <textarea
+                  value={appPrivateKey}
+                  onChange={(e) => setAppPrivateKey(e.target.value)}
+                  rows={6}
+                  spellCheck={false}
+                  placeholder={"-----BEGIN RSA PRIVATE KEY-----\n…\n-----END RSA PRIVATE KEY-----"}
+                  className="w-full rounded border border-accent/20 bg-card px-3 py-2 font-mono text-xs text-strong focus:outline-none focus:border-accent/60 focus:ring-2 focus:ring-accent/30"
+                />
+                <div className="mt-1 font-text text-[11px] text-meta">
+                  {isMaskedKey(appPrivateKey)
+                    ? t(
+                        "adminMirror.fieldPrivateKeyMaskedHint",
+                        "Showing a mid-masked snapshot of the persisted key. Leave masked to keep it; paste a fresh PEM to replace.",
+                      )
+                    : t(
+                        "adminMirror.fieldPrivateKeyHint",
+                        "Encrypted at rest with AES-256-GCM. The DB only ever sees ciphertext.",
+                      )}
+                </div>
+              </label>
+              <div className="flex items-center justify-between">
+                <p className="font-text text-xs text-meta">
+                  {t(
+                    "adminMirror.credsFormHint",
+                    "Credentials take effect on the next sync — no pod restart needed.",
+                  )}
+                </p>
+                <Button
+                  onClick={() => void doSaveCreds()}
+                  disabled={!credsFormDirty}
+                  loading={updateConfig.isPending}
                 >
                   {t("common.save", "Save")}
                 </Button>
@@ -411,7 +590,7 @@ export function MirrorPage() {
                 "adminMirror.confirmBodyA",
                 "You're about to point the mirror at a different GitHub repo. The current repo ({{current}}) will be left as-is — Ornn does not delete it.",
                 {
-                  current: repoCfg ? `${repoCfg.owner}/${repoCfg.repo}` : "",
+                  current: status ? `${status.repo.owner}/${status.repo.repo}` : "",
                 },
               )}
             </p>
@@ -429,7 +608,7 @@ export function MirrorPage() {
               <Button variant="secondary" onClick={() => setConfirmModalOpen(false)}>
                 {t("common.cancel", "Cancel")}
               </Button>
-              <Button onClick={() => doSave(true)} loading={updateRepo.isPending}>
+              <Button onClick={() => doSaveRepo(true)} loading={updateConfig.isPending}>
                 {t("adminMirror.confirmConfirm", "Yes, change repo")}
               </Button>
             </div>

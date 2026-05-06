@@ -29,9 +29,56 @@ spec:
           imagePullPolicy: ${IMAGE_PULL_POLICY}
           ports:
             - containerPort: 3802
+          # Operator-flippable settings (kill switches, repo coords,
+          # credentials) live in the platform_settings DB collection
+          # and are managed via the admin UI — no configmap.
+          # Only true bootstrap secrets (DB / NyxID SA / encryption
+          # passphrase) come from the Secret. Everything else here is
+          # plain operational env baked into the manifest.
+          env:
+            - name: PORT
+              value: "${ORNN_API_PORT}"
+            - name: LOG_LEVEL
+              value: "${ORNN_API_LOG_LEVEL}"
+            - name: LOG_PRETTY
+              value: "${ORNN_API_LOG_PRETTY}"
+            - name: NYXID_SA_TOKEN_URL
+              value: "${NYXID_SA_TOKEN_URL}"
+            - name: NYX_LLM_GATEWAY_URL
+              value: "${NYX_LLM_GATEWAY_URL}"
+            - name: MONGODB_DB
+              value: "${MONGODB_DB}"
+            - name: STORAGE_SERVICE_URL
+              value: "${STORAGE_SERVICE_URL}"
+            - name: STORAGE_BUCKET
+              value: "${STORAGE_BUCKET}"
+            - name: SANDBOX_SERVICE_URL
+              value: "${SANDBOX_SERVICE_URL}"
+            - name: DEFAULT_LLM_MODEL
+              value: "${DEFAULT_LLM_MODEL}"
+            - name: LLM_MAX_OUTPUT_TOKENS
+              value: "${LLM_MAX_OUTPUT_TOKENS}"
+            - name: LLM_TEMPERATURE
+              value: "${LLM_TEMPERATURE}"
+            - name: SSE_KEEP_ALIVE_INTERVAL_MS
+              value: "${SSE_KEEP_ALIVE_INTERVAL_MS}"
+            - name: MAX_PACKAGE_SIZE_BYTES
+              value: "${MAX_PACKAGE_SIZE_BYTES}"
+            - name: ALLOWED_ORIGINS
+              value: "${ALLOWED_ORIGINS}"
+            - name: EXTRA_NYXID_SERVICES
+              value: "${EXTRA_NYXID_SERVICES}"
+            - name: POSTHOG_HOST
+              value: "${POSTHOG_HOST}"
+            - name: POSTHOG_ERROR_SAMPLE_RATE
+              value: "${POSTHOG_ERROR_SAMPLE_RATE}"
+            - name: AGENTSEAL_ENABLED
+              value: "${AGENTSEAL_ENABLED}"
+            - name: AGENTSEAL_TIMEOUT_MS
+              value: "${AGENTSEAL_TIMEOUT_MS}"
+            - name: ORNN_PUBLIC_ORIGIN
+              value: "${ORNN_PUBLIC_ORIGIN}"
           envFrom:
-            - configMapRef:
-                name: ornn-api-config
             - secretRef:
                 name: ornn-api-secret
           readinessProbe:

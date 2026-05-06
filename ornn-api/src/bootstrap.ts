@@ -11,7 +11,7 @@ import { cors } from "hono/cors";
 import { join } from "node:path";
 import { readFileSync } from "node:fs";
 import pino from "pino";
-import { type SkillConfig, assertMirrorConfigComplete } from "./infra/config";
+import { type SkillConfig } from "./infra/config";
 
 const pkg = JSON.parse(readFileSync(join(import.meta.dir, "..", "package.json"), "utf-8"));
 
@@ -86,8 +86,6 @@ import { createAdminRoutes } from "./domains/admin/routes";
 import { createFormatRoutes } from "./domains/skills/format/routes";
 
 // Domain: GitHub Mirror (public + system skill auto-mirror)
-import { GitHubAppAuth } from "./domains/skills/mirror/githubAppAuth";
-import { GitHubMirrorClient } from "./domains/skills/mirror/githubMirrorClient";
 import { MirrorService } from "./domains/skills/mirror/mirrorService";
 import { createMirrorRoutes } from "./domains/skills/mirror/routes";
 
@@ -164,11 +162,6 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
     enabled: config.agentsealEnabled,
     logger,
   });
-
-  // Validate the mirror config up front (loud) — otherwise an
-  // ENABLED-but-misconfigured deployment would only fail at first
-  // publish hook fire-and-forget, where the failure gets swallowed.
-  assertMirrorConfigComplete(config);
 
   // ---- Database Connections ----
   const mongo: MongoConnection = await connectMongo(config.mongodbUri, config.mongodbDb);
@@ -297,14 +290,9 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   const analyticsService = new AnalyticsService({ analyticsRepo });
   const analyticsRoutes = createAnalyticsRoutes({ analyticsService, skillService });
 
-  // ---- Domain: Platform settings (admin-editable thresholds + mirror coords) ----
+  // ---- Domain: Platform settings (admin-editable: audit threshold, mirror config, LLM override) ----
   const platformSettingsRepo = new PlatformSettingsRepository(db);
   const platformSettingsService = new PlatformSettingsService(platformSettingsRepo, {
-    githubMirror: {
-      owner: config.mirror.repoOwner,
-      repo: config.mirror.repoName,
-      branch: config.mirror.defaultBranch,
-    },
     encryptionKey: config.encryptionKey,
   });
   const platformSettingsRoutes = createPlatformSettingsRoutes({ platformSettingsService });
@@ -348,54 +336,23 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   const modelsRoutes = createModelsRoutes({ modelsService });
 
   // ---- Domain: GitHub Mirror ----
-  // Built before the skill routes so we can inject it into the route
-  // handlers as a fire-and-forget hook target. The MirrorService's
-  // `enabled` flag short-circuits all operations when the feature is
-  // off, so callers don't need to null-check.
-  //
-  // Repo coordinates are resolved at call time from
-  // `platformSettingsService` (DB-wins-with-configmap-fallback), so an
-  // admin patch via `POST /api/v1/github/repo` lands on the next sync
-  // without a redeploy.
-  const mirrorService = (() => {
-    if (!config.mirror.enabled) {
-      return new MirrorService(
-        {
-          // The deps are unused when disabled; pass placeholders.
-          github: undefined as unknown as GitHubMirrorClient,
-          skillRepo,
-          skillService,
-          ornnPublicOrigin: config.ornnPublicOrigin,
-          platformSettingsService,
-        },
-        false,
-      );
-    }
-    const auth = new GitHubAppAuth({
-      appId: config.mirror.appId,
-      privateKey: config.mirror.privateKey,
-      installationId: config.mirror.installationId,
-    });
-    const github = new GitHubMirrorClient(auth, async () => {
-      const cfg = await platformSettingsService.getGithubMirrorRepo();
-      return { owner: cfg.owner, repo: cfg.repo, defaultBranch: cfg.branch };
-    });
-    return new MirrorService(
-      {
-        github,
-        skillRepo,
-        skillService,
-        ornnPublicOrigin: config.ornnPublicOrigin,
-        platformSettingsService,
-      },
-      true,
-    );
-  })();
+  // Single MirrorService instance — runtime-aware. Reads enabled +
+  // App credentials + repo coords from `platformSettingsService` on
+  // every operation, so an admin flipping the kill switch or pasting
+  // new creds via the admin UI lands on the next sync without a
+  // redeploy. `getActiveClient()` returns null when disabled or when
+  // any required field is empty, and every public op no-ops in that
+  // case — callers don't need to null-check.
+  const mirrorService = new MirrorService({
+    skillRepo,
+    skillService,
+    ornnPublicOrigin: config.ornnPublicOrigin,
+    platformSettingsService,
+  });
   const mirrorRoutes = createMirrorRoutes({
-    mirrorService: config.mirror.enabled ? mirrorService : undefined,
+    mirrorService,
     platformSettingsService,
     skillRepo,
-    mirrorEnabled: config.mirror.enabled,
   });
 
   // Skill routes — sharing is now a direct PUT /permissions write; the
