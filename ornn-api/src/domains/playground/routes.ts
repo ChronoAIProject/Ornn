@@ -137,107 +137,102 @@ export function createPlaygroundRoutes(config: PlaygroundRoutesConfig): Hono<{ V
       const signal = c.req.raw.signal;
       const chatRequest: PlaygroundChatRequest = parsed;
 
-      // Manual ReadableStream rather than Hono's `streamSSE` helper
-      // because the helper batches `writeSSE` calls under Bun. Critical
-      // detail: `start` MUST be synchronous and the async pump runs in
-      // a deferred task — if `start` is `async`, Bun (and the WHATWG
-      // streams spec on most engines) holds response headers until the
-      // start promise resolves, defeating token-by-token streaming.
-      const body = new ReadableStream<Uint8Array>({
-        start(controller) {
-          let closed = false;
-          const closeOnce = () => {
-            if (closed) return;
-            closed = true;
-            try {
-              controller.close();
-            } catch {
-              /* already closed */
+      // TransformStream: writer.write() back-pressures naturally against
+      // Bun's response consumer, so each `await writer.write(chunk)`
+      // resolves only after the chunk has been picked up by the HTTP
+      // writer. This forces real per-event flushing — the previous
+      // `ReadableStream.start(controller) + IIFE + controller.enqueue`
+      // pattern coalesced 2,000+ enqueues into a single delivery at
+      // stream close under Bun (verified via the EventStream tab: every
+      // event arrived at the browser at the same millisecond despite
+      // upstream LLM emitting deltas over ~45s).
+      const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
+      const writer = writable.getWriter();
+
+      let writerClosed = false;
+      const closeOnce = async () => {
+        if (writerClosed) return;
+        writerClosed = true;
+        try {
+          await writer.close();
+        } catch {
+          /* already closed */
+        }
+      };
+      const writeFrame = async (frame: string) => {
+        if (writerClosed) return;
+        try {
+          await writer.write(encoder.encode(frame));
+        } catch {
+          writerClosed = true;
+        }
+      };
+      const writeEvent = (payload: unknown) =>
+        writeFrame(`data: ${JSON.stringify(payload)}\n\n`);
+
+      // Pre-flush a fat comment frame so the response headers + first
+      // chunk hit the wire immediately. SSE comments are spec-mandated
+      // ignores by the browser parser. The 2KB padding defeats any
+      // intermediate proxy that holds the connection until ~2-4KB
+      // arrives.
+      const padding = " ".repeat(2048);
+      void writeFrame(`: stream-open ${Date.now()} ${padding}\n\n`);
+
+      // Keepalive defeats idle-timeout proxies during LLM warmup.
+      const keepAlive = setInterval(() => {
+        void writeFrame(`: keepalive ${Date.now()}\n\n`);
+      }, keepAliveIntervalMs);
+
+      const onAbort = () => {
+        clearInterval(keepAlive);
+        void closeOnce();
+      };
+      signal.addEventListener("abort", onAbort);
+
+      // Producer task — pumps chat events into the writer. Runs in
+      // background; the response is returned synchronously below.
+      void (async () => {
+        try {
+          for await (const event of chatService.chat(authCtx.userId, chatRequest, signal, {
+            modelId: resolvedModelId,
+          })) {
+            await writeEvent(event);
+            if (event.type === "tool-result") outcome = "skill_error";
+            if (event.type === "finish") {
+              const reason = (event as { finishReason?: string }).finishReason;
+              if (reason === "stop") outcome = "success";
             }
-          };
-          const write = (frame: string) => {
-            if (closed) return;
-            try {
-              controller.enqueue(encoder.encode(frame));
-            } catch {
-              /* writer gone — caller aborted */
-              closed = true;
-            }
-          };
-          const writeEvent = (payload: unknown) => {
-            write(`data: ${JSON.stringify(payload)}\n\n`);
-          };
+          }
+        } catch (err) {
+          const message = err instanceof Error ? err.message : "Chat stream failed";
+          logger.error({ userId: authCtx.userId, err: message }, "Chat stream error");
+          await writeEvent({ type: "error", message });
+        } finally {
+          signal.removeEventListener("abort", onAbort);
+          clearInterval(keepAlive);
+          await closeOnce();
+          await quotaService
+            .chargeOnCompletion({
+              userId: authCtx.userId,
+              permissions: authCtx.permissions,
+              surface: "playground",
+              outcome,
+            })
+            .catch((err) => {
+              logger.warn(
+                { userId: authCtx.userId, err: (err as Error).message },
+                "Quota charge after playground chat failed",
+              );
+            });
+        }
+      })();
 
-          // Pre-flush a fat comment frame to force every layer in the
-          // chain (Bun's response buffer, NyxID's reqwest stream, the
-          // browser's `response.body` reader) to commit headers + start
-          // delivering chunks. Some intermediaries hold output until
-          // ~2-4KB lands or until they think the response is "real".
-          // SSE comments (lines starting with `:`) are spec-mandated
-          // ignores in the browser parser, so this is invisible to the
-          // application.
-          const padding = " ".repeat(2048);
-          write(`: stream-open ${Date.now()} ${padding}\n\n`);
-
-          // Keepalive to defeat idle-timeout proxies during LLM warmup.
-          const keepAlive = setInterval(() => {
-            write(`: keepalive ${Date.now()}\n\n`);
-          }, keepAliveIntervalMs);
-
-          const onAbort = () => {
-            clearInterval(keepAlive);
-            closeOnce();
-          };
-          signal.addEventListener("abort", onAbort);
-
-          // Async pump — runs as a deferred task so `start` returns
-          // synchronously. Bun commits response headers as soon as the
-          // first byte is enqueued (the `: stream-open` above).
-          (async () => {
-            try {
-              for await (const event of chatService.chat(authCtx.userId, chatRequest, signal, {
-                modelId: resolvedModelId,
-              })) {
-                writeEvent(event);
-                if (event.type === "tool-result") outcome = "skill_error";
-                if (event.type === "finish") {
-                  const reason = (event as { finishReason?: string }).finishReason;
-                  if (reason === "stop") outcome = "success";
-                }
-              }
-            } catch (err) {
-              const message = err instanceof Error ? err.message : "Chat stream failed";
-              logger.error({ userId: authCtx.userId, err: message }, "Chat stream error");
-              writeEvent({ type: "error", message });
-            } finally {
-              signal.removeEventListener("abort", onAbort);
-              clearInterval(keepAlive);
-              closeOnce();
-              await quotaService
-                .chargeOnCompletion({
-                  userId: authCtx.userId,
-                  permissions: authCtx.permissions,
-                  surface: "playground",
-                  outcome,
-                })
-                .catch((err) => {
-                  logger.warn(
-                    { userId: authCtx.userId, err: (err as Error).message },
-                    "Quota charge after playground chat failed",
-                  );
-                });
-            }
-          })();
-        },
-      });
-
-      return new Response(body, {
+      return new Response(readable, {
         status: 200,
         headers: {
           "Content-Type": "text/event-stream; charset=utf-8",
           "Cache-Control": "no-cache, no-transform",
           Connection: "keep-alive",
-          // Tell intermediate proxies (nginx, NyxID) NOT to buffer.
           "X-Accel-Buffering": "no",
         },
       });

@@ -327,78 +327,65 @@ export function PlaygroundPage() {
   return (
     <PageTransition>
       <div className="relative flex h-full flex-col">
-        {/* ─── Lightweight surface strip — model picker + quota only ─── */}
-        <header className="shrink-0 px-4 pt-1">
-          <div className="mx-auto flex max-w-3xl items-center justify-end gap-3">
-            <QuotaInline surface="playground" />
-            <ModelPicker surface="playground" onChange={setPickedModelId} />
-          </div>
-        </header>
+        {/* Quota chip is already surfaced by the app shell; the model
+            picker has moved down to sit just above the composer (same
+            place ChatGPT puts it). No surface header needed. */}
 
         {/* ─── Chat (page hero) ─── */}
         <section className="flex min-h-0 flex-1 flex-col">
-          <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col px-4 py-2">
-            {/* Inline status row above the messages — no header band. */}
-            <div className="mb-2 flex shrink-0 items-center justify-between">
-              <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.18em] text-meta">
+          <div className="mx-auto flex min-h-0 w-full max-w-2xl flex-1 flex-col px-4 pb-6 pt-1">
+            {/* Slim utility row — only when a conversation is active.
+                A pulsing ember dot shows streaming; clear-chat sits as a
+                small ghost link on the right. No "Idle/Ready" status
+                noise to compete with the conversation itself. */}
+            {conversationActive && (
+              <div className="mb-1 flex shrink-0 items-center justify-between py-1">
                 <span
                   aria-hidden
                   className={`inline-block h-1.5 w-1.5 rounded-full ${
-                    isStreaming ? "animate-pulse bg-accent" : "bg-meta/40"
+                    isStreaming ? "animate-pulse bg-accent" : "bg-transparent"
                   }`}
                 />
-                <span className="text-strong">{skillName}</span>
-                <span aria-hidden className="h-px w-3 bg-accent/40" />
-                <span>
-                  {isStreaming
-                    ? t("playground.statusStreaming", "Streaming")
-                    : messages.length === 0
-                      ? t("playground.statusIdle", "Idle")
-                      : t("playground.statusReady", "Ready")}
-                </span>
+                <button
+                  type="button"
+                  onClick={clearChat}
+                  className="font-mono text-[10px] uppercase tracking-[0.14em] text-meta transition-colors hover:text-accent"
+                >
+                  {t("playground.clearChat")}
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={clearChat}
-                disabled={messages.length === 0}
-                className="font-mono text-[10px] uppercase tracking-[0.14em] text-meta transition-colors hover:text-accent disabled:cursor-not-allowed disabled:opacity-30"
-              >
-                {t("playground.clearChat")}
-              </button>
-            </div>
+            )}
 
             {/* Messages scroll area */}
             <div ref={messagesScrollRef} className="min-h-0 flex-1 overflow-y-auto pr-1">
               {!conversationActive ? (
-                /* ─── Empty-state hero ─── */
-                <div className="space-y-5 py-6">
-                  <div className="space-y-2">
-                    <span className="font-mono text-[10px] uppercase tracking-[0.20em] text-accent">
-                      [§&nbsp;READY]
-                    </span>
-                    <h2 className="font-display text-2xl font-semibold leading-tight tracking-tight text-strong">
-                      {t("playground.heroTitle", "Probe the skill.")}
-                    </h2>
-                    <p className="font-text text-sm leading-relaxed text-body">
-                      {envIncomplete
-                        ? t(
-                            "playground.heroEnvFirst",
-                            "Set the runtime env vars in the Env drawer on the right, then start chatting.",
-                          )
-                        : t(
-                            "playground.heroSubtitle",
-                            "Ask anything about {{name}}, or have it run with sample input. Pick a starter below or write your own.",
-                            { name: skillName },
-                          )}
-                    </p>
-                  </div>
-
-                  <WeldedSeam />
-
-                  <div>
-                    <div className="mb-2 font-mono text-[10px] uppercase tracking-[0.18em] text-meta">
-                      {t("playground.starters", "Quick starters")}
+                /* ─── Empty-state hero ─── ChatGPT-style centered prompt
+                    flag with skill identity, single-line lede, and three
+                    starters as soft chips below. Vertical-centered so
+                    the cursor lands ~middle of the screen at rest. */
+                <div className="flex h-full flex-col items-center justify-center py-8">
+                  <div className="w-full space-y-6 text-center">
+                    <div className="space-y-2">
+                      <div className="font-mono text-[10px] uppercase tracking-[0.20em] text-meta">
+                        {skillName}
+                      </div>
+                      <h2 className="font-display text-3xl font-semibold leading-[1.15] tracking-tight text-strong">
+                        {t("playground.heroTitle", "Probe the skill.")}
+                      </h2>
+                      <p className="font-text text-[15px] leading-relaxed text-body">
+                        {envIncomplete
+                          ? t(
+                              "playground.heroEnvFirst",
+                              "Set the runtime env vars in the Env drawer on the right, then start chatting.",
+                            )
+                          : t(
+                              "playground.heroSubtitle",
+                              "Ask anything about {{name}}, or have it run with sample input.",
+                              { name: skillName },
+                            )}
+                      </p>
                     </div>
+
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                       {starters.map((s) => (
                         <button
@@ -406,29 +393,25 @@ export function PlaygroundPage() {
                           type="button"
                           onClick={() => handleStarterClick(s.body)}
                           disabled={envIncomplete}
-                          className="group flex flex-col items-start gap-1.5 rounded-sm border border-subtle bg-page/40 px-3 py-2.5 text-left transition-all hover:border-accent/60 hover:bg-card disabled:cursor-not-allowed disabled:opacity-40"
+                          className="group flex flex-col items-start gap-1 rounded-xl border border-subtle bg-card/60 px-3.5 py-3 text-left transition-all hover:border-accent/60 hover:bg-card disabled:cursor-not-allowed disabled:opacity-40"
                         >
                           <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-accent">
                             {s.label}
                           </span>
-                          <span className="line-clamp-2 font-text text-xs leading-snug text-body">
+                          <span className="line-clamp-2 font-text text-[13px] leading-snug text-body">
                             {s.body}
                           </span>
                         </button>
                       ))}
                     </div>
+
+                    <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-meta/70">
+                      {t(
+                        "playground.drawerHint",
+                        "Skill · Env · Package on the right edge",
+                      )}
+                    </p>
                   </div>
-
-                  <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
-                    {t("playground.kbHint", "Enter to send · Shift + Enter for newline")}
-                  </p>
-
-                  <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-meta/70">
-                    {t(
-                      "playground.drawerHint",
-                      "Hover the right edge to peek skill / env / package · click a tab to pin",
-                    )}
-                  </p>
                 </div>
               ) : (
                 /* ─── Conversation ─── */
@@ -499,7 +482,15 @@ export function PlaygroundPage() {
             </div>
 
             {/* Chat input — pinned bottom */}
-            <div className="shrink-0 pt-2">
+            {/* Composer — model picker above the input, ChatGPT-style.
+                Both elements share the chat column's centerline so the
+                empty-state hero, the conversation, and the composer all
+                line up vertically without "one looks shifted". */}
+            <div className="shrink-0 pt-3">
+              <div className="mb-2 flex items-center justify-center gap-3">
+                <QuotaInline surface="playground" />
+                <ModelPicker surface="playground" onChange={setPickedModelId} />
+              </div>
               <ChatInput
                 ref={chatInputRef}
                 onSend={handleSend}
@@ -514,6 +505,9 @@ export function PlaygroundPage() {
                       : t("playground.askPlaceholder", { name: skillName })
                 }
               />
+              <p className="mt-2 text-center font-mono text-[10px] uppercase tracking-[0.14em] text-meta/70">
+                {t("playground.kbHint", "Enter to send · Shift + Enter for newline")}
+              </p>
             </div>
           </div>
         </section>
