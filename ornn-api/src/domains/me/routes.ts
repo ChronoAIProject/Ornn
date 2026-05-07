@@ -17,7 +17,8 @@ import {
 } from "../../middleware/nyxidAuth";
 import type { NyxidServiceClient } from "../../clients/nyxid/service";
 import type { SkillRepository } from "../skills/crud/repository";
-import type { ActivityRepository } from "../admin/activityRepository";
+import type { UserDirectoryRepository } from "../users/repository";
+import type { AnalyticsEmitter } from "../../infra/analytics";
 import { AppError } from "../../shared/types/index";
 
 export interface MeRoutesConfig {
@@ -28,7 +29,10 @@ export interface MeRoutesConfig {
    */
   nyxidBaseUrlResolver: () => Promise<string>;
   skillRepo: SkillRepository;
-  activityRepo: ActivityRepository;
+  /** Identity cache — backs `findByUserIds` for label resolution. */
+  userDirectoryRepo: UserDirectoryRepository;
+  /** PostHog emitter for `user.login` / `user.logout` (issue #271). */
+  analyticsEmitter: AnalyticsEmitter;
   /**
    * Catalog-service client. Powers `GET /me/nyxid-services`, which lists
    * the NyxID services the caller can tie a skill to (public admin
@@ -47,7 +51,8 @@ export function createMeRoutes(config: MeRoutesConfig): Hono<{ Variables: AuthVa
   const {
     nyxidBaseUrlResolver,
     skillRepo,
-    activityRepo,
+    userDirectoryRepo,
+    analyticsEmitter,
     nyxidServiceClient,
     extraNyxidServicesResolver,
   } = config;
@@ -123,20 +128,30 @@ export function createMeRoutes(config: MeRoutesConfig): Hono<{ Variables: AuthVa
    * are pulled from the decoded NyxID identity token (never from
    * client-supplied headers, which the proxy strips).
    *
-   * Kept under `/activity/*` for v0 back-compat — Epic 2 promotes these
-   * to `POST /v1/me/events` with a `{ type: "login" | "logout" }` body.
-   * Moved from the `admin` domain in the Epic 1 reorg; "any authed user"
-   * was never an admin operation.
+   * Issue #271: events go straight to PostHog. The frontend already
+   * emits `login.completed` client-side; this is the server-side ack
+   * (`user.login` / `user.logout`) — both are useful for cross-checking
+   * client-vs-server attribution in dashboards.
    */
   app.post("/activity/login", auth, async (c) => {
     const authCtx = getAuth(c);
-    await activityRepo.log(authCtx.userId, authCtx.email, authCtx.displayName, "login");
+    analyticsEmitter.trackPlatformActivity({
+      userId: authCtx.userId,
+      userEmail: authCtx.email,
+      userDisplayName: authCtx.displayName,
+      action: "user.login",
+    });
     return c.json({ data: { success: true }, error: null });
   });
 
   app.post("/activity/logout", auth, async (c) => {
     const authCtx = getAuth(c);
-    await activityRepo.log(authCtx.userId, authCtx.email, authCtx.displayName, "logout");
+    analyticsEmitter.trackPlatformActivity({
+      userId: authCtx.userId,
+      userEmail: authCtx.email,
+      userDisplayName: authCtx.displayName,
+      action: "user.logout",
+    });
     return c.json({ data: { success: true }, error: null });
   });
 
@@ -269,7 +284,7 @@ export function createMeRoutes(config: MeRoutesConfig): Hono<{ Variables: AuthVa
     const baseUrl = await resolveBaseUrl();
     const [orgs, users] = await Promise.all([
       resolveOrgDisplayNames(raw.orgs, authCtx.userAccessToken, baseUrl),
-      resolveUserDisplayNames(raw.users, activityRepo),
+      resolveUserDisplayNames(raw.users, userDirectoryRepo),
     ]);
     return c.json({ data: { orgs, users }, error: null });
   });
@@ -288,7 +303,7 @@ export function createMeRoutes(config: MeRoutesConfig): Hono<{ Variables: AuthVa
     const baseUrl = await resolveBaseUrl();
     const [orgs, users] = await Promise.all([
       resolveOrgDisplayNames(raw.orgs, authCtx.userAccessToken, baseUrl),
-      resolveUserDisplayNames(raw.users, activityRepo),
+      resolveUserDisplayNames(raw.users, userDirectoryRepo),
     ]);
     return c.json({ data: { orgs, users }, error: null });
   });
@@ -329,16 +344,16 @@ async function resolveOrgDisplayNames(
 
 /**
  * Best-effort name resolution for a list of user ids. Hits the
- * activity collection once per unique id through the existing email
- * directory. A user who never signed into Ornn returns as their raw
- * id — which the UI chip displays verbatim.
+ * unified `users` directory once per batch. A user who never signed
+ * into Ornn returns as their raw id — which the UI chip displays
+ * verbatim.
  */
 async function resolveUserDisplayNames(
   raw: Array<{ userId: string; skillCount: number }>,
-  activityRepo: ActivityRepository,
+  userDirectoryRepo: UserDirectoryRepository,
 ): Promise<Array<{ userId: string; email: string; displayName: string; skillCount: number }>> {
   const ids = raw.map((r) => r.userId);
-  const directory = await activityRepo.findByUserIds(ids);
+  const directory = await userDirectoryRepo.findByUserIds(ids);
   const map = new Map(directory.map((d) => [d.userId, d]));
   return raw.map((r) => {
     const d = map.get(r.userId);

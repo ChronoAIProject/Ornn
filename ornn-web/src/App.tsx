@@ -177,9 +177,9 @@ const SkillAuditSection = lazy(() =>
     default: m.SkillAuditSection,
   })),
 );
-const TelemetryPlaceholderSection = lazy(() =>
+const TelemetrySection = lazy(() =>
   import("@/pages/admin/settings/sections").then((m) => ({
-    default: m.TelemetryPlaceholderSection,
+    default: m.TelemetrySection,
   })),
 );
 const QuotaDefaultsSection = lazy(() =>
@@ -291,10 +291,7 @@ const router = createBrowserRouter(
                 element={<ServicesSection />}
               />
               <Route path="skill-audit" element={<SkillAuditSection />} />
-              <Route
-                path="telemetry"
-                element={<TelemetryPlaceholderSection />}
-              />
+              <Route path="telemetry" element={<TelemetrySection />} />
               <Route path="quota" element={<QuotaDefaultsSection />} />
               <Route path="extras" element={<ExtrasSection />} />
               <Route

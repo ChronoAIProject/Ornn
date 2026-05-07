@@ -22,8 +22,19 @@ describe("NoopTracker", () => {
 });
 
 describe("createTracker", () => {
+  test("returns NoopTracker when posthogEnabled is false", () => {
+    const tracker = createTracker({
+      posthogEnabled: false,
+      posthogApiKey: "phc_fake_key_for_test",
+      posthogHost: "https://eu.i.posthog.com",
+      posthogProjectId: null,
+    });
+    expect(tracker).toBeInstanceOf(NoopTracker);
+  });
+
   test("returns NoopTracker when posthogApiKey is null", () => {
     const tracker = createTracker({
+      posthogEnabled: true,
       posthogApiKey: null,
       posthogHost: "https://eu.i.posthog.com",
       posthogProjectId: null,
@@ -33,6 +44,7 @@ describe("createTracker", () => {
 
   test("returns NoopTracker when posthogApiKey is empty string", () => {
     const tracker = createTracker({
+      posthogEnabled: true,
       posthogApiKey: "",
       posthogHost: "https://eu.i.posthog.com",
       posthogProjectId: null,
@@ -40,8 +52,9 @@ describe("createTracker", () => {
     expect(tracker).toBeInstanceOf(NoopTracker);
   });
 
-  test("returns PosthogTracker when posthogApiKey is set", async () => {
+  test("returns PosthogTracker when enabled with a key", async () => {
     const tracker = createTracker({
+      posthogEnabled: true,
       posthogApiKey: "phc_fake_key_for_test",
       posthogHost: "https://eu.i.posthog.com",
       posthogProjectId: "fake-project",

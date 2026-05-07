@@ -2,8 +2,9 @@
  * Admin quota routes UT-ADMQROUTE-001..012.
  *
  * Mounts `createAdminQuotaRoutes` directly on a Hono app and dispatches
- * via `app.request()` — no harness needed. Activity / admin-users repos
- * use mongodb-memory-server; QuotaService uses fake repo + defaults.
+ * via `app.request()` — no harness needed. After issue #271 the user
+ * pool comes from the unified `users` directory; the old `activities`
+ * + `admin_users` collections are gone.
  *
  * @module domains/admin/quota/routes.test
  */
@@ -12,8 +13,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:tes
 import { Hono } from "hono";
 import { MongoMemoryServer } from "mongodb-memory-server";
 import { MongoClient, type Db } from "mongodb";
-import { ActivityRepository } from "../activityRepository";
-import { AdminUsersRepository } from "../../admin-users/repository";
+import { UserDirectoryRepository } from "../../users/repository";
 import { QuotaRepository } from "../../quota/repository";
 import { QuotaService } from "../../quota/service";
 import type { AuthVariables } from "../../../middleware/nyxidAuth";
@@ -22,8 +22,7 @@ import { createAdminQuotaRoutes } from "./routes";
 let mongo: MongoMemoryServer;
 let client: MongoClient;
 let db: Db;
-let activityRepo: ActivityRepository;
-let adminUsersRepo: AdminUsersRepository;
+let userDirectoryRepo: UserDirectoryRepository;
 let quotaRepo: QuotaRepository;
 let quotaService: QuotaService;
 let app: Hono<{ Variables: AuthVariables }>;
@@ -35,9 +34,8 @@ beforeAll(async () => {
   client = new MongoClient(mongo.getUri());
   await client.connect();
   db = client.db("admin_quota_routes_test");
-  activityRepo = new ActivityRepository(db);
-  adminUsersRepo = new AdminUsersRepository(db);
-  await adminUsersRepo.ensureIndexes();
+  userDirectoryRepo = new UserDirectoryRepository(db);
+  await userDirectoryRepo.ensureIndexes();
   quotaRepo = new QuotaRepository(db);
   await quotaRepo.ensureIndexes();
   quotaService = new QuotaService({
@@ -48,10 +46,8 @@ beforeAll(async () => {
       },
     },
   });
-  const router = createAdminQuotaRoutes({ quotaService, activityRepo, adminUsersRepo });
+  const router = createAdminQuotaRoutes({ quotaService, userDirectoryRepo });
   app = new Hono<{ Variables: AuthVariables }>();
-  // Test setup middleware: read perms from x-test-perms header and pre-
-  // populate the auth context the way `proxyAuthSetup` would in prod.
   app.use("*", async (c, next) => {
     const permsHeader = c.req.header("x-test-perms") ?? "";
     const permissions = permsHeader.length > 0 ? permsHeader.split(",") : [];
@@ -64,7 +60,6 @@ beforeAll(async () => {
     });
     await next();
   });
-  // Wire AppError → JSON like prod does (otherwise Hono returns a 500 stack).
   app.onError((err, c) => {
     const e = err as { statusCode?: number; code?: string; message: string };
     if (e.statusCode && e.code) {
@@ -87,20 +82,22 @@ afterAll(async () => {
 });
 
 beforeEach(async () => {
-  await db.collection("activities").deleteMany({});
-  await db.collection("admin_users").deleteMany({});
+  await db.collection("users").deleteMany({});
   await db.collection("quota_buckets").deleteMany({});
   await db.collection("quota_grants_audit").deleteMany({});
 });
 
 function authHeaders(perms: string[] = [ADMIN_PERM]) {
-  // The test setup middleware (mounted in beforeAll) reads `x-test-perms`
-  // and synthesizes the auth context.
   return { "x-test-perms": perms.join(",") };
 }
 
-async function logActivity(userId: string, email: string) {
-  await activityRepo.log(userId, email, userId, "login", {});
+async function seedUser(userId: string, email: string, isAdmin = false) {
+  await userDirectoryRepo.upsert({
+    userId,
+    email,
+    displayName: userId,
+    isAdmin,
+  });
 }
 
 describe("UT-ADMQROUTE-012 non-admin → 403", () => {
@@ -181,7 +178,7 @@ describe("UT-ADMQROUTE-011 bulk grant trimmed body", () => {
 
 describe("UT-ADMQROUTE-001 GET /admin/quota/users surface=playground", () => {
   test("returns shape with monthMarker + items", async () => {
-    await logActivity("u1", "u1@x");
+    await seedUser("u1", "u1@x");
     const res = await app.request("/admin/quota/users?surface=playground", {
       headers: authHeaders(),
     });
@@ -200,22 +197,20 @@ describe("UT-ADMQROUTE-001 GET /admin/quota/users surface=playground", () => {
 
 describe("UT-ADMQROUTE-002 surface=skillGen filter", () => {
   test("snapshot read on skillGen surface", async () => {
-    await logActivity("u1", "u1@x");
+    await seedUser("u1", "u1@x");
     const res = await app.request("/admin/quota/users?surface=skillGen", {
       headers: authHeaders(),
     });
     expect(res.status).toBe(200);
     const json = (await res.json()) as { data: { items: Array<{ defaultAllotment: number }> } };
-    // skillGen default is 10 in our test settings.
     expect(json.data.items[0].defaultAllotment).toBe(10);
   });
 });
 
 describe("UT-ADMQROUTE-003 admin users excluded", () => {
-  test("admin in admin-users-repo not surfaced", async () => {
-    await logActivity("a1", "a1@x");
-    await adminUsersRepo.upsert({ userId: "a1", email: "a1@x", displayName: "A1" });
-    await logActivity("u1", "u1@x");
+  test("admin marked in directory not surfaced", async () => {
+    await seedUser("a1", "a1@x", true);
+    await seedUser("u1", "u1@x", false);
     const res = await app.request("/admin/quota/users?surface=playground", {
       headers: authHeaders(),
     });
@@ -227,8 +222,7 @@ describe("UT-ADMQROUTE-003 admin users excluded", () => {
 
 describe("UT-ADMQROUTE-006 remaining floors at 0", () => {
   test("over-limit user reports remaining=0, not negative", async () => {
-    await logActivity("u1", "u1@x");
-    // Seed bucket beyond cap.
+    await seedUser("u1", "u1@x");
     await db.collection("quota_buckets").insertOne({
       _id: ("u1:playground:" + monthMarkerNow()) as unknown as never,
       userId: "u1",
@@ -286,7 +280,6 @@ describe("UT-ADMQROUTE-007 lifetime endpoint sorted asc", () => {
 
 describe("UT-ADMQROUTE-005 /admin/quota/grants pagination", () => {
   test("returns audit list", async () => {
-    // Seed two grants via the service so audit + bucket are coherent.
     await quotaService.grant({
       admin: { userId: "admin1", email: "admin@x", displayName: "Admin" },
       targetUserId: "u1",

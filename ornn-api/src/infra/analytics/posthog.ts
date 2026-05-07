@@ -144,15 +144,29 @@ export class PosthogTracker implements AnalyticsTracker {
 /**
  * Pick the right tracker based on the resolved config. Single
  * construction site so the bootstrap doesn't have to know which
- * implementation is wired.
+ * implementation is wired. NoopTracker when:
+ *   - the admin master switch (`posthogEnabled`) is off, OR
+ *   - no API key is configured.
  */
 export function createTracker(
-  config: { posthogApiKey: string | null; posthogHost: string; posthogProjectId: string | null },
+  config: {
+    posthogEnabled: boolean;
+    posthogApiKey: string | null;
+    posthogHost: string;
+    posthogProjectId: string | null;
+  },
   logger?: Logger,
 ): AnalyticsTracker {
+  if (!config.posthogEnabled) {
+    (logger ?? moduleLogger).info(
+      { reason: "telemetry.postHogEnabled=false" },
+      "PostHog tracker disabled — using NoopTracker",
+    );
+    return new NoopTracker();
+  }
   if (!config.posthogApiKey) {
     (logger ?? moduleLogger).info(
-      { reason: "POSTHOG_API_KEY not set" },
+      { reason: "no API key configured" },
       "PostHog tracker disabled — using NoopTracker",
     );
     return new NoopTracker();
