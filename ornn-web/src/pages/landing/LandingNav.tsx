@@ -195,6 +195,21 @@ export function LandingNav() {
               t("nav.docs")
             )}
           </Link>
+          <Link
+            to="/contact"
+            aria-current={isNavActive("/contact") ? "page" : undefined}
+            className={`focus-ring-ember transition-colors duration-150 ${
+              isNavActive("/contact")
+                ? "font-semibold text-parchment"
+                : "hover:text-ember"
+            }`}
+          >
+            {isNavActive("/contact") ? (
+              <HighlighterMark className="highlighter-mark--loose">{t("nav.contact")}</HighlighterMark>
+            ) : (
+              t("nav.contact")
+            )}
+          </Link>
         </div>
 
         {/* Desktop right cluster — fully hidden on mobile; the hamburger
@@ -491,6 +506,23 @@ export function LandingNav() {
                 <HighlighterMark className="highlighter-mark--loose">{t("nav.docs")}</HighlighterMark>
               ) : (
                 t("nav.docs")
+              )}
+            </Link>
+            <Link
+              to="/contact"
+              onClick={closeMenu}
+              tabIndex={menuOpen ? 0 : -1}
+              aria-current={isNavActive("/contact") ? "page" : undefined}
+              className={`focus-ring-ember border-b border-[color:var(--color-border-subtle)] py-3 font-text text-[16px] transition-colors ${
+                isNavActive("/contact")
+                  ? "font-semibold text-parchment"
+                  : "text-bone hover:text-ember"
+              }`}
+            >
+              {isNavActive("/contact") ? (
+                <HighlighterMark className="highlighter-mark--loose">{t("nav.contact")}</HighlighterMark>
+              ) : (
+                t("nav.contact")
               )}
             </Link>
             <a
