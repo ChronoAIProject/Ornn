@@ -48,13 +48,13 @@ export function CookieConsentBanner() {
       role="dialog"
       aria-live="polite"
       aria-labelledby="cookie-consent-title"
-      className="pointer-events-none fixed inset-x-0 bottom-0 z-50 flex justify-center px-4 pb-4 sm:px-6 sm:pb-6"
+      className="pointer-events-none fixed inset-x-0 bottom-0 z-50 flex justify-center px-4 pb-4 sm:justify-end sm:px-6 sm:pb-6"
     >
       <div
-        className="card-impression pointer-events-auto w-full max-w-3xl rounded-md border border-subtle bg-card px-5 py-4 sm:px-6 sm:py-5"
+        className="card-impression pointer-events-auto w-full max-w-md rounded-md border border-subtle bg-card px-5 py-4 sm:px-6 sm:py-5"
         data-testid="cookie-consent-banner"
       >
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
+        <div className="flex flex-col gap-4">
           <div className="min-w-0">
             <p className="mb-1.5 font-mono text-[10px] uppercase tracking-[0.2em] text-meta">
               [ § ANALYTICS — CONSENT ]
