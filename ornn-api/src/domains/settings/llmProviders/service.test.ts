@@ -47,7 +47,7 @@ class FakeRepo {
       const isKeeper = keep && id === keep.providerId;
       const nextModels = doc.models.map((m) => {
         if (isKeeper && m.id === keep!.modelId) return m;
-        if ((m as Record<string, unknown>)[defKey] !== true) return m;
+        if ((m as unknown as Record<string, unknown>)[defKey] !== true) return m;
         return { ...m, [defKey]: false };
       });
       this.rows.set(id, { ...doc, models: nextModels });
