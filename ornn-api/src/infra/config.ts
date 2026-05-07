@@ -2,14 +2,14 @@
  * Environment variable configuration for ornn-api (bootstrap-only).
  *
  * Per the Architecture §7 inventory, runtime-flippable knobs (LLM gateway,
- * default model, storage/sandbox URLs, NyxID base URL/paths, AgentSeal
- * toggle/timeout, SSE keep-alive, extra NyxID services, **PostHog
- * telemetry**) live in admin settings (`platform_settings` collection)
- * and are read on demand via `SettingsService`. `loadConfig` only resolves
- * what's needed to bring the process up: DB URI, log level, NyxID SA
- * credentials (so the very first settings read can authenticate downstream
- * proxies if required), the encryption key for at-rest secrets, CORS
- * origins, and the public origin used for canonical-link generation.
+ * default model, storage/sandbox URLs, NyxID base URL/paths + SA
+ * credentials, AgentSeal toggle/timeout, SSE keep-alive, extra NyxID
+ * services, **PostHog telemetry**) live in admin settings
+ * (`platform_settings` collection) and are read on demand via
+ * `SettingsService`. `loadConfig` only resolves what's needed to bring
+ * the process up: DB URI, log level, the encryption key for at-rest
+ * secrets, CORS origins, and the public origin used for canonical-link
+ * generation.
  *
  * PostHog values stay in env as a *bootstrap fallback* for the very first
  * boot (when the DB telemetry section is empty / defaults). Once the
@@ -30,11 +30,6 @@ export interface SkillConfig {
   readonly port: number;
   readonly logLevel: string;
   readonly logPretty: boolean;
-
-  // NyxID — service-account credentials only (URLs come from settings).
-  readonly nyxidTokenUrl: string;
-  readonly nyxidClientId: string;
-  readonly nyxidClientSecret: string;
 
   // MongoDB
   readonly mongodbUri: string;
@@ -94,10 +89,6 @@ const envSchema = z.object({
   PORT: z.coerce.number().int().positive().default(3802),
   LOG_LEVEL: z.enum(["trace", "debug", "info", "warn", "error", "fatal"]).default("info"),
   LOG_PRETTY: booleanFromEnv,
-
-  NYXID_SA_TOKEN_URL: z.string().url(),
-  NYXID_SA_CLIENT_ID: z.string().min(1),
-  NYXID_SA_CLIENT_SECRET: z.string().min(1),
 
   MONGODB_URI: z.string().min(1),
   MONGODB_DB: z.string().min(1).default("ornn"),
@@ -178,10 +169,6 @@ export function loadConfig(): SkillConfig {
     port: env.PORT,
     logLevel: env.LOG_LEVEL,
     logPretty: env.LOG_PRETTY,
-
-    nyxidTokenUrl: env.NYXID_SA_TOKEN_URL,
-    nyxidClientId: env.NYXID_SA_CLIENT_ID,
-    nyxidClientSecret: env.NYXID_SA_CLIENT_SECRET,
 
     mongodbUri: env.MONGODB_URI,
     mongodbDb: env.MONGODB_DB,

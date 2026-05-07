@@ -69,7 +69,6 @@ export interface AdminRoutesConfig {
    * tag-based form. Currently unused.
    */
   generationService?: SkillGenerationService;
-  nyxidTokenUrl?: string;
   /**
    * AgentSeal scanner (#253). When omitted the rescan endpoint replies
    * with 503; in dev/CI without the binary, ops can still operate the

@@ -15,14 +15,12 @@
  * code path the long-running pod uses).
  *
  * Run locally:
- *   MONGODB_URI=... MONGODB_DB=ornn \
- *   STORAGE_SERVICE_URL=... NYXID_SA_TOKEN_URL=... NYXID_SA_CLIENT_ID=... NYXID_SA_CLIENT_SECRET=... \
- *   NYX_LLM_GATEWAY_URL=http://placeholder SANDBOX_SERVICE_URL=http://placeholder \
- *   ENCRYPTION_KEY=... \
+ *   MONGODB_URI=... MONGODB_DB=ornn ENCRYPTION_KEY=... \
  *   bun run scripts/reconcile-mirror.ts
  *
- * Many of those envs are unused by the mirror path (LLM, sandbox) but
- * the shared `loadConfig()` validates them all up front.
+ * NyxID SA credentials and other operator-flippable settings live in
+ * the `platform_settings` collection — the script reads them through
+ * `SettingsService` and self-gates when missing.
  *
  * @module scripts/reconcile-mirror
  */
@@ -49,11 +47,18 @@ async function main(): Promise<void> {
     const skillVersionRepo = new SkillVersionRepository(mongo.db);
     await skillVersionRepo.ensureIndexes();
 
-    const saTokenProvider = new NyxidSaTokenProvider(
-      config.nyxidTokenUrl,
-      config.nyxidClientId,
-      config.nyxidClientSecret,
-    );
+    const platformSettingsRepo = new PlatformSettingsRepository(mongo.db);
+    const platformSettingsService = new PlatformSettingsService(platformSettingsRepo, {
+      encryptionKey: config.encryptionKey,
+    });
+    const saTokenProvider = new NyxidSaTokenProvider(async () => {
+      const s = await platformSettingsService.getNyxidIntegration();
+      return {
+        tokenUrl: s.tokenUrl,
+        clientId: s.clientId,
+        clientSecret: s.clientSecret,
+      };
+    });
     const getSaAccessToken = () => saTokenProvider.getAccessToken();
     const needsProxyAuth = config.storageServiceUrl.includes("proxy");
     const storageClient = new StorageClient(
@@ -66,11 +71,6 @@ async function main(): Promise<void> {
       skillVersionRepo,
       storageClient,
       storageBucket: config.storageBucket,
-    });
-
-    const platformSettingsRepo = new PlatformSettingsRepository(mongo.db);
-    const platformSettingsService = new PlatformSettingsService(platformSettingsRepo, {
-      encryptionKey: config.encryptionKey,
     });
 
     // Self-gates on disabled/incomplete config — exits cleanly with a
