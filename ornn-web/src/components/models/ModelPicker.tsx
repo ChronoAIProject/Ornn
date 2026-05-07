@@ -44,9 +44,35 @@ export function ModelPicker({
   } = usePreferredModel(surface);
 
   const [open, setOpen] = useState(false);
+  // "down" = menu opens below the trigger (default), "up" = above. Computed
+  // once per open, before the menu renders, based on remaining viewport
+  // space — keeps long lists fully visible when the trigger sits near the
+  // bottom of the screen (playground composer bar).
+  const [placement, setPlacement] = useState<"down" | "up">("down");
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const [activeIndex, setActiveIndex] = useState(-1);
+
+  // Match the menu's `max-h-[20rem]` (320px) so the placement decision lines
+  // up with the rendered ceiling. If you change one, change the other.
+  const MENU_MAX_HEIGHT_PX = 320;
+  const handleToggleOpen = useCallback(() => {
+    if (open) {
+      setOpen(false);
+      return;
+    }
+    const rect = triggerRef.current?.getBoundingClientRect();
+    if (rect) {
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const spaceAbove = rect.top;
+      // Flip up only when below is genuinely tight AND above has more room —
+      // avoids surprising flips in normal page contexts.
+      setPlacement(
+        spaceBelow < MENU_MAX_HEIGHT_PX && spaceAbove > spaceBelow ? "up" : "down",
+      );
+    }
+    setOpen(true);
+  }, [open]);
 
   // Keep parent in sync with the resolved model — initial load and any
   // upstream change (e.g. admin disables the user's pick) flow back here.
@@ -145,7 +171,7 @@ export function ModelPicker({
       <button
         ref={triggerRef}
         type="button"
-        onClick={() => setOpen((o) => !o)}
+        onClick={handleToggleOpen}
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-label={`${label}: ${selected?.displayName ?? "—"}`}
@@ -185,11 +211,12 @@ export function ModelPicker({
           ref={menuRef}
           role="listbox"
           aria-label={`${label} options`}
-          className="
-            card-impression absolute right-0 top-[calc(100%+6px)] z-30
+          className={`
+            card-impression absolute right-0 z-30
             min-w-[16rem] max-h-[20rem] overflow-y-auto
             rounded-sm border border-subtle bg-card p-1
-          "
+            ${placement === "up" ? "bottom-[calc(100%+6px)]" : "top-[calc(100%+6px)]"}
+          `}
         >
           {options.map((opt, idx) => {
             const isSelected = opt.modelId === effectiveModelId;
