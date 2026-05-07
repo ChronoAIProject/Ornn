@@ -19,6 +19,9 @@ export function NotFoundPage() {
   return (
     <PageTransition>
       <div className="flex flex-col items-center justify-center py-24 text-center">
+        <p className="mb-5 font-mono text-[11px] uppercase tracking-[0.22em] text-meta">
+          {t("notFound.eyebrow")}
+        </p>
         <h1 className="mb-4 font-display text-7xl font-semibold tracking-tight text-accent">
           {t("notFound.code")}
         </h1>

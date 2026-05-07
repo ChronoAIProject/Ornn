@@ -45,6 +45,9 @@ export function LoginPage() {
           className="w-full max-w-md"
         >
           <div className="mb-8 text-center">
+            <p className="mb-4 font-mono text-[11px] uppercase tracking-[0.22em] text-meta">
+              {t("login.eyebrow")}
+            </p>
             <h1 className="sr-only">ORNN</h1>
             <Logo className="mx-auto mb-4 h-14 w-auto" />
             <p className="font-text text-sm text-meta">
