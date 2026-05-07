@@ -13,7 +13,6 @@
  */
 
 import { Hono } from "hono";
-import { z } from "zod";
 import type { SkillRepository } from "../skills/crud/repository";
 import type { SkillService } from "../skills/crud/service";
 import type { SkillVersionRepository } from "../skills/crud/skillVersionRepository";
@@ -27,7 +26,6 @@ import {
   requirePermission,
   getAuth,
 } from "../../middleware/nyxidAuth";
-import { validateBody, getValidatedBody } from "../../middleware/validate";
 import pino from "pino";
 
 const logger = pino({ level: "info" }).child({ module: "adminRoutes" });
