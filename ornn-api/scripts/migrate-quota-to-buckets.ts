@@ -37,7 +37,12 @@ import {
   type UpsertGrantParams,
 } from "../src/domains/quota/repository";
 import { bucketId, monthBounds } from "../src/domains/quota/types";
-import { UsersMetaRepository } from "../src/domains/admin-users/usersMetaRepository";
+
+// `UsersMetaRepository` was removed in issue #271 (the `users_meta` and
+// `activities` Mongo collections were folded into the unified `users`
+// directory). The Step 2 backfill below is preserved for historical
+// runs against pre-#271 databases but no-ops on schemas that have
+// already been migrated.
 
 const logger = pino({ level: "info" }).child({ module: "migrateQuotaToBuckets" });
 
@@ -95,7 +100,6 @@ export async function migrate(db: Db, opts: MigrationOptions): Promise<Migration
   const now = opts.now ?? new Date();
   const { monthMarker, monthStart, monthEnd } = monthBounds(now);
   const quotaRepo = new QuotaRepository(db);
-  const usersMetaRepo = new UsersMetaRepository(db);
 
   const oldQuotas = db.collection<OldUserQuotaDoc>("user_quotas");
   const oldGrants = db.collection<OldGrantDoc>(OLD_GRANTS_COLLECTION);
@@ -177,20 +181,13 @@ export async function migrate(db: Db, opts: MigrationOptions): Promise<Migration
     report.userQuotas.migrated += 1;
   }
 
-  // -- 2. users_meta backfill (firstJoinedAt from MIN activities) -----
-  const distinctUserIds = await db.collection("activities").distinct("userId");
-  for (const userId of distinctUserIds) {
-    if (typeof userId !== "string" || userId.length === 0) continue;
-    if (dryRun) {
-      const existing = await db.collection("users_meta").findOne({ _id: userId as never });
-      if (!existing) report.usersMetaWritten += 1;
-      continue;
-    }
-    const existing = await db.collection("users_meta").findOne({ _id: userId as never });
-    if (existing) continue;
-    await usersMetaRepo.compute(userId);
-    report.usersMetaWritten += 1;
-  }
+  // -- 2. users_meta backfill: removed in issue #271. The `activities`
+  // and `users_meta` collections no longer exist; the unified `users`
+  // directory is fed lazily on every authenticated request via
+  // `proxyAuthSetup.onAuthSeen`. `usersMetaWritten` is left in the
+  // report shape for backward compat with any caller that destructures
+  // it; it always reports 0 now.
+  void report.usersMetaWritten;
 
   // -- 3. Archive `quota_grants` and emit notifications ---------------
   const archivedAlready = await archive

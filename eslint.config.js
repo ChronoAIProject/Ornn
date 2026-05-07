@@ -52,12 +52,6 @@ export default tseslint.config(
                 "Routes must not import repositories at runtime. Use the service layer instead. `import type` is still allowed.",
               allowTypeImports: true,
             },
-            {
-              group: ["**/activityRepository"],
-              message:
-                "Routes must not import ActivityRepository at runtime. Use ActivityService (or the domain service) instead. `import type` is still allowed.",
-              allowTypeImports: true,
-            },
           ],
         },
       ],

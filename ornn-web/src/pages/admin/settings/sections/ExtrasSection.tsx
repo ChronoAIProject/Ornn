@@ -18,17 +18,35 @@ import {
   type ExtrasSection as EX,
 } from "@/services/settingsApi";
 
-const NAME_RE = /^[a-z0-9-]{1,64}$/;
+// Mirror of backend `extras.ts:SERVICE_NAME_RE` — common service-id
+// pattern: any case, digits, dot/dash/underscore. Covers canonical
+// names like `NyxID`, `twitter-api`, `openai_v2`, `v1.beta`. Spaces
+// are deliberately excluded so the value is safe to flow into URL
+// path segments without encoding gymnastics. (#284)
+const NAME_RE = /^[A-Za-z0-9._-]{1,64}$/;
 
 const Schema = z
   .object({
     extraNyxidServices: z.array(
       z.object({
-        name: z.string().regex(NAME_RE, "Must match ^[a-z0-9-]{1,64}$"),
-        baseUrl: z
-          .string()
-          .url()
-          .regex(/^https?:\/\//, "Must be http(s)"),
+        name: z.string().regex(NAME_RE, "Must match ^[A-Za-z0-9._-]{1,64}$"),
+        // Empty string is the unset state (matches backend `optionalHttpUrl`
+        // in extras.ts) — operators can register a service by name only and
+        // fill in the gateway later. When set, must be a parseable http(s)
+        // URL (#279).
+        baseUrl: z.string().refine(
+          (v) => {
+            if (v === "") return true;
+            if (!/^https?:\/\//.test(v)) return false;
+            try {
+              new URL(v);
+              return true;
+            } catch {
+              return false;
+            }
+          },
+          { message: "Must be a http(s) URL or empty" },
+        ),
         scopes: z.array(z.string()).optional(),
       }),
     ),
@@ -128,7 +146,7 @@ export function ExtrasSection() {
                 </label>
                 <label className="sm:col-span-5 flex flex-col gap-1.5">
                   <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
-                    Base URL
+                    Base URL (optional)
                   </span>
                   <input
                     type="text"
@@ -139,7 +157,7 @@ export function ExtrasSection() {
                 </label>
                 <label className="sm:col-span-3 flex flex-col gap-1.5">
                   <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
-                    Scopes (comma-separated)
+                    Scopes (comma-separated, optional)
                   </span>
                   <input
                     type="text"

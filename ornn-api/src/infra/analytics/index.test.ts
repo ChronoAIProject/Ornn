@@ -45,7 +45,10 @@ describe("AnalyticsEmitter", () => {
     expect(tracker.calls).toHaveLength(1);
     expect(tracker.calls[0]!.userId).toBe("u-1");
     expect(tracker.calls[0]!.event).toBe("api.skill.pull");
+    // `source: "api"` is auto-merged by the emitter so dashboards can
+    // split server- vs client-originated events of the same name.
     expect(tracker.calls[0]!.properties).toEqual({
+      source: "api",
       callerType: "api",
       skillId: "skill-guid-1",
       skillName: "demo",
@@ -155,7 +158,63 @@ describe("AnalyticsEmitter", () => {
     expect(tracker.calls[0]).toEqual({
       userId: "u-7",
       event: "custom.event",
-      properties: { foo: "bar", count: 1 },
+      // `source: "api"` is auto-merged by every track* call.
+      properties: { source: "api", foo: "bar", count: 1 },
+    });
+  });
+
+  test("trackPlatformActivity emits the action as event name with source", () => {
+    const tracker = new FakeTracker();
+    const emitter = new AnalyticsEmitter({ tracker, errorSampleRate: 1 });
+
+    emitter.trackPlatformActivity({
+      userId: "u-9",
+      userEmail: "u-9@x.test",
+      userDisplayName: "Niner",
+      action: "skill.deleted",
+      properties: { skillId: "g-1", adminAction: true },
+    });
+
+    expect(tracker.calls).toHaveLength(1);
+    expect(tracker.calls[0]!.event).toBe("skill.deleted");
+    expect(tracker.calls[0]!.userId).toBe("u-9");
+    expect(tracker.calls[0]!.properties).toEqual({
+      source: "api",
+      actorEmail: "u-9@x.test",
+      actorDisplayName: "Niner",
+      skillId: "g-1",
+      adminAction: true,
+    });
+  });
+
+  test("trackApiRequest emits api.request with metadata only (no body)", () => {
+    const tracker = new FakeTracker();
+    const emitter = new AnalyticsEmitter({ tracker, errorSampleRate: 1 });
+
+    emitter.trackApiRequest({
+      userId: "u-1",
+      callerType: "web",
+      method: "POST",
+      path: "/api/v1/skills/g-1",
+      routePattern: "/skills/:id",
+      status: 200,
+      durationMs: 42,
+      sourceIp: "1.2.3.0",
+      requestId: "req-1",
+    });
+
+    expect(tracker.calls).toHaveLength(1);
+    expect(tracker.calls[0]!.event).toBe("api.request");
+    expect(tracker.calls[0]!.properties).toEqual({
+      source: "api",
+      callerType: "web",
+      method: "POST",
+      path: "/api/v1/skills/g-1",
+      routePattern: "/skills/:id",
+      status: 200,
+      durationMs: 42,
+      sourceIp: "1.2.3.0",
+      requestId: "req-1",
     });
   });
 });

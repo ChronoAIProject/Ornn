@@ -29,49 +29,41 @@ spec:
               # credentials) lives in the platform_settings DB row —
               # the script reads + self-gates on every run, so when
               # disabled or incomplete it logs and exits 0.
+              # Same env shape as ornn-api/deployment.yaml — kept in
+              # lockstep so a mis-set var on either side doesn't drift
+              # only the runtime path. Cross-checked against config.ts
+              # + infra/url.ts: every key below has a code consumer.
               env:
                 - name: PORT
-                  value: "${ORNN_API_PORT}"
+                  value: "${PORT}"
                 - name: LOG_LEVEL
-                  value: "${ORNN_API_LOG_LEVEL}"
+                  value: "${LOG_LEVEL}"
                 - name: LOG_PRETTY
-                  value: "${ORNN_API_LOG_PRETTY}"
+                  value: "${LOG_PRETTY}"
                 - name: NYXID_SA_TOKEN_URL
                   value: "${NYXID_SA_TOKEN_URL}"
-                - name: NYX_LLM_GATEWAY_URL
-                  value: "${NYX_LLM_GATEWAY_URL}"
                 - name: MONGODB_DB
                   value: "${MONGODB_DB}"
-                - name: STORAGE_SERVICE_URL
-                  value: "${STORAGE_SERVICE_URL}"
-                - name: STORAGE_BUCKET
-                  value: "${STORAGE_BUCKET}"
-                - name: SANDBOX_SERVICE_URL
-                  value: "${SANDBOX_SERVICE_URL}"
-                - name: DEFAULT_LLM_MODEL
-                  value: "${DEFAULT_LLM_MODEL}"
-                - name: LLM_MAX_OUTPUT_TOKENS
-                  value: "${LLM_MAX_OUTPUT_TOKENS}"
-                - name: LLM_TEMPERATURE
-                  value: "${LLM_TEMPERATURE}"
-                - name: SSE_KEEP_ALIVE_INTERVAL_MS
-                  value: "${SSE_KEEP_ALIVE_INTERVAL_MS}"
                 - name: MAX_PACKAGE_SIZE_BYTES
                   value: "${MAX_PACKAGE_SIZE_BYTES}"
                 - name: ALLOWED_ORIGINS
                   value: "${ALLOWED_ORIGINS}"
-                - name: EXTRA_NYXID_SERVICES
-                  value: "${EXTRA_NYXID_SERVICES}"
+                - name: ORNN_PUBLIC_ORIGIN
+                  value: "${ORNN_PUBLIC_ORIGIN}"
+                - name: ORNN_URL_ALLOWLIST_CIDR
+                  value: "${ORNN_URL_ALLOWLIST_CIDR}"
+                - name: AGENTSEAL_PYTHON
+                  value: "${AGENTSEAL_PYTHON}"
+                - name: AGENTSEAL_SCRIPT
+                  value: "${AGENTSEAL_SCRIPT}"
+                # Bootstrap fallback only — admin telemetry section
+                # is canonical (#271).
+                - name: POSTHOG_ENABLED
+                  value: "${POSTHOG_ENABLED}"
                 - name: POSTHOG_HOST
                   value: "${POSTHOG_HOST}"
                 - name: POSTHOG_ERROR_SAMPLE_RATE
                   value: "${POSTHOG_ERROR_SAMPLE_RATE}"
-                - name: AGENTSEAL_ENABLED
-                  value: "${AGENTSEAL_ENABLED}"
-                - name: AGENTSEAL_TIMEOUT_MS
-                  value: "${AGENTSEAL_TIMEOUT_MS}"
-                - name: ORNN_PUBLIC_ORIGIN
-                  value: "${ORNN_PUBLIC_ORIGIN}"
               envFrom:
                 - secretRef:
                     name: ornn-api-secret

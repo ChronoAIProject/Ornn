@@ -39,108 +39,113 @@ When editing skills in `.ornn-apis/`:
 - Skills guide AI agents through multi-step MCP workflows — keep instructions precise and include example JSON payloads
 - The upload skill must instruct agents to create ZIPs **with a root folder** (e.g., `skill-name/SKILL.md`), not flat files
 
-## Audit
+## Audit + analytics (PostHog)
 
-The audit subsystem captures one structured record per `/api/v1/*` request. Records answer the questions Pino logs alone can't (who? from where? was this human or agent? what did the request body look like?) and feed forensic / compliance / future admin-dashboard use cases. See issue #245 for the original spec; the implementation lives at `ornn-api/src/middleware/audit/`.
+Issue #271 collapsed every observability surface in Ornn — the
+universal API audit middleware (#245), the `activities` Mongo
+collection, and the OpenTelemetry placeholder section — into a single
+PostHog-driven pipeline. There is **no custom audit code** in Ornn
+anymore; everything flows through the `posthog-node` SDK and is
+viewed in the PostHog dashboard.
 
-### Pipeline
+### Event taxonomy
 
-```
-HTTP request ─→ proxyAuthSetup (resolves c.var.auth)
-            ─→ auditMiddleware
-                  ├─ snapshot req body via req.raw.clone()
-                  ├─ resolve source IP from XFF / X-Real-IP, truncate immediately
-                  ├─ run downstream handler (await next())
-                  ├─ snapshot res body via res.clone() (write op or 4xx/5xx only)
-                  ├─ resolve callerType from auth shape + X-Ornn-Caller hint
-                  ├─ redact bodies (whitelist + global blacklist)
-                  ├─ inline (≤16 KB) or gzip → MinIO
-                  ├─ insertOne → Mongo `api_audit`
-                  └─ Pino info `api audit` line
-```
+Backend events (server-emitted, every event carries `source: "api"`
+so dashboards can disambiguate from frontend events of the same name):
 
-Failure isolation is non-negotiable: any error inside the audit pipeline is caught and logged at `error`; the business response is never delayed or replaced. Mongo down → no audit row, business OK. MinIO down → `bodyOffloadFailed: true` on the doc, body refs left null, business OK.
+| event | when | properties |
+|---|---|---|
+| `api.request` | every authenticated `/api/v1/*` request | `userId`, `callerType`, `method`, `path`, `routePattern`, `status`, `durationMs`, `sourceIp` (truncated /24 IPv4, /48 IPv6), `requestId` |
+| `api.error` | sampled 5xx responses | `statusCode`, `errorCode`, `method`, `path`, `requestId` |
+| `api.skill.pull` | every skill package materialization | `callerType`, `skillId`, `skillName`, `skillVersion` |
+| `api.skill.published` | skill create + version publish | `skillId`, `skillVersion`, `isNewSkill` |
+| `user.login` / `user.logout` | session open / close | — |
+| `skill.created` / `.updated` / `.deleted` / `.version_deleted` | mutation routes | `skillId`, `skillName`, `version`, `adminAction?` |
+| `skill.visibility_changed` / `.permissions_changed` | visibility + sharing flips | `skillId`, `isPrivate`, `sharedWithUsers`, `sharedWithOrgs` |
+| `skill.refresh` / `.source_linked` / `.source_unlinked` | source-pointer ops | `skillId`, `repo`, `ref`, `commit` |
+| `skill.nyxid_service_tied` / `.agentseal_rescanned` | tie + admin-rescan | `skillId`, `isSystemSkill`, `score` |
+| `settings.exported` / `.imported` | settings IO | `schemaVersion`, `aggregateStatus`, `dryRun`, `sections` |
 
-### MongoDB schema (`api_audit`)
+Frontend events (browser SDK — `ornn-web/src/lib/analytics.ts`) carry
+auto-pageview + cookie-consent state and the typed event union in
+that file. Identity is set via `posthog.identify(userId, traits)` on
+every NyxID login.
 
-```ts
-{
-  _id: string,                        // ULID
-  timestamp: Date,
-  durationMs: number,
-  method: string,
-  path: string,                       // route pattern (`/api/v1/skills/:id`)
-  rawPath: string,                    // actual path
-  queryString: string | null,
-  sourceIp: string,                   // truncated (last octet zeroed for IPv4; first /48 kept for IPv6)
-  userAgent: string | null,
-  callerIdentity: string | null,      // NyxID userId, null for anonymous
-  callerType: 'web' | 'agent' | 'anonymous',
-  headerHint: string | null,          // raw X-Ornn-Caller (untrusted)
-  callerTypeMismatch: boolean,        // true when hint disagrees with auth shape
-  status: number,
-  reqBodyRef: { kind: 'inline'; data } | { kind: 'minio'; key } | null,
-  resBodyRef: { kind: 'inline'; data } | { kind: 'minio'; key } | null,
-  redactedFields: string[],
-  bodyOffloadFailed?: true,
-}
-```
+### Caller-type detection
 
-**Indexes**: `(timestamp -1)` · `(callerIdentity, timestamp -1)` · `(path, timestamp -1)` · `(callerType, timestamp -1)` · TTL on `timestamp` (`expireAfterSeconds = AUDIT_RETENTION_DAYS * 86400`).
+`api.request` is emitted from `apiRequestTrackingMiddleware` mounted
+on `/api/v1/*` AFTER `proxyAuthSetup`. `callerType` derives from auth
+shape:
 
-### Caller-type matrix
+| auth shape | `X-Ornn-Caller` | `callerType` |
+|---|---|---|
+| browser session (NyxID OAuth cookie / browser-scope Bearer) | — | `web` |
+| NyxID forwarded user-access token (agent via NyxID proxy) | — | `api` |
+| anonymous | `system` / `playground` | matches header |
+| anonymous | other | `web` |
 
-| auth shape | `X-Ornn-Caller` | `callerType` | mismatch? |
-|---|---|---|---|
-| browser session (NyxID OAuth cookie / browser-scope Bearer) | `web` | `web` | no |
-| browser session | missing or other | `web` | yes |
-| NyxID forwarded access token (agent via NyxID proxy) | empty | `agent` | no |
-| NyxID forwarded access token | non-empty + non-`agent` | `agent` | yes |
-| no identity | any | `anonymous` | — |
-
-Mismatch is informational only — never blocks the request. Pino emits a warn line when it fires; admin dashboards highlight mismatched rows for forensic review.
-
-### Redaction
-
-Two layers compose:
-
-1. **Whitelist (per-route opt-in).** Routes call `setAuditConfig(c, { req: [...], res: [...] })` with field names they want preserved. Anything not listed becomes `[REDACTED]` in the persisted doc. Empty whitelist (default) means everything is redacted — safe-default.
-2. **Blacklist (global, regex).** Field names matching `password|token|apiKey|secret|key|credential` (case-insensitive) are always redacted, regardless of whitelist. Operators extend the pattern set via `AUDIT_GLOBAL_REDACT_PATTERNS` (comma-separated). The blacklist always wins — even if a route mistakenly lists `apiKey` in its whitelist, secrets stay out of the database.
-
-Identity-bearing **headers** (`Authorization`, `Cookie`, `Set-Cookie`, `X-NyxID-*`) are never read into the pipeline at all — the middleware doesn't even snapshot them. Only `User-Agent`, `X-Ornn-Caller`, `X-Forwarded-For`, and `X-Real-IP` are consulted.
-
-### Body offload
-
-| condition | action |
-|---|---|
-| read 200 | metadata only (`reqBodyRef = resBodyRef = null`) |
-| write op (POST/PUT/PATCH/DELETE) or status ≥ 400, body ≤ `AUDIT_BODY_INLINE_MAX_KB` | inline in Mongo doc |
-| same, body > inline cutoff | gzip → MinIO `${MINIO_AUDIT_BUCKET}/<YYYY>/<MM>/<DD>/<auditId>-<side>.json.gz`; doc holds the key |
-| MinIO put fails | `bodyOffloadFailed: true`; doc still inserted; business response unaffected |
-
-MinIO bucket lifecycle is configured out-of-band (mirroring `AUDIT_RETENTION_DAYS`) so offloaded bodies expire on the same cadence as the Mongo TTL.
+The header is informational only. Source IP is read from
+`X-Forwarded-For` (first hop), falls back to `X-Real-IP`, then
+truncated to /24 (IPv4) or /48 (IPv6) before emit.
 
 ### Configuration
 
-| env var | default | meaning |
+PostHog config lives in the admin `telemetry` settings section.
+Backend reads it once at boot (`bootstrap.ts`) and falls back to env
+vars when the DB section has no API key set:
+
+| field | env fallback | meaning |
 |---|---|---|
-| `AUDIT_RETENTION_DAYS` | `90` | Mongo TTL window for audit docs |
-| `MINIO_AUDIT_BUCKET` | `ornn-audit` | bucket holding offloaded bodies |
-| `AUDIT_BODY_INLINE_MAX_KB` | `16` | inline-vs-MinIO cutoff |
-| `AUDIT_GLOBAL_REDACT_PATTERNS` | (empty) | comma-separated extra blacklist patterns |
+| `postHogEnabled` | `POSTHOG_ENABLED` | master switch — off forces NoopTracker even with a key |
+| `postHogApiKey` | `POSTHOG_API_KEY` | public project key (`phc_…`); empty disables |
+| `postHogHost` | `POSTHOG_HOST` | ingest host (e.g. `https://eu.i.posthog.com`) |
+| `postHogProjectId` | `POSTHOG_PROJECT_ID` | informational, surfaced in log lines |
+| `postHogErrorSampleRate` | `POSTHOG_ERROR_SAMPLE_RATE` | `[0,1]` sampling for `api.error` |
 
-### Per-route opt-in example
+Admin DB is canonical: a non-empty `postHogApiKey` in the section
+makes the entire DB record authoritative; otherwise env wins.
+Restart-required for changes to apply (the SDK is initialized once
+at boot).
 
-```ts
-import { setAuditConfig } from "../../../middleware/audit";
+### Failure modes accepted
 
-app.post("/skills", async (c) => {
-  setAuditConfig(c, {
-    req: ["skillName", "description", "category"],
-    res: ["skillId", "version"],
-  });
-  // ...handler...
-});
-```
+- **No body archive.** Request/response bodies are not captured.
+  Forensic body-replay post-incident is not possible. The previous
+  MinIO-offload pipeline (#245) was removed.
+- **Audit retention = PostHog retention.** Cloud free tier is
+  approximately 1 year of events; paid extends. Self-hosted PostHog
+  retains as long as the storage volume allows.
+- **PostHog-side outages** drop events that miss the in-process
+  buffer. The drain on `shutdown()` flushes the buffer; sigterm
+  during a backlog can lose tail events.
 
-Routes that don't call `setAuditConfig` still get audited — they just produce records where every body field reads `[REDACTED]`. The expectation is that admin and write routes opt in to capturing the most operationally-useful fields.
+### Viewing data
+
+There is **no in-Ornn activity feed UI**. Admins use the PostHog
+dashboard for the full event explorer, funnels, retention, and SQL
+queries. The Ornn admin dashboard at `/admin` deep-links to the
+PostHog Activity / Insights views via
+`ornn-web/src/lib/postHogLinks.ts`, which translates the configured
+ingest host (`<region>.i.posthog.com`) into the matching dashboard
+host (`<region>.posthog.com`).
+
+### What about OpenTelemetry?
+
+Considered and deferred (issue #271 discussion). For Ornn's current
+single-service architecture and the requirements covered here
+(per-request audit, user activity, who-called-what), PostHog alone
+is sufficient. OpenTelemetry's value (distributed tracing, metrics
+histograms) doesn't justify standing up a collector + Tempo / Loki /
+Jaeger today. Reopen as a separate issue if/when the architecture
+splits across services or a concrete tracing pain point appears.
+
+### User directory
+
+The unified `users` Mongo collection (built in #271, replaces
+`activities` + `admin_users` + `users_meta`) is fed lazily by
+`proxyAuthSetup.onAuthSeen` on every authenticated request. It is
+NOT audit data — it's an identity cache backing the skill-permissions
+typeahead, the admin user list, and the dashboard role partition.
+NyxID stays authoritative for permission checks; this collection is
+display + indexing only. See
+`ornn-api/src/domains/users/repository.ts`.

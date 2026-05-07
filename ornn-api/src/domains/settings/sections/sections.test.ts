@@ -214,15 +214,26 @@ describe("section schemas", () => {
   });
 
   // -------- extras --------
-  it("UT-SCHEMA-EXTRAS-001: service name regex", () => {
+  it("UT-SCHEMA-EXTRAS-001: service name regex (#284 — case-insensitive + dot/underscore)", () => {
+    // Mixed-case + dash + underscore + dot all permitted (covers
+    // canonical names: NyxID, twitter-api, openai_v2, v1.beta).
+    for (const name of ["valid-svc1", "NyxID", "openai_v2", "v1.beta"]) {
+      expect(
+        extrasSection.schema.safeParse({
+          extraNyxidServices: [{ name, baseUrl: "" }],
+        }).success,
+      ).toBe(true);
+    }
+    // Spaces still rejected — value flows into URL path segments.
     expect(
       extrasSection.schema.safeParse({
-        extraNyxidServices: [{ name: "valid-svc1", baseUrl: "" }],
+        extraNyxidServices: [{ name: "has space", baseUrl: "" }],
       }).success,
-    ).toBe(true);
+    ).toBe(false);
+    // Empty + over-length still rejected.
     expect(
       extrasSection.schema.safeParse({
-        extraNyxidServices: [{ name: "INVALID", baseUrl: "" }],
+        extraNyxidServices: [{ name: "", baseUrl: "" }],
       }).success,
     ).toBe(false);
     expect(

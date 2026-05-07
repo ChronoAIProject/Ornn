@@ -1,6 +1,13 @@
 /**
  * Admin routes with NyxID auth.
- * Category/Tag CRUD, activity log, user dashboard, skill management.
+ *
+ * Category/Tag CRUD + skill management. Activity feed + user list +
+ * dashboard stats moved out of this module in issue #271:
+ *   - `/admin/dashboard/stats`  → `domains/admin/dashboard`
+ *   - `/admin/users`            → `domains/admin-users`
+ *   - `/admin/activities`       → removed (PostHog dashboard)
+ *   - `/admin/stats`            → removed (PostHog dashboard)
+ *
  * Requires ornn:admin:* permissions.
  * @module domains/admin/routes
  */
@@ -8,12 +15,13 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import type { AdminService } from "./service";
-import type { ActivityRepository, ActivityAction } from "./activityRepository";
 import type { SkillRepository } from "../skills/crud/repository";
 import type { SkillService } from "../skills/crud/service";
 import type { SkillVersionRepository } from "../skills/crud/skillVersionRepository";
 import type { SkillGenerationService } from "../skills/generation/service";
 import type { IAgentSealScanner } from "../../infra/agentseal";
+import type { AnalyticsEmitter } from "../../infra/analytics";
+import type { UserDirectoryRepository } from "../users/repository";
 import {
   type AuthVariables,
   nyxidAuthMiddleware,
@@ -43,7 +51,10 @@ const createTagSchema = z.object({
 
 export interface AdminRoutesConfig {
   adminService: AdminService;
-  activityRepo: ActivityRepository;
+  /** PostHog emitter for skill-delete + agentseal-rescan activity events. */
+  analyticsEmitter: AnalyticsEmitter;
+  /** Identity cache (used by future drill-downs; held to keep the wiring stable). */
+  userDirectoryRepo: UserDirectoryRepository;
   skillRepo: SkillRepository;
   skillService: SkillService;
   /**
@@ -68,95 +79,22 @@ export interface AdminRoutesConfig {
 }
 
 export function createAdminRoutes(config: AdminRoutesConfig): Hono<{ Variables: AuthVariables }> {
-  const { adminService, activityRepo, skillRepo, skillService, agentsealScanner } = config;
+  const {
+    adminService,
+    analyticsEmitter,
+    skillRepo,
+    skillService,
+    agentsealScanner,
+  } = config;
+  // userDirectoryRepo is held on `config` for future drill-downs; not
+  // referenced in this module's current endpoints.
+  void config.userDirectoryRepo;
   const app = new Hono<{ Variables: AuthVariables }>();
 
   const auth = nyxidAuthMiddleware();
 
   // All /admin/* routes require auth + admin permission.
-  // `/activity/login` and `/activity/logout` now live under the `me`
-  // domain — this is a caller-scoped telemetry event, not an admin
-  // operation.
   app.use("/admin/*", auth);
-
-  // =========================================================================
-  // Dashboard Stats
-  // =========================================================================
-
-  app.get(
-    "/admin/stats",
-    requirePermission("ornn:admin:skill"),
-    async (c) => {
-      const skillCollection = skillRepo["collection"];
-      const stats = await activityRepo.getStats(skillCollection);
-      return c.json({ data: stats, error: null });
-    },
-  );
-
-  // =========================================================================
-  // Activity Log
-  // =========================================================================
-
-  app.get(
-    "/admin/activities",
-    requirePermission("ornn:admin:skill"),
-    async (c) => {
-      const page = Math.max(1, Number(c.req.query("page")) || 1);
-      const pageSize = Math.min(100, Math.max(1, Number(c.req.query("pageSize")) || 20));
-      const action = c.req.query("action") as ActivityAction | undefined;
-      const userId = c.req.query("userId") || undefined;
-
-      const result = await activityRepo.list({ page, pageSize, action, userId });
-      const totalPages = Math.ceil(result.total / pageSize);
-
-      return c.json({
-        data: {
-          items: result.items.map((a) => ({
-            id: a._id,
-            userId: a.userId,
-            userEmail: a.userEmail,
-            userDisplayName: a.userDisplayName,
-            action: a.action,
-            details: a.details,
-            createdAt: a.createdAt instanceof Date ? a.createdAt.toISOString() : String(a.createdAt),
-          })),
-          total: result.total,
-          page,
-          pageSize,
-          totalPages,
-        },
-        error: null,
-      });
-    },
-  );
-
-  // =========================================================================
-  // User Dashboard
-  // =========================================================================
-
-  app.get(
-    "/admin/users",
-    requirePermission("ornn:admin:skill"),
-    async (c) => {
-      const page = Math.max(1, Number(c.req.query("page")) || 1);
-      const pageSize = Math.min(100, Math.max(1, Number(c.req.query("pageSize")) || 20));
-
-      const skillCollection = skillRepo["collection"];
-      const result = await activityRepo.aggregateUsers(skillCollection, page, pageSize);
-      const totalPages = Math.ceil(result.total / pageSize);
-
-      return c.json({
-        data: {
-          items: result.items,
-          total: result.total,
-          page,
-          pageSize,
-          totalPages,
-        },
-        error: null,
-      });
-    },
-  );
 
   // =========================================================================
   // Admin Skill Management — browse ALL skills, CRUD any skill
@@ -228,9 +166,12 @@ export function createAdminRoutes(config: AdminRoutesConfig): Hono<{ Variables: 
       const authCtx = getAuth(c);
       await skillService.deleteSkill(guid);
 
-      await activityRepo.log(authCtx.userId, authCtx.email, authCtx.displayName, "skill:delete", {
-        skillId: guid,
-        adminAction: true,
+      analyticsEmitter.trackPlatformActivity({
+        userId: authCtx.userId,
+        userEmail: authCtx.email,
+        userDisplayName: authCtx.displayName,
+        action: "skill.deleted",
+        properties: { skillId: guid, adminAction: true },
       });
 
       logger.info({ guid, adminUserId: authCtx.userId }, "Skill deleted by admin");
@@ -276,16 +217,20 @@ export function createAdminRoutes(config: AdminRoutesConfig): Hono<{ Variables: 
 
       const result = await skillService.rescanVersion(idOrName, version);
 
-      activityRepo
-        .log(authCtx.userId, authCtx.email, authCtx.displayName, "skill:agentseal_rescan", {
+      analyticsEmitter.trackPlatformActivity({
+        userId: authCtx.userId,
+        userEmail: authCtx.email,
+        userDisplayName: authCtx.displayName,
+        action: "skill.agentseal_rescanned",
+        properties: {
           skillId: result.skillGuid,
           skillName: result.skillName,
           version: result.version,
           score: result.scan?.score ?? null,
           findings: result.scan?.findings.length ?? 0,
           adminAction: true,
-        })
-        .catch((err) => logger.warn({ err }, "Failed to log skill:agentseal_rescan activity"));
+        },
+      });
 
       logger.info(
         {

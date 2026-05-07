@@ -198,31 +198,10 @@ describe("UT-MIGRATE-006 renames quota_grants → _archive_quota_grants", () => 
   });
 });
 
-describe("UT-MIGRATE-007 users_meta.firstJoinedAt from earliest activity", () => {
-  test("MIN(activities.createdAt) is persisted", async () => {
-    await seedOldQuota({ userId: "u1" });
-    await seedActivity("u1", new Date(Date.UTC(2026, 4, 10)));
-    await seedActivity("u1", new Date(Date.UTC(2026, 0, 1)));
-    await migrate(db, OPTS);
-    const meta = await db.collection("users_meta").findOne({ _id: "u1" });
-    expect(meta?.firstJoinedAt instanceof Date ? meta.firstJoinedAt.toISOString() : null).toBe(
-      "2026-01-01T00:00:00.000Z",
-    );
-  });
-});
-
-describe("UT-MIGRATE-008 firstJoinedAt null when no activities", () => {
-  test("user without activities → null row written", async () => {
-    await seedOldQuota({ userId: "ghost" });
-    // No activities seeded for ghost.
-    await migrate(db, OPTS);
-    const meta = await db.collection("users_meta").findOne({ _id: "ghost" });
-    // Ghost has no activities so it's never in the activity user-id pool;
-    // backfill skips them. That's the expected behavior — meta is filled
-    // lazily when admin-users service first asks for them.
-    expect(meta).toBeNull();
-  });
-});
+// UT-MIGRATE-007 / -008 (users_meta.firstJoinedAt backfill) were
+// removed in issue #271 alongside the `users_meta` collection. The
+// unified `users` directory is fed lazily on every authenticated
+// request via `proxyAuthSetup.onAuthSeen`, not by this migration.
 
 describe("UT-MIGRATE-010 per-user log entries", () => {
   test("3 users → 3 'Migrating user/surface bucket' info logs (per surface)", async () => {

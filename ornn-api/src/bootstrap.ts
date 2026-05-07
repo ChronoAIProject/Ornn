@@ -18,20 +18,23 @@ const pkg = JSON.parse(readFileSync(join(import.meta.dir, "..", "package.json"),
 
 // Auth setup
 import { proxyAuthSetup, nyxidOrgLookupMiddleware } from "./middleware/nyxidAuth";
-import { AdminUsersRepository } from "./domains/admin-users/repository";
 import { requestIdMiddleware, getRequestId } from "./middleware/requestId";
 
-// Universal API audit (issue #245)
-import {
-  auditMiddleware,
-  ApiAuditRepository,
-  AuditBodyStorage,
-} from "./middleware/audit";
+// Per-request analytics middleware (issue #271). Replaces the universal
+// API audit middleware (#245) — every authenticated /api/v1/* request
+// emits an `api.request` PostHog event with caller, method, path,
+// status, durationMs, sourceIp, requestId.
+import { apiRequestTrackingMiddleware } from "./middleware/apiRequestTracking";
 
 // Infrastructure
 import { connectMongo, type MongoConnection } from "./infra/db/mongodb";
 import { createAnalyticsEmitter } from "./infra/analytics";
 import { AgentSealScanner } from "./infra/agentseal";
+
+// User directory — single identity cache. Replaces the activity-derived
+// directory in the old `activities` collection plus the `admin_users` /
+// `users_meta` cache collections (issue #271).
+import { UserDirectoryRepository } from "./domains/users/repository";
 
 
 // Clients
@@ -79,7 +82,6 @@ import { createPlaygroundRoutes } from "./domains/playground/routes";
 // Domain: Admin
 import { CategoryRepository, TagRepository } from "./domains/admin/repository";
 import { AdminService } from "./domains/admin/service";
-import { ActivityRepository } from "./domains/admin/activityRepository";
 import { createAdminRoutes } from "./domains/admin/routes";
 
 // Domain: Skill Format
@@ -121,7 +123,6 @@ import { createQuotaRoutes } from "./domains/quota/routes";
 import { AdminDashboardService } from "./domains/admin/dashboard/service";
 import { createAdminDashboardRoutes } from "./domains/admin/dashboard/routes";
 import { createAdminQuotaRoutes } from "./domains/admin/quota/routes";
-import { UsersMetaRepository } from "./domains/admin-users/usersMetaRepository";
 import { AdminUsersService } from "./domains/admin-users/service";
 import { createAdminUsersRoutes } from "./domains/admin-users/routes";
 
@@ -159,16 +160,10 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
 
   logger.info("Bootstrapping ornn-api service...");
 
-  // ---- PostHog product analytics (#252). Sink is Noop when no API key.
-  const analyticsEmitter = createAnalyticsEmitter(
-    {
-      posthogApiKey: config.posthogApiKey,
-      posthogHost: config.posthogHost,
-      posthogProjectId: config.posthogProjectId,
-      posthogErrorSampleRate: config.posthogErrorSampleRate,
-    },
-    logger,
-  );
+  // PostHog analytics emitter is constructed AFTER `settingsService` is
+  // wired below — the `telemetry` section in DB is the canonical source
+  // for PostHog config; env vars only kick in when DB is empty (issue
+  // #271). See the construction site further down.
 
   // ---- AgentSeal trust scanner (#253). Subprocess wrapper —
   // `agentseal guard` doesn't accept skill packages, so we ship a small
@@ -232,6 +227,52 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
     list: () => llmProvidersService.list(),
     get: (id) => llmProvidersService.get(id),
   });
+
+  // ---- PostHog product analytics (issue #271). DB-driven via the
+  // `telemetry` settings section; env values are bootstrap fallback
+  // for the very first boot when admin hasn't saved yet.
+  //
+  // Resolution rule: if the DB section has a non-empty `postHogApiKey`,
+  // the entire DB record is authoritative. Otherwise the whole config
+  // falls back to env. Avoids the half-merged "DB host with env key"
+  // foot-gun that comes with per-field merging.
+  const telemetrySection = await settingsService.getTelemetry();
+  const dbHasPosthogConfig = !!telemetrySection.postHogApiKey;
+  const analyticsEmitter = createAnalyticsEmitter(
+    dbHasPosthogConfig
+      ? {
+          posthogEnabled: telemetrySection.postHogEnabled,
+          posthogApiKey: telemetrySection.postHogApiKey,
+          posthogHost: telemetrySection.postHogHost || config.posthogHost,
+          posthogProjectId: telemetrySection.postHogProjectId || null,
+          posthogErrorSampleRate: telemetrySection.postHogErrorSampleRate,
+        }
+      : {
+          posthogEnabled: config.posthogEnabled,
+          posthogApiKey: config.posthogApiKey,
+          posthogHost: config.posthogHost,
+          posthogProjectId: config.posthogProjectId,
+          posthogErrorSampleRate: config.posthogErrorSampleRate,
+        },
+    logger,
+  );
+  logger.info(
+    {
+      source: dbHasPosthogConfig ? "telemetry-section" : "env-fallback",
+      enabled: dbHasPosthogConfig
+        ? telemetrySection.postHogEnabled
+        : config.posthogEnabled,
+    },
+    "PostHog config resolved",
+  );
+
+  // ---- User directory (issue #271). Single identity cache, lazily
+  // populated on every authenticated request. Replaces the old activity-
+  // derived directory + `admin_users` + `users_meta` cache collections.
+  const userDirectoryRepo = new UserDirectoryRepository(db);
+  void userDirectoryRepo.ensureIndexes().catch((err) =>
+    logger.warn({ err }, "users indexes ensureIndexes failed — proceeding anyway"),
+  );
 
   // Convenience: resolve the LLM provider for a given surface in a
   // single Promise, projecting whichever auth shape the provider uses
@@ -358,29 +399,6 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   await skillVersionRepo.ensureIndexes();
   const categoryRepo = new CategoryRepository(db);
   const tagRepo = new TagRepository(db);
-  const activityRepo = new ActivityRepository(db);
-
-  // ---- Admin-users tracker ----
-  // Lazy display cache: every time we see a request authenticated with
-  // the admin permission, upsert the user into `admin_users`. Read by
-  // `/admin/quota/users` (and any other admin list endpoint that needs
-  // to mark known admins) so the UI can show "Unlimited" without
-  // round-tripping NyxID per row. NyxID remains authoritative on the
-  // hot path — this collection is never used for permission checks.
-  const adminUsersRepo = new AdminUsersRepository(db);
-  void adminUsersRepo.ensureIndexes().catch((err) =>
-    logger.warn({ err }, "admin_users indexes ensureIndexes failed — proceeding anyway"),
-  );
-
-  // ---- Universal API audit (issue #245) ----
-  // Built early so the middleware can mount on `apiApp` below. Indexes
-  // ensured fire-and-forget — a Mongo hiccup at startup must not block
-  // the API from serving traffic; audit failures degrade silently.
-  const apiAuditRepository = new ApiAuditRepository(db, config.auditRetentionDays);
-  void apiAuditRepository.ensureIndexes().catch((err) =>
-    logger.warn({ err }, "api_audit indexes ensureIndexes failed — proceeding anyway"),
-  );
-  const auditBodyStorage = new AuditBodyStorage(storageClient, config.auditMinioBucket);
 
   // ---- Domain: Skill CRUD ----
   const skillService = new SkillService({
@@ -476,41 +494,42 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
     exporter: settingsExporter,
     importer: settingsImporter,
     auditLogger: {
-      // Fire-and-forget audit emit. Both branches swallow errors so a
-      // log-write failure never breaks the response — `recordExport` /
-      // `recordImport` MUST NOT throw per the SettingsAuditLogger
-      // contract (`exportImport/routes.ts` interface comment).
+      // Fire-and-forget activity emit via PostHog. Both branches
+      // swallow errors so a tracker hiccup never breaks the response —
+      // `recordExport` / `recordImport` MUST NOT throw per the
+      // SettingsAuditLogger contract (`exportImport/routes.ts`
+      // interface comment).
       recordExport: async ({ actor, schemaVersion }) => {
-        await activityRepo
-          .log(
-            actor.userId,
-            actor.email,
-            actor.displayName ?? "",
-            "settings:export",
-            { schemaVersion },
-          )
-          .catch((err) =>
-            logger.warn(
-              { err: (err as Error).message, actor: actor.userId },
-              "settings:export audit log failed (swallowed)",
-            ),
+        try {
+          analyticsEmitter.trackPlatformActivity({
+            userId: actor.userId,
+            userEmail: actor.email,
+            userDisplayName: actor.displayName ?? "",
+            action: "settings.exported",
+            properties: { schemaVersion },
+          });
+        } catch (err) {
+          logger.warn(
+            { err: (err as Error).message, actor: actor.userId },
+            "settings.exported activity emit failed (swallowed)",
           );
+        }
       },
       recordImport: async ({ actor, schemaVersion, aggregateStatus, sections, dryRun }) => {
-        await activityRepo
-          .log(
-            actor.userId,
-            actor.email,
-            actor.displayName ?? "",
-            "settings:import",
-            { schemaVersion, aggregateStatus, dryRun, sections },
-          )
-          .catch((err) =>
-            logger.warn(
-              { err: (err as Error).message, actor: actor.userId },
-              "settings:import audit log failed (swallowed)",
-            ),
+        try {
+          analyticsEmitter.trackPlatformActivity({
+            userId: actor.userId,
+            userEmail: actor.email,
+            userDisplayName: actor.displayName ?? "",
+            action: "settings.imported",
+            properties: { schemaVersion, aggregateStatus, dryRun, sections },
+          });
+        } catch (err) {
+          logger.warn(
+            { err: (err as Error).message, actor: actor.userId },
+            "settings.imported activity emit failed (swallowed)",
           );
+        }
       },
     },
   });
@@ -577,7 +596,6 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
     analyticsService,
     analyticsEmitter,
     maxFileSize: config.maxPackageSizeBytes,
-    activityRepo,
     nyxidServiceClient,
     // Resolved from settings (`extras` section) on demand. Routes that
     // need a one-shot snapshot adapt around the async — most consumers
@@ -639,7 +657,8 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   const adminService = new AdminService(categoryRepo, tagRepo);
   const adminRoutes = createAdminRoutes({
     adminService,
-    activityRepo,
+    analyticsEmitter,
+    userDirectoryRepo,
     skillRepo,
     skillService,
     skillVersionRepo,
@@ -739,53 +758,26 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   apiApp.use(
     "*",
     proxyAuthSetup({
-      // Lazy admin-user tracking: whenever we see a request authenticated
-      // with the admin permission, upsert the user. Fire-and-forget;
-      // failure is logged inside the repo and never bubbles up.
+      // Lazy user-directory upsert: every authenticated request refreshes
+      // the user's row in the directory. Replaces the old admin-only
+      // `admin_users` cache (issue #271). Fire-and-forget; failure is
+      // logged inside the repo and never bubbles up.
       onAuthSeen: (auth) => {
-        if (auth.permissions.includes("ornn:admin:skill")) {
-          void adminUsersRepo.upsert({
-            userId: auth.userId,
-            email: auth.email,
-            displayName: auth.displayName,
-          });
-        }
+        void userDirectoryRepo.upsert({
+          userId: auth.userId,
+          email: auth.email,
+          displayName: auth.displayName,
+          isAdmin: auth.permissions.includes("ornn:admin:skill"),
+        });
       },
     }),
   );
-  // Universal API audit — runs after `proxyAuthSetup` so the
-  // caller-type resolver can read `c.var.auth`. Fail-isolated: errors
-  // inside the audit pipeline never propagate to the business response.
+  // Per-request analytics — emits `api.request` to PostHog with caller,
+  // method, path, status, durationMs, sourceIp, requestId. Mount AFTER
+  // `proxyAuthSetup` so `c.var.auth` is populated (issue #271).
   apiApp.use(
     "*",
-    auditMiddleware({
-      repository: apiAuditRepository,
-      bodyStorage: auditBodyStorage,
-      bodyInlineMaxBytes: config.auditBodyInlineMaxBytes,
-      extraBlacklistPatterns: config.auditGlobalRedactPatterns,
-      logger,
-      // Resolve auth shape from the Hono context. Auth-setup middleware
-      // populates `auth` with `userAccessToken` only when the NyxID
-      // proxy forwarded a user Bearer alongside the identity token —
-      // i.e. agent flows; browser cookie sessions leave it undefined.
-      resolveAuthHint: (c) => {
-        const auth = c.get("auth") as
-          | { userId?: string; userAccessToken?: string }
-          | undefined;
-        if (!auth?.userId) {
-          return {
-            hasAuth: false,
-            hasForwardedUserToken: false,
-            callerIdentity: null,
-          };
-        }
-        return {
-          hasAuth: true,
-          hasForwardedUserToken: Boolean(auth.userAccessToken),
-          callerIdentity: auth.userId,
-        };
-      },
-    }),
+    apiRequestTrackingMiddleware({ emitter: analyticsEmitter }),
   );
   // Lazy, per-request memoized org lookup. Mounted once here so every domain
   // route sees the same cached result — avoids re-querying NyxID within a
@@ -795,27 +787,19 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   // ---- Admin routes (engineer-1): dashboard, users, quota admin ----
   const adminDashboardService = new AdminDashboardService({
     db,
-    activityRepo,
-    adminUsersRepo,
+    userDirectoryRepo,
   });
   const adminDashboardRoutes = createAdminDashboardRoutes({
     dashboardService: adminDashboardService,
   });
-  const usersMetaRepo = new UsersMetaRepository(db);
-  void usersMetaRepo.ensureIndexes?.().catch?.((err: Error) =>
-    logger.warn({ err }, "users_meta indexes ensureIndexes failed — proceeding anyway"),
-  );
   const adminUsersService = new AdminUsersService({
     db,
-    activityRepo,
-    adminUsersRepo,
-    usersMetaRepo,
+    userDirectoryRepo,
   });
   const adminUsersRoutes = createAdminUsersRoutes({ adminUsersService });
   const adminQuotaRoutes = createAdminQuotaRoutes({
     quotaService,
-    activityRepo,
-    adminUsersRepo,
+    userDirectoryRepo,
   });
 
   apiApp.route("/", skillRoutes);
@@ -841,12 +825,13 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
     nyxidBaseUrlResolver: async () =>
       (await settingsService.getNyxid()).baseApiUrl,
     skillRepo,
-    activityRepo,
+    userDirectoryRepo,
+    analyticsEmitter,
     nyxidServiceClient,
     extraNyxidServicesResolver: () =>
       resolveExtraNyxidServiceNames(),
   }));
-  apiApp.route("/", createUserRoutes({ activityRepo }));
+  apiApp.route("/", createUserRoutes({ userDirectoryRepo }));
   app.route("/api/v1", apiApp);
 
   // OpenAPI spec — auto-generated from Zod schemas

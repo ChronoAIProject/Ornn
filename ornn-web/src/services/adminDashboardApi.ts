@@ -1,8 +1,9 @@
 /**
- * Admin dashboard API — totals tiles + recent-activities widget.
+ * Admin dashboard API — totals tiles only.
  *
- * Mirrors `GET /api/v1/admin/dashboard/stats` and
- * `GET /api/v1/admin/dashboard/recent-activities` from the API.
+ * Mirrors `GET /api/v1/admin/dashboard/stats` from the API. The
+ * `recent-activities` endpoint and its frontend consumer were
+ * removed in issue #271 — activity data lives in PostHog now.
  *
  * Skill counts are disjoint by code invariant:
  *   system  = isSystemSkill: true
@@ -18,17 +19,6 @@ import { apiGet } from "./apiClient";
 export interface DashboardStats {
   users: { total: number; admin: number; normal: number };
   skills: { total: number; system: number; public: number; private: number };
-  recentActivities24h: number;
-}
-
-export interface RecentActivity {
-  id: string;
-  userId: string;
-  userEmail: string;
-  userDisplayName: string;
-  action: string;
-  details?: Record<string, unknown>;
-  createdAt: string;
 }
 
 export async function fetchDashboardStats(): Promise<DashboardStats> {
@@ -37,12 +27,4 @@ export async function fetchDashboardStats(): Promise<DashboardStats> {
     throw new Error("Dashboard stats missing");
   }
   return res.data;
-}
-
-export async function fetchRecentActivities(limit = 10): Promise<RecentActivity[]> {
-  const res = await apiGet<{ items: RecentActivity[] }>(
-    "/api/v1/admin/dashboard/recent-activities",
-    { limit },
-  );
-  return res.data?.items ?? [];
 }
