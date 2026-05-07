@@ -484,12 +484,14 @@
     "openNyxID": "打开 NyxID 设置"
   },
   "login": {
+    "eyebrow": "[ § 入口 — NYXID ]",
     "tagline": "锻造 AI 能力的工坊",
     "desc": "使用 NyxID 账号登录以访问平台。",
     "loginBtn": "使用 NyxID 登录",
     "terms": "继续即表示你同意我们的服务条款和隐私政策。"
   },
   "notFound": {
+    "eyebrow": "[ § 404 — 未找到 ]",
     "code": "404",
     "message": "这片网格区域不存在。",
     "goHome": "返回工坊"

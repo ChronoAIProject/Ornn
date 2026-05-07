@@ -484,12 +484,14 @@
     "openNyxID": "Open NyxID Settings"
   },
   "login": {
+    "eyebrow": "[ § ENTRY — NYXID ]",
     "tagline": "The Forge for AI Capabilities",
     "desc": "Sign in with your NyxID account to access the platform.",
     "loginBtn": "Login with NyxID",
     "terms": "By continuing, you agree to our Terms of Service and Privacy Policy."
   },
   "notFound": {
+    "eyebrow": "[ § 404 — NOT FOUND ]",
     "code": "404",
     "message": "This sector of the grid does not exist.",
     "goHome": "Return to Forge"
