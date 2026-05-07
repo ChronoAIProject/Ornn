@@ -38,11 +38,10 @@ function fakeSettingsService(): SettingsService {
     tokenUrl: "https://nyx.example.com/oauth/token",
     clientId: "ornn-api",
     clientSecret: "real-client-secret",
+    chronoStorageBucket: "ornn",
   });
-  store.set("services", { chronoStorageUrl: "", chronoStorageBucket: "ornn", chronoSandboxUrl: "" });
   store.set("skillAudit", { ...sections.skillAudit.defaults });
   store.set("telemetry", { ...sections.telemetry.defaults, postHogApiKey: "phc-xyz" });
-  store.set("quotaDefaults", { defaultPlaygroundMonthly: 200, defaultSkillGenMonthly: 20 });
   store.set("extras", { extraNyxidServices: [] });
 
   const providers: LlmProvider[] = [
@@ -70,10 +69,8 @@ function fakeSettingsService(): SettingsService {
     getSkillGen: () => make("skillGen"),
     getMirror: () => make("mirror"),
     getNyxid: () => make("nyxid"),
-    getServices: () => make("services"),
     getSkillAudit: () => make("skillAudit"),
     getTelemetry: () => make("telemetry"),
-    getQuotaDefaults: () => make("quotaDefaults"),
     getExtras: () => make("extras"),
     getSection: <T,>(id: string) => make<T>(id),
     putSection: async () => ({ value: {} as never, changedFields: [] }),
@@ -84,7 +81,7 @@ function fakeSettingsService(): SettingsService {
 }
 
 describe("SettingsExporter", () => {
-  it("UT-EXPORT-001: envelope contains all 9 sections + schemaVersion + exportedAt", async () => {
+  it("UT-EXPORT-001: envelope contains all 7 sections + schemaVersion + exportedAt", async () => {
     const fixed = new Date("2026-05-06T12:00:00.000Z");
     const exporter = new SettingsExporter({
       settingsService: fakeSettingsService(),
@@ -101,10 +98,8 @@ describe("SettingsExporter", () => {
       "skillGen",
       "mirror",
       "nyxid",
-      "services",
       "skillAudit",
       "telemetry",
-      "quotaDefaults",
       "extras",
       "llmProviders",
     ]) {

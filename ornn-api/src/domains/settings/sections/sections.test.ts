@@ -10,8 +10,6 @@ import {
   mirrorSection,
   nyxidSection,
   playgroundSection,
-  quotaDefaultsSection,
-  servicesSection,
   skillAuditSection,
   skillGenSection,
   telemetrySection,
@@ -24,6 +22,7 @@ describe("section schemas", () => {
       defaultProviderId: "p",
       defaultModelId: "m",
       sseKeepAliveMs: 15_000,
+      defaultMonthlyQuota: 200,
     });
     expect(ok.success).toBe(true);
     expect(
@@ -31,6 +30,7 @@ describe("section schemas", () => {
         defaultProviderId: "p",
         defaultModelId: "m",
         sseKeepAliveMs: 999,
+        defaultMonthlyQuota: 200,
       }).success,
     ).toBe(false);
     expect(
@@ -38,6 +38,40 @@ describe("section schemas", () => {
         defaultProviderId: "p",
         defaultModelId: "m",
         sseKeepAliveMs: 600_001,
+        defaultMonthlyQuota: 200,
+      }).success,
+    ).toBe(false);
+  });
+
+  it("UT-SCHEMA-PG-003: playground defaultMonthlyQuota bounds (#302)", () => {
+    expect(
+      playgroundSection.schema.safeParse({
+        ...playgroundSection.defaults,
+        defaultMonthlyQuota: 0,
+      }).success,
+    ).toBe(true);
+    expect(
+      playgroundSection.schema.safeParse({
+        ...playgroundSection.defaults,
+        defaultMonthlyQuota: 1_000_000,
+      }).success,
+    ).toBe(true);
+    expect(
+      playgroundSection.schema.safeParse({
+        ...playgroundSection.defaults,
+        defaultMonthlyQuota: -1,
+      }).success,
+    ).toBe(false);
+    expect(
+      playgroundSection.schema.safeParse({
+        ...playgroundSection.defaults,
+        defaultMonthlyQuota: 1_000_001,
+      }).success,
+    ).toBe(false);
+    expect(
+      playgroundSection.schema.safeParse({
+        ...playgroundSection.defaults,
+        defaultMonthlyQuota: 1.5,
       }).success,
     ).toBe(false);
   });
@@ -49,6 +83,7 @@ describe("section schemas", () => {
         defaultProviderId: null,
         defaultModelId: null,
         sseKeepAliveMs: 1000,
+        defaultMonthlyQuota: 20,
       }).success,
     ).toBe(true);
     expect(
@@ -56,34 +91,16 @@ describe("section schemas", () => {
         defaultProviderId: null,
         defaultModelId: null,
         sseKeepAliveMs: 500,
+        defaultMonthlyQuota: 20,
       }).success,
     ).toBe(false);
   });
 
-  // -------- quota defaults --------
-  it("UT-SCHEMA-Q-001/002: quotaDefaults bounds", () => {
+  it("UT-SCHEMA-SG-003: skillGen defaultMonthlyQuota bounds (#302)", () => {
     expect(
-      quotaDefaultsSection.schema.safeParse({
-        defaultPlaygroundMonthly: 0,
-        defaultSkillGenMonthly: 1_000_000,
-      }).success,
-    ).toBe(true);
-    expect(
-      quotaDefaultsSection.schema.safeParse({
-        defaultPlaygroundMonthly: -1,
-        defaultSkillGenMonthly: 0,
-      }).success,
-    ).toBe(false);
-    expect(
-      quotaDefaultsSection.schema.safeParse({
-        defaultPlaygroundMonthly: 1_000_001,
-        defaultSkillGenMonthly: 0,
-      }).success,
-    ).toBe(false);
-    expect(
-      quotaDefaultsSection.schema.safeParse({
-        defaultPlaygroundMonthly: 1.5,
-        defaultSkillGenMonthly: 0,
+      skillGenSection.schema.safeParse({
+        ...skillGenSection.defaults,
+        defaultMonthlyQuota: 1_000_001,
       }).success,
     ).toBe(false);
   });
@@ -117,46 +134,41 @@ describe("section schemas", () => {
     expect(bad.success).toBe(false);
   });
 
-  // -------- services --------
-  it("UT-SCHEMA-SVC-001: bucket regex no-slash", () => {
+  it("UT-SCHEMA-NYX-003: chrono-storage bucket regex no-slash (#302, was services)", () => {
     expect(
-      servicesSection.schema.safeParse({
-        chronoStorageUrl: "",
+      nyxidSection.schema.safeParse({
+        ...nyxidSection.defaults,
         chronoStorageBucket: "ornn-prod",
-        chronoSandboxUrl: "",
       }).success,
     ).toBe(true);
     expect(
-      servicesSection.schema.safeParse({
-        chronoStorageUrl: "",
+      nyxidSection.schema.safeParse({
+        ...nyxidSection.defaults,
         chronoStorageBucket: "bad/slash",
-        chronoSandboxUrl: "",
       }).success,
     ).toBe(false);
     expect(
-      servicesSection.schema.safeParse({
-        chronoStorageUrl: "",
-        // 64-char bucket exceeds limit
+      nyxidSection.schema.safeParse({
+        ...nyxidSection.defaults,
         chronoStorageBucket: "a".repeat(64),
-        chronoSandboxUrl: "",
       }).success,
     ).toBe(false);
   });
 
-  it("UT-SCHEMA-SVC-002: storage url validates http(s)", () => {
+  it("UT-SCHEMA-NYX-004: chrono-storage/sandbox URLs validate http(s) (#302, was services)", () => {
     // S2 rejects mDNS `.local` for SSRF safety; use a public-looking host.
     expect(
-      servicesSection.schema.safeParse({
+      nyxidSection.schema.safeParse({
+        ...nyxidSection.defaults,
         chronoStorageUrl: "https://storage.example.com",
         chronoStorageBucket: "ornn",
         chronoSandboxUrl: "https://sandbox.example.com",
       }).success,
     ).toBe(true);
     expect(
-      servicesSection.schema.safeParse({
+      nyxidSection.schema.safeParse({
+        ...nyxidSection.defaults,
         chronoStorageUrl: "ftp://nope",
-        chronoStorageBucket: "ornn",
-        chronoSandboxUrl: "",
       }).success,
     ).toBe(false);
   });
@@ -304,8 +316,9 @@ describe("section schemas", () => {
     }
   });
 
-  it("S2: services rejects loopback chronoStorageUrl/chronoSandboxUrl", () => {
-    const r = servicesSection.schema.safeParse({
+  it("S2: nyxid rejects loopback chronoStorageUrl/chronoSandboxUrl (#302)", () => {
+    const r = nyxidSection.schema.safeParse({
+      ...nyxidSection.defaults,
       chronoStorageUrl: "http://127.0.0.1:9000/",
       chronoStorageBucket: "ornn",
       chronoSandboxUrl: "http://10.0.0.1/",

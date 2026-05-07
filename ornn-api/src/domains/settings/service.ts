@@ -35,9 +35,7 @@ import {
   type MirrorSection,
   type NyxidSection,
   type PlaygroundSection,
-  type QuotaDefaultsSection,
   type SectionId,
-  type ServicesSection,
   type SkillAuditSection,
   type SkillGenSection,
   type TelemetrySection,
@@ -106,17 +104,11 @@ export class SettingsServiceImpl implements SettingsService {
   async getNyxid(): Promise<NyxidSection> {
     return this.getSection<NyxidSection>("nyxid");
   }
-  async getServices(): Promise<ServicesSection> {
-    return this.getSection<ServicesSection>("services");
-  }
   async getSkillAudit(): Promise<SkillAuditSection> {
     return this.getSection<SkillAuditSection>("skillAudit");
   }
   async getTelemetry(): Promise<TelemetrySection> {
     return this.getSection<TelemetrySection>("telemetry");
-  }
-  async getQuotaDefaults(): Promise<QuotaDefaultsSection> {
-    return this.getSection<QuotaDefaultsSection>("quotaDefaults");
   }
   async getExtras(): Promise<ExtrasSection> {
     return this.getSection<ExtrasSection>("extras");

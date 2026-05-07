@@ -28,10 +28,8 @@ function fakeSettingsService(): SettingsService {
     getSkillGen: async () => store.get("skillGen") as never,
     getMirror: async () => store.get("mirror") as never,
     getNyxid: async () => store.get("nyxid") as never,
-    getServices: async () => store.get("services") as never,
     getSkillAudit: async () => store.get("skillAudit") as never,
     getTelemetry: async () => store.get("telemetry") as never,
-    getQuotaDefaults: async () => store.get("quotaDefaults") as never,
     getExtras: async () => store.get("extras") as never,
     getSection: async <T,>(id: string) => store.get(id) as T,
     putSection: async <T,>(id: string, value: T) => {
@@ -117,9 +115,11 @@ describe("settings export/import routes", () => {
       body: JSON.stringify({
         schemaVersion: SETTINGS_SCHEMA_VERSION,
         sections: {
-          quotaDefaults: {
-            defaultPlaygroundMonthly: 300,
-            defaultSkillGenMonthly: 30,
+          playground: {
+            defaultProviderId: null,
+            defaultModelId: null,
+            sseKeepAliveMs: 15_000,
+            defaultMonthlyQuota: 300,
           },
         },
       }),
@@ -164,9 +164,11 @@ describe("settings export/import routes", () => {
       body: JSON.stringify({
         schemaVersion: SETTINGS_SCHEMA_VERSION,
         sections: {
-          quotaDefaults: {
-            defaultPlaygroundMonthly: 400,
-            defaultSkillGenMonthly: 40,
+          playground: {
+            defaultProviderId: null,
+            defaultModelId: null,
+            sseKeepAliveMs: 15_000,
+            defaultMonthlyQuota: 400,
           },
         },
       }),
@@ -188,8 +190,8 @@ describe("settings export/import routes", () => {
     expect(args.schemaVersion).toBe(SETTINGS_SCHEMA_VERSION);
     expect(args.aggregateStatus).toBe("applied");
     expect(args.dryRun).toBe(false);
-    const quota = args.sections.find((s) => s.id === "quotaDefaults")!;
-    expect(quota.status).toBe("applied");
+    const playground = args.sections.find((s) => s.id === "playground")!;
+    expect(playground.status).toBe("applied");
   });
 
   it("G3: audit emission failure does not break the response", async () => {

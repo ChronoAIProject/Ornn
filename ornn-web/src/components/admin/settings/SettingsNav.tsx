@@ -22,11 +22,9 @@ const SECTIONS: NavEntry[] = [
   { to: "/admin/settings/skill-generation", label: "Skill Generation" },
   { to: "/admin/settings/mirror", label: "GitHub Mirror" },
   { to: "/admin/settings/integrations/nyxid", label: "NyxID Integration" },
-  { to: "/admin/settings/integrations/services", label: "Other Services" },
   { to: "/admin/settings/skill-audit", label: "Skill Auditing" },
-  { to: "/admin/settings/telemetry", label: "Telemetry" },
-  { to: "/admin/settings/quota", label: "Quota Defaults" },
-  { to: "/admin/settings/extras", label: "Extras" },
+  { to: "/admin/settings/posthog", label: "PostHog" },
+  { to: "/admin/settings/extras", label: "Service Binding List" },
   { to: "/admin/settings/export-import", label: "Export / Import" },
 ];
 

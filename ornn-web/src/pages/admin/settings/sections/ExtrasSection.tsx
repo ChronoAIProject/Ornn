@@ -110,8 +110,8 @@ export function ExtrasSection() {
     <>
       <UnsavedChangesGuard when={form.isDirty} />
       <SectionShell
-        title="Extras"
-        description="Additional NyxID-managed services proxied through Ornn."
+        title="Service binding list configuration"
+        description="Additional NyxID-managed services proxied through Ornn — bind each by name + base URL + optional scopes."
         isLoading={form.isLoading}
         isSaving={form.isSaving}
         isDirty={form.isDirty}

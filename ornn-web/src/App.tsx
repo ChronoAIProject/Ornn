@@ -158,11 +158,6 @@ const NyxIDSection = lazy(() =>
     default: m.NyxIDSection,
   })),
 );
-const ServicesSection = lazy(() =>
-  import("@/pages/admin/settings/sections").then((m) => ({
-    default: m.ServicesSection,
-  })),
-);
 const SkillAuditSection = lazy(() =>
   import("@/pages/admin/settings/sections").then((m) => ({
     default: m.SkillAuditSection,
@@ -171,11 +166,6 @@ const SkillAuditSection = lazy(() =>
 const TelemetrySection = lazy(() =>
   import("@/pages/admin/settings/sections").then((m) => ({
     default: m.TelemetrySection,
-  })),
-);
-const QuotaDefaultsSection = lazy(() =>
-  import("@/pages/admin/settings/sections").then((m) => ({
-    default: m.QuotaDefaultsSection,
   })),
 );
 const ExtrasSection = lazy(() =>
@@ -274,13 +264,8 @@ const router = createBrowserRouter(
               <Route path="skill-generation" element={<SkillGenSection />} />
               <Route path="mirror" element={<MirrorSection />} />
               <Route path="integrations/nyxid" element={<NyxIDSection />} />
-              <Route
-                path="integrations/services"
-                element={<ServicesSection />}
-              />
               <Route path="skill-audit" element={<SkillAuditSection />} />
-              <Route path="telemetry" element={<TelemetrySection />} />
-              <Route path="quota" element={<QuotaDefaultsSection />} />
+              <Route path="posthog" element={<TelemetrySection />} />
               <Route path="extras" element={<ExtrasSection />} />
               <Route
                 path="export-import"

@@ -40,11 +40,11 @@ const Schema = z.object({
 
 export function TelemetrySection() {
   const form = useSectionForm<TS>({
-    queryKey: ["admin", "settings", "telemetry"] as const,
-    fetcher: () => fetchSection<TS>("telemetry"),
-    saver: (input) => putSection<TS>("telemetry", input),
+    queryKey: ["admin", "settings", "posthog"] as const,
+    fetcher: () => fetchSection<TS>("posthog"),
+    saver: (input) => putSection<TS>("posthog", input),
     schema: Schema,
-    successMessage: "Telemetry config saved",
+    successMessage: "PostHog config saved",
   });
 
   const draft = form.draft;
@@ -56,7 +56,7 @@ export function TelemetrySection() {
     <>
       <UnsavedChangesGuard when={form.isDirty} />
       <SectionShell
-        title="Telemetry"
+        title="PostHog"
         description="PostHog product analytics + per-request audit. Backend reads this on boot — restart ornn-api to apply changes."
         isLoading={form.isLoading}
         isSaving={form.isSaving}

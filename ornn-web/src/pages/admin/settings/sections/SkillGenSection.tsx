@@ -22,6 +22,7 @@ const Schema = z.object({
   defaultProviderId: z.string().min(1).nullable(),
   defaultModelId: z.string().min(1).nullable(),
   sseKeepAliveMs: z.number().int().min(1000).max(600_000),
+  defaultMonthlyQuota: z.number().int().min(0).max(1_000_000),
   updatedAt: z.string().optional(),
   updatedBy: z.string().optional(),
 }) satisfies z.ZodType<SG>;
@@ -126,6 +127,29 @@ export function SkillGenSection() {
                 }
                 className="rounded-sm border border-subtle bg-card px-3 py-2 font-mono text-sm text-strong focus:border-accent focus:outline-none"
               />
+            </label>
+
+            <label className="flex flex-col gap-1.5">
+              <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
+                Default monthly quota — non-admin users (0..1,000,000)
+              </span>
+              <input
+                type="number"
+                min={0}
+                max={1_000_000}
+                step={1}
+                value={draft.defaultMonthlyQuota}
+                onChange={(e) =>
+                  form.patchDraft({
+                    defaultMonthlyQuota: Number(e.target.value) || 0,
+                  })
+                }
+                className="rounded-sm border border-subtle bg-card px-3 py-2 font-mono text-sm text-strong focus:border-accent focus:outline-none"
+              />
+              <span className="font-mono text-[10px] text-meta">
+                Raising the default mid-month grants existing users
+                headroom; lowering does not retroactively claw back.
+              </span>
             </label>
           </div>
         )}

@@ -363,13 +363,14 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   };
 
   // ---- External Clients ----
-  // Storage URL/bucket and Sandbox URL come from settings (`services`
-  // section). The "needs proxy auth" flag is a behavior of the URL
-  // itself ("proxy" in the host); we resolve once per call so a switch
-  // between direct and proxied endpoints works without a redeploy.
+  // Storage URL/bucket and Sandbox URL come from the NyxID integration
+  // settings section (folded in from the old standalone `services`
+  // section in #302). The "needs proxy auth" flag is a behavior of the
+  // URL itself ("proxy" in the host); we resolve once per call so a
+  // switch between direct and proxied endpoints works without a redeploy.
   const storageClient = new StorageClient({
     resolver: async () => {
-      const s = await settingsService.getServices();
+      const s = await settingsService.getNyxid();
       return { baseUrl: s.chronoStorageUrl, bucket: s.chronoStorageBucket };
     },
     // Conservative: always attach SA token when present. The chrono-storage
@@ -378,7 +379,7 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   });
   const sandboxClient = new SandboxClient({
     resolver: async () => {
-      const s = await settingsService.getServices();
+      const s = await settingsService.getNyxid();
       return { baseUrl: s.chronoSandboxUrl };
     },
     getAccessToken: getSaAccessToken,
@@ -406,7 +407,7 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
     skillVersionRepo,
     storageClient,
     storageBucketResolver: async () =>
-      (await settingsService.getServices()).chronoStorageBucket,
+      (await settingsService.getNyxid()).chronoStorageBucket,
     analyticsEmitter,
     agentsealScanner,
   });
@@ -447,7 +448,7 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
     skillService,
     storageClient,
     storageBucketResolver: async () =>
-      (await settingsService.getServices()).chronoStorageBucket,
+      (await settingsService.getNyxid()).chronoStorageBucket,
     llmClient: nyxLlmClient,
     defaultsResolver: async () => resolveAuditDefaults(),
     // Audits are re-run automatically when the cached record ages past
@@ -542,7 +543,16 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   const quotaService = new QuotaService({
     repo: quotaRepo,
     defaults: {
-      getQuotaDefaults: async () => settingsService.getQuotaDefaults(),
+      getQuotaDefaults: async () => {
+        const [pg, sg] = await Promise.all([
+          settingsService.getPlayground(),
+          settingsService.getSkillGen(),
+        ]);
+        return {
+          defaultPlaygroundMonthly: pg.defaultMonthlyQuota,
+          defaultSkillGenMonthly: sg.defaultMonthlyQuota,
+        };
+      },
     },
     notificationService,
   });
