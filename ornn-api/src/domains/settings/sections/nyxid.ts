@@ -1,11 +1,20 @@
 /**
- * NyxID integration section schema (Story 7.5).
+ * NyxID integration section schema (Story 7.5; #275 cleanup).
  *
- * `clientSecret` is encrypted at rest. Paths must start with `/`; URLs
- * must be `http(s)://...`. The split-prod rule (memory:
- * NYXID_BASE_URL must be explicit when frontend host != API host) is
- * enforced at the API edge by validating both `baseFrontendUrl` and
- * `baseApiUrl` are non-empty when either is set.
+ * Owns only the server-side coords ornn-api actually consults:
+ *   - tokenUrl    — SA OAuth token endpoint
+ *   - clientId    — SA client id
+ *   - clientSecret — SA secret (encrypted at rest)
+ *   - baseApiUrl  — NyxID API base URL the backend proxies through
+ *
+ * Browser-only link coords (NyxID frontend URL + my-services /
+ * my-profile / my-organization paths) used to live here as scaffolding
+ * but never had a server-side consumer. They moved to ornn-web's
+ * configmap (delivered via window.__ORNN_CONFIG__ — see #275 + the
+ * `NYXID_BASE_FRONTEND_URL` / `NYXID_MY_*_PATH` env vars).
+ *
+ * `clientSecret` is encrypted at rest. URLs must be `http(s)://...`
+ * when set; an empty string is the unset state.
  *
  * @module domains/settings/sections/nyxid
  */
@@ -17,36 +26,12 @@ const optionalHttpUrl = z.string().refine(requirePublicUrl, {
   message: PUBLIC_URL_REFUSAL,
 });
 
-const pathOrEmpty = z
-  .string()
-  .refine((v) => v === "" || v.startsWith("/"), {
-    message: "path must start with /",
-  });
-
-export const nyxidSchema = z
-  .object({
-    tokenUrl: optionalHttpUrl,
-    clientId: z.string(),
-    clientSecret: z.string(),
-    baseFrontendUrl: optionalHttpUrl,
-    baseApiUrl: optionalHttpUrl,
-    myServicesPath: pathOrEmpty,
-    myProfilePath: pathOrEmpty,
-    myOrganizationPath: pathOrEmpty,
-    servicesListApiPath: pathOrEmpty,
-  })
-  .superRefine((value, ctx) => {
-    // Split-prod rule: if either of the URL hosts is set, both must be.
-    const frontSet = value.baseFrontendUrl.length > 0;
-    const apiSet = value.baseApiUrl.length > 0;
-    if (frontSet !== apiSet) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: [frontSet ? "baseApiUrl" : "baseFrontendUrl"],
-        message: "split-prod rule: set both baseFrontendUrl and baseApiUrl together",
-      });
-    }
-  });
+export const nyxidSchema = z.object({
+  tokenUrl: optionalHttpUrl,
+  clientId: z.string(),
+  clientSecret: z.string(),
+  baseApiUrl: optionalHttpUrl,
+});
 
 export type NyxidSection = z.infer<typeof nyxidSchema>;
 
@@ -54,12 +39,7 @@ export const nyxidDefaults: NyxidSection = {
   tokenUrl: "",
   clientId: "",
   clientSecret: "",
-  baseFrontendUrl: "",
   baseApiUrl: "",
-  myServicesPath: "",
-  myProfilePath: "",
-  myOrganizationPath: "",
-  servicesListApiPath: "",
 };
 
 export const nyxidSection: SectionMeta<NyxidSection> = {
