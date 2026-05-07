@@ -27,20 +27,29 @@ const NAV_ITEMS: NavItem[] = [
     ),
   },
   {
-    path: "/admin/activities",
-    label: "Activities",
-    icon: (
-      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-      </svg>
-    ),
-  },
-  {
     path: "/admin/users",
     label: "Users",
     icon: (
       <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+      </svg>
+    ),
+  },
+  {
+    path: "/admin/auditing",
+    label: "Auditing",
+    icon: (
+      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+    ),
+  },
+  {
+    path: "/admin/quota",
+    label: "Quota",
+    icon: (
+      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 3v18h18M7 14l4-4 4 4 5-5" />
       </svg>
     ),
   },
@@ -54,20 +63,11 @@ const NAV_ITEMS: NavItem[] = [
     ),
   },
   {
-    path: "/admin/models",
-    label: "Models",
+    path: "/admin/activities",
+    label: "Activities",
     icon: (
       <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.75 17 9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2Z" />
-      </svg>
-    ),
-  },
-  {
-    path: "/admin/quota",
-    label: "Quota",
-    icon: (
-      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 3v18h18M7 14l4-4 4 4 5-5" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
       </svg>
     ),
   },
@@ -99,15 +99,6 @@ const NAV_ITEMS: NavItem[] = [
       </svg>
     ),
   },
-  {
-    path: "/admin/mirror",
-    label: "GitHub Mirror",
-    icon: (
-      <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
-        <path d="M12 .5a11.5 11.5 0 00-3.64 22.42c.58.11.79-.25.79-.56v-2.16c-3.21.7-3.89-1.37-3.89-1.37-.52-1.32-1.28-1.67-1.28-1.67-1.05-.72.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.71 1.26 3.37.97.1-.76.4-1.27.73-1.56-2.56-.29-5.26-1.28-5.26-5.72 0-1.26.45-2.3 1.19-3.11-.12-.29-.52-1.47.11-3.06 0 0 .97-.31 3.18 1.18.92-.26 1.92-.39 2.9-.39.99 0 1.98.13 2.9.39 2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.77.11 3.06.74.81 1.19 1.85 1.19 3.11 0 4.45-2.7 5.42-5.28 5.71.41.35.78 1.05.78 2.12v3.14c0 .31.21.67.8.56A11.5 11.5 0 0012 .5z" />
-      </svg>
-    ),
-  },
 ];
 
 function getBreadcrumbs(pathname: string): Array<{ label: string; path?: string }> {
@@ -117,20 +108,28 @@ function getBreadcrumbs(pathname: string): Array<{ label: string; path?: string 
 
   if (pathname.startsWith("/admin/dashboard")) {
     breadcrumbs.push({ label: "Dashboard" });
-  } else if (pathname.startsWith("/admin/activities")) {
-    breadcrumbs.push({ label: "Activities" });
   } else if (pathname.startsWith("/admin/users")) {
     breadcrumbs.push({ label: "Users" });
-  } else if (pathname.startsWith("/admin/skills")) {
-    breadcrumbs.push({ label: "Skills" });
-  } else if (pathname.startsWith("/admin/models")) {
-    breadcrumbs.push({ label: "Models" });
+  } else if (pathname.startsWith("/admin/auditing")) {
+    breadcrumbs.push({ label: "Auditing" });
   } else if (pathname.startsWith("/admin/quota")) {
     breadcrumbs.push({ label: "Quota" });
+  } else if (pathname.startsWith("/admin/skills")) {
+    breadcrumbs.push({ label: "Skills" });
   } else if (pathname.startsWith("/admin/categories")) {
     breadcrumbs.push({ label: "Categories" });
   } else if (pathname.startsWith("/admin/tags")) {
     breadcrumbs.push({ label: "Tags" });
+  } else if (pathname.startsWith("/admin/activities")) {
+    breadcrumbs.push({ label: "Activities" });
+  } else if (pathname.startsWith("/admin/settings")) {
+    breadcrumbs.push({ label: "Settings", path: "/admin/settings" });
+    const tail = pathname.replace(/^\/admin\/settings\/?/, "");
+    if (tail) {
+      breadcrumbs.push({
+        label: tail.replace(/[/-]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+      });
+    }
   }
 
   return breadcrumbs;

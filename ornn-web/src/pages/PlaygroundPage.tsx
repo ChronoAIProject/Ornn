@@ -157,7 +157,7 @@ export function PlaygroundPage() {
   const isOverLimit =
     Boolean(playgroundSnap) &&
     !quotaSnapshot?.isAdmin &&
-    playgroundSnap!.monthly.remaining + playgroundSnap!.credits.balance <= 0;
+    playgroundSnap!.remaining <= 0;
 
   const {
     messages,
@@ -304,10 +304,14 @@ export function PlaygroundPage() {
     );
   }
 
-  if (isOverLimit && playgroundSnap) {
+  if (isOverLimit && playgroundSnap && quotaSnapshot) {
     return (
       <PageTransition>
-        <OverLimitPage surface="playground" snapshot={playgroundSnap} />
+        <OverLimitPage
+          surface="playground"
+          snapshot={playgroundSnap}
+          resetAt={quotaSnapshot.nextMonthlyResetAt}
+        />
       </PageTransition>
     );
   }

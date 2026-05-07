@@ -14,6 +14,7 @@
  */
 
 import pino from "pino";
+import type { NyxidConfigResolver } from "./base";
 
 const logger = pino({ level: "info" }).child({ module: "nyxidServiceClient" });
 
@@ -51,7 +52,7 @@ interface RawListResponse {
 }
 
 export class NyxidServiceClient {
-  private readonly baseUrl: string;
+  private readonly resolver: NyxidConfigResolver;
   /**
    * Per-user-token cache. Keyed by the bearer token so two callers don't
    * leak each other's view. 60-second TTL — services don't change often,
@@ -64,8 +65,13 @@ export class NyxidServiceClient {
   >();
   private readonly cacheTtlMs = 60 * 1000;
 
-  constructor(baseUrl: string) {
-    this.baseUrl = baseUrl.replace(/\/+$/, "");
+  constructor(opts: { resolver: NyxidConfigResolver }) {
+    this.resolver = opts.resolver;
+  }
+
+  private async resolveBaseUrl(): Promise<string> {
+    const cfg = await this.resolver();
+    return cfg.baseApiUrl.replace(/\/+$/, "");
   }
 
   /**
@@ -82,7 +88,8 @@ export class NyxidServiceClient {
       return cached.services;
     }
     try {
-      const resp = await fetch(`${this.baseUrl}/api/v1/services`, {
+      const baseUrl = await this.resolveBaseUrl();
+      const resp = await fetch(`${baseUrl}/api/v1/services`, {
         headers: { Authorization: `Bearer ${userAccessToken}` },
       });
       if (!resp.ok) {

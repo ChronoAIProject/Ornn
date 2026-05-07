@@ -116,14 +116,33 @@ export interface SessionListResponse {
 
 // ── Client ────────────────────────────────────────────────────────────
 
+/**
+ * Runtime-resolvable Chrono Sandbox config. Sourced from admin settings
+ * (`services` section). Resolved on every call so an admin URL change
+ * lands without a redeploy.
+ */
+export interface SandboxClientConfig {
+  baseUrl: string;
+}
+
+export type SandboxClientConfigResolver = () => Promise<SandboxClientConfig>;
+
 export class SandboxClient {
-  private readonly baseUrl: string;
+  private readonly resolver: SandboxClientConfigResolver;
   private readonly getAccessToken?: () => Promise<string>;
 
-  constructor(baseUrl: string, getAccessToken?: () => Promise<string>) {
-    this.baseUrl = baseUrl;
-    this.getAccessToken = getAccessToken;
-    logger.info({ baseUrl, authenticated: !!getAccessToken }, "SandboxClient initialized");
+  constructor(opts: {
+    resolver: SandboxClientConfigResolver;
+    getAccessToken?: () => Promise<string>;
+  }) {
+    this.resolver = opts.resolver;
+    this.getAccessToken = opts.getAccessToken;
+    logger.info({ authenticated: !!opts.getAccessToken }, "SandboxClient initialized");
+  }
+
+  private async resolveBaseUrl(): Promise<string> {
+    const cfg = await this.resolver();
+    return cfg.baseUrl.replace(/\/+$/, "");
   }
 
   private async authHeaders(): Promise<Record<string, string>> {
@@ -275,8 +294,9 @@ export class SandboxClient {
   async deleteSession(sessionId: string): Promise<void> {
     logger.info({ sessionId }, "Deleting session");
 
+    const baseUrl = await this.resolveBaseUrl();
     const auth = await this.authHeaders();
-    const response = await fetch(`${this.baseUrl}/sessions/${sessionId}`, {
+    const response = await fetch(`${baseUrl}/sessions/${sessionId}`, {
       method: "DELETE",
       headers: auth,
     });
@@ -293,8 +313,9 @@ export class SandboxClient {
   async listSessions(): Promise<SessionListResponse> {
     logger.debug("Listing sessions");
 
+    const baseUrl = await this.resolveBaseUrl();
     const auth = await this.authHeaders();
-    const response = await fetch(`${this.baseUrl}/sessions`, { headers: auth });
+    const response = await fetch(`${baseUrl}/sessions`, { headers: auth });
     if (!response.ok) {
       const text = await response.text().catch(() => "");
       throw new Error(`List sessions failed (${response.status}): ${text}`);
@@ -306,8 +327,9 @@ export class SandboxClient {
   // ── Internal helpers ──────────────────────────────────────────────
 
   private async post<T>(path: string, body: Record<string, unknown>): Promise<T> {
+    const baseUrl = await this.resolveBaseUrl();
     const auth = await this.authHeaders();
-    const response = await fetch(`${this.baseUrl}${path}`, {
+    const response = await fetch(`${baseUrl}${path}`, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...auth },
       body: JSON.stringify(body),
@@ -323,8 +345,9 @@ export class SandboxClient {
   }
 
   private async *streamSSE(path: string, body: Record<string, unknown>): AsyncGenerator<StreamEvent> {
+    const baseUrl = await this.resolveBaseUrl();
     const auth = await this.authHeaders();
-    const response = await fetch(`${this.baseUrl}${path}`, {
+    const response = await fetch(`${baseUrl}${path}`, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...auth },
       body: JSON.stringify(body),

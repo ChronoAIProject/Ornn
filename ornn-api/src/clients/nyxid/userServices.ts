@@ -21,6 +21,7 @@
  */
 
 import pino from "pino";
+import type { NyxidConfigResolver } from "./base";
 
 const logger = pino({ level: "info" }).child({ module: "nyxidUserServicesClient" });
 
@@ -55,10 +56,15 @@ interface RawResponse {
 }
 
 export class NyxidUserServicesClient {
-  private readonly baseUrl: string;
+  private readonly resolver: NyxidConfigResolver;
 
-  constructor(baseUrl: string) {
-    this.baseUrl = baseUrl.replace(/\/+$/, "");
+  constructor(opts: { resolver: NyxidConfigResolver }) {
+    this.resolver = opts.resolver;
+  }
+
+  private async resolveBaseUrl(): Promise<string> {
+    const cfg = await this.resolver();
+    return cfg.baseApiUrl.replace(/\/+$/, "");
   }
 
   /**
@@ -68,7 +74,8 @@ export class NyxidUserServicesClient {
    * with", not "every row NyxID could show".
    */
   async listUserServices(userAccessToken: string): Promise<UserService[]> {
-    const url = `${this.baseUrl}/api/v1/user-services`;
+    const baseUrl = await this.resolveBaseUrl();
+    const url = `${baseUrl}/api/v1/user-services`;
     const resp = await fetch(url, {
       headers: { Authorization: `Bearer ${userAccessToken}` },
     });

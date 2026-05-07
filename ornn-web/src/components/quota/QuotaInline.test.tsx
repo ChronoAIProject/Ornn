@@ -1,16 +1,15 @@
 /**
  * Tests for `QuotaInline` rendering branches: admin-bypass, normal,
- * 80% warning, and exhausted-suppress.
- *
- * The component reads the cached caller quota — we mock the hook
- * directly so the test stays focused on render behavior.
+ * threshold warning, and exhausted-suppress. The component reads the
+ * cached caller quota; the hook is mocked so this stays focused on
+ * render behavior.
  *
  * @module components/quota/QuotaInline.test
  */
 
 import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
-import type { QuotaSnapshot } from "@/services/quotaApi";
+import type { QuotaSnapshot, SurfaceSnapshot } from "@/services/quotaApi";
 
 const useMyQuota = vi.fn();
 
@@ -20,21 +19,28 @@ vi.mock("@/hooks/useQuota", () => ({
 
 import { QuotaInline } from "./QuotaInline";
 
-function snapshot(overrides: Partial<QuotaSnapshot["playground"]> = {}): QuotaSnapshot {
-  const playground: QuotaSnapshot["playground"] = {
-    monthly: { limit: 200, used: 10, remaining: 190 },
-    daily: { limit: 50, used: 2, remaining: 48 },
-    credits: { balance: 0 },
+function surface(overrides: Partial<SurfaceSnapshot> = {}): SurfaceSnapshot {
+  return {
+    defaultAllotment: 200,
+    adminGrant: 0,
+    used: 10,
+    remaining: 190,
     warningThreshold: 0.8,
     warning: false,
-    monthlyResetAt: "2026-06-01T00:00:00.000Z",
-    dailyResetAt: "2026-05-05T00:00:00.000Z",
     ...overrides,
   };
+}
+
+function snapshot(overrides: Partial<SurfaceSnapshot> = {}): QuotaSnapshot {
+  const playground = surface(overrides);
   return {
-    playground,
-    skillGen: { ...playground, monthly: { ...playground.monthly, limit: 20 } },
     isAdmin: false,
+    monthMarker: "2026-05",
+    monthStart: "2026-05-01T00:00:00.000Z",
+    monthEnd: "2026-06-01T00:00:00.000Z",
+    nextMonthlyResetAt: "2026-06-01T00:00:00.000Z",
+    playground,
+    skillGen: surface({ defaultAllotment: 20, remaining: 18, used: 2 }),
   };
 }
 
@@ -54,24 +60,34 @@ describe("QuotaInline", () => {
     expect(screen.getByText(/playground left/i)).toBeInTheDocument();
   });
 
-  it("renders the warning banner at 80%+", () => {
+  it("renders the warning banner at warning threshold", () => {
     useMyQuota.mockReturnValue({
       data: snapshot({
         warning: true,
-        monthly: { limit: 200, used: 160, remaining: 40 },
+        used: 160,
+        remaining: 40,
       }),
     });
     render(<QuotaInline surface="playground" />);
-    expect(screen.getByText(/80% used/i)).toBeInTheDocument();
+    expect(screen.getByText(/80% used this month/i)).toBeInTheDocument();
   });
 
   it("renders nothing when surface is exhausted (over-limit page takes over)", () => {
     useMyQuota.mockReturnValue({
       data: snapshot({
-        monthly: { limit: 200, used: 200, remaining: 0 },
+        used: 200,
+        remaining: 0,
       }),
     });
     const { container } = render(<QuotaInline surface="playground" />);
     expect(container.firstChild).toBeNull();
+  });
+
+  it("shows the admin-grant additive when one is active", () => {
+    useMyQuota.mockReturnValue({
+      data: snapshot({ adminGrant: 5, remaining: 195 }),
+    });
+    render(<QuotaInline surface="playground" />);
+    expect(screen.getByText(/\+5 grant/i)).toBeInTheDocument();
   });
 });

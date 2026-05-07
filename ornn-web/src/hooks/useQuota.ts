@@ -1,9 +1,10 @@
 /**
- * Quota hooks — caller snapshot + admin grant mutations.
+ * Quota hooks — caller snapshot + admin grant mutations + lifetime usage.
  *
  * `useMyQuota` is the chip / drawer / banner / playground in-context source.
- * Grant hooks invalidate the relevant cache keys so the admin Users + caller
- * counters refresh in lockstep when admins issue credits.
+ * `useAdminQuotaUsers` and `useUserLifetimeQuota` drive the admin Quota
+ * page. Grant hooks invalidate the relevant cache keys so the admin
+ * tables + caller counters refresh in lockstep when admins issue grants.
  *
  * @module hooks/useQuota
  */
@@ -20,10 +21,13 @@ import {
   fetchAdminQuotaGrants,
   fetchAdminQuotaUsers,
   fetchMyQuota,
+  fetchUserLifetimeQuota,
   grantQuota,
   type BulkGrantInput,
   type BulkGrantOutcome,
   type GrantInput,
+  type GrantResult,
+  type LifetimeResponse,
   type QuotaSnapshot,
   type Surface,
 } from "@/services/quotaApi";
@@ -49,9 +53,7 @@ export function useMyQuota(): UseQueryResult<QuotaSnapshot> {
 
 /**
  * Resolve a single surface's snapshot from the cached caller quota.
- * Returns undefined while the query is in flight or for admins (admins
- * still get a snapshot but the consumer typically wants to skip the chip
- * — checking `quota?.isAdmin` is the right gate).
+ * Returns undefined while the query is in flight.
  */
 export function useSurfaceQuota(
   surface: Surface,
@@ -70,6 +72,7 @@ export function useSurfaceQuota(
 }
 
 export function useAdminQuotaUsers(params: {
+  surface: Surface;
   page?: number;
   pageSize?: number;
   q?: string;
@@ -81,9 +84,29 @@ export function useAdminQuotaUsers(params: {
   });
 }
 
+export function useUserLifetimeQuota(params: {
+  userId: string | null;
+  surface: Surface;
+  enabled?: boolean;
+}): UseQueryResult<LifetimeResponse> {
+  return useQuery({
+    queryKey: [
+      "admin",
+      "quota",
+      "lifetime",
+      params.userId,
+      params.surface,
+    ] as const,
+    queryFn: () =>
+      fetchUserLifetimeQuota({ userId: params.userId!, surface: params.surface }),
+    enabled: Boolean(params.userId) && (params.enabled ?? true),
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
 export function useGrantQuota() {
   const qc = useQueryClient();
-  return useMutation<{ auditId: string }, Error, GrantInput>({
+  return useMutation<GrantResult, Error, GrantInput>({
     mutationFn: grantQuota,
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin", "quota"] });

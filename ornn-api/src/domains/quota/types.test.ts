@@ -1,53 +1,74 @@
 /**
- * Pure-function unit tests for the quota date helpers.
+ * Pure-function tests for the quota date helpers + key derivation.
  *
  * @module domains/quota/types.test
  */
 
 import { describe, expect, test } from "bun:test";
 import {
-  currentDailyMarker,
-  currentMonthlyMarker,
-  freshSurfaceCounter,
-  nextDailyResetAt,
+  bucketId,
+  currentMonthMarker,
+  escapeModelKey,
+  monthBounds,
   nextMonthlyResetAt,
 } from "./types";
 
-describe("quota types: marker math", () => {
-  test("monthly marker is YYYY-MM in UTC, not local", () => {
-    const t = new Date(Date.UTC(2026, 3, 30, 23, 30, 0));
-    expect(currentMonthlyMarker(t)).toBe("2026-04");
+describe("currentMonthMarker", () => {
+  test("YYYY-MM in UTC, not local", () => {
+    expect(currentMonthMarker(new Date(Date.UTC(2026, 3, 30, 23, 30)))).toBe("2026-04");
   });
-
-  test("daily marker is YYYY-MM-DD in UTC", () => {
-    const t = new Date(Date.UTC(2026, 4, 5, 12, 0, 0));
-    expect(currentDailyMarker(t)).toBe("2026-05-05");
+  test("zero-pads single-digit months", () => {
+    expect(currentMonthMarker(new Date(Date.UTC(2026, 0, 1)))).toBe("2026-01");
   });
+});
 
-  test("monthly marker zero-pads single-digit months", () => {
-    const t = new Date(Date.UTC(2026, 0, 15, 0, 0, 0));
-    expect(currentMonthlyMarker(t)).toBe("2026-01");
-  });
-
-  test("nextMonthlyResetAt rolls year on December", () => {
-    const t = new Date(Date.UTC(2026, 11, 15, 12, 0, 0));
-    const next = nextMonthlyResetAt(t);
-    expect(next.toISOString()).toBe("2027-01-01T00:00:00.000Z");
-  });
-
-  test("nextDailyResetAt rolls month on month-end", () => {
-    const t = new Date(Date.UTC(2026, 4, 31, 22, 0, 0));
-    const next = nextDailyResetAt(t);
+describe("nextMonthlyResetAt", () => {
+  test("first instant of next UTC month", () => {
+    const next = nextMonthlyResetAt(new Date(Date.UTC(2026, 4, 15)));
     expect(next.toISOString()).toBe("2026-06-01T00:00:00.000Z");
   });
+  test("year rollover", () => {
+    const next = nextMonthlyResetAt(new Date(Date.UTC(2026, 11, 31, 23, 59, 59, 999)));
+    expect(next.toISOString()).toBe("2027-01-01T00:00:00.000Z");
+  });
+});
 
-  test("freshSurfaceCounter starts at zero with current markers", () => {
-    const t = new Date(Date.UTC(2026, 4, 5, 0, 0, 0));
-    const c = freshSurfaceCounter(t);
-    expect(c.monthlyUsed).toBe(0);
-    expect(c.dailyUsed).toBe(0);
-    expect(c.creditsBalance).toBe(0);
-    expect(c.monthlyResetMarker).toBe("2026-05");
-    expect(c.dailyResetMarker).toBe("2026-05-05");
+describe("monthBounds", () => {
+  test("monthStart is 1st 00:00:00.000Z; monthEnd is exclusive next month", () => {
+    const b = monthBounds(new Date(Date.UTC(2026, 4, 15, 12)));
+    expect(b.monthMarker).toBe("2026-05");
+    expect(b.monthStart.toISOString()).toBe("2026-05-01T00:00:00.000Z");
+    expect(b.monthEnd.toISOString()).toBe("2026-06-01T00:00:00.000Z");
+  });
+
+  test("first millisecond of month belongs to that month", () => {
+    const b = monthBounds(new Date(Date.UTC(2026, 5, 1, 0, 0, 0, 0)));
+    expect(b.monthMarker).toBe("2026-06");
+  });
+
+  test("last millisecond of May belongs to May", () => {
+    const b = monthBounds(new Date(Date.UTC(2026, 4, 31, 23, 59, 59, 999)));
+    expect(b.monthMarker).toBe("2026-05");
+  });
+});
+
+describe("bucketId", () => {
+  test("composes id from triple", () => {
+    expect(bucketId("u1", "playground", "2026-05")).toBe("u1:playground:2026-05");
+  });
+});
+
+describe("escapeModelKey", () => {
+  test("returns __unknown__ for empty / null / undefined", () => {
+    expect(escapeModelKey("")).toBe("__unknown__");
+    expect(escapeModelKey(null)).toBe("__unknown__");
+    expect(escapeModelKey(undefined)).toBe("__unknown__");
+  });
+  test("substitutes Mongo-illegal characters", () => {
+    expect(escapeModelKey("gpt-4o.0")).toBe("gpt-4o_0");
+    expect(escapeModelKey("$model")).toBe("_model");
+  });
+  test("passes plain ids through", () => {
+    expect(escapeModelKey("gpt-4o")).toBe("gpt-4o");
   });
 });

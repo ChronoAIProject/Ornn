@@ -15,16 +15,40 @@ export interface IStorageClient {
   copy(bucket: string, sourceKey: string, destKey: string): Promise<void>;
 }
 
+/**
+ * Runtime-resolvable Chrono Storage config. Sourced from admin settings
+ * (`services` section) — the ConfigMap-baked URL and bucket are gone.
+ */
+export interface StorageClientConfig {
+  baseUrl: string;
+  /** Default bucket name. Empty string is rejected at admin-save time. */
+  bucket: string;
+}
+
+export type StorageClientConfigResolver = () => Promise<StorageClientConfig>;
+
 export class StorageClient implements IStorageClient {
+  private readonly resolver: StorageClientConfigResolver;
   private readonly getAccessToken?: () => Promise<string>;
 
-  constructor(baseUrl: string, getAccessToken?: () => Promise<string>) {
-    this.baseUrl = baseUrl;
-    this.getAccessToken = getAccessToken;
-    logger.info({ baseUrl, authenticated: !!getAccessToken }, "StorageClient initialized");
+  constructor(opts: {
+    resolver: StorageClientConfigResolver;
+    getAccessToken?: () => Promise<string>;
+  }) {
+    this.resolver = opts.resolver;
+    this.getAccessToken = opts.getAccessToken;
+    logger.info({ authenticated: !!opts.getAccessToken }, "StorageClient initialized");
   }
 
-  private readonly baseUrl: string;
+  private async resolveBaseUrl(): Promise<string> {
+    const cfg = await this.resolver();
+    return cfg.baseUrl.replace(/\/+$/, "");
+  }
+
+  async getDefaultBucket(): Promise<string> {
+    const cfg = await this.resolver();
+    return cfg.bucket;
+  }
 
   private async authHeaders(): Promise<Record<string, string>> {
     if (!this.getAccessToken) return {};
@@ -38,8 +62,9 @@ export class StorageClient implements IStorageClient {
     data: Uint8Array,
     contentType: string,
   ): Promise<{ url: string }> {
+    const baseUrl = await this.resolveBaseUrl();
     const params = new URLSearchParams({ key, contentType });
-    const url = `${this.baseUrl}/api/buckets/${bucket}/objects?${params.toString()}`;
+    const url = `${baseUrl}/api/buckets/${bucket}/objects?${params.toString()}`;
 
     const auth = await this.authHeaders();
     const res = await fetch(url, {
@@ -60,8 +85,9 @@ export class StorageClient implements IStorageClient {
   }
 
   async delete(bucket: string, key: string): Promise<void> {
+    const baseUrl = await this.resolveBaseUrl();
     const params = new URLSearchParams({ key });
-    const url = `${this.baseUrl}/api/buckets/${bucket}/objects?${params.toString()}`;
+    const url = `${baseUrl}/api/buckets/${bucket}/objects?${params.toString()}`;
 
     const auth = await this.authHeaders();
     const res = await fetch(url, { method: "DELETE", headers: auth });
@@ -80,11 +106,12 @@ export class StorageClient implements IStorageClient {
     key: string,
     expiresIn?: number,
   ): Promise<{ presignedUrl: string; expiresAt: string }> {
+    const baseUrl = await this.resolveBaseUrl();
     const params = new URLSearchParams({ key });
     if (expiresIn !== undefined) {
       params.set("expiresIn", String(expiresIn));
     }
-    const url = `${this.baseUrl}/api/buckets/${bucket}/presigned-url?${params.toString()}`;
+    const url = `${baseUrl}/api/buckets/${bucket}/presigned-url?${params.toString()}`;
 
     const auth = await this.authHeaders();
     const res = await fetch(url, { method: "GET", headers: auth });
@@ -100,7 +127,8 @@ export class StorageClient implements IStorageClient {
   }
 
   async copy(bucket: string, sourceKey: string, destKey: string): Promise<void> {
-    const url = `${this.baseUrl}/api/buckets/${bucket}/objects/copy`;
+    const baseUrl = await this.resolveBaseUrl();
+    const url = `${baseUrl}/api/buckets/${bucket}/objects/copy`;
 
     const auth = await this.authHeaders();
     const res = await fetch(url, {

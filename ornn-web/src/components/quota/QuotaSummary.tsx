@@ -2,9 +2,9 @@
  * QuotaSummary — drawer showing the full quota breakdown across both
  * surfaces. Opened from the QuotaChip in the top nav.
  *
- * Layout per surface: monthly bar with used / limit, daily ceiling
- * sub-bar, credit balance line, next reset times. A single CTA at the
- * bottom directs the user to the admin contact / paid-plan upsell.
+ * Layout per surface: monthly bar with used / (default + grant), reset
+ * line, and an admin-grant accent line. v1+ has no daily ceiling — the
+ * single monthly bucket is the only quota lever.
  *
  * @module components/quota/QuotaSummary
  */
@@ -38,26 +38,26 @@ function formatReset(iso: string): string {
   }
 }
 
-function pct(used: number, limit: number): number {
-  if (limit <= 0) return 0;
-  return Math.max(0, Math.min(100, Math.round((used / limit) * 100)));
+function pct(used: number, ceiling: number): number {
+  if (ceiling <= 0) return 0;
+  return Math.max(0, Math.min(100, Math.round((used / ceiling) * 100)));
 }
 
 interface SurfaceRowProps {
   label: string;
   snapshot: SurfaceSnapshot;
+  resetAt: string;
 }
 
-function SurfaceRow({ label, snapshot }: SurfaceRowProps) {
-  const monthlyPct = pct(snapshot.monthly.used, snapshot.monthly.limit);
-  const dailyPct = pct(snapshot.daily.used, snapshot.daily.limit);
+function SurfaceRow({ label, snapshot, resetAt }: SurfaceRowProps) {
+  const ceiling = snapshot.defaultAllotment + snapshot.adminGrant;
+  const monthlyPct = pct(snapshot.used, ceiling);
   const monthlyTone =
-    snapshot.monthly.remaining <= 0
+    snapshot.remaining <= 0
       ? "bg-danger"
       : snapshot.warning
       ? "bg-warning"
       : "bg-accent";
-  const totalRemaining = snapshot.monthly.remaining + snapshot.credits.balance;
 
   return (
     <section className="rounded border border-subtle bg-elevated/40 p-4">
@@ -66,17 +66,17 @@ function SurfaceRow({ label, snapshot }: SurfaceRowProps) {
           {label}
         </h3>
         <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
-          {nfmt(totalRemaining)} remaining
+          {nfmt(Math.max(0, snapshot.remaining))} remaining
         </span>
       </header>
 
       <dl className="space-y-3">
         <div>
           <div className="mb-1 flex items-baseline justify-between font-mono text-[10px] uppercase tracking-[0.14em]">
-            <dt className="text-meta">Monthly base</dt>
+            <dt className="text-meta">Monthly usage</dt>
             <dd className="text-strong">
-              <span className="text-meta">{nfmt(snapshot.monthly.used)} /</span>{" "}
-              {nfmt(snapshot.monthly.limit)}
+              <span className="text-meta">{nfmt(snapshot.used)} /</span>{" "}
+              {nfmt(ceiling)}
             </dd>
           </div>
           <div className="h-1.5 w-full overflow-hidden rounded-sm bg-card">
@@ -86,34 +86,22 @@ function SurfaceRow({ label, snapshot }: SurfaceRowProps) {
             />
           </div>
           <p className="mt-1 font-mono text-[10px] text-meta">
-            Resets {formatReset(snapshot.monthlyResetAt)}
-          </p>
-        </div>
-
-        <div>
-          <div className="mb-1 flex items-baseline justify-between font-mono text-[10px] uppercase tracking-[0.14em]">
-            <dt className="text-meta">Daily ceiling</dt>
-            <dd className="text-strong">
-              <span className="text-meta">{nfmt(snapshot.daily.used)} /</span>{" "}
-              {nfmt(snapshot.daily.limit)}
-            </dd>
-          </div>
-          <div className="h-1 w-full overflow-hidden rounded-sm bg-card">
-            <div
-              className="h-full bg-accent-support transition-all duration-300"
-              style={{ width: `${dailyPct}%` }}
-            />
-          </div>
-          <p className="mt-1 font-mono text-[10px] text-meta">
-            Resets {formatReset(snapshot.dailyResetAt)}
+            Resets {formatReset(resetAt)} (UTC month boundary)
           </p>
         </div>
 
         <div className="flex items-center justify-between border-t border-subtle pt-3 font-mono text-[11px]">
           <dt className="uppercase tracking-[0.14em] text-meta">
-            Beta credits
+            Admin grant (this month)
           </dt>
-          <dd className="text-accent">+{nfmt(snapshot.credits.balance)}</dd>
+          <dd className="text-accent">+{nfmt(snapshot.adminGrant)}</dd>
+        </div>
+
+        <div className="flex items-center justify-between font-mono text-[11px]">
+          <dt className="uppercase tracking-[0.14em] text-meta">
+            Default allotment
+          </dt>
+          <dd className="text-body">{nfmt(snapshot.defaultAllotment)}</dd>
         </div>
       </dl>
     </section>
@@ -163,8 +151,11 @@ export function QuotaSummary({ isOpen, onClose, quota }: QuotaSummaryProps) {
                   [§ QUOTA — USAGE]
                 </p>
                 <h2 className="mt-1 font-display text-xl font-semibold tracking-tight text-strong">
-                  Your usage this period
+                  Your usage this month
                 </h2>
+                <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
+                  Period {quota.monthMarker} · UTC
+                </p>
               </div>
               <button
                 type="button"
@@ -180,8 +171,16 @@ export function QuotaSummary({ isOpen, onClose, quota }: QuotaSummaryProps) {
             </header>
 
             <div className="flex-1 space-y-4 overflow-y-auto">
-              <SurfaceRow label={SURFACE_LABEL.playground} snapshot={quota.playground} />
-              <SurfaceRow label={SURFACE_LABEL.skillGen} snapshot={quota.skillGen} />
+              <SurfaceRow
+                label={SURFACE_LABEL.playground}
+                snapshot={quota.playground}
+                resetAt={quota.nextMonthlyResetAt}
+              />
+              <SurfaceRow
+                label={SURFACE_LABEL.skillGen}
+                snapshot={quota.skillGen}
+                resetAt={quota.nextMonthlyResetAt}
+              />
             </div>
 
             <footer className="rounded border border-accent/30 bg-accent/5 p-4">
@@ -189,11 +188,11 @@ export function QuotaSummary({ isOpen, onClose, quota }: QuotaSummaryProps) {
                 Need more headroom?
               </p>
               <p className="mt-1 font-text text-xs leading-relaxed text-body">
-                Beta credits are non-expiring and granted by an Ornn admin.
-                Paid plans are coming soon.
+                Admin grants are added to the current month only and reset
+                with the calendar. Paid plans are coming soon.
               </p>
               <a
-                href="mailto:hello@chrono-ai.fun?subject=Ornn%20beta%20credits"
+                href="mailto:hello@chrono-ai.fun?subject=Ornn%20quota"
                 className="mt-3 inline-flex items-center gap-2 font-mono text-[11px] font-semibold uppercase tracking-[0.14em] text-accent hover:text-accent-muted"
               >
                 Contact admin

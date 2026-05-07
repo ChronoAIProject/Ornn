@@ -62,7 +62,8 @@ function SurfacePill({ surface, snapshot, isAdmin, onOpen }: SurfacePillProps) {
     );
   }
 
-  const remaining = snapshot.monthly.remaining + snapshot.credits.balance;
+  const ceiling = snapshot.defaultAllotment + snapshot.adminGrant;
+  const remaining = Math.max(0, snapshot.remaining);
   const tone =
     remaining <= 0 ? "danger" : snapshot.warning ? "warning" : "ok";
 
@@ -77,8 +78,8 @@ function SurfacePill({ surface, snapshot, isAdmin, onOpen }: SurfacePillProps) {
     <button
       type="button"
       onClick={onOpen}
-      aria-label={`${SURFACE_LABEL[surface]} quota — ${nfmt(Math.max(0, remaining))} of ${nfmt(snapshot.monthly.limit)} remaining`}
-      title={`${SURFACE_LABEL[surface]}: ${nfmt(Math.max(0, remaining))} / ${nfmt(snapshot.monthly.limit)} this month`}
+      aria-label={`${SURFACE_LABEL[surface]} quota — ${nfmt(remaining)} of ${nfmt(ceiling)} remaining`}
+      title={`${SURFACE_LABEL[surface]}: ${nfmt(remaining)} / ${nfmt(ceiling)} this month`}
       className={`
         inline-flex h-7 items-center gap-1.5 rounded-sm border bg-transparent
         px-2 font-mono text-[10px] font-semibold uppercase tracking-[0.12em]
@@ -89,8 +90,8 @@ function SurfacePill({ surface, snapshot, isAdmin, onOpen }: SurfacePillProps) {
     >
       <span className="opacity-70">{SURFACE_LABEL[surface]}</span>
       <span aria-hidden className="opacity-50">·</span>
-      <span>{nfmt(Math.max(0, remaining))}</span>
-      <span className="text-meta opacity-70">/{nfmt(snapshot.monthly.limit)}</span>
+      <span>{nfmt(remaining)}</span>
+      <span className="text-meta opacity-70">/{nfmt(ceiling)}</span>
     </button>
   );
 }

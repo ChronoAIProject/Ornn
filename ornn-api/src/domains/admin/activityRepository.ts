@@ -22,7 +22,9 @@ export type ActivityAction =
   | "skill:nyxid_service_tie"
   | "skill:source_link"
   | "skill:source_unlink"
-  | "skill:agentseal_rescan";
+  | "skill:agentseal_rescan"
+  | "settings:export"
+  | "settings:import";
 
 export interface ActivityDocument {
   _id: string;

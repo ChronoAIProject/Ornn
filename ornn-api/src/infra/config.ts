@@ -1,5 +1,15 @@
 /**
- * Environment variable configuration for ornn-api.
+ * Environment variable configuration for ornn-api (bootstrap-only).
+ *
+ * Per the Architecture §7 inventory, runtime-flippable knobs (LLM gateway,
+ * default model, storage/sandbox URLs, NyxID base URL/paths, AgentSeal
+ * toggle/timeout, SSE keep-alive, extra NyxID services) live in admin
+ * settings (`platform_settings` collection) and are read on demand via
+ * `SettingsService`. `loadConfig` only resolves what's needed to bring the
+ * process up: DB URI, log level, NyxID SA credentials (so the very first
+ * settings read can authenticate downstream proxies if required), the
+ * encryption key for at-rest secrets, CORS origins, and the public origin
+ * used for canonical-link generation.
  *
  * Validation is schema-driven via Zod. Library code throws `ConfigError`
  * on invalid env; the entry point (`src/index.ts`) decides what to do
@@ -16,38 +26,16 @@ export interface SkillConfig {
   readonly logLevel: string;
   readonly logPretty: boolean;
 
-  // NyxID
+  // NyxID — service-account credentials only (URLs come from settings).
   readonly nyxidTokenUrl: string;
   readonly nyxidClientId: string;
   readonly nyxidClientSecret: string;
-  /**
-   * NyxID API base URL (no trailing slash, no `/oauth/token` suffix).
-   * Derived from `NYXID_SA_TOKEN_URL` when `NYXID_BASE_URL` is not set
-   * explicitly so local dev works with just the token URL.
-   */
-  readonly nyxidBaseUrl: string;
-
-  // Nyx Provider (LLM Gateway)
-  readonly nyxLlmGatewayUrl: string;
 
   // MongoDB
   readonly mongodbUri: string;
   readonly mongodbDb: string;
 
-  // chrono-storage
-  readonly storageServiceUrl: string;
-  readonly storageBucket: string;
-
-  // chrono-sandbox
-  readonly sandboxServiceUrl: string;
-
-  // LLM defaults
-  readonly defaultLlmModel: string;
-  readonly llmMaxOutputTokens: number;
-  readonly llmTemperature: number;
-  readonly sseKeepAliveIntervalMs: number;
-
-  // Skill package
+  // Skill package upload limit (image-baked operational constant).
   readonly maxPackageSizeBytes: number;
 
   // CORS
@@ -58,85 +46,24 @@ export interface SkillConfig {
    */
   readonly allowedOrigins: readonly string[];
 
-  /**
-   * Synthetic / out-of-catalogue NyxID service names that get appended
-   * to the bottom of every `GET /api/v1/me/nyxid-services` response so
-   * skill owners can tie a skill to a platform-side service that isn't
-   * (yet) in the catalogue. Parsed from the comma-separated
-   * `EXTRA_NYXID_SERVICES` env var.
-   *
-   * Each entry surfaces as a synthetic service with `tier: "admin"`,
-   * `id: "synthetic:<slug>"`, the trimmed name as the label. Default is
-   * a single-item array `["NyxID"]`.
-   */
-  readonly extraNyxidServices: readonly string[];
-
-
-  // PostHog (server-side product analytics) — see #252
-  /**
-   * PostHog project API key. When absent the analytics module no-ops
-   * (`enabled === false`) so dev/CI runs don't pollute the dashboard.
-   * Read from `POSTHOG_API_KEY`.
-   */
+  // PostHog (server-side product analytics) — see #252.
+  // Kept in env for v1 — the `telemetry` settings section is reserved but
+  // has no live consumer yet per Architecture §10 sub-decision 8. When the
+  // telemetry section is wired, these can move.
   readonly posthogApiKey: string | null;
-  /** Optional project id. Currently informational; logged on emit. */
   readonly posthogProjectId: string | null;
-  /**
-   * PostHog host. Defaults to the EU cloud (`https://eu.i.posthog.com`)
-   * so launch traffic lands in the GDPR region from day one.
-   */
   readonly posthogHost: string;
-  /**
-   * Sample rate for `api.error` 5xx events, in `[0, 1]`. Default `0.1` —
-   * every 5xx still logs locally; only ~10% are forwarded to PostHog so
-   * a thundering herd can't burn the project quota.
-   */
   readonly posthogErrorSampleRate: number;
 
-  // AgentSeal (subprocess-based skill scanner) — see #253
-  /**
-   * Path to the python interpreter that has `agentseal` installed.
-   * Defaults to `/opt/agentseal/bin/python` per the Dockerfile.
-   */
+  // AgentSeal — scanner binary paths (image-baked); enabled-flag and
+  // timeout move to settings (skillAudit section).
   readonly agentsealPython: string;
-  /**
-   * Path to the `scan_skill.py` wrapper baked into the image. Defaults
-   * to `/opt/agentseal/scan_skill.py` per the Dockerfile.
-   */
   readonly agentsealScript: string;
-  /**
-   * Hard timeout for a single skill scan. The process is killed past
-   * this deadline and the scan is recorded as a failure. Default 60s.
-   */
-  readonly agentsealTimeoutMs: number;
-  /**
-   * When false, the publish path skips the scan entirely. Lets ops
-   * disable scanning on a hot deploy without redeploying. Default true.
-   */
-  readonly agentsealEnabled: boolean;
 
   // ---- Universal API audit (issue #245) ----
-  /**
-   * How long audit records live in MongoDB before the TTL index expires
-   * them. Mirrored by the MinIO bucket lifecycle policy (configured
-   * out-of-band) so the offloaded bodies expire on the same cadence.
-   */
   readonly auditRetentionDays: number;
-  /**
-   * MinIO bucket where redacted request / response bodies are
-   * gzip-uploaded for write ops and 4xx/5xx responses.
-   */
   readonly auditMinioBucket: string;
-  /**
-   * Cutoff for inline-vs-MinIO. Bodies with redacted-JSON byte length
-   * above this go to MinIO; smaller bodies live in the Mongo doc.
-   */
   readonly auditBodyInlineMaxBytes: number;
-  /**
-   * Extra field-name regex patterns OR-d into the global redaction
-   * blacklist. The defaults (`password|token|apiKey|secret|key|
-   * credential`) always apply; this list extends them.
-   */
   readonly auditGlobalRedactPatterns: readonly string[];
 
   /**
@@ -170,24 +97,11 @@ const envSchema = z.object({
   LOG_PRETTY: booleanFromEnv,
 
   NYXID_SA_TOKEN_URL: z.string().url(),
-  NYXID_BASE_URL: z.string().url().optional(),
   NYXID_SA_CLIENT_ID: z.string().min(1),
   NYXID_SA_CLIENT_SECRET: z.string().min(1),
 
-  NYX_LLM_GATEWAY_URL: z.string().url(),
-
   MONGODB_URI: z.string().min(1),
   MONGODB_DB: z.string().min(1).default("ornn"),
-
-  STORAGE_SERVICE_URL: z.string().min(1),
-  STORAGE_BUCKET: z.string().min(1).default("ornn"),
-
-  SANDBOX_SERVICE_URL: z.string().min(1),
-
-  DEFAULT_LLM_MODEL: z.string().min(1).default("gpt-4o"),
-  LLM_MAX_OUTPUT_TOKENS: z.coerce.number().int().positive().default(8192),
-  LLM_TEMPERATURE: z.coerce.number().min(0).max(2).default(0.7),
-  SSE_KEEP_ALIVE_INTERVAL_MS: z.coerce.number().int().positive().default(15000),
 
   MAX_PACKAGE_SIZE_BYTES: z.coerce.number().int().positive().default(52428800),
 
@@ -199,19 +113,15 @@ const envSchema = z.object({
   ALLOWED_ORIGINS: z.string().default(""),
 
   /**
-   * Comma-separated synthetic NyxID services to append to the bottom of
-   * the picker. See `SkillConfig.extraNyxidServices`. Default is the
-   * single entry "NyxID"; future operators can extend it without code
-   * changes by setting e.g. `EXTRA_NYXID_SERVICES=NyxID,SomeOtherSvc`.
-   */
-  EXTRA_NYXID_SERVICES: z.string().default("NyxID"),
-
-  /**
    * Master passphrase for the at-rest secret cipher (AES-256-GCM via
-   * scrypt-derived key). MUST be at least 32 chars in prod; a known
-   * dev sentinel is used when unset so local first-boot doesn't fail.
+   * scrypt-derived key). MUST be ≥ 32 chars — schema rejects shorter
+   * values at boot. There is NO dev fallback: a missing or weak key
+   * fails-fast with a structured `ConfigError` rather than silently
+   * encrypting every operator-pasted secret with a publicly-known
+   * passphrase. Tests that boot the harness set `ENCRYPTION_KEY`
+   * themselves (engineer-2's harness already does this).
    */
-  ENCRYPTION_KEY: z.string().min(0).default(""),
+  ENCRYPTION_KEY: z.string().min(32, "ENCRYPTION_KEY must be at least 32 characters (set via env in all environments — no dev fallback)"),
 
   // ---- PostHog (server-side product analytics, #252) ----
   POSTHOG_API_KEY: z.string().default(""),
@@ -219,28 +129,14 @@ const envSchema = z.object({
   POSTHOG_HOST: z.string().url().default("https://eu.i.posthog.com"),
   POSTHOG_ERROR_SAMPLE_RATE: z.coerce.number().min(0).max(1).default(0.1),
 
-  // ---- AgentSeal (skill trust scanner, #253) ----
+  // ---- AgentSeal (skill trust scanner, #253) — binary paths only ----
   AGENTSEAL_PYTHON: z.string().min(1).default("/opt/agentseal/bin/python"),
   AGENTSEAL_SCRIPT: z.string().min(1).default("/opt/agentseal/scan_skill.py"),
-  AGENTSEAL_TIMEOUT_MS: z.coerce.number().int().positive().default(60_000),
-  /**
-   * Toggle for the publish-time scan. Defaults to true — operators
-   * opt OUT, not in. (booleanFromEnv defaults to false on missing
-   * env, so we override below in `loadConfig`.)
-   */
-  AGENTSEAL_ENABLED: booleanFromEnv,
 
   // ---- Universal API audit (issue #245) ----
-  /** Days to retain audit records before TTL expiry. */
   AUDIT_RETENTION_DAYS: z.coerce.number().int().positive().default(90),
-  /** MinIO bucket for offloaded audit bodies. */
   MINIO_AUDIT_BUCKET: z.string().min(1).default("ornn-audit"),
-  /** Max KB to keep inline in the Mongo doc; bigger spills to MinIO. */
   AUDIT_BODY_INLINE_MAX_KB: z.coerce.number().int().positive().default(16),
-  /**
-   * Comma-separated extra blacklist patterns. Combined with the built-in
-   * defaults (`password|token|apiKey|secret|key|credential`).
-   */
   AUDIT_GLOBAL_REDACT_PATTERNS: z.string().default(""),
 
   /**
@@ -283,33 +179,17 @@ export function loadConfig(): SkillConfig {
   }
   const env = result.data;
 
-  const tokenUrl = env.NYXID_SA_TOKEN_URL;
-  const baseUrl = (env.NYXID_BASE_URL ?? tokenUrl.replace(/\/oauth\/token\/?$/, "")).replace(/\/+$/, "");
-
   return {
     port: env.PORT,
     logLevel: env.LOG_LEVEL,
     logPretty: env.LOG_PRETTY,
 
-    nyxidTokenUrl: tokenUrl,
+    nyxidTokenUrl: env.NYXID_SA_TOKEN_URL,
     nyxidClientId: env.NYXID_SA_CLIENT_ID,
     nyxidClientSecret: env.NYXID_SA_CLIENT_SECRET,
-    nyxidBaseUrl: baseUrl,
-
-    nyxLlmGatewayUrl: env.NYX_LLM_GATEWAY_URL,
 
     mongodbUri: env.MONGODB_URI,
     mongodbDb: env.MONGODB_DB,
-
-    storageServiceUrl: env.STORAGE_SERVICE_URL,
-    storageBucket: env.STORAGE_BUCKET,
-
-    sandboxServiceUrl: env.SANDBOX_SERVICE_URL,
-
-    defaultLlmModel: env.DEFAULT_LLM_MODEL,
-    llmMaxOutputTokens: env.LLM_MAX_OUTPUT_TOKENS,
-    llmTemperature: env.LLM_TEMPERATURE,
-    sseKeepAliveIntervalMs: env.SSE_KEEP_ALIVE_INTERVAL_MS,
 
     maxPackageSizeBytes: env.MAX_PACKAGE_SIZE_BYTES,
 
@@ -318,18 +198,10 @@ export function loadConfig(): SkillConfig {
       .map((s) => s.trim())
       .filter((s) => s.length > 0),
 
-    extraNyxidServices: env.EXTRA_NYXID_SERVICES
-      .split(",")
-      .map((s) => s.trim())
-      .filter((s) => s.length > 0),
-
-    // Dev sentinel — operators set ENCRYPTION_KEY=<32+ chars> in any
-    // non-dev cluster. We log a warning at boot when this fallback is
-    // active so it can't stay quietly insecure for long.
-    encryptionKey:
-      env.ENCRYPTION_KEY.trim().length > 0
-        ? env.ENCRYPTION_KEY.trim()
-        : "ornn-dev-encryption-key-DO-NOT-USE-IN-PRODUCTION-32chars",
+    // Schema enforces ≥32 chars; trim is just defensive against trailing
+    // whitespace from `.env` files. A short/missing key already failed
+    // safeParse above, so we never reach here without a real value.
+    encryptionKey: env.ENCRYPTION_KEY.trim(),
 
     posthogApiKey: env.POSTHOG_API_KEY.trim() ? env.POSTHOG_API_KEY.trim() : null,
     posthogProjectId: env.POSTHOG_PROJECT_ID.trim() ? env.POSTHOG_PROJECT_ID.trim() : null,
@@ -338,11 +210,6 @@ export function loadConfig(): SkillConfig {
 
     agentsealPython: env.AGENTSEAL_PYTHON,
     agentsealScript: env.AGENTSEAL_SCRIPT,
-    agentsealTimeoutMs: env.AGENTSEAL_TIMEOUT_MS,
-    // booleanFromEnv treats "missing" as false. AgentSeal should be ON
-    // by default; ops opts OUT explicitly with `AGENTSEAL_ENABLED=false`.
-    agentsealEnabled:
-      process.env.AGENTSEAL_ENABLED === undefined ? true : env.AGENTSEAL_ENABLED,
 
     auditRetentionDays: env.AUDIT_RETENTION_DAYS,
     auditMinioBucket: env.MINIO_AUDIT_BUCKET,

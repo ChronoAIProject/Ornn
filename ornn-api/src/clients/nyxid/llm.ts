@@ -6,6 +6,7 @@
  */
 
 import pino from "pino";
+import type { NyxidSaTokenProvider } from "./base";
 
 const logger = pino({ level: "info" }).child({ module: "nyxLlmClient" });
 
@@ -59,15 +60,6 @@ export interface NyxLlmCompleteParams {
   max_output_tokens?: number;
   temperature?: number;
   tools?: ResponsesApiTool[];
-}
-
-// ---------------------------------------------------------------------------
-// SA Token Cache
-// ---------------------------------------------------------------------------
-
-interface CachedToken {
-  accessToken: string;
-  expiresAt: number; // epoch ms
 }
 
 // ---------------------------------------------------------------------------
@@ -147,147 +139,80 @@ async function* parseSSEStream(
 // Client
 // ---------------------------------------------------------------------------
 
-export interface NyxLlmClientConfig {
-  gatewayUrl: string;
-  tokenUrl: string;
-  clientId: string;
-  clientSecret: string;
-  /**
-   * Optional async resolver of admin-overridable LLM provider config.
-   * Returned values WIN over the constructor-time env config:
-   *   - `gatewayUrl` (non-empty) replaces the env gateway.
-   *   - `apiKey` (non-empty) replaces the SA token-exchange flow with a
-   *     direct Bearer header.
-   *
-   * Resolved before every LLM request so admin updates take effect on
-   * the next call without restarting the pod. Caching is the resolver's
-   * responsibility (PlatformSettingsService caches platform settings
-   * for ~30s, which doubles as our LLM-config cache TTL).
-   *
-   * Failure of the resolver is non-fatal — we fall back to env. The
-   * scenario "DB is down" should never break LLM service.
-   */
-  overrideResolver?: () => Promise<LlmProviderOverride>;
-}
-
-/** Subset of fields the platform-settings layer surfaces as overrides. */
-export interface LlmProviderOverride {
+/**
+ * Per-call provider config. Resolved on every LLM request from the
+ * `LlmProvidersService` (a wrapper around the `llm_providers`
+ * collection) so an admin's edit lands on the next call without a pod
+ * restart. The resolver chooses the right provider for the surface
+ * (playground vs skill-gen) and projects its `auth` discriminated
+ * union into the simpler {gatewayUrl, apiKey?} shape this client
+ * speaks.
+ *
+ * - `gatewayUrl` is required (validated upstream when the admin saves
+ *   the provider) — empty string means "no provider configured" and
+ *   the call MUST fail-closed; we don't keep an env fallback because
+ *   any silent fallback masks misconfiguration.
+ * - `apiKey` empty triggers the SA token-exchange path
+ *   (`NyxidSaTokenProvider`). Most providers behind the NyxID proxy
+ *   use SA flow; direct-key providers (third-party gateways) bypass it.
+ */
+export interface LlmProviderResolution {
   gatewayUrl: string;
   apiKey: string;
 }
 
+export type LlmProviderResolver = () => Promise<LlmProviderResolution>;
+
+export interface NyxLlmClientConfig {
+  /**
+   * Resolves the effective gateway URL + apiKey for every LLM call from
+   * admin settings. NO env fallback: if the resolver returns an empty
+   * `gatewayUrl`, the call fails-closed with `LLM_PROVIDER_NOT_CONFIGURED`.
+   */
+  resolver: LlmProviderResolver;
+  /**
+   * Shared SA token provider used when the resolved provider has no
+   * direct apiKey (i.e. it sits behind the NyxID proxy and authorizes
+   * via OAuth client_credentials). Owned by bootstrap so all clients
+   * share one token cache.
+   */
+  saTokenProvider: NyxidSaTokenProvider;
+}
+
 export class NyxLlmClient {
-  private readonly envGatewayUrl: string;
-  private readonly tokenUrl: string;
-  private readonly clientId: string;
-  private readonly clientSecret: string;
-  private readonly overrideResolver?: () => Promise<LlmProviderOverride>;
-  private cachedToken: CachedToken | null = null;
+  private readonly resolver: LlmProviderResolver;
+  private readonly saTokenProvider: NyxidSaTokenProvider;
 
   constructor(config: NyxLlmClientConfig) {
-    this.envGatewayUrl = config.gatewayUrl;
-    this.tokenUrl = config.tokenUrl;
-    this.clientId = config.clientId;
-    this.clientSecret = config.clientSecret;
-    this.overrideResolver = config.overrideResolver;
-    logger.info(
-      {
-        gatewayUrl: config.gatewayUrl,
-        tokenUrl: config.tokenUrl,
-        runtimeOverrideEnabled: Boolean(config.overrideResolver),
-      },
-      "NyxLlmClient initialized with SA credentials",
-    );
+    this.resolver = config.resolver;
+    this.saTokenProvider = config.saTokenProvider;
+    logger.info("NyxLlmClient initialized with settings-driven resolver");
   }
 
   /**
    * Resolve the effective gateway URL + auth header for the current
-   * call. Reads the admin-overridable platform settings (when wired)
-   * and falls back to constructor-time env values on any failure.
+   * call. Pulls the provider config from settings; SA token is fetched
+   * on demand when the provider has no direct apiKey.
+   *
+   * Fails-closed when no provider is configured — callers see a
+   * structured error rather than a stale env URL.
    */
   private async resolveCallTarget(): Promise<{
     gatewayUrl: string;
     authHeader: string;
   }> {
-    let override: LlmProviderOverride | null = null;
-    if (this.overrideResolver) {
-      try {
-        override = await this.overrideResolver();
-      } catch (err) {
-        logger.warn(
-          { err: (err as Error).message },
-          "LLM override resolver threw — falling back to env config",
-        );
-      }
+    const provider = await this.resolver();
+    const gatewayUrl = provider.gatewayUrl?.trim().replace(/\/+$/, "");
+    if (!gatewayUrl) {
+      throw new Error("LLM_PROVIDER_NOT_CONFIGURED: no gatewayUrl in settings");
     }
 
-    const gatewayUrl =
-      override?.gatewayUrl && override.gatewayUrl.trim().length > 0
-        ? override.gatewayUrl.trim().replace(/\/+$/, "")
-        : this.envGatewayUrl;
-
-    if (override?.apiKey && override.apiKey.trim().length > 0) {
-      // Direct bearer key — skip SA token exchange entirely.
-      return {
-        gatewayUrl,
-        authHeader: `Bearer ${override.apiKey.trim()}`,
-      };
+    if (provider.apiKey && provider.apiKey.trim().length > 0) {
+      return { gatewayUrl, authHeader: `Bearer ${provider.apiKey.trim()}` };
     }
 
-    const token = await this.getAccessToken();
+    const token = await this.saTokenProvider.getAccessToken();
     return { gatewayUrl, authHeader: `Bearer ${token}` };
-  }
-
-  /**
-   * Get a valid SA access token, refreshing if expired or about to expire.
-   * Caches the token and refreshes 60s before expiry.
-   */
-  private async getAccessToken(): Promise<string> {
-    const now = Date.now();
-    // Return cached token if still valid (with 60s buffer)
-    if (this.cachedToken && this.cachedToken.expiresAt > now + 60_000) {
-      return this.cachedToken.accessToken;
-    }
-
-    logger.info("Acquiring new SA access token via client_credentials grant");
-
-    const body = new URLSearchParams({
-      grant_type: "client_credentials",
-      client_id: this.clientId,
-      client_secret: this.clientSecret,
-    });
-
-    const response = await fetch(this.tokenUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: body.toString(),
-    });
-
-    if (!response.ok) {
-      const errText = await response.text().catch(() => "");
-      const msg = `SA token acquisition failed (${response.status}): ${errText.slice(0, 200)}`;
-      logger.error({ status: response.status }, msg);
-      throw new Error(msg);
-    }
-
-    const result = (await response.json()) as {
-      access_token: string;
-      expires_in?: number;
-      token_type?: string;
-    };
-
-    if (!result.access_token) {
-      throw new Error("SA token response missing access_token");
-    }
-
-    const expiresInMs = (result.expires_in ?? 900) * 1000;
-    this.cachedToken = {
-      accessToken: result.access_token,
-      expiresAt: now + expiresInMs,
-    };
-
-    logger.info({ expiresInSecs: result.expires_in ?? 900 }, "SA access token acquired");
-    return this.cachedToken.accessToken;
   }
 
   /**

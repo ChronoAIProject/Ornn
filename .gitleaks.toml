@@ -25,3 +25,20 @@ description = "Frontend i18n key dot-notation strings"
 regexes = [
   '''^[a-z][a-zA-Z0-9]{0,31}(\.[a-zA-Z][a-zA-Z0-9]{0,31}){2,}$''',
 ]
+
+# Test fixtures use deliberately-fake high-entropy strings to exercise the
+# real crypto / settings-encryption code paths under bun test. The strings are
+# all named with explicit `test-`, `ornn-test-`, or `shh-secret-` prefixes so a
+# reviewer can identify them at a glance, but the entropy is high enough to
+# trip the generic-api-key rule. Scope strictly to test files only — anything
+# under src/ that isn't a *.test.ts is still scanned normally.
+[[allowlists]]
+description = "Test fixtures in *.test.ts and tests/integration/**"
+paths = [
+  '''.*\.test\.ts$''',
+  '''.*\.test\.tsx$''',
+  '''ornn-api/tests/integration/.*\.ts$''',
+  '''ornn-api/tests/mocks/.*\.ts$''',
+  '''ornn-api/tests/fixtures/.*\.ts$''',
+  '''ornn-web/src/__tests__/.*''',
+]

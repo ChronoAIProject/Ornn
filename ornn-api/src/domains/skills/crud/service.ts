@@ -46,7 +46,12 @@ export interface SkillServiceDeps {
   skillRepo: SkillRepository;
   skillVersionRepo: SkillVersionRepository;
   storageClient: IStorageClient;
-  storageBucket: string;
+  /**
+   * Resolves the active storage bucket from admin settings (services
+   * section). Awaited at every storage I/O site so a bucket rename
+   * lands without a redeploy.
+   */
+  storageBucketResolver: () => Promise<string>;
   /**
    * PostHog emitter for `api.skill.published` (#252). Optional — when
    * absent the publish path skips the emit. Always async/safe; failures
@@ -65,7 +70,7 @@ export class SkillService {
   private readonly skillRepo: SkillRepository;
   private readonly skillVersionRepo: SkillVersionRepository;
   private readonly storageClient: IStorageClient;
-  private readonly storageBucket: string;
+  private readonly storageBucketResolver: () => Promise<string>;
   private readonly analyticsEmitter?: AnalyticsEmitter;
   private readonly agentsealScanner?: IAgentSealScanner;
 
@@ -73,7 +78,7 @@ export class SkillService {
     this.skillRepo = deps.skillRepo;
     this.skillVersionRepo = deps.skillVersionRepo;
     this.storageClient = deps.storageClient;
-    this.storageBucket = deps.storageBucket;
+    this.storageBucketResolver = deps.storageBucketResolver;
     this.analyticsEmitter = deps.analyticsEmitter;
     this.agentsealScanner = deps.agentsealScanner;
   }
@@ -125,7 +130,7 @@ export class SkillService {
 
     // 5. Upload ZIP to chrono-storage under a versioned key (versions are immutable).
     const storageKey = buildVersionedStorageKey(guid, version);
-    await this.storageClient.upload(this.storageBucket, storageKey, zipBuffer, "application/zip");
+    await this.storageClient.upload((await this.storageBucketResolver()), storageKey, zipBuffer, "application/zip");
     logger.info({ guid, storageKey, version }, "Skill package uploaded to storage");
 
     // 6. Save the skill document.
@@ -407,7 +412,7 @@ export class SkillService {
 
       // Upload under a new, versioned storage key — versions are immutable.
       const storageKey = buildVersionedStorageKey(guid, version);
-      await this.storageClient.upload(this.storageBucket, storageKey, options.zipBuffer, "application/zip");
+      await this.storageClient.upload((await this.storageBucketResolver()), storageKey, options.zipBuffer, "application/zip");
       logger.info({ guid, storageKey, version }, "Skill package updated in storage");
 
       // Record the new version row.
@@ -742,7 +747,7 @@ export class SkillService {
 
   private async downloadPackage(storageKey: string): Promise<Uint8Array> {
     const presigned = await this.storageClient.getPresignedUrl(
-      this.storageBucket,
+      (await this.storageBucketResolver()),
       storageKey,
     );
     const res = await fetch(presigned.presignedUrl);
@@ -800,7 +805,7 @@ export class SkillService {
 
     if (versionDoc.storageKey) {
       try {
-        await this.storageClient.delete(this.storageBucket, versionDoc.storageKey);
+        await this.storageClient.delete((await this.storageBucketResolver()), versionDoc.storageKey);
       } catch (err) {
         logger.warn(
           { skillGuid: skill.guid, version, storageKey: versionDoc.storageKey, err },
@@ -911,7 +916,7 @@ export class SkillService {
 
     for (const key of storageKeys) {
       try {
-        await this.storageClient.delete(this.storageBucket, key);
+        await this.storageClient.delete((await this.storageBucketResolver()), key);
       } catch (err) {
         logger.warn({ guid, storageKey: key, err }, "Best-effort storage cleanup failed");
       }
@@ -943,7 +948,7 @@ export class SkillService {
     }
 
     // 2. Download ZIP from storage
-    const presigned = await this.storageClient.getPresignedUrl(this.storageBucket, skill.storageKey);
+    const presigned = await this.storageClient.getPresignedUrl((await this.storageBucketResolver()), skill.storageKey);
     const response = await fetch(presigned.presignedUrl);
     if (!response.ok) {
       throw AppError.internalError("PACKAGE_DOWNLOAD_FAILED", "Failed to download skill package from storage");
@@ -1223,7 +1228,7 @@ export class SkillService {
     let presignedPackageUrl = "";
     if (storageKey) {
       try {
-        const result = await this.storageClient.getPresignedUrl(this.storageBucket, storageKey);
+        const result = await this.storageClient.getPresignedUrl((await this.storageBucketResolver()), storageKey);
         presignedPackageUrl = result.presignedUrl;
       } catch (err) {
         logger.warn({ guid: skill.guid, version, err }, "Presigned URL generation failed");

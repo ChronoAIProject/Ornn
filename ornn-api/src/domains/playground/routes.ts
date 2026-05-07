@@ -52,7 +52,12 @@ const chatRequestSchema = z.object({
 
 export interface PlaygroundRoutesConfig {
   chatService: PlaygroundChatService;
-  keepAliveIntervalMs: number;
+  /**
+   * SSE keep-alive interval (ms). Resolved from admin settings
+   * (`playground.sseKeepAliveMs`) on every request — admin edits land
+   * on the next chat without a restart.
+   */
+  keepAliveIntervalMsResolver: () => Promise<number>;
   /** Optional. When set together with `skillService`, the route emits a
    *  `playground` pull event each time a chat references a real skill. */
   analyticsService?: AnalyticsService;
@@ -64,7 +69,7 @@ export interface PlaygroundRoutesConfig {
 }
 
 export function createPlaygroundRoutes(config: PlaygroundRoutesConfig): Hono<{ Variables: AuthVariables }> {
-  const { chatService, keepAliveIntervalMs, analyticsService, skillService, quotaService, modelsService } = config;
+  const { chatService, keepAliveIntervalMsResolver, analyticsService, skillService, quotaService, modelsService } = config;
   const app = new Hono<{ Variables: AuthVariables }>();
 
   const auth = nyxidAuthMiddleware();
@@ -178,10 +183,23 @@ export function createPlaygroundRoutes(config: PlaygroundRoutesConfig): Hono<{ V
       const padding = " ".repeat(2048);
       void writeFrame(`: stream-open ${Date.now()} ${padding}\n\n`);
 
-      // Keepalive defeats idle-timeout proxies during LLM warmup.
+      // Keepalive defeats idle-timeout proxies during LLM warmup. The
+      // interval is read from settings on every request — fall back to
+      // a conservative 15s when the resolver throws so a transient
+      // settings outage doesn't break streaming.
+      let keepAliveMs = 15_000;
+      try {
+        const resolved = await keepAliveIntervalMsResolver();
+        if (Number.isFinite(resolved) && resolved > 0) keepAliveMs = resolved;
+      } catch (err) {
+        logger.warn(
+          { err: (err as Error).message },
+          "Failed to resolve playground sseKeepAliveMs; using 15s default",
+        );
+      }
       const keepAlive = setInterval(() => {
         void writeFrame(`: keepalive ${Date.now()}\n\n`);
-      }, keepAliveIntervalMs);
+      }, keepAliveMs);
 
       const onAbort = () => {
         clearInterval(keepAlive);
@@ -217,6 +235,7 @@ export function createPlaygroundRoutes(config: PlaygroundRoutesConfig): Hono<{ V
               permissions: authCtx.permissions,
               surface: "playground",
               outcome,
+              modelId: resolvedModelId,
             })
             .catch((err) => {
               logger.warn(

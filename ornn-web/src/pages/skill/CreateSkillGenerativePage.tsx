@@ -106,7 +106,7 @@ export function CreateSkillGenerativePage() {
   const isOverLimit =
     Boolean(skillGenSnap) &&
     !quotaSnapshot?.isAdmin &&
-    skillGenSnap!.monthly.remaining + skillGenSnap!.credits.balance <= 0;
+    skillGenSnap!.remaining <= 0;
 
   const [pickedModelId, setPickedModelId] = useState<string | null>(null);
 
@@ -233,10 +233,14 @@ export function CreateSkillGenerativePage() {
         "Describe the skill you want to create…",
       );
 
-  if (isOverLimit && skillGenSnap) {
+  if (isOverLimit && skillGenSnap && quotaSnapshot) {
     return (
       <PageTransition>
-        <OverLimitPage surface="skillGen" snapshot={skillGenSnap} />
+        <OverLimitPage
+          surface="skillGen"
+          snapshot={skillGenSnap}
+          resetAt={quotaSnapshot.nextMonthlyResetAt}
+        />
       </PageTransition>
     );
   }

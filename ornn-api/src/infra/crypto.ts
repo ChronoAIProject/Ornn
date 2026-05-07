@@ -108,7 +108,48 @@ export function midMaskSecret(value: string): string {
   return `${head}${"•".repeat(Math.max(4, value.length - 8))}${tail}`;
 }
 
+/** Alias for `midMaskSecret`. */
+export function midMaskString(value: string): string {
+  return midMaskSecret(value);
+}
+
 /** True if `value` is the mid-mask sentinel (contains the bullet character). */
 export function isMidMaskSentinel(value: string): boolean {
   return value.includes("•");
+}
+
+// ---------------------------------------------------------------------------
+// Redaction sentinels (settings export / import)
+// ---------------------------------------------------------------------------
+
+/**
+ * Build a redaction sentinel of the form `<REDACTED:fieldName>`. Used by
+ * the settings export pipeline to stand in for at-rest secrets so the
+ * exported JSON never carries plaintext (or ciphertext, which would be
+ * useless to the importer anyway). The importer treats this token as
+ * "keep DB value untouched".
+ *
+ * `fieldName` MUST be a simple identifier (`[a-zA-Z][a-zA-Z0-9_]*`); the
+ * matcher in `isRedactionSentinel` keeps in lock-step with this charset.
+ */
+export function redactSentinel(fieldName: string): string {
+  return `<REDACTED:${fieldName}>`;
+}
+
+const REDACTION_SENTINEL_RE = /^<REDACTED:[a-zA-Z][a-zA-Z0-9_]*>$/;
+
+/** True iff `value` is exactly a `<REDACTED:fieldName>` sentinel. */
+export function isRedactionSentinel(value: unknown): boolean {
+  return typeof value === "string" && REDACTION_SENTINEL_RE.test(value);
+}
+
+/**
+ * True iff `value` should be treated as "keep existing DB value" on
+ * import — either a redaction sentinel (`<REDACTED:apiKey>`) or a
+ * mid-mask sentinel (the bullet-character display form).
+ */
+export function isPreserveSentinel(value: unknown): boolean {
+  if (typeof value !== "string") return false;
+  if (isRedactionSentinel(value)) return true;
+  return isMidMaskSentinel(value);
 }

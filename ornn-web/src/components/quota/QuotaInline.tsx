@@ -1,15 +1,15 @@
 /**
- * QuotaInline — in-context surface display + soft 80% warning banner.
+ * QuotaInline — in-context surface display + soft warning banner.
  *
  * Sits at the top of the playground / skill-gen pages and renders one of
  * four states based on the cached caller quota:
  *
- *  - admin-bypass:  compact "ADMIN · UNLIMITED" stamp (admins bypass
- *                   the counter on the backend).
+ *  - admin-bypass:  compact "ADMIN · UNLIMITED" stamp (admins bypass the
+ *                   counter on the backend).
  *  - normal:        compact "X / Y left" stamp with reset hint.
- *  - warning:       full-width banner at 80% of monthly base, copy
- *                   directing the user to the QuotaChip drawer for
- *                   detail.
+ *  - warning:       full-width banner at the configured warning
+ *                   threshold; copy directs the user to the QuotaChip
+ *                   drawer for detail.
  *  - exhausted:     rendered nothing (the over-limit page takes over).
  *
  * @module components/quota/QuotaInline
@@ -32,8 +32,8 @@ function nfmt(n: number): string {
   return n.toLocaleString("en-US");
 }
 
-function totalRemaining(s: SurfaceSnapshot): number {
-  return s.monthly.remaining + s.credits.balance;
+function ceiling(s: SurfaceSnapshot): number {
+  return s.defaultAllotment + s.adminGrant;
 }
 
 export function QuotaInline({ surface, className = "" }: QuotaInlineProps) {
@@ -71,7 +71,8 @@ export function QuotaInline({ surface, className = "" }: QuotaInlineProps) {
   }
   const snap = surface === "playground" ? quota.playground : quota.skillGen;
 
-  const remaining = totalRemaining(snap);
+  const cap = ceiling(snap);
+  const remaining = Math.max(0, snap.remaining);
   const exhausted = remaining <= 0;
   const warning = snap.warning && !exhausted;
 
@@ -95,12 +96,12 @@ export function QuotaInline({ surface, className = "" }: QuotaInlineProps) {
         </svg>
         <div className="flex-1">
           <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.14em] text-warning">
-            {SURFACE_LABEL[surface]} — {Math.round(((snap.monthly.limit - snap.monthly.remaining) / snap.monthly.limit) * 100)}% used
+            {SURFACE_LABEL[surface]} — {cap > 0 ? Math.round((snap.used / cap) * 100) : 0}% used this month
           </p>
           <p className="mt-1 font-text text-xs leading-relaxed text-body">
-            {nfmt(remaining)} {SURFACE_LABEL[surface]} calls left this month
-            {snap.credits.balance > 0
-              ? ` (includes ${nfmt(snap.credits.balance)} beta credits)`
+            {nfmt(remaining)} {SURFACE_LABEL[surface]} calls left
+            {snap.adminGrant > 0
+              ? ` (includes +${nfmt(snap.adminGrant)} admin grant)`
               : ""}
             . Click the quota chip in the nav for full breakdown.
           </p>
@@ -118,11 +119,15 @@ export function QuotaInline({ surface, className = "" }: QuotaInlineProps) {
       className={`inline-flex items-center gap-2 rounded-sm border border-subtle bg-elevated/40 px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.14em] text-meta ${className}`}
     >
       <span className="text-accent">{nfmt(remaining)}</span>
-      <span className="opacity-70">/{nfmt(snap.monthly.limit)} {SURFACE_LABEL[surface]} left</span>
-      <span className="hidden sm:inline opacity-50">·</span>
-      <span className="hidden sm:inline opacity-70">
-        daily {nfmt(snap.daily.remaining)}/{nfmt(snap.daily.limit)}
-      </span>
+      <span className="opacity-70">/{nfmt(cap)} {SURFACE_LABEL[surface]} left</span>
+      {snap.adminGrant > 0 ? (
+        <>
+          <span className="hidden sm:inline opacity-50">·</span>
+          <span className="hidden sm:inline opacity-70 text-accent-support">
+            +{nfmt(snap.adminGrant)} grant
+          </span>
+        </>
+      ) : null}
     </div>
   );
 }
