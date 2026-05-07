@@ -54,7 +54,6 @@ function fakeSettingsService(): SettingsService {
       apiFormat: "chat-completion",
       auth: { kind: "apiKey", apiKey: "sk-real" },
       models: [],
-      defaultModelId: null,
       maxOutputTokens: 8192,
       defaultTemperature: 0.7,
       createdAt: new Date("2026-01-01"),

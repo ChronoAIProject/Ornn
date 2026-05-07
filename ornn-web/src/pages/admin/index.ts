@@ -13,5 +13,4 @@ export { AuditingPlaceholderPage } from "./AuditingPlaceholderPage";
 export { AdminSkillsPage } from "./AdminSkillsPage";
 export { PlatformSettingsPage } from "./PlatformSettingsPage";
 export { MirrorPage } from "./MirrorPage";
-export { AdminModelsPage } from "./AdminModelsPage";
 export { QuotaManagementPage } from "./QuotaManagementPage";

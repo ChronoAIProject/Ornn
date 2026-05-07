@@ -10,9 +10,9 @@ import type { PlaygroundChatService, PlaygroundChatRequest } from "./chatService
 import type { SkillService } from "../skills/crud/service";
 import type { AnalyticsService } from "../analytics/service";
 import type { QuotaService } from "../quota/service";
-import type { ModelsService } from "../models/service";
+import type { LlmProvidersService } from "../settings/llmProviders/service";
 import { throwQuotaError } from "../quota/routes";
-import { throwModelResolutionError } from "../models/routes";
+import { throwModelResolutionError } from "../settings/llmProviders/routes";
 import type { ChargeOutcome } from "../quota/types";
 import {
   type AuthVariables,
@@ -64,12 +64,12 @@ export interface PlaygroundRoutesConfig {
   skillService?: SkillService;
   /** Per-user quota gate (charged on completion). */
   quotaService: QuotaService;
-  /** Admin-curated model catalog. */
-  modelsService: ModelsService;
+  /** Admin-curated model catalog (per-provider, #270). */
+  llmProvidersService: LlmProvidersService;
 }
 
 export function createPlaygroundRoutes(config: PlaygroundRoutesConfig): Hono<{ Variables: AuthVariables }> {
-  const { chatService, keepAliveIntervalMsResolver, analyticsService, skillService, quotaService, modelsService } = config;
+  const { chatService, keepAliveIntervalMsResolver, analyticsService, skillService, quotaService, llmProvidersService } = config;
   const app = new Hono<{ Variables: AuthVariables }>();
 
   const auth = nyxidAuthMiddleware();
@@ -103,7 +103,7 @@ export function createPlaygroundRoutes(config: PlaygroundRoutesConfig): Hono<{ V
       // Resolve the model — explicit `modelId` (validated against the
       // surface's enabled list) or the admin-set default. 503 when no
       // models are enabled for the playground surface.
-      const resolution = await modelsService.resolveModel({
+      const resolution = await llmProvidersService.resolveModel({
         surface: "playground",
         requested: parsed.modelId,
       });

@@ -17,7 +17,7 @@
  * @module services/settingsApi
  */
 
-import { apiDelete, apiGet, apiPost, apiPut } from "./apiClient";
+import { apiDelete, apiGet, apiPatch, apiPost, apiPut } from "./apiClient";
 
 // --------------------------------------------------------------------- shared
 
@@ -180,7 +180,13 @@ export type LlmProviderAuth =
 export interface LlmProviderModel {
   id: string;
   displayName: string;
-  enabled: boolean;
+  /** Per-surface enable + default flags (#270). Resolver reads
+   * `enabledFor<Surface>` and surfaces honour the at-most-one
+   * `defaultFor<Surface>` invariant across every provider. */
+  enabledForPlayground: boolean;
+  enabledForSkillGen: boolean;
+  defaultForPlayground: boolean;
+  defaultForSkillGen: boolean;
   removed: boolean;
   firstSeenAt?: string;
   lastSyncedAt?: string;
@@ -194,7 +200,6 @@ export interface LlmProvider {
   apiFormat: LlmProviderApiFormat;
   auth: LlmProviderAuth;
   models: LlmProviderModel[];
-  defaultModelId: string | null;
   maxOutputTokens: number;
   defaultTemperature: number;
   createdAt?: string;
@@ -207,9 +212,16 @@ export interface LlmProviderInput {
   modelListUrl: string;
   apiFormat: LlmProviderApiFormat;
   auth: LlmProviderAuth;
-  defaultModelId?: string | null;
   maxOutputTokens: number;
   defaultTemperature: number;
+}
+
+/** Patch one model's surface flags. Anything absent is preserved. */
+export interface ModelFlagsPatchInput {
+  enabledForPlayground?: boolean;
+  enabledForSkillGen?: boolean;
+  defaultForPlayground?: boolean;
+  defaultForSkillGen?: boolean;
 }
 
 export async function listLlmProviders(): Promise<LlmProvider[]> {
@@ -268,6 +280,28 @@ export async function syncLlmProviderModels(id: string): Promise<LlmSyncResult> 
     {},
   );
   if (!res.data) throw new Error("Sync failed");
+  return res.data;
+}
+
+/**
+ * Patch one model's surface flags (#270 — single-source per-provider
+ * model management). Server enforces:
+ *   - at-most-one default per surface across all providers,
+ *   - `defaultForX: true` ⇒ `enabledForX: true`,
+ *   - the row cannot be `removed: true`.
+ *
+ * Returns the full updated provider doc (with auth secrets mid-masked).
+ */
+export async function patchProviderModelFlags(
+  providerId: string,
+  modelId: string,
+  flags: ModelFlagsPatchInput,
+): Promise<LlmProvider> {
+  const res = await apiPatch<LlmProvider>(
+    `/api/v1/admin/settings/llm-providers/${encodeURIComponent(providerId)}/models/${encodeURIComponent(modelId)}`,
+    flags,
+  );
+  if (!res.data) throw new Error("Model patch failed");
   return res.data;
 }
 

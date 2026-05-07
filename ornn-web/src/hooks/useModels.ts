@@ -1,32 +1,21 @@
 /**
- * Models hooks — picker (caller-side) and admin catalog mutations.
+ * Picker-side model hooks (post #270 — admin model-catalog hooks moved
+ * into the per-provider `LlmProvidersSection` flow). What's here:
  *
- * `usePreferredModel` returns a `[modelId, setModelId]` pair backed by
- * `localStorage` so the user's last choice survives reloads, with a
- * stale-value fallback to the admin default when the stored choice is no
- * longer enabled. The picker on playground / skill-gen consumes this
- * directly.
+ *   - `usePickerModels(surface)` — `GET /api/v1/me/models?surface=...`
+ *     wrapped in TanStack Query.
+ *   - `usePreferredModel(surface)` — `[modelId, setModelId]` backed by
+ *     `localStorage` so the user's last choice survives reloads, with a
+ *     stale-value fallback to the admin-set surface default when the
+ *     stored choice is no longer enabled. The picker on playground /
+ *     skill-gen consumes this directly.
  *
  * @module hooks/useModels
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  useMutation,
-  useQuery,
-  useQueryClient,
-  type UseQueryResult,
-} from "@tanstack/react-query";
-import {
-  fetchAdminModels,
-  fetchPickerModels,
-  patchModelFlags,
-  refreshModelCatalog,
-  type AdminModelsList,
-  type PatchFlagsInput,
-  type PickerResult,
-  type RefreshOutcome,
-} from "@/services/modelsApi";
+import { useQuery, type UseQueryResult } from "@tanstack/react-query";
+import { fetchPickerModels, type PickerResult } from "@/services/modelsApi";
 import type { Surface } from "@/services/quotaApi";
 import { useIsAuthenticated } from "@/stores/authStore";
 
@@ -126,38 +115,4 @@ export function usePreferredModel(surface: Surface): {
     isLoading,
     isEmpty: !isLoading && (data?.items.length ?? 0) === 0,
   };
-}
-
-export function useAdminModels(includeArchived: boolean): UseQueryResult<AdminModelsList> {
-  return useQuery({
-    queryKey: ["admin", "models", { includeArchived }] as const,
-    queryFn: () => fetchAdminModels(includeArchived),
-    staleTime: 15_000,
-  });
-}
-
-export function useRefreshModels() {
-  const qc = useQueryClient();
-  return useMutation<RefreshOutcome, Error, void>({
-    mutationFn: refreshModelCatalog,
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["admin", "models"] });
-      qc.invalidateQueries({ queryKey: ["me", "models"] });
-    },
-  });
-}
-
-export function usePatchModelFlags() {
-  const qc = useQueryClient();
-  return useMutation<
-    Awaited<ReturnType<typeof patchModelFlags>>,
-    Error,
-    { modelId: string; patch: PatchFlagsInput }
-  >({
-    mutationFn: ({ modelId, patch }) => patchModelFlags(modelId, patch),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["admin", "models"] });
-      qc.invalidateQueries({ queryKey: ["me", "models"] });
-    },
-  });
 }

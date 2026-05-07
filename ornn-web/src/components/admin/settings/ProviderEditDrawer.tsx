@@ -11,15 +11,14 @@
  * fields render the API's mid-mask placeholder when present and treat
  * an unchanged sentinel value as "(unchanged — secret preserved)".
  *
- * Validation runs on Save via Zod against the same shape the backend
- * accepts. `defaultModelId` only enables once enabled non-removed
- * models exist on the provider — for new providers, it stays empty
- * until the first Sync populates the catalog.
+ * Per-model surface flags (#270) — enable/disable + per-surface default
+ * — are managed in `ProviderModelsDrawer`, not here. This drawer only
+ * owns the connection-level config (auth, gateway URLs, token caps).
  *
  * @module components/admin/settings/ProviderEditDrawer
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { createPortal } from "react-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -52,7 +51,6 @@ interface DrawerForm {
   clientSecret: string;
   username: string;
   password: string;
-  defaultModelId: string;
   maxOutputTokens: number;
   defaultTemperature: number;
 }
@@ -75,7 +73,6 @@ const SCHEMA = z
     clientSecret: z.string(),
     username: z.string(),
     password: z.string(),
-    defaultModelId: z.string(),
     maxOutputTokens: z
       .number()
       .int()
@@ -147,7 +144,6 @@ function emptyForm(): DrawerForm {
     clientSecret: "",
     username: "",
     password: "",
-    defaultModelId: "",
     maxOutputTokens: 4096,
     defaultTemperature: 0.7,
   };
@@ -170,7 +166,6 @@ function fromProvider(p: LlmProvider): DrawerForm {
     base.username = p.auth.username;
     base.password = p.auth.password;
   }
-  base.defaultModelId = p.defaultModelId ?? "";
   base.maxOutputTokens = p.maxOutputTokens;
   base.defaultTemperature = p.defaultTemperature;
   return base;
@@ -200,7 +195,6 @@ function toInput(form: DrawerForm): LlmProviderInput {
     modelListUrl: form.modelListUrl.trim(),
     apiFormat: form.apiFormat,
     auth,
-    defaultModelId: form.defaultModelId || null,
     maxOutputTokens: form.maxOutputTokens,
     defaultTemperature: form.defaultTemperature,
   };
@@ -244,11 +238,6 @@ export function ProviderEditDrawer({
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [isOpen, onClose]);
-
-  const availableModels = useMemo(
-    () => provider?.models.filter((m) => m.enabled && !m.removed) ?? [],
-    [provider],
-  );
 
   const saveMut = useMutation<LlmProvider, Error, LlmProviderInput>({
     mutationFn: (input) =>
@@ -456,32 +445,6 @@ export function ProviderEditDrawer({
                   </>
                 )}
               </fieldset>
-
-              <label className="flex flex-col gap-1.5">
-                <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
-                  Default model
-                </span>
-                <select
-                  value={form.defaultModelId}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, defaultModelId: e.target.value }))
-                  }
-                  disabled={availableModels.length === 0}
-                  className="rounded-sm border border-subtle bg-card px-3 py-2 font-mono text-sm text-strong focus:border-accent focus:outline-none disabled:opacity-50"
-                >
-                  <option value="">— provider default —</option>
-                  {availableModels.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.displayName} ({m.id})
-                    </option>
-                  ))}
-                </select>
-                <span className="font-mono text-[10px] text-meta">
-                  {availableModels.length === 0
-                    ? "Run Sync after creating the provider to populate the model catalog."
-                    : "Only enabled, non-removed models are listed."}
-                </span>
-              </label>
 
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <label className="flex flex-col gap-1.5">
