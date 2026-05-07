@@ -54,12 +54,18 @@ export async function fetchAdminUsers(params: {
   pageSize?: number;
   sort?: AdminUsersSort;
 }): Promise<AdminUsersPage> {
+  // Backend takes `sort` (field) and `dir` (asc|desc) as two separate
+  // query params. Frontend stores them as one `field:dir` value for
+  // UI ergonomics (single-source of table state). Split at the wire
+  // boundary.
+  const [sortField, sortDir] = params.sort ? params.sort.split(":") : [undefined, undefined];
   const res = await apiGet<AdminUsersPage>("/api/v1/admin/users", {
     role: params.role,
     q: params.q,
     page: params.page,
     pageSize: params.pageSize,
-    sort: params.sort,
+    sort: sortField,
+    dir: sortDir,
   });
   if (!res.data) {
     throw new Error("Admin users list missing");
