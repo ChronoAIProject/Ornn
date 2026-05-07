@@ -63,15 +63,6 @@ const NAV_ITEMS: NavItem[] = [
     ),
   },
   {
-    path: "/admin/activities",
-    label: "Activities",
-    icon: (
-      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-      </svg>
-    ),
-  },
-  {
     path: "/admin/categories",
     label: "Categories",
     icon: (
@@ -120,8 +111,6 @@ function getBreadcrumbs(pathname: string): Array<{ label: string; path?: string 
     breadcrumbs.push({ label: "Categories" });
   } else if (pathname.startsWith("/admin/tags")) {
     breadcrumbs.push({ label: "Tags" });
-  } else if (pathname.startsWith("/admin/activities")) {
-    breadcrumbs.push({ label: "Activities" });
   } else if (pathname.startsWith("/admin/settings")) {
     breadcrumbs.push({ label: "Settings", path: "/admin/settings" });
     const tail = pathname.replace(/^\/admin\/settings\/?/, "");

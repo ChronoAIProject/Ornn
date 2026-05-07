@@ -111,9 +111,6 @@ const NotificationsPage = lazy(() =>
 const AdminDashboardPage = lazy(() =>
   import("@/pages/admin").then((m) => ({ default: m.DashboardPage })),
 );
-const AdminActivitiesPage = lazy(() =>
-  import("@/pages/admin").then((m) => ({ default: m.ActivitiesPage })),
-);
 const AdminUsersLegacyPage = lazy(() =>
   import("@/pages/admin").then((m) => ({ default: m.UsersPage })),
 );
@@ -259,7 +256,6 @@ const router = createBrowserRouter(
           <Route element={<AdminLayout />}>
             <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
             <Route path="/admin/dashboard" element={<AdminDashboardPage />} />
-            <Route path="/admin/activities" element={<AdminActivitiesPage />} />
             <Route path="/admin/users" element={<AdminUserManagementPage />} />
             <Route path="/admin/users-legacy" element={<AdminUsersLegacyPage />} />
             <Route path="/admin/auditing" element={<AdminAuditingPage />} />

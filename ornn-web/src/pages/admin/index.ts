@@ -6,7 +6,6 @@
 export { CategoriesPage } from "./CategoriesPage";
 export { TagsPage } from "./TagsPage";
 export { DashboardPage } from "./DashboardPage";
-export { ActivitiesPage } from "./ActivitiesPage";
 export { UsersPage } from "./UsersPage";
 export { UserManagementPage } from "./UserManagementPage";
 export { AuditingPlaceholderPage } from "./AuditingPlaceholderPage";
