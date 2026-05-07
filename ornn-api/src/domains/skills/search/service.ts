@@ -30,18 +30,23 @@ const BATCH_SIZE = 50;
 export interface SearchServiceDeps {
   skillRepo: SkillRepository;
   llmClient: NyxLlmClient;
-  defaultModel: string;
+  /**
+   * Resolves the default LLM model from admin settings (playground
+   * surface — search is a playground-flavoured semantic call). Read on
+   * every search; admin edits land without a redeploy.
+   */
+  defaultModelResolver: () => Promise<string>;
 }
 
 export class SearchService {
   private readonly skillRepo: SkillRepository;
   private readonly llmClient: NyxLlmClient;
-  private readonly defaultModel: string;
+  private readonly defaultModelResolver: () => Promise<string>;
 
   constructor(deps: SearchServiceDeps) {
     this.skillRepo = deps.skillRepo;
     this.llmClient = deps.llmClient;
-    this.defaultModel = deps.defaultModel;
+    this.defaultModelResolver = deps.defaultModelResolver;
   }
 
   async search(params: {
@@ -105,7 +110,7 @@ export class SearchService {
         scope,
         currentUserId,
         userOrgIds,
-        model: params.model ?? this.defaultModel,
+        model: params.model ?? (await this.defaultModelResolver()),
         page,
         pageSize,
         systemFilter,

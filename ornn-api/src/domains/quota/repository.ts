@@ -1,12 +1,11 @@
 /**
- * Mongo persistence for per-user quota counters and admin grant audit.
+ * Mongo persistence for the calendar-month quota bucket model.
  *
- *   `user_quotas`  — one document per user, keyed by `userId`. Counters
- *                    + credit balances per surface.
- *   `quota_grants` — append-only audit trail for every grant operation.
- *
- * Counters are zeroed lazily on read+charge against the live UTC marker
- * (see `types.ts`). No cron is required.
+ *   `quota_buckets`        — one document per (userId, surface,
+ *                            monthMarker). Atomic `$inc` on `used` /
+ *                            `usedByModel` / `adminGrant`.
+ *   `quota_grants_audit`   — append-only history of admin grants
+ *                            (replaces the old drainable ledger).
  *
  * @module domains/quota/repository
  */
@@ -15,304 +14,186 @@ import type { Collection, Db } from "mongodb";
 import { randomUUID } from "node:crypto";
 import pino from "pino";
 import {
-  type QuotaGrantAudit,
+  type QuotaBucketDoc,
+  type QuotaGrantAuditDoc,
   type Surface,
-  type SurfaceCounter,
-  type UserQuotaDocument,
-  currentDailyMarker,
-  currentMonthlyMarker,
-  freshSurfaceCounter,
+  bucketId,
+  escapeModelKey,
+  monthBounds,
 } from "./types";
 
 const logger = pino({ level: "info" }).child({ module: "quotaRepository" });
 
-/**
- * Apply lazy resets to a counter against the current markers. Returns
- * the (possibly-zeroed) counter and a boolean indicating whether any
- * reset actually happened — callers can use that to decide whether to
- * persist the change immediately or piggyback it on the next charge.
- */
-export function applyResets(
-  counter: SurfaceCounter,
-  now: Date = new Date(),
-): { counter: SurfaceCounter; reset: boolean } {
-  const monthly = currentMonthlyMarker(now);
-  const daily = currentDailyMarker(now);
-  let monthlyUsed = counter.monthlyUsed;
-  let dailyUsed = counter.dailyUsed;
-  let reset = false;
-  if (counter.monthlyResetMarker !== monthly) {
-    monthlyUsed = 0;
-    reset = true;
-  }
-  if (counter.dailyResetMarker !== daily) {
-    dailyUsed = 0;
-    reset = true;
-  }
-  return {
-    counter: {
-      monthlyUsed,
-      dailyUsed,
-      creditsBalance: counter.creditsBalance,
-      monthlyResetMarker: monthly,
-      dailyResetMarker: daily,
-    },
-    reset,
-  };
+export interface UpsertChargeParams {
+  userId: string;
+  surface: Surface;
+  modelId: string | null | undefined;
+  defaultAllotment: number;
+  now?: Date;
+}
+
+export interface UpsertGrantParams {
+  userId: string;
+  surface: Surface;
+  amount: number;
+  defaultAllotment: number;
+  now?: Date;
 }
 
 export class QuotaRepository {
-  private readonly quotas: Collection<UserQuotaDocument>;
-  private readonly grants: Collection<QuotaGrantAudit>;
+  private readonly buckets: Collection<QuotaBucketDoc>;
+  private readonly audit: Collection<QuotaGrantAuditDoc>;
 
   constructor(db: Db) {
-    this.quotas = db.collection<UserQuotaDocument>("user_quotas");
-    this.grants = db.collection<QuotaGrantAudit>("quota_grants");
+    this.buckets = db.collection<QuotaBucketDoc>("quota_buckets");
+    this.audit = db.collection<QuotaGrantAuditDoc>("quota_grants_audit");
+  }
+
+  get bucketsCollection(): Collection<QuotaBucketDoc> {
+    return this.buckets;
+  }
+
+  get auditCollection(): Collection<QuotaGrantAuditDoc> {
+    return this.audit;
   }
 
   async ensureIndexes(): Promise<void> {
     try {
-      await this.quotas.createIndex({ userId: 1 }, { unique: true });
-      await this.grants.createIndex({ targetUserId: 1, createdAt: -1 });
-      await this.grants.createIndex({ adminUserId: 1, createdAt: -1 });
-      await this.grants.createIndex({ createdAt: -1 });
-      // Active-grants index — covers `sumActiveCredits` and
-      // `tryConsumeActiveGrant`. Sparse on `expiresAt` so non-expiring
-      // grants index without a fake date sentinel.
-      await this.grants.createIndex(
-        { targetUserId: 1, surface: 1, expiresAt: 1, createdAt: 1 },
-        { name: "active_grants_lookup" },
+      await this.buckets.createIndex(
+        { userId: 1, surface: 1, monthMarker: -1 },
+        { name: "bucket_lookup" },
+      );
+      await this.buckets.createIndex({ monthMarker: 1 }, { name: "bucket_month" });
+      await this.audit.createIndex(
+        { targetUserId: 1, createdAt: -1 },
+        { name: "audit_per_target" },
+      );
+      await this.audit.createIndex(
+        { adminUserId: 1, createdAt: -1 },
+        { name: "audit_per_admin" },
+      );
+      await this.audit.createIndex({ createdAt: -1 }, { name: "audit_recent" });
+      await this.audit.createIndex(
+        { monthMarker: 1, targetUserId: 1 },
+        { name: "audit_lifetime" },
       );
     } catch (err) {
       logger.warn({ err }, "quota indexes ensureIndexes failed — proceeding anyway");
     }
   }
 
-  /**
-   * Fetch a user's quota document, lazily zeroing windows whose markers
-   * have rolled over. Always returns a non-null document — a fresh one
-   * is materialized in memory (and persisted) for first-time callers.
-   */
-  async getOrInit(userId: string, now: Date = new Date()): Promise<UserQuotaDocument> {
-    const doc = await this.quotas.findOne({ userId });
-    if (!doc) {
-      const fresh: UserQuotaDocument = {
-        userId,
-        playground: freshSurfaceCounter(now),
-        skillGen: freshSurfaceCounter(now),
-        updatedAt: now,
-      };
-      await this.quotas
-        .updateOne({ userId }, { $setOnInsert: fresh }, { upsert: true })
-        .catch((err) => logger.warn({ err, userId }, "quota init upsert failed"));
-      return fresh;
-    }
-    const playground = applyResets(doc.playground, now);
-    const skillGen = applyResets(doc.skillGen, now);
-    if (playground.reset || skillGen.reset) {
-      await this.quotas
-        .updateOne(
-          { userId },
-          {
-            $set: {
-              playground: playground.counter,
-              skillGen: skillGen.counter,
-              updatedAt: now,
-            },
-          },
-        )
-        .catch((err) => logger.warn({ err, userId }, "quota reset persist failed"));
-    }
-    return {
-      userId,
-      playground: playground.counter,
-      skillGen: skillGen.counter,
-      updatedAt: doc.updatedAt ?? now,
-    };
-  }
-
-  /**
-   * Increment a surface's `monthlyUsed` and `dailyUsed` by 1. The
-   * service layer is responsible for separately consuming a credit
-   * (legacy bucket OR active grant ledger) when the monthly base is
-   * exhausted — see `tryDecrementLegacyCredits` and
-   * `tryConsumeActiveGrant`.
-   */
-  async chargeMonthly(params: {
-    userId: string;
-    surface: Surface;
-    now?: Date;
-  }): Promise<void> {
-    const now = params.now ?? new Date();
-    const surface = params.surface;
-    const monthly = currentMonthlyMarker(now);
-    const daily = currentDailyMarker(now);
-
-    await this.quotas.updateOne(
-      { userId: params.userId },
-      {
-        $inc: {
-          [`${surface}.monthlyUsed`]: 1,
-          [`${surface}.dailyUsed`]: 1,
-        },
-        $set: {
-          [`${surface}.monthlyResetMarker`]: monthly,
-          [`${surface}.dailyResetMarker`]: daily,
-          updatedAt: now,
-        },
-      },
-      { upsert: true },
-    );
-  }
-
-  /**
-   * Atomically decrement `creditsBalance` (legacy non-expiring bucket)
-   * if positive. Returns true on success, false when no legacy balance
-   * was available — caller should fall through to the grant ledger.
-   */
-  async tryDecrementLegacyCredits(params: {
-    userId: string;
-    surface: Surface;
-    now?: Date;
-  }): Promise<boolean> {
-    const now = params.now ?? new Date();
-    const r = await this.quotas.updateOne(
-      {
-        userId: params.userId,
-        [`${params.surface}.creditsBalance`]: { $gt: 0 },
-      },
-      {
-        $inc: { [`${params.surface}.creditsBalance`]: -1 },
-        $set: { updatedAt: now },
-      },
-    );
-    return r.modifiedCount === 1;
-  }
-
-  /**
-   * Find the oldest active grant (consumed < amount AND not expired)
-   * for the user/surface and increment its `consumed` by 1. Atomic
-   * findOneAndUpdate so two parallel charges can't double-spend the
-   * same row's last credit.
-   *
-   * Returns true on success, false when no active grant has capacity.
-   */
-  async tryConsumeActiveGrant(params: {
-    userId: string;
-    surface: Surface;
-    now?: Date;
-  }): Promise<boolean> {
-    const now = params.now ?? new Date();
-    const r = await this.grants.findOneAndUpdate(
-      {
-        targetUserId: params.userId,
-        surface: params.surface,
-        $expr: { $lt: ["$consumed", "$amount"] },
-        $or: [{ expiresAt: null }, { expiresAt: { $gt: now } }],
-      },
-      { $inc: { consumed: 1 } },
-      // Sort oldest first so admins can predict expiry-vs-consumption
-      // ordering ("the credits I gave you 6 months ago drain first").
-      { sort: { createdAt: 1 }, returnDocument: "after" },
-    );
-    return r !== null;
-  }
-
-  /**
-   * Sum `(amount - consumed)` over all active grants for the user/
-   * surface. Active = not yet drained AND not yet expired.
-   */
-  async sumActiveCredits(
+  async findBucket(
     userId: string,
     surface: Surface,
-    now: Date = new Date(),
-  ): Promise<number> {
-    const cursor = this.grants.aggregate<{ total: number }>([
-      {
-        $match: {
-          targetUserId: userId,
-          surface,
-          $expr: { $lt: ["$consumed", "$amount"] },
-          $or: [{ expiresAt: null }, { expiresAt: { $gt: now } }],
-        },
-      },
-      {
-        $group: {
-          _id: null,
-          total: {
-            $sum: {
-              $subtract: [
-                "$amount",
-                { $ifNull: ["$consumed", 0] },
-              ],
-            },
-          },
-        },
-      },
-    ]);
-    const rows = await cursor.toArray();
-    return rows[0]?.total ?? 0;
+    monthMarker: string,
+  ): Promise<QuotaBucketDoc | null> {
+    return this.buckets.findOne({ _id: bucketId(userId, surface, monthMarker) });
+  }
+
+  async findLifetime(userId: string, surface: Surface): Promise<QuotaBucketDoc[]> {
+    return this.buckets
+      .find({ userId, surface })
+      .sort({ monthMarker: 1 })
+      .toArray();
   }
 
   /**
-   * Insert a grant row. The grant is the only source of truth for
-   * credits — `creditsBalance` on the user counter doc is legacy and
-   * never written here. `expiresAt: null` = never expires.
-   *
-   * Returns the new grant `_id`.
+   * Atomically increment `used` and `usedByModel.<id>`. Upserts a fresh
+   * bucket on first touch with the spec defaults — `$setOnInsert` keeps
+   * existing buckets untouched. Returns the after-state for callers
+   * who want to log resulting counters.
    */
-  async recordGrant(params: {
-    adminUserId: string;
-    adminEmail: string;
-    adminDisplayName: string;
-    targetUserId: string;
-    surface: Surface;
-    amount: number;
-    expiresAt: Date | null;
-    note?: string;
-    now?: Date;
-  }): Promise<string> {
+  async incrementUsed(params: UpsertChargeParams): Promise<QuotaBucketDoc> {
     const now = params.now ?? new Date();
-    const id = randomUUID();
-    const row: QuotaGrantAudit = {
-      _id: id,
-      adminUserId: params.adminUserId,
-      adminEmail: params.adminEmail,
-      adminDisplayName: params.adminDisplayName,
-      targetUserId: params.targetUserId,
-      surface: params.surface,
-      amount: params.amount,
-      consumed: 0,
-      expiresAt: params.expiresAt,
-      createdAt: now,
-      ...(params.note ? { note: params.note } : {}),
-    };
-    await this.grants.insertOne(row);
-    logger.info(
+    const { monthMarker, monthStart, monthEnd } = monthBounds(now);
+    const id = bucketId(params.userId, params.surface, monthMarker);
+    const modelKey = escapeModelKey(params.modelId);
+
+    const result = await this.buckets.findOneAndUpdate(
+      { _id: id },
       {
-        adminUserId: params.adminUserId,
-        targetUserId: params.targetUserId,
-        surface: params.surface,
-        amount: params.amount,
-        expiresAt: params.expiresAt,
+        $inc: { used: 1, [`usedByModel.${modelKey}`]: 1 },
+        $set: { updatedAt: now },
+        $setOnInsert: {
+          userId: params.userId,
+          surface: params.surface,
+          monthMarker,
+          monthStart,
+          monthEnd,
+          defaultAllotment: params.defaultAllotment,
+          adminGrant: 0,
+          createdAt: now,
+        },
       },
-      "Quota grant recorded (active credits ledger)",
+      { upsert: true, returnDocument: "after" },
     );
-    return id;
+    if (!result) {
+      throw new Error(`incrementUsed: upsert returned null for ${id}`);
+    }
+    return result;
   }
 
-  async listGrants(params: {
+  /**
+   * Atomically increase the admin-grant counter for the bucket. Upsert
+   * on first touch.
+   */
+  async incrementAdminGrant(params: UpsertGrantParams): Promise<QuotaBucketDoc> {
+    const now = params.now ?? new Date();
+    const { monthMarker, monthStart, monthEnd } = monthBounds(now);
+    const id = bucketId(params.userId, params.surface, monthMarker);
+    const result = await this.buckets.findOneAndUpdate(
+      { _id: id },
+      {
+        $inc: { adminGrant: params.amount },
+        $set: { updatedAt: now },
+        $setOnInsert: {
+          userId: params.userId,
+          surface: params.surface,
+          monthMarker,
+          monthStart,
+          monthEnd,
+          defaultAllotment: params.defaultAllotment,
+          used: 0,
+          usedByModel: {},
+          createdAt: now,
+        },
+      },
+      { upsert: true, returnDocument: "after" },
+    );
+    if (!result) {
+      throw new Error(`incrementAdminGrant: upsert returned null for ${id}`);
+    }
+    return result;
+  }
+
+  async appendGrantAudit(row: Omit<QuotaGrantAuditDoc, "_id">): Promise<string> {
+    const _id = randomUUID();
+    await this.audit.insertOne({ _id, ...row });
+    logger.info(
+      {
+        adminUserId: row.adminUserId,
+        targetUserId: row.targetUserId,
+        surface: row.surface,
+        amount: row.amount,
+        monthMarker: row.monthMarker,
+      },
+      "Quota grant audit appended",
+    );
+    return _id;
+  }
+
+  async listGrantAudit(params: {
     page: number;
     pageSize: number;
     targetUserId?: string;
     adminUserId?: string;
-  }): Promise<{ items: QuotaGrantAudit[]; total: number }> {
+  }): Promise<{ items: QuotaGrantAuditDoc[]; total: number }> {
     const filter: Record<string, unknown> = {};
     if (params.targetUserId) filter.targetUserId = params.targetUserId;
     if (params.adminUserId) filter.adminUserId = params.adminUserId;
-    const total = await this.grants.countDocuments(filter);
+    const total = await this.audit.countDocuments(filter);
     const offset = (params.page - 1) * params.pageSize;
-    const items = await this.grants
+    const items = await this.audit
       .find(filter)
       .sort({ createdAt: -1 })
       .skip(offset)

@@ -84,12 +84,14 @@ export interface SkillRoutesConfig {
   nyxidServiceClient: NyxidServiceClient;
   /**
    * Synthetic NyxID services that `GET /me/nyxid-services` appends to
-   * the picker. The tie endpoint accepts `synthetic:<slug>` ids drawn
-   * from this list and short-circuits the NyxID lookup so the bind
-   * succeeds without a real catalogue row. Treated as admin/platform
-   * services (tying forces `isPrivate: false`).
+   * the picker. Resolved from admin settings (extras section) on every
+   * tie call so an admin can append/remove without redeploying. The
+   * tie endpoint accepts `synthetic:<slug>` ids drawn from this list
+   * and short-circuits the NyxID lookup so the bind succeeds without a
+   * real catalogue row. Treated as admin/platform services (tying
+   * forces `isPrivate: false`).
    */
-  extraNyxidServices: readonly string[];
+  extraNyxidServicesResolver: () => Promise<readonly string[]>;
   /**
    * GitHub mirror service. Optional — when undefined OR when its
    * `enabled` flag is false, every mutation hook is a no-op. When
@@ -112,7 +114,7 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
     maxFileSize,
     activityRepo,
     nyxidServiceClient,
-    extraNyxidServices,
+    extraNyxidServicesResolver,
     mirrorService,
   } = config;
   const app = new Hono<{ Variables: AuthVariables }>();
@@ -143,9 +145,10 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
    * if the id isn't synthetic or doesn't match any configured entry —
    * callers must then fall back to the real catalog lookup.
    */
-  const resolveSyntheticService = (id: string) => {
+  const resolveSyntheticService = async (id: string) => {
     if (!id.startsWith(SYNTHETIC_NYXID_SERVICE_PREFIX)) return null;
     const slug = id.slice(SYNTHETIC_NYXID_SERVICE_PREFIX.length);
+    const extraNyxidServices = await extraNyxidServicesResolver();
     const match = extraNyxidServices.find(
       (name) =>
         name
@@ -923,7 +926,7 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
           // `EXTRA_NYXID_SERVICES` config — short-circuit before the
           // NyxID round-trip so the bind succeeds without a catalogue
           // row. Treated as admin/platform service.
-          const syn = resolveSyntheticService(id);
+          const syn = await resolveSyntheticService(id);
           if (syn) return syn;
           if (!token) return null;
           const svc = await nyxidServiceClient.findVisibleToCaller(token, id);

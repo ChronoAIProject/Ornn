@@ -114,8 +114,14 @@ const AdminDashboardPage = lazy(() =>
 const AdminActivitiesPage = lazy(() =>
   import("@/pages/admin").then((m) => ({ default: m.ActivitiesPage })),
 );
-const AdminUsersPage = lazy(() =>
+const AdminUsersLegacyPage = lazy(() =>
   import("@/pages/admin").then((m) => ({ default: m.UsersPage })),
+);
+const AdminUserManagementPage = lazy(() =>
+  import("@/pages/admin").then((m) => ({ default: m.UserManagementPage })),
+);
+const AdminAuditingPage = lazy(() =>
+  import("@/pages/admin").then((m) => ({ default: m.AuditingPlaceholderPage })),
 );
 const AdminSkillsPage = lazy(() =>
   import("@/pages/admin").then((m) => ({ default: m.AdminSkillsPage })),
@@ -126,17 +132,73 @@ const AdminCategoriesPage = lazy(() =>
 const AdminTagsPage = lazy(() =>
   import("@/pages/admin").then((m) => ({ default: m.TagsPage })),
 );
-const AdminPlatformSettingsPage = lazy(() =>
-  import("@/pages/admin").then((m) => ({ default: m.PlatformSettingsPage })),
-);
-const AdminMirrorPage = lazy(() =>
-  import("@/pages/admin").then((m) => ({ default: m.MirrorPage })),
-);
 const AdminModelsPage = lazy(() =>
   import("@/pages/admin").then((m) => ({ default: m.AdminModelsPage })),
 );
-const AdminQuotaPage = lazy(() =>
-  import("@/pages/admin").then((m) => ({ default: m.AdminQuotaPage })),
+const AdminQuotaManagementPage = lazy(() =>
+  import("@/pages/admin").then((m) => ({ default: m.QuotaManagementPage })),
+);
+
+// Settings layout + section components live under pages/admin/settings.
+const SettingsLayout = lazy(() =>
+  import("@/pages/admin/settings/SettingsLayout").then((m) => ({
+    default: m.SettingsLayout,
+  })),
+);
+const LlmProvidersSection = lazy(() =>
+  import("@/pages/admin/settings/sections").then((m) => ({
+    default: m.LlmProvidersSection,
+  })),
+);
+const PlaygroundSection = lazy(() =>
+  import("@/pages/admin/settings/sections").then((m) => ({
+    default: m.PlaygroundSection,
+  })),
+);
+const SkillGenSection = lazy(() =>
+  import("@/pages/admin/settings/sections").then((m) => ({
+    default: m.SkillGenSection,
+  })),
+);
+const MirrorSection = lazy(() =>
+  import("@/pages/admin/settings/sections").then((m) => ({
+    default: m.MirrorSection,
+  })),
+);
+const NyxIDSection = lazy(() =>
+  import("@/pages/admin/settings/sections").then((m) => ({
+    default: m.NyxIDSection,
+  })),
+);
+const ServicesSection = lazy(() =>
+  import("@/pages/admin/settings/sections").then((m) => ({
+    default: m.ServicesSection,
+  })),
+);
+const SkillAuditSection = lazy(() =>
+  import("@/pages/admin/settings/sections").then((m) => ({
+    default: m.SkillAuditSection,
+  })),
+);
+const TelemetryPlaceholderSection = lazy(() =>
+  import("@/pages/admin/settings/sections").then((m) => ({
+    default: m.TelemetryPlaceholderSection,
+  })),
+);
+const QuotaDefaultsSection = lazy(() =>
+  import("@/pages/admin/settings/sections").then((m) => ({
+    default: m.QuotaDefaultsSection,
+  })),
+);
+const ExtrasSection = lazy(() =>
+  import("@/pages/admin/settings/sections").then((m) => ({
+    default: m.ExtrasSection,
+  })),
+);
+const ExportImportSection = lazy(() =>
+  import("@/pages/admin/settings/sections").then((m) => ({
+    default: m.ExportImportSection,
+  })),
 );
 
 const queryClient = new QueryClient({
@@ -195,20 +257,55 @@ const router = createBrowserRouter(
           <Route path="/notifications" element={<NotificationsPage />} />
         </Route>
 
-        {/* Admin routes - separate layout */}
+        {/* Admin routes — new IA per Architecture §6.1. */}
         <Route element={<AdminGuard />}>
           <Route element={<AdminLayout />}>
             <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
             <Route path="/admin/dashboard" element={<AdminDashboardPage />} />
             <Route path="/admin/activities" element={<AdminActivitiesPage />} />
-            <Route path="/admin/users" element={<AdminUsersPage />} />
+            <Route path="/admin/users" element={<AdminUserManagementPage />} />
+            <Route path="/admin/users-legacy" element={<AdminUsersLegacyPage />} />
+            <Route path="/admin/auditing" element={<AdminAuditingPage />} />
             <Route path="/admin/skills" element={<AdminSkillsPage />} />
             <Route path="/admin/categories" element={<AdminCategoriesPage />} />
             <Route path="/admin/tags" element={<AdminTagsPage />} />
-            <Route path="/admin/settings" element={<AdminPlatformSettingsPage />} />
-            <Route path="/admin/mirror" element={<AdminMirrorPage />} />
             <Route path="/admin/models" element={<AdminModelsPage />} />
-            <Route path="/admin/quota" element={<AdminQuotaPage />} />
+            <Route path="/admin/quota" element={<AdminQuotaManagementPage />} />
+
+            {/* /admin/mirror keeps working but redirects to the new
+                settings/mirror section so existing deep-links + bookmarks
+                continue to land on the right surface. */}
+            <Route
+              path="/admin/mirror"
+              element={<Navigate to="/admin/settings/mirror" replace />}
+            />
+
+            <Route path="/admin/settings" element={<SettingsLayout />}>
+              <Route
+                index
+                element={<Navigate to="/admin/settings/llm-providers" replace />}
+              />
+              <Route path="llm-providers" element={<LlmProvidersSection />} />
+              <Route path="playground" element={<PlaygroundSection />} />
+              <Route path="skill-generation" element={<SkillGenSection />} />
+              <Route path="mirror" element={<MirrorSection />} />
+              <Route path="integrations/nyxid" element={<NyxIDSection />} />
+              <Route
+                path="integrations/services"
+                element={<ServicesSection />}
+              />
+              <Route path="skill-audit" element={<SkillAuditSection />} />
+              <Route
+                path="telemetry"
+                element={<TelemetryPlaceholderSection />}
+              />
+              <Route path="quota" element={<QuotaDefaultsSection />} />
+              <Route path="extras" element={<ExtrasSection />} />
+              <Route
+                path="export-import"
+                element={<ExportImportSection />}
+              />
+            </Route>
           </Route>
         </Route>
       </Route>

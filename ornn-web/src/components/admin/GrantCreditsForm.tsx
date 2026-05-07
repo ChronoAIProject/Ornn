@@ -3,8 +3,11 @@
  *
  * Two integer inputs (playground / skill-gen) + an optional note. Submit
  * fires the appropriate POST(s) — only non-zero amounts result in a
- * grant call, so the form can be used to issue credit on one surface
+ * grant call, so the form can be used to issue a grant on one surface
  * without touching the other.
+ *
+ * Per the v1 quota redefinition, grants apply to the **current calendar
+ * month only** and reset on the 1st (UTC). There is no expiry knob.
  *
  * @module components/admin/GrantCreditsForm
  */
@@ -23,6 +26,9 @@ interface GrantCreditsFormProps {
   className?: string;
 }
 
+const MAX_AMOUNT = 100_000;
+const MAX_NOTE = 500;
+
 export function GrantCreditsForm({
   userId,
   email,
@@ -32,7 +38,6 @@ export function GrantCreditsForm({
 }: GrantCreditsFormProps) {
   const [playground, setPlayground] = useState("");
   const [skillGen, setSkillGen] = useState("");
-  const [periodMonths, setPeriodMonths] = useState("");
   const [note, setNote] = useState("");
   const grant = useGrantQuota();
   const addToast = useToastStore((s) => s.addToast);
@@ -41,55 +46,46 @@ export function GrantCreditsForm({
     e.preventDefault();
     const pg = Number(playground);
     const sg = Number(skillGen);
-    const monthsRaw = periodMonths.trim();
-    const months = monthsRaw === "" ? null : Number(monthsRaw);
-    if ((!pg || pg <= 0) && (!sg || sg <= 0)) {
+    const valid = (n: number) =>
+      Number.isInteger(n) && n > 0 && n <= MAX_AMOUNT;
+    const pgValid = playground.trim() !== "" && valid(pg);
+    const sgValid = skillGen.trim() !== "" && valid(sg);
+    if (!pgValid && !sgValid) {
       addToast({
         type: "warning",
-        message: "Enter a positive amount on at least one surface.",
-      });
-      return;
-    }
-    if (months !== null && (!Number.isInteger(months) || months <= 0 || months > 60)) {
-      addToast({
-        type: "warning",
-        message: "Period must be a positive whole number of months (1–60), or empty for no expiry.",
+        message: `Enter a positive whole number (≤ ${MAX_AMOUNT.toLocaleString()}) on at least one surface.`,
       });
       return;
     }
     try {
-      if (pg > 0) {
+      if (pgValid) {
         await grant.mutateAsync({
           userId,
           surface: "playground",
           amount: pg,
-          periodMonths: months,
           note: note || undefined,
         });
       }
-      if (sg > 0) {
+      if (sgValid) {
         await grant.mutateAsync({
           userId,
           surface: "skillGen",
           amount: sg,
-          periodMonths: months,
           note: note || undefined,
         });
       }
       const summary = [
-        pg > 0 ? `+${pg} playground` : null,
-        sg > 0 ? `+${sg} skill-gen` : null,
+        pgValid ? `+${pg} playground` : null,
+        sgValid ? `+${sg} skill-gen` : null,
       ]
         .filter(Boolean)
         .join(", ");
-      const period = months ? ` (${months} month${months === 1 ? "" : "s"})` : " (never expires)";
       addToast({
         type: "success",
-        message: `Granted ${summary}${period} to ${displayName || email}.`,
+        message: `Granted ${summary} to ${displayName || email} (current month only).`,
       });
       setPlayground("");
       setSkillGen("");
-      setPeriodMonths("");
       setNote("");
       onGranted?.();
     } catch (err) {
@@ -107,26 +103,29 @@ export function GrantCreditsForm({
     >
       <header className="mb-3">
         <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-accent">
-          [§ GRANT — ADD CREDITS]
+          [§ GRANT — ADD TO CURRENT MONTH]
         </p>
         <p className="mt-1 font-text text-sm text-strong">
           {displayName || email}
         </p>
         <p className="font-mono text-[11px] text-meta">{email}</p>
         <p className="mt-1.5 font-text text-[11px] text-meta">
-          Each grant is <span className="font-semibold text-strong">additive</span> — repeated grants stack on top of existing credits, never replace them.
+          Each grant is{" "}
+          <span className="font-semibold text-strong">additive</span> and
+          applies to the current month only. Unused capacity does NOT roll
+          over — every grant resets on the 1st (UTC).
         </p>
       </header>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <label className="flex flex-col gap-1.5">
           <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
-            Playground credits
+            Playground grant
           </span>
           <input
             type="number"
             min={0}
-            max={100000}
+            max={MAX_AMOUNT}
             value={playground}
             onChange={(e) => setPlayground(e.target.value)}
             placeholder="0"
@@ -135,12 +134,12 @@ export function GrantCreditsForm({
         </label>
         <label className="flex flex-col gap-1.5">
           <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
-            Skill-gen credits
+            Skill-gen grant
           </span>
           <input
             type="number"
             min={0}
-            max={100000}
+            max={MAX_AMOUNT}
             value={skillGen}
             onChange={(e) => setSkillGen(e.target.value)}
             placeholder="0"
@@ -151,30 +150,11 @@ export function GrantCreditsForm({
 
       <label className="mt-3 flex flex-col gap-1.5">
         <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
-          Period (months) — optional
-        </span>
-        <input
-          type="number"
-          min={1}
-          max={60}
-          step={1}
-          value={periodMonths}
-          onChange={(e) => setPeriodMonths(e.target.value)}
-          placeholder="e.g. 3 — leave blank to never expire"
-          className="w-full rounded-sm border border-subtle bg-card px-3 py-2 font-mono text-sm text-strong focus:border-accent focus:outline-none"
-        />
-        <span className="font-mono text-[10px] text-meta">
-          After this many months, unused credits from this grant drop out of the user's balance. Empty = never expires.
-        </span>
-      </label>
-
-      <label className="mt-3 flex flex-col gap-1.5">
-        <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
           Note (optional)
         </span>
         <input
           type="text"
-          maxLength={500}
+          maxLength={MAX_NOTE}
           value={note}
           onChange={(e) => setNote(e.target.value)}
           placeholder="Reason for grant — surfaced in audit trail"
@@ -184,7 +164,7 @@ export function GrantCreditsForm({
 
       <div className="mt-4 flex justify-end">
         <Button type="submit" loading={grant.isPending} size="sm">
-          Grant credits
+          Grant
         </Button>
       </div>
     </form>

@@ -6,71 +6,56 @@
  * `ornn-api/src/domains/quota/routes.ts` so the picker/UI consumes the
  * same shape the API emits.
  *
+ * v1 minor bump (RT-ME-QUOTA-SHAPE): `daily.*` removed from `/me/quota`
+ * payload. Zod parser actively rejects payloads that still carry it so
+ * a backend regression is caught loudly on the client.
+ *
  * @module services/quotaApi
  */
 
 import { apiGet, apiPost } from "./apiClient";
+import { QuotaSnapshotSchema, type QuotaSnapshot } from "./quotaApi.schema";
+
+export type { QuotaSnapshot, SurfaceSnapshot } from "./quotaApi.schema";
 
 export type Surface = "playground" | "skillGen";
 
-export interface SurfaceSnapshot {
-  monthly: { limit: number; used: number; remaining: number };
-  daily: { limit: number; used: number; remaining: number };
-  credits: { balance: number };
-  warningThreshold: number;
-  warning: boolean;
-  monthlyResetAt: string;
-  dailyResetAt: string;
-}
-
-export interface QuotaSnapshot {
-  playground: SurfaceSnapshot;
-  skillGen: SurfaceSnapshot;
-  isAdmin: boolean;
-}
-
 export async function fetchMyQuota(): Promise<QuotaSnapshot> {
-  const res = await apiGet<QuotaSnapshot>("/api/v1/me/quota");
+  const res = await apiGet<unknown>("/api/v1/me/quota");
   if (!res.data) {
     throw new Error("Quota snapshot missing");
   }
-  return res.data;
+  const parsed = QuotaSnapshotSchema.safeParse(res.data);
+  if (!parsed.success) {
+    throw new Error(`Quota snapshot shape invalid: ${parsed.error.message}`);
+  }
+  return parsed.data;
 }
 
+/** Per-user row in the admin quota table. */
 export interface AdminQuotaRow {
   userId: string;
   email: string;
   displayName: string;
-  /**
-   * True when this user carries the `ornn:admin:skill` permission per
-   * the lazily-tracked `admin_users` collection (populated by the auth
-   * setup layer whenever an admin authenticates). Drives the UI to
-   * render "Admin · Unlimited" instead of usage counters and disables
-   * the per-row Grant action.
-   */
+  /** True when the user holds `ornn:admin:skill` — these rows render as
+   * "Admin · Unlimited" and the per-row Grant action is suppressed. */
   isAdmin: boolean;
-  playground: AdminQuotaSurfaceStatus;
-  skillGen: AdminQuotaSurfaceStatus;
+  defaultAllotment: number;
+  adminGrant: number;
+  used: number;
+  remaining: number;
 }
 
-export interface AdminQuotaSurfaceStatus {
-  /** Calls used in the current monthly window. */
-  monthlyUsed: number;
-  /** Original monthly base — what the user gets each rollover. */
-  monthlyLimit: number;
-  /** Calls used in the current daily window. */
-  dailyUsed: number;
-  /** Daily ceiling for this surface. */
-  dailyLimit: number;
-  /**
-   * Total active granted credits = legacy non-expiring bucket PLUS
-   * sum of unused capacity across active grants in the ledger.
-   */
-  creditsBalance: number;
+/** Calendar-month banner data, identical for every row on a page. */
+export interface AdminQuotaBanner {
+  monthMarker: string;
+  monthStart: string;
+  monthEnd: string;
 }
 
 export interface AdminQuotaPage {
   items: AdminQuotaRow[];
+  banner: AdminQuotaBanner;
   page: number;
   pageSize: number;
   total: number;
@@ -78,11 +63,13 @@ export interface AdminQuotaPage {
 }
 
 export async function fetchAdminQuotaUsers(params: {
+  surface: Surface;
   page?: number;
   pageSize?: number;
   q?: string;
 }): Promise<AdminQuotaPage> {
   const res = await apiGet<AdminQuotaPage>("/api/v1/admin/quota/users", {
+    surface: params.surface,
     page: params.page,
     pageSize: params.pageSize,
     q: params.q,
@@ -93,43 +80,71 @@ export async function fetchAdminQuotaUsers(params: {
   return res.data;
 }
 
+export interface LifetimeBucket {
+  monthMarker: string;
+  monthStart: string;
+  monthEnd: string;
+  defaultAllotment: number;
+  adminGrant: number;
+  used: number;
+  usedByModel: Record<string, number>;
+}
+
+export interface LifetimeResponse {
+  items: LifetimeBucket[];
+  /** Inclusive of the current month bucket (also present in `items` if seen). */
+  currentMonthMarker: string;
+  firstJoinedAt: string | null;
+}
+
+export async function fetchUserLifetimeQuota(params: {
+  userId: string;
+  surface: Surface;
+}): Promise<LifetimeResponse> {
+  const res = await apiGet<LifetimeResponse>(
+    `/api/v1/admin/quota/users/${encodeURIComponent(params.userId)}/lifetime`,
+    { surface: params.surface },
+  );
+  if (!res.data) {
+    throw new Error("Lifetime quota response missing");
+  }
+  return res.data;
+}
+
 export interface GrantInput {
   userId: string;
   surface: Surface;
+  /** Positive integer ≤ 100_000. Validated client-side too for fast feedback. */
   amount: number;
-  /**
-   * How many UTC months the grant stays active before unused capacity
-   * drops out of the balance. Omit / set null to grant credits that
-   * never expire.
-   */
-  periodMonths?: number | null;
   note?: string;
 }
 
-export async function grantQuota(
-  input: GrantInput,
-): Promise<{ auditId: string; expiresAt: string | null }> {
-  const res = await apiPost<{ auditId: string; applied: number; expiresAt: string | null }>(
-    "/api/v1/admin/quota/grant",
-    input,
-  );
+export interface GrantResult {
+  auditId: string;
+  applied: number;
+  monthMarker: string;
+  newAdminGrant: number;
+}
+
+export async function grantQuota(input: GrantInput): Promise<GrantResult> {
+  const res = await apiPost<GrantResult>("/api/v1/admin/quota/grant", input);
   if (!res.data) {
     throw new Error("Grant response missing");
   }
-  return { auditId: res.data.auditId, expiresAt: res.data.expiresAt ?? null };
+  return res.data;
 }
 
 export interface BulkGrantInput {
   userIds: string[];
   surface: Surface;
   amount: number;
-  periodMonths?: number | null;
   note?: string;
 }
 
 export interface BulkGrantOutcome {
   applied: number;
   requested: number;
+  monthMarker: string;
   results: Array<{
     userId: string;
     ok: boolean;
@@ -159,6 +174,7 @@ export interface QuotaGrantAuditRow {
   targetUserId: string;
   surface: Surface;
   amount: number;
+  monthMarker: string;
   createdAt: string;
   note?: string;
 }
@@ -188,3 +204,7 @@ export async function fetchAdminQuotaGrants(params: {
   }
   return res.data;
 }
+
+// Test-only export — Zod parser surfaced for unit tests asserting that
+// payloads carrying the old `daily.*` shape are rejected.
+export const __test__ = { QuotaSnapshotSchema };

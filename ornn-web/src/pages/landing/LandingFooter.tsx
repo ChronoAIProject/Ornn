@@ -45,7 +45,7 @@ export function LandingFooter() {
         </div>
         <div className="mt-10 flex flex-col justify-between gap-2 border-t border-[color:var(--color-border-subtle)] pt-5 font-mono text-[11px] text-meta sm:flex-row">
           <div>{t("landing.footer.copyright")}</div>
-          <div>ornn.chrono-ai.fun</div>
+          <div>ornn.chrono-ai.fun</div>{/* allow-hardcode brand string in marketing footer */}
         </div>
       </div>
     </footer>

@@ -17,7 +17,7 @@
  */
 
 import pino from "pino";
-import type { NyxidSaTokenProvider } from "./base";
+import type { NyxidConfigResolver, NyxidSaTokenProvider } from "./base";
 
 const logger = pino({ level: "info" }).child({ module: "nyxLlmCatalogClient" });
 
@@ -42,19 +42,24 @@ interface RawListResponse {
 }
 
 export interface NyxLlmCatalogClientConfig {
-  readonly proxyBaseUrl: string;
+  readonly resolver: NyxidConfigResolver;
   readonly saTokenProvider: NyxidSaTokenProvider;
 }
 
 export class NyxLlmCatalogClient {
-  private readonly url: string;
+  private readonly resolver: NyxidConfigResolver;
   private readonly saTokenProvider: NyxidSaTokenProvider;
 
   constructor(config: NyxLlmCatalogClientConfig) {
-    const base = config.proxyBaseUrl.replace(/\/+$/, "");
-    this.url = `${base}/api/v1/proxy/s/chrono-llm/models`;
+    this.resolver = config.resolver;
     this.saTokenProvider = config.saTokenProvider;
-    logger.info({ url: this.url }, "NyxLlmCatalogClient initialized");
+    logger.info("NyxLlmCatalogClient initialized");
+  }
+
+  private async resolveUrl(): Promise<string> {
+    const cfg = await this.resolver();
+    const base = cfg.baseApiUrl.replace(/\/+$/, "");
+    return `${base}/api/v1/proxy/s/chrono-llm/models`;
   }
 
   /**
@@ -65,14 +70,15 @@ export class NyxLlmCatalogClient {
    * the error so operators can see why the sync didn't apply.
    */
   async listUpstreamModels(): Promise<UpstreamModel[]> {
+    const url = await this.resolveUrl();
     const token = await this.saTokenProvider.getAccessToken();
-    const resp = await fetch(this.url, {
+    const resp = await fetch(url, {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (!resp.ok) {
       const body = await resp.text().catch(() => "");
       logger.error(
-        { status: resp.status, body: body.slice(0, 200) },
+        { status: resp.status, url, body: body.slice(0, 200) },
         "Chrono LLM catalog fetch failed",
       );
       throw new Error(

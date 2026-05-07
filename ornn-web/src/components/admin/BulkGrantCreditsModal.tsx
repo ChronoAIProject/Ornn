@@ -34,7 +34,6 @@ export function BulkGrantCreditsModal({
 }: BulkGrantCreditsModalProps) {
   const [surface, setSurface] = useState<Surface>("playground");
   const [amount, setAmount] = useState("10");
-  const [periodMonths, setPeriodMonths] = useState("");
   const [note, setNote] = useState("");
   const grant = useBulkGrantQuota();
   const addToast = useToastStore((s) => s.addToast);
@@ -45,16 +44,10 @@ export function BulkGrantCreditsModal({
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     const n = Number(amount);
-    const monthsRaw = periodMonths.trim();
-    const months = monthsRaw === "" ? null : Number(monthsRaw);
-    if (!n || n <= 0) {
-      addToast({ type: "warning", message: "Enter a positive credit amount." });
-      return;
-    }
-    if (months !== null && (!Number.isInteger(months) || months <= 0 || months > 60)) {
+    if (!Number.isInteger(n) || n <= 0 || n > 100_000) {
       addToast({
         type: "warning",
-        message: "Period must be a positive whole number of months (1–60), or empty for no expiry.",
+        message: "Enter a positive whole number ≤ 100,000.",
       });
       return;
     }
@@ -71,13 +64,11 @@ export function BulkGrantCreditsModal({
         userIds,
         surface,
         amount: n,
-        periodMonths: months,
         note: note || undefined,
       });
-      const period = months ? ` (${months} month${months === 1 ? "" : "s"})` : " (never expires)";
       addToast({
         type: "success",
-        message: `Granted +${n} ${surface === "playground" ? "playground" : "skill-gen"} credits${period} to ${out.applied}/${out.requested} users.`,
+        message: `Granted +${n} ${surface === "playground" ? "playground" : "skill-gen"} (current month only) to ${out.applied}/${out.requested} users.`,
       });
       onClose();
     } catch (err) {
@@ -89,15 +80,15 @@ export function BulkGrantCreditsModal({
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Grant credits to selected">
+    <Modal isOpen={isOpen} onClose={onClose} title="Grant to selected">
       <form onSubmit={submit} className="space-y-4">
         <p className="font-text text-sm text-body">
-          Issue credits to{" "}
+          Grant to{" "}
           <strong className="text-strong">
             {selectionLabel ?? `${userIds.length} selected user${userIds.length === 1 ? "" : "s"}`}
           </strong>
-          . Each grant is <strong className="text-strong">additive</strong> — it stacks on top of any
-          existing credits the recipients already hold.
+          . Each grant is <strong className="text-strong">additive</strong> and
+          stacks on top of the recipient's existing current-month grant.
         </p>
 
         {tooMany && (
@@ -123,7 +114,7 @@ export function BulkGrantCreditsModal({
 
           <label className="flex flex-col gap-1.5">
             <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
-              Credits per user
+              Amount per user
             </span>
             <input
               type="number"
@@ -136,24 +127,10 @@ export function BulkGrantCreditsModal({
           </label>
         </div>
 
-        <label className="flex flex-col gap-1.5">
-          <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
-            Period (months) — optional
-          </span>
-          <input
-            type="number"
-            min={1}
-            max={60}
-            step={1}
-            value={periodMonths}
-            onChange={(e) => setPeriodMonths(e.target.value)}
-            placeholder="e.g. 3 — leave blank to never expire"
-            className="rounded-sm border border-subtle bg-card px-3 py-2 font-mono text-sm text-strong focus:border-accent focus:outline-none"
-          />
-          <span className="font-mono text-[10px] text-meta">
-            Unused credits drop out of each user's balance after this many months. Empty = never expires.
-          </span>
-        </label>
+        <p className="rounded border border-subtle bg-elevated/40 px-3 py-2 font-mono text-[10px] text-meta">
+          Grants apply to the current calendar month only and reset on
+          the 1st (UTC). There is no expiry knob.
+        </p>
 
         <label className="flex flex-col gap-1.5">
           <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-meta">

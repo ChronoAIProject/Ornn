@@ -1,11 +1,17 @@
 /**
  * Shared base utilities for all NyxID-backed clients.
  *
- * Currently exposes `NyxidSaTokenProvider` — an OAuth2 client-credentials
- * token cache used for ornn → downstream service-account calls (e.g.
- * chrono-storage, chrono-sandbox behind the NyxID proxy). Not used for
- * user-scoped calls: those ride on the caller's bearer token forwarded
- * by the proxy.
+ * Exposes:
+ *   - `NyxidSaTokenProvider` — OAuth2 client-credentials token cache used
+ *     for ornn → downstream service-account calls (chrono-storage,
+ *     chrono-sandbox behind the NyxID proxy, Chrono LLM catalog). Not
+ *     used for user-scoped calls: those ride on the caller's bearer
+ *     token forwarded by the proxy.
+ *   - `NyxidConfig` — runtime config shape resolved on every call from
+ *     admin settings (per Architecture §7.2 the NyxID base URL + paths
+ *     live in the `nyxid` settings section, not env). Each NyxID client
+ *     takes a `() => Promise<NyxidConfig>` resolver so an admin's URL
+ *     edit lands on the next call without a redeploy.
  *
  * @module clients/nyxid/base
  */
@@ -13,6 +19,22 @@
 import pino from "pino";
 
 const logger = pino({ level: "info" }).child({ module: "nyxidSaTokenProvider" });
+
+/**
+ * Runtime-resolvable NyxID config. Sourced from admin settings on every
+ * call — the surrounding `SettingsService` caches with a short TTL so
+ * the read cost is amortized.
+ *
+ * The token-URL credentials remain in env (`NYXID_SA_TOKEN_URL`,
+ * `NYXID_SA_CLIENT_ID`, `NYXID_SA_CLIENT_SECRET`) because they bootstrap
+ * the very first settings read; everything else is operator-flippable.
+ */
+export interface NyxidConfig {
+  /** Base URL of the NyxID API (no trailing slash). */
+  readonly baseApiUrl: string;
+}
+
+export type NyxidConfigResolver = () => Promise<NyxidConfig>;
 
 /**
  * Caches and refreshes an SA (service-account) access token. Tokens are

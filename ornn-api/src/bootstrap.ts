@@ -95,15 +95,35 @@ import { createMeRoutes } from "./domains/me/routes";
 // Domain: Users (directory lookup)
 import { createUserRoutes } from "./domains/users/routes";
 
-// Domain: Platform settings (admin-editable thresholds, etc.)
+// Domain: Platform settings (legacy single-doc — still used by mirror, audit-waiver) ----
 import { PlatformSettingsRepository } from "./domains/platform/repository";
 import { PlatformSettingsService } from "./domains/platform/service";
 import { createPlatformSettingsRoutes } from "./domains/platform/routes";
+
+// Domain: Settings (multi-section + LLM providers + export/import) — backend-engineer-2.
+import { SettingsRepository } from "./domains/settings/repository";
+import { SettingsServiceImpl } from "./domains/settings/service";
+import { createSettingsRoutes } from "./domains/settings/routes";
+import { LlmProvidersRepository } from "./domains/settings/llmProviders/repository";
+import { LlmProvidersService } from "./domains/settings/llmProviders/service";
+import { createLlmProvidersRoutes } from "./domains/settings/llmProviders/routes";
+import { SettingsExporter } from "./domains/settings/exportImport/exporter";
+import { SettingsImporter } from "./domains/settings/exportImport/importer";
+import { createSettingsExportImportRoutes } from "./domains/settings/exportImport/routes";
+import { LlmModelListClient } from "./clients/llmModelListClient";
 
 // Domain: Quota (per-user playground / skill-gen counters + admin grants)
 import { QuotaRepository } from "./domains/quota/repository";
 import { QuotaService } from "./domains/quota/service";
 import { createQuotaRoutes } from "./domains/quota/routes";
+
+// Domain: Admin (engineer-1): dashboard, users, quota admin.
+import { AdminDashboardService } from "./domains/admin/dashboard/service";
+import { createAdminDashboardRoutes } from "./domains/admin/dashboard/routes";
+import { createAdminQuotaRoutes } from "./domains/admin/quota/routes";
+import { UsersMetaRepository } from "./domains/admin-users/usersMetaRepository";
+import { AdminUsersService } from "./domains/admin-users/service";
+import { createAdminUsersRoutes } from "./domains/admin-users/routes";
 
 // Domain: Models (admin-curated Chrono LLM catalog + user picker)
 import { ModelsRepository } from "./domains/models/repository";
@@ -155,11 +175,17 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   // Python wrapper (`/opt/agentseal/scan_skill.py`) that imports
   // `agentseal.skill_scanner.SkillScanner` directly and runs it per
   // file in the extracted ZIP.
+  //
+  // Per Architecture §7.2 the enabled flag and timeout move to the
+  // `skillAudit` settings section. We pre-instantiate the scanner with
+  // safe defaults; runtime knobs are read from settings on each scan.
+  // (Wiring of the resolver into AgentSealScanner is deferred to
+  // backend-engineer-2's settings section landing.)
   const agentsealScanner = new AgentSealScanner({
     python: config.agentsealPython,
     script: config.agentsealScript,
-    timeoutMs: config.agentsealTimeoutMs,
-    enabled: config.agentsealEnabled,
+    timeoutMs: 60_000,
+    enabled: true,
     logger,
   });
 
@@ -169,6 +195,8 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   logger.info("MongoDB connected");
 
   // ---- SA Token Provider (shared by proxy-authenticated clients) ----
+  // The OAuth client_credentials endpoint stays in env (bootstrap-only)
+  // because it has to mint a token before the very first settings read.
   const saTokenProvider = new NyxidSaTokenProvider(
     config.nyxidTokenUrl,
     config.nyxidClientId,
@@ -176,31 +204,138 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   );
   const getSaAccessToken = () => saTokenProvider.getAccessToken();
 
+  // ---- SettingsService (multi-section + LLM providers) ----
+  // Built early so every downstream client/route can take a resolver
+  // closure over it. The provider-list service is wired POST-construction
+  // via `setLlmProvidersAccessor` to break the circular dep
+  // (LlmProvidersService -> SettingsService for the encryption key on
+  // create() validation; SettingsService -> LlmProvidersService for
+  // listLlmProviders/getLlmProvider on the export/admin paths).
+  const settingsRepo = new SettingsRepository(db);
+  const settingsService = new SettingsServiceImpl({
+    repo: settingsRepo,
+    encryptionKey: config.encryptionKey,
+  });
+  const llmProvidersRepo = new LlmProvidersRepository(db);
+  void llmProvidersRepo.ensureIndexes().catch((err) =>
+    logger.warn({ err }, "llm_providers indexes ensureIndexes failed — proceeding anyway"),
+  );
+  const modelListFetcher = new LlmModelListClient();
+  const llmProvidersService = new LlmProvidersService({
+    repo: llmProvidersRepo,
+    encryptionKey: config.encryptionKey,
+    modelListFetcher,
+  });
+  // Late-bind: the settings service exposes provider listings to the
+  // export/admin paths.
+  settingsService.setLlmProvidersAccessor({
+    list: () => llmProvidersService.list(),
+    get: (id) => llmProvidersService.get(id),
+  });
+
+  // Convenience: resolve the LLM provider for a given surface in a
+  // single Promise, projecting whichever auth shape the provider uses
+  // into the simpler `{ gatewayUrl, apiKey }` contract `NyxLlmClient`
+  // speaks. `apiKey` empty means "use SA token-exchange flow".
+  const resolveLlmProviderForSurface = async (
+    surface: "playground" | "skillGen",
+  ): Promise<{ gatewayUrl: string; apiKey: string }> => {
+    const sec =
+      surface === "playground"
+        ? await settingsService.getPlayground()
+        : await settingsService.getSkillGen();
+    if (!sec.defaultProviderId) return { gatewayUrl: "", apiKey: "" };
+    const provider = await llmProvidersService.get(sec.defaultProviderId);
+    if (!provider) return { gatewayUrl: "", apiKey: "" };
+    const apiKey = provider.auth.kind === "apiKey" ? provider.auth.apiKey : "";
+    return { gatewayUrl: provider.gatewayUrl, apiKey };
+  };
+
+  // Same pattern, returning the per-surface model + token cap +
+  // temperature snapshot the playground/skill-gen services need on
+  // every request.
+  const resolveSurfaceDefaults = async (
+    surface: "playground" | "skillGen",
+  ): Promise<{ model: string; maxOutputTokens: number; temperature: number }> => {
+    const sec =
+      surface === "playground"
+        ? await settingsService.getPlayground()
+        : await settingsService.getSkillGen();
+    if (!sec.defaultProviderId) {
+      return { model: sec.defaultModelId ?? "", maxOutputTokens: 8192, temperature: 0.7 };
+    }
+    const provider = await llmProvidersService.get(sec.defaultProviderId);
+    if (!provider) {
+      return { model: sec.defaultModelId ?? "", maxOutputTokens: 8192, temperature: 0.7 };
+    }
+    return {
+      model: sec.defaultModelId ?? provider.defaultModelId ?? "",
+      maxOutputTokens: provider.maxOutputTokens,
+      temperature: provider.defaultTemperature,
+    };
+  };
+
+  // The audit pipeline reads its own per-section knobs (LLM toggle +
+  // model + AgentSeal toggle/timeout + risk threshold).
+  const resolveAuditDefaults = async (): Promise<{
+    model: string;
+    llmEnabled: boolean;
+    agentSealEnabled: boolean;
+    agentSealTimeoutMs: number;
+    riskThreshold: number;
+  }> => {
+    const sec = await settingsService.getSkillAudit();
+    let model = sec.llmAuditDefaultModelId ?? "";
+    if (!model && sec.llmAuditDefaultProviderId) {
+      const provider = await llmProvidersService.get(sec.llmAuditDefaultProviderId);
+      model = provider?.defaultModelId ?? "";
+    }
+    return {
+      model,
+      llmEnabled: sec.llmAuditEnabled,
+      agentSealEnabled: sec.agentSealEnabled,
+      agentSealTimeoutMs: sec.agentSealTimeoutMs,
+      riskThreshold: sec.riskThreshold,
+    };
+  };
+
+  // Synthetic NyxID services list — extras section drives this.
+  const resolveExtraNyxidServiceNames = async (): Promise<readonly string[]> => {
+    const sec = await settingsService.getExtras();
+    return sec.extraNyxidServices.map((s) => s.name);
+  };
+
   // ---- External Clients ----
-  const needsProxyAuth = config.storageServiceUrl.includes("proxy");
-  const storageClient = new StorageClient(
-    config.storageServiceUrl,
-    needsProxyAuth ? getSaAccessToken : undefined,
-  );
-  const needsSandboxProxyAuth = config.sandboxServiceUrl.includes("proxy");
-  const sandboxClient = new SandboxClient(
-    config.sandboxServiceUrl,
-    needsSandboxProxyAuth ? getSaAccessToken : undefined,
-  );
-  // The platform-settings service is wired ~80 lines below this point.
-  // We can't pass a `platformSettingsService` reference here (forward
-  // dependency), so we hold a mutable slot and the resolver closes over
-  // it. By the time the first LLM request fires, the slot is populated.
-  let llmOverrideSource: { getLlmProviderConfig: () => Promise<{ gatewayUrl: string; apiKey: string }> } | null = null;
-  const nyxLlmClient = new NyxLlmClient({
-    gatewayUrl: config.nyxLlmGatewayUrl,
-    tokenUrl: config.nyxidTokenUrl,
-    clientId: config.nyxidClientId,
-    clientSecret: config.nyxidClientSecret,
-    overrideResolver: async () => {
-      if (!llmOverrideSource) return { gatewayUrl: "", apiKey: "" };
-      return llmOverrideSource.getLlmProviderConfig();
+  // Storage URL/bucket and Sandbox URL come from settings (`services`
+  // section). The "needs proxy auth" flag is a behavior of the URL
+  // itself ("proxy" in the host); we resolve once per call so a switch
+  // between direct and proxied endpoints works without a redeploy.
+  const storageClient = new StorageClient({
+    resolver: async () => {
+      const s = await settingsService.getServices();
+      return { baseUrl: s.chronoStorageUrl, bucket: s.chronoStorageBucket };
     },
+    // Conservative: always attach SA token when present. The chrono-storage
+    // proxy ignores it for direct URLs; for proxy URLs it's required.
+    getAccessToken: getSaAccessToken,
+  });
+  const sandboxClient = new SandboxClient({
+    resolver: async () => {
+      const s = await settingsService.getServices();
+      return { baseUrl: s.chronoSandboxUrl };
+    },
+    getAccessToken: getSaAccessToken,
+  });
+
+  // The NyxLlmClient resolver picks the playground provider as default
+  // — most call sites are playground-flavoured. Skill-gen routes pass
+  // a model id explicitly through the params, but the gateway/apiKey
+  // selection still resolves through this single client. Backend-eng-2
+  // will swap this for a per-surface provider lookup once the
+  // `llm_providers` collection ships.
+  const nyxLlmClient = new NyxLlmClient({
+    resolver: async () => resolveLlmProviderForSurface("playground"),
+    saTokenProvider,
   });
 
   // ---- Repositories ----
@@ -238,7 +373,8 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
     skillRepo,
     skillVersionRepo,
     storageClient,
-    storageBucket: config.storageBucket,
+    storageBucketResolver: async () =>
+      (await settingsService.getServices()).chronoStorageBucket,
     analyticsEmitter,
     agentsealScanner,
   });
@@ -254,11 +390,20 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
 
   // ---- NyxID Orgs Client — built early so the audit fan-out can expand
   //   sharedWithOrgs into member rosters when sending consumer notifications.
-  const nyxidOrgsClient = new NyxidOrgsClient(config.nyxidBaseUrl, saTokenProvider);
+  // Base URL is resolved from settings (`nyxid` section) on every call.
+  const nyxidConfigResolver = async () => ({
+    baseApiUrl: (await settingsService.getNyxid()).baseApiUrl,
+  });
+  const nyxidOrgsClient = new NyxidOrgsClient({
+    resolver: nyxidConfigResolver,
+    saTokenProvider,
+  });
 
   // ---- NyxID Service Client — used by the skill→service tie endpoint
   //   and the picker (`/me/nyxid-services`). Per-token cached.
-  const nyxidServiceClient = new NyxidServiceClient(config.nyxidBaseUrl);
+  const nyxidServiceClient = new NyxidServiceClient({
+    resolver: nyxidConfigResolver,
+  });
 
   // ---- Domain: Skill Audit ----
   const auditRepo = new AuditRepository(db);
@@ -269,9 +414,10 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
     auditRepo,
     skillService,
     storageClient,
-    storageBucket: config.storageBucket,
+    storageBucketResolver: async () =>
+      (await settingsService.getServices()).chronoStorageBucket,
     llmClient: nyxLlmClient,
-    model: config.defaultLlmModel,
+    defaultsResolver: async () => resolveAuditDefaults(),
     // Audits are re-run automatically when the cached record ages past
     // this TTL, even if the skill bytes haven't changed. 30 days keeps
     // LLM spend reasonable while still catching drift in the audit
@@ -291,17 +437,69 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   const analyticsRoutes = createAnalyticsRoutes({ analyticsService, skillService });
 
   // ---- Domain: Platform settings (admin-editable: audit threshold, mirror config, LLM override) ----
+  // Backend-engineer-2 is replacing this with a multi-section
+  // `SettingsService` (one doc per section in `platform_settings`,
+  // separate `llm_providers` collection). Until that lands, we adapt
+  // the existing single-doc `PlatformSettings` shape into the bridge
+  // contract — every field a client/route asks for is satisfied here
+  // (with sensible fallbacks for sections that don't exist yet).
   const platformSettingsRepo = new PlatformSettingsRepository(db);
   const platformSettingsService = new PlatformSettingsService(platformSettingsRepo, {
     encryptionKey: config.encryptionKey,
   });
   const platformSettingsRoutes = createPlatformSettingsRoutes({ platformSettingsService });
 
-  // Now that platformSettingsService exists, hand it to the LLM client
-  // so admin overrides take effect on the next LLM call without a
-  // restart. The closure captured by `overrideResolver` above reads
-  // through this slot.
-  llmOverrideSource = platformSettingsService;
+  // ---- Settings routes (engineer-2): per-section CRUD, LLM providers,
+  //   export/import.
+  const settingsRoutes = createSettingsRoutes({ settingsService });
+  const llmProvidersRoutes = createLlmProvidersRoutes({ llmProvidersService });
+  const settingsExporter = new SettingsExporter({
+    settingsService,
+    ornnVersion: pkg.version,
+  });
+  const settingsImporter = new SettingsImporter({ settingsService });
+  const settingsExportImportRoutes = createSettingsExportImportRoutes({
+    exporter: settingsExporter,
+    importer: settingsImporter,
+    auditLogger: {
+      // Fire-and-forget audit emit. Both branches swallow errors so a
+      // log-write failure never breaks the response — `recordExport` /
+      // `recordImport` MUST NOT throw per the SettingsAuditLogger
+      // contract (`exportImport/routes.ts` interface comment).
+      recordExport: async ({ actor, schemaVersion }) => {
+        await activityRepo
+          .log(
+            actor.userId,
+            actor.email,
+            actor.displayName ?? "",
+            "settings:export",
+            { schemaVersion },
+          )
+          .catch((err) =>
+            logger.warn(
+              { err: (err as Error).message, actor: actor.userId },
+              "settings:export audit log failed (swallowed)",
+            ),
+          );
+      },
+      recordImport: async ({ actor, schemaVersion, aggregateStatus, sections, dryRun }) => {
+        await activityRepo
+          .log(
+            actor.userId,
+            actor.email,
+            actor.displayName ?? "",
+            "settings:import",
+            { schemaVersion, aggregateStatus, dryRun, sections },
+          )
+          .catch((err) =>
+            logger.warn(
+              { err: (err as Error).message, actor: actor.userId },
+              "settings:import audit log failed (swallowed)",
+            ),
+          );
+      },
+    },
+  });
 
   // ---- Domain: Quota (per-user playground / skill-gen counters + admin grants) ----
   const quotaRepo = new QuotaRepository(db);
@@ -310,12 +508,13 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   );
   const quotaService = new QuotaService({
     repo: quotaRepo,
+    defaults: {
+      getQuotaDefaults: async () => settingsService.getQuotaDefaults(),
+    },
     notificationService,
   });
   const quotaRoutes = createQuotaRoutes({
     quotaService,
-    activityRepo,
-    adminUsersRepo,
   });
 
   // ---- Domain: Models (admin-curated Chrono LLM catalog + user picker) ----
@@ -326,7 +525,7 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   // The catalog client speaks to NyxID's Chrono LLM proxy. Refresh
   // happens on demand from the admin UI; no scheduled cron.
   const llmCatalogClient = new NyxLlmCatalogClient({
-    proxyBaseUrl: config.nyxidBaseUrl,
+    resolver: nyxidConfigResolver,
     saTokenProvider,
   });
   const modelsService = new ModelsService({
@@ -365,7 +564,11 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
     maxFileSize: config.maxPackageSizeBytes,
     activityRepo,
     nyxidServiceClient,
-    extraNyxidServices: config.extraNyxidServices,
+    // Resolved from settings (`extras` section) on demand. Routes that
+    // need a one-shot snapshot adapt around the async — most consumers
+    // already call this resolver, so the mutable adapter is a thin
+    // wrapper here.
+    extraNyxidServicesResolver: () => resolveExtraNyxidServiceNames(),
     mirrorService,
   });
 
@@ -373,7 +576,11 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   const searchService = new SearchService({
     skillRepo,
     llmClient: nyxLlmClient,
-    defaultModel: config.defaultLlmModel,
+    // Default model resolves through the playground surface (search is
+    // a playground-flavoured LLM call). Backend-eng-2 may add a
+    // dedicated `search` section later; until then, share with playground.
+    defaultModelResolver: async () =>
+      (await resolveSurfaceDefaults("playground")).model,
   });
 
   const searchRoutes = createSearchRoutes({
@@ -384,14 +591,13 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   // ---- Domain: Skill Generation ----
   const generationService = new SkillGenerationService({
     llmClient: nyxLlmClient,
-    defaultModel: config.defaultLlmModel,
-    maxOutputTokens: config.llmMaxOutputTokens,
-    temperature: config.llmTemperature,
+    defaultsResolver: async () => resolveSurfaceDefaults("skillGen"),
   });
 
   const generationRoutes = createGenerationRoutes({
     generationService,
-    keepAliveIntervalMs: config.sseKeepAliveIntervalMs,
+    keepAliveIntervalMsResolver: async () =>
+      (await settingsService.getSkillGen()).sseKeepAliveMs,
     quotaService,
     modelsService,
   });
@@ -401,14 +607,13 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
     llmClient: nyxLlmClient,
     sandboxClient,
     skillService,
-    defaultModel: config.defaultLlmModel,
-    maxOutputTokens: config.llmMaxOutputTokens,
-    temperature: config.llmTemperature,
+    defaultsResolver: async () => resolveSurfaceDefaults("playground"),
   });
 
   const playgroundRoutes = createPlaygroundRoutes({
     chatService,
-    keepAliveIntervalMs: config.sseKeepAliveIntervalMs,
+    keepAliveIntervalMsResolver: async () =>
+      (await settingsService.getPlayground()).sseKeepAliveMs,
     analyticsService,
     skillService,
     quotaService,
@@ -571,6 +776,33 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   // route sees the same cached result — avoids re-querying NyxID within a
   // single request even when multiple routes call `readUserOrgMemberships`.
   apiApp.use("*", nyxidOrgLookupMiddleware(nyxidOrgsClient));
+
+  // ---- Admin routes (engineer-1): dashboard, users, quota admin ----
+  const adminDashboardService = new AdminDashboardService({
+    db,
+    activityRepo,
+    adminUsersRepo,
+  });
+  const adminDashboardRoutes = createAdminDashboardRoutes({
+    dashboardService: adminDashboardService,
+  });
+  const usersMetaRepo = new UsersMetaRepository(db);
+  void usersMetaRepo.ensureIndexes?.().catch?.((err: Error) =>
+    logger.warn({ err }, "users_meta indexes ensureIndexes failed — proceeding anyway"),
+  );
+  const adminUsersService = new AdminUsersService({
+    db,
+    activityRepo,
+    adminUsersRepo,
+    usersMetaRepo,
+  });
+  const adminUsersRoutes = createAdminUsersRoutes({ adminUsersService });
+  const adminQuotaRoutes = createAdminQuotaRoutes({
+    quotaService,
+    activityRepo,
+    adminUsersRepo,
+  });
+
   apiApp.route("/", skillRoutes);
   apiApp.route("/", mirrorRoutes);
   apiApp.route("/", auditRoutes);
@@ -580,16 +812,24 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   apiApp.route("/", generationRoutes);
   apiApp.route("/", playgroundRoutes);
   apiApp.route("/", adminRoutes);
+  apiApp.route("/", adminDashboardRoutes);
+  apiApp.route("/", adminUsersRoutes);
+  apiApp.route("/", adminQuotaRoutes);
   apiApp.route("/", platformSettingsRoutes);
+  apiApp.route("/", settingsRoutes);
+  apiApp.route("/", llmProvidersRoutes);
+  apiApp.route("/", settingsExportImportRoutes);
   apiApp.route("/", quotaRoutes);
   apiApp.route("/", modelsRoutes);
   apiApp.route("/", formatRoutes);
   apiApp.route("/", createMeRoutes({
-    nyxidBaseUrl: config.nyxidBaseUrl,
+    nyxidBaseUrlResolver: async () =>
+      (await settingsService.getNyxid()).baseApiUrl,
     skillRepo,
     activityRepo,
     nyxidServiceClient,
-    extraNyxidServices: config.extraNyxidServices,
+    extraNyxidServicesResolver: () =>
+      resolveExtraNyxidServiceNames(),
   }));
   apiApp.route("/", createUserRoutes({ activityRepo }));
   app.route("/api/v1", apiApp);

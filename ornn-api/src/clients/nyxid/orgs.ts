@@ -12,7 +12,7 @@
  */
 
 import pino from "pino";
-import type { NyxidSaTokenProvider } from "./base";
+import type { NyxidConfigResolver, NyxidSaTokenProvider } from "./base";
 
 const logger = pino({ level: "info" }).child({ module: "nyxidOrgsClient" });
 
@@ -46,12 +46,20 @@ interface RawResponse {
 }
 
 export class NyxidOrgsClient {
-  private readonly baseUrl: string;
+  private readonly resolver: NyxidConfigResolver;
   private readonly saTokenProvider?: NyxidSaTokenProvider;
 
-  constructor(baseUrl: string, saTokenProvider?: NyxidSaTokenProvider) {
-    this.baseUrl = baseUrl.replace(/\/+$/, "");
-    this.saTokenProvider = saTokenProvider;
+  constructor(opts: {
+    resolver: NyxidConfigResolver;
+    saTokenProvider?: NyxidSaTokenProvider;
+  }) {
+    this.resolver = opts.resolver;
+    this.saTokenProvider = opts.saTokenProvider;
+  }
+
+  private async resolveBaseUrl(): Promise<string> {
+    const cfg = await this.resolver();
+    return cfg.baseApiUrl.replace(/\/+$/, "");
   }
 
   /**
@@ -63,7 +71,8 @@ export class NyxidOrgsClient {
    * (treat as empty list) on read paths and fail-closed on write paths.
    */
   async listUserOrgs(userAccessToken: string): Promise<OrgMembership[]> {
-    const url = `${this.baseUrl}/api/v1/orgs`;
+    const baseUrl = await this.resolveBaseUrl();
+    const url = `${baseUrl}/api/v1/orgs`;
     const resp = await fetch(url, {
       headers: { Authorization: `Bearer ${userAccessToken}` },
     });
@@ -122,7 +131,8 @@ export class NyxidOrgsClient {
       return [];
     }
 
-    const url = `${this.baseUrl}/api/v1/orgs/${encodeURIComponent(orgUserId)}/members`;
+    const baseUrl = await this.resolveBaseUrl();
+    const url = `${baseUrl}/api/v1/orgs/${encodeURIComponent(orgUserId)}/members`;
     let resp: Response;
     try {
       resp = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });

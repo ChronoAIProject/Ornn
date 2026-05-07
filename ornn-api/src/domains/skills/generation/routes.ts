@@ -29,11 +29,33 @@ const logger = pino({ level: "info" }).child({ module: "skillGenerationRoutes" }
 
 export interface GenerationRoutesConfig {
   generationService: SkillGenerationService;
-  keepAliveIntervalMs: number;
+  /**
+   * SSE keep-alive interval (ms). Resolved from admin settings
+   * (`skillGen.sseKeepAliveMs`) on every request so an admin's edit
+   * lands without a redeploy. Internal helpers still take a number
+   * — the route handler resolves once per request and threads it down.
+   */
+  keepAliveIntervalMsResolver: () => Promise<number>;
   /** Per-user quota gate (charged on completion). */
   quotaService: QuotaService;
   /** Admin-curated model catalog. */
   modelsService: ModelsService;
+}
+
+/** Helper to resolve keep-alive ms with a safe fallback. */
+async function resolveKeepAliveMs(
+  resolver: () => Promise<number>,
+): Promise<number> {
+  try {
+    const v = await resolver();
+    return Number.isFinite(v) && v > 0 ? v : 15_000;
+  } catch (err) {
+    logger.warn(
+      { err: (err as Error).message },
+      "Failed to resolve skillGen sseKeepAliveMs; using 15s default",
+    );
+    return 15_000;
+  }
 }
 
 /**
@@ -79,6 +101,8 @@ async function streamGenerationEvents(
     quotaService: QuotaService;
     userId: string;
     permissions: readonly string[] | undefined;
+    /** Resolved model id used for the LLM call — flows into `usedByModel`. */
+    modelId: string;
   },
 ) {
   c.header("Cache-Control", "no-cache");
@@ -112,6 +136,7 @@ async function streamGenerationEvents(
             permissions: chargeAfter.permissions,
             surface: "skillGen",
             outcome,
+            modelId: chargeAfter.modelId,
           })
           .catch((err) => {
             logger.warn(
@@ -168,7 +193,7 @@ async function analyzePackageContent(zipBuffer: Uint8Array): Promise<string> {
 }
 
 export function createGenerationRoutes(config: GenerationRoutesConfig): Hono<{ Variables: AuthVariables }> {
-  const { generationService, keepAliveIntervalMs, quotaService, modelsService } = config;
+  const { generationService, keepAliveIntervalMsResolver, quotaService, modelsService } = config;
   const app = new Hono<{ Variables: AuthVariables }>();
 
   const auth = nyxidAuthMiddleware();
@@ -217,11 +242,12 @@ export function createGenerationRoutes(config: GenerationRoutesConfig): Hono<{ V
         if (body.messages && Array.isArray(body.messages)) {
           logger.info({ userId: authCtx.userId, messageCount: body.messages.length }, "Multi-turn generation request");
           const pf = await preflight(c, quotaService, modelsService, requestedModelId);
+          const keepAliveMs = await resolveKeepAliveMs(keepAliveIntervalMsResolver);
           return streamGenerationEvents(
             c,
             generationService.generateStreamWithHistory(body.messages, c.req.raw.signal, pf.modelId),
-            keepAliveIntervalMs,
-            { quotaService, userId: pf.userId, permissions: pf.permissions },
+            keepAliveMs,
+            { quotaService, userId: pf.userId, permissions: pf.permissions, modelId: pf.modelId },
           );
         }
 
@@ -242,11 +268,12 @@ export function createGenerationRoutes(config: GenerationRoutesConfig): Hono<{ V
 
       logger.info({ userId: authCtx.userId, promptLength: prompt.length, modelId: pf.modelId }, "Generation request");
 
+      const keepAliveMs = await resolveKeepAliveMs(keepAliveIntervalMsResolver);
       return streamGenerationEvents(
         c,
         generationService.generateStream(query, signal, pf.modelId),
-        keepAliveIntervalMs,
-        { quotaService, userId: pf.userId, permissions: pf.permissions },
+        keepAliveMs,
+        { quotaService, userId: pf.userId, permissions: pf.permissions, modelId: pf.modelId },
       );
     },
   );
@@ -342,6 +369,7 @@ export function createGenerationRoutes(config: GenerationRoutesConfig): Hono<{ V
       const signal = c.req.raw.signal;
       const pf = await preflight(c, quotaService, modelsService, requestedModelId);
 
+      const keepAliveMs = await resolveKeepAliveMs(keepAliveIntervalMsResolver);
       return streamGenerationEvents(
         c,
         generationService.generateFromSource(
@@ -350,8 +378,8 @@ export function createGenerationRoutes(config: GenerationRoutesConfig): Hono<{ V
           signal,
           pf.modelId,
         ),
-        keepAliveIntervalMs,
-        { quotaService, userId: pf.userId, permissions: pf.permissions },
+        keepAliveMs,
+        { quotaService, userId: pf.userId, permissions: pf.permissions, modelId: pf.modelId },
       );
     },
   );
@@ -386,11 +414,12 @@ export function createGenerationRoutes(config: GenerationRoutesConfig): Hono<{ V
       const signal = c.req.raw.signal;
       const pf = await preflight(c, quotaService, modelsService, requestedModelId);
 
+      const keepAliveMs = await resolveKeepAliveMs(keepAliveIntervalMsResolver);
       return streamGenerationEvents(
         c,
         generationService.generateFromOpenApi(body.spec, { endpoints, description }, signal, pf.modelId),
-        keepAliveIntervalMs,
-        { quotaService, userId: pf.userId, permissions: pf.permissions },
+        keepAliveMs,
+        { quotaService, userId: pf.userId, permissions: pf.permissions, modelId: pf.modelId },
       );
     },
   );

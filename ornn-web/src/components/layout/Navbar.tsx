@@ -37,7 +37,7 @@ function getNyxIdUrl(): string {
   } catch {
     /* ignore */
   }
-  return "https://nyx.chrono-ai.fun";
+  return "https://nyx.chrono-ai.fun"; // allow-hardcode legacy fallback; runtime config supplies the real value
 }
 
 function GitHubIcon({ className }: { className?: string }) {
