@@ -25,10 +25,23 @@ const Schema = z
     extraNyxidServices: z.array(
       z.object({
         name: z.string().regex(NAME_RE, "Must match ^[a-z0-9-]{1,64}$"),
-        baseUrl: z
-          .string()
-          .url()
-          .regex(/^https?:\/\//, "Must be http(s)"),
+        // Empty string is the unset state (matches backend `optionalHttpUrl`
+        // in extras.ts) — operators can register a service by name only and
+        // fill in the gateway later. When set, must be a parseable http(s)
+        // URL (#279).
+        baseUrl: z.string().refine(
+          (v) => {
+            if (v === "") return true;
+            if (!/^https?:\/\//.test(v)) return false;
+            try {
+              new URL(v);
+              return true;
+            } catch {
+              return false;
+            }
+          },
+          { message: "Must be a http(s) URL or empty" },
+        ),
         scopes: z.array(z.string()).optional(),
       }),
     ),
@@ -128,7 +141,7 @@ export function ExtrasSection() {
                 </label>
                 <label className="sm:col-span-5 flex flex-col gap-1.5">
                   <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
-                    Base URL
+                    Base URL (optional)
                   </span>
                   <input
                     type="text"
@@ -139,7 +152,7 @@ export function ExtrasSection() {
                 </label>
                 <label className="sm:col-span-3 flex flex-col gap-1.5">
                   <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
-                    Scopes (comma-separated)
+                    Scopes (comma-separated, optional)
                   </span>
                   <input
                     type="text"
