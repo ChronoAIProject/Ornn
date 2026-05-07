@@ -59,6 +59,36 @@ TypeScript, Bun workspace monorepo
 - PR merge auto-deletes the source branch (protected branches excluded).
 - **New work MUST branch from the latest `origin/develop`.** Every feature, bug fix, or any kind of change must start from a freshly fetched `develop` — either a new branch (`git fetch && git checkout develop && git pull && git checkout -b <name>`) or a new worktree created against `origin/develop`. Never branch off a stale local `develop` or another feature branch.
 
+## Commit Standards
+
+Every code change MUST respect commit size. **Multiple small, self-contained commits are always better than one big combined commit, no exceptions.**
+
+Rules:
+
+1. **Each commit is self-contained.** A reviewer reading just that commit's diff + message can understand what changed and why, without context from sibling commits.
+2. **Each commit is small.** One logical change per commit. Schema migration is one commit. New endpoint is another. Frontend drawer is another. Old page deletion is another. Tests can ride with the code they test, but unrelated test additions get their own commit.
+3. **Each commit's message is detailed.** Subject line states the change in one short sentence (≤ 72 chars). Body explains the *why*, the constraints, and any non-obvious decisions. Reference the issue when relevant (`#270`).
+4. **Order matters.** Stack commits in dependency order so the tree compiles + tests pass at every commit (or as close as is practical). A reviewer should be able to `git checkout` any intermediate commit without a broken state.
+5. **Don't bundle for convenience.** "These are all part of the same feature" is not a reason to combine — that's what the PR is for. The PR groups related commits; the commits decompose the change.
+6. **Refactors / renames go in their own commit.** Pure refactors first, then the behaviour change on top. Never bury a bug fix inside a "drive-by cleanup" commit.
+
+What this looks like in practice for a feature like #270 (per-provider model management):
+
+```
+feat(api): extend LlmProviderModel schema with per-surface flags (#270)
+feat(api): boot migration — fold legacy models collection into per-provider arrays (#270)
+feat(api): PATCH /admin/settings/llm-providers/:id/models/:modelId (#270)
+feat(api): rewire /me/models picker + execute-path resolver to per-provider source (#270)
+chore(api): delete domains/models/ module (#270)
+feat(web): ProviderModelsDrawer with per-row toggles + per-surface defaults (#270)
+feat(web): wire ProviderModelsDrawer from LlmProvidersSection, drop Default column (#270)
+chore(web): drop Default model select from ProviderEditDrawer (#270)
+chore(web): remove /admin/models page + AdminModelsPage + admin parts of useModels/modelsApi (#270)
+docs: changeset for #270
+```
+
+Ten commits is fine. Twenty is fine. One commit covering schema + migration + new routes + old module deletion + frontend + cleanup is **not fine** — it forecloses bisection and forces the reviewer to re-do the decomposition in their head.
+
 ## Versioning & Releases
 
 This project uses **Changesets** (`@changesets/cli`) for versioning.
