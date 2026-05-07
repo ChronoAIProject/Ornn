@@ -142,10 +142,10 @@ describe("settings export/import routes", () => {
     // The audit emission is fire-and-forget; give the microtask queue a tick.
     await new Promise((r) => setTimeout(r, 5));
     expect(recordExport).toHaveBeenCalledTimes(1);
-    const args = recordExport.mock.calls[0][0] as {
-      actor: { userId: string };
-      schemaVersion: number;
-    };
+    const calls = recordExport.mock.calls as unknown as Array<
+      [{ actor: { userId: string }; schemaVersion: number }]
+    >;
+    const args = calls[0]![0];
     expect(args.actor.userId).toBe("u-admin");
     expect(args.schemaVersion).toBe(SETTINGS_SCHEMA_VERSION);
     expect(recordImport).not.toHaveBeenCalled();
@@ -174,12 +174,17 @@ describe("settings export/import routes", () => {
     expect(res.status).toBe(200);
     await new Promise((r) => setTimeout(r, 5));
     expect(recordImport).toHaveBeenCalledTimes(1);
-    const args = recordImport.mock.calls[0][0] as {
-      schemaVersion: number;
-      aggregateStatus: string;
-      sections: Array<{ id: string; status: string }>;
-      dryRun: boolean;
-    };
+    const calls = recordImport.mock.calls as unknown as Array<
+      [
+        {
+          schemaVersion: number;
+          aggregateStatus: string;
+          sections: Array<{ id: string; status: string }>;
+          dryRun: boolean;
+        },
+      ]
+    >;
+    const args = calls[0]![0];
     expect(args.schemaVersion).toBe(SETTINGS_SCHEMA_VERSION);
     expect(args.aggregateStatus).toBe("applied");
     expect(args.dryRun).toBe(false);
