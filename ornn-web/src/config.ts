@@ -21,6 +21,17 @@ export interface OrnnConfig {
   nyxidOauthRedirectUri: string;
   nyxidLogoutUrl: string;
   nyxidSettingsUrl: string;
+  /**
+   * NyxID frontend link coords (#275). The SPA composes
+   * `${nyxidBaseFrontendUrl}${nyxidMy*Path}` for in-app links to NyxID's
+   * own pages. Empty path values mean "no link"; empty base URL disables
+   * all four. These used to live in the `nyxid` admin-settings section
+   * and moved here because they have no server-side consumer.
+   */
+  nyxidBaseFrontendUrl: string;
+  nyxidMyServicesPath: string;
+  nyxidMyProfilePath: string;
+  nyxidMyOrganizationPath: string;
   /** PostHog public project key (`phc_…`). Empty disables analytics. */
   posthogApiKey: string;
   /** PostHog project id — informational, surfaced in logs only. */
@@ -63,6 +74,22 @@ export const config: OrnnConfig = {
   nyxidSettingsUrl:
     runtime.nyxidSettingsUrl ??
     import.meta.env.VITE_NYXID_SETTINGS_URL ??
+    "",
+  nyxidBaseFrontendUrl:
+    runtime.nyxidBaseFrontendUrl ??
+    import.meta.env.VITE_NYXID_BASE_FRONTEND_URL ??
+    "",
+  nyxidMyServicesPath:
+    runtime.nyxidMyServicesPath ??
+    import.meta.env.VITE_NYXID_MY_SERVICES_PATH ??
+    "",
+  nyxidMyProfilePath:
+    runtime.nyxidMyProfilePath ??
+    import.meta.env.VITE_NYXID_MY_PROFILE_PATH ??
+    "",
+  nyxidMyOrganizationPath:
+    runtime.nyxidMyOrganizationPath ??
+    import.meta.env.VITE_NYXID_MY_ORGANIZATION_PATH ??
     "",
   posthogApiKey:
     runtime.posthogApiKey ?? import.meta.env.VITE_POSTHOG_API_KEY ?? "",

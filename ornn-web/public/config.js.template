@@ -6,6 +6,10 @@ window.__ORNN_CONFIG__ = {
   nyxidOauthRedirectUri: "${NYXID_OAUTH_REDIRECT_URI}",
   nyxidLogoutUrl: "${NYXID_LOGOUT_URL}",
   nyxidSettingsUrl: "${NYXID_SETTINGS_URL}",
+  nyxidBaseFrontendUrl: "${NYXID_BASE_FRONTEND_URL}",
+  nyxidMyServicesPath: "${NYXID_MY_SERVICES_PATH}",
+  nyxidMyProfilePath: "${NYXID_MY_PROFILE_PATH}",
+  nyxidMyOrganizationPath: "${NYXID_MY_ORGANIZATION_PATH}",
   posthogApiKey: "${POSTHOG_API_KEY}",
   posthogProjectId: "${POSTHOG_PROJECT_ID}",
   posthogHost: "${POSTHOG_HOST}"

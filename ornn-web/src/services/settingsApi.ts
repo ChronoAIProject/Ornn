@@ -89,12 +89,10 @@ export interface NyxIdSection extends SectionMeta {
   clientId: string;
   /** Mid-masked on GET. */
   clientSecret: string;
-  baseFrontendUrl: string;
+  /** API host the backend proxies through. Browser-side link coords
+   * (frontend URL + my-services / my-profile / my-organization paths)
+   * live in `ornn-web`'s configmap, not here — see #275. */
   baseApiUrl: string;
-  myServicesPath: string;
-  myProfilePath: string;
-  myOrganizationPath: string;
-  servicesListApiPath: string;
 }
 
 export interface ServicesSection extends SectionMeta {
