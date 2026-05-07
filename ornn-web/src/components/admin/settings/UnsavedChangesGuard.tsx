@@ -2,19 +2,21 @@
  * UnsavedChangesGuard — react-router useBlocker wrapper.
  *
  * Blocks navigation away from a settings section while the local form
- * is `dirty`. Confirms via window.confirm; on accept, the underlying
- * blocker is `proceed()`-ed; on reject, `reset()` keeps the user on the
- * current route. The component renders nothing — it's a side-effect
- * hook driver that lives inside the Outlet so each section opts in.
+ * is `dirty`. When the blocker fires, we render a styled `<Modal>`
+ * confirming the discard rather than popping Chrome's native
+ * `window.confirm` (#281). On Discard the blocker is `proceed()`-ed; on
+ * Cancel `reset()` keeps the user on the current route.
  *
- * Also installs a `beforeunload` handler so closing the tab triggers
- * the browser's native "Leave site?" prompt.
+ * The `beforeunload` handler stays raw — that prompt belongs to the OS
+ * shell at tab-close time and isn't styleable from the page.
  *
  * @module components/admin/settings/UnsavedChangesGuard
  */
 
 import { useEffect } from "react";
 import { useBlocker } from "react-router-dom";
+import { Modal } from "@/components/ui/Modal";
+import { Button } from "@/components/ui/Button";
 
 export interface UnsavedChangesGuardProps {
   when: boolean;
@@ -33,14 +35,7 @@ export function UnsavedChangesGuard({
       when && currentLocation.pathname !== nextLocation.pathname,
   );
 
-  useEffect(() => {
-    if (blocker.state === "blocked") {
-      const ok = window.confirm(message);
-      if (ok) blocker.proceed();
-      else blocker.reset();
-    }
-  }, [blocker, message]);
-
+  // Tab-close prompt — browser-owned, can't be styled.
   useEffect(() => {
     if (!when) return;
     const handler = (e: BeforeUnloadEvent) => {
@@ -51,5 +46,32 @@ export function UnsavedChangesGuard({
     return () => window.removeEventListener("beforeunload", handler);
   }, [when]);
 
-  return null;
+  const isBlocked = blocker.state === "blocked";
+
+  return (
+    <Modal
+      isOpen={isBlocked}
+      onClose={() => isBlocked && blocker.reset?.()}
+      title="Unsaved changes"
+    >
+      <p className="font-text text-sm text-body">{message}</p>
+      <div className="mt-6 flex items-center justify-end gap-2">
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          onClick={() => isBlocked && blocker.reset?.()}
+        >
+          Cancel
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          onClick={() => isBlocked && blocker.proceed?.()}
+        >
+          Discard changes
+        </Button>
+      </div>
+    </Modal>
+  );
 }
