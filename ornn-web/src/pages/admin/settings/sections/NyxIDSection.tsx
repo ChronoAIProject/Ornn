@@ -23,12 +23,25 @@ import {
 } from "@/services/settingsApi";
 
 const HTTP_URL = z.string().url().regex(/^https?:\/\//, "Must start with http:// or https://");
+const HTTP_URL_OR_EMPTY = z
+  .string()
+  .refine((v) => v === "" || /^https?:\/\//.test(v), {
+    message: "Must start with http:// or https://",
+  });
+const BUCKET_OR_EMPTY = z
+  .string()
+  .refine((v) => v === "" || /^[a-z0-9.-]{1,63}$/.test(v), {
+    message: "Must match ^[a-z0-9.-]{1,63}$ (no slashes)",
+  });
 
 const Schema = z.object({
   tokenUrl: HTTP_URL,
   clientId: z.string().min(1),
   clientSecret: z.string().min(1),
   baseApiUrl: HTTP_URL,
+  chronoStorageUrl: HTTP_URL_OR_EMPTY,
+  chronoStorageBucket: BUCKET_OR_EMPTY,
+  chronoSandboxUrl: HTTP_URL_OR_EMPTY,
   updatedAt: z.string().optional(),
   updatedBy: z.string().optional(),
 }) satisfies z.ZodType<NX>;
@@ -49,7 +62,7 @@ export function NyxIDSection() {
       <UnsavedChangesGuard when={form.isDirty} />
       <SectionShell
         title="NyxID integration"
-        description="OAuth service-account credentials + the API base URL the backend proxies through. Browser-side link coords live in ornn-web's configmap (NYXID_WEB_BASE_URL + path env vars) — change them there and redeploy."
+        description="OAuth service-account credentials + the API base URL the backend proxies through, plus the chrono-storage / chrono-sandbox endpoints (folded in here as part of #302 — same NyxID-orbit integration tier). Browser-side link coords live in ornn-web's configmap (NYXID_WEB_BASE_URL + path env vars) — change them there and redeploy."
         isLoading={form.isLoading}
         isSaving={form.isSaving}
         isDirty={form.isDirty}
@@ -81,6 +94,21 @@ export function NyxIDSection() {
               label="Base API URL"
               value={draft.baseApiUrl}
               onChange={(v) => form.patchDraft({ baseApiUrl: v })}
+            />
+            <Field
+              label="chrono-storage URL"
+              value={draft.chronoStorageUrl}
+              onChange={(v) => form.patchDraft({ chronoStorageUrl: v })}
+            />
+            <Field
+              label="chrono-storage bucket"
+              value={draft.chronoStorageBucket}
+              onChange={(v) => form.patchDraft({ chronoStorageBucket: v })}
+            />
+            <Field
+              label="chrono-sandbox URL"
+              value={draft.chronoSandboxUrl}
+              onChange={(v) => form.patchDraft({ chronoSandboxUrl: v })}
             />
           </div>
         )}

@@ -51,7 +51,11 @@ export const telemetryDefaults: TelemetrySection = {
 
 export const telemetrySection: SectionMeta<TelemetrySection> = {
   id: "telemetry",
-  publicPath: "telemetry",
+  // Public URL renamed from "telemetry" to "posthog" (#302) — the section
+  // only carries PostHog config, so the more specific name reads better
+  // in /admin/settings. Section id stays "telemetry" so existing Mongo
+  // rows keep their _id and the operator doesn't lose their saved state.
+  publicPath: "posthog",
   schema: telemetrySchema,
   secretFields: ["postHogApiKey"],
   defaults: telemetryDefaults,

@@ -60,10 +60,8 @@ describe("IT-SETTINGS export/import", () => {
       "skillGen",
       "mirror",
       "nyxid",
-      "services",
       "skillAudit",
       "telemetry",
-      "quotaDefaults",
       "extras",
       "llmProviders",
     ]) {
@@ -88,8 +86,13 @@ describe("IT-SETTINGS export/import", () => {
       ACTOR,
     );
     await svc.putSection(
-      "quotaDefaults",
-      { defaultPlaygroundMonthly: 500, defaultSkillGenMonthly: 50 },
+      "playground",
+      {
+        defaultProviderId: null,
+        defaultModelId: null,
+        sseKeepAliveMs: 15_000,
+        defaultMonthlyQuota: 500,
+      },
       ACTOR,
     );
 
@@ -134,10 +137,13 @@ describe("IT-SETTINGS export/import", () => {
             defaultProviderId: "p",
             defaultModelId: "m",
             sseKeepAliveMs: 100, // invalid
+            defaultMonthlyQuota: 200,
           },
-          quotaDefaults: {
-            defaultPlaygroundMonthly: 750,
-            defaultSkillGenMonthly: 75,
+          skillGen: {
+            defaultProviderId: null,
+            defaultModelId: null,
+            sseKeepAliveMs: 15_000,
+            defaultMonthlyQuota: 75,
           },
         },
       },
@@ -145,29 +151,34 @@ describe("IT-SETTINGS export/import", () => {
     );
     expect(result.aggregateStatus).toBe("partial");
     const playground = result.sections.find((s) => s.id === "playground")!;
-    const quota = result.sections.find((s) => s.id === "quotaDefaults")!;
+    const skillGen = result.sections.find((s) => s.id === "skillGen")!;
     expect(playground.status).toBe("failed");
-    expect(quota.status).toBe("applied");
+    expect(skillGen.status).toBe("applied");
 
-    // Confirm DB state matches: quotaDefaults was written, playground was not.
-    const q = await svc.getQuotaDefaults();
-    expect(q.defaultPlaygroundMonthly).toBe(750);
+    // Confirm DB state: skillGen was written, playground was not.
+    const sg = await svc.getSkillGen();
+    expect(sg.defaultMonthlyQuota).toBe(75);
   });
 
   it("IT-SETTINGS-IMPORT-SCHEMA-MISMATCH: bad schemaVersion → no writes", async () => {
-    // Snapshot the current quotaDefaults — it must remain unchanged after a schema-mismatch import.
-    const before = await svc.getQuotaDefaults();
+    // Snapshot the current skillGen — it must remain unchanged after a schema-mismatch import.
+    const before = await svc.getSkillGen();
     const result = await importer.import(
       {
         schemaVersion: 0,
         sections: {
-          quotaDefaults: { defaultPlaygroundMonthly: 1, defaultSkillGenMonthly: 2 },
+          skillGen: {
+            defaultProviderId: null,
+            defaultModelId: null,
+            sseKeepAliveMs: 15_000,
+            defaultMonthlyQuota: 1,
+          },
         },
       },
       ACTOR,
     );
     expect(result.aggregateStatus).toBe("failed");
-    const after = await svc.getQuotaDefaults();
+    const after = await svc.getSkillGen();
     expect(after).toEqual(before);
   });
 });

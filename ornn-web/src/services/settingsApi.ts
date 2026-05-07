@@ -26,10 +26,8 @@ export type SectionKey =
   | "skill-generation"
   | "mirror"
   | "integrations/nyxid"
-  | "integrations/services"
   | "skill-audit"
-  | "telemetry"
-  | "quota"
+  | "posthog"
   | "extras";
 
 export interface SectionMeta {
@@ -65,12 +63,16 @@ export interface PlaygroundSection extends SectionMeta {
   defaultProviderId: string | null;
   defaultModelId: string | null;
   sseKeepAliveMs: number;
+  /** Default monthly quota for non-admin users (#302). */
+  defaultMonthlyQuota: number;
 }
 
 export interface SkillGenSection extends SectionMeta {
   defaultProviderId: string | null;
   defaultModelId: string | null;
   sseKeepAliveMs: number;
+  /** Default monthly quota for non-admin users (#302). */
+  defaultMonthlyQuota: number;
 }
 
 export interface MirrorSection extends SectionMeta {
@@ -93,9 +95,7 @@ export interface NyxIdSection extends SectionMeta {
    * (frontend URL + my-services / my-profile / my-organization paths)
    * live in `ornn-web`'s configmap, not here — see #275. */
   baseApiUrl: string;
-}
-
-export interface ServicesSection extends SectionMeta {
+  /** chrono-storage / chrono-sandbox endpoints folded in here in #302. */
   chronoStorageUrl: string;
   chronoStorageBucket: string;
   chronoSandboxUrl: string;
@@ -119,11 +119,6 @@ export interface TelemetrySection extends SectionMeta {
   postHogErrorSampleRate: number;
 }
 
-export interface QuotaDefaultsSection extends SectionMeta {
-  defaultPlaygroundMonthly: number;
-  defaultSkillGenMonthly: number;
-}
-
 export interface ExtrasSection extends SectionMeta {
   extraNyxidServices: Array<{
     name: string;
@@ -137,10 +132,8 @@ export type SectionPayload =
   | SkillGenSection
   | MirrorSection
   | NyxIdSection
-  | ServicesSection
   | SkillAuditSection
   | TelemetrySection
-  | QuotaDefaultsSection
   | ExtrasSection;
 
 // --------------------------------------------------------------------- IO helpers
@@ -315,10 +308,8 @@ export interface SettingsExport {
     skillGeneration: SkillGenSection;
     mirror: MirrorSection;
     integrationsNyxid: NyxIdSection;
-    integrationsServices: ServicesSection;
     skillAudit: SkillAuditSection;
     telemetry: TelemetrySection;
-    quotaDefaults: QuotaDefaultsSection;
     extras: ExtrasSection;
   };
 }

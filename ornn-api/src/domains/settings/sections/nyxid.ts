@@ -1,11 +1,19 @@
 /**
- * NyxID integration section schema (Story 7.5; #275 cleanup).
+ * NyxID integration section schema (#302 cleanup).
  *
- * Owns only the server-side coords ornn-api actually consults:
+ * Owns the server-side coords ornn-api consults plus the chrono-storage
+ * + chrono-sandbox URLs that previously lived in a separate `services`
+ * section. Folded here because all three are NyxID-orbit integration
+ * endpoints; one section per integration tier keeps the admin surface
+ * leaner.
+ *
  *   - tokenUrl    — SA OAuth token endpoint
  *   - clientId    — SA client id
  *   - clientSecret — SA secret (encrypted at rest)
  *   - baseApiUrl  — NyxID API base URL the backend proxies through
+ *   - chronoStorageUrl    — chrono-storage service base URL
+ *   - chronoStorageBucket — chrono-storage S3 bucket name
+ *   - chronoSandboxUrl    — chrono-sandbox service base URL
  *
  * Browser-only link coords (NyxID frontend URL + my-services /
  * my-profile / my-organization paths) used to live here as scaffolding
@@ -26,11 +34,22 @@ const optionalHttpUrl = z.string().refine(requirePublicUrl, {
   message: PUBLIC_URL_REFUSAL,
 });
 
+// S3 bucket rules (relaxed enough for MinIO too): lower-case alnum / dot
+// / hyphen, 1..63 chars, no slash. Empty is permitted ("not configured").
+const bucketName = z
+  .string()
+  .refine((v) => v === "" || /^[a-z0-9.-]{1,63}$/.test(v), {
+    message: "bucket must match ^[a-z0-9.-]{1,63}$ (no slashes)",
+  });
+
 export const nyxidSchema = z.object({
   tokenUrl: optionalHttpUrl,
   clientId: z.string(),
   clientSecret: z.string(),
   baseApiUrl: optionalHttpUrl,
+  chronoStorageUrl: optionalHttpUrl,
+  chronoStorageBucket: bucketName,
+  chronoSandboxUrl: optionalHttpUrl,
 });
 
 export type NyxidSection = z.infer<typeof nyxidSchema>;
@@ -40,6 +59,9 @@ export const nyxidDefaults: NyxidSection = {
   clientId: "",
   clientSecret: "",
   baseApiUrl: "",
+  chronoStorageUrl: "",
+  chronoStorageBucket: "",
+  chronoSandboxUrl: "",
 };
 
 export const nyxidSection: SectionMeta<NyxidSection> = {

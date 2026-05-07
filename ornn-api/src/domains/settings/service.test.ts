@@ -69,16 +69,18 @@ describe("SettingsServiceImpl", () => {
 
   it("UT-SETSVC-003: putSection invalidates cache, get returns new value", async () => {
     const { svc } = makeService();
-    const initial = await svc.getQuotaDefaults();
-    expect(initial.defaultPlaygroundMonthly).toBe(200);
+    const initial = await svc.getPlayground();
+    expect(initial.defaultMonthlyQuota).toBe(200);
     await svc.putSection(
-      "quotaDefaults",
-      { defaultPlaygroundMonthly: 500, defaultSkillGenMonthly: 50 },
+      "playground",
+      {
+        ...initial,
+        defaultMonthlyQuota: 500,
+      },
       ACTOR,
     );
-    const after = await svc.getQuotaDefaults();
-    expect(after.defaultPlaygroundMonthly).toBe(500);
-    expect(after.defaultSkillGenMonthly).toBe(50);
+    const after = await svc.getPlayground();
+    expect(after.defaultMonthlyQuota).toBe(500);
   });
 
   it("UT-SETSVC-004: encryption round-trip — plaintext on internal get, ciphertext in DB", async () => {
@@ -172,20 +174,21 @@ describe("SettingsServiceImpl", () => {
 
   it("UT-SETSVC-007: concurrent putSection — last write wins", async () => {
     const { svc } = makeService();
+    const base = await svc.getPlayground();
     await Promise.all([
       svc.putSection(
-        "quotaDefaults",
-        { defaultPlaygroundMonthly: 100, defaultSkillGenMonthly: 10 },
+        "playground",
+        { ...base, defaultMonthlyQuota: 100 },
         ACTOR,
       ),
       svc.putSection(
-        "quotaDefaults",
-        { defaultPlaygroundMonthly: 999, defaultSkillGenMonthly: 99 },
+        "playground",
+        { ...base, defaultMonthlyQuota: 999 },
         ACTOR,
       ),
     ]);
-    const final = await svc.getQuotaDefaults();
-    expect([100, 999]).toContain(final.defaultPlaygroundMonthly);
+    const final = await svc.getPlayground();
+    expect([100, 999]).toContain(final.defaultMonthlyQuota);
   });
 
   it("UT-SETSVC-008: validation error includes section field path", async () => {
@@ -218,6 +221,7 @@ describe("SettingsServiceImpl", () => {
         defaultProviderId: "p1",
         defaultModelId: "m1",
         sseKeepAliveMs: 5000,
+        defaultMonthlyQuota: 200,
       },
       ACTOR,
     );

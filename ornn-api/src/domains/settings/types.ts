@@ -17,9 +17,7 @@ import type {
   MirrorSection,
   NyxidSection,
   PlaygroundSection,
-  QuotaDefaultsSection,
   SectionId,
-  ServicesSection,
   SkillAuditSection,
   SkillGenSection,
   TelemetrySection,
@@ -53,10 +51,8 @@ export interface SettingsService {
   getSkillGen(): Promise<SkillGenSection>;
   getMirror(): Promise<MirrorSection>;
   getNyxid(): Promise<NyxidSection>;
-  getServices(): Promise<ServicesSection>;
   getSkillAudit(): Promise<SkillAuditSection>;
   getTelemetry(): Promise<TelemetrySection>;
-  getQuotaDefaults(): Promise<QuotaDefaultsSection>;
   getExtras(): Promise<ExtrasSection>;
 
   /**

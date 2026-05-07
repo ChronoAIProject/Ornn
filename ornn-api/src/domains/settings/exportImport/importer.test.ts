@@ -34,10 +34,8 @@ function fakeSettingsService(initial?: Partial<Record<string, Record<string, unk
     getSkillGen: async () => store.get("skillGen") as never,
     getMirror: async () => store.get("mirror") as never,
     getNyxid: async () => store.get("nyxid") as never,
-    getServices: async () => store.get("services") as never,
     getSkillAudit: async () => store.get("skillAudit") as never,
     getTelemetry: async () => store.get("telemetry") as never,
-    getQuotaDefaults: async () => store.get("quotaDefaults") as never,
     getExtras: async () => store.get("extras") as never,
     getSection: async <T,>(id: string) => store.get(id) as T,
     putSection: async <T,>(id: string, value: T) => {
@@ -118,19 +116,22 @@ describe("SettingsImporter", () => {
             defaultProviderId: "p",
             defaultModelId: "m",
             sseKeepAliveMs: 100, // invalid
+            defaultMonthlyQuota: 500,
           },
-          quotaDefaults: {
-            defaultPlaygroundMonthly: 500,
-            defaultSkillGenMonthly: 50,
+          skillGen: {
+            defaultProviderId: null,
+            defaultModelId: null,
+            sseKeepAliveMs: 15_000,
+            defaultMonthlyQuota: 50,
           },
         },
       },
       ACTOR,
     );
     const playground = r.sections.find((s) => s.id === "playground")!;
-    const quota = r.sections.find((s) => s.id === "quotaDefaults")!;
+    const skillGen = r.sections.find((s) => s.id === "skillGen")!;
     expect(playground.status).toBe("failed");
-    expect(quota.status).toBe("applied");
+    expect(skillGen.status).toBe("applied");
     expect(r.aggregateStatus).toBe("partial");
   });
 
@@ -141,17 +142,19 @@ describe("SettingsImporter", () => {
       {
         schemaVersion: SETTINGS_SCHEMA_VERSION,
         sections: {
-          quotaDefaults: {
-            defaultPlaygroundMonthly: -5,
-            defaultSkillGenMonthly: 0,
+          playground: {
+            defaultProviderId: null,
+            defaultModelId: null,
+            sseKeepAliveMs: 15_000,
+            defaultMonthlyQuota: -5,
           },
         },
       },
       ACTOR,
     );
-    const q = r.sections.find((s) => s.id === "quotaDefaults")!;
+    const q = r.sections.find((s) => s.id === "playground")!;
     expect(q.status).toBe("failed");
-    expect(q.errors?.[0].field).toBe("defaultPlaygroundMonthly");
+    expect(q.errors?.[0].field).toBe("defaultMonthlyQuota");
     expect(q.errors?.[0].message).toBeDefined();
   });
 
@@ -162,20 +165,22 @@ describe("SettingsImporter", () => {
       {
         schemaVersion: SETTINGS_SCHEMA_VERSION,
         sections: {
-          quotaDefaults: {
-            defaultPlaygroundMonthly: 999,
-            defaultSkillGenMonthly: 99,
+          playground: {
+            defaultProviderId: null,
+            defaultModelId: null,
+            sseKeepAliveMs: 15_000,
+            defaultMonthlyQuota: 999,
           },
         },
       },
       ACTOR,
       { dryRun: true },
     );
-    const q = r.sections.find((s) => s.id === "quotaDefaults")!;
+    const q = r.sections.find((s) => s.id === "playground")!;
     expect(q.status).toBe("applied");
     expect(svc.putCalls).toBe(0);
-    const stored = svc.store.get("quotaDefaults") as { defaultPlaygroundMonthly: number };
-    expect(stored.defaultPlaygroundMonthly).toBe(200); // unchanged default
+    const stored = svc.store.get("playground") as { defaultMonthlyQuota: number };
+    expect(stored.defaultMonthlyQuota).toBe(200); // dry-run: default preserved
   });
 
   it("UT-IMPORT-llmProviders-skip: providers payload is reported as skipped (v1)", async () => {
