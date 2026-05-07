@@ -88,7 +88,6 @@ function useBreadcrumbs() {
     }
   } else if (path.startsWith("/admin")) {
     crumbs.push({ label: t("breadcrumb.admin"), to: "/admin/dashboard" });
-    if (path.includes("tags")) crumbs.push({ label: t("breadcrumb.tags"), to: "/admin/tags" });
   }
 
   return crumbs;

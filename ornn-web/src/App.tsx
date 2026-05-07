@@ -120,9 +120,6 @@ const AdminUserManagementPage = lazy(() =>
 const AdminSkillsPage = lazy(() =>
   import("@/pages/admin").then((m) => ({ default: m.AdminSkillsPage })),
 );
-const AdminTagsPage = lazy(() =>
-  import("@/pages/admin").then((m) => ({ default: m.TagsPage })),
-);
 const AdminQuotaManagementPage = lazy(() =>
   import("@/pages/admin").then((m) => ({ default: m.QuotaManagementPage })),
 );
@@ -253,7 +250,6 @@ const router = createBrowserRouter(
             <Route path="/admin/users" element={<AdminUserManagementPage />} />
             <Route path="/admin/users-legacy" element={<AdminUsersLegacyPage />} />
             <Route path="/admin/skills" element={<AdminSkillsPage />} />
-            <Route path="/admin/tags" element={<AdminTagsPage />} />
             <Route path="/admin/quota" element={<AdminQuotaManagementPage />} />
 
             {/* /admin/mirror keeps working but redirects to the new

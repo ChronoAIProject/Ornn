@@ -3,7 +3,6 @@
  * @module pages/admin
  */
 
-export { TagsPage } from "./TagsPage";
 export { DashboardPage } from "./DashboardPage";
 export { UsersPage } from "./UsersPage";
 export { UserManagementPage } from "./UserManagementPage";
