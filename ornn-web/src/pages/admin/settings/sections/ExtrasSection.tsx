@@ -18,13 +18,18 @@ import {
   type ExtrasSection as EX,
 } from "@/services/settingsApi";
 
-const NAME_RE = /^[a-z0-9-]{1,64}$/;
+// Mirror of backend `extras.ts:SERVICE_NAME_RE` — common service-id
+// pattern: any case, digits, dot/dash/underscore. Covers canonical
+// names like `NyxID`, `twitter-api`, `openai_v2`, `v1.beta`. Spaces
+// are deliberately excluded so the value is safe to flow into URL
+// path segments without encoding gymnastics. (#284)
+const NAME_RE = /^[A-Za-z0-9._-]{1,64}$/;
 
 const Schema = z
   .object({
     extraNyxidServices: z.array(
       z.object({
-        name: z.string().regex(NAME_RE, "Must match ^[a-z0-9-]{1,64}$"),
+        name: z.string().regex(NAME_RE, "Must match ^[A-Za-z0-9._-]{1,64}$"),
         // Empty string is the unset state (matches backend `optionalHttpUrl`
         // in extras.ts) — operators can register a service by name only and
         // fill in the gateway later. When set, must be a parseable http(s)
