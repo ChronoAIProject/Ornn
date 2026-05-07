@@ -1,9 +1,13 @@
 /**
  * LlmProvidersSection — list of LLM providers with create / edit /
- * sync. Backed by the per-provider CRUD endpoints under
- * `/api/v1/admin/settings/llm-providers`. Each provider doc carries
- * its own auth (apiKey / tokenUrl / basic), gateway URL, model catalog,
- * and default-model selection.
+ * sync / per-provider model management. Backed by the per-provider
+ * CRUD endpoints under `/api/v1/admin/settings/llm-providers`.
+ *
+ * Per #270 — single source of truth for model flags. Two drawers:
+ *   - `ProviderEditDrawer` for connection-level config (auth, gateway
+ *     URL, max-tokens, temperature)
+ *   - `ProviderModelsDrawer` for per-model surface flags + per-surface
+ *     defaults
  *
  * @module pages/admin/settings/sections/LlmProvidersSection
  */
@@ -13,9 +17,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { Badge } from "@/components/ui/Badge";
 import { useToastStore } from "@/stores/toastStore";
 import { ProviderEditDrawer } from "@/components/admin/settings/ProviderEditDrawer";
+import { ProviderModelsDrawer } from "@/components/admin/settings/ProviderModelsDrawer";
 import {
   listLlmProviders,
   syncLlmProviderModels,
@@ -27,8 +31,10 @@ export function LlmProvidersSection() {
   const qc = useQueryClient();
   const addToast = useToastStore((s) => s.addToast);
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [editDrawerOpen, setEditDrawerOpen] = useState(false);
   const [editing, setEditing] = useState<LlmProvider | null>(null);
+  const [modelsDrawerOpen, setModelsDrawerOpen] = useState(false);
+  const [modelsFor, setModelsFor] = useState<LlmProvider | null>(null);
 
   const list = useQuery({
     queryKey: ["admin", "settings", "llm-providers", "list"] as const,
@@ -59,13 +65,28 @@ export function LlmProvidersSection() {
 
   const openCreate = () => {
     setEditing(null);
-    setDrawerOpen(true);
+    setEditDrawerOpen(true);
   };
 
   const openEdit = (p: LlmProvider) => {
     setEditing(p);
-    setDrawerOpen(true);
+    setEditDrawerOpen(true);
   };
+
+  const openModels = (p: LlmProvider) => {
+    setModelsFor(p);
+    setModelsDrawerOpen(true);
+  };
+
+  // Keep the models drawer's `provider` prop in sync with the freshly
+  // refetched list — when a PATCH lands the list cache is invalidated,
+  // so we replace `modelsFor` with the matching row from the new query
+  // result on every render of the open drawer. Without this, the user
+  // would see stale flags after toggling.
+  const liveModelsFor =
+    modelsFor && list.data
+      ? list.data.find((p) => p._id === modelsFor._id) ?? modelsFor
+      : modelsFor;
 
   return (
     <section className="space-y-5">
@@ -78,9 +99,10 @@ export function LlmProvidersSection() {
             LLM providers
           </h2>
           <p className="mt-1 font-text text-sm text-meta">
-            Per-provider gateway, auth, and model catalog. Multiple providers
-            can coexist; pick which one each surface uses in its own settings
-            section.
+            Per-provider gateway, auth, and model catalog. Click{" "}
+            <strong>Models</strong> on a row to enable / disable models and pick
+            per-surface defaults — defaults are global across providers, so
+            setting one unselects every other.
           </p>
         </div>
         <Button type="button" size="sm" onClick={openCreate}>
@@ -126,9 +148,6 @@ export function LlmProvidersSection() {
                   <th className="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
                     Models
                   </th>
-                  <th className="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
-                    Default
-                  </th>
                   <th className="px-4 py-3 text-right font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
                     Actions
                   </th>
@@ -142,6 +161,7 @@ export function LlmProvidersSection() {
                     syncing={busyId === p._id}
                     onSync={() => syncMut.mutate(p._id)}
                     onEdit={() => openEdit(p)}
+                    onModels={() => openModels(p)}
                   />
                 ))}
               </tbody>
@@ -151,9 +171,14 @@ export function LlmProvidersSection() {
       </Card>
 
       <ProviderEditDrawer
-        isOpen={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
+        isOpen={editDrawerOpen}
+        onClose={() => setEditDrawerOpen(false)}
         provider={editing}
+      />
+      <ProviderModelsDrawer
+        isOpen={modelsDrawerOpen}
+        onClose={() => setModelsDrawerOpen(false)}
+        provider={liveModelsFor}
       />
     </section>
   );
@@ -164,16 +189,18 @@ function ProviderRow({
   syncing,
   onSync,
   onEdit,
+  onModels,
 }: {
   provider: LlmProvider;
   syncing: boolean;
   onSync: () => void;
   onEdit: () => void;
+  onModels: () => void;
 }) {
-  const enabledCount = provider.models.filter(
-    (m) => m.enabled && !m.removed,
-  ).length;
-  const removedCount = provider.models.filter((m) => m.removed).length;
+  const active = provider.models.filter((m) => !m.removed);
+  const playground = active.filter((m) => m.enabledForPlayground).length;
+  const skillGen = active.filter((m) => m.enabledForSkillGen).length;
+  const removedCount = provider.models.length - active.length;
 
   return (
     <tr className="border-b border-accent/10 hover:bg-elevated/40">
@@ -185,17 +212,22 @@ function ProviderRow({
         {provider.auth.kind}
       </td>
       <td className="px-4 py-3 font-mono text-[11px] text-body">
-        <span className="text-strong">{enabledCount}</span> enabled ·{" "}
-        {provider.models.length - removedCount} active
+        <span className="text-strong">{playground}</span> playground ·{" "}
+        <span className="text-strong">{skillGen}</span> skillGen ·{" "}
+        {active.length} total
         {removedCount > 0 && (
-          <span className="text-meta"> · {removedCount} removed</span>
+          <span className="text-meta"> · {removedCount} archived</span>
         )}
-      </td>
-      <td className="px-4 py-3 font-mono text-[11px] text-body">
-        {provider.defaultModelId ?? <Badge color="muted">unset</Badge>}
       </td>
       <td className="whitespace-nowrap px-4 py-3 text-right">
         <div className="inline-flex items-center gap-2">
+          <button
+            type="button"
+            onClick={onModels}
+            className="font-mono text-[11px] uppercase tracking-[0.14em] text-accent hover:text-accent-muted"
+          >
+            Models
+          </button>
           <button
             type="button"
             onClick={onEdit}

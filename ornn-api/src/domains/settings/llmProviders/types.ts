@@ -18,11 +18,24 @@ export interface LlmProviderModel {
   /** Operator-friendly display name. Defaults to `id` if missing. */
   readonly displayName: string;
   /**
-   * `enabled` is what the resolver checks before serving a model. New
-   * models from sync arrive with `enabled: false` so adding a row to the
-   * upstream catalog never auto-changes platform behavior.
+   * Per-surface enable flags. Resolver reads these — the model is
+   * usable on a surface iff `enabledFor<Surface>` is true AND
+   * `removed === false`. New models from sync arrive with both flags
+   * false so a freshly-discovered model never auto-changes platform
+   * behavior.
    */
-  readonly enabled: boolean;
+  readonly enabledForPlayground: boolean;
+  readonly enabledForSkillGen: boolean;
+  /**
+   * Per-surface default flags. Server enforces at-most-one-true
+   * across **all providers** — setting a default on one model clears
+   * it on every other model (this provider or any other) for the
+   * same surface in the same write. Setting `defaultForX: true`
+   * also forces `enabledForX: true` (a default that isn't enabled
+   * is incoherent).
+   */
+  readonly defaultForPlayground: boolean;
+  readonly defaultForSkillGen: boolean;
   /**
    * `removed` flips to true when a previously-known model disappears
    * from the upstream catalog. Kept for history / lifetime breakdowns;
@@ -59,7 +72,6 @@ export interface LlmProvider {
   readonly apiFormat: ApiFormat;
   readonly auth: LlmProviderAuth;
   readonly models: ReadonlyArray<LlmProviderModel>;
-  readonly defaultModelId: string | null;
   readonly maxOutputTokens: number;
   readonly defaultTemperature: number;
   readonly createdAt: Date;

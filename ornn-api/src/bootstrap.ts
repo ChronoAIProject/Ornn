@@ -125,11 +125,11 @@ import { UsersMetaRepository } from "./domains/admin-users/usersMetaRepository";
 import { AdminUsersService } from "./domains/admin-users/service";
 import { createAdminUsersRoutes } from "./domains/admin-users/routes";
 
-// Domain: Models (admin-curated Chrono LLM catalog + user picker)
-import { ModelsRepository } from "./domains/models/repository";
-import { ModelsService } from "./domains/models/service";
-import { createModelsRoutes } from "./domains/models/routes";
-import { NyxLlmCatalogClient } from "./clients/nyxid/llmCatalog";
+// LLM provider migration (#270 — fold legacy global model catalog into
+// per-provider arrays). One-time, idempotent, runs before any
+// LlmProvidersService consumer reads from disk.
+import { migrateModelCatalogIntoProviders } from "./domains/settings/llmProviders/migration";
+import { createLlmPickerRoutes } from "./domains/settings/llmProviders/routes";
 
 // OpenAPI spec
 import { buildSpec } from "./openapi/specBuilder";
@@ -254,6 +254,13 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   // Same pattern, returning the per-surface model + token cap +
   // temperature snapshot the playground/skill-gen services need on
   // every request.
+  //
+  // After #270, the surface default lives on per-model `defaultForX`
+  // flags rather than `provider.defaultModelId` — `resolveModel(...)`
+  // picks the right row (surface default → first enabled → no-op),
+  // and we still honour the section-level explicit `defaultModelId`
+  // override for callers that want to pin a specific model regardless
+  // of the cross-provider default.
   const resolveSurfaceDefaults = async (
     surface: "playground" | "skillGen",
   ): Promise<{ model: string; maxOutputTokens: number; temperature: number }> => {
@@ -261,18 +268,21 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
       surface === "playground"
         ? await settingsService.getPlayground()
         : await settingsService.getSkillGen();
-    if (!sec.defaultProviderId) {
-      return { model: sec.defaultModelId ?? "", maxOutputTokens: 8192, temperature: 0.7 };
+    let model = sec.defaultModelId ?? "";
+    if (!model) {
+      const resolution = await llmProvidersService.resolveModel({ surface });
+      if (resolution.kind === "ok") model = resolution.modelId;
     }
-    const provider = await llmProvidersService.get(sec.defaultProviderId);
-    if (!provider) {
-      return { model: sec.defaultModelId ?? "", maxOutputTokens: 8192, temperature: 0.7 };
+    let maxOutputTokens = 8192;
+    let temperature = 0.7;
+    if (sec.defaultProviderId) {
+      const provider = await llmProvidersService.get(sec.defaultProviderId);
+      if (provider) {
+        maxOutputTokens = provider.maxOutputTokens;
+        temperature = provider.defaultTemperature;
+      }
     }
-    return {
-      model: sec.defaultModelId ?? provider.defaultModelId ?? "",
-      maxOutputTokens: provider.maxOutputTokens,
-      temperature: provider.defaultTemperature,
-    };
+    return { model, maxOutputTokens, temperature };
   };
 
   // The audit pipeline reads its own per-section knobs (LLM toggle +
@@ -285,10 +295,14 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
     riskThreshold: number;
   }> => {
     const sec = await settingsService.getSkillAudit();
+    // Audit shares the skillGen surface for default-model resolution —
+    // there's no separate "audit" surface today. After #270, the
+    // section-level `llmAuditDefaultModelId` wins; otherwise fall
+    // back to the cross-provider skillGen default.
     let model = sec.llmAuditDefaultModelId ?? "";
-    if (!model && sec.llmAuditDefaultProviderId) {
-      const provider = await llmProvidersService.get(sec.llmAuditDefaultProviderId);
-      model = provider?.defaultModelId ?? "";
+    if (!model) {
+      const resolution = await llmProvidersService.resolveModel({ surface: "skillGen" });
+      if (resolution.kind === "ok") model = resolution.modelId;
     }
     return {
       model,
@@ -517,22 +531,23 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
     quotaService,
   });
 
-  // ---- Domain: Models (admin-curated Chrono LLM catalog + user picker) ----
-  const modelsRepo = new ModelsRepository(db);
-  void modelsRepo.ensureIndexes().catch((err) =>
-    logger.warn({ err }, "models indexes ensureIndexes failed — proceeding anyway"),
+  // ---- Per-provider model catalog migration (#270) ----
+  // Fold the standalone `models` collection into `llm_providers.models[]`
+  // arrays. One-time, idempotent — see `migration.ts`. Must run before
+  // any consumer of `LlmProvidersService.resolveModel` (playground,
+  // skill-gen) hits the wire, but the call is sync-safe because no
+  // route handlers are mounted yet at this point in bootstrap.
+  await migrateModelCatalogIntoProviders(db).catch((err) =>
+    logger.error(
+      { err: err instanceof Error ? err.message : String(err) },
+      "model-catalog migration failed — providers will read pre-migration shape via the repo's normalize shim, no data loss",
+    ),
   );
-  // The catalog client speaks to NyxID's Chrono LLM proxy. Refresh
-  // happens on demand from the admin UI; no scheduled cron.
-  const llmCatalogClient = new NyxLlmCatalogClient({
-    resolver: nyxidConfigResolver,
-    saTokenProvider,
-  });
-  const modelsService = new ModelsService({
-    repo: modelsRepo,
-    catalogClient: llmCatalogClient,
-  });
-  const modelsRoutes = createModelsRoutes({ modelsService });
+
+  // The picker route — `GET /me/models?surface=...` — reads from the
+  // per-provider arrays via `LlmProvidersService` (already constructed
+  // upstream as part of `domains/settings/...`).
+  const llmPickerRoutes = createLlmPickerRoutes({ llmProvidersService });
 
   // ---- Domain: GitHub Mirror ----
   // Single MirrorService instance — runtime-aware. Reads enabled +
@@ -599,7 +614,7 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
     keepAliveIntervalMsResolver: async () =>
       (await settingsService.getSkillGen()).sseKeepAliveMs,
     quotaService,
-    modelsService,
+    llmProvidersService,
   });
 
   // ---- Domain: Playground ----
@@ -617,7 +632,7 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
     analyticsService,
     skillService,
     quotaService,
-    modelsService,
+    llmProvidersService,
   });
 
   // ---- Domain: Admin ----
@@ -820,7 +835,7 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   apiApp.route("/", llmProvidersRoutes);
   apiApp.route("/", settingsExportImportRoutes);
   apiApp.route("/", quotaRoutes);
-  apiApp.route("/", modelsRoutes);
+  apiApp.route("/", llmPickerRoutes);
   apiApp.route("/", formatRoutes);
   apiApp.route("/", createMeRoutes({
     nyxidBaseUrlResolver: async () =>

@@ -30,10 +30,9 @@ const baseInput = {
   maxOutputTokens: 8192,
   defaultTemperature: 0.7,
   models: [
-    { id: "gpt-4o", displayName: "GPT-4o", enabled: true },
-    { id: "gpt-3.5", displayName: "GPT-3.5", enabled: false },
+    { id: "gpt-4o", displayName: "GPT-4o", enabledForPlayground: true, enabledForSkillGen: true },
+    { id: "gpt-3.5", displayName: "GPT-3.5" },
   ],
-  defaultModelId: "gpt-4o",
   auth: { kind: "apiKey" as const, apiKey: "sk-test" },
 };
 
@@ -130,7 +129,10 @@ describe("IT-LLM-SYNC", () => {
     const { provider, result } = await svc.sync(created._id, ACTOR);
     expect(result.added).toBe(1);
     const m = provider.models.find((x) => x.id === "gpt-5")!;
-    expect(m.enabled).toBe(false);
+    expect(m.enabledForPlayground).toBe(false);
+    expect(m.enabledForSkillGen).toBe(false);
+    expect(m.defaultForPlayground).toBe(false);
+    expect(m.defaultForSkillGen).toBe(false);
     expect(m.removed).toBe(false);
   });
 

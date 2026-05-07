@@ -4,6 +4,15 @@
  * `Enc`-suffixed fields hold ciphertext; the service layer above
  * encrypts on write and decrypts on read.
  *
+ * Per-model surface flags (#270 — single-source per-provider model
+ * management): each row in `models[]` carries `enabledForPlayground`,
+ * `enabledForSkillGen`, `defaultForPlayground`, `defaultForSkillGen`.
+ * The at-most-one-default-per-surface invariant is enforced by the
+ * service via `clearDefaultsForSurfaceExcept` — at the storage layer
+ * this is a `$set: { "models.$[m].defaultForX": false }` array
+ * filter that runs in the same write request as setting the new
+ * default, so cross-provider writes can't race past each other.
+ *
  * @module domains/settings/llmProviders/repository
  */
 
@@ -28,13 +37,15 @@ export interface StoredProvider {
   readonly apiFormat: ApiFormat;
   readonly auth: StoredAuth;
   readonly models: ReadonlyArray<LlmProviderModel>;
-  readonly defaultModelId: string | null;
   readonly maxOutputTokens: number;
   readonly defaultTemperature: number;
   readonly createdAt: Date;
   readonly updatedAt: Date;
   readonly updatedBy: string;
 }
+
+/** Surface key — must match the in-store field naming convention. */
+export type SurfaceKey = "Playground" | "SkillGen";
 
 export class LlmProvidersRepository {
   private readonly collection: Collection<Document>;
@@ -82,6 +93,44 @@ export class LlmProvidersRepository {
     return res.deletedCount === 1;
   }
 
+  /**
+   * Across **every** provider, set `models[*].defaultFor<Surface>: false`
+   * EXCEPT for the `(providerId, modelId)` pair passed in `keep`. Used
+   * by `LlmProvidersService.patchModel` to enforce the at-most-one-
+   * default-per-surface invariant in a single write.
+   *
+   * Implementation: one `updateMany` per provider with an `arrayFilters`
+   * matching the surface field. Acceptable for the tens-of-providers
+   * scale we expect (writes are admin-only, rare).
+   */
+  async clearDefaultsForSurfaceExcept(
+    surface: SurfaceKey,
+    keep: { providerId: string; modelId: string } | null,
+  ): Promise<void> {
+    const field = `models.$[m].defaultFor${surface}` as const;
+    const filterField = `m.defaultFor${surface}` as const;
+    const arrayFilters: Document[] = [{ [filterField]: true }];
+    if (keep) {
+      arrayFilters[0]["m.id"] = { $ne: keep.modelId };
+    }
+    const filter: Document = keep
+      ? { _id: { $ne: keep.providerId as unknown as Document["_id"] } }
+      : {};
+    // Step 1: clear on every provider EXCEPT the one we're about to keep.
+    await this.collection.updateMany(filter, { $set: { [field]: false } }, {
+      arrayFilters: [{ [filterField]: true }],
+    });
+    // Step 2: clear sibling rows on the keeper provider, leaving the
+    // chosen model alone.
+    if (keep) {
+      await this.collection.updateOne(
+        { _id: keep.providerId as unknown as Document["_id"] },
+        { $set: { [field]: false } },
+        { arrayFilters },
+      );
+    }
+  }
+
   private fromDoc(doc: Document): StoredProvider {
     const d = doc as unknown as StoredProvider & { _id: string };
     return {
@@ -91,8 +140,7 @@ export class LlmProvidersRepository {
       modelListUrl: d.modelListUrl,
       apiFormat: d.apiFormat,
       auth: d.auth,
-      models: d.models ?? [],
-      defaultModelId: d.defaultModelId ?? null,
+      models: (d.models ?? []).map((m) => normalizeModel(m)),
       maxOutputTokens: d.maxOutputTokens,
       defaultTemperature: d.defaultTemperature,
       createdAt: d.createdAt,
@@ -100,4 +148,31 @@ export class LlmProvidersRepository {
       updatedBy: d.updatedBy ?? "system",
     };
   }
+}
+
+/**
+ * Forward-compatibility shim — the `models[]` array on disk used to
+ * carry a single `enabled` boolean. After #270 the schema is the four
+ * surface flags. Pre-migration docs are mapped here so reads always
+ * see the new shape; the boot migration is what actually writes the
+ * new fields back to disk.
+ */
+function normalizeModel(raw: LlmProviderModel & { enabled?: boolean }): LlmProviderModel {
+  return {
+    id: raw.id,
+    displayName: raw.displayName,
+    enabledForPlayground:
+      typeof raw.enabledForPlayground === "boolean"
+        ? raw.enabledForPlayground
+        : raw.enabled === true,
+    enabledForSkillGen:
+      typeof raw.enabledForSkillGen === "boolean"
+        ? raw.enabledForSkillGen
+        : raw.enabled === true,
+    defaultForPlayground: raw.defaultForPlayground === true,
+    defaultForSkillGen: raw.defaultForSkillGen === true,
+    removed: raw.removed === true,
+    firstSeenAt: raw.firstSeenAt instanceof Date ? raw.firstSeenAt : new Date(raw.firstSeenAt),
+    lastSyncedAt: raw.lastSyncedAt instanceof Date ? raw.lastSyncedAt : new Date(raw.lastSyncedAt),
+  };
 }

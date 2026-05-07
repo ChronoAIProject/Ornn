@@ -58,7 +58,7 @@ export function SkillAuditSection() {
   const provider = providers.data?.find(
     (p) => p._id === draft?.llmAuditDefaultProviderId,
   );
-  const auditModels = provider?.models.filter((m) => m.enabled && !m.removed) ?? [];
+  const auditModels = provider?.models.filter((m) => m.enabledForSkillGen && !m.removed) ?? [];
 
   return (
     <>

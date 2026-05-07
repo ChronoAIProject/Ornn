@@ -101,7 +101,6 @@ function redactProviderSecrets(p: LlmProvider): Record<string, unknown> {
     apiFormat: p.apiFormat,
     auth,
     models: p.models,
-    defaultModelId: p.defaultModelId,
     maxOutputTokens: p.maxOutputTokens,
     defaultTemperature: p.defaultTemperature,
   };
