@@ -87,9 +87,7 @@ function useBreadcrumbs() {
       crumbs.push({ label, to: `/docs?section=${section}${title ? `&title=${encodeURIComponent(title)}` : ""}` });
     }
   } else if (path.startsWith("/admin")) {
-    crumbs.push({ label: t("breadcrumb.admin"), to: "/admin/categories" });
-    if (path.includes("categories")) crumbs.push({ label: t("breadcrumb.categories"), to: "/admin/categories" });
-    else if (path.includes("tags")) crumbs.push({ label: t("breadcrumb.tags"), to: "/admin/tags" });
+    crumbs.push({ label: t("breadcrumb.admin"), to: "/admin/dashboard" });
   }
 
   return crumbs;

@@ -80,8 +80,6 @@ import { PlaygroundChatService } from "./domains/playground/chatService";
 import { createPlaygroundRoutes } from "./domains/playground/routes";
 
 // Domain: Admin
-import { CategoryRepository, TagRepository } from "./domains/admin/repository";
-import { AdminService } from "./domains/admin/service";
 import { createAdminRoutes } from "./domains/admin/routes";
 
 // Domain: Skill Format
@@ -401,8 +399,6 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   const skillRepo = new SkillRepository(db);
   const skillVersionRepo = new SkillVersionRepository(db);
   await skillVersionRepo.ensureIndexes();
-  const categoryRepo = new CategoryRepository(db);
-  const tagRepo = new TagRepository(db);
 
   // ---- Domain: Skill CRUD ----
   const skillService = new SkillService({
@@ -658,9 +654,7 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   });
 
   // ---- Domain: Admin ----
-  const adminService = new AdminService(categoryRepo, tagRepo);
   const adminRoutes = createAdminRoutes({
-    adminService,
     analyticsEmitter,
     userDirectoryRepo,
     skillRepo,

@@ -114,26 +114,14 @@ const NotificationsPage = lazy(() =>
 const AdminDashboardPage = lazy(() =>
   import("@/pages/admin").then((m) => ({ default: m.DashboardPage })),
 );
-const AdminActivitiesPage = lazy(() =>
-  import("@/pages/admin").then((m) => ({ default: m.ActivitiesPage })),
-);
 const AdminUsersLegacyPage = lazy(() =>
   import("@/pages/admin").then((m) => ({ default: m.UsersPage })),
 );
 const AdminUserManagementPage = lazy(() =>
   import("@/pages/admin").then((m) => ({ default: m.UserManagementPage })),
 );
-const AdminAuditingPage = lazy(() =>
-  import("@/pages/admin").then((m) => ({ default: m.AuditingPlaceholderPage })),
-);
 const AdminSkillsPage = lazy(() =>
   import("@/pages/admin").then((m) => ({ default: m.AdminSkillsPage })),
-);
-const AdminCategoriesPage = lazy(() =>
-  import("@/pages/admin").then((m) => ({ default: m.CategoriesPage })),
-);
-const AdminTagsPage = lazy(() =>
-  import("@/pages/admin").then((m) => ({ default: m.TagsPage })),
 );
 const AdminQuotaManagementPage = lazy(() =>
   import("@/pages/admin").then((m) => ({ default: m.QuotaManagementPage })),
@@ -263,13 +251,9 @@ const router = createBrowserRouter(
           <Route element={<AdminLayout />}>
             <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
             <Route path="/admin/dashboard" element={<AdminDashboardPage />} />
-            <Route path="/admin/activities" element={<AdminActivitiesPage />} />
             <Route path="/admin/users" element={<AdminUserManagementPage />} />
             <Route path="/admin/users-legacy" element={<AdminUsersLegacyPage />} />
-            <Route path="/admin/auditing" element={<AdminAuditingPage />} />
             <Route path="/admin/skills" element={<AdminSkillsPage />} />
-            <Route path="/admin/categories" element={<AdminCategoriesPage />} />
-            <Route path="/admin/tags" element={<AdminTagsPage />} />
             <Route path="/admin/quota" element={<AdminQuotaManagementPage />} />
 
             {/* /admin/mirror keeps working but redirects to the new
