@@ -27,6 +27,7 @@
     "registry": "技能库",
     "build": "构建",
     "docs": "文档",
+    "contact": "联系",
     "signIn": "登录",
     "signOut": "退出",
     "settings": "设置",
@@ -698,5 +699,25 @@
     "backToModes": "返回创建模式",
     "success": "已从 GitHub 拉取技能。",
     "genericError": "从 GitHub 拉取失败。"
+  },
+  "contact": {
+    "eyebrow": "[ § 01 — 联系 ]",
+    "headlineStart": "联系",
+    "headlineHighlight": "工坊",
+    "headlineEnd": "。",
+    "subhead": "有问题、想合作，或想发布技能？通过下方任意一个渠道联系我们 —— 每一封都会读到。",
+    "channelsLabel": "联系渠道",
+    "cardEmailLabel": "邮箱",
+    "cardEmailHint": "适合产品咨询、合作洽谈与安全披露。一般两个工作日内回复。",
+    "cardGithubLabel": "GITHUB",
+    "cardGithubHint": "在 issue 追踪器上提交 bug、Pull Request 与功能请求。",
+    "cardXhsLabel": "小红书 · XIAOHONGSHU",
+    "cardXhsValue": "即将上线",
+    "cardXhsHint": "工坊幕后日常，账号即将上线。",
+    "cardOfficeLabel": "工坊",
+    "cardOfficeBrand": "Chrono AI",
+    "cardOfficeLocation": "新加坡",
+    "cardOfficeHint": "由位于新加坡的 Chrono AI 工坊打造与维护。",
+    "signoff": "[ 完 · 联系 ]"
   }
 }

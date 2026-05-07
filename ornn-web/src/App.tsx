@@ -65,6 +65,9 @@ const LandingPage = lazy(() =>
 const DocsPage = lazy(() =>
   import("@/pages/DocsPage").then((m) => ({ default: m.DocsPage })),
 );
+const ContactPage = lazy(() =>
+  import("@/pages/ContactPage").then((m) => ({ default: m.ContactPage })),
+);
 
 const ExplorePage = lazy(() =>
   import("@/pages/ExplorePage").then((m) => ({ default: m.ExplorePage })),
@@ -230,6 +233,7 @@ const router = createBrowserRouter(
       {/* Public routes with RootLayout */}
       <Route element={<RootLayout />}>
         <Route path="/docs" element={<DocsPage />} />
+        <Route path="/contact" element={<ContactPage />} />
         <Route path="/registry" element={<ExplorePage />} />
         <Route path="/skills/:idOrName" element={<SkillDetailPage />} />
         <Route
