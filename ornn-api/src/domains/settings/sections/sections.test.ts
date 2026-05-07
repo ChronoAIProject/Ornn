@@ -104,26 +104,17 @@ describe("section schemas", () => {
     ).toBe(false);
   });
 
-  it("UT-SCHEMA-NYX-002: paths must start with `/`", () => {
-    const bad = nyxidSection.schema.safeParse({
+  it("UT-SCHEMA-NYX-002: baseApiUrl must be http(s) when set (#275)", () => {
+    const ok = nyxidSection.schema.safeParse({
       ...nyxidSection.defaults,
-      myServicesPath: "missing-slash",
-    });
-    expect(bad.success).toBe(false);
-  });
-
-  it("UT-SCHEMA-NYX-003: split-prod rule — base+token must be set together", () => {
-    const onlyFront = nyxidSection.schema.safeParse({
-      ...nyxidSection.defaults,
-      baseFrontendUrl: "https://nyx.example.com",
-    });
-    expect(onlyFront.success).toBe(false);
-    const both = nyxidSection.schema.safeParse({
-      ...nyxidSection.defaults,
-      baseFrontendUrl: "https://nyx.example.com",
       baseApiUrl: "https://nyx-api.example.com",
     });
-    expect(both.success).toBe(true);
+    expect(ok.success).toBe(true);
+    const bad = nyxidSection.schema.safeParse({
+      ...nyxidSection.defaults,
+      baseApiUrl: "ftp://nyx-api.example.com",
+    });
+    expect(bad.success).toBe(false);
   });
 
   // -------- services --------

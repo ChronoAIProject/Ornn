@@ -1,11 +1,12 @@
 /**
  * NyxIDSection — settings for the NyxID auth/proxy backend.
  *
- * URL + path knobs were previously env vars (`NYXID_BASE_URL`, etc.)
- * and now live in a per-section settings doc so operators can flip them
- * without redeploying. Both base URL and token URL must be explicit on
- * split-prod environments where the NyxID frontend lives at a different
- * host than the API.
+ * Owns only the server-side coords that ornn-api actually consults:
+ * the SA OAuth token URL + client credentials, and the NyxID API base
+ * URL the backend proxies through. Browser-only link coords (NyxID
+ * frontend URL + my-services / my-profile / my-organization paths)
+ * live in `ornn-web`'s configmap (see `config.ts`) — they're delivered
+ * via `window.__ORNN_CONFIG__` since they have no server-side consumer.
  *
  * @module pages/admin/settings/sections/NyxIDSection
  */
@@ -22,18 +23,12 @@ import {
 } from "@/services/settingsApi";
 
 const HTTP_URL = z.string().url().regex(/^https?:\/\//, "Must start with http:// or https://");
-const ROOTED_PATH = z.string().regex(/^\//, "Must start with /");
 
 const Schema = z.object({
   tokenUrl: HTTP_URL,
   clientId: z.string().min(1),
   clientSecret: z.string().min(1),
-  baseFrontendUrl: HTTP_URL,
   baseApiUrl: HTTP_URL,
-  myServicesPath: ROOTED_PATH,
-  myProfilePath: ROOTED_PATH,
-  myOrganizationPath: ROOTED_PATH,
-  servicesListApiPath: ROOTED_PATH,
   updatedAt: z.string().optional(),
   updatedBy: z.string().optional(),
 }) satisfies z.ZodType<NX>;
@@ -54,7 +49,7 @@ export function NyxIDSection() {
       <UnsavedChangesGuard when={form.isDirty} />
       <SectionShell
         title="NyxID integration"
-        description="OAuth + service-account endpoints. Both base URLs must be explicit on split-prod (frontend host ≠ API host)."
+        description="OAuth service-account credentials + the API base URL the backend proxies through. Browser-side link coords live in ornn-web's configmap (NYXID_BASE_FRONTEND_URL + path env vars) — change them there and redeploy."
         isLoading={form.isLoading}
         isSaving={form.isSaving}
         isDirty={form.isDirty}
@@ -83,34 +78,9 @@ export function NyxIDSection() {
               isSentinel={isSecretPreserveValue(draft.clientSecret)}
             />
             <Field
-              label="Base frontend URL"
-              value={draft.baseFrontendUrl}
-              onChange={(v) => form.patchDraft({ baseFrontendUrl: v })}
-            />
-            <Field
               label="Base API URL"
               value={draft.baseApiUrl}
               onChange={(v) => form.patchDraft({ baseApiUrl: v })}
-            />
-            <Field
-              label="My services path"
-              value={draft.myServicesPath}
-              onChange={(v) => form.patchDraft({ myServicesPath: v })}
-            />
-            <Field
-              label="My profile path"
-              value={draft.myProfilePath}
-              onChange={(v) => form.patchDraft({ myProfilePath: v })}
-            />
-            <Field
-              label="My organization path"
-              value={draft.myOrganizationPath}
-              onChange={(v) => form.patchDraft({ myOrganizationPath: v })}
-            />
-            <Field
-              label="Services list API path"
-              value={draft.servicesListApiPath}
-              onChange={(v) => form.patchDraft({ servicesListApiPath: v })}
             />
           </div>
         )}
