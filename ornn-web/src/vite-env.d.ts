@@ -4,21 +4,30 @@
 declare const __APP_VERSION__: string;
 
 interface ImportMetaEnv {
-  /** Base URL for the ornn-api API backend. */
-  readonly VITE_API_BASE_URL: string;
+  /** Ornn API base URL (empty = same-origin via nginx proxy). */
+  readonly VITE_ORNN_API_BASE_URL: string;
+  /** NyxID API base URL (no trailing slash). */
+  readonly VITE_NYXID_API_BASE_URL: string;
+  /** NyxID web/frontend base URL (no trailing slash). */
+  readonly VITE_NYXID_WEB_BASE_URL: string;
 
-  /** NyxID OAuth authorize endpoint URL. */
-  readonly VITE_NYXID_OAUTH_AUTHORIZE_URL: string;
-  /** NyxID OAuth token endpoint URL. */
-  readonly VITE_NYXID_OAUTH_TOKEN_URL: string;
+  /** NyxID OAuth authorize path (appended to VITE_NYXID_WEB_BASE_URL). */
+  readonly VITE_NYXID_OAUTH_AUTHORIZE_PATH: string;
+  /** NyxID OAuth token path (appended to VITE_NYXID_API_BASE_URL). */
+  readonly VITE_NYXID_OAUTH_TOKEN_PATH: string;
+  /** NyxID OAuth redirect path (appended to window.location.origin). */
+  readonly VITE_NYXID_OAUTH_REDIRECT_PATH: string;
+  /** NyxID logout path (appended to VITE_NYXID_WEB_BASE_URL). */
+  readonly VITE_NYXID_LOGOUT_PATH: string;
+  /** NyxID settings/profile page path (appended to VITE_NYXID_WEB_BASE_URL). */
+  readonly VITE_NYXID_SETTINGS_PATH: string;
+
   /** NyxID OAuth client ID (public / PKCE client). */
   readonly VITE_NYXID_OAUTH_CLIENT_ID: string;
-  /** NyxID OAuth redirect URI (this app's callback URL). */
-  readonly VITE_NYXID_OAUTH_REDIRECT_URI: string;
-  /** NyxID logout endpoint URL. */
-  readonly VITE_NYXID_LOGOUT_URL: string;
-  /** NyxID settings/profile page URL (for linking from Settings page). */
-  readonly VITE_NYXID_SETTINGS_URL: string;
+
+  readonly VITE_POSTHOG_API_KEY: string;
+  readonly VITE_POSTHOG_PROJECT_ID: string;
+  readonly VITE_POSTHOG_HOST: string;
 }
 
 interface ImportMeta {
