@@ -1,20 +1,35 @@
 /**
  * LlmProvidersService — CRUD over the `llm_providers` collection plus
- * the model-list sync routine (Story 7.1).
+ * the model-list sync routine and the per-surface model resolver
+ * (Story 7.1 + #270 — single-source per-provider model management).
  *
  * Sync semantics (Architecture §5.3):
- *   • Existing models keep their `enabled` flag; their `lastSyncedAt`
- *     is bumped.
+ *   • Existing models keep their per-surface flags
+ *     (`enabledForPlayground`, `enabledForSkillGen`,
+ *     `defaultForPlayground`, `defaultForSkillGen`); their
+ *     `lastSyncedAt` is bumped.
  *   • Models in the upstream catalog that the service has never seen
- *     before arrive with `enabled: false`, `removed: false`,
- *     `firstSeenAt = now`.
+ *     before arrive with all four surface flags `false`,
+ *     `removed: false`, `firstSeenAt = now`. Adding a row to the
+ *     upstream catalog never auto-changes platform behavior.
  *   • Models the service knows about that are NO LONGER in the upstream
- *     catalog get `removed: true` but are kept for history.
+ *     catalog get `removed: true` but are kept for history. If a row
+ *     was the surface default, the default flag is cleared in the
+ *     same write — the resolver excludes `removed:true` rows.
  *   • A model whose `removed:true` row reappears upstream flips back to
- *     `removed:false`, preserving its prior `enabled` flag.
+ *     `removed:false`, preserving its prior flags.
  *
  * Sync is idempotent: re-running with the same upstream list yields
  * `{ added:0, updated:0, removed:0 }`.
+ *
+ * Per-model patching (`patchModel`) is the single write path for
+ * surface flags. Setting `defaultForX: true` enforces three things in
+ * the same write:
+ *   1. clears `defaultForX` on every other model (any provider) for
+ *      that surface,
+ *   2. forces `enabledForX: true` on the chosen model (a default that
+ *      isn't enabled is incoherent),
+ *   3. refuses if the chosen model is `removed: true`.
  *
  * @module domains/settings/llmProviders/service
  */
@@ -31,7 +46,12 @@ import {
 import { PUBLIC_URL_REFUSAL, requirePublicUrl } from "../../../infra/url";
 import { AppError } from "../../../shared/types/index";
 import type { SettingsActor } from "../types";
-import type { LlmProvidersRepository, StoredAuth, StoredProvider } from "./repository";
+import type {
+  LlmProvidersRepository,
+  StoredAuth,
+  StoredProvider,
+  SurfaceKey,
+} from "./repository";
 import type {
   ApiFormat,
   LlmProvider,
@@ -40,6 +60,14 @@ import type {
 } from "./types";
 
 const logger = pino({ level: "info" }).child({ module: "llmProvidersService" });
+
+/** Surfaces the picker / resolver care about. Mirror of `quota/types.ts:Surface`. */
+export type Surface = "playground" | "skillGen";
+
+const SURFACE_KEY: Record<Surface, SurfaceKey> = {
+  playground: "Playground",
+  skillGen: "SkillGen",
+};
 
 // ---------------------------------------------------------------------------
 // Input schemas
@@ -71,10 +99,18 @@ const authSchema = z.discriminatedUnion("kind", [
   basicAuthSchema,
 ]);
 
+/**
+ * Models on POST/PUT bodies. The four surface flags are optional —
+ * absent fields default to `false`, matching the sync semantics
+ * (newly-discovered models never auto-route).
+ */
 const modelInputSchema = z.object({
   id: z.string().min(1),
   displayName: z.string().min(1),
-  enabled: z.boolean(),
+  enabledForPlayground: z.boolean().optional(),
+  enabledForSkillGen: z.boolean().optional(),
+  defaultForPlayground: z.boolean().optional(),
+  defaultForSkillGen: z.boolean().optional(),
   removed: z.boolean().optional(),
 });
 
@@ -89,7 +125,6 @@ export const providerCreateSchema = z.object({
   apiFormat: apiFormatSchema,
   auth: authSchema,
   models: z.array(modelInputSchema).default([]),
-  defaultModelId: z.string().nullable().default(null),
   maxOutputTokens: z.number().int().min(1).max(1_000_000),
   defaultTemperature: z.number().min(0).max(2),
 });
@@ -98,6 +133,23 @@ export type ProviderCreateInput = z.infer<typeof providerCreateSchema>;
 
 export const providerUpdateSchema = providerCreateSchema.partial();
 export type ProviderUpdateInput = z.infer<typeof providerUpdateSchema>;
+
+/**
+ * `PATCH /admin/settings/llm-providers/:providerId/models/:modelId`
+ * — partial update of a single model's surface flags. Anything absent
+ * is preserved.
+ */
+export const modelFlagsPatchSchema = z
+  .object({
+    enabledForPlayground: z.boolean().optional(),
+    enabledForSkillGen: z.boolean().optional(),
+    defaultForPlayground: z.boolean().optional(),
+    defaultForSkillGen: z.boolean().optional(),
+  })
+  .refine((v) => Object.keys(v).length > 0, {
+    message: "At least one flag must be provided",
+  });
+export type ModelFlagsPatchInput = z.infer<typeof modelFlagsPatchSchema>;
 
 // ---------------------------------------------------------------------------
 // Service
@@ -129,6 +181,25 @@ export interface ProviderSyncResult {
   readonly removed: number;
 }
 
+/** Picker row returned to surface UIs. `isDefault` is the surface-scoped flag. */
+export interface PickerModelRow {
+  readonly modelId: string;
+  readonly displayName: string;
+  readonly providerId: string;
+  readonly providerName: string;
+  readonly isDefault: boolean;
+}
+
+/** Resolution outcome for the execute path. Matches the legacy
+ * `models/types.ts:ModelResolution` shape verbatim so consumers can
+ * swap between the two during migration without changing their
+ * error-mapping logic. */
+export type ModelResolution =
+  | { kind: "ok"; modelId: string; displayName: string; providerId: string }
+  | { kind: "no-models-enabled"; surface: Surface }
+  | { kind: "not-enabled"; surface: Surface; modelId: string }
+  | { kind: "not-found"; surface: Surface; modelId: string };
+
 export class LlmProvidersService {
   private readonly repo: LlmProvidersRepository;
   private readonly encryptionKey: string;
@@ -142,7 +213,7 @@ export class LlmProvidersService {
     this.clock = deps.clock ?? (() => new Date());
   }
 
-  // -------- read paths --------
+  // ────────────────────────── read paths ──────────────────────────
 
   async list(): Promise<ReadonlyArray<LlmProvider>> {
     const stored = await this.repo.list();
@@ -154,10 +225,6 @@ export class LlmProvidersService {
     return stored ? this.toProvider(stored) : null;
   }
 
-  /**
-   * Same as `list()` but mid-masks every secret field. Used directly by
-   * admin GET routes so the response never carries plaintext.
-   */
   async listForAdmin(): Promise<ReadonlyArray<LlmProvider>> {
     return (await this.list()).map((p) => this.maskAuth(p));
   }
@@ -166,7 +233,117 @@ export class LlmProvidersService {
     return p ? this.maskAuth(p) : null;
   }
 
-  // -------- write paths --------
+  /**
+   * Surface-scoped picker. Returns every enabled, non-removed model
+   * across all providers, sorted with the surface default first then
+   * by display name. The first row's `modelId` is also exposed via
+   * `default` for easy "what's the fallback?" UI.
+   */
+  async listPickerModels(surface: Surface): Promise<{
+    items: PickerModelRow[];
+    default: string | null;
+  }> {
+    const enabledField = enabledFieldFor(surface);
+    const defaultField = defaultFieldFor(surface);
+    const all = await this.repo.list();
+    const items: PickerModelRow[] = [];
+    for (const provider of all) {
+      for (const m of provider.models) {
+        if (m.removed) continue;
+        if (m[enabledField] !== true) continue;
+        items.push({
+          modelId: m.id,
+          displayName: m.displayName,
+          providerId: provider._id,
+          providerName: provider.name,
+          isDefault: m[defaultField] === true,
+        });
+      }
+    }
+    items.sort((a, b) => {
+      if (a.isDefault !== b.isDefault) return a.isDefault ? -1 : 1;
+      return a.displayName.localeCompare(b.displayName);
+    });
+    const def = items.find((i) => i.isDefault) ?? items[0] ?? null;
+    return { items, default: def?.modelId ?? null };
+  }
+
+  /**
+   * Resolve a request's chosen model to a (provider, model) pair.
+   * Behaviour mirrors the legacy `ModelsService.resolveModel`:
+   *
+   *   - `requested` provided AND enabled+non-removed for surface ⇒ ok
+   *     (first matching provider wins; ties broken by provider name).
+   *   - `requested` provided but no enabled match ⇒ `not-enabled`.
+   *   - `requested` provided and no row exists ⇒ `not-found`.
+   *   - `requested` undefined ⇒ surface default; if no default, the
+   *     first enabled row by display name; if none enabled,
+   *     `no-models-enabled`.
+   */
+  async resolveModel(params: {
+    surface: Surface;
+    requested?: string;
+  }): Promise<ModelResolution> {
+    const surface = params.surface;
+    const enabledField = enabledFieldFor(surface);
+    const defaultField = defaultFieldFor(surface);
+    const all = await this.repo.list();
+
+    type Hit = { providerId: string; modelId: string; displayName: string };
+
+    if (params.requested) {
+      let foundAny = false;
+      for (const provider of all) {
+        for (const m of provider.models) {
+          if (m.id !== params.requested) continue;
+          if (m.removed) continue;
+          foundAny = true;
+          if (m[enabledField] === true) {
+            return {
+              kind: "ok",
+              modelId: m.id,
+              displayName: m.displayName,
+              providerId: provider._id,
+            };
+          }
+        }
+      }
+      if (!foundAny) {
+        return { kind: "not-found", surface, modelId: params.requested };
+      }
+      return { kind: "not-enabled", surface, modelId: params.requested };
+    }
+
+    // No explicit request — pick the surface default, or the first enabled.
+    const enabledList: Hit[] = [];
+    let defaultMatch: Hit | null = null;
+    for (const provider of all) {
+      for (const m of provider.models) {
+        if (m.removed) continue;
+        if (m[enabledField] !== true) continue;
+        const hit: Hit = {
+          providerId: provider._id,
+          modelId: m.id,
+          displayName: m.displayName,
+        };
+        enabledList.push(hit);
+        if (m[defaultField] === true && !defaultMatch) defaultMatch = hit;
+      }
+    }
+    if (enabledList.length === 0) {
+      return { kind: "no-models-enabled", surface };
+    }
+    enabledList.sort((a, b) => a.displayName.localeCompare(b.displayName));
+    const winner = defaultMatch ?? enabledList[0];
+    return {
+      kind: "ok",
+      modelId: winner.modelId,
+      displayName: winner.displayName,
+      providerId: winner.providerId,
+    };
+  }
+
+  // ────────────────────────── write paths ──────────────────────────
 
   async create(
     input: unknown,
@@ -180,7 +357,6 @@ export class LlmProvidersService {
         `Provider name "${parsed.name}" is already in use`,
       );
     }
-    this.validateDefaultModel(parsed.defaultModelId, parsed.models);
 
     const now = this.clock();
     const id = randomUUID();
@@ -194,12 +370,14 @@ export class LlmProvidersService {
       models: parsed.models.map((m) => ({
         id: m.id,
         displayName: m.displayName,
-        enabled: m.enabled,
-        removed: m.removed ?? false,
+        enabledForPlayground: m.enabledForPlayground === true,
+        enabledForSkillGen: m.enabledForSkillGen === true,
+        defaultForPlayground: m.defaultForPlayground === true,
+        defaultForSkillGen: m.defaultForSkillGen === true,
+        removed: m.removed === true,
         firstSeenAt: now,
         lastSyncedAt: now,
       })),
-      defaultModelId: parsed.defaultModelId,
       maxOutputTokens: parsed.maxOutputTokens,
       defaultTemperature: parsed.defaultTemperature,
       createdAt: now,
@@ -237,19 +415,20 @@ export class LlmProvidersService {
         return {
           id: m.id,
           displayName: m.displayName,
-          enabled: m.enabled,
+          enabledForPlayground:
+            m.enabledForPlayground ?? prev?.enabledForPlayground ?? false,
+          enabledForSkillGen:
+            m.enabledForSkillGen ?? prev?.enabledForSkillGen ?? false,
+          defaultForPlayground:
+            m.defaultForPlayground ?? prev?.defaultForPlayground ?? false,
+          defaultForSkillGen:
+            m.defaultForSkillGen ?? prev?.defaultForSkillGen ?? false,
           removed: m.removed ?? prev?.removed ?? false,
           firstSeenAt: prev?.firstSeenAt ?? now,
           lastSyncedAt: prev?.lastSyncedAt ?? now,
         };
       });
     }
-
-    const defaultModelId =
-      patch.defaultModelId === undefined
-        ? existing.defaultModelId
-        : patch.defaultModelId;
-    this.validateDefaultModel(defaultModelId, models);
 
     // Auth: sentinel handling — if the caller passes a sentinel for a
     // secret field, we keep the encrypted blob as-is.
@@ -266,7 +445,6 @@ export class LlmProvidersService {
       apiFormat: patch.apiFormat ?? existing.apiFormat,
       auth,
       models,
-      defaultModelId,
       maxOutputTokens: patch.maxOutputTokens ?? existing.maxOutputTokens,
       defaultTemperature:
         patch.defaultTemperature ?? existing.defaultTemperature,
@@ -282,7 +460,109 @@ export class LlmProvidersService {
     return this.repo.deleteById(id);
   }
 
-  // -------- sync --------
+  /**
+   * Patch a single model's surface flags. Enforces:
+   *   - if `defaultForX: true` is in the patch, also force `enabledForX: true`
+   *     and clear `defaultForX` on every other model across all providers
+   *   - if `enabledForX: false` is in the patch and the row is currently the
+   *     surface default, clear `defaultForX` too (no incoherent "default but
+   *     disabled" state)
+   *   - reject if the model is `removed: true`
+   *
+   * Returns the updated provider doc.
+   */
+  async patchModel(
+    providerId: string,
+    modelId: string,
+    input: unknown,
+    actor: SettingsActor,
+  ): Promise<LlmProvider> {
+    const flags = parse(modelFlagsPatchSchema, input);
+    const existing = await this.repo.findById(providerId);
+    if (!existing) {
+      throw AppError.notFound("PROVIDER_NOT_FOUND", `No provider ${providerId}`);
+    }
+    const idx = existing.models.findIndex((m) => m.id === modelId);
+    if (idx === -1) {
+      throw AppError.notFound(
+        "MODEL_NOT_FOUND",
+        `Model "${modelId}" not on provider "${existing.name}"`,
+      );
+    }
+    const current = existing.models[idx];
+    if (current.removed) {
+      throw AppError.badRequest(
+        "MODEL_REMOVED",
+        `Model "${modelId}" was removed upstream — re-sync to restore before flipping flags.`,
+      );
+    }
+
+    // Compute the new flags, applying coherence rules.
+    let next: LlmProviderModel = { ...current };
+
+    for (const surface of ["playground", "skillGen"] as const) {
+      const enKey = enabledFieldFor(surface);
+      const defKey = defaultFieldFor(surface);
+      if (flags[enKey] !== undefined) {
+        next = { ...next, [enKey]: flags[enKey] === true };
+        // Disabling clears the default — a default that isn't enabled
+        // would silently mis-route the surface to a different model.
+        if (flags[enKey] === false && next[defKey]) {
+          next = { ...next, [defKey]: false };
+        }
+      }
+      if (flags[defKey] !== undefined) {
+        next = { ...next, [defKey]: flags[defKey] === true };
+        // Setting default forces enabled — same incoherence-prevention.
+        if (flags[defKey] === true) {
+          next = { ...next, [enKey]: true };
+        }
+      }
+    }
+
+    // Cross-provider clears: for each surface where this row is now
+    // the default, blow away the flag on every other model first.
+    for (const surface of ["playground", "skillGen"] as const) {
+      const defKey = defaultFieldFor(surface);
+      if (next[defKey] === true) {
+        await this.repo.clearDefaultsForSurfaceExcept(SURFACE_KEY[surface], {
+          providerId,
+          modelId,
+        });
+      }
+    }
+
+    // Re-fetch existing AFTER the cross-provider clears so the in-memory
+    // copy of THIS provider reflects any sibling-row flips that landed
+    // via the previous step.
+    const refreshed = (await this.repo.findById(providerId))!;
+    const merged = refreshed.models.map((m, i) =>
+      i === idx
+        ? {
+            ...m,
+            enabledForPlayground: next.enabledForPlayground,
+            enabledForSkillGen: next.enabledForSkillGen,
+            defaultForPlayground: next.defaultForPlayground,
+            defaultForSkillGen: next.defaultForSkillGen,
+          }
+        : m,
+    );
+    const now = this.clock();
+    await this.repo.replace(providerId, {
+      ...refreshed,
+      models: merged,
+      updatedAt: now,
+      updatedBy: actor.userId,
+    });
+    logger.info(
+      { providerId, modelId, flags, actor: actor.userId },
+      "model flags patched",
+    );
+    const after = (await this.repo.findById(providerId))!;
+    return this.toProvider(after);
+  }
+
+  // ────────────────────────── sync ──────────────────────────
 
   async sync(id: string, actor: SettingsActor): Promise<{
     provider: LlmProvider;
@@ -326,7 +606,10 @@ export class LlmProvidersService {
         merged.push({
           id: u.id,
           displayName: u.displayName,
-          enabled: false,
+          enabledForPlayground: false,
+          enabledForSkillGen: false,
+          defaultForPlayground: false,
+          defaultForSkillGen: false,
           removed: false,
           firstSeenAt: now,
           lastSyncedAt: now,
@@ -340,19 +623,26 @@ export class LlmProvidersService {
       merged.push({
         id: prev.id,
         displayName: u.displayName,
-        enabled: prev.enabled,
+        enabledForPlayground: prev.enabledForPlayground,
+        enabledForSkillGen: prev.enabledForSkillGen,
+        defaultForPlayground: prev.defaultForPlayground,
+        defaultForSkillGen: prev.defaultForSkillGen,
         removed: false,
         firstSeenAt: prev.firstSeenAt,
         lastSyncedAt: now,
       });
     }
     // Keep history rows for models no longer in upstream — flag removed.
+    // Default flags get cleared on removal (an absent model can't be the
+    // surface default).
     for (const prev of existing.models) {
       if (upstreamIds.has(prev.id)) continue;
       const wasRemoved = prev.removed;
       merged.push({
         ...prev,
         removed: true,
+        defaultForPlayground: false,
+        defaultForSkillGen: false,
         lastSyncedAt: now,
       });
       if (!wasRemoved) removed += 1;
@@ -375,7 +665,7 @@ export class LlmProvidersService {
     };
   }
 
-  // -------- helpers --------
+  // ────────────────────────── helpers ──────────────────────────
 
   private toProvider(stored: StoredProvider): LlmProvider {
     return {
@@ -386,7 +676,6 @@ export class LlmProvidersService {
       apiFormat: stored.apiFormat,
       auth: this.decryptAuth(stored.auth),
       models: stored.models,
-      defaultModelId: stored.defaultModelId,
       maxOutputTokens: stored.maxOutputTokens,
       defaultTemperature: stored.defaultTemperature,
       createdAt: stored.createdAt,
@@ -477,32 +766,18 @@ export class LlmProvidersService {
       password: safeDecrypt(stored.passwordEnc ?? "", this.encryptionKey),
     };
   }
+}
 
-  private validateDefaultModel(
-    defaultModelId: string | null,
-    models: ReadonlyArray<{ id: string; enabled: boolean; removed?: boolean }>,
-  ): void {
-    if (!defaultModelId) return;
-    const m = models.find((x) => x.id === defaultModelId);
-    if (!m) {
-      throw AppError.badRequest(
-        "INVALID_DEFAULT_MODEL",
-        `defaultModelId "${defaultModelId}" is not in models[]`,
-      );
-    }
-    if (!m.enabled) {
-      throw AppError.badRequest(
-        "INVALID_DEFAULT_MODEL",
-        `defaultModelId "${defaultModelId}" is not enabled`,
-      );
-    }
-    if (m.removed) {
-      throw AppError.badRequest(
-        "INVALID_DEFAULT_MODEL",
-        `defaultModelId "${defaultModelId}" is marked removed`,
-      );
-    }
-  }
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+export function enabledFieldFor(surface: Surface): "enabledForPlayground" | "enabledForSkillGen" {
+  return surface === "playground" ? "enabledForPlayground" : "enabledForSkillGen";
+}
+
+export function defaultFieldFor(surface: Surface): "defaultForPlayground" | "defaultForSkillGen" {
+  return surface === "playground" ? "defaultForPlayground" : "defaultForSkillGen";
 }
 
 function safeDecrypt(blob: string, key: string): string {

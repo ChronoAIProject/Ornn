@@ -46,7 +46,7 @@ export function SkillGenSection() {
     (p) => p._id === draft?.defaultProviderId,
   );
   const availableModels =
-    provider?.models.filter((m) => m.enabled && !m.removed) ?? [];
+    provider?.models.filter((m) => m.enabledForSkillGen && !m.removed) ?? [];
 
   return (
     <>

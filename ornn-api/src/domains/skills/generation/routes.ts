@@ -9,9 +9,9 @@ import { streamSSE } from "hono/streaming";
 import type { Context } from "hono";
 import type { SkillGenerationService } from "./service";
 import type { QuotaService } from "../../quota/service";
-import type { ModelsService } from "../../models/service";
+import type { LlmProvidersService } from "../../settings/llmProviders/service";
 import { throwQuotaError } from "../../quota/routes";
-import { throwModelResolutionError } from "../../models/routes";
+import { throwModelResolutionError } from "../../settings/llmProviders/routes";
 import type { ChargeOutcome } from "../../quota/types";
 import {
   type AuthVariables,
@@ -38,8 +38,8 @@ export interface GenerationRoutesConfig {
   keepAliveIntervalMsResolver: () => Promise<number>;
   /** Per-user quota gate (charged on completion). */
   quotaService: QuotaService;
-  /** Admin-curated model catalog. */
-  modelsService: ModelsService;
+  /** Admin-curated model catalog (per-provider, #270). */
+  llmProvidersService: LlmProvidersService;
 }
 
 /** Helper to resolve keep-alive ms with a safe fallback. */
@@ -66,7 +66,7 @@ async function resolveKeepAliveMs(
 async function preflight(
   c: Context<{ Variables: AuthVariables }>,
   quotaService: QuotaService,
-  modelsService: ModelsService,
+  llmProvidersService: LlmProvidersService,
   requestedModelId: string | undefined,
 ): Promise<{ modelId: string; userId: string; permissions: readonly string[] | undefined }> {
   const authCtx = getAuth(c);
@@ -77,7 +77,7 @@ async function preflight(
   });
   if (!decision.allowed) throwQuotaError(decision);
 
-  const resolution = await modelsService.resolveModel({
+  const resolution = await llmProvidersService.resolveModel({
     surface: "skillGen",
     requested: requestedModelId,
   });
@@ -193,7 +193,7 @@ async function analyzePackageContent(zipBuffer: Uint8Array): Promise<string> {
 }
 
 export function createGenerationRoutes(config: GenerationRoutesConfig): Hono<{ Variables: AuthVariables }> {
-  const { generationService, keepAliveIntervalMsResolver, quotaService, modelsService } = config;
+  const { generationService, keepAliveIntervalMsResolver, quotaService, llmProvidersService } = config;
   const app = new Hono<{ Variables: AuthVariables }>();
 
   const auth = nyxidAuthMiddleware();
@@ -241,7 +241,7 @@ export function createGenerationRoutes(config: GenerationRoutesConfig): Hono<{ V
         // Multi-turn format: messages array
         if (body.messages && Array.isArray(body.messages)) {
           logger.info({ userId: authCtx.userId, messageCount: body.messages.length }, "Multi-turn generation request");
-          const pf = await preflight(c, quotaService, modelsService, requestedModelId);
+          const pf = await preflight(c, quotaService, llmProvidersService, requestedModelId);
           const keepAliveMs = await resolveKeepAliveMs(keepAliveIntervalMsResolver);
           return streamGenerationEvents(
             c,
@@ -260,7 +260,7 @@ export function createGenerationRoutes(config: GenerationRoutesConfig): Hono<{ V
       }
 
       const signal = c.req.raw.signal;
-      const pf = await preflight(c, quotaService, modelsService, requestedModelId);
+      const pf = await preflight(c, quotaService, llmProvidersService, requestedModelId);
 
       const query = packageContent
         ? `Existing skill package content:\n${packageContent}\n\nUser requirement: ${prompt}`
@@ -367,7 +367,7 @@ export function createGenerationRoutes(config: GenerationRoutesConfig): Hono<{ V
       );
 
       const signal = c.req.raw.signal;
-      const pf = await preflight(c, quotaService, modelsService, requestedModelId);
+      const pf = await preflight(c, quotaService, llmProvidersService, requestedModelId);
 
       const keepAliveMs = await resolveKeepAliveMs(keepAliveIntervalMsResolver);
       return streamGenerationEvents(
@@ -412,7 +412,7 @@ export function createGenerationRoutes(config: GenerationRoutesConfig): Hono<{ V
       );
 
       const signal = c.req.raw.signal;
-      const pf = await preflight(c, quotaService, modelsService, requestedModelId);
+      const pf = await preflight(c, quotaService, llmProvidersService, requestedModelId);
 
       const keepAliveMs = await resolveKeepAliveMs(keepAliveIntervalMsResolver);
       return streamGenerationEvents(

@@ -48,7 +48,7 @@ export function PlaygroundSection() {
     (p) => p._id === draft?.defaultProviderId,
   );
   const availableModels = provider?.models.filter(
-    (m) => m.enabled && !m.removed,
+    (m) => m.enabledForPlayground && !m.removed,
   ) ?? [];
 
   return (

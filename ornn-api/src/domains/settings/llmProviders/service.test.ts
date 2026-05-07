@@ -37,6 +37,22 @@ class FakeRepo {
   async deleteById(id: string): Promise<boolean> {
     return this.rows.delete(id);
   }
+  async clearDefaultsForSurfaceExcept(
+    surface: "Playground" | "SkillGen",
+    keep: { providerId: string; modelId: string } | null,
+  ): Promise<void> {
+    const defKey =
+      surface === "Playground" ? "defaultForPlayground" : "defaultForSkillGen";
+    for (const [id, doc] of this.rows) {
+      const isKeeper = keep && id === keep.providerId;
+      const nextModels = doc.models.map((m) => {
+        if (isKeeper && m.id === keep!.modelId) return m;
+        if ((m as unknown as Record<string, unknown>)[defKey] !== true) return m;
+        return { ...m, [defKey]: false };
+      });
+      this.rows.set(id, { ...doc, models: nextModels });
+    }
+  }
 }
 
 class StubFetcher implements ModelListFetcher {
@@ -67,10 +83,21 @@ const baseInput = {
   maxOutputTokens: 8192,
   defaultTemperature: 0.7,
   models: [
-    { id: "gpt-4o", displayName: "GPT-4o", enabled: true },
-    { id: "gpt-3.5", displayName: "GPT-3.5", enabled: false },
+    {
+      id: "gpt-4o",
+      displayName: "GPT-4o",
+      enabledForPlayground: true,
+      enabledForSkillGen: true,
+      defaultForPlayground: true,
+      defaultForSkillGen: true,
+    },
+    {
+      id: "gpt-3.5",
+      displayName: "GPT-3.5",
+      enabledForPlayground: false,
+      enabledForSkillGen: false,
+    },
   ],
-  defaultModelId: "gpt-4o",
 };
 
 describe("LlmProvidersService", () => {
@@ -125,7 +152,7 @@ describe("LlmProvidersService", () => {
     expect(masked.auth.username).toBe("u");
   });
 
-  it("UT-LLM-004: update preserves model.enabled", async () => {
+  it("UT-LLM-004: update preserves model surface flags", async () => {
     const { svc } = makeService();
     const created = await svc.create(
       { ...baseInput, auth: { kind: "apiKey", apiKey: "sk-aaaaaa" } },
@@ -135,18 +162,24 @@ describe("LlmProvidersService", () => {
       created._id,
       {
         models: [
-          { id: "gpt-4o", displayName: "GPT-4o (renamed)", enabled: true },
-          { id: "gpt-3.5", displayName: "GPT-3.5", enabled: false },
+          {
+            id: "gpt-4o",
+            displayName: "GPT-4o (renamed)",
+            enabledForPlayground: true,
+            enabledForSkillGen: true,
+          },
+          { id: "gpt-3.5", displayName: "GPT-3.5" },
         ],
       },
       ACTOR,
     );
     const m = updated.models.find((x) => x.id === "gpt-4o")!;
-    expect(m.enabled).toBe(true);
+    expect(m.enabledForPlayground).toBe(true);
+    expect(m.enabledForSkillGen).toBe(true);
     expect(m.displayName).toBe("GPT-4o (renamed)");
   });
 
-  it("UT-LLM-005: sync — newly arrived model lands disabled", async () => {
+  it("UT-LLM-005: sync — newly arrived model lands with all surface flags false", async () => {
     const { svc, fetcher } = makeService();
     const created = await svc.create(
       { ...baseInput, auth: { kind: "apiKey", apiKey: "k" } },
@@ -160,7 +193,10 @@ describe("LlmProvidersService", () => {
     const { provider, result } = await svc.sync(created._id, ACTOR);
     expect(result.added).toBe(1);
     const newModel = provider.models.find((m) => m.id === "gpt-5")!;
-    expect(newModel.enabled).toBe(false);
+    expect(newModel.enabledForPlayground).toBe(false);
+    expect(newModel.enabledForSkillGen).toBe(false);
+    expect(newModel.defaultForPlayground).toBe(false);
+    expect(newModel.defaultForSkillGen).toBe(false);
     expect(newModel.removed).toBe(false);
   });
 
@@ -193,31 +229,44 @@ describe("LlmProvidersService", () => {
     expect(result).toEqual({ added: 0, updated: 0, removed: 0 });
   });
 
-  it("UT-LLM-008: defaultModelId must be enabled", async () => {
+  it("UT-LLM-008: patchModel — setting defaultForX implies enabledForX (#270)", async () => {
     const { svc } = makeService();
-    let err: unknown = null;
-    try {
-      await svc.create(
-        {
-          ...baseInput,
-          defaultModelId: "gpt-3.5", // not enabled in baseInput
-          auth: { kind: "apiKey", apiKey: "k" },
-        },
-        ACTOR,
-      );
-    } catch (e) {
-      err = e;
-    }
-    expect((err as { code: string }).code).toBe("INVALID_DEFAULT_MODEL");
-  });
-
-  it("UT-LLM-009: defaultModelId accepts enabled model", async () => {
-    const { svc } = makeService();
-    const p = await svc.create(
+    const created = await svc.create(
       { ...baseInput, auth: { kind: "apiKey", apiKey: "k" } },
       ACTOR,
     );
-    expect(p.defaultModelId).toBe("gpt-4o");
+    // gpt-3.5 starts with enabledForPlayground: false. Setting it as
+    // the default must auto-enable it for that surface.
+    const after = await svc.patchModel(
+      created._id,
+      "gpt-3.5",
+      { defaultForPlayground: true },
+      ACTOR,
+    );
+    const gpt35 = after.models.find((m) => m.id === "gpt-3.5")!;
+    expect(gpt35.defaultForPlayground).toBe(true);
+    expect(gpt35.enabledForPlayground).toBe(true);
+  });
+
+  it("UT-LLM-009: patchModel — setting defaultForX clears it on every other model (#270)", async () => {
+    const { svc } = makeService();
+    const created = await svc.create(
+      { ...baseInput, auth: { kind: "apiKey", apiKey: "k" } },
+      ACTOR,
+    );
+    // baseInput marks gpt-4o as defaultForPlayground; flipping the
+    // default to gpt-3.5 must clear gpt-4o's default flag in the same
+    // write so the at-most-one invariant holds.
+    const after = await svc.patchModel(
+      created._id,
+      "gpt-3.5",
+      { defaultForPlayground: true },
+      ACTOR,
+    );
+    const gpt4o = after.models.find((m) => m.id === "gpt-4o")!;
+    expect(gpt4o.defaultForPlayground).toBe(false);
+    const gpt35 = after.models.find((m) => m.id === "gpt-3.5")!;
+    expect(gpt35.defaultForPlayground).toBe(true);
   });
 
   it("UT-LLM-010: maxOutputTokens bounds", async () => {
