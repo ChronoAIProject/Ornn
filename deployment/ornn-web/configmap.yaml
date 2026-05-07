@@ -4,17 +4,13 @@ metadata:
   name: ornn-web-config
   namespace: ${NAMESPACE}
 data:
-  # nginx upstream — consumed by /etc/nginx/templates/default.conf.template
-  # via the image's built-in 20-envsubst-on-templates.sh. NYXID_API_HOST is
-  # derived from NYXID_API_BASE_URL by 15-derive-nyxid-api-host.envsh
-  # before script 20 runs, so operators only need to set the base URL.
-  NYXID_API_BASE_URL: "${NYXID_API_BASE_URL}"
-  NGINX_ENVSUBST_FILTER: "^(NYXID_API_BASE_URL|NYXID_API_HOST)$"
-
   # Frontend runtime config — consumed by 40-envsubst-config-js.sh,
   # injected into window.__ORNN_CONFIG__ via /config.js at page load.
-  # The SPA composes full URLs from these bases + paths in src/config.ts.
+  # The SPA composes full URLs from these bases + paths in src/config.ts
+  # and hits NyxID's proxy directly for ornn-api calls, so nginx is no
+  # longer in the API request path.
   ORNN_API_BASE_URL: "${ORNN_API_BASE_URL}"
+  NYXID_API_BASE_URL: "${NYXID_API_BASE_URL}"
   NYXID_WEB_BASE_URL: "${NYXID_WEB_BASE_URL}"
   NYXID_OAUTH_AUTHORIZE_PATH: "${NYXID_OAUTH_AUTHORIZE_PATH}"
   NYXID_OAUTH_TOKEN_PATH: "${NYXID_OAUTH_TOKEN_PATH}"
