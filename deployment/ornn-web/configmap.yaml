@@ -4,46 +4,24 @@ metadata:
   name: ornn-web-config
   namespace: ${NAMESPACE}
 data:
-  # nginx upstreams — consumed by /etc/nginx/templates/default.conf.template
-  # via the image's built-in 20-envsubst-on-templates.sh. NGINX_ENVSUBST_FILTER
-  # narrows substitution so $host / $remote_addr / $scheme etc. inside the
-  # template stay literal.
-  NYXID_BACKEND_URL: "${NYXID_BACKEND_URL}"
-  # Hostname portion of NYXID_BACKEND_URL — used for Host header + SNI when
-  # the upstream is a multi-tenant HTTPS edge (Cloudflare, Vercel, etc.).
-  # e.g. "nyx.chrono-ai.fun" when NYXID_BACKEND_URL is "https://nyx.chrono-ai.fun".
-  # For in-cluster plain-HTTP upstreams this MAY be set to $host (the nginx
-  # built-in) to fall back to standard behavior.
-  NYXID_BACKEND_HOST: "${NYXID_BACKEND_HOST}"
-  ORNN_API_URL: "${ORNN_API_URL}"
-  NGINX_ENVSUBST_FILTER: "^(NYXID_BACKEND_URL|NYXID_BACKEND_HOST|ORNN_API_URL)$"
+  # nginx upstream — consumed by /etc/nginx/templates/default.conf.template
+  # via the image's built-in 20-envsubst-on-templates.sh. NYXID_API_HOST is
+  # derived from NYXID_API_BASE_URL by 15-derive-nyxid-api-host.envsh
+  # before script 20 runs, so operators only need to set the base URL.
+  NYXID_API_BASE_URL: "${NYXID_API_BASE_URL}"
+  NGINX_ENVSUBST_FILTER: "^(NYXID_API_BASE_URL|NYXID_API_HOST)$"
 
   # Frontend runtime config — consumed by 40-envsubst-config-js.sh,
   # injected into window.__ORNN_CONFIG__ via /config.js at page load.
-  # NYXID_OAUTH_* are the browser-facing public-client credentials
-  # (authorization_code + PKCE). ornn-api uses a different set — the
-  # NYXID_SA_* service-account credentials — for machine-to-machine calls.
-  API_BASE_URL: "${API_BASE_URL}"
-  NYXID_OAUTH_AUTHORIZE_URL: "${NYXID_OAUTH_AUTHORIZE_URL}"
-  NYXID_OAUTH_TOKEN_URL: "${NYXID_OAUTH_TOKEN_URL}"
+  # The SPA composes full URLs from these bases + paths in src/config.ts.
+  ORNN_API_BASE_URL: "${ORNN_API_BASE_URL}"
+  NYXID_WEB_BASE_URL: "${NYXID_WEB_BASE_URL}"
+  NYXID_OAUTH_AUTHORIZE_PATH: "${NYXID_OAUTH_AUTHORIZE_PATH}"
+  NYXID_OAUTH_TOKEN_PATH: "${NYXID_OAUTH_TOKEN_PATH}"
+  NYXID_OAUTH_REDIRECT_PATH: "${NYXID_OAUTH_REDIRECT_PATH}"
+  NYXID_LOGOUT_PATH: "${NYXID_LOGOUT_PATH}"
+  NYXID_SETTINGS_PATH: "${NYXID_SETTINGS_PATH}"
   NYXID_OAUTH_CLIENT_ID: "${NYXID_OAUTH_CLIENT_ID}"
-  NYXID_OAUTH_REDIRECT_URI: "${NYXID_OAUTH_REDIRECT_URI}"
-  NYXID_LOGOUT_URL: "${NYXID_LOGOUT_URL}"
-  NYXID_SETTINGS_URL: "${NYXID_SETTINGS_URL}"
-  # NyxID frontend link coords (#275). The SPA composes
-  # `${NYXID_BASE_FRONTEND_URL}${NYXID_MY_*_PATH}` for in-app links to
-  # NyxID's own pages. Empty paths hide individual links; empty base URL
-  # disables all four. These used to live in the `nyxid` admin-settings
-  # section but moved here because they have no server-side consumer —
-  # putting them alongside the other browser-only NyxID coords keeps
-  # the delivery channel single.
-  NYXID_BASE_FRONTEND_URL: "${NYXID_BASE_FRONTEND_URL}"
-  NYXID_MY_SERVICES_PATH: "${NYXID_MY_SERVICES_PATH}"
-  NYXID_MY_PROFILE_PATH: "${NYXID_MY_PROFILE_PATH}"
-  NYXID_MY_ORGANIZATION_PATH: "${NYXID_MY_ORGANIZATION_PATH}"
-  # PostHog browser SDK config. Empty values disable analytics — useful
-  # for previews and local dev. Read by 40-envsubst-config-js.sh and
-  # injected into window.__ORNN_CONFIG__.
   POSTHOG_API_KEY: "${POSTHOG_API_KEY}"
   POSTHOG_PROJECT_ID: "${POSTHOG_PROJECT_ID}"
   POSTHOG_HOST: "${POSTHOG_HOST}"

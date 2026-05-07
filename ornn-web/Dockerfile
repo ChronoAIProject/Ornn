@@ -34,9 +34,13 @@ FROM nginx:alpine
 COPY --from=build /app/ornn-web/dist /usr/share/nginx/html
 # nginx:alpine envsubst's /etc/nginx/templates/*.template at startup
 # (see /docker-entrypoint.d/20-envsubst-on-templates.sh). Substitution is
-# scoped to NYXID_BACKEND_URL / ORNN_API_URL via NGINX_ENVSUBST_FILTER
-# in the ConfigMap — $host / $scheme etc. stay literal.
+# scoped to NYXID_API_BASE_URL / NYXID_API_HOST via NGINX_ENVSUBST_FILTER
+# in the ConfigMap — $host / $scheme etc. stay literal. NYXID_API_HOST is
+# derived from NYXID_API_BASE_URL by 15-derive-nyxid-api-host.envsh
+# (sourced ahead of script 20).
 COPY ornn-web/nginx.conf.template /etc/nginx/templates/default.conf.template
+# Sourced before 20- so the host derivation propagates to envsubst.
+COPY ornn-web/docker-entrypoint.d/15-derive-nyxid-api-host.envsh /docker-entrypoint.d/15-derive-nyxid-api-host.envsh
 # Runtime frontend config: generate /config.js from its template and
 # inject window.__ORNN_CONFIG__ at container startup.
 COPY ornn-web/docker-entrypoint.d/40-envsubst-config-js.sh /docker-entrypoint.d/40-envsubst-config-js.sh

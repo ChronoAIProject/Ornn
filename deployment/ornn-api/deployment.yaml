@@ -44,8 +44,6 @@ spec:
               value: "${LOG_LEVEL}"
             - name: LOG_PRETTY
               value: "${LOG_PRETTY}"
-            - name: NYXID_SA_TOKEN_URL
-              value: "${NYXID_SA_TOKEN_URL}"
             - name: MONGODB_DB
               value: "${MONGODB_DB}"
             - name: MAX_PACKAGE_SIZE_BYTES
@@ -56,22 +54,10 @@ spec:
               value: "${ORNN_PUBLIC_ORIGIN}"
             - name: ORNN_URL_ALLOWLIST_CIDR
               value: "${ORNN_URL_ALLOWLIST_CIDR}"
-            # AgentSeal subprocess paths — runner is opt-in via the
-            # admin skill-audit section, but the binary paths must
-            # exist as env so the runner knows where to spawn.
             - name: AGENTSEAL_PYTHON
               value: "${AGENTSEAL_PYTHON}"
             - name: AGENTSEAL_SCRIPT
               value: "${AGENTSEAL_SCRIPT}"
-            # PostHog values are bootstrap fallback only — once admin
-            # saves the telemetry settings section, those win on
-            # restart (#271).
-            - name: POSTHOG_ENABLED
-              value: "${POSTHOG_ENABLED}"
-            - name: POSTHOG_HOST
-              value: "${POSTHOG_HOST}"
-            - name: POSTHOG_ERROR_SAMPLE_RATE
-              value: "${POSTHOG_ERROR_SAMPLE_RATE}"
           envFrom:
             - secretRef:
                 name: ornn-api-secret
