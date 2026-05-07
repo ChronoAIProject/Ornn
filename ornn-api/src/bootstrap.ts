@@ -187,16 +187,6 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   const db = mongo.db;
   logger.info("MongoDB connected");
 
-  // ---- SA Token Provider (shared by proxy-authenticated clients) ----
-  // The OAuth client_credentials endpoint stays in env (bootstrap-only)
-  // because it has to mint a token before the very first settings read.
-  const saTokenProvider = new NyxidSaTokenProvider(
-    config.nyxidTokenUrl,
-    config.nyxidClientId,
-    config.nyxidClientSecret,
-  );
-  const getSaAccessToken = () => saTokenProvider.getAccessToken();
-
   // ---- SettingsService (multi-section + LLM providers) ----
   // Built early so every downstream client/route can take a resolver
   // closure over it. The provider-list service is wired POST-construction
@@ -209,6 +199,20 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
     repo: settingsRepo,
     encryptionKey: config.encryptionKey,
   });
+
+  // ---- SA Token Provider (shared by proxy-authenticated clients) ----
+  // Credentials live in admin Settings → Integrations → NyxID and are
+  // resolved lazily on every refresh; an empty section throws a clear
+  // configuration error rather than booting silently broken.
+  const saTokenProvider = new NyxidSaTokenProvider(async () => {
+    const s = await settingsService.getNyxid();
+    return {
+      tokenUrl: s.tokenUrl,
+      clientId: s.clientId,
+      clientSecret: s.clientSecret,
+    };
+  });
+  const getSaAccessToken = () => saTokenProvider.getAccessToken();
   const llmProvidersRepo = new LlmProvidersRepository(db);
   void llmProvidersRepo.ensureIndexes().catch((err) =>
     logger.warn({ err }, "llm_providers indexes ensureIndexes failed — proceeding anyway"),
@@ -657,7 +661,6 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
     skillService,
     skillVersionRepo,
     generationService,
-    nyxidTokenUrl: config.nyxidTokenUrl,
     agentsealScanner,
   });
 

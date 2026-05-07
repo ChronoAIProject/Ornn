@@ -40,8 +40,6 @@ spec:
                   value: "${LOG_LEVEL}"
                 - name: LOG_PRETTY
                   value: "${LOG_PRETTY}"
-                - name: NYXID_SA_TOKEN_URL
-                  value: "${NYXID_SA_TOKEN_URL}"
                 - name: MONGODB_DB
                   value: "${MONGODB_DB}"
                 - name: MAX_PACKAGE_SIZE_BYTES
@@ -56,14 +54,6 @@ spec:
                   value: "${AGENTSEAL_PYTHON}"
                 - name: AGENTSEAL_SCRIPT
                   value: "${AGENTSEAL_SCRIPT}"
-                # Bootstrap fallback only — admin telemetry section
-                # is canonical (#271).
-                - name: POSTHOG_ENABLED
-                  value: "${POSTHOG_ENABLED}"
-                - name: POSTHOG_HOST
-                  value: "${POSTHOG_HOST}"
-                - name: POSTHOG_ERROR_SAMPLE_RATE
-                  value: "${POSTHOG_ERROR_SAMPLE_RATE}"
               envFrom:
                 - secretRef:
                     name: ornn-api-secret

@@ -25,9 +25,11 @@ const logger = pino({ level: "info" }).child({ module: "nyxidSaTokenProvider" })
  * call — the surrounding `SettingsService` caches with a short TTL so
  * the read cost is amortized.
  *
- * The token-URL credentials remain in env (`NYXID_SA_TOKEN_URL`,
- * `NYXID_SA_CLIENT_ID`, `NYXID_SA_CLIENT_SECRET`) because they bootstrap
- * the very first settings read; everything else is operator-flippable.
+ * Both the API base URL AND the SA OAuth credentials live in the
+ * `integrations/nyxid` settings section and are read on demand. There
+ * are no NyxID env vars: a fresh deployment has empty admin settings
+ * until an operator configures them, and SA token minting fails-fast
+ * with a clear error in that window.
  */
 export interface NyxidConfig {
   /** Base URL of the NyxID API (no trailing slash). */
@@ -36,9 +38,22 @@ export interface NyxidConfig {
 
 export type NyxidConfigResolver = () => Promise<NyxidConfig>;
 
+export interface NyxidSaCreds {
+  readonly tokenUrl: string;
+  readonly clientId: string;
+  readonly clientSecret: string;
+}
+
+export type NyxidSaCredsResolver = () => Promise<NyxidSaCreds>;
+
 /**
  * Caches and refreshes an SA (service-account) access token. Tokens are
  * cached until 60s before expiry; the next call refreshes on demand.
+ *
+ * Credentials are pulled lazily from a resolver (typically a closure
+ * over `SettingsService.getNyxid()`), so an admin's edit lands on the
+ * next refresh without a redeploy. An empty/missing credential triggers
+ * a structured error rather than a silent unauthenticated request.
  *
  * Concurrent callers during a refresh race will all issue their own
  * token request. Acceptable at current scale — add a `pendingRefresh`
@@ -47,11 +62,7 @@ export type NyxidConfigResolver = () => Promise<NyxidConfig>;
 export class NyxidSaTokenProvider {
   private cache: { accessToken: string; expiresAt: number } | null = null;
 
-  constructor(
-    private readonly tokenUrl: string,
-    private readonly clientId: string,
-    private readonly clientSecret: string,
-  ) {}
+  constructor(private readonly credsResolver: NyxidSaCredsResolver) {}
 
   async getAccessToken(): Promise<string> {
     const now = Date.now();
@@ -59,13 +70,20 @@ export class NyxidSaTokenProvider {
       return this.cache.accessToken;
     }
 
+    const { tokenUrl, clientId, clientSecret } = await this.credsResolver();
+    if (!tokenUrl || !clientId || !clientSecret) {
+      throw new Error(
+        "NyxID SA credentials are not configured — set tokenUrl, clientId, and clientSecret under admin Settings → Integrations → NyxID",
+      );
+    }
+
     logger.info("Acquiring SA access token for proxy-authenticated services");
     const body = new URLSearchParams({
       grant_type: "client_credentials",
-      client_id: this.clientId,
-      client_secret: this.clientSecret,
+      client_id: clientId,
+      client_secret: clientSecret,
     });
-    const resp = await fetch(this.tokenUrl, {
+    const resp = await fetch(tokenUrl, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: body.toString(),

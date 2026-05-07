@@ -27,6 +27,7 @@
     "registry": "Registry",
     "build": "Build",
     "docs": "Docs",
+    "contact": "Contact",
     "signIn": "Sign In",
     "signOut": "Sign Out",
     "settings": "Settings",
@@ -483,12 +484,14 @@
     "openNyxID": "Open NyxID Settings"
   },
   "login": {
+    "eyebrow": "[ § ENTRY — NYXID ]",
     "tagline": "The Forge for AI Capabilities",
     "desc": "Sign in with your NyxID account to access the platform.",
     "loginBtn": "Login with NyxID",
     "terms": "By continuing, you agree to our Terms of Service and Privacy Policy."
   },
   "notFound": {
+    "eyebrow": "[ § 404 — NOT FOUND ]",
     "code": "404",
     "message": "This sector of the grid does not exist.",
     "goHome": "Return to Forge"
@@ -698,5 +701,25 @@
     "backToModes": "Back to creation modes",
     "success": "Skill pulled from GitHub.",
     "genericError": "Failed to pull from GitHub."
+  },
+  "contact": {
+    "eyebrow": "[ § 01 — CONTACT ]",
+    "headlineStart": "Talk to the",
+    "headlineHighlight": "workshop",
+    "headlineEnd": ".",
+    "subhead": "Questions, partnerships, or a skill you want to publish? Reach us through any of the channels below — we read everything.",
+    "channelsLabel": "Contact channels",
+    "cardEmailLabel": "EMAIL",
+    "cardEmailHint": "Best for product questions, partnership, and security disclosures. Expect a reply within two business days.",
+    "cardGithubLabel": "GITHUB",
+    "cardGithubHint": "File bugs, pull requests, and feature requests on the issue tracker.",
+    "cardXhsLabel": "XIAOHONGSHU · 小红书",
+    "cardXhsValue": "Coming soon",
+    "cardXhsHint": "Behind-the-scenes notes from the forge. Handle goes live shortly.",
+    "cardOfficeLabel": "WORKSHOP",
+    "cardOfficeBrand": "Chrono AI",
+    "cardOfficeLocation": "Singapore",
+    "cardOfficeHint": "Built and maintained from the Chrono AI workshop, Singapore.",
+    "signoff": "[ END · CONTACT ]"
   }
 }

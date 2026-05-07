@@ -35,6 +35,8 @@ vi.mock("posthog-js", () => ({
 vi.mock("@/config", () => ({
   config: {
     apiBaseUrl: "",
+    nyxidApiBaseUrl: "",
+    nyxidWebBaseUrl: "",
     nyxidOauthAuthorizeUrl: "",
     nyxidOauthTokenUrl: "",
     nyxidOauthClientId: "",
@@ -134,6 +136,8 @@ describe("analytics wrapper", () => {
     vi.doMock("@/config", () => ({
       config: {
         apiBaseUrl: "",
+        nyxidApiBaseUrl: "",
+        nyxidWebBaseUrl: "",
         nyxidOauthAuthorizeUrl: "",
         nyxidOauthTokenUrl: "",
         nyxidOauthClientId: "",

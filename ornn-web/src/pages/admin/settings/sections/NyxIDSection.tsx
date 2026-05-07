@@ -49,7 +49,7 @@ export function NyxIDSection() {
       <UnsavedChangesGuard when={form.isDirty} />
       <SectionShell
         title="NyxID integration"
-        description="OAuth service-account credentials + the API base URL the backend proxies through. Browser-side link coords live in ornn-web's configmap (NYXID_BASE_FRONTEND_URL + path env vars) — change them there and redeploy."
+        description="OAuth service-account credentials + the API base URL the backend proxies through. Browser-side link coords live in ornn-web's configmap (NYXID_WEB_BASE_URL + path env vars) — change them there and redeploy."
         isLoading={form.isLoading}
         isSaving={form.isSaving}
         isDirty={form.isDirty}
