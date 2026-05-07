@@ -329,7 +329,7 @@ export function LandingNav() {
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: -8, scale: 0.97 }}
                     transition={{ duration: 0.15, ease: "easeOut" }}
-                    className="absolute right-0 top-full mt-2 w-60 overflow-hidden rounded-[2px] border border-[color:var(--color-border-subtle)] bg-page shadow-[var(--card-shadow-rest)]"
+                    className="card-impression absolute right-0 top-full mt-2 w-60 overflow-hidden rounded-[2px] border border-[color:var(--color-border-subtle)] bg-page"
                   >
                     {/* Identity card */}
                     <div className="border-b border-[color:var(--color-border-subtle)] px-4 py-3">
@@ -453,7 +453,7 @@ export function LandingNav() {
         id="mobile-nav-panel"
         data-open={menuOpen}
         aria-hidden={!menuOpen}
-        className="absolute left-0 right-0 top-full grid grid-rows-[0fr] bg-page shadow-[var(--card-shadow-rest)] transition-[grid-template-rows,border-color] duration-300 ease-out border-t border-transparent data-[open=true]:grid-rows-[1fr] data-[open=true]:border-[color:var(--color-border-subtle)] md:hidden"
+        className="absolute left-0 right-0 top-full grid grid-rows-[0fr] bg-page transition-[grid-template-rows,border-color] duration-300 ease-out border-t border-transparent data-[open=true]:grid-rows-[1fr] data-[open=true]:border-[color:var(--color-border-subtle)] data-[open=true]:card-impression md:hidden"
       >
         <div className="overflow-hidden">
           <div className="mx-auto flex max-w-[1280px] flex-col px-6 py-3 sm:px-8">
