@@ -7,13 +7,19 @@ import { z } from "zod";
 import { PUBLIC_URL_REFUSAL, requirePublicUrl } from "../../../infra/url";
 import type { SectionMeta } from "./index";
 
-const SERVICE_NAME_RE = /^[a-z0-9-]{1,64}$/;
+// Common service-id pattern: any case, digits, dot/dash/underscore.
+// Permits canonical names like `NyxID`, `twitter-api`, `openai_v2`,
+// `v1.beta`. Spaces are still rejected so the value is safe to flow
+// into URL path segments without encoding gymnastics. (#284 — was
+// `^[a-z0-9-]{1,64}$`, lowercase-only, which rejected the legacy
+// `EXTRA_NYXID_SERVICES=NyxID` default.)
+const SERVICE_NAME_RE = /^[A-Za-z0-9._-]{1,64}$/;
 const optionalHttpUrl = z.string().refine(requirePublicUrl, {
   message: PUBLIC_URL_REFUSAL,
 });
 
 const extraServiceSchema = z.object({
-  name: z.string().regex(SERVICE_NAME_RE, "name must match ^[a-z0-9-]{1,64}$"),
+  name: z.string().regex(SERVICE_NAME_RE, "name must match ^[A-Za-z0-9._-]{1,64}$"),
   baseUrl: optionalHttpUrl,
   scopes: z.array(z.string()).optional(),
 });
