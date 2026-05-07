@@ -3,11 +3,12 @@
  *   GET  /admin/settings/export   → JSON envelope, attachment header
  *   POST /admin/settings/import   → parse + apply, returns per-section status
  *
- * Both endpoints emit a settings-audit row via the injected
+ * Both endpoints emit a settings-audit event via the injected
  * `SettingsAuditLogger` (Story 8.1 + 8.2 acceptance criterion).
- * Bootstrap wires this to `ActivityRepository.log()`; tests inject a
- * spy. Audit failures NEVER block the response — the action already
- * succeeded by the time we log.
+ * Bootstrap wires this to `analyticsEmitter.trackPlatformActivity`
+ * (issue #271 — PostHog replaces the Mongo activity log); tests
+ * inject a spy. Emit failures NEVER block the response — the action
+ * already succeeded by the time we log.
  *
  * @module domains/settings/exportImport/routes
  */
@@ -28,10 +29,11 @@ import type { ImportResult, SettingsImporter } from "./importer";
 const logger = pino({ level: "info" }).child({ module: "settingsExportImportRoutes" });
 
 /**
- * Settings audit hook. Bootstrap binds this to `ActivityRepository.log`
- * with the appropriate `ActivityAction` value (engineer-3 owns the
- * action-union extension); routes call into this interface so this
- * module stays decoupled from the repo / activity-action enum.
+ * Settings audit hook. Bootstrap binds this to
+ * `analyticsEmitter.trackPlatformActivity` with the
+ * `settings.exported` / `settings.imported` action values; routes call
+ * into this interface so this module stays decoupled from the
+ * underlying tracker.
  *
  * Implementations MUST NOT throw — the audit pipeline is best-effort.
  */

@@ -113,12 +113,12 @@ export interface SkillAuditSection extends SectionMeta {
 }
 
 export interface TelemetrySection extends SectionMeta {
-  openTelemetryEnabled: boolean;
-  openTelemetryEndpoint: string;
   postHogEnabled: boolean;
   /** Mid-masked on GET. */
   postHogApiKey: string;
   postHogHost: string;
+  postHogProjectId: string;
+  postHogErrorSampleRate: number;
 }
 
 export interface QuotaDefaultsSection extends SectionMeta {

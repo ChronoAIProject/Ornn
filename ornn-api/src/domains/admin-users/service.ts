@@ -4,21 +4,28 @@
  *   `displayName`, `email`, `skillCount`, `lastActiveAt`,
  *   `activityCount`, `firstJoinedAt`.
  *
- * Sources:
- *   - Activities aggregated for `lastActiveAt`, `activityCount`.
- *   - `users_meta.firstJoinedAt` (synthesized from MIN(activities.createdAt))
- *     — see Architecture §3.5.
- *   - Skill ownership count from `skills.createdBy`.
- *   - Admin set from `admin_users` (lazy display cache).
+ * After issue #271:
+ *   - Source pool is the unified `users` directory (fed lazily by the
+ *     proxy-auth setup middleware on every authenticated request).
+ *   - Skill counts come from the `skills` collection.
+ *   - `firstJoinedAt` ↔ `firstSeenAt`, `lastActiveAt` ↔ `lastSeenAt`
+ *     in the underlying directory doc — API names are preserved so
+ *     the existing admin frontend doesn't need to change.
+ *   - `activityCount` semantics shifted from "rows in activities
+ *     table" to "authenticated requests seen" (incremented on every
+ *     directory upsert). Higher numbers are expected; still
+ *     monotonic.
+ *
+ * Sort by `skillCount` is implemented JS-side because it requires a
+ * cross-collection join. Hard-bounded to 5k users in role+q to keep
+ * memory predictable; beyond that we'd switch to Mongo aggregation.
  *
  * @module domains/admin-users/service
  */
 
 import type { Collection, Db } from "mongodb";
 import pino from "pino";
-import type { ActivityRepository } from "../admin/activityRepository";
-import type { AdminUsersRepository } from "./repository";
-import type { UsersMetaRepository } from "./usersMetaRepository";
+import type { UserDirectoryRepository } from "../users/repository";
 
 const logger = pino({ level: "info" }).child({ module: "adminUsersService" });
 
@@ -55,24 +62,16 @@ export interface AdminUserRow {
 
 export interface AdminUsersServiceConfig {
   db: Db;
-  activityRepo: ActivityRepository;
-  adminUsersRepo: AdminUsersRepository;
-  usersMetaRepo: UsersMetaRepository;
+  userDirectoryRepo: UserDirectoryRepository;
 }
 
 export class AdminUsersService {
   private readonly skills: Collection;
-  private readonly activities: Collection;
-  private readonly activityRepo: ActivityRepository;
-  private readonly adminUsersRepo: AdminUsersRepository;
-  private readonly usersMetaRepo: UsersMetaRepository;
+  private readonly userDirectoryRepo: UserDirectoryRepository;
 
   constructor(config: AdminUsersServiceConfig) {
     this.skills = config.db.collection("skills");
-    this.activities = config.db.collection("activities");
-    this.activityRepo = config.activityRepo;
-    this.adminUsersRepo = config.adminUsersRepo;
-    this.usersMetaRepo = config.usersMetaRepo;
+    this.userDirectoryRepo = config.userDirectoryRepo;
   }
 
   async listUsers(params: ListUsersParams): Promise<{
@@ -87,100 +86,40 @@ export class AdminUsersService {
     const sortKey: SortKey = params.sort ?? "lastActiveAt";
     const dir: SortDir = params.dir ?? "desc";
 
-    // 1) Aggregate the activity-derived user pool with email/display
-    //    (most recent non-empty), lastActiveAt, activityCount.
-    const matchStage = params.q
-      ? {
-          $match: {
-            userEmail: {
-              $regex: `^${params.q.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`,
-              $options: "i",
-            },
-          },
-        }
-      : { $match: { userEmail: { $ne: "" } } };
-    const pipeline = [
-      matchStage,
-      { $sort: { createdAt: -1 as const } },
-      {
-        $group: {
-          _id: "$userId",
-          emails: { $push: "$userEmail" },
-          displayNames: { $push: "$userDisplayName" },
-          lastActiveAt: { $max: "$createdAt" },
-          activityCount: { $sum: 1 },
-        },
-      },
-      {
-        $project: {
-          _id: 1,
-          email: {
-            $first: {
-              $filter: {
-                input: "$emails",
-                cond: { $and: [{ $ne: ["$$this", null] }, { $ne: ["$$this", ""] }] },
-              },
-            },
-          },
-          displayName: {
-            $first: {
-              $filter: {
-                input: "$displayNames",
-                cond: { $and: [{ $ne: ["$$this", null] }, { $ne: ["$$this", ""] }] },
-              },
-            },
-          },
-          lastActiveAt: 1,
-          activityCount: 1,
-        },
-      },
-    ];
-    const allRows = await this.activities.aggregate(pipeline).toArray();
+    // 1) Pool of users matching role + email-prefix filter.
+    const docs = await this.userDirectoryRepo.findAllInRole(
+      params.role,
+      params.q,
+    );
 
-    // 2) Filter by role.
-    const adminIds = await this.adminUsersRepo.listUserIds();
-    const filtered = allRows.filter((r) => {
-      const isAdmin = adminIds.has(r._id as string);
-      return params.role === "admin" ? isAdmin : !isAdmin;
-    });
+    // 2) Enrich with skill counts from the `skills` collection.
+    const userIds = docs.map((d) => d._id);
+    const skillCounts =
+      userIds.length === 0
+        ? []
+        : await this.skills
+            .aggregate([
+              { $match: { createdBy: { $in: userIds } } },
+              { $group: { _id: "$createdBy", count: { $sum: 1 } } },
+            ])
+            .toArray();
+    const skillCountMap = new Map(
+      skillCounts.map((s) => [s._id as string, s.count as number]),
+    );
 
-    // 3) Enrich with skillCount + firstJoinedAt (cached).
-    const userIds = filtered.map((r) => r._id as string);
-    const [skillCounts, metaRows] = await Promise.all([
-      this.skills
-        .aggregate([
-          { $match: { createdBy: { $in: userIds } } },
-          { $group: { _id: "$createdBy", count: { $sum: 1 } } },
-        ])
-        .toArray(),
-      this.usersMetaRepo.batchGetOrCompute(userIds),
-    ]);
-    const skillCountMap = new Map(skillCounts.map((s) => [s._id as string, s.count as number]));
-    const metaMap = new Map(metaRows.map((m) => [m._id, m]));
+    const enriched: AdminUserRow[] = docs.map((d) => ({
+      userId: d._id,
+      email: d.email ?? "",
+      displayName: d.displayName ?? "",
+      skillCount: skillCountMap.get(d._id) ?? 0,
+      lastActiveAt:
+        d.lastSeenAt instanceof Date ? d.lastSeenAt.toISOString() : null,
+      activityCount: d.activityCount ?? 0,
+      firstJoinedAt:
+        d.firstSeenAt instanceof Date ? d.firstSeenAt.toISOString() : null,
+    }));
 
-    const enriched: AdminUserRow[] = filtered.map((r) => {
-      const meta = metaMap.get(r._id as string);
-      return {
-        userId: r._id as string,
-        email: (r.email as string) ?? meta?.email ?? "",
-        displayName: (r.displayName as string) ?? meta?.displayName ?? "",
-        skillCount: skillCountMap.get(r._id as string) ?? 0,
-        lastActiveAt:
-          r.lastActiveAt instanceof Date
-            ? r.lastActiveAt.toISOString()
-            : r.lastActiveAt
-              ? String(r.lastActiveAt)
-              : null,
-        activityCount: r.activityCount as number,
-        firstJoinedAt: meta?.firstJoinedAt
-          ? meta.firstJoinedAt instanceof Date
-            ? meta.firstJoinedAt.toISOString()
-            : String(meta.firstJoinedAt)
-          : null,
-      };
-    });
-
-    // 4) Sort + paginate.
+    // 3) Sort + paginate.
     const sorted = [...enriched].sort(buildComparator(sortKey, dir));
     const total = sorted.length;
     const offset = (page - 1) * pageSize;
@@ -190,10 +129,7 @@ export class AdminUsersService {
       { role: params.role, page, pageSize, total, q: params.q ?? null },
       "Admin users list served",
     );
-    // Reserve the unused activityRepo handle for future targeted look-ups
-    // (e.g. activity drill-down per user). Keeping it on the service so
-    // we don't have to rewire the constructor for that follow-up.
-    void this.activityRepo;
+
     return {
       items,
       page,
@@ -209,14 +145,15 @@ function buildComparator(
   dir: SortDir,
 ): (a: AdminUserRow, b: AdminUserRow) => number {
   const sign = dir === "asc" ? 1 : -1;
-  const nullsLast = (v: string | number | null): [number, string | number] => {
+  const nullsLast = (
+    v: string | number | null,
+  ): [number, string | number] => {
     if (v === null || v === undefined) return [1, ""];
     return [0, v];
   };
   return (a, b) => {
     const av = nullsLast(a[sortKey]);
     const bv = nullsLast(b[sortKey]);
-    // Nulls always last, regardless of direction.
     if (av[0] !== bv[0]) return av[0] - bv[0];
     if (typeof av[1] === "number" && typeof bv[1] === "number") {
       return sign * (av[1] - bv[1]);

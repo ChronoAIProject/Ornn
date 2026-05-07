@@ -1,10 +1,13 @@
 /**
  * Admin dashboard HTTP surface.
  *
- *   GET /api/v1/admin/dashboard/stats              — user + skill totals.
- *   GET /api/v1/admin/dashboard/recent-activities  — top-N activities.
+ *   GET /api/v1/admin/dashboard/stats — user + skill totals.
  *
- * Both gated on `ornn:admin:skill`.
+ * The `/admin/dashboard/recent-activities` endpoint was removed in
+ * issue #271 — the activity feed lives in PostHog now. The admin UI
+ * deep-links to the PostHog dashboard for the same data.
+ *
+ * Gated on `ornn:admin:skill`.
  *
  * @module domains/admin/dashboard/routes
  */
@@ -36,17 +39,6 @@ export function createAdminDashboardRoutes(
     async (c) => {
       const stats = await dashboardService.getStats();
       return c.json({ data: stats, error: null });
-    },
-  );
-
-  app.get(
-    "/admin/dashboard/recent-activities",
-    auth,
-    requirePermission(QUOTA_ADMIN_PERMISSION),
-    async (c) => {
-      const limit = Math.min(200, Math.max(1, Number(c.req.query("limit")) || 50));
-      const items = await dashboardService.listRecentActivities(limit);
-      return c.json({ data: { items, limit }, error: null });
     },
   );
 

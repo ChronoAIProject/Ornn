@@ -1,94 +1,27 @@
 /**
- * RecentActivities — top-10 list widget on the admin dashboard.
+ * RecentActivities — deep-link card on the admin dashboard.
  *
- * Pulls from `GET /api/v1/admin/dashboard/recent-activities?limit=10`.
- * Empty state shows mono uppercase "No activity yet" copy; the View all
- * link points to the existing /admin/activities log.
+ * Issue #271 retired the in-Ornn activity feed; the Mongo-backed
+ * list and `GET /admin/dashboard/recent-activities` endpoint are
+ * gone. This card keeps the dashboard slot but routes admins to
+ * PostHog (the new source of truth) rather than rendering events
+ * locally.
  *
  * @module components/admin/RecentActivities
  */
 
-import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
-import { useQuery } from "@tanstack/react-query";
 import { Card } from "@/components/ui/Card";
-import { Skeleton } from "@/components/ui/Skeleton";
-import { Badge } from "@/components/ui/Badge";
 import {
-  fetchRecentActivities,
-  type RecentActivity,
-} from "@/services/adminDashboardApi";
-
-function formatDateSGT(iso: string): string {
-  try {
-    return new Date(iso).toLocaleString("en-SG", {
-      timeZone: "Asia/Singapore",
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-    });
-  } catch {
-    return iso;
-  }
-}
-
-function actionTone(
-  action: string,
-): "green" | "muted" | "cyan" | "yellow" | "red" | "magenta" {
-  switch (action) {
-    case "login":
-      return "green";
-    case "logout":
-      return "muted";
-    case "skill:create":
-      return "cyan";
-    case "skill:update":
-      return "yellow";
-    case "skill:delete":
-      return "red";
-    case "skill:visibility_change":
-      return "magenta";
-    default:
-      return "muted";
-  }
-}
-
-interface ActivityRowProps {
-  activity: RecentActivity;
-}
-
-function ActivityRow({ activity }: ActivityRowProps) {
-  const detail =
-    activity.details && Object.keys(activity.details).length > 0
-      ? ((activity.details as Record<string, unknown>).skillName as string) ??
-        JSON.stringify(activity.details)
-      : null;
-
-  return (
-    <li className="flex flex-col gap-2 rounded border border-accent/10 bg-card p-3 sm:flex-row sm:items-center sm:gap-4">
-      <span className="shrink-0 font-mono text-[11px] text-meta">
-        {formatDateSGT(activity.createdAt)}
-      </span>
-      <span className="font-text text-sm text-strong">
-        {activity.userDisplayName || activity.userEmail}
-      </span>
-      <Badge color={actionTone(activity.action)}>{activity.action}</Badge>
-      {detail && (
-        <span className="truncate font-text text-sm text-meta">{detail}</span>
-      )}
-    </li>
-  );
-}
+  isPostHogConfigured,
+  postHogActivityUrl,
+  postHogInsightsUrl,
+} from "@/lib/postHogLinks";
 
 export function RecentActivities() {
-  const query = useQuery({
-    queryKey: ["admin", "dashboard", "recent"] as const,
-    queryFn: () => fetchRecentActivities(10),
-    staleTime: 30_000,
-  });
+  const configured = isPostHogConfigured();
+  const activityUrl = postHogActivityUrl();
+  const insightsUrl = postHogInsightsUrl();
 
   return (
     <motion.div
@@ -101,36 +34,40 @@ export function RecentActivities() {
           <h2 className="font-display text-lg font-semibold uppercase tracking-tight text-strong">
             Recent activity
           </h2>
-          <Link
-            to="/admin/activities"
-            className="font-mono text-[11px] uppercase tracking-[0.14em] text-accent hover:text-accent-muted"
-          >
-            View all
-          </Link>
         </header>
 
-        {query.isLoading ? (
-          <Skeleton lines={5} />
-        ) : query.error ? (
-          <p
-            role="alert"
-            className="py-6 text-center font-text text-danger"
-          >
-            {query.error instanceof Error
-              ? query.error.message
-              : "Failed to load activities"}
+        <p className="font-text text-sm leading-relaxed text-body">
+          Audit + activity events live in PostHog. Every API request,
+          login, skill mutation, and admin action is captured there as
+          a typed event with caller, source IP, status, and timing —
+          searchable, filterable, and pivotable into funnels.
+        </p>
+
+        {!configured && (
+          <p className="mt-3 font-mono text-[11px] text-meta">
+            PostHog isn't configured yet — set it up under Settings →
+            Telemetry.
           </p>
-        ) : (query.data ?? []).length === 0 ? (
-          <p className="py-6 text-center font-mono text-[11px] uppercase tracking-[0.14em] text-meta">
-            No activity yet
-          </p>
-        ) : (
-          <ul className="space-y-2">
-            {(query.data ?? []).map((a) => (
-              <ActivityRow key={a.id} activity={a} />
-            ))}
-          </ul>
         )}
+
+        <div className="mt-4 flex flex-wrap gap-3">
+          <a
+            href={activityUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 rounded-sm border border-strong-edge bg-card px-3 py-1.5 font-mono text-[11px] font-semibold uppercase tracking-[0.12em] text-strong hover:border-accent"
+          >
+            Activity feed ↗
+          </a>
+          <a
+            href={insightsUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 rounded-sm border border-strong-edge bg-card px-3 py-1.5 font-mono text-[11px] font-semibold uppercase tracking-[0.12em] text-strong hover:border-accent"
+          >
+            Insights ↗
+          </a>
+        </div>
       </Card>
     </motion.div>
   );

@@ -24,8 +24,7 @@ import {
 } from "../../../middleware/nyxidAuth";
 import { validateBody, getValidatedBody } from "../../../middleware/validate";
 import { AppError } from "../../../shared/types/index";
-import type { ActivityRepository } from "../activityRepository";
-import type { AdminUsersRepository } from "../../admin-users/repository";
+import type { UserDirectoryRepository } from "../../users/repository";
 import type { QuotaService } from "../../quota/service";
 import {
   QUOTA_ADMIN_PERMISSION,
@@ -53,14 +52,13 @@ const bulkGrantSchema = z.object({
 
 export interface AdminQuotaRoutesConfig {
   readonly quotaService: QuotaService;
-  readonly activityRepo: ActivityRepository;
-  readonly adminUsersRepo: AdminUsersRepository;
+  readonly userDirectoryRepo: UserDirectoryRepository;
 }
 
 export function createAdminQuotaRoutes(
   config: AdminQuotaRoutesConfig,
 ): Hono<{ Variables: AuthVariables }> {
-  const { quotaService, activityRepo, adminUsersRepo } = config;
+  const { quotaService, userDirectoryRepo } = config;
   const app = new Hono<{ Variables: AuthVariables }>();
   const auth = nyxidAuthMiddleware();
 
@@ -82,8 +80,8 @@ export function createAdminQuotaRoutes(
       const now = new Date();
       const { monthMarker, monthStart, monthEnd } = monthBounds(now);
 
-      const userPool = await activityRepo.searchUsersByEmail(q, pageSize * 5);
-      const knownAdmins = await adminUsersRepo.listUserIds();
+      const userPool = await userDirectoryRepo.searchByEmailPrefix(q, pageSize * 5);
+      const knownAdmins = await userDirectoryRepo.listAdminUserIds();
       const normalUsers = userPool.filter((u) => !knownAdmins.has(u.userId));
       const slice = normalUsers.slice((page - 1) * pageSize, page * pageSize);
 

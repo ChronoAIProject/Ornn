@@ -62,6 +62,10 @@ spec:
                   value: "${ALLOWED_ORIGINS}"
                 - name: EXTRA_NYXID_SERVICES
                   value: "${EXTRA_NYXID_SERVICES}"
+                # Bootstrap fallback only — admin telemetry section
+                # is canonical (issue #271).
+                - name: POSTHOG_ENABLED
+                  value: "${POSTHOG_ENABLED}"
                 - name: POSTHOG_HOST
                   value: "${POSTHOG_HOST}"
                 - name: POSTHOG_ERROR_SAMPLE_RATE

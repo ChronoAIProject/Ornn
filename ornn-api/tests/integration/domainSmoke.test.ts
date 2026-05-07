@@ -101,16 +101,19 @@ describe("integration: domain — skill search", () => {
 });
 
 describe("integration: domain — admin", () => {
-  test("GET /api/v1/admin/activities rejects callers without admin perm", async () => {
+  // The `/admin/activities` endpoint was removed in issue #271 — the
+  // activity feed lives in PostHog now. The dashboard `/admin/dashboard/stats`
+  // endpoint covers the auth gate for admin-only routes.
+  test("GET /api/v1/admin/dashboard/stats rejects callers without admin perm", async () => {
     const res = await harness.app.request(
-      "/api/v1/admin/activities",
+      "/api/v1/admin/dashboard/stats",
       { headers: authHeaders({ userId: "user_not_admin", email: "n@test" }) },
     );
     expect([401, 403]).toContain(res.status);
   });
 
-  test("GET /api/v1/admin/activities accepts platform admins", async () => {
-    const res = await harness.app.request("/api/v1/admin/activities", {
+  test("GET /api/v1/admin/dashboard/stats accepts platform admins", async () => {
+    const res = await harness.app.request("/api/v1/admin/dashboard/stats", {
       headers: authHeaders({
         userId: "user_admin",
         email: "a@test",

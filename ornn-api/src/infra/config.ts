@@ -3,13 +3,18 @@
  *
  * Per the Architecture §7 inventory, runtime-flippable knobs (LLM gateway,
  * default model, storage/sandbox URLs, NyxID base URL/paths, AgentSeal
- * toggle/timeout, SSE keep-alive, extra NyxID services) live in admin
- * settings (`platform_settings` collection) and are read on demand via
- * `SettingsService`. `loadConfig` only resolves what's needed to bring the
- * process up: DB URI, log level, NyxID SA credentials (so the very first
- * settings read can authenticate downstream proxies if required), the
- * encryption key for at-rest secrets, CORS origins, and the public origin
- * used for canonical-link generation.
+ * toggle/timeout, SSE keep-alive, extra NyxID services, **PostHog
+ * telemetry**) live in admin settings (`platform_settings` collection)
+ * and are read on demand via `SettingsService`. `loadConfig` only resolves
+ * what's needed to bring the process up: DB URI, log level, NyxID SA
+ * credentials (so the very first settings read can authenticate downstream
+ * proxies if required), the encryption key for at-rest secrets, CORS
+ * origins, and the public origin used for canonical-link generation.
+ *
+ * PostHog values stay in env as a *bootstrap fallback* for the very first
+ * boot (when the DB telemetry section is empty / defaults). Once the
+ * admin saves a value through Settings → Telemetry, that DB value wins
+ * on the next restart.
  *
  * Validation is schema-driven via Zod. Library code throws `ConfigError`
  * on invalid env; the entry point (`src/index.ts`) decides what to do
@@ -46,10 +51,10 @@ export interface SkillConfig {
    */
   readonly allowedOrigins: readonly string[];
 
-  // PostHog (server-side product analytics) — see #252.
-  // Kept in env for v1 — the `telemetry` settings section is reserved but
-  // has no live consumer yet per Architecture §10 sub-decision 8. When the
-  // telemetry section is wired, these can move.
+  // PostHog (server-side product analytics) — bootstrap fallback only.
+  // Live values are read from the `telemetry` settings section at boot
+  // (issue #271). When the section is empty, we fall back to these.
+  readonly posthogEnabled: boolean;
   readonly posthogApiKey: string | null;
   readonly posthogProjectId: string | null;
   readonly posthogHost: string;
@@ -59,12 +64,6 @@ export interface SkillConfig {
   // timeout move to settings (skillAudit section).
   readonly agentsealPython: string;
   readonly agentsealScript: string;
-
-  // ---- Universal API audit (issue #245) ----
-  readonly auditRetentionDays: number;
-  readonly auditMinioBucket: string;
-  readonly auditBodyInlineMaxBytes: number;
-  readonly auditGlobalRedactPatterns: readonly string[];
 
   /**
    * Origin used in mirror READMEs to link back to the canonical Ornn
@@ -123,7 +122,9 @@ const envSchema = z.object({
    */
   ENCRYPTION_KEY: z.string().min(32, "ENCRYPTION_KEY must be at least 32 characters (set via env in all environments — no dev fallback)"),
 
-  // ---- PostHog (server-side product analytics, #252) ----
+  // ---- PostHog (server-side product analytics) — bootstrap fallback. ----
+  // Admin Settings → Telemetry overrides these at boot when set.
+  POSTHOG_ENABLED: booleanFromEnv,
   POSTHOG_API_KEY: z.string().default(""),
   POSTHOG_PROJECT_ID: z.string().default(""),
   POSTHOG_HOST: z.string().url().default("https://eu.i.posthog.com"),
@@ -132,12 +133,6 @@ const envSchema = z.object({
   // ---- AgentSeal (skill trust scanner, #253) — binary paths only ----
   AGENTSEAL_PYTHON: z.string().min(1).default("/opt/agentseal/bin/python"),
   AGENTSEAL_SCRIPT: z.string().min(1).default("/opt/agentseal/scan_skill.py"),
-
-  // ---- Universal API audit (issue #245) ----
-  AUDIT_RETENTION_DAYS: z.coerce.number().int().positive().default(90),
-  MINIO_AUDIT_BUCKET: z.string().min(1).default("ornn-audit"),
-  AUDIT_BODY_INLINE_MAX_KB: z.coerce.number().int().positive().default(16),
-  AUDIT_GLOBAL_REDACT_PATTERNS: z.string().default(""),
 
   /**
    * Public origin agents and humans use to reach Ornn (no trailing
@@ -203,6 +198,7 @@ export function loadConfig(): SkillConfig {
     // safeParse above, so we never reach here without a real value.
     encryptionKey: env.ENCRYPTION_KEY.trim(),
 
+    posthogEnabled: env.POSTHOG_ENABLED,
     posthogApiKey: env.POSTHOG_API_KEY.trim() ? env.POSTHOG_API_KEY.trim() : null,
     posthogProjectId: env.POSTHOG_PROJECT_ID.trim() ? env.POSTHOG_PROJECT_ID.trim() : null,
     posthogHost: env.POSTHOG_HOST,
@@ -210,14 +206,6 @@ export function loadConfig(): SkillConfig {
 
     agentsealPython: env.AGENTSEAL_PYTHON,
     agentsealScript: env.AGENTSEAL_SCRIPT,
-
-    auditRetentionDays: env.AUDIT_RETENTION_DAYS,
-    auditMinioBucket: env.MINIO_AUDIT_BUCKET,
-    auditBodyInlineMaxBytes: env.AUDIT_BODY_INLINE_MAX_KB * 1024,
-    auditGlobalRedactPatterns: env.AUDIT_GLOBAL_REDACT_PATTERNS
-      .split(",")
-      .map((s) => s.trim())
-      .filter((s) => s.length > 0),
 
     ornnPublicOrigin: env.ORNN_PUBLIC_ORIGIN.replace(/\/+$/, ""),
   };

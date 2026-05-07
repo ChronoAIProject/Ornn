@@ -1,5 +1,12 @@
 /**
- * AdminUsersService UT-ADMIN-USERS-001..009 against in-memory Mongo.
+ * AdminUsersService against in-memory Mongo.
+ *
+ * After issue #271 the source pool is the unified `users` directory
+ * (UserDirectoryRepository); the old `activities` aggregation is gone.
+ * `lastActiveAt` and `firstJoinedAt` are surfaced from the directory's
+ * `lastSeenAt` / `firstSeenAt` columns. `activityCount` is the
+ * number of authenticated requests Ornn has seen for the user
+ * (incremented on every directory upsert).
  *
  * @module domains/admin-users/service.test
  */
@@ -7,35 +14,23 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { MongoMemoryServer } from "mongodb-memory-server";
 import { MongoClient, type Db } from "mongodb";
-import { ActivityRepository } from "../admin/activityRepository";
-import { AdminUsersRepository } from "./repository";
-import { UsersMetaRepository } from "./usersMetaRepository";
+import { UserDirectoryRepository } from "../users/repository";
 import { AdminUsersService } from "./service";
 
 let mongo: MongoMemoryServer;
 let client: MongoClient;
 let db: Db;
 let service: AdminUsersService;
-let activityRepo: ActivityRepository;
-let adminUsersRepo: AdminUsersRepository;
-let metaRepo: UsersMetaRepository;
+let userDirectoryRepo: UserDirectoryRepository;
 
 beforeAll(async () => {
   mongo = await MongoMemoryServer.create();
   client = new MongoClient(mongo.getUri());
   await client.connect();
   db = client.db("admin_users_svc_test");
-  activityRepo = new ActivityRepository(db);
-  adminUsersRepo = new AdminUsersRepository(db);
-  await adminUsersRepo.ensureIndexes();
-  metaRepo = new UsersMetaRepository(db);
-  await metaRepo.ensureIndexes();
-  service = new AdminUsersService({
-    db,
-    activityRepo,
-    adminUsersRepo,
-    usersMetaRepo: metaRepo,
-  });
+  userDirectoryRepo = new UserDirectoryRepository(db);
+  await userDirectoryRepo.ensureIndexes();
+  service = new AdminUsersService({ db, userDirectoryRepo });
 });
 
 afterAll(async () => {
@@ -44,36 +39,34 @@ afterAll(async () => {
 });
 
 beforeEach(async () => {
-  await db.collection("activities").deleteMany({});
-  await db.collection("admin_users").deleteMany({});
-  await db.collection("users_meta").deleteMany({});
+  await db.collection("users").deleteMany({});
   await db.collection("skills").deleteMany({});
 });
 
+/**
+ * Direct collection insert so tests can pin `firstSeenAt` / `lastSeenAt`
+ * to specific dates. The lazy upsert path stamps `now` and would make
+ * temporal assertions unreliable.
+ */
 async function seedUser(opts: {
   userId: string;
   isAdmin?: boolean;
-  activities?: Array<{ at: Date; email?: string; name?: string }>;
+  email?: string;
+  displayName?: string;
+  firstSeenAt?: Date;
+  lastSeenAt?: Date;
+  activityCount?: number;
   skills?: number;
 }) {
-  if (opts.isAdmin) {
-    await adminUsersRepo.upsert({
-      userId: opts.userId,
-      email: `${opts.userId}@x`,
-      displayName: opts.userId,
-    });
-  }
-  for (const a of opts.activities ?? []) {
-    await db.collection("activities").insertOne({
-      _id: `${opts.userId}-${a.at.toISOString()}` as never,
-      userId: opts.userId,
-      userEmail: a.email ?? `${opts.userId}@x`,
-      userDisplayName: a.name ?? opts.userId,
-      action: "login",
-      details: {},
-      createdAt: a.at,
-    });
-  }
+  await db.collection("users").insertOne({
+    _id: opts.userId as never,
+    email: opts.email ?? `${opts.userId}@x`,
+    displayName: opts.displayName ?? opts.userId,
+    firstSeenAt: opts.firstSeenAt ?? new Date(),
+    lastSeenAt: opts.lastSeenAt ?? new Date(),
+    activityCount: opts.activityCount ?? 1,
+    isAdmin: !!opts.isAdmin,
+  });
   for (let i = 0; i < (opts.skills ?? 0); i++) {
     await db.collection("skills").insertOne({
       _id: `${opts.userId}-skill-${i}` as never,
@@ -84,19 +77,19 @@ async function seedUser(opts: {
   }
 }
 
-describe("UT-ADMIN-USERS-001 role=admin returns admin set", () => {
+describe("role=admin returns admin set", () => {
   test("3 admins seeded → 3 rows", async () => {
     for (let i = 0; i < 3; i++) {
       await seedUser({
         userId: `a${i}`,
         isAdmin: true,
-        activities: [{ at: new Date(Date.UTC(2026, 4, 1 + i)) }],
+        lastSeenAt: new Date(Date.UTC(2026, 4, 1 + i)),
       });
     }
     for (let i = 0; i < 4; i++) {
       await seedUser({
         userId: `u${i}`,
-        activities: [{ at: new Date(Date.UTC(2026, 4, 5)) }],
+        lastSeenAt: new Date(Date.UTC(2026, 4, 5)),
       });
     }
     const r = await service.listUsers({ role: "admin", page: 1, pageSize: 50 });
@@ -105,48 +98,35 @@ describe("UT-ADMIN-USERS-001 role=admin returns admin set", () => {
   });
 });
 
-describe("UT-ADMIN-USERS-002 role=normal excludes admins", () => {
+describe("role=normal excludes admins", () => {
   test("normal pool = total − admin", async () => {
     for (let i = 0; i < 2; i++) {
-      await seedUser({
-        userId: `a${i}`,
-        isAdmin: true,
-        activities: [{ at: new Date() }],
-      });
+      await seedUser({ userId: `a${i}`, isAdmin: true });
     }
     for (let i = 0; i < 5; i++) {
-      await seedUser({
-        userId: `u${i}`,
-        activities: [{ at: new Date() }],
-      });
+      await seedUser({ userId: `u${i}` });
     }
     const r = await service.listUsers({ role: "normal", page: 1, pageSize: 50 });
     expect(r.total).toBe(5);
   });
 });
 
-describe("UT-ADMIN-USERS-003 search by email substring", () => {
+describe("search by email prefix", () => {
   test("q narrows to prefix match", async () => {
-    await seedUser({
-      userId: "alice",
-      activities: [{ at: new Date(), email: "alice@example.com", name: "Alice" }],
-    });
-    await seedUser({
-      userId: "bob",
-      activities: [{ at: new Date(), email: "bob@example.com", name: "Bob" }],
-    });
+    await seedUser({ userId: "alice", email: "alice@example.com", displayName: "Alice" });
+    await seedUser({ userId: "bob", email: "bob@example.com", displayName: "Bob" });
     const r = await service.listUsers({ role: "normal", page: 1, pageSize: 50, q: "ali" });
     expect(r.total).toBe(1);
     expect(r.items[0].email).toBe("alice@example.com");
   });
 });
 
-describe("UT-ADMIN-USERS-004 pagination", () => {
-  test("page=2 pageSize=10 returns rows 11..20", async () => {
+describe("pagination", () => {
+  test("page=2 pageSize=10 returns the second page", async () => {
     for (let i = 0; i < 25; i++) {
       await seedUser({
         userId: `u${String(i).padStart(2, "0")}`,
-        activities: [{ at: new Date(Date.UTC(2026, 4, 1 + (i % 28))) }],
+        lastSeenAt: new Date(Date.UTC(2026, 4, 1 + (i % 28))),
       });
     }
     const r = await service.listUsers({ role: "normal", page: 2, pageSize: 10 });
@@ -156,15 +136,15 @@ describe("UT-ADMIN-USERS-004 pagination", () => {
   });
 });
 
-describe("UT-ADMIN-USERS-005 default sort lastActiveAt desc, nulls last", () => {
+describe("default sort lastActiveAt desc, nulls last", () => {
   test("most-recent first", async () => {
     await seedUser({
       userId: "old",
-      activities: [{ at: new Date(Date.UTC(2026, 0, 1)) }],
+      lastSeenAt: new Date(Date.UTC(2026, 0, 1)),
     });
     await seedUser({
       userId: "new",
-      activities: [{ at: new Date(Date.UTC(2026, 4, 1)) }],
+      lastSeenAt: new Date(Date.UTC(2026, 4, 1)),
     });
     const r = await service.listUsers({ role: "normal", page: 1, pageSize: 10 });
     expect(r.items[0].userId).toBe("new");
@@ -172,42 +152,32 @@ describe("UT-ADMIN-USERS-005 default sort lastActiveAt desc, nulls last", () => 
   });
 });
 
-describe("UT-ADMIN-USERS-006 lastActiveAt = MAX(activities.createdAt)", () => {
-  test("multiple activities; lastActiveAt is the max", async () => {
+describe("lastActiveAt surfaces directory's lastSeenAt", () => {
+  test("ISO timestamp matches the seeded value", async () => {
     await seedUser({
       userId: "u1",
-      activities: [
-        { at: new Date(Date.UTC(2026, 0, 1)) },
-        { at: new Date(Date.UTC(2026, 4, 15)) },
-        { at: new Date(Date.UTC(2026, 2, 1)) },
-      ],
+      lastSeenAt: new Date(Date.UTC(2026, 4, 15)),
+      activityCount: 7,
     });
     const r = await service.listUsers({ role: "normal", page: 1, pageSize: 10 });
     expect(r.items[0].lastActiveAt).toBe("2026-05-15T00:00:00.000Z");
-    expect(r.items[0].activityCount).toBe(3);
+    expect(r.items[0].activityCount).toBe(7);
   });
 });
 
-describe("UT-ADMIN-USERS-008 skillCount = N owned", () => {
+describe("skillCount = N owned", () => {
   test("createdBy match", async () => {
-    await seedUser({
-      userId: "u1",
-      activities: [{ at: new Date() }],
-      skills: 4,
-    });
+    await seedUser({ userId: "u1", skills: 4 });
     const r = await service.listUsers({ role: "normal", page: 1, pageSize: 10 });
     expect(r.items[0].skillCount).toBe(4);
   });
 });
 
-describe("firstJoinedAt synthesized from earliest activity", () => {
-  test("matches MIN(activities.createdAt)", async () => {
+describe("firstJoinedAt surfaces directory's firstSeenAt", () => {
+  test("matches the seeded value", async () => {
     await seedUser({
       userId: "u1",
-      activities: [
-        { at: new Date(Date.UTC(2026, 4, 1)) },
-        { at: new Date(Date.UTC(2025, 11, 15)) },
-      ],
+      firstSeenAt: new Date(Date.UTC(2025, 11, 15)),
     });
     const r = await service.listUsers({ role: "normal", page: 1, pageSize: 10 });
     expect(r.items[0].firstJoinedAt).toBe("2025-12-15T00:00:00.000Z");

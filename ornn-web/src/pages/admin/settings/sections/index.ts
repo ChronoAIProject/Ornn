@@ -10,7 +10,7 @@ export { MirrorSection } from "./MirrorSection";
 export { NyxIDSection } from "./NyxIDSection";
 export { ServicesSection } from "./ServicesSection";
 export { SkillAuditSection } from "./SkillAuditSection";
-export { TelemetryPlaceholderSection } from "./TelemetryPlaceholderSection";
+export { TelemetrySection } from "./TelemetrySection";
 export { QuotaDefaultsSection } from "./QuotaDefaultsSection";
 export { ExtrasSection } from "./ExtrasSection";
 export { ExportImportSection } from "./ExportImportSection";
