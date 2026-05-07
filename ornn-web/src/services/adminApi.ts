@@ -1,60 +1,10 @@
 /**
- * Admin API client.
- * Handles admin-related API calls for categories and tags.
- * User management and platform config removed (handled by NyxID).
+ * Admin API client (tags-only after #292; categories CRUD dropped).
  * @module services/adminApi
  */
 
-import { apiGet, apiPost, apiPut, apiDelete } from "./apiClient";
-import type {
-  Category,
-  CategoryInput,
-  Tag,
-} from "@/types/admin";
-
-// ============================================================================
-// Categories
-// ============================================================================
-
-/**
- * Fetch all categories.
- */
-export async function getCategories(): Promise<Category[]> {
-  const res = await apiGet<Category[]>("/api/v1/admin/categories");
-  return res.data ?? [];
-}
-
-/**
- * Create a new category.
- */
-export async function createCategory(data: CategoryInput): Promise<Category> {
-  const res = await apiPost<Category>("/api/v1/admin/categories", data);
-  if (!res.data) {
-    throw new Error("Failed to create category");
-  }
-  return res.data;
-}
-
-/**
- * Update a category.
- */
-export async function updateCategory(
-  id: string,
-  data: Partial<CategoryInput>
-): Promise<Category> {
-  const res = await apiPut<Category>(`/api/v1/admin/categories/${id}`, data);
-  if (!res.data) {
-    throw new Error("Failed to update category");
-  }
-  return res.data;
-}
-
-/**
- * Delete a category.
- */
-export async function deleteCategory(id: string): Promise<void> {
-  await apiDelete(`/api/v1/admin/categories/${id}`);
-}
+import { apiGet, apiPost, apiDelete } from "./apiClient";
+import type { Tag } from "@/types/admin";
 
 // ============================================================================
 // Tags

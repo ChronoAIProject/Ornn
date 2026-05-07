@@ -5,30 +5,6 @@
  */
 
 /**
- * Category definition.
- */
-export interface Category {
-  id: string;
-  name: string;
-  slug: string;
-  description: string;
-  order: number;
-  skillCount: number;
-  createdAt: string;
-  updatedAt: string;
-}
-
-/**
- * Input for creating/updating a category.
- */
-export interface CategoryInput {
-  name: string;
-  slug?: string;
-  description: string;
-  order?: number;
-}
-
-/**
  * Tag definition.
  */
 export interface Tag {
