@@ -117,9 +117,6 @@ const AdminUsersLegacyPage = lazy(() =>
 const AdminUserManagementPage = lazy(() =>
   import("@/pages/admin").then((m) => ({ default: m.UserManagementPage })),
 );
-const AdminAuditingPage = lazy(() =>
-  import("@/pages/admin").then((m) => ({ default: m.AuditingPlaceholderPage })),
-);
 const AdminSkillsPage = lazy(() =>
   import("@/pages/admin").then((m) => ({ default: m.AdminSkillsPage })),
 );
@@ -258,7 +255,6 @@ const router = createBrowserRouter(
             <Route path="/admin/dashboard" element={<AdminDashboardPage />} />
             <Route path="/admin/users" element={<AdminUserManagementPage />} />
             <Route path="/admin/users-legacy" element={<AdminUsersLegacyPage />} />
-            <Route path="/admin/auditing" element={<AdminAuditingPage />} />
             <Route path="/admin/skills" element={<AdminSkillsPage />} />
             <Route path="/admin/categories" element={<AdminCategoriesPage />} />
             <Route path="/admin/tags" element={<AdminTagsPage />} />

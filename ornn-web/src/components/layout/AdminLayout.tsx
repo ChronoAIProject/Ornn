@@ -36,15 +36,6 @@ const NAV_ITEMS: NavItem[] = [
     ),
   },
   {
-    path: "/admin/auditing",
-    label: "Auditing",
-    icon: (
-      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-      </svg>
-    ),
-  },
-  {
     path: "/admin/quota",
     label: "Quota",
     icon: (
@@ -101,8 +92,6 @@ function getBreadcrumbs(pathname: string): Array<{ label: string; path?: string 
     breadcrumbs.push({ label: "Dashboard" });
   } else if (pathname.startsWith("/admin/users")) {
     breadcrumbs.push({ label: "Users" });
-  } else if (pathname.startsWith("/admin/auditing")) {
-    breadcrumbs.push({ label: "Auditing" });
   } else if (pathname.startsWith("/admin/quota")) {
     breadcrumbs.push({ label: "Quota" });
   } else if (pathname.startsWith("/admin/skills")) {
