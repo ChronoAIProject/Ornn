@@ -30,6 +30,17 @@ data:
   NYXID_OAUTH_REDIRECT_URI: "${NYXID_OAUTH_REDIRECT_URI}"
   NYXID_LOGOUT_URL: "${NYXID_LOGOUT_URL}"
   NYXID_SETTINGS_URL: "${NYXID_SETTINGS_URL}"
+  # NyxID frontend link coords (#275). The SPA composes
+  # `${NYXID_BASE_FRONTEND_URL}${NYXID_MY_*_PATH}` for in-app links to
+  # NyxID's own pages. Empty paths hide individual links; empty base URL
+  # disables all four. These used to live in the `nyxid` admin-settings
+  # section but moved here because they have no server-side consumer —
+  # putting them alongside the other browser-only NyxID coords keeps
+  # the delivery channel single.
+  NYXID_BASE_FRONTEND_URL: "${NYXID_BASE_FRONTEND_URL}"
+  NYXID_MY_SERVICES_PATH: "${NYXID_MY_SERVICES_PATH}"
+  NYXID_MY_PROFILE_PATH: "${NYXID_MY_PROFILE_PATH}"
+  NYXID_MY_ORGANIZATION_PATH: "${NYXID_MY_ORGANIZATION_PATH}"
   # PostHog browser SDK config. Empty values disable analytics — useful
   # for previews and local dev. Read by 40-envsubst-config-js.sh and
   # injected into window.__ORNN_CONFIG__.
