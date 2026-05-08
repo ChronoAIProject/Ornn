@@ -512,18 +512,19 @@ export function SkillDetailPage() {
         />
 
         {/* ── Main grid ── */}
-        {/* Two-column layout (lg+). Columns flow with content; flex's
-            default `align-items: stretch` keeps both ending at the same
-            y-pixel (whichever column is taller wins; the shorter one
-            grows to match). Page-level scroll is the only scroll —
-            neither column has its own. A responsive `min-h` on the left
-            section keeps the file panel substantial when the package is
-            small; the right rail's intrinsic card stack handles the
-            rest. */}
-        <main className="flex flex-col gap-4 lg:flex-row lg:items-stretch">
+        {/* Two-column layout (lg+). On lg+, the grid is fixed to a
+            viewport-relative height so each column can scroll its own
+            long content without growing the page. `lg:h-[calc(100vh-Y)]`
+            absorbs roughly the top nav + breadcrumb + hero + version
+            banner above; `lg:min-h-[480px]` keeps it usable on short
+            viewports. On mobile we fall back to natural page-flow
+            (no fixed height, no inner scroll — let the OS scroll). */}
+        <main className="flex flex-col gap-4 lg:flex-row lg:items-stretch lg:h-[calc(100vh-280px)] lg:min-h-[480px]">
 
-          {/* Left: tabs + content. */}
-          <section className="card-impression flex min-h-[420px] flex-col overflow-hidden rounded border border-subtle bg-card lg:min-h-[680px] lg:flex-1 lg:min-w-0">
+          {/* Left: tabs + content. Inner overflow is owned by
+              SkillPackagePreview which gets `h-full`; this section
+              just needs `min-h-0` so the flex sizing math works. */}
+          <section className="card-impression flex min-h-[420px] flex-col overflow-hidden rounded border border-subtle bg-card lg:flex-1 lg:min-h-0 lg:min-w-0">
             {/* Toolbar — VersionPicker carries its own "Version" label, so
                 no outer label here (we used to render two). Audit history
                 lives in the right-rail card now. */}
@@ -576,11 +577,12 @@ export function SkillDetailPage() {
             </div>
           </section>
 
-          {/* Right rail — flows with content, no inner scroll. Flex
-              stretch keeps it aligned to the left section's y-extent
-              (or pushes the left section to grow when the rail is
-              taller). */}
-          <aside className="flex flex-col gap-4 lg:w-[320px] lg:shrink-0">
+          {/* Right rail — on lg+, scrolls its own content (audit
+              history, version list, danger zone can all grow long).
+              `lg:min-h-0` + `lg:overflow-y-auto` flips this from
+              "page-grows-with-cards" to "rail scrolls inside the
+              fixed-height main grid". */}
+          <aside className="flex flex-col gap-4 lg:w-[320px] lg:shrink-0 lg:min-h-0 lg:overflow-y-auto">
 
             {/* ── Audit card ── */}
             <section className="rounded-md border border-subtle bg-card p-5 card-impression">
