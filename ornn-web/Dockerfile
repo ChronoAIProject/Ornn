@@ -27,6 +27,14 @@ RUN bun install
 # Copy frontend source
 COPY ornn-web/ ornn-web/
 
+# Bake the deployed git commit into the bundle (and into dist/version.json).
+# Caller passes `--build-arg GIT_COMMIT=$(git rev-parse --short HEAD)`. The
+# version-check loop in the SPA polls /version.json at runtime and prompts
+# a reload when it differs from the baked __APP_VERSION__ — that's how
+# users on stale Safari sessions auto-recover after a deploy.
+ARG GIT_COMMIT=unknown
+ENV VITE_GIT_COMMIT=$GIT_COMMIT
+
 WORKDIR /app/ornn-web
 RUN bun run build
 
