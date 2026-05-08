@@ -145,25 +145,18 @@ describe("SettingsExporter", () => {
     expect(playground.defaultProviderId).toBe("openai");
   });
 
-  it("UT-EXPORT-005: provider models keep operator flags but drop synced catalog fields (#330)", async () => {
+  it("UT-EXPORT-005: provider `models` field is NOT in the export (#330)", async () => {
     const exporter = new SettingsExporter({ settingsService: fakeSettingsService() });
     const env = await exporter.export();
     const providers = env.sections.llmProviders as Array<Record<string, unknown>>;
-    const models = providers[0]!.models as Array<Record<string, unknown>>;
-    expect(models).toHaveLength(1);
-    const m = models[0]!;
-    // Operator flags survive the export.
-    expect(m.id).toBe("gpt-4o");
-    expect(m.enabledForPlayground).toBe(true);
-    expect(m.enabledForSkillGen).toBe(true);
-    expect(m.defaultForPlayground).toBe(true);
-    expect(m.defaultForSkillGen).toBe(false);
-    expect(m.removed).toBe(false);
-    // Synced catalog noise is gone — refilled by /sync against the
-    // upstream gateway.
-    expect("displayName" in m).toBe(false);
-    expect("firstSeenAt" in m).toBe(false);
-    expect("lastSyncedAt" in m).toBe(false);
+    expect(providers).toHaveLength(1);
+    // Provider container stays — gateway URL, auth, defaults are
+    // operator-set config worth replicating across envs.
+    expect(providers[0]!.name).toBe("openai");
+    expect(providers[0]!.gatewayUrl).toBe("https://api.openai.com");
+    // Model catalog is derived data, refilled by Sync; entirely
+    // absent from the export.
+    expect("models" in providers[0]!).toBe(false);
   });
 
   it("UT-EXPORT-006: exportedAt is ISO-8601 UTC", async () => {
