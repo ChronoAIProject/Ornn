@@ -117,6 +117,9 @@ import { QuotaRepository } from "./domains/quota/repository";
 import { QuotaService } from "./domains/quota/service";
 import { createQuotaRoutes } from "./domains/quota/routes";
 
+// Domain: Redemption codes (admin-issued single-use quota grants)
+import { RedemptionCodeRepository } from "./domains/redemption-codes/repository";
+
 // Domain: Admin (engineer-1): dashboard, users, quota admin.
 import { AdminDashboardService } from "./domains/admin/dashboard/service";
 import { createAdminDashboardRoutes } from "./domains/admin/dashboard/routes";
@@ -539,6 +542,12 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   const quotaRepo = new QuotaRepository(db);
   void quotaRepo.ensureIndexes().catch((err) =>
     logger.warn({ err }, "quota indexes ensureIndexes failed — proceeding anyway"),
+  );
+
+  // ---- Domain: Redemption codes (single-use admin-issued quota grants) ----
+  const redemptionCodeRepo = new RedemptionCodeRepository(db);
+  void redemptionCodeRepo.ensureIndexes().catch((err) =>
+    logger.warn({ err }, "redemption_codes indexes ensureIndexes failed — proceeding anyway"),
   );
   const quotaService = new QuotaService({
     repo: quotaRepo,
