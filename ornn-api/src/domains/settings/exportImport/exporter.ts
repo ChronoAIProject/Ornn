@@ -93,6 +93,20 @@ function redactProviderSecrets(p: LlmProvider): Record<string, unknown> {
       auth[field] = redactSentinel(field);
     }
   }
+  // Trim each model entry to operator-set state only. The synced
+  // catalog fields (displayName, firstSeenAt, lastSyncedAt) are
+  // derived data — refilled by the next /sync against the upstream
+  // gateway — and don't belong in a portable export. The flags
+  // (enabledFor*, defaultFor*, removed) ARE operator state and stay.
+  // See #330.
+  const models = p.models.map((m) => ({
+    id: m.id,
+    enabledForPlayground: m.enabledForPlayground,
+    enabledForSkillGen: m.enabledForSkillGen,
+    defaultForPlayground: m.defaultForPlayground,
+    defaultForSkillGen: m.defaultForSkillGen,
+    removed: m.removed,
+  }));
   return {
     _id: p._id,
     name: p.name,
@@ -100,7 +114,7 @@ function redactProviderSecrets(p: LlmProvider): Record<string, unknown> {
     modelListUrl: p.modelListUrl,
     apiFormat: p.apiFormat,
     auth,
-    models: p.models,
+    models,
     maxOutputTokens: p.maxOutputTokens,
     defaultTemperature: p.defaultTemperature,
   };
