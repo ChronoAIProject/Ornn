@@ -62,6 +62,11 @@ import { NotificationRepository } from "./domains/notifications/repository";
 import { NotificationService } from "./domains/notifications/service";
 import { createNotificationRoutes } from "./domains/notifications/routes";
 
+// Domain: Announcements (landing-page popup)
+import { AnnouncementRepository } from "./domains/announcements/repository";
+import { AnnouncementService } from "./domains/announcements/service";
+import { createAnnouncementRoutes } from "./domains/announcements/routes";
+
 // Domain: Analytics
 import { AnalyticsRepository } from "./domains/analytics/repository";
 import { AnalyticsService } from "./domains/analytics/service";
@@ -420,6 +425,14 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   );
   const notificationService = new NotificationService({ notificationRepo });
   const notificationRoutes = createNotificationRoutes({ notificationService });
+
+  // ---- Domain: Announcements (landing-page popup, issue #307) ----
+  const announcementRepo = new AnnouncementRepository(db);
+  void announcementRepo.ensureIndexes().catch((err) =>
+    logger.warn({ err }, "announcements indexes ensureIndexes failed — proceeding anyway"),
+  );
+  const announcementService = new AnnouncementService({ repo: announcementRepo });
+  const announcementRoutes = createAnnouncementRoutes({ announcementService });
 
   // ---- NyxID Orgs Client — built early so the audit fan-out can expand
   //   sharedWithOrgs into member rosters when sending consumer notifications.
@@ -813,6 +826,7 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   apiApp.route("/", mirrorRoutes);
   apiApp.route("/", auditRoutes);
   apiApp.route("/", notificationRoutes);
+  apiApp.route("/", announcementRoutes);
   apiApp.route("/", analyticsRoutes);
   apiApp.route("/", searchRoutes);
   apiApp.route("/", generationRoutes);
