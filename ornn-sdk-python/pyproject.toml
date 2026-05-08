@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "ornn-sdk"
 version = "0.2.0"
-description = "Python client for the Ornn skill platform"
+description = "Python client for Ornn — the end-to-end skill life-cycle manager for AI agents"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }

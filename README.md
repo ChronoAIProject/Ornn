@@ -4,15 +4,15 @@
 
 <h1 align="center">Ornn</h1>
 
-<p align="center">The skill platform for AI agents</p>
+<p align="center">The end-to-end skill life-cycle manager for AI agents</p>
 
 ---
 
-Ornn is an AI skill platform where users create, publish, discover, and execute AI skills — packaged prompts and scripts that any agent can use. The ultimate vision is **Skill-as-a-Service**: plug-and-play skill integration for any AI agent.
+Ornn is the end-to-end skill life-cycle manager for AI agents — search, install, run, build, audit, and publish AI skills (packaged prompts and scripts that any agent can use) from one platform. The ultimate vision is **Skill-as-a-Service**: plug-and-play skill integration for any AI agent, across the full life-cycle.
 
 ## What is Ornn
 
-A **skill** is a packaged AI capability — a combination of prompts, scripts, and metadata that an AI agent can discover and execute. Skills are versioned, validated, and stored in the Ornn skill library.
+A **skill** is a packaged AI capability — a combination of prompts, scripts, and metadata that an AI agent can discover and execute. Ornn manages the full skill life-cycle: skills are authored or AI-generated, validated, versioned, audited, published, discovered, installed, executed, and monitored — all through one platform.
 
 The skill library provides multiple discovery methods:
 
