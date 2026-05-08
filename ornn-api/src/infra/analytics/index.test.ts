@@ -217,4 +217,57 @@ describe("AnalyticsEmitter", () => {
       requestId: "req-1",
     });
   });
+
+  test("trackApiRequest passes through optional UA / query / size props when set", () => {
+    const tracker = new FakeTracker();
+    const emitter = new AnalyticsEmitter({ tracker, errorSampleRate: 1 });
+
+    emitter.trackApiRequest({
+      userId: "u-2",
+      callerType: "api",
+      method: "GET",
+      path: "/api/v1/skills",
+      status: 200,
+      durationMs: 11,
+      userAgent: "ornn-sdk-ts/0.4.1 node/22",
+      queryParamKeys: "page,pageSize,q",
+      requestBytes: 0,
+      responseBytes: 4096,
+    });
+
+    expect(tracker.calls).toHaveLength(1);
+    expect(tracker.calls[0]!.properties).toEqual({
+      source: "api",
+      callerType: "api",
+      method: "GET",
+      path: "/api/v1/skills",
+      status: 200,
+      durationMs: 11,
+      userAgent: "ornn-sdk-ts/0.4.1 node/22",
+      queryParamKeys: "page,pageSize,q",
+      requestBytes: 0,
+      responseBytes: 4096,
+    });
+  });
+
+  test("trackApiRequest drops the new optional props when undefined", () => {
+    const tracker = new FakeTracker();
+    const emitter = new AnalyticsEmitter({ tracker, errorSampleRate: 1 });
+
+    emitter.trackApiRequest({
+      userId: null,
+      callerType: "system",
+      method: "GET",
+      path: "/api/v1/health",
+      status: 200,
+      durationMs: 1,
+      // userAgent, queryParamKeys, requestBytes, responseBytes all unset
+    });
+
+    const props = tracker.calls[0]!.properties as Record<string, unknown>;
+    expect("userAgent" in props).toBe(false);
+    expect("queryParamKeys" in props).toBe(false);
+    expect("requestBytes" in props).toBe(false);
+    expect("responseBytes" in props).toBe(false);
+  });
 });

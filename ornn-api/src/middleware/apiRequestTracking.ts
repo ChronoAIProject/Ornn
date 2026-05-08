@@ -10,6 +10,13 @@
  *   - method, path, routePattern (when available), status, durationMs
  *   - sourceIp (first hop from `X-Forwarded-For`, redacted to /24 / /48)
  *   - requestId for cross-log correlation
+ *   - userAgent (capped at 500 chars) — distinguishes browser / SDK /
+ *     CLI / bot. Truncate not redact: clients self-identify here.
+ *   - queryParamKeys — comma-joined list of query-string KEYS only
+ *     (never values). Lets you slice on "which filter is used" without
+ *     leaking PII through search terms.
+ *   - requestBytes / responseBytes — content-length on each side
+ *     when set. SSE / chunked responses leave responseBytes undefined.
  *
  * Bodies are NOT captured — by design. PostHog event properties are
  * 32 KB capped and bodies don't belong in analytics. If you need
@@ -63,6 +70,12 @@ export function apiRequestTrackingMiddleware(
           durationMs,
           sourceIp,
           requestId,
+          userAgent: capUserAgent(c.req.header("user-agent")),
+          queryParamKeys: extractQueryParamKeys(c),
+          requestBytes: parseContentLength(c.req.header("content-length")),
+          responseBytes: parseContentLength(
+            c.res.headers.get("content-length"),
+          ),
         });
       } catch {
         /* never fail the request because tracking blew up */
@@ -145,4 +158,52 @@ function redactIp(ip: string | null): string | null {
 function extractRoutePattern(c: Context): string | undefined {
   const route = (c.req as unknown as { routePath?: string }).routePath;
   return typeof route === "string" && route.length > 0 ? route : undefined;
+}
+
+/**
+ * Cap user-agent at 500 chars. Real browsers/SDKs are well under
+ * this; a longer string is almost always a bot trying to overflow
+ * something. Truncating preserves the prefix (which carries the
+ * real client signature) and drops the trailing garbage.
+ */
+const USER_AGENT_MAX = 500;
+function capUserAgent(ua: string | undefined): string | undefined {
+  if (!ua) return undefined;
+  return ua.length > USER_AGENT_MAX ? `${ua.slice(0, USER_AGENT_MAX)}…` : ua;
+}
+
+/**
+ * Extract query-string KEYS only — comma-joined, sorted, no values.
+ * Sort ensures the property is comparable across requests (PostHog
+ * filters on equality). Cap to 20 keys so an attacker can't bloat
+ * the event by spamming params.
+ */
+const QUERY_PARAM_KEYS_MAX = 20;
+function extractQueryParamKeys(c: Context): string | undefined {
+  let queries: Record<string, string>;
+  try {
+    queries = c.req.query() as Record<string, string>;
+  } catch {
+    return undefined;
+  }
+  const keys = Object.keys(queries);
+  if (keys.length === 0) return undefined;
+  keys.sort();
+  if (keys.length > QUERY_PARAM_KEYS_MAX) {
+    keys.length = QUERY_PARAM_KEYS_MAX;
+    keys[QUERY_PARAM_KEYS_MAX - 1] = "…";
+  }
+  return keys.join(",");
+}
+
+/**
+ * Parse Content-Length header into a finite non-negative integer.
+ * Anything else (missing, NaN, negative, oversized) returns
+ * undefined — caller drops the property rather than emit garbage.
+ */
+function parseContentLength(value: string | null | undefined): number | undefined {
+  if (value == null || value === "") return undefined;
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < 0) return undefined;
+  return Math.trunc(n);
 }
