@@ -123,6 +123,14 @@ export class AnalyticsEmitter {
     durationMs: number;
     sourceIp?: string | null;
     requestId?: string | null;
+    /** Capped at 500 chars by the middleware. Distinguishes browser / SDK / CLI / bot. */
+    userAgent?: string;
+    /** Comma-joined sorted list of query-string KEYS (never values). */
+    queryParamKeys?: string;
+    /** Content-Length on the request body when set. */
+    requestBytes?: number;
+    /** Content-Length on the response when set (SSE/chunked → undefined). */
+    responseBytes?: number;
   }): void {
     this.tracker.track(input.userId, "api.request", {
       ...SOURCE_PROPERTY,
@@ -134,6 +142,10 @@ export class AnalyticsEmitter {
       durationMs: input.durationMs,
       ...(input.sourceIp ? { sourceIp: input.sourceIp } : {}),
       ...(input.requestId ? { requestId: input.requestId } : {}),
+      ...(input.userAgent ? { userAgent: input.userAgent } : {}),
+      ...(input.queryParamKeys ? { queryParamKeys: input.queryParamKeys } : {}),
+      ...(input.requestBytes !== undefined ? { requestBytes: input.requestBytes } : {}),
+      ...(input.responseBytes !== undefined ? { responseBytes: input.responseBytes } : {}),
     });
   }
 
