@@ -85,7 +85,8 @@ export function createSettingsExportImportRoutes(
   app.get("/admin/settings/export", auth, adminGuard, async (c) => {
     const envelope = await exporter.export();
     const filename = exporter.filenameFor(envName);
-    c.header("Content-Type", "application/json; charset=utf-8");
+    // Surface the suggested filename for clients that want it; the
+    // browser SPA serializes the JSON itself for the download blob.
     c.header("Content-Disposition", `attachment; filename="${filename}"`);
     // Fire-and-forget audit emission; never blocks the download.
     void audit
@@ -96,7 +97,10 @@ export function createSettingsExportImportRoutes(
       .catch((err) =>
         logger.warn({ err }, "settings.export audit emit failed — ignoring"),
       );
-    return c.body(JSON.stringify(envelope, null, 2));
+    // Wrap in the standard `{ data, error }` envelope so apiGet on the
+    // SPA side can parse it like every other endpoint. Was returning
+    // raw JSON before — that broke the SPA's downloader (#330).
+    return c.json({ data: envelope, error: null });
   });
 
   app.post(
@@ -122,7 +126,14 @@ export function createSettingsExportImportRoutes(
       if (!body || typeof body !== "object") {
         throw AppError.badRequest("INVALID_BODY", "JSON body required");
       }
-      const dryRun = c.req.query("dryRun") === "1" || c.req.query("dryRun") === "true";
+      // Accept dryRun from either the body (the SPA path) OR the
+      // query string (curl / scripts). Body takes precedence. Was
+      // query-only before — that silently mutated on the SPA's
+      // "preview" button (#330).
+      const dryRun =
+        (body as { dryRun?: unknown }).dryRun === true ||
+        c.req.query("dryRun") === "1" ||
+        c.req.query("dryRun") === "true";
       const actor = currentActor(c);
       const result = await importer.import(body, actor, { dryRun });
       void audit
