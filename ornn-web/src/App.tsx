@@ -126,6 +126,9 @@ const AdminSkillsPage = lazy(() =>
 const AdminQuotaManagementPage = lazy(() =>
   import("@/pages/admin").then((m) => ({ default: m.QuotaManagementPage })),
 );
+const AdminRedemptionCodesPage = lazy(() =>
+  import("@/pages/admin").then((m) => ({ default: m.RedemptionCodesPage })),
+);
 
 // Settings layout + section components live under pages/admin/settings.
 const SettingsLayout = lazy(() =>
@@ -245,6 +248,10 @@ const router = createBrowserRouter(
             <Route path="/admin/users-legacy" element={<AdminUsersLegacyPage />} />
             <Route path="/admin/skills" element={<AdminSkillsPage />} />
             <Route path="/admin/quota" element={<AdminQuotaManagementPage />} />
+            <Route
+              path="/admin/redemption-codes"
+              element={<AdminRedemptionCodesPage />}
+            />
 
             {/* /admin/mirror keeps working but redirects to the new
                 settings/mirror section so existing deep-links + bookmarks
