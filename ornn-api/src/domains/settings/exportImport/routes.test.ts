@@ -194,6 +194,53 @@ describe("settings export/import routes", () => {
     expect(playground.status).toBe("applied");
   });
 
+  it("G3: dryRun=true in BODY is honored — response audit reports dryRun=true (#330)", async () => {
+    const recordImport = mock(async () => {});
+    const audit: SettingsAuditLogger = {
+      recordExport: async () => {},
+      recordImport,
+    };
+    const { app } = makeApp({ audit });
+    const res = await app.request("/api/v1/admin/settings/import", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        schemaVersion: SETTINGS_SCHEMA_VERSION,
+        sections: {
+          playground: {
+            defaultProviderId: null,
+            defaultModelId: null,
+            sseKeepAliveMs: 15_000,
+            defaultMonthlyQuota: 99,
+          },
+        },
+        dryRun: true,
+      }),
+    });
+    expect(res.status).toBe(200);
+    await new Promise((r) => setTimeout(r, 5));
+    const args = (recordImport.mock.calls as unknown as Array<
+      [{ dryRun: boolean }]
+    >)[0]![0];
+    expect(args.dryRun).toBe(true);
+  });
+
+  it("G3: GET /export returns standard { data, error } envelope (#330)", async () => {
+    const { app } = makeApp();
+    const res = await app.request("/api/v1/admin/settings/export", {
+      method: "GET",
+      headers: {},
+    });
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as {
+      data?: { schemaVersion: number };
+      error: unknown;
+    };
+    expect(json.error).toBeNull();
+    expect(json.data).toBeDefined();
+    expect(json.data!.schemaVersion).toBe(SETTINGS_SCHEMA_VERSION);
+  });
+
   it("G3: audit emission failure does not break the response", async () => {
     const recordExport = mock(async () => {
       throw new Error("audit-broken");
