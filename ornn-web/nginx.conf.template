@@ -28,6 +28,17 @@ server {
         try_files $uri =404;
     }
 
+    # ── Build version manifest — MUST be served fresh on every fetch so
+    #    the SPA's version-check loop sees the current deploy. nginx-side
+    #    no-store + the SPA fetches with `cache: "no-store"` for double
+    #    insurance against intermediate caches (Safari, CDNs).
+    location = /version.json {
+        expires -1;
+        add_header Cache-Control "no-store, no-cache, must-revalidate";
+        add_header Pragma "no-cache";
+        try_files $uri =404;
+    }
+
     # ── Static asset caching ──────────────────────────────────────────────
     location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
         expires 1y;

@@ -254,9 +254,13 @@ done
 # Backend
 docker build -t "${ORNN_API_IMAGE}" -f ornn-api/Dockerfile .
 
-# Frontend — no build args. All config (nginx upstreams + Vite env)
-# is injected at container startup via the `ornn-web-config` ConfigMap.
-docker build -t "${ORNN_WEB_IMAGE}" -f ornn-web/Dockerfile .
+# Frontend — runtime config (nginx + Vite env) is injected at container
+# startup via the `ornn-web-config` ConfigMap. Pass `GIT_COMMIT` so the
+# stale-bundle auto-reload loop has a fresh build identity baked into
+# both `__APP_VERSION__` and `dist/version.json` (#318).
+docker build \
+  --build-arg GIT_COMMIT=$(git rev-parse --short HEAD) \
+  -t "${ORNN_WEB_IMAGE}" -f ornn-web/Dockerfile .
 ```
 
 ### Step 7: Deploy ornn

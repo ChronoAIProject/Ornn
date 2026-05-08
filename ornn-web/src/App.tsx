@@ -29,6 +29,7 @@ import { AuthGuard } from "@/components/auth/AuthGuard";
 import { AdminGuard } from "@/components/auth/AdminGuard";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { HighlighterMarkFilter } from "@/pages/landing/HighlighterMark";
+import { VersionUpdateBanner } from "@/components/layout/VersionUpdateBanner";
 import { PostHogProvider } from "@/components/analytics/PostHogProvider";
 import { CookieConsentBanner } from "@/components/analytics/CookieConsentBanner";
 
@@ -306,6 +307,10 @@ export function App() {
             landing surface and the app-shell nav can use the
             highlighter wash without duplicating filter IDs in the DOM. */}
         <HighlighterMarkFilter />
+        {/* Stale-bundle self-recovery — polls /version.json and prompts
+            a reload when a new ornn-web has been deployed. Renders
+            nothing on the happy path. */}
+        <VersionUpdateBanner />
         <Suspense fallback={<RouteFallback />}>
           <RouterProvider router={router} />
         </Suspense>
