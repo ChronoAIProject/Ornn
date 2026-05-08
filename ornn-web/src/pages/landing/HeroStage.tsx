@@ -11,7 +11,6 @@ import { useTranslation } from "react-i18next";
 import { PhoneMockup } from "./PhoneMockup";
 import { RepoRail } from "./RepoRail";
 import { HeroChyron } from "./HeroChyron";
-import { Stamp } from "./Stamp";
 import { EmberLink } from "./EmberButton";
 import { HighlighterMark } from "./HighlighterMark";
 import { RAIL_SKILLS, type RailTarget } from "./skillsData";
@@ -429,9 +428,6 @@ function ScrubHero() {
               data-off="false"
               className="pointer-events-none transition-opacity duration-300 data-[off=true]:opacity-[0.18]"
             >
-              <div className="mb-5 max-[720px]:mb-2">
-                <Stamp dot>{t("landing.nowForging")}</Stamp>
-              </div>
               {/* Forge Workshop display: Space Grotesk Bold UPPERCASE
                   with HighlighterMark on emphasis nouns. Replaces the
                   legacy italic-Fraunces-ember signature per DESIGN.md. */}
@@ -564,7 +560,6 @@ function StaticHero() {
         <div className="relative z-10 mx-auto flex max-w-[1280px] flex-col gap-10 px-6 pb-12 pt-14 sm:gap-12 sm:px-8 sm:pb-20 sm:pt-24">
           <div className="grid items-center gap-10 sm:gap-12 lg:grid-cols-[1fr_320px]">
             <div className="flex flex-col items-start gap-5 sm:gap-6">
-              <Stamp dot>{t("landing.nowForging")}</Stamp>
               {/* Static / reduced-motion hero — same Forge Workshop display */}
               <h1 className="font-display-grotesk text-[clamp(40px,4.6vw,64px)] font-bold uppercase leading-[0.98] tracking-[-0.025em] text-parchment max-[720px]:text-[clamp(28px,8vw,36px)]">
                 {t("landing.hero.headlineStart")}{" "}
