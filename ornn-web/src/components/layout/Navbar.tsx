@@ -303,6 +303,9 @@ export function Navbar({ className = "" }: NavbarProps) {
                     <DropdownExternal href={`${getNyxIdUrl()}/orgs`}>
                       {t("nav.myOrgs", "My Organizations")}
                     </DropdownExternal>
+                    <DropdownInternal to="/settings" onClick={() => setUserMenuOpen(false)}>
+                      {t("nav.redeemCode", "Redeem code")}
+                    </DropdownInternal>
                     <DropdownExternal href={getNyxIdUrl()}>
                       {t("nav.goToNyxId")}
                     </DropdownExternal>
@@ -455,6 +458,14 @@ export function Navbar({ className = "" }: NavbarProps) {
                 >
                   {t("nav.myProfile", "My Profile")}
                 </a>
+                <Link
+                  to="/settings"
+                  onClick={closeMenu}
+                  tabIndex={menuOpen ? 0 : -1}
+                  className="border-b border-subtle py-3 font-text text-[16px] text-body transition-colors hover:text-accent"
+                >
+                  {t("nav.redeemCode", "Redeem code")}
+                </Link>
                 {isAdmin(user) && (
                   <Link
                     to="/admin"
