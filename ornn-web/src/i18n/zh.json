@@ -485,7 +485,7 @@
   },
   "login": {
     "eyebrow": "[ § 入口 — NYXID ]",
-    "tagline": "锻造 AI 能力的工坊",
+    "tagline": "面向 AI 代理的技能生命周期平台",
     "desc": "使用 NyxID 账号登录以访问平台。",
     "loginBtn": "使用 NyxID 登录",
     "terms": "继续即表示你同意我们的服务条款和隐私政策。"
@@ -494,7 +494,7 @@
     "eyebrow": "[ § 404 — 未找到 ]",
     "code": "404",
     "message": "这片网格区域不存在。",
-    "goHome": "返回工坊"
+    "goHome": "返回首页"
   },
   "docs": {
     "onThisPage": "本页目录",
@@ -649,7 +649,7 @@
       "alsoOnRegistry": "注册中心其它技能"
     },
     "footer": {
-      "tagline": "为 AI 代理打造的技能全生命周期管理平台。来自 Chrono AI 工作室。",
+      "tagline": "为 AI 代理打造的技能全生命周期管理平台。",
       "productHeading": "产品",
       "developersHeading": "开发者",
       "productBrowse": "浏览",
@@ -704,7 +704,7 @@
   "contact": {
     "eyebrow": "[ § 01 — 联系 ]",
     "headlineStart": "联系",
-    "headlineHighlight": "工坊",
+    "headlineHighlight": "我们",
     "headlineEnd": "。",
     "subhead": "有问题、想合作，或想发布技能？通过下方任意一个渠道联系我们 —— 每一封都会读到。",
     "channelsLabel": "联系渠道",
@@ -713,5 +713,26 @@
     "cardGithubLabel": "GITHUB",
     "cardGithubHint": "在 issue 追踪器上提交 bug、Pull Request 与功能请求。",
     "signoff": "[ 完 · 联系 ]"
+  },
+  "serviceDetail": {
+    "failedToLoad": "加载服务失败: {{error}}",
+    "notFound": "未找到",
+    "back": "返回",
+    "backToMy": "返回我的服务",
+    "backToAdmin": "返回平台服务",
+    "statusActive": "活跃",
+    "statusInactive": "未启用",
+    "generateSkillBtn": "生成技能",
+    "proxyUrlHeading": "NyxID 代理 URL",
+    "openapiHeading": "OpenAPI 规范 URL",
+    "openapiNotConfigured": "未配置 OpenAPI 规范",
+    "sourceCodeHeading": "源代码",
+    "homepageHeading": "主页",
+    "notConfigured": "未配置"
+  },
+  "announcementsAdmin": {
+    "noAnnouncements": "暂无公告",
+    "emptyHint": "创建第一条公告后，访客下次加载落地页时就会看到。",
+    "createBtn": "创建公告"
   }
 }
