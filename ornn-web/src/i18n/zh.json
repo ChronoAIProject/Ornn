@@ -713,13 +713,6 @@
     "cardEmailHint": "适合产品咨询、合作洽谈与安全披露。一般两个工作日内回复。",
     "cardGithubLabel": "GITHUB",
     "cardGithubHint": "在 issue 追踪器上提交 bug、Pull Request 与功能请求。",
-    "cardXhsLabel": "小红书 · XIAOHONGSHU",
-    "cardXhsValue": "即将上线",
-    "cardXhsHint": "工坊幕后日常，账号即将上线。",
-    "cardOfficeLabel": "工坊",
-    "cardOfficeBrand": "Chrono AI",
-    "cardOfficeLocation": "新加坡",
-    "cardOfficeHint": "由位于新加坡的 Chrono AI 工坊打造与维护。",
     "signoff": "[ 完 · 联系 ]"
   }
 }

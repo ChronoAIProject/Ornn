@@ -17,6 +17,7 @@
  */
 
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/Button";
 import {
   isUndecided,
@@ -76,8 +77,14 @@ export function CookieConsentBanner() {
                 PostHog (EU)
               </a>{" "}
               to measure feature usage and improve the platform. Session
-              replay is sampled with input fields masked. You can change
-              your choice anytime in settings.
+              replay is sampled with input fields masked. See our{" "}
+              <Link
+                to="/legal/privacy"
+                className="text-accent underline-offset-2 hover:underline"
+              >
+                Privacy Policy
+              </Link>{" "}
+              for details. You can change your choice anytime in settings.
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-3">

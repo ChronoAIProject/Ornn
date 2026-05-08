@@ -43,8 +43,31 @@ export function LandingFooter() {
             </Column>
           </div>
         </div>
-        <div className="mt-10 flex flex-col justify-between gap-2 border-t border-[color:var(--color-border-subtle)] pt-5 font-mono text-[11px] text-meta sm:flex-row">
+        <div className="mt-10 flex flex-col justify-between gap-3 border-t border-[color:var(--color-border-subtle)] pt-5 font-mono text-[11px] text-meta sm:flex-row sm:items-center">
           <div>{t("landing.footer.copyright")}</div>
+          <nav
+            aria-label="Legal"
+            className="flex flex-wrap gap-x-5 gap-y-1"
+          >
+            <Link
+              to="/legal/privacy"
+              className="text-meta no-underline transition-colors hover:text-ember"
+            >
+              {t("landing.footer.legalPrivacy", "Privacy")}
+            </Link>
+            <Link
+              to="/legal/terms"
+              className="text-meta no-underline transition-colors hover:text-ember"
+            >
+              {t("landing.footer.legalTerms", "Terms")}
+            </Link>
+            <Link
+              to="/legal/acceptable-use"
+              className="text-meta no-underline transition-colors hover:text-ember"
+            >
+              {t("landing.footer.legalAup", "Acceptable Use")}
+            </Link>
+          </nav>
           <div>ornn.chrono-ai.fun</div>{/* allow-hardcode brand string in marketing footer */}
         </div>
       </div>

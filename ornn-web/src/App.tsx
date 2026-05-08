@@ -69,6 +69,21 @@ const DocsPage = lazy(() =>
 const ContactPage = lazy(() =>
   import("@/pages/ContactPage").then((m) => ({ default: m.ContactPage })),
 );
+const PrivacyPolicyPage = lazy(() =>
+  import("@/pages/legal/PrivacyPolicyPage").then((m) => ({
+    default: m.PrivacyPolicyPage,
+  })),
+);
+const TermsOfServicePage = lazy(() =>
+  import("@/pages/legal/TermsOfServicePage").then((m) => ({
+    default: m.TermsOfServicePage,
+  })),
+);
+const AcceptableUsePage = lazy(() =>
+  import("@/pages/legal/AcceptableUsePage").then((m) => ({
+    default: m.AcceptableUsePage,
+  })),
+);
 
 const ExplorePage = lazy(() =>
   import("@/pages/ExplorePage").then((m) => ({ default: m.ExplorePage })),
@@ -222,6 +237,9 @@ const router = createBrowserRouter(
       <Route element={<RootLayout />}>
         <Route path="/docs" element={<DocsPage />} />
         <Route path="/contact" element={<ContactPage />} />
+        <Route path="/legal/privacy" element={<PrivacyPolicyPage />} />
+        <Route path="/legal/terms" element={<TermsOfServicePage />} />
+        <Route path="/legal/acceptable-use" element={<AcceptableUsePage />} />
         <Route path="/registry" element={<ExplorePage />} />
         <Route path="/skills/:idOrName" element={<SkillDetailPage />} />
         <Route
