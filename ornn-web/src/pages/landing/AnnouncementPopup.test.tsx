@@ -115,7 +115,7 @@ describe("AnnouncementPopup", () => {
     expect(
       await screen.findByRole("heading", { name: /Hello there/i }),
     ).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Dismiss/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
     expect(localStorage.getItem("ornn:announcement:dismissed:a-2")).toBe("1");
   });
 });
