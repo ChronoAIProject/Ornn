@@ -160,7 +160,7 @@ export function TermsOfServicePage() {
       <h2>16. Contact</h2>
       <p>
         Questions about these Terms:{" "}
-        <a href="mailto:legal@chrono-ai.fun">legal@chrono-ai.fun</a>.
+        <a href="mailto:support@chrono-ai.fun">support@chrono-ai.fun</a>.
       </p>
     </LegalLayout>
   );

@@ -157,7 +157,7 @@ export function PrivacyPolicyPage() {
         </li>
       </ul>
       <p>
-        Email <a href="mailto:legal@chrono-ai.fun">legal@chrono-ai.fun</a>{" "}
+        Email <a href="mailto:support@chrono-ai.fun">support@chrono-ai.fun</a>{" "}
         to exercise any of these rights. We respond within 30 days.
       </p>
 
@@ -167,7 +167,7 @@ export function PrivacyPolicyPage() {
         configuration secrets (e.g. integration credentials), and least-
         privilege access controls inside Chrono AI. No security model is
         perfect — please report any vulnerability you find to{" "}
-        <a href="mailto:security@chrono-ai.fun">security@chrono-ai.fun</a>.
+        <a href="mailto:support@chrono-ai.fun">support@chrono-ai.fun</a>.
       </p>
 
       <h2>7. International transfers</h2>
@@ -195,10 +195,9 @@ export function PrivacyPolicyPage() {
 
       <h2>10. Contact</h2>
       <p>
-        Privacy questions or requests:{" "}
-        <a href="mailto:legal@chrono-ai.fun">legal@chrono-ai.fun</a>.<br />
-        Security disclosures:{" "}
-        <a href="mailto:security@chrono-ai.fun">security@chrono-ai.fun</a>.
+        Privacy questions, data-subject requests, and security
+        disclosures:{" "}
+        <a href="mailto:support@chrono-ai.fun">support@chrono-ai.fun</a>.
       </p>
     </LegalLayout>
   );

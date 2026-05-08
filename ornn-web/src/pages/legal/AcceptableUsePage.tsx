@@ -89,7 +89,7 @@ export function AcceptableUsePage() {
         <li>
           Probe, scan, or test the vulnerability of the Service except
           through our coordinated security disclosure channel (
-          <a href="mailto:security@chrono-ai.fun">security@chrono-ai.fun</a>).
+          <a href="mailto:support@chrono-ai.fun">support@chrono-ai.fun</a>).
         </li>
         <li>
           Circumvent rate limits, quota enforcement, or other usage
@@ -131,7 +131,7 @@ export function AcceptableUsePage() {
       <h2>6. Reporting and takedown</h2>
       <p>
         To report a skill or content that violates this policy, email{" "}
-        <a href="mailto:abuse@chrono-ai.fun">abuse@chrono-ai.fun</a> with
+        <a href="mailto:support@chrono-ai.fun">support@chrono-ai.fun</a> with
         the skill name, version, and a description of the violation. For
         copyright (DMCA) claims, include all elements required under 17
         U.S.C. § 512(c)(3) and direct the notice to the same address with
@@ -161,14 +161,8 @@ export function AcceptableUsePage() {
 
       <h2>9. Contact</h2>
       <p>
-        Abuse reports:{" "}
-        <a href="mailto:abuse@chrono-ai.fun">abuse@chrono-ai.fun</a>
-        <br />
-        Security disclosures:{" "}
-        <a href="mailto:security@chrono-ai.fun">security@chrono-ai.fun</a>
-        <br />
-        General legal:{" "}
-        <a href="mailto:legal@chrono-ai.fun">legal@chrono-ai.fun</a>
+        Abuse reports, security disclosures, and other policy questions:{" "}
+        <a href="mailto:support@chrono-ai.fun">support@chrono-ai.fun</a>.
       </p>
     </LegalLayout>
   );

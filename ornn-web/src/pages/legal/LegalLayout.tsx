@@ -92,10 +92,10 @@ export function LegalLayout({
             <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-meta">
               Questions? Email{" "}
               <a
-                href="mailto:legal@chrono-ai.fun"
+                href="mailto:support@chrono-ai.fun"
                 className="text-accent underline underline-offset-4 hover:opacity-80"
               >
-                legal@chrono-ai.fun
+                support@chrono-ai.fun
               </a>
             </span>
           </footer>
