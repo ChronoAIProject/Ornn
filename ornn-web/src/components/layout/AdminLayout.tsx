@@ -54,6 +54,15 @@ const NAV_ITEMS: NavItem[] = [
     ),
   },
   {
+    path: "/admin/announcements",
+    label: "Announcements",
+    icon: (
+      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M11 5.882V19.24a1.76 1.76 0 01-3.417.586l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />
+      </svg>
+    ),
+  },
+  {
     path: "/admin/settings",
     label: "Settings",
     icon: (
@@ -78,6 +87,8 @@ function getBreadcrumbs(pathname: string): Array<{ label: string; path?: string 
     breadcrumbs.push({ label: "Quota" });
   } else if (pathname.startsWith("/admin/skills")) {
     breadcrumbs.push({ label: "Skills" });
+  } else if (pathname.startsWith("/admin/announcements")) {
+    breadcrumbs.push({ label: "Announcements" });
   } else if (pathname.startsWith("/admin/settings")) {
     breadcrumbs.push({ label: "Settings", path: "/admin/settings" });
     const tail = pathname.replace(/^\/admin\/settings\/?/, "");
