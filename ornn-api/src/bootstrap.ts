@@ -121,6 +121,7 @@ import { createQuotaRoutes } from "./domains/quota/routes";
 import { RedemptionCodeRepository } from "./domains/redemption-codes/repository";
 import { RedemptionCodeService } from "./domains/redemption-codes/service";
 import { createAdminRedemptionCodesRoutes } from "./domains/admin/redemption-codes/routes";
+import { createMeRedemptionCodesRoutes } from "./domains/redemption-codes/me-routes";
 
 // Domain: Admin (engineer-1): dashboard, users, quota admin.
 import { AdminDashboardService } from "./domains/admin/dashboard/service";
@@ -826,6 +827,9 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   const adminRedemptionCodesRoutes = createAdminRedemptionCodesRoutes({
     redemptionCodeService,
   });
+  const meRedemptionCodesRoutes = createMeRedemptionCodesRoutes({
+    redemptionCodeService,
+  });
 
   apiApp.route("/", skillRoutes);
   apiApp.route("/", mirrorRoutes);
@@ -845,6 +849,7 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   apiApp.route("/", llmProvidersRoutes);
   apiApp.route("/", settingsExportImportRoutes);
   apiApp.route("/", quotaRoutes);
+  apiApp.route("/", meRedemptionCodesRoutes);
   apiApp.route("/", llmPickerRoutes);
   apiApp.route("/", formatRoutes);
   apiApp.route("/", createMeRoutes({

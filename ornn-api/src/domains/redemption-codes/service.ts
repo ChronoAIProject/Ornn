@@ -204,6 +204,14 @@ export class RedemptionCodeService {
     return this.repo.findByCode(code);
   }
 
+  async listRedeemedByUser(
+    userId: string,
+    page: number,
+    pageSize: number,
+  ): Promise<{ items: RedemptionCodeDoc[]; total: number }> {
+    return this.repo.listRedeemedByUser(userId, page, pageSize);
+  }
+
   async invalidate(params: InvalidateParams): Promise<RedemptionCodeDoc> {
     const now = params.now ?? new Date();
     const updated = await this.repo.tryInvalidate({
