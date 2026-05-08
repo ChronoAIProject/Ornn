@@ -485,7 +485,7 @@
   },
   "login": {
     "eyebrow": "[ § ENTRY — NYXID ]",
-    "tagline": "The Forge for AI Capabilities",
+    "tagline": "Skill life-cycle for AI agents",
     "desc": "Sign in with your NyxID account to access the platform.",
     "loginBtn": "Login with NyxID",
     "terms": "By continuing, you agree to our Terms of Service and Privacy Policy."
@@ -494,7 +494,7 @@
     "eyebrow": "[ § 404 — NOT FOUND ]",
     "code": "404",
     "message": "This sector of the grid does not exist.",
-    "goHome": "Return to Forge"
+    "goHome": "Return to home"
   },
   "docs": {
     "onThisPage": "On this page",
@@ -649,7 +649,7 @@
       "alsoOnRegistry": "Also on the registry"
     },
     "footer": {
-      "tagline": "The end-to-end skill life-cycle manager for AI agents. From the Chrono AI workshop.",
+      "tagline": "The end-to-end skill life-cycle manager for AI agents.",
       "productHeading": "Product",
       "developersHeading": "Developers",
       "productBrowse": "Browse",
@@ -704,7 +704,7 @@
   "contact": {
     "eyebrow": "[ § 01 — CONTACT ]",
     "headlineStart": "Talk to the",
-    "headlineHighlight": "workshop",
+    "headlineHighlight": "team",
     "headlineEnd": ".",
     "subhead": "Questions, partnerships, or a skill you want to publish? Reach us through any of the channels below — we read everything.",
     "channelsLabel": "Contact channels",
@@ -713,5 +713,26 @@
     "cardGithubLabel": "GITHUB",
     "cardGithubHint": "File bugs, pull requests, and feature requests on the issue tracker.",
     "signoff": "[ END · CONTACT ]"
+  },
+  "serviceDetail": {
+    "failedToLoad": "Failed to load service: {{error}}",
+    "notFound": "Not found",
+    "back": "Back",
+    "backToMy": "Back to My Services",
+    "backToAdmin": "Back to Admin Services",
+    "statusActive": "active",
+    "statusInactive": "inactive",
+    "generateSkillBtn": "Generate Skill",
+    "proxyUrlHeading": "NyxID Proxy URL",
+    "openapiHeading": "OpenAPI Spec URL",
+    "openapiNotConfigured": "No OpenAPI spec configured",
+    "sourceCodeHeading": "Source Code",
+    "homepageHeading": "Homepage",
+    "notConfigured": "Not configured"
+  },
+  "announcementsAdmin": {
+    "noAnnouncements": "No announcements yet",
+    "emptyHint": "Create the first announcement and visitors will see it on their next landing-page load.",
+    "createBtn": "Create announcement"
   }
 }

@@ -11,6 +11,7 @@
  */
 
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -64,6 +65,7 @@ const TONE_STYLE: Record<
 };
 
 export function AnnouncementsPage() {
+  const { t } = useTranslation();
   const addToast = useToastStore((s) => s.addToast);
   const announcementsQuery = useAdminAnnouncements();
   const deleteMut = useDeleteAnnouncement();
@@ -151,13 +153,12 @@ export function AnnouncementsPage() {
           </div>
         ) : items.length === 0 ? (
           <div className="flex flex-col items-center gap-2 p-12 text-center">
-            <p className="font-display text-lg text-strong">No announcements yet</p>
+            <p className="font-display text-lg text-strong">{t("announcementsAdmin.noAnnouncements")}</p>
             <p className="max-w-md font-text text-sm text-meta">
-              Create the first announcement and visitors will see it on
-              their next landing-page load.
+              {t("announcementsAdmin.emptyHint")}
             </p>
             <Button variant="secondary" onClick={openCreate} className="mt-2">
-              Create announcement
+              {t("announcementsAdmin.createBtn")}
             </Button>
           </div>
         ) : (

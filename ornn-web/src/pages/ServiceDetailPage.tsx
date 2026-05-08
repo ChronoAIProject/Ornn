@@ -6,6 +6,7 @@
 
 import { useState, useEffect } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { PageTransition } from "@/components/layout/PageTransition";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -30,6 +31,7 @@ interface ServiceDetail {
 }
 
 export function ServiceDetailPage() {
+  const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -91,8 +93,8 @@ export function ServiceDetailPage() {
     return (
       <PageTransition>
         <div className="py-4">
-          <p className="font-text text-sm text-danger">Failed to load service: {error ?? "Not found"}</p>
-          <Button variant="secondary" className="mt-4" onClick={() => navigate(-1)}>Back</Button>
+          <p className="font-text text-sm text-danger">{t("serviceDetail.failedToLoad", { error: error ?? t("serviceDetail.notFound") })}</p>
+          <Button variant="secondary" className="mt-4" onClick={() => navigate(-1)}>{t("serviceDetail.back")}</Button>
         </div>
       </PageTransition>
     );
@@ -108,7 +110,7 @@ export function ServiceDetailPage() {
           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
           </svg>
-          Back to {source === "my" ? "My Services" : "Admin Services"}
+          {source === "my" ? t("serviceDetail.backToMy") : t("serviceDetail.backToAdmin")}
         </button>
 
         <div className="mb-6">
@@ -116,13 +118,13 @@ export function ServiceDetailPage() {
             <div className="flex items-center gap-3">
               <h1 className="font-display text-2xl tracking-wider text-strong">{service.name}</h1>
               <Badge color={service.isActive ? "green" : "muted"}>
-                {service.isActive ? "active" : "inactive"}
+                {service.isActive ? t("serviceDetail.statusActive") : t("serviceDetail.statusInactive")}
               </Badge>
               <Badge color="yellow">{service.serviceCategory}</Badge>
             </div>
             {isAdminUser && (
               <Button onClick={() => setShowGenerateModal(true)}>
-                Generate Skill
+                {t("serviceDetail.generateSkillBtn")}
               </Button>
             )}
           </div>
@@ -133,40 +135,40 @@ export function ServiceDetailPage() {
 
         <div className="space-y-4">
           <Card>
-            <h3 className="font-display text-[10px] font-700 tracking-widest uppercase text-meta mb-2">NyxID Proxy URL</h3>
+            <h3 className="font-display text-[10px] font-700 tracking-widest uppercase text-meta mb-2">{t("serviceDetail.proxyUrlHeading")}</h3>
             <p className="font-mono text-xs text-accent break-all">{service.proxyUrl}</p>
           </Card>
 
           <Card>
-            <h3 className="font-display text-[10px] font-700 tracking-widest uppercase text-meta mb-2">OpenAPI Spec URL</h3>
+            <h3 className="font-display text-[10px] font-700 tracking-widest uppercase text-meta mb-2">{t("serviceDetail.openapiHeading")}</h3>
             {service.openapiProxyUrl ? (
               <a href={service.openapiProxyUrl} target="_blank" rel="noopener noreferrer" className="font-mono text-xs text-accent hover:underline break-all">
                 {service.openapiProxyUrl}
               </a>
             ) : (
-              <p className="font-text text-xs text-meta italic">No OpenAPI spec configured</p>
+              <p className="font-text text-xs text-meta italic">{t("serviceDetail.openapiNotConfigured")}</p>
             )}
           </Card>
 
           <Card>
-            <h3 className="font-display text-[10px] font-700 tracking-widest uppercase text-meta mb-2">Source Code</h3>
+            <h3 className="font-display text-[10px] font-700 tracking-widest uppercase text-meta mb-2">{t("serviceDetail.sourceCodeHeading")}</h3>
             {service.repositoryUrl ? (
               <a href={service.repositoryUrl} target="_blank" rel="noopener noreferrer" className="font-mono text-xs text-accent hover:underline break-all">
                 {service.repositoryUrl}
               </a>
             ) : (
-              <p className="font-text text-xs text-meta italic">Not configured</p>
+              <p className="font-text text-xs text-meta italic">{t("serviceDetail.notConfigured")}</p>
             )}
           </Card>
 
           <Card>
-            <h3 className="font-display text-[10px] font-700 tracking-widest uppercase text-meta mb-2">Homepage</h3>
+            <h3 className="font-display text-[10px] font-700 tracking-widest uppercase text-meta mb-2">{t("serviceDetail.homepageHeading")}</h3>
             {service.homepageUrl ? (
               <a href={service.homepageUrl} target="_blank" rel="noopener noreferrer" className="font-mono text-xs text-accent hover:underline break-all">
                 {service.homepageUrl}
               </a>
             ) : (
-              <p className="font-text text-xs text-meta italic">Not configured</p>
+              <p className="font-text text-xs text-meta italic">{t("serviceDetail.notConfigured")}</p>
             )}
           </Card>
         </div>
