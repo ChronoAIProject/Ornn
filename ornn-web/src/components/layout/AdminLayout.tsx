@@ -45,6 +45,15 @@ const NAV_ITEMS: NavItem[] = [
     ),
   },
   {
+    path: "/admin/redemption-codes",
+    label: "Redemption codes",
+    icon: (
+      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 5l-3 3m0 0l-3-3m3 3V3m6 14a3 3 0 11-6 0 3 3 0 016 0zM9 7a2 2 0 11-4 0 2 2 0 014 0z" />
+      </svg>
+    ),
+  },
+  {
     path: "/admin/skills",
     label: "Skills",
     icon: (
@@ -85,6 +94,8 @@ function getBreadcrumbs(pathname: string): Array<{ label: string; path?: string 
     breadcrumbs.push({ label: "Users" });
   } else if (pathname.startsWith("/admin/quota")) {
     breadcrumbs.push({ label: "Quota" });
+  } else if (pathname.startsWith("/admin/redemption-codes")) {
+    breadcrumbs.push({ label: "Redemption codes" });
   } else if (pathname.startsWith("/admin/skills")) {
     breadcrumbs.push({ label: "Skills" });
   } else if (pathname.startsWith("/admin/announcements")) {

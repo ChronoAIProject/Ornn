@@ -11,6 +11,7 @@ import { useTranslation } from "react-i18next";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/Button";
 import { PageTransition } from "@/components/layout/PageTransition";
+import { RedeemCodeSection } from "@/components/settings/RedeemCodeSection";
 import { useAuthStore } from "@/stores/authStore";
 import { config } from "@/config";
 
@@ -103,6 +104,9 @@ export function SettingsPage() {
             </div>
           </div>
         </motion.div>
+
+        {/* Redeem code — accept admin-issued codes that grant quota. */}
+        <RedeemCodeSection />
 
         {/* NyxID Settings Link */}
         {NYXID_SETTINGS_URL && (
