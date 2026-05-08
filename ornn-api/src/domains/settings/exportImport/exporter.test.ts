@@ -52,7 +52,19 @@ function fakeSettingsService(): SettingsService {
       modelListUrl: "https://api.openai.com/v1/models",
       apiFormat: "chat-completion",
       auth: { kind: "apiKey", apiKey: "sk-real" },
-      models: [],
+      models: [
+        {
+          id: "gpt-4o",
+          displayName: "GPT-4o",
+          enabledForPlayground: true,
+          enabledForSkillGen: true,
+          defaultForPlayground: true,
+          defaultForSkillGen: false,
+          removed: false,
+          firstSeenAt: new Date("2026-01-01"),
+          lastSyncedAt: new Date("2026-04-01"),
+        },
+      ],
       maxOutputTokens: 8192,
       defaultTemperature: 0.7,
       createdAt: new Date("2026-01-01"),
@@ -131,6 +143,27 @@ describe("SettingsExporter", () => {
     expect(mirror.enabled).toBe(true);
     const playground = env.sections.playground as Record<string, unknown>;
     expect(playground.defaultProviderId).toBe("openai");
+  });
+
+  it("UT-EXPORT-005: provider models keep operator flags but drop synced catalog fields (#330)", async () => {
+    const exporter = new SettingsExporter({ settingsService: fakeSettingsService() });
+    const env = await exporter.export();
+    const providers = env.sections.llmProviders as Array<Record<string, unknown>>;
+    const models = providers[0]!.models as Array<Record<string, unknown>>;
+    expect(models).toHaveLength(1);
+    const m = models[0]!;
+    // Operator flags survive the export.
+    expect(m.id).toBe("gpt-4o");
+    expect(m.enabledForPlayground).toBe(true);
+    expect(m.enabledForSkillGen).toBe(true);
+    expect(m.defaultForPlayground).toBe(true);
+    expect(m.defaultForSkillGen).toBe(false);
+    expect(m.removed).toBe(false);
+    // Synced catalog noise is gone — refilled by /sync against the
+    // upstream gateway.
+    expect("displayName" in m).toBe(false);
+    expect("firstSeenAt" in m).toBe(false);
+    expect("lastSyncedAt" in m).toBe(false);
   });
 
   it("UT-EXPORT-006: exportedAt is ISO-8601 UTC", async () => {
