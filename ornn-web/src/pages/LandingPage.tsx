@@ -7,16 +7,16 @@
  * styles/neon.css. The hero scroll-scrub lives in `HeroStage`.
  *
  * Routed bare (no RootLayout) so the 820vh sticky hero owns its scroll.
+ *
+ * Pre-launch trim (#324): the lower marketing sections (Why / Install /
+ * Featured / VS / Publish) are unmounted in favor of a hero-only
+ * landing. The components still live in `pages/landing/` so we can
+ * remount selectively as the message stabilizes; nothing here is
+ * deleted.
  */
 import { LandingNav } from "@/pages/landing/LandingNav";
 import { HeroStage } from "@/pages/landing/HeroStage";
-import { WhyOrnnSection } from "@/pages/landing/WhyOrnnSection";
-import { InstallEverywhereSection } from "@/pages/landing/InstallEverywhereSection";
-import { FeaturedSkillsSection } from "@/pages/landing/FeaturedSkillsSection";
-import { VSComparisonSection } from "@/pages/landing/VSComparisonSection";
-import { PublishSection } from "@/pages/landing/PublishSection";
 import { LandingFooter } from "@/pages/landing/LandingFooter";
-import { SectionRule } from "@/pages/landing/HammeredDivider";
 import { LandingChrome } from "@/pages/landing/LandingChrome";
 import { AnnouncementPopup } from "@/pages/landing/AnnouncementPopup";
 
@@ -32,16 +32,6 @@ export function LandingPage() {
       <LandingNav />
       <main>
         <HeroStage />
-        <SectionRule num="§ 001" label="WHY ORNN" />
-        <WhyOrnnSection />
-        <SectionRule num="§ 002" label="INSTALL ANYWHERE" />
-        <InstallEverywhereSection />
-        <SectionRule num="§ 003" label="FROM THE FORGE" />
-        <FeaturedSkillsSection />
-        <SectionRule num="§ 004" label="ORNN VS." />
-        <VSComparisonSection />
-        <SectionRule num="§ 005" label="FOR MAKERS" />
-        <PublishSection />
       </main>
       <LandingFooter />
       <AnnouncementPopup />

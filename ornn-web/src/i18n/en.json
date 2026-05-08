@@ -567,8 +567,8 @@
       "headlineNothing": "nothing",
       "headlineEnd": "Ship with",
       "headlineEverything": "everything",
-      "subhead": "A registry of composable skills. Watch a blank screen equip itself — nav, type, hero, motion. Install what you need; skip what you don't.",
-      "subheadStatic": "A registry of composable skills. Install what you need; skip what you don't.",
+      "subhead": "The skill life-cycle manager for AI agents. Search, install, run, build, audit, and publish — one platform from spec to ship, without bolting six tools together.",
+      "subheadStatic": "The skill life-cycle manager for AI agents — search, install, build, publish, audit. One platform, every runtime.",
       "finalLine1": "Your product. Your agent.",
       "finalLine2": "Fully equipped."
     },
