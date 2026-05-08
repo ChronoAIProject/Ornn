@@ -103,13 +103,24 @@ export function initAnalytics(): void {
       api_host: config.posthogHost,
       // Auto-pageview is on per #252.
       capture_pageview: true,
+      // Honor the browser's Do-Not-Track signal — if the user has DNT on,
+      // PostHog opts out of capture before any event fires. Free GDPR/CCPA
+      // affinity; complements the cookie banner rather than replacing it.
+      respect_dnt: true,
       // Session replay — gated by consent at the wrapper level. PostHog's
       // own opt-in flag mirrors that so the SDK doesn't even start the
       // recorder until we say so.
       disable_session_recording: !hasConsent(),
       session_recording: {
+        // Privacy-first defaults: mask every input AND every rendered text
+        // node. Skill content, user names, emails, activity feeds are all
+        // user-data; we'd rather lose visual fidelity in replays than
+        // risk PII leaking to PostHog. PostHog's own no-text idiom is
+        // `maskTextSelector: "*"` — it applies the standard mask to every
+        // matching element. Opt back in per element with `data-ph-no-mask`
+        // (PostHog's allowlist hook) when a piece of UI is public chrome.
         maskAllInputs: true,
-        maskTextSelector: "[data-ph-mask], input[type='password']",
+        maskTextSelector: "*",
       },
       // Defer personhood until `identify()` runs on login — anonymous
       // distinct IDs are fine for funnel attribution.
