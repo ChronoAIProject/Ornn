@@ -108,6 +108,9 @@ const ServiceDetailPage = lazy(() =>
 const NotificationsPage = lazy(() =>
   import("@/pages/NotificationsPage").then((m) => ({ default: m.NotificationsPage })),
 );
+const SettingsPage = lazy(() =>
+  import("@/pages/SettingsPage").then((m) => ({ default: m.SettingsPage })),
+);
 
 // Admin pages — bundled into one chunk by virtue of sharing the barrel
 // import path; only loaded when an /admin route activates.
@@ -240,6 +243,7 @@ const router = createBrowserRouter(
           <Route path="/my-skills" element={<MySkillsPage />} />
           <Route path="/services/:id" element={<ServiceDetailPage />} />
           <Route path="/notifications" element={<NotificationsPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
         </Route>
 
         {/* Admin routes — new IA per Architecture §6.1. */}
