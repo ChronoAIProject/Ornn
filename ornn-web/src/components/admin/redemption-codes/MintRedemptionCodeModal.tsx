@@ -263,7 +263,7 @@ export function MintRedemptionCodeModal({
           </div>
         </div>
       ) : (
-        <form onSubmit={submit} className="space-y-5">
+        <form onSubmit={submit} noValidate className="space-y-5">
           <fieldset className="space-y-3">
             <legend className="font-mono text-[10px] uppercase tracking-[0.18em] text-meta">
               Grants
