@@ -18,6 +18,7 @@ import { PublishSection } from "@/pages/landing/PublishSection";
 import { LandingFooter } from "@/pages/landing/LandingFooter";
 import { SectionRule } from "@/pages/landing/HammeredDivider";
 import { LandingChrome } from "@/pages/landing/LandingChrome";
+import { AnnouncementPopup } from "@/pages/landing/AnnouncementPopup";
 
 export function LandingPage() {
   return (
@@ -43,6 +44,7 @@ export function LandingPage() {
         <PublishSection />
       </main>
       <LandingFooter />
+      <AnnouncementPopup />
     </div>
   );
 }
