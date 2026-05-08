@@ -1,6 +1,6 @@
 # ornn-sdk (Python)
 
-Python client for the [Ornn](https://github.com/ChronoAIProject/Ornn) skill platform.
+Python client for [Ornn](https://github.com/ChronoAIProject/Ornn) — the end-to-end skill life-cycle manager for AI agents.
 
 Wraps the `/api/v1/*` HTTP surface with auth injection, response-envelope unwrapping, and typed errors (`OrnnError`). Mirrors the [TypeScript SDK](../ornn-sdk) so agents written in either language have the same programmatic entry point.
 

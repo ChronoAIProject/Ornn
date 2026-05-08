@@ -1,5 +1,5 @@
 /**
- * @chronoai/ornn-sdk — TypeScript client for the Ornn skill platform.
+ * @chronoai/ornn-sdk — TypeScript client for Ornn, the end-to-end skill life-cycle manager for AI agents.
  *
  * Quickstart:
  *
