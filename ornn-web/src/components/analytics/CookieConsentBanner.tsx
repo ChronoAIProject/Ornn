@@ -18,6 +18,7 @@
 
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { Trans, useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/Button";
 import {
   isUndecided,
@@ -26,6 +27,7 @@ import {
 } from "@/lib/cookieConsent";
 
 export function CookieConsentBanner() {
+  const { t } = useTranslation();
   // Hydrate from localStorage on mount so SSR-style snapshots don't
   // briefly flash the banner for users who already decided.
   const [visible, setVisible] = useState<boolean>(false);
@@ -58,33 +60,34 @@ export function CookieConsentBanner() {
         <div className="flex flex-col gap-4">
           <div className="min-w-0">
             <p className="mb-1.5 font-mono text-[10px] uppercase tracking-[0.2em] text-meta">
-              [ § ANALYTICS — CONSENT ]
+              {t("cookieConsent.stamp")}
             </p>
             <h2
               id="cookie-consent-title"
               className="mb-1 font-display text-base font-semibold tracking-tight text-strong"
             >
-              We use cookies for product analytics.
+              {t("cookieConsent.title")}
             </h2>
             <p className="font-text text-sm leading-relaxed text-body">
-              Ornn uses{" "}
-              <a
-                href="https://posthog.com/eu"
-                target="_blank"
-                rel="noreferrer noopener"
-                className="text-accent underline-offset-2 hover:underline"
-              >
-                PostHog (EU)
-              </a>{" "}
-              to measure feature usage and improve the platform. Session
-              replay is sampled with input fields masked. See our{" "}
-              <Link
-                to="/legal/privacy"
-                className="text-accent underline-offset-2 hover:underline"
-              >
-                Privacy Policy
-              </Link>{" "}
-              for details. You can change your choice anytime in settings.
+              <Trans
+                i18nKey="cookieConsent.body"
+                components={{
+                  postHogLink: (
+                    <a
+                      href="https://posthog.com/eu"
+                      target="_blank"
+                      rel="noreferrer noopener"
+                      className="text-accent underline-offset-2 hover:underline"
+                    />
+                  ),
+                  privacyLink: (
+                    <Link
+                      to="/legal/privacy"
+                      className="text-accent underline-offset-2 hover:underline"
+                    />
+                  ),
+                }}
+              />
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-3">
@@ -94,7 +97,7 @@ export function CookieConsentBanner() {
               onClick={decline}
               className="min-w-[96px]"
             >
-              Decline
+              {t("cookieConsent.decline")}
             </Button>
             <Button
               variant="primary"
@@ -102,7 +105,7 @@ export function CookieConsentBanner() {
               onClick={accept}
               className="min-w-[96px]"
             >
-              Accept
+              {t("cookieConsent.accept")}
             </Button>
           </div>
         </div>
