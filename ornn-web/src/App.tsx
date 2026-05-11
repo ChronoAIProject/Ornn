@@ -265,46 +265,52 @@ const router = createBrowserRouter(
           <Route path="/settings" element={<SettingsPage />} />
         </Route>
 
-        {/* Admin routes — new IA per Architecture §6.1. */}
+        {/* Admin routes — new IA per Architecture §6.1. Nested under
+            RootLayout so admin pages share the same Navbar + breadcrumb
+            chrome as every other authenticated route (theme switcher,
+            language switcher, user menu, QuotaChip). AdminLayout is now
+            a thin sidebar wrapper. */}
         <Route element={<AdminGuard />}>
-          <Route element={<AdminLayout />}>
-            <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
-            <Route path="/admin/dashboard" element={<AdminDashboardPage />} />
-            <Route path="/admin/users" element={<AdminUserManagementPage />} />
-            <Route path="/admin/users-legacy" element={<AdminUsersLegacyPage />} />
-            <Route path="/admin/skills" element={<AdminSkillsPage />} />
-            <Route path="/admin/quota" element={<AdminQuotaManagementPage />} />
-            <Route
-              path="/admin/redemption-codes"
-              element={<AdminRedemptionCodesPage />}
-            />
-            <Route path="/admin/announcements" element={<AdminAnnouncementsPage />} />
-
-            {/* /admin/mirror keeps working but redirects to the new
-                settings/mirror section so existing deep-links + bookmarks
-                continue to land on the right surface. */}
-            <Route
-              path="/admin/mirror"
-              element={<Navigate to="/admin/settings/mirror" replace />}
-            />
-
-            <Route path="/admin/settings" element={<SettingsLayout />}>
+          <Route element={<RootLayout />}>
+            <Route element={<AdminLayout />}>
+              <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
+              <Route path="/admin/dashboard" element={<AdminDashboardPage />} />
+              <Route path="/admin/users" element={<AdminUserManagementPage />} />
+              <Route path="/admin/users-legacy" element={<AdminUsersLegacyPage />} />
+              <Route path="/admin/skills" element={<AdminSkillsPage />} />
+              <Route path="/admin/quota" element={<AdminQuotaManagementPage />} />
               <Route
-                index
-                element={<Navigate to="/admin/settings/llm-providers" replace />}
+                path="/admin/redemption-codes"
+                element={<AdminRedemptionCodesPage />}
               />
-              <Route path="llm-providers" element={<LlmProvidersSection />} />
-              <Route path="playground" element={<PlaygroundSection />} />
-              <Route path="skill-generation" element={<SkillGenSection />} />
-              <Route path="mirror" element={<MirrorSection />} />
-              <Route path="integrations/nyxid" element={<NyxIDSection />} />
-              <Route path="skill-audit" element={<SkillAuditSection />} />
-              <Route path="posthog" element={<TelemetrySection />} />
-              <Route path="extras" element={<ExtrasSection />} />
+              <Route path="/admin/announcements" element={<AdminAnnouncementsPage />} />
+
+              {/* /admin/mirror keeps working but redirects to the new
+                  settings/mirror section so existing deep-links + bookmarks
+                  continue to land on the right surface. */}
               <Route
-                path="export-import"
-                element={<ExportImportSection />}
+                path="/admin/mirror"
+                element={<Navigate to="/admin/settings/mirror" replace />}
               />
+
+              <Route path="/admin/settings" element={<SettingsLayout />}>
+                <Route
+                  index
+                  element={<Navigate to="/admin/settings/llm-providers" replace />}
+                />
+                <Route path="llm-providers" element={<LlmProvidersSection />} />
+                <Route path="playground" element={<PlaygroundSection />} />
+                <Route path="skill-generation" element={<SkillGenSection />} />
+                <Route path="mirror" element={<MirrorSection />} />
+                <Route path="integrations/nyxid" element={<NyxIDSection />} />
+                <Route path="skill-audit" element={<SkillAuditSection />} />
+                <Route path="posthog" element={<TelemetrySection />} />
+                <Route path="extras" element={<ExtrasSection />} />
+                <Route
+                  path="export-import"
+                  element={<ExportImportSection />}
+                />
+              </Route>
             </Route>
           </Route>
         </Route>
