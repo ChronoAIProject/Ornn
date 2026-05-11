@@ -828,5 +828,351 @@
   },
   "editor": {
     "startTyping": "Start typing..."
+  },
+  "adminPages": {
+    "announcements": {
+      "eyebrow": "[§ ADMIN — ANNOUNCEMENTS]",
+      "title": "Landing page popup",
+      "description": "One announcement is shown at a time on the marketing page — the most recently created enabled record currently inside its schedule window. Disabled and out-of-window records stay here for history.",
+      "action": {
+        "new": "New announcement",
+        "disable": "Disable",
+        "enable": "Enable"
+      },
+      "table": {
+        "title": "Title",
+        "status": "Status",
+        "window": "Window",
+        "created": "Created",
+        "actions": "Actions"
+      },
+      "status": {
+        "live": "LIVE",
+        "scheduled": "SCHEDULED",
+        "expired": "EXPIRED",
+        "disabled": "DISABLED"
+      },
+      "window": {
+        "always": "Always (no schedule)"
+      },
+      "confirm": {
+        "delete": "Delete announcement \"{{title}}\"?"
+      },
+      "toast": {
+        "disabled": "Announcement disabled",
+        "enabled": "Announcement enabled",
+        "deleted": "Announcement deleted",
+        "updateFailed": "Update failed",
+        "deleteFailed": "Delete failed"
+      }
+    },
+    "skills": {
+      "title": "Skills",
+      "subtitle": "Manage all platform skills",
+      "subtitleForUser": "Skills for selected user",
+      "searchLabel": "Search Skills",
+      "searchPlaceholder": "Search by name or description...",
+      "searchBtn": "Search",
+      "clearBtn": "Clear",
+      "empty": "No skills found.",
+      "loadFailed": "Failed to load skills",
+      "table": {
+        "name": "Name",
+        "author": "Author",
+        "visibility": "Visibility",
+        "tags": "Tags",
+        "created": "Created",
+        "actions": "Actions"
+      },
+      "modal": {
+        "deleteTitle": "Delete Skill?",
+        "deleteBodyPrefix": "Are you sure you want to delete",
+        "deleteBodySuffix": "?",
+        "deleteWarning": "This action cannot be undone. The skill will be permanently removed from the platform."
+      },
+      "toast": {
+        "deleted": "Skill deleted",
+        "deleteFailed": "Failed to delete skill"
+      }
+    },
+    "quota": {
+      "title": "Quota",
+      "subtitle": "Per-user monthly counters with admin-applied grants. Admin users bypass quota and are excluded from this table.",
+      "tabs": {
+        "playground": "Playground",
+        "skillGen": "Skill Generation"
+      },
+      "placeholder": {
+        "filter": "Filter by email or display name…"
+      },
+      "aria": {
+        "filter": "Filter users",
+        "surface": "Surface"
+      },
+      "loadFailed": "Failed to load users"
+    },
+    "redemption": {
+      "title": "Redemption codes",
+      "subtitle": "Mint single-use codes that bundle one or more current-month quota grants. Codes can be invalidated before redemption.",
+      "action": {
+        "mint": "Mint code"
+      },
+      "tabs": {
+        "all": "All",
+        "active": "Active",
+        "redeemed": "Redeemed",
+        "invalidated": "Invalidated"
+      },
+      "placeholder": {
+        "filter": "Filter by code prefix or note…"
+      },
+      "aria": {
+        "filter": "Filter redemption codes",
+        "status": "Status"
+      },
+      "confirm": {
+        "invalidate": "Invalidate code {{code}}? It will no longer be redeemable."
+      },
+      "toast": {
+        "invalidated": "Code {{code}} invalidated.",
+        "invalidateFailed": "Failed to invalidate code."
+      },
+      "loadFailed": "Failed to load redemption codes"
+    },
+    "userMgmt": {
+      "title": "Users",
+      "subtitle": "Two views: admins (quota-bypass) and normal users. Per-row Grant quota link deep-links to the Quota page.",
+      "adminTitle": "Admin users",
+      "adminDescription": "Carry ornn:admin:skill — bypass all quota counters.",
+      "normalTitle": "Normal users",
+      "normalDescription": "Subject to monthly playground + skill-gen quotas."
+    },
+    "users": {
+      "title": "Users",
+      "subtitle": "Platform users and their activity",
+      "empty": "No users found.",
+      "loadFailed": "Failed to load users",
+      "table": {
+        "user": "User",
+        "email": "Email",
+        "skills": "Skills",
+        "activities": "Activities",
+        "lastActive": "Last Active"
+      }
+    }
+  },
+  "adminSettings": {
+    "secretSentinelHint": "(unchanged — secret preserved)",
+    "secretReplaceHint": "Replace to overwrite. Saving an unchanged mid-mask keeps the existing DB value.",
+    "sections": {
+      "mirror": {
+        "title": "GitHub mirror",
+        "description": "Repo coords + App credentials. Run controls are on the legacy mirror dashboard.",
+        "savedToast": "Mirror config saved",
+        "label": {
+          "enabled": "Mirror enabled",
+          "owner": "Owner",
+          "repo": "Repo",
+          "branch": "Branch",
+          "appId": "App ID",
+          "installationId": "Installation ID",
+          "privateKey": "App private key (PEM)"
+        },
+        "openDashboard": "Open mirror dashboard →"
+      },
+      "nyxid": {
+        "title": "NyxID integration",
+        "description": "OAuth service-account credentials + the API base URL the backend proxies through, plus the chrono-storage / chrono-sandbox endpoints (folded in here as part of #302 — same NyxID-orbit integration tier). Browser-side link coords live in ornn-web's configmap (NYXID_WEB_BASE_URL + path env vars) — change them there and redeploy.",
+        "savedToast": "NyxID integration saved",
+        "label": {
+          "tokenUrl": "Token URL",
+          "clientId": "Client ID",
+          "clientSecret": "Client Secret",
+          "baseApiUrl": "Base API URL",
+          "chronoStorageUrl": "chrono-storage URL",
+          "chronoStorageBucket": "chrono-storage bucket",
+          "chronoSandboxUrl": "chrono-sandbox URL"
+        }
+      },
+      "telemetry": {
+        "title": "PostHog",
+        "description": "PostHog product analytics + per-request audit. Backend reads this on boot — restart ornn-api to apply changes.",
+        "savedToast": "PostHog config saved",
+        "restartBadge": "Restart required · Backend reads on boot",
+        "label": {
+          "enabled": "PostHog enabled",
+          "apiKey": "Project API key",
+          "host": "Host",
+          "projectId": "Project ID",
+          "errorSampleRate": "api.error sample rate (0–1)"
+        },
+        "apiKeyHint": "Public project key from your PostHog dashboard. Empty disables analytics.",
+        "hostHint": "https://us.i.posthog.com or https://eu.i.posthog.com depending on your region.",
+        "projectIdPlaceholder": "optional — log correlation only",
+        "errorSampleRateHint": "Fraction of 5xx errors emitted as `api.error` events. `api.request` always emits at 100%.",
+        "frontendNote": "Frontend pageviews + identify still run from env-injected `window.__ORNN_CONFIG__` for now — DB-driven frontend runtime config is a follow-up."
+      },
+      "skillAudit": {
+        "title": "Skill auditing",
+        "description": "LLM-driven audit, AgentSeal hardening, risk threshold.",
+        "savedToast": "Skill audit saved",
+        "label": {
+          "llmAuditEnabled": "LLM audit enabled",
+          "provider": "LLM audit provider",
+          "model": "LLM audit model (optional)",
+          "riskThreshold": "Risk threshold (0..10)",
+          "agentSealEnabled": "AgentSeal enabled",
+          "agentSealTimeout": "AgentSeal timeout (ms) — 1000..600000"
+        },
+        "option": {
+          "select": "— select —",
+          "providerDefault": "— provider default —"
+        }
+      },
+      "runtime": {
+        "label": {
+          "defaultProvider": "Default provider",
+          "defaultModel": "Default model",
+          "sseKeepAlive": "SSE keep-alive (ms) — 1000..600000",
+          "defaultMonthlyQuota": "Default monthly quota — non-admin users (0..1,000,000)"
+        },
+        "option": {
+          "none": "— none —",
+          "providerDefault": "— provider default —"
+        },
+        "defaultModelHint": "Only enabled, non-removed models from the selected provider appear.",
+        "defaultMonthlyQuotaHint": "Raising the default mid-month grants existing users headroom; lowering does not retroactively claw back."
+      },
+      "playground": {
+        "title": "Playground",
+        "description": "Runtime defaults for the playground surface.",
+        "savedToast": "Playground settings saved"
+      },
+      "skillGen": {
+        "title": "Skill generation",
+        "description": "Runtime defaults for the AI-assisted skill generation surface.",
+        "savedToast": "Skill-gen settings saved"
+      },
+      "extras": {
+        "title": "Service binding list configuration",
+        "description": "Additional NyxID-managed services proxied through Ornn — bind each by name + base URL + optional scopes.",
+        "savedToast": "Extras saved",
+        "empty": "No extra services configured",
+        "label": {
+          "name": "Name",
+          "baseUrl": "Base URL (optional)",
+          "scopes": "Scopes (comma-separated, optional)"
+        },
+        "aria": {
+          "remove": "Remove {{name}}"
+        },
+        "fallbackRow": "row",
+        "action": {
+          "add": "Add service"
+        }
+      },
+      "llmProviders": {
+        "eyebrow": "[§ LLM PROVIDERS]",
+        "title": "LLM providers",
+        "description": "Per-provider gateway, auth, and model catalog. Click Models on a row to enable / disable models and pick per-surface defaults — defaults are global across providers, so setting one unselects every other.",
+        "action": {
+          "new": "New provider",
+          "addFirst": "Add your first provider",
+          "models": "Models",
+          "sync": "Sync"
+        },
+        "loadFailed": "Failed to load providers",
+        "empty": "No providers configured",
+        "table": {
+          "name": "Name",
+          "auth": "Auth",
+          "models": "Models",
+          "actions": "Actions"
+        },
+        "modelCounts": "{{playground}} playground · {{skillGen}} skillGen · {{total}} total",
+        "archivedCount": "{{count}} archived",
+        "toast": {
+          "synced": "Synced {{name}}: +{{added}} added, {{updated}} updated, {{removed}} removed.",
+          "syncFailed": "Sync failed"
+        }
+      },
+      "exportImport": {
+        "eyebrow": "[§ EXPORT / IMPORT]",
+        "title": "Export / import",
+        "description": "Download the full settings tree as JSON, or import to apply a previously-exported configuration. Secrets in the export are sentinel-redacted; importing a sentinel preserves the existing DB value.",
+        "downloadTitle": "Download",
+        "downloadHintPrefix": "File name follows",
+        "uploadTitle": "Upload + import",
+        "uploadSteps": "Step 1: upload. Step 2: dry-run. Step 3: confirm + apply.",
+        "invalidFile": "File is not a valid Ornn settings export (missing schemaVersion or sections)",
+        "parseFailed": "Parse failed",
+        "loaded": "Loaded · schemaVersion {{schemaVersion}} · exported {{exportedAt}}",
+        "dryRunTitle": "Dry-run preview",
+        "appliedTitle": "Import applied",
+        "action": {
+          "export": "Export settings",
+          "chooseFile": "Choose file",
+          "dryRun": "Run dry-run preview",
+          "apply": "Apply import",
+          "applyConfirm": "Apply"
+        },
+        "confirm": {
+          "title": "Apply import?",
+          "body": "This will write every section that passes validation. Sections that fail validation are skipped — the rest still apply. Sentinel-valued secrets keep the existing DB value."
+        },
+        "table": {
+          "section": "Section",
+          "status": "Status",
+          "detail": "Detail"
+        },
+        "toast": {
+          "exported": "Exported {{filename}}",
+          "exportFailed": "Export failed",
+          "dryRunFailed": "Dry-run failed",
+          "importPartial": "Import partial — {{failed}} section(s) failed.",
+          "importApplied": "Import applied.",
+          "importFailed": "Import failed"
+        }
+      }
+    }
+  },
+  "adminMirror": {
+    "savedRepo": "Mirror settings saved.",
+    "savedCreds": "GitHub App credentials saved.",
+    "title": "GitHub Mirror",
+    "loading": "Loading mirror status…",
+    "loadFailed": "Could not load mirror status.",
+    "featureOn": "Feature enabled",
+    "featureOff": "Feature disabled — flip the toggle below to enable",
+    "branch": "Branch",
+    "lastReconcile": "Last reconcile",
+    "runningSince": "Running since {{when}}",
+    "never": "Never",
+    "duration": "Duration",
+    "lastError": "Last error",
+    "countEligible": "Eligible",
+    "countEligibleHint": "Public + system skills",
+    "countSynced": "Synced",
+    "countSyncedHint": "Latest version on the mirror",
+    "countLagging": "Lagging",
+    "countLaggingHint": "Mirrored, but stale version",
+    "countNeverSynced": "Never synced",
+    "countNeverSyncedOldest": "Oldest pending: {{when}}",
+    "countNeverSyncedNone": "Nothing pending",
+    "reconcileTitle": "Manual reconcile",
+    "reconcileRunning": "Running…",
+    "reconcileButton": "Reconcile now",
+    "repoFormTitle": "Mirror repository",
+    "fieldEnabled": "Mirror enabled",
+    "fieldOwner": "Owner",
+    "fieldRepo": "Repo",
+    "fieldBranch": "Branch",
+    "credsTitle": "GitHub App credentials",
+    "fieldAppId": "App ID",
+    "fieldAppIdHint": "Numeric, from the App settings page on GitHub.",
+    "fieldInstallationId": "Installation ID",
+    "fieldPrivateKey": "App private key (PEM)",
+    "confirmTitle": "Confirm: abandon current mirror repo",
+    "confirmConfirm": "Yes, change repo"
   }
 }

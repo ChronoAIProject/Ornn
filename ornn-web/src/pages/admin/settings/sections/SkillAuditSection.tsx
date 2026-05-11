@@ -9,6 +9,7 @@
  */
 
 import { z } from "zod";
+import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
 import { SectionShell } from "@/components/admin/settings/SectionShell";
 import { UnsavedChangesGuard } from "@/components/admin/settings/UnsavedChangesGuard";
@@ -40,6 +41,7 @@ const Schema = z
   ) satisfies z.ZodType<SA>;
 
 export function SkillAuditSection() {
+  const { t } = useTranslation();
   const providers = useQuery({
     queryKey: ["admin", "settings", "llm-providers", "list"] as const,
     queryFn: listLlmProviders,
@@ -51,7 +53,7 @@ export function SkillAuditSection() {
     fetcher: () => fetchSection<SA>("skill-audit"),
     saver: (input) => putSection<SA>("skill-audit", input),
     schema: Schema,
-    successMessage: "Skill audit saved",
+    successMessage: t("adminSettings.sections.skillAudit.savedToast"),
   });
 
   const draft = form.draft;
@@ -64,8 +66,8 @@ export function SkillAuditSection() {
     <>
       <UnsavedChangesGuard when={form.isDirty} />
       <SectionShell
-        title="Skill auditing"
-        description="LLM-driven audit, AgentSeal hardening, risk threshold."
+        title={t("adminSettings.sections.skillAudit.title")}
+        description={t("adminSettings.sections.skillAudit.description")}
         isLoading={form.isLoading}
         isSaving={form.isSaving}
         isDirty={form.isDirty}
@@ -78,14 +80,14 @@ export function SkillAuditSection() {
         {draft && (
           <div className="space-y-4">
             <Toggle
-              label="LLM audit enabled"
+              label={t("adminSettings.sections.skillAudit.label.llmAuditEnabled")}
               value={draft.llmAuditEnabled}
               onChange={(v) => form.patchDraft({ llmAuditEnabled: v })}
             />
 
             <label className="flex flex-col gap-1.5">
               <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
-                LLM audit provider
+                {t("adminSettings.sections.skillAudit.label.provider")}
               </span>
               <select
                 value={draft.llmAuditDefaultProviderId ?? ""}
@@ -98,7 +100,7 @@ export function SkillAuditSection() {
                 disabled={!draft.llmAuditEnabled}
                 className="rounded-sm border border-subtle bg-card px-3 py-2 font-mono text-sm text-strong focus:border-accent focus:outline-none disabled:opacity-50"
               >
-                <option value="">— select —</option>
+                <option value="">{t("adminSettings.sections.skillAudit.option.select")}</option>
                 {(providers.data ?? []).map((p) => (
                   <option key={p._id} value={p._id}>
                     {p.name}
@@ -109,7 +111,7 @@ export function SkillAuditSection() {
 
             <label className="flex flex-col gap-1.5">
               <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
-                LLM audit model (optional)
+                {t("adminSettings.sections.skillAudit.label.model")}
               </span>
               <select
                 value={draft.llmAuditDefaultModelId ?? ""}
@@ -121,7 +123,7 @@ export function SkillAuditSection() {
                 disabled={!draft.llmAuditEnabled || !draft.llmAuditDefaultProviderId}
                 className="rounded-sm border border-subtle bg-card px-3 py-2 font-mono text-sm text-strong focus:border-accent focus:outline-none disabled:opacity-50"
               >
-                <option value="">— provider default —</option>
+                <option value="">{t("adminSettings.sections.skillAudit.option.providerDefault")}</option>
                 {auditModels.map((m) => (
                   <option key={m.id} value={m.id}>
                     {m.displayName} ({m.id})
@@ -132,7 +134,7 @@ export function SkillAuditSection() {
 
             <label className="flex flex-col gap-1.5">
               <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
-                Risk threshold (0..10)
+                {t("adminSettings.sections.skillAudit.label.riskThreshold")}
               </span>
               <input
                 type="number"
@@ -148,14 +150,14 @@ export function SkillAuditSection() {
             </label>
 
             <Toggle
-              label="AgentSeal enabled"
+              label={t("adminSettings.sections.skillAudit.label.agentSealEnabled")}
               value={draft.agentSealEnabled}
               onChange={(v) => form.patchDraft({ agentSealEnabled: v })}
             />
 
             <label className="flex flex-col gap-1.5">
               <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
-                AgentSeal timeout (ms) — 1000..600000
+                {t("adminSettings.sections.skillAudit.label.agentSealTimeout")}
               </span>
               <input
                 type="number"

@@ -8,6 +8,7 @@
  */
 
 import { z } from "zod";
+import { useTranslation } from "react-i18next";
 import { SectionShell } from "@/components/admin/settings/SectionShell";
 import { UnsavedChangesGuard } from "@/components/admin/settings/UnsavedChangesGuard";
 import { useSectionForm } from "@/components/admin/settings/useSectionForm";
@@ -69,12 +70,13 @@ const Schema = z
   ) satisfies z.ZodType<EX>;
 
 export function ExtrasSection() {
+  const { t } = useTranslation();
   const form = useSectionForm<EX>({
     queryKey: ["admin", "settings", "extras"] as const,
     fetcher: () => fetchSection<EX>("extras"),
     saver: (input) => putSection<EX>("extras", input),
     schema: Schema,
-    successMessage: "Extras saved",
+    successMessage: t("adminSettings.sections.extras.savedToast"),
   });
 
   const draft = form.draft;
@@ -110,8 +112,8 @@ export function ExtrasSection() {
     <>
       <UnsavedChangesGuard when={form.isDirty} />
       <SectionShell
-        title="Service binding list configuration"
-        description="Additional NyxID-managed services proxied through Ornn — bind each by name + base URL + optional scopes."
+        title={t("adminSettings.sections.extras.title")}
+        description={t("adminSettings.sections.extras.description")}
         isLoading={form.isLoading}
         isSaving={form.isSaving}
         isDirty={form.isDirty}
@@ -125,7 +127,7 @@ export function ExtrasSection() {
           <div className="space-y-3">
             {draft.extraNyxidServices.length === 0 && (
               <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-meta">
-                No extra services configured
+                {t("adminSettings.sections.extras.empty")}
               </p>
             )}
             {draft.extraNyxidServices.map((s, idx) => (
@@ -135,7 +137,7 @@ export function ExtrasSection() {
               >
                 <label className="sm:col-span-3 flex flex-col gap-1.5">
                   <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
-                    Name
+                    {t("adminSettings.sections.extras.label.name")}
                   </span>
                   <input
                     type="text"
@@ -146,7 +148,7 @@ export function ExtrasSection() {
                 </label>
                 <label className="sm:col-span-5 flex flex-col gap-1.5">
                   <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
-                    Base URL (optional)
+                    {t("adminSettings.sections.extras.label.baseUrl")}
                   </span>
                   <input
                     type="text"
@@ -157,7 +159,7 @@ export function ExtrasSection() {
                 </label>
                 <label className="sm:col-span-3 flex flex-col gap-1.5">
                   <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
-                    Scopes (comma-separated, optional)
+                    {t("adminSettings.sections.extras.label.scopes")}
                   </span>
                   <input
                     type="text"
@@ -177,10 +179,12 @@ export function ExtrasSection() {
                   <button
                     type="button"
                     onClick={() => remove(idx)}
-                    aria-label={`Remove ${s.name || "row"}`}
+                    aria-label={t("adminSettings.sections.extras.aria.remove", {
+                      name: s.name || t("adminSettings.sections.extras.fallbackRow"),
+                    })}
                     className="font-mono text-[10px] uppercase tracking-[0.14em] text-danger hover:text-accent"
                   >
-                    Remove
+                    {t("common.remove")}
                   </button>
                 </div>
               </div>
@@ -191,7 +195,7 @@ export function ExtrasSection() {
               size="sm"
               onClick={add}
             >
-              Add service
+              {t("adminSettings.sections.extras.action.add")}
             </Button>
           </div>
         )}

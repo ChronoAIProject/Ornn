@@ -10,31 +10,32 @@
  * @module pages/admin/UserManagementPage
  */
 
+import { useTranslation } from "react-i18next";
 import { AdminUsersTable } from "@/components/admin/AdminUsersTable";
 
 export function UserManagementPage() {
+  const { t } = useTranslation();
   return (
     <div className="space-y-8">
       <header>
         <h1 className="font-display text-2xl font-bold uppercase tracking-tight text-strong">
-          Users
+          {t("adminPages.userMgmt.title")}
         </h1>
         <p className="mt-1 font-text text-meta">
-          Two views: admins (quota-bypass) and normal users. Per-row Grant
-          quota link deep-links to the Quota page.
+          {t("adminPages.userMgmt.subtitle")}
         </p>
       </header>
 
       <AdminUsersTable
         role="admin"
-        title="Admin users"
-        description="Carry ornn:admin:skill — bypass all quota counters."
+        title={t("adminPages.userMgmt.adminTitle")}
+        description={t("adminPages.userMgmt.adminDescription")}
       />
 
       <AdminUsersTable
         role="normal"
-        title="Normal users"
-        description="Subject to monthly playground + skill-gen quotas."
+        title={t("adminPages.userMgmt.normalTitle")}
+        description={t("adminPages.userMgmt.normalDescription")}
       />
     </div>
   );

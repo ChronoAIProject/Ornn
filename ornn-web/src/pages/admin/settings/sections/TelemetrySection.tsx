@@ -18,6 +18,7 @@
  */
 
 import { z } from "zod";
+import { useTranslation } from "react-i18next";
 import { SectionShell } from "@/components/admin/settings/SectionShell";
 import { UnsavedChangesGuard } from "@/components/admin/settings/UnsavedChangesGuard";
 import { useSectionForm } from "@/components/admin/settings/useSectionForm";
@@ -39,12 +40,13 @@ const Schema = z.object({
 }) satisfies z.ZodType<TS>;
 
 export function TelemetrySection() {
+  const { t } = useTranslation();
   const form = useSectionForm<TS>({
     queryKey: ["admin", "settings", "posthog"] as const,
     fetcher: () => fetchSection<TS>("posthog"),
     saver: (input) => putSection<TS>("posthog", input),
     schema: Schema,
-    successMessage: "PostHog config saved",
+    successMessage: t("adminSettings.sections.telemetry.savedToast"),
   });
 
   const draft = form.draft;
@@ -56,8 +58,8 @@ export function TelemetrySection() {
     <>
       <UnsavedChangesGuard when={form.isDirty} />
       <SectionShell
-        title="PostHog"
-        description="PostHog product analytics + per-request audit. Backend reads this on boot — restart ornn-api to apply changes."
+        title={t("adminSettings.sections.telemetry.title")}
+        description={t("adminSettings.sections.telemetry.description")}
         isLoading={form.isLoading}
         isSaving={form.isSaving}
         isDirty={form.isDirty}
@@ -73,18 +75,18 @@ export function TelemetrySection() {
               role="status"
               className="inline-flex items-center gap-2 rounded-sm border border-accent-support/40 bg-warning-soft px-2 py-1 font-mono text-[10px] uppercase tracking-[0.14em] text-accent-support"
             >
-              Restart required · Backend reads on boot
+              {t("adminSettings.sections.telemetry.restartBadge")}
             </div>
 
             <Toggle
-              label="PostHog enabled"
+              label={t("adminSettings.sections.telemetry.label.enabled")}
               value={draft.postHogEnabled}
               onChange={(v) => form.patchDraft({ postHogEnabled: v })}
             />
 
             <label className="flex flex-col gap-1.5">
               <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
-                Project API key
+                {t("adminSettings.sections.telemetry.label.apiKey")}
               </span>
               <input
                 type="text"
@@ -97,29 +99,29 @@ export function TelemetrySection() {
               />
               <span className="font-mono text-[10px] text-meta">
                 {secretIsSentinel
-                  ? "(unchanged — secret preserved)"
-                  : "Public project key from your PostHog dashboard. Empty disables analytics."}
+                  ? t("adminSettings.secretSentinelHint")
+                  : t("adminSettings.sections.telemetry.apiKeyHint")}
               </span>
             </label>
 
             <Field
-              label="Host"
+              label={t("adminSettings.sections.telemetry.label.host")}
               value={draft.postHogHost}
               onChange={(v) => form.patchDraft({ postHogHost: v })}
               placeholder="https://eu.i.posthog.com"
-              hint="https://us.i.posthog.com or https://eu.i.posthog.com depending on your region."
+              hint={t("adminSettings.sections.telemetry.hostHint")}
             />
 
             <Field
-              label="Project ID"
+              label={t("adminSettings.sections.telemetry.label.projectId")}
               value={draft.postHogProjectId}
               onChange={(v) => form.patchDraft({ postHogProjectId: v })}
-              placeholder="optional — log correlation only"
+              placeholder={t("adminSettings.sections.telemetry.projectIdPlaceholder")}
             />
 
             <label className="flex flex-col gap-1.5">
               <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
-                api.error sample rate (0–1)
+                {t("adminSettings.sections.telemetry.label.errorSampleRate")}
               </span>
               <input
                 type="number"
@@ -135,16 +137,12 @@ export function TelemetrySection() {
                 className="rounded-sm border border-subtle bg-card px-3 py-2 font-mono text-sm text-strong focus:border-accent focus:outline-none"
               />
               <span className="font-mono text-[10px] text-meta">
-                Fraction of 5xx errors emitted as `api.error` events. `api.request` always emits at 100%.
+                {t("adminSettings.sections.telemetry.errorSampleRateHint")}
               </span>
             </label>
 
             <p className="font-mono text-[11px] text-meta">
-              Frontend pageviews + identify still run from env-injected
-              <code className="mx-1 rounded-sm bg-elevated px-1 py-0.5 text-[10px]">
-                window.__ORNN_CONFIG__
-              </code>
-              for now — DB-driven frontend runtime config is a follow-up.
+              {t("adminSettings.sections.telemetry.frontendNote")}
             </p>
           </div>
         )}
