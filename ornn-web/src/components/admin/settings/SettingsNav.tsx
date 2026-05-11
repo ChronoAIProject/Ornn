@@ -10,6 +10,7 @@
  */
 
 import { NavLink } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 
 interface NavEntry {
   to: string;
@@ -33,9 +34,10 @@ interface SettingsNavProps {
 }
 
 export function SettingsNav({ className = "" }: SettingsNavProps) {
+  const { t } = useTranslation();
   return (
     <nav
-      aria-label="Settings sections"
+      aria-label={t("aria.settingsSections")}
       className={`flex flex-col gap-0.5 ${className}`}
     >
       {SECTIONS.map((s) => (

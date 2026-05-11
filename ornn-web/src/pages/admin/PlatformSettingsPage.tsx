@@ -16,6 +16,7 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { usePlatformSettings, useUpdatePlatformSettings } from "@/hooks/usePlatformSettings";
 import { useToastStore } from "@/stores/toastStore";
+import { translateError } from "@/utils/translateError";
 
 export function PlatformSettingsPage() {
   const { t } = useTranslation();
@@ -46,7 +47,7 @@ export function PlatformSettingsPage() {
     } catch (err) {
       addToast({
         type: "error",
-        message: err instanceof Error ? err.message : String(err),
+        message: translateError(err),
       });
     }
   };

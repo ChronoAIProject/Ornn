@@ -8,6 +8,7 @@
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { useTranslation } from "react-i18next";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { Button } from "@/components/ui/Button";
@@ -55,6 +56,7 @@ export function SkillForm({
   isSubmitting = false,
   className = "",
 }: SkillFormProps) {
+  const { t } = useTranslation();
   const {
     register,
     handleSubmit,
@@ -90,7 +92,7 @@ export function SkillForm({
       {mode === "create" && (
         <Input
           label="Name"
-          placeholder="my-skill-name"
+          placeholder={t("form.namePlaceholder")}
           error={errors.name?.message}
           {...register("name")}
         />
@@ -98,7 +100,7 @@ export function SkillForm({
 
       <Input
         label="Description"
-        placeholder="What does this skill do?"
+        placeholder={t("form.descPlaceholder")}
         error={errors.description?.message}
         {...register("description")}
       />
@@ -110,7 +112,7 @@ export function SkillForm({
           <Select
             label="Category"
             options={categoryOptions}
-            placeholder="Select category"
+            placeholder={t("form.selectCategory")}
             error={errors.category?.message}
             {...field}
           />
@@ -124,11 +126,11 @@ export function SkillForm({
           render={({ field }) => (
             <Select
               label="Output Type"
-              options={OUTPUT_TYPES.map((t) => ({
-                value: t,
-                label: t === "text" ? "Text (stdout)" : "File (artifact)",
+              options={OUTPUT_TYPES.map((ot) => ({
+                value: ot,
+                label: ot === "text" ? "Text (stdout)" : "File (artifact)",
               }))}
-              placeholder="Select output type"
+              placeholder={t("form.selectOutputType")}
               error={errors.outputType?.message}
               {...field}
               value={field.value ?? ""}
@@ -152,13 +154,13 @@ export function SkillForm({
       <div className="grid gap-6 sm:grid-cols-2">
         <Input
           label="License"
-          placeholder="MIT, Apache-2.0, etc."
+          placeholder={t("form.licensePlaceholder")}
           error={errors.license?.message}
           {...register("license")}
         />
         <Input
           label="Repository URL"
-          placeholder="https://github.com/..."
+          placeholder={t("form.repoPlaceholder")}
           error={errors.repoUrl?.message}
           {...register("repoUrl")}
         />

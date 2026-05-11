@@ -5,6 +5,7 @@
  */
 
 import { useState, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -14,6 +15,7 @@ import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { OtpInput } from "@/components/auth/OtpInput";
 import { OTP_CONFIG } from "@/types/auth";
+import { translateError } from "@/utils/translateError";
 
 const emailSchema = z.object({
   newEmail: z.string().email("Please enter a valid email address"),
@@ -46,6 +48,7 @@ export function EmailChangeCard({
   onConfirmChange,
   disabled = false,
 }: EmailChangeCardProps) {
+  const { t } = useTranslation();
   const [step, setStep] = useState<ChangeStep>("idle");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -80,7 +83,7 @@ export function EmailChangeCard({
       setStep("verify_current");
       setCooldown(OTP_CONFIG.COOLDOWN_SECONDS);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to start email change");
+      setError(translateError(err, "Failed to start email change"));
     } finally {
       setIsLoading(false);
     }
@@ -95,7 +98,7 @@ export function EmailChangeCard({
       setStep("enter_new");
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : "Invalid or expired OTP code"
+        translateError(err, "Invalid or expired OTP code")
       );
     } finally {
       setIsLoading(false);
@@ -112,7 +115,7 @@ export function EmailChangeCard({
       setStep("verify_new");
       setCooldown(OTP_CONFIG.COOLDOWN_SECONDS);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to send OTP to new email");
+      setError(translateError(err, "Failed to send OTP to new email"));
     } finally {
       setIsLoading(false);
     }
@@ -126,7 +129,7 @@ export function EmailChangeCard({
       await onConfirmChange(newEmail, otp);
       handleCancel();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to change email");
+      setError(translateError(err, "Failed to change email"));
       setIsLoading(false);
     }
   };
@@ -160,7 +163,7 @@ export function EmailChangeCard({
         setCooldown(OTP_CONFIG.COOLDOWN_SECONDS);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to resend OTP");
+      setError(translateError(err, "Failed to resend OTP"));
     } finally {
       setIsLoading(false);
     }
@@ -272,7 +275,7 @@ export function EmailChangeCard({
               <Input
                 label="New Email"
                 type="email"
-                placeholder="your-new@email.com"
+                placeholder={t("userProfile.newEmailPlaceholder")}
                 error={errors.newEmail?.message}
                 {...register("newEmail")}
               />

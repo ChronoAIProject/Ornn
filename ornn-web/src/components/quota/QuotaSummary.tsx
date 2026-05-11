@@ -12,6 +12,7 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { createPortal } from "react-dom";
 import { useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import type { QuotaSnapshot, SurfaceSnapshot } from "@/services/quotaApi";
 
 const SURFACE_LABEL: Record<"playground" | "skillGen", string> = {
@@ -115,6 +116,7 @@ export interface QuotaSummaryProps {
 }
 
 export function QuotaSummary({ isOpen, onClose, quota }: QuotaSummaryProps) {
+  const { t } = useTranslation();
   useEffect(() => {
     if (!isOpen) return;
     const onKey = (e: KeyboardEvent) => {
@@ -142,7 +144,7 @@ export function QuotaSummary({ isOpen, onClose, quota }: QuotaSummaryProps) {
             exit={{ x: "100%" }}
             transition={{ type: "spring", stiffness: 240, damping: 28, mass: 0.9 }}
             role="dialog"
-            aria-label="Quota usage details"
+            aria-label={t("aria.quotaUsageDetails")}
             className="card-impression absolute right-0 top-0 flex h-full w-full max-w-md flex-col gap-5 border-l border-subtle bg-page p-6 sm:p-8"
           >
             <header className="flex items-baseline justify-between">
@@ -160,7 +162,7 @@ export function QuotaSummary({ isOpen, onClose, quota }: QuotaSummaryProps) {
               <button
                 type="button"
                 onClick={onClose}
-                aria-label="Close"
+                aria-label={t("common.close")}
                 className="-mr-2 -mt-2 inline-flex h-8 w-8 items-center justify-center rounded-sm text-meta transition-colors hover:bg-elevated hover:text-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden="true">

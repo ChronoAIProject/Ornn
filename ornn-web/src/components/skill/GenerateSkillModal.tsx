@@ -5,12 +5,14 @@
  */
 
 import { useState, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { Input } from "@/components/ui/Input";
 import { useAuthStore } from "@/stores/authStore";
 import { apiPost } from "@/services/apiClient";
+import { translateError } from "@/utils/translateError";
 
 interface Reference {
   id: string;
@@ -64,6 +66,7 @@ export function GenerateSkillModal({
   repositoryUrl,
   homepageUrl,
 }: GenerateSkillModalProps) {
+  const { t } = useTranslation();
   // Build initial references from service data
   const buildInitialRefs = (): Reference[] => {
     const refs: Reference[] = [];
@@ -203,8 +206,8 @@ export function GenerateSkillModal({
       setTimeout(() => {
         onSuccess(res.data!.name);
       }, 1500);
-    } catch (err: any) {
-      setErrorMsg(err.message ?? "Generation failed");
+    } catch (err) {
+      setErrorMsg(translateError(err, "Generation failed"));
       setStep("error");
     }
   };
@@ -220,7 +223,7 @@ export function GenerateSkillModal({
   };
 
   return (
-    <Modal isOpen={isOpen} title="Generate Skill" onClose={handleClose}>
+    <Modal isOpen={isOpen} title={t("skillComponents.generateModal.title")} onClose={handleClose}>
       {step === "select" && (
         <div className="space-y-4">
           <p className="font-text text-sm text-meta">
@@ -260,11 +263,11 @@ export function GenerateSkillModal({
               <Input
                 value={newUrl}
                 onChange={(e) => { setNewUrl(e.target.value); setUrlError(""); }}
-                placeholder="Add reference URL..."
+                placeholder={t("skillComponents.generateModal.addRefPlaceholder")}
                 className="flex-1"
                 onKeyDown={(e) => e.key === "Enter" && addUrl()}
               />
-              <Button size="sm" variant="secondary" onClick={addUrl}>Add</Button>
+              <Button size="sm" variant="secondary" onClick={addUrl}>{t("skillComponents.generateModal.add")}</Button>
             </div>
             <div className="flex gap-2">
               <Button size="sm" variant="secondary" onClick={() => fileInputRef.current?.click()}>
@@ -283,7 +286,7 @@ export function GenerateSkillModal({
 
           {/* Proceed */}
           <div className="flex justify-end gap-3 pt-2 border-t border-accent/10">
-            <Button variant="secondary" onClick={handleClose}>Cancel</Button>
+            <Button variant="secondary" onClick={handleClose}>{t("common.cancel")}</Button>
             <Button onClick={handleGenerate} disabled={references.filter((r) => r.selected).length === 0}>
               Proceed
             </Button>
@@ -329,7 +332,7 @@ export function GenerateSkillModal({
             </div>
           </div>
           <div className="flex justify-end gap-3">
-            <Button variant="secondary" onClick={handleClose}>Close</Button>
+            <Button variant="secondary" onClick={handleClose}>{t("common.close")}</Button>
             <Button onClick={() => { setStep("select"); setErrorMsg(""); }}>Try Again</Button>
           </div>
         </div>

@@ -10,11 +10,13 @@
  */
 
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { useToastStore } from "@/stores/toastStore";
 import { useGrantQuota } from "@/hooks/useQuota";
 import type { Surface } from "@/services/quotaApi";
+import { translateError } from "@/utils/translateError";
 
 const MAX_AMOUNT = 100_000;
 const MAX_NOTE = 500;
@@ -40,6 +42,7 @@ export function GrantQuotaModal({
   user,
   onGranted,
 }: GrantQuotaModalProps) {
+  const { t } = useTranslation();
   const [amountStr, setAmountStr] = useState("10");
   const [note, setNote] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -81,7 +84,7 @@ export function GrantQuotaModal({
       onGranted?.();
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Grant failed");
+      setError(translateError(err, "Grant failed"));
     }
   };
 
@@ -113,7 +116,7 @@ export function GrantQuotaModal({
             value={amountStr}
             onChange={(e) => setAmountStr(e.target.value)}
             className="rounded-sm border border-subtle bg-card px-3 py-2 font-mono text-sm text-strong focus:border-accent focus:outline-none"
-            aria-label="Grant amount"
+            aria-label={t("aria.grantAmount")}
           />
         </label>
 

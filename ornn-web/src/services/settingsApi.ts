@@ -18,6 +18,7 @@
  */
 
 import { apiDelete, apiGet, apiPatch, apiPost, apiPut } from "./apiClient";
+import { encodeErrorPayload } from "@/utils/translateError";
 
 // --------------------------------------------------------------------- shared
 
@@ -143,7 +144,12 @@ export async function fetchSection<T extends SectionPayload>(
 ): Promise<T> {
   const res = await apiGet<T>(`/api/v1/admin/settings/${key}`);
   if (!res.data) {
-    throw new Error(`Section ${key} missing from response`);
+    throw new Error(
+      encodeErrorPayload({
+        key: "errors.api.settings.sectionMissing",
+        params: { section: key },
+      }),
+    );
   }
   return res.data;
 }
@@ -154,7 +160,12 @@ export async function putSection<T extends SectionPayload>(
 ): Promise<T> {
   const res = await apiPut<T>(`/api/v1/admin/settings/${key}`, body);
   if (!res.data) {
-    throw new Error(`Section ${key} put returned no data`);
+    throw new Error(
+      encodeErrorPayload({
+        key: "errors.api.settings.sectionPutMissing",
+        params: { section: key },
+      }),
+    );
   }
   return res.data;
 }
@@ -226,7 +237,7 @@ export async function getLlmProvider(id: string): Promise<LlmProvider> {
   const res = await apiGet<LlmProvider>(
     `/api/v1/admin/settings/llm-providers/${encodeURIComponent(id)}`,
   );
-  if (!res.data) throw new Error("Provider not found");
+  if (!res.data) throw new Error("errors.api.settings.providerNotFound");
   return res.data;
 }
 
@@ -237,7 +248,7 @@ export async function createLlmProvider(
     "/api/v1/admin/settings/llm-providers",
     input,
   );
-  if (!res.data) throw new Error("Provider create failed");
+  if (!res.data) throw new Error("errors.api.settings.providerCreateFailed");
   return res.data;
 }
 
@@ -249,7 +260,7 @@ export async function updateLlmProvider(
     `/api/v1/admin/settings/llm-providers/${encodeURIComponent(id)}`,
     input,
   );
-  if (!res.data) throw new Error("Provider update failed");
+  if (!res.data) throw new Error("errors.api.settings.providerUpdateFailed");
   return res.data;
 }
 
@@ -270,7 +281,7 @@ export async function syncLlmProviderModels(id: string): Promise<LlmSyncResult> 
     `/api/v1/admin/settings/llm-providers/${encodeURIComponent(id)}/sync`,
     {},
   );
-  if (!res.data) throw new Error("Sync failed");
+  if (!res.data) throw new Error("errors.api.settings.syncFailed");
   return res.data;
 }
 
@@ -292,7 +303,7 @@ export async function patchProviderModelFlags(
     `/api/v1/admin/settings/llm-providers/${encodeURIComponent(providerId)}/models/${encodeURIComponent(modelId)}`,
     flags,
   );
-  if (!res.data) throw new Error("Model patch failed");
+  if (!res.data) throw new Error("errors.api.settings.modelPatchFailed");
   return res.data;
 }
 
@@ -335,7 +346,7 @@ export async function downloadSettingsExport(): Promise<{
   // `exportedAt` (apiGet swallows `Content-Disposition` — the filename
   // is reconstructed client-side using the same spec).
   const res = await apiGet<SettingsExport>("/api/v1/admin/settings/export");
-  if (!res.data) throw new Error("Export missing");
+  if (!res.data) throw new Error("errors.api.settings.exportMissing");
   const iso = res.data.exportedAt.replace(/[:.]/g, "-");
   const filename = `ornn-settings-${iso}.json`;
   return { body: res.data, filename };
@@ -355,6 +366,6 @@ export async function importSettings(
     "/api/v1/admin/settings/import",
     payload,
   );
-  if (!res.data) throw new Error("Import response missing");
+  if (!res.data) throw new Error("errors.api.settings.importMissing");
   return res.data;
 }

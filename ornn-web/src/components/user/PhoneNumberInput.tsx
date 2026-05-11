@@ -5,6 +5,7 @@
  */
 
 import { useState, useRef, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { motion, AnimatePresence } from "framer-motion";
 import { COUNTRY_CODES, type PhoneNumber } from "@/types/user";
 
@@ -25,6 +26,7 @@ export function PhoneNumberInput({
   disabled = false,
   error,
 }: PhoneNumberInputProps) {
+  const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
   const [selectedCode, setSelectedCode] = useState(
     value?.countryCode || COUNTRY_CODES[0].dialCode
@@ -133,7 +135,7 @@ export function PhoneNumberInput({
           value={phoneNumber}
           onChange={handleNumberChange}
           disabled={disabled}
-          placeholder="Phone number"
+          placeholder={t("userProfile.phoneNumberPlaceholder")}
           className={`
             flex-1 rounded-r-lg
             px-4 py-2.5
@@ -177,7 +179,7 @@ export function PhoneNumberInput({
                 type="text"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Search country..."
+                placeholder={t("userProfile.searchCountryPlaceholder")}
                 className="
                   w-full rounded-md
                   bg-page/50 px-3 py-2

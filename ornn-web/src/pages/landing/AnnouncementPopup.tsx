@@ -23,6 +23,7 @@
 import { useEffect, useState, type CSSProperties } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { createPortal } from "react-dom";
+import { useTranslation } from "react-i18next";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeSanitize from "rehype-sanitize";
@@ -66,6 +67,7 @@ const INK_OVERRIDES = {
 } as CSSProperties;
 
 export function AnnouncementPopup() {
+  const { t } = useTranslation();
   const { data: announcement } = useActiveAnnouncement();
   const [open, setOpen] = useState(false);
 
@@ -144,7 +146,7 @@ export function AnnouncementPopup() {
               <button
                 type="button"
                 onClick={close}
-                aria-label="Dismiss announcement"
+                aria-label={t("aria.dismissAnnouncement")}
                 className="
                   -mr-2 -mt-1 inline-flex h-8 w-8 items-center justify-center rounded-[2px]
                   text-[var(--color-obsidian)]/85

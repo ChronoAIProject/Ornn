@@ -12,6 +12,7 @@
  */
 
 import { z } from "zod";
+import { useTranslation } from "react-i18next";
 import { SectionShell } from "@/components/admin/settings/SectionShell";
 import { UnsavedChangesGuard } from "@/components/admin/settings/UnsavedChangesGuard";
 import { useSectionForm } from "@/components/admin/settings/useSectionForm";
@@ -47,12 +48,13 @@ const Schema = z.object({
 }) satisfies z.ZodType<NX>;
 
 export function NyxIDSection() {
+  const { t } = useTranslation();
   const form = useSectionForm<NX>({
     queryKey: ["admin", "settings", "integrations/nyxid"] as const,
     fetcher: () => fetchSection<NX>("integrations/nyxid"),
     saver: (input) => putSection<NX>("integrations/nyxid", input),
     schema: Schema,
-    successMessage: "NyxID integration saved",
+    successMessage: t("adminSettings.sections.nyxid.savedToast"),
   });
 
   const draft = form.draft;
@@ -61,8 +63,8 @@ export function NyxIDSection() {
     <>
       <UnsavedChangesGuard when={form.isDirty} />
       <SectionShell
-        title="NyxID integration"
-        description="OAuth service-account credentials + the API base URL the backend proxies through, plus the chrono-storage / chrono-sandbox endpoints (folded in here as part of #302 — same NyxID-orbit integration tier). Browser-side link coords live in ornn-web's configmap (NYXID_WEB_BASE_URL + path env vars) — change them there and redeploy."
+        title={t("adminSettings.sections.nyxid.title")}
+        description={t("adminSettings.sections.nyxid.description")}
         isLoading={form.isLoading}
         isSaving={form.isSaving}
         isDirty={form.isDirty}
@@ -75,38 +77,38 @@ export function NyxIDSection() {
         {draft && (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field
-              label="Token URL"
+              label={t("adminSettings.sections.nyxid.label.tokenUrl")}
               value={draft.tokenUrl}
               onChange={(v) => form.patchDraft({ tokenUrl: v })}
             />
             <Field
-              label="Client ID"
+              label={t("adminSettings.sections.nyxid.label.clientId")}
               value={draft.clientId}
               onChange={(v) => form.patchDraft({ clientId: v })}
             />
             <SecretField
-              label="Client Secret"
+              label={t("adminSettings.sections.nyxid.label.clientSecret")}
               value={draft.clientSecret}
               onChange={(v) => form.patchDraft({ clientSecret: v })}
               isSentinel={isSecretPreserveValue(draft.clientSecret)}
             />
             <Field
-              label="Base API URL"
+              label={t("adminSettings.sections.nyxid.label.baseApiUrl")}
               value={draft.baseApiUrl}
               onChange={(v) => form.patchDraft({ baseApiUrl: v })}
             />
             <Field
-              label="chrono-storage URL"
+              label={t("adminSettings.sections.nyxid.label.chronoStorageUrl")}
               value={draft.chronoStorageUrl}
               onChange={(v) => form.patchDraft({ chronoStorageUrl: v })}
             />
             <Field
-              label="chrono-storage bucket"
+              label={t("adminSettings.sections.nyxid.label.chronoStorageBucket")}
               value={draft.chronoStorageBucket}
               onChange={(v) => form.patchDraft({ chronoStorageBucket: v })}
             />
             <Field
-              label="chrono-sandbox URL"
+              label={t("adminSettings.sections.nyxid.label.chronoSandboxUrl")}
               value={draft.chronoSandboxUrl}
               onChange={(v) => form.patchDraft({ chronoSandboxUrl: v })}
             />
@@ -145,6 +147,7 @@ function SecretField({
   onChange,
   isSentinel,
 }: FieldProps & { isSentinel: boolean }) {
+  const { t } = useTranslation();
   return (
     <label className="flex flex-col gap-1.5">
       <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
@@ -158,8 +161,8 @@ function SecretField({
       />
       <span className="font-mono text-[10px] text-meta">
         {isSentinel
-          ? "(unchanged — secret preserved)"
-          : "Replace to overwrite. Saving an unchanged mid-mask keeps the existing DB value."}
+          ? t("adminSettings.secretSentinelHint")
+          : t("adminSettings.secretReplaceHint")}
       </span>
     </label>
   );

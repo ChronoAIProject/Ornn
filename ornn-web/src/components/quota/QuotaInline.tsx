@@ -15,6 +15,7 @@
  * @module components/quota/QuotaInline
  */
 
+import { useTranslation } from "react-i18next";
 import type { Surface, SurfaceSnapshot } from "@/services/quotaApi";
 import { useMyQuota } from "@/hooks/useQuota";
 
@@ -37,6 +38,7 @@ function ceiling(s: SurfaceSnapshot): number {
 }
 
 export function QuotaInline({ surface, className = "" }: QuotaInlineProps) {
+  const { t } = useTranslation();
   const { data: quota } = useMyQuota();
   if (!quota) return null;
 
@@ -46,8 +48,8 @@ export function QuotaInline({ surface, className = "" }: QuotaInlineProps) {
     return (
       <span
         role="status"
-        aria-label="Admin — quota unlimited"
-        title="Admin · Unlimited usage"
+        aria-label={t("aria.adminQuotaUnlimited")}
+        title={t("aria.adminUnlimitedUsageTitle")}
         className={`inline-flex items-center gap-2 rounded-sm border border-accent/40 bg-accent/5 px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.14em] text-accent ${className}`}
       >
         <svg

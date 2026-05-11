@@ -112,7 +112,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
           rows={1}
           className="flex-1 resize-none bg-transparent px-1.5 py-1.5 font-text text-[15px] leading-6 text-strong placeholder:text-meta/60 focus:outline-none disabled:opacity-50"
           style={{ maxHeight: `${MAX_HEIGHT_PX}px` }}
-          aria-label="Chat message input"
+          aria-label={t("aria.chatMessageInput")}
         />
 
         {isStreaming ? (

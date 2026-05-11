@@ -18,6 +18,7 @@ import {
   validateSkillZip,
   type ZipValidationResult,
 } from "@/utils/zipValidator";
+import { translateError } from "@/utils/translateError";
 import {
   validateSkillFrontmatter,
   type FrontmatterValidationError,
@@ -185,7 +186,7 @@ export function CreateSkillFreePage() {
         status: "invalid",
         files: [],
         metadata: null,
-        errors: [t("free.onlyZip")],
+        errors: [{ key: "errors.zip.onlyZipAccepted" }],
         warnings: [],
       });
       return;
@@ -199,7 +200,10 @@ export function CreateSkillFreePage() {
         files: [],
         metadata: null,
         errors: [
-          t("free.tooLarge", { size: formatFileSize(file.size) }),
+          {
+            key: "errors.zip.fileTooLarge",
+            params: { size: formatFileSize(file.size) },
+          },
         ],
         warnings: [],
       });
@@ -271,8 +275,7 @@ export function CreateSkillFreePage() {
       });
       navigate(`/skills/${skill.name}`);
     } catch (err) {
-      const message =
-        err instanceof Error ? err.message : t("free.uploadFailed");
+      const message = translateError(err, t("free.uploadFailed"));
       addToast({ type: "error", message });
       setPageState(
         validationResult?.status === "warning" ? "warning" : "valid",
@@ -396,12 +399,12 @@ export function CreateSkillFreePage() {
           >
             {validationResult.errors.map((err, i) => (
               <p key={i} className="font-text text-sm text-danger">
-                {err}
+                {t(err.key, err.params ?? {})}
               </p>
             ))}
             {validationResult.warnings.map((warn, i) => (
               <p key={i} className="font-text text-sm text-warning">
-                {warn}
+                {t(warn.key, warn.params ?? {})}
               </p>
             ))}
             {pageState === "valid" && !hasFrontmatterErrors && (

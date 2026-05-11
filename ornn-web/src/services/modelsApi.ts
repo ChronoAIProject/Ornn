@@ -28,7 +28,7 @@ export interface PickerResult {
 export async function fetchPickerModels(surface: Surface): Promise<PickerResult> {
   const res = await apiGet<PickerResult>("/api/v1/me/models", { surface });
   if (!res.data) {
-    throw new Error("Picker models response missing");
+    throw new Error("errors.api.models.pickerMissing");
   }
   return res.data;
 }

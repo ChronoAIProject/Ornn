@@ -9,6 +9,7 @@
  */
 
 import { z } from "zod";
+import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
 import { SectionShell } from "@/components/admin/settings/SectionShell";
 import { UnsavedChangesGuard } from "@/components/admin/settings/UnsavedChangesGuard";
@@ -30,6 +31,7 @@ const Schema = z.object({
 }) satisfies z.ZodType<PS>;
 
 export function PlaygroundSection() {
+  const { t } = useTranslation();
   const providers = useQuery({
     queryKey: ["admin", "settings", "llm-providers", "list"] as const,
     queryFn: listLlmProviders,
@@ -41,7 +43,7 @@ export function PlaygroundSection() {
     fetcher: () => fetchSection<PS>("playground"),
     saver: (input) => putSection<PS>("playground", input),
     schema: Schema,
-    successMessage: "Playground settings saved",
+    successMessage: t("adminSettings.sections.playground.savedToast"),
   });
 
   const draft = form.draft;
@@ -56,8 +58,8 @@ export function PlaygroundSection() {
     <>
       <UnsavedChangesGuard when={form.isDirty} />
       <SectionShell
-        title="Playground"
-        description="Runtime defaults for the playground surface."
+        title={t("adminSettings.sections.playground.title")}
+        description={t("adminSettings.sections.playground.description")}
         isLoading={form.isLoading}
         isSaving={form.isSaving}
         isDirty={form.isDirty}
@@ -71,7 +73,7 @@ export function PlaygroundSection() {
           <div className="space-y-4">
             <label className="flex flex-col gap-1.5">
               <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
-                Default provider
+                {t("adminSettings.sections.runtime.label.defaultProvider")}
               </span>
               <select
                 value={draft.defaultProviderId ?? ""}
@@ -83,7 +85,7 @@ export function PlaygroundSection() {
                 }
                 className="rounded-sm border border-subtle bg-card px-3 py-2 font-mono text-sm text-strong focus:border-accent focus:outline-none"
               >
-                <option value="">— none —</option>
+                <option value="">{t("adminSettings.sections.runtime.option.none")}</option>
                 {(providers.data ?? []).map((p) => (
                   <option key={p._id} value={p._id}>
                     {p.name}
@@ -94,7 +96,7 @@ export function PlaygroundSection() {
 
             <label className="flex flex-col gap-1.5">
               <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
-                Default model
+                {t("adminSettings.sections.runtime.label.defaultModel")}
               </span>
               <select
                 value={draft.defaultModelId ?? ""}
@@ -104,7 +106,7 @@ export function PlaygroundSection() {
                 disabled={!draft.defaultProviderId}
                 className="rounded-sm border border-subtle bg-card px-3 py-2 font-mono text-sm text-strong focus:border-accent focus:outline-none disabled:opacity-50"
               >
-                <option value="">— provider default —</option>
+                <option value="">{t("adminSettings.sections.runtime.option.providerDefault")}</option>
                 {availableModels.map((m) => (
                   <option key={m.id} value={m.id}>
                     {m.displayName} ({m.id})
@@ -112,14 +114,13 @@ export function PlaygroundSection() {
                 ))}
               </select>
               <span className="font-mono text-[10px] text-meta">
-                Only enabled, non-removed models from the selected provider
-                appear.
+                {t("adminSettings.sections.runtime.defaultModelHint")}
               </span>
             </label>
 
             <label className="flex flex-col gap-1.5">
               <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
-                SSE keep-alive (ms) — 1000..600000
+                {t("adminSettings.sections.runtime.label.sseKeepAlive")}
               </span>
               <input
                 type="number"
@@ -138,7 +139,7 @@ export function PlaygroundSection() {
 
             <label className="flex flex-col gap-1.5">
               <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
-                Default monthly quota — non-admin users (0..1,000,000)
+                {t("adminSettings.sections.runtime.label.defaultMonthlyQuota")}
               </span>
               <input
                 type="number"
@@ -154,8 +155,7 @@ export function PlaygroundSection() {
                 className="rounded-sm border border-subtle bg-card px-3 py-2 font-mono text-sm text-strong focus:border-accent focus:outline-none"
               />
               <span className="font-mono text-[10px] text-meta">
-                Raising the default mid-month grants existing users
-                headroom; lowering does not retroactively claw back.
+                {t("adminSettings.sections.runtime.defaultMonthlyQuotaHint")}
               </span>
             </label>
           </div>

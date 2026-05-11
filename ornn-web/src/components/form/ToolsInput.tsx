@@ -5,6 +5,7 @@
  */
 
 import { useState, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/Badge";
 import { SUGGESTED_TOOLS } from "@/utils/constants";
 
@@ -16,6 +17,7 @@ export interface ToolsInputProps {
 }
 
 export function ToolsInput({ tools, onChange, error, className = "" }: ToolsInputProps) {
+  const { t } = useTranslation();
   const [input, setInput] = useState("");
 
   const addTool = useCallback(
@@ -68,7 +70,7 @@ export function ToolsInput({ tools, onChange, error, className = "" }: ToolsInpu
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Type a tool name + Enter"
+          placeholder={t("form.tools.placeholder")}
           className="min-w-[100px] flex-1 border-none bg-transparent font-text text-sm text-strong outline-none placeholder:text-meta/50"
         />
       </div>
@@ -76,7 +78,7 @@ export function ToolsInput({ tools, onChange, error, className = "" }: ToolsInpu
       {/* Suggested tools */}
       <div className="flex flex-wrap gap-1.5 mt-1">
         <span className="text-xs text-meta font-text mr-1 self-center">
-          Suggested:
+          {t("form.tools.suggested")}
         </span>
         {SUGGESTED_TOOLS.map((tool) => {
           const isAdded = tools.includes(tool);
@@ -99,8 +101,7 @@ export function ToolsInput({ tools, onChange, error, className = "" }: ToolsInpu
       {/* Warning banner */}
       <div className="rounded border border-warning/20 bg-warning/5 p-3 mt-1">
         <p className="font-text text-xs text-warning">
-          Ensure that the tools you list are available in your target Claude client
-          environment. Skills referencing unavailable tools will fail at runtime.
+          {t("form.tools.help")}
         </p>
       </div>
 

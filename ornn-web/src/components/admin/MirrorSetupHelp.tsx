@@ -10,6 +10,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
+import { useTranslation } from "react-i18next";
 
 function InfoIcon({ className }: { className?: string }) {
   return (
@@ -29,6 +30,7 @@ export interface MirrorSetupHelpProps {
 }
 
 export function MirrorSetupHelp({ className = "" }: MirrorSetupHelpProps) {
+  const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -50,7 +52,7 @@ export function MirrorSetupHelp({ className = "" }: MirrorSetupHelpProps) {
         onMouseLeave={() => setIsOpen(false)}
         onClick={() => setIsOpen((prev) => !prev)}
         className="p-1 text-meta hover:text-accent transition-colors cursor-pointer"
-        aria-label="Mirror setup instructions"
+        aria-label={t("aria.mirrorSetupInstructions")}
       >
         <InfoIcon className="h-4 w-4" />
       </button>

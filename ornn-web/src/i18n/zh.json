@@ -20,7 +20,14 @@
     "clearSearch": "清除搜索",
     "close": "关闭",
     "gotIt": "知道了",
-    "remove": "移除"
+    "remove": "移除",
+    "unsavedChanges": "未保存的更改",
+    "aria": {
+      "dismissNotification": "关闭通知",
+      "notifications": "通知",
+      "categoryDescriptions": "类别说明",
+      "closeDrawer": "关闭抽屉"
+    }
   },
   "nav": {
     "home": "首页",
@@ -430,7 +437,7 @@
     "contextPaths": "上下文路径",
     "contextPathsPlaceholder": "./path/to/file 后按回车",
     "contextPathsHelper": "作为上下文提供给技能的文件路径",
-    "agentLabel": "Agent",
+    "agentLabel": "代理",
     "agentPlaceholder": "agent-identifier",
     "argumentHint": "参数提示",
     "argumentHintPlaceholder": "例如：文件路径或 URL",
@@ -481,7 +488,19 @@
     "signOut": "退出登录",
     "accountMgmt": "账户管理",
     "accountDesc": "你的个人资料、LLM 凭证和安全设置通过 NyxID 管理。",
-    "openNyxID": "打开 NyxID 设置"
+    "openNyxID": "打开 NyxID 设置",
+    "redeemCode": {
+      "title": "兑换码",
+      "placeholder": "输入你的兑换码",
+      "codeAria": "兑换码",
+      "redeem": "兑换",
+      "helpText": "拿到团队发的兑换码？在此输入即可为账户增加额度。",
+      "added": "已添加：",
+      "activeUntil": "有效期至本月末。",
+      "dismissAria": "关闭",
+      "dismiss": "关闭",
+      "recentlyRedeemed": "最近兑换"
+    }
   },
   "login": {
     "eyebrow": "[ § 入口 — NYXID ]",
@@ -548,7 +567,12 @@
     "repoPlaceholder": "https://github.com/...",
     "invalidUrl": "必须是有效的 URL",
     "uploadSkill": "上传技能",
-    "saveChanges": "保存更改"
+    "saveChanges": "保存更改",
+    "tools": {
+      "placeholder": "输入工具名称后按回车",
+      "suggested": "推荐：",
+      "help": "请确保你列出的工具在目标 Claude 客户端环境中可用。引用不可用工具的技能会在运行时失败。"
+    }
   },
   "landing": {
     "scrollHint": "下滑装备 ↓",
@@ -686,7 +710,8 @@
     "syncSuccess": "已从 GitHub 同步,并发布了新版本。",
     "previewTitle": "同步预览",
     "previewSubtitle": "确认后将从已关联的 GitHub 源发布 {{name}} 的 v{{version}} 版本。",
-    "applySync": "应用同步"
+    "applySync": "应用同步",
+    "urlPlaceholder": "https://github.com/owner/repo/tree/main/path/to/skill"
   },
   "githubImport": {
     "title": "从 GitHub 导入",
@@ -734,5 +759,505 @@
     "noAnnouncements": "暂无公告",
     "emptyHint": "创建第一条公告后，访客下次加载落地页时就会看到。",
     "createBtn": "创建公告"
+  },
+  "aria": {
+    "toggleLanguage": "切换语言",
+    "toggleTheme": "切换主题",
+    "accountMenu": "账户菜单",
+    "openMenu": "打开菜单",
+    "closeMenu": "关闭菜单",
+    "dismissAnnouncement": "关闭公告",
+    "legal": "法律信息",
+    "productOverview": "{{brand}} 产品概览",
+    "skillPackageDrawer": "技能包抽屉",
+    "skillPackagePreview": "技能包预览",
+    "generating": "生成中",
+    "brandHome": "{{brand}} 首页",
+    "brandOnGitHub": "GitHub 上的 {{brand}}",
+    "expandSidebar": "展开侧边栏",
+    "collapseSidebar": "折叠侧边栏",
+    "closeSidebar": "关闭侧边栏",
+    "mirrorSetupInstructions": "镜像设置说明",
+    "settingsSections": "设置分区",
+    "noLifetimeUsageHistory": "暂无累计使用历史",
+    "lifetimeMonthlyUsage": "累计每月使用量",
+    "currentQuotaPeriod": "当前配额周期",
+    "grantAmount": "授予数量",
+    "copyCode": "复制代码",
+    "invalidateCode": "作废代码",
+    "redemptionCodeDetail": "兑换码详情",
+    "chatMessageInput": "聊天消息输入",
+    "quotaUsage": "配额使用",
+    "adminQuotaUnlimited": "管理员 — 无限配额",
+    "adminUnlimitedUsageTitle": "管理员 · 无限用量",
+    "quotaUsageDetails": "配额使用详情"
+  },
+  "skillComponents": {
+    "generateModal": {
+      "title": "生成技能",
+      "addRefPlaceholder": "添加参考链接...",
+      "add": "添加"
+    },
+    "card": {
+      "linkedToGithub": "已关联到 GitHub"
+    },
+    "grid": {
+      "emptyTitle": "未找到技能",
+      "emptyDesc": "尝试调整搜索或筛选条件，或上传第一个技能。"
+    },
+    "fileBrowser": {
+      "noFiles": "没有可用的包文件"
+    },
+    "frontmatter": {
+      "runtime": "运行时",
+      "requiredTools": "必需工具",
+      "dependencies": "依赖",
+      "envVars": "环境变量",
+      "compatibility": "兼容性"
+    }
+  },
+  "userProfile": {
+    "displayNamePlaceholder": "你的显示名称",
+    "bioPlaceholder": "介绍一下你自己...",
+    "newEmailPlaceholder": "your-new@email.com",
+    "phoneNumberPlaceholder": "电话号码",
+    "searchCountryPlaceholder": "搜索国家/地区...",
+    "apiKeyGeneratedTitle": "API 密钥已生成",
+    "notConnected": "未连接",
+    "unlinkAccountTitle": "解除账户绑定"
+  },
+  "editor": {
+    "startTyping": "开始输入..."
+  },
+  "adminPages": {
+    "announcements": {
+      "eyebrow": "[§ 管理 — 公告]",
+      "title": "落地页弹窗",
+      "description": "营销页面同一时间只展示一条公告——当前在排期窗口内且最近创建的启用记录。已停用或超出窗口的记录留在此处供查询历史。",
+      "action": {
+        "new": "新建公告",
+        "disable": "停用",
+        "enable": "启用"
+      },
+      "table": {
+        "title": "标题",
+        "status": "状态",
+        "window": "时间窗口",
+        "created": "创建时间",
+        "actions": "操作"
+      },
+      "status": {
+        "live": "上线中",
+        "scheduled": "已排期",
+        "expired": "已过期",
+        "disabled": "已停用"
+      },
+      "window": {
+        "always": "始终（未设置排期）"
+      },
+      "confirm": {
+        "delete": "删除公告\"{{title}}\"？"
+      },
+      "toast": {
+        "disabled": "公告已停用",
+        "enabled": "公告已启用",
+        "deleted": "公告已删除",
+        "updateFailed": "更新失败",
+        "deleteFailed": "删除失败"
+      }
+    },
+    "skills": {
+      "title": "技能",
+      "subtitle": "管理平台全部技能",
+      "subtitleForUser": "所选用户的技能",
+      "searchLabel": "搜索技能",
+      "searchPlaceholder": "按名称或描述搜索...",
+      "searchBtn": "搜索",
+      "clearBtn": "清除",
+      "empty": "未找到技能。",
+      "loadFailed": "加载技能失败",
+      "table": {
+        "name": "名称",
+        "author": "作者",
+        "visibility": "可见性",
+        "tags": "标签",
+        "created": "创建时间",
+        "actions": "操作"
+      },
+      "modal": {
+        "deleteTitle": "删除技能？",
+        "deleteBodyPrefix": "确认删除",
+        "deleteBodySuffix": "吗？",
+        "deleteWarning": "此操作不可撤销。该技能将从平台永久移除。"
+      },
+      "toast": {
+        "deleted": "技能已删除",
+        "deleteFailed": "删除技能失败"
+      }
+    },
+    "quota": {
+      "title": "配额",
+      "subtitle": "按用户的月度计数，可由管理员授予额度。管理员用户不受配额限制，不会出现在此列表中。",
+      "tabs": {
+        "playground": "Playground",
+        "skillGen": "技能生成"
+      },
+      "placeholder": {
+        "filter": "按邮箱或显示名筛选…"
+      },
+      "aria": {
+        "filter": "筛选用户",
+        "surface": "场景"
+      },
+      "loadFailed": "加载用户失败"
+    },
+    "redemption": {
+      "title": "兑换码",
+      "subtitle": "生成一次性兑换码，可绑定当月一个或多个配额授予。兑换前可作废。",
+      "action": {
+        "mint": "生成兑换码"
+      },
+      "tabs": {
+        "all": "全部",
+        "active": "可用",
+        "redeemed": "已兑换",
+        "invalidated": "已作废"
+      },
+      "placeholder": {
+        "filter": "按兑换码前缀或备注筛选…"
+      },
+      "aria": {
+        "filter": "筛选兑换码",
+        "status": "状态"
+      },
+      "confirm": {
+        "invalidate": "作废兑换码 {{code}}？作废后将无法再被兑换。"
+      },
+      "toast": {
+        "invalidated": "兑换码 {{code}} 已作废。",
+        "invalidateFailed": "作废兑换码失败。"
+      },
+      "loadFailed": "加载兑换码失败"
+    },
+    "userMgmt": {
+      "title": "用户",
+      "subtitle": "两个视图：管理员（不受配额限制）与普通用户。每行的\"授予配额\"链接可直达配额页面。",
+      "adminTitle": "管理员用户",
+      "adminDescription": "持有 ornn:admin:skill 权限——不受任何配额计数限制。",
+      "normalTitle": "普通用户",
+      "normalDescription": "受月度 Playground + 技能生成配额限制。"
+    },
+    "users": {
+      "title": "用户",
+      "subtitle": "平台用户及其活动",
+      "empty": "未找到用户。",
+      "loadFailed": "加载用户失败",
+      "table": {
+        "user": "用户",
+        "email": "邮箱",
+        "skills": "技能数",
+        "activities": "活动数",
+        "lastActive": "最近活跃"
+      }
+    }
+  },
+  "adminSettings": {
+    "secretSentinelHint": "（未修改——保留原密钥）",
+    "secretReplaceHint": "替换以覆盖。保存未修改的掩码值将保留数据库中的原值。",
+    "sections": {
+      "mirror": {
+        "title": "GitHub 镜像",
+        "description": "仓库坐标 + GitHub App 凭据。运行控制位于旧版镜像看板。",
+        "savedToast": "镜像配置已保存",
+        "label": {
+          "enabled": "启用镜像",
+          "owner": "Owner",
+          "repo": "Repo",
+          "branch": "分支",
+          "appId": "App ID",
+          "installationId": "Installation ID",
+          "privateKey": "App 私钥 (PEM)"
+        },
+        "openDashboard": "打开镜像看板 →"
+      },
+      "nyxid": {
+        "title": "NyxID 集成",
+        "description": "OAuth 服务账号凭据 + 后端代理使用的 API 根 URL，以及 chrono-storage / chrono-sandbox 端点（在 #302 中并入此处，同属 NyxID 集成层）。浏览器侧的链接坐标位于 ornn-web 的 configmap (NYXID_WEB_BASE_URL + 路径环境变量)——请在那里修改并重新部署。",
+        "savedToast": "NyxID 集成已保存",
+        "label": {
+          "tokenUrl": "Token URL",
+          "clientId": "Client ID",
+          "clientSecret": "Client Secret",
+          "baseApiUrl": "API 根 URL",
+          "chronoStorageUrl": "chrono-storage URL",
+          "chronoStorageBucket": "chrono-storage bucket",
+          "chronoSandboxUrl": "chrono-sandbox URL"
+        }
+      },
+      "telemetry": {
+        "title": "PostHog",
+        "description": "PostHog 产品分析 + 单请求审计。后端在启动时读取此配置——更改后需重启 ornn-api 生效。",
+        "savedToast": "PostHog 配置已保存",
+        "restartBadge": "需重启 · 后端启动时读取",
+        "label": {
+          "enabled": "启用 PostHog",
+          "apiKey": "项目 API Key",
+          "host": "Host",
+          "projectId": "Project ID",
+          "errorSampleRate": "api.error 采样率 (0–1)"
+        },
+        "apiKeyHint": "来自 PostHog 控制台的项目公开 Key。留空将停用分析。",
+        "hostHint": "根据所在区域选择 https://us.i.posthog.com 或 https://eu.i.posthog.com。",
+        "projectIdPlaceholder": "可选——仅用于日志关联",
+        "errorSampleRateHint": "作为 `api.error` 事件上报的 5xx 错误比例。`api.request` 始终以 100% 上报。",
+        "frontendNote": "前端 pageview + identify 目前仍由环境变量注入的 `window.__ORNN_CONFIG__` 驱动——基于数据库的前端运行时配置将作为后续工作。"
+      },
+      "skillAudit": {
+        "title": "技能审计",
+        "description": "LLM 驱动的审计、AgentSeal 加固、风险阈值。",
+        "savedToast": "技能审计配置已保存",
+        "label": {
+          "llmAuditEnabled": "启用 LLM 审计",
+          "provider": "LLM 审计 Provider",
+          "model": "LLM 审计模型（可选）",
+          "riskThreshold": "风险阈值 (0..10)",
+          "agentSealEnabled": "启用 AgentSeal",
+          "agentSealTimeout": "AgentSeal 超时 (ms) — 1000..600000"
+        },
+        "option": {
+          "select": "— 请选择 —",
+          "providerDefault": "— Provider 默认 —"
+        }
+      },
+      "runtime": {
+        "label": {
+          "defaultProvider": "默认 Provider",
+          "defaultModel": "默认模型",
+          "sseKeepAlive": "SSE 心跳 (ms) — 1000..600000",
+          "defaultMonthlyQuota": "默认月度配额——非管理员用户 (0..1,000,000)"
+        },
+        "option": {
+          "none": "— 无 —",
+          "providerDefault": "— Provider 默认 —"
+        },
+        "defaultModelHint": "仅显示所选 Provider 下已启用且未移除的模型。",
+        "defaultMonthlyQuotaHint": "月中提高默认值会为现有用户提供更多额度；降低不会追溯回收已用配额。"
+      },
+      "playground": {
+        "title": "Playground",
+        "description": "Playground 场景的运行时默认值。",
+        "savedToast": "Playground 设置已保存"
+      },
+      "skillGen": {
+        "title": "技能生成",
+        "description": "AI 辅助技能生成场景的运行时默认值。",
+        "savedToast": "技能生成设置已保存"
+      },
+      "extras": {
+        "title": "服务绑定列表配置",
+        "description": "通过 Ornn 代理的其他 NyxID 托管服务——按名称 + 根 URL + 可选 scopes 绑定。",
+        "savedToast": "Extras 已保存",
+        "empty": "未配置额外服务",
+        "label": {
+          "name": "名称",
+          "baseUrl": "根 URL（可选）",
+          "scopes": "Scopes（英文逗号分隔，可选）"
+        },
+        "aria": {
+          "remove": "移除 {{name}}"
+        },
+        "fallbackRow": "行",
+        "action": {
+          "add": "添加服务"
+        }
+      },
+      "llmProviders": {
+        "eyebrow": "[§ LLM PROVIDER]",
+        "title": "LLM Provider",
+        "description": "按 Provider 配置的网关、认证与模型目录。点击行内的「模型」可启停模型并按场景设置默认——默认值跨 Provider 全局生效，设置一个会取消其余所有。",
+        "action": {
+          "new": "新建 Provider",
+          "addFirst": "添加第一个 Provider",
+          "models": "模型",
+          "sync": "同步"
+        },
+        "loadFailed": "加载 Provider 失败",
+        "empty": "未配置 Provider",
+        "table": {
+          "name": "名称",
+          "auth": "认证方式",
+          "models": "模型",
+          "actions": "操作"
+        },
+        "modelCounts": "{{playground}} playground · {{skillGen}} skillGen · 共 {{total}}",
+        "archivedCount": "已归档 {{count}}",
+        "toast": {
+          "synced": "已同步 {{name}}：新增 +{{added}}，更新 {{updated}}，移除 {{removed}}。",
+          "syncFailed": "同步失败"
+        }
+      },
+      "exportImport": {
+        "eyebrow": "[§ 导出 / 导入]",
+        "title": "导出 / 导入",
+        "description": "将完整设置以 JSON 形式下载，或导入此前导出的配置以应用。导出文件中的密钥会被脱敏占位；导入占位值会保留数据库中现有的值。",
+        "downloadTitle": "下载",
+        "downloadHintPrefix": "文件名遵循",
+        "uploadTitle": "上传并导入",
+        "uploadSteps": "第 1 步：上传。第 2 步：预演。第 3 步：确认并应用。",
+        "invalidFile": "文件不是有效的 Ornn 设置导出（缺少 schemaVersion 或 sections）",
+        "parseFailed": "解析失败",
+        "loaded": "已加载 · schemaVersion {{schemaVersion}} · 导出于 {{exportedAt}}",
+        "dryRunTitle": "预演预览",
+        "appliedTitle": "导入已应用",
+        "action": {
+          "export": "导出设置",
+          "chooseFile": "选择文件",
+          "dryRun": "运行预演",
+          "apply": "应用导入",
+          "applyConfirm": "应用"
+        },
+        "confirm": {
+          "title": "应用导入？",
+          "body": "将写入所有通过校验的节。校验失败的节会被跳过——其余照常应用。占位值的密钥将保留数据库中现有的值。"
+        },
+        "table": {
+          "section": "节",
+          "status": "状态",
+          "detail": "详情"
+        },
+        "toast": {
+          "exported": "已导出 {{filename}}",
+          "exportFailed": "导出失败",
+          "dryRunFailed": "预演失败",
+          "importPartial": "导入部分成功——{{failed}} 个节失败。",
+          "importApplied": "导入已应用。",
+          "importFailed": "导入失败"
+        }
+      }
+    }
+  },
+  "adminMirror": {
+    "savedRepo": "镜像设置已保存。",
+    "savedCreds": "GitHub App 凭据已保存。",
+    "title": "GitHub 镜像",
+    "loading": "正在加载镜像状态…",
+    "loadFailed": "无法加载镜像状态。",
+    "featureOn": "功能已启用",
+    "featureOff": "功能未启用——切换下方开关以启用",
+    "branch": "分支",
+    "lastReconcile": "上次同步",
+    "runningSince": "从 {{when}} 开始运行",
+    "never": "从未",
+    "duration": "耗时",
+    "lastError": "上次错误",
+    "countEligible": "符合条件",
+    "countEligibleHint": "公开 + 系统技能",
+    "countSynced": "已同步",
+    "countSyncedHint": "镜像中的最新版本",
+    "countLagging": "落后",
+    "countLaggingHint": "已镜像，但版本陈旧",
+    "countNeverSynced": "从未同步",
+    "countNeverSyncedOldest": "最早待处理：{{when}}",
+    "countNeverSyncedNone": "无待处理",
+    "reconcileTitle": "手动同步",
+    "reconcileRunning": "运行中…",
+    "reconcileButton": "立即同步",
+    "repoFormTitle": "镜像仓库",
+    "fieldEnabled": "启用镜像",
+    "fieldOwner": "Owner",
+    "fieldRepo": "Repo",
+    "fieldBranch": "分支",
+    "credsTitle": "GitHub App 凭据",
+    "fieldAppId": "App ID",
+    "fieldAppIdHint": "数字格式，来自 GitHub 上的 App 设置页。",
+    "fieldInstallationId": "Installation ID",
+    "fieldPrivateKey": "App 私钥 (PEM)",
+    "confirmTitle": "确认：放弃当前镜像仓库",
+    "confirmConfirm": "是，更换仓库"
+  },
+  "errors": {
+    "generic": {
+      "unknown": "出错了"
+    },
+    "api": {
+      "quota": {
+        "snapshotMissing": "配额快照缺失",
+        "snapshotShapeInvalid": "配额快照格式无效：{{detail}}",
+        "adminListMissing": "管理员配额列表缺失",
+        "lifetimeMissing": "历史配额响应缺失",
+        "grantMissing": "授予响应缺失",
+        "bulkGrantMissing": "批量授予响应缺失",
+        "auditListMissing": "审计列表缺失"
+      },
+      "redemption": {
+        "mintMissing": "兑换码生成响应缺失",
+        "mintShapeInvalid": "兑换码生成响应格式无效：{{detail}}",
+        "adminListMissing": "管理员兑换码列表缺失",
+        "adminListShapeInvalid": "管理员兑换码列表格式无效：{{detail}}",
+        "detailMissing": "兑换码详情缺失",
+        "detailShapeInvalid": "兑换码格式无效：{{detail}}",
+        "invalidateMissing": "作废响应缺失",
+        "invalidateShapeInvalid": "作废响应格式无效：{{detail}}",
+        "redeemMissing": "兑换响应缺失",
+        "redeemShapeInvalid": "兑换响应格式无效：{{detail}}",
+        "historyMissing": "兑换历史缺失",
+        "historyShapeInvalid": "兑换历史格式无效：{{detail}}"
+      },
+      "settings": {
+        "sectionMissing": "响应中缺失 {{section}} 段",
+        "sectionPutMissing": "{{section}} 段更新未返回数据",
+        "providerNotFound": "未找到 Provider",
+        "providerCreateFailed": "创建 Provider 失败",
+        "providerUpdateFailed": "更新 Provider 失败",
+        "syncFailed": "同步 Provider 模型失败",
+        "modelPatchFailed": "更新模型标记失败",
+        "exportMissing": "导出响应缺失",
+        "importMissing": "导入响应缺失"
+      },
+      "adminUsers": {
+        "listMissing": "管理员用户列表缺失"
+      },
+      "models": {
+        "pickerMissing": "模型选择响应缺失"
+      },
+      "adminDashboard": {
+        "statsMissing": "仪表板统计缺失"
+      },
+      "audit": {
+        "startMissing": "审计未返回数据"
+      },
+      "skillPackage": {
+        "downloadFailed": "技能包下载失败：{{status}}",
+        "loadFailed": "技能包加载失败"
+      }
+    },
+    "zip": {
+      "readFailed": "读取 ZIP 文件失败。文件可能已损坏。",
+      "skillMdNested": "在子目录中发现 SKILL.md，但它必须位于压缩包根目录。",
+      "skillMdRootRequired": "无效的技能包：根目录必须存在 SKILL.md。",
+      "skillMdMultiple": "发现多个 SKILL.md 文件。不允许嵌套技能。",
+      "unrecognizedDirs": "存在未识别目录：{{dirs}}。仅允许 scripts/、references/、assets/。",
+      "frontmatterUnparseable": "无法从 SKILL.md frontmatter 解析元数据。请检查并修复 YAML frontmatter 块。",
+      "onlyZipAccepted": "仅接受 .zip 文件。",
+      "fileTooLarge": "文件过大（{{size}}）。"
+    },
+    "frontmatter": {
+      "panelTitle": "Frontmatter 校验错误",
+      "panelCount": "{{count}} 个错误。保存前请全部修复。",
+      "generic": "{{detail}}",
+      "unparseable": "无法解析 SKILL.md frontmatter",
+      "tagFormat": "标签必须为小写字母数字，可包含连字符",
+      "envVarFormat": "环境变量名必须为 UPPER_SNAKE_CASE",
+      "nameFormat": "名称必须以字母或数字开头，仅允许小写字母、数字和连字符",
+      "versionFormat": "版本必须为 `<主版本>.<次版本>` 格式，例如 `1.0`（非负整数，不含前导零，不含修订位）",
+      "runtimeRequiredForCategory": "类别为 '{{category}}' 时必须填写 runtime",
+      "runtimeForbiddenForCategory": "类别为 '{{category}}' 时不得填写 runtime",
+      "toolListRequiredForCategory": "类别为 '{{category}}' 时必须填写 tool-list",
+      "toolListForbiddenForCategory": "类别为 '{{category}}' 时不得填写 tool-list",
+      "outputTypeRequiredForCategory": "类别为 '{{category}}' 时必须填写 output-type",
+      "outputTypeForbiddenForCategory": "类别为 '{{category}}' 时不得填写 output-type",
+      "runtimeDependencyForbiddenForCategory": "类别为 '{{category}}' 时不得填写 runtime-dependency",
+      "runtimeEnvVarForbiddenForCategory": "类别为 '{{category}}' 时不得填写 runtime-env-var"
+    }
   }
 }

@@ -1,4 +1,5 @@
 import { motion } from "framer-motion";
+import { useTranslation } from "react-i18next";
 import { SkillCard } from "./SkillCard";
 import { SkeletonCard } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -24,6 +25,7 @@ const itemVariants = {
 
 export function SkillGrid({ skills, isLoading, className = "" }: SkillGridProps) {
   const navigate = useNavigate();
+  const { t } = useTranslation();
 
   if (isLoading) {
     return (
@@ -38,9 +40,9 @@ export function SkillGrid({ skills, isLoading, className = "" }: SkillGridProps)
   if (skills.length === 0) {
     return (
       <EmptyState
-        title="No skills found"
-        description="Try adjusting your search or filters, or upload the first skill."
-        action={<Button onClick={() => navigate("/skills/new")}>Upload Skill</Button>}
+        title={t("skillComponents.grid.emptyTitle")}
+        description={t("skillComponents.grid.emptyDesc")}
+        action={<Button onClick={() => navigate("/skills/new")}>{t("explore.uploadSkill")}</Button>}
       />
     );
   }

@@ -16,6 +16,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { useToastStore } from "@/stores/toastStore";
 import { useGrantQuota } from "@/hooks/useQuota";
+import { translateError } from "@/utils/translateError";
 
 interface GrantCreditsFormProps {
   userId: string;
@@ -91,7 +92,7 @@ export function GrantCreditsForm({
     } catch (err) {
       addToast({
         type: "error",
-        message: err instanceof Error ? err.message : "Grant failed",
+        message: translateError(err, "Grant failed"),
       });
     }
   };

@@ -25,6 +25,7 @@ import {
 import type { AgentSealScan, AgentSealFinding } from "@/types/domain";
 import { apiPost } from "@/services/apiClient";
 import { useToastStore } from "@/stores/toastStore";
+import { translateError } from "@/utils/translateError";
 
 export interface AgentSealTrustBadgeProps {
   scan: AgentSealScan | null | undefined;
@@ -112,7 +113,7 @@ export function AgentSealTrustBadge({
     } catch (err) {
       addToast({
         type: "error",
-        message: err instanceof Error ? err.message : "Rescan failed",
+        message: translateError(err, "Rescan failed"),
       });
     } finally {
       setRescanning(false);

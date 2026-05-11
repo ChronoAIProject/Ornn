@@ -25,6 +25,7 @@ import type {
   RedemptionCode,
   Surface,
 } from "@/services/redemptionCodesApi";
+import { translateError } from "@/utils/translateError";
 
 const MAX_AMOUNT = 100_000;
 const MAX_NOTE = 500;
@@ -181,7 +182,7 @@ export function MintRedemptionCodeModal({
         message: "Redemption code minted. Copy it before closing.",
       });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Mint failed");
+      setError(translateError(err, "Mint failed"));
     }
   };
 

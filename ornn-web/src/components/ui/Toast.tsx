@@ -9,6 +9,7 @@
  */
 
 import { motion, AnimatePresence } from "framer-motion";
+import { useTranslation } from "react-i18next";
 import { useToastStore, type Toast as ToastType } from "@/stores/toastStore";
 
 const ACCENT_STYLES = {
@@ -95,6 +96,7 @@ export interface ToastItemProps {
 }
 
 function ToastItem({ toast }: ToastItemProps) {
+  const { t } = useTranslation();
   const removeToast = useToastStore((s) => s.removeToast);
   const styles = ACCENT_STYLES[toast.type];
   const Icon = ICONS[toast.type];
@@ -120,7 +122,7 @@ function ToastItem({ toast }: ToastItemProps) {
           <button
             onClick={() => removeToast(toast.id)}
             className="-mt-1 -mr-1 shrink-0 cursor-pointer rounded-sm p-1 text-meta transition-colors hover:bg-elevated hover:text-strong"
-            aria-label="Dismiss notification"
+            aria-label={t("common.aria.dismissNotification")}
           >
             <CloseIcon className="h-4 w-4" />
           </button>
@@ -158,6 +160,7 @@ export function ToastContainer({
   maxToasts = 5,
   className = "",
 }: ToastContainerProps) {
+  const { t } = useTranslation();
   const toasts = useToastStore((s) => s.toasts);
   const visibleToasts = toasts.slice(-maxToasts);
 
@@ -165,7 +168,7 @@ export function ToastContainer({
     <div
       className={`pointer-events-none fixed z-50 flex flex-col gap-3 ${POSITION_STYLES[position]} ${className}`}
       role="region"
-      aria-label="Notifications"
+      aria-label={t("common.aria.notifications")}
     >
       <AnimatePresence mode="popLayout">
         {visibleToasts.map((toast) => (

@@ -5,6 +5,7 @@ import {
   buildFileTreeFromEntries,
   type FileTreeEntry,
 } from "@/utils/fileTreeBuilder";
+import { encodeErrorPayload } from "@/utils/translateError";
 
 /** Extensions treated as viewable text files */
 const TEXT_EXTENSIONS = new Set([
@@ -81,7 +82,12 @@ export function useSkillPackage(
       try {
         const response = await fetch(presignedUrl!);
         if (!response.ok) {
-          throw new Error(`Failed to download package: ${response.status}`);
+          throw new Error(
+            encodeErrorPayload({
+              key: "errors.api.skillPackage.downloadFailed",
+              params: { status: response.status },
+            }),
+          );
         }
 
         const buffer = await response.arrayBuffer();
@@ -140,7 +146,9 @@ export function useSkillPackage(
       } catch (err) {
         if (!cancelled) {
           setError(
-            err instanceof Error ? err.message : "Failed to load package",
+            err instanceof Error
+              ? err.message
+              : "errors.api.skillPackage.loadFailed",
           );
         }
       } finally {

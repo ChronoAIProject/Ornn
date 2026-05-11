@@ -24,6 +24,7 @@ import {
   useUpdateAnnouncement,
 } from "@/hooks/useAnnouncements";
 import type { AdminAnnouncement } from "@/services/announcementsApi";
+import { translateError } from "@/utils/translateError";
 
 const ROW_DATE_FMT: Intl.DateTimeFormatOptions = {
   year: "numeric",
@@ -33,25 +34,32 @@ const ROW_DATE_FMT: Intl.DateTimeFormatOptions = {
   minute: "2-digit",
 };
 
-function formatRange(a: AdminAnnouncement): string {
+function formatRange(
+  a: AdminAnnouncement,
+  alwaysLabel: string,
+): string {
   const fmt = (iso: string | null): string =>
     iso ? new Date(iso).toLocaleString(undefined, ROW_DATE_FMT) : "—";
-  if (!a.startsAt && !a.endsAt) return "Always (no schedule)";
+  if (!a.startsAt && !a.endsAt) return alwaysLabel;
   return `${fmt(a.startsAt)}  →  ${fmt(a.endsAt)}`;
 }
 
-function statusLabel(a: AdminAnnouncement, now: Date): {
+function statusLabel(
+  a: AdminAnnouncement,
+  now: Date,
+  labels: { disabled: string; scheduled: string; expired: string; live: string },
+): {
   label: string;
   tone: "live" | "scheduled" | "expired" | "disabled";
 } {
-  if (!a.enabled) return { label: "DISABLED", tone: "disabled" };
+  if (!a.enabled) return { label: labels.disabled, tone: "disabled" };
   if (a.startsAt && new Date(a.startsAt).getTime() > now.getTime()) {
-    return { label: "SCHEDULED", tone: "scheduled" };
+    return { label: labels.scheduled, tone: "scheduled" };
   }
   if (a.endsAt && new Date(a.endsAt).getTime() <= now.getTime()) {
-    return { label: "EXPIRED", tone: "expired" };
+    return { label: labels.expired, tone: "expired" };
   }
-  return { label: "LIVE", tone: "live" };
+  return { label: labels.live, tone: "live" };
 }
 
 const TONE_STYLE: Record<
@@ -90,26 +98,34 @@ export function AnnouncementsPage() {
         onSuccess: () =>
           addToast({
             type: "success",
-            message: a.enabled ? "Announcement disabled" : "Announcement enabled",
+            message: a.enabled
+              ? t("adminPages.announcements.toast.disabled")
+              : t("adminPages.announcements.toast.enabled"),
           }),
         onError: (err) =>
           addToast({
             type: "error",
-            message: err instanceof Error ? err.message : "Update failed",
+            message: translateError(
+              err,
+              t("adminPages.announcements.toast.updateFailed"),
+            ),
           }),
       },
     );
   };
 
   const onDelete = (a: AdminAnnouncement) => {
-    if (!confirm(`Delete announcement "${a.title}"?`)) return;
+    if (!confirm(t("adminPages.announcements.confirm.delete", { title: a.title }))) return;
     deleteMut.mutate(a.id, {
       onSuccess: () =>
-        addToast({ type: "success", message: "Announcement deleted" }),
+        addToast({ type: "success", message: t("adminPages.announcements.toast.deleted") }),
       onError: (err) =>
         addToast({
           type: "error",
-          message: err instanceof Error ? err.message : "Delete failed",
+          message: translateError(
+            err,
+            t("adminPages.announcements.toast.deleteFailed"),
+          ),
         }),
     });
   };
@@ -127,20 +143,17 @@ export function AnnouncementsPage() {
       <header className="flex items-end justify-between gap-4 flex-wrap">
         <div>
           <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-meta">
-            [§ ADMIN — ANNOUNCEMENTS]
+            {t("adminPages.announcements.eyebrow")}
           </p>
           <h1 className="mt-1 font-display text-2xl font-semibold tracking-tight text-strong">
-            Landing page popup
+            {t("adminPages.announcements.title")}
           </h1>
           <p className="mt-2 max-w-2xl font-text text-sm text-meta">
-            One announcement is shown at a time on the marketing page —
-            the most recently created enabled record currently inside its
-            schedule window. Disabled and out-of-window records stay
-            here for history.
+            {t("adminPages.announcements.description")}
           </p>
         </div>
         <Button variant="primary" onClick={openCreate}>
-          New announcement
+          {t("adminPages.announcements.action.new")}
         </Button>
       </header>
 
@@ -165,16 +178,21 @@ export function AnnouncementsPage() {
           <table className="w-full text-left text-sm">
             <thead className="bg-elevated/40">
               <tr className="font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
-                <th className="px-4 py-3">Title</th>
-                <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3">Window</th>
-                <th className="px-4 py-3">Created</th>
-                <th className="px-4 py-3 text-right">Actions</th>
+                <th className="px-4 py-3">{t("adminPages.announcements.table.title")}</th>
+                <th className="px-4 py-3">{t("adminPages.announcements.table.status")}</th>
+                <th className="px-4 py-3">{t("adminPages.announcements.table.window")}</th>
+                <th className="px-4 py-3">{t("adminPages.announcements.table.created")}</th>
+                <th className="px-4 py-3 text-right">{t("adminPages.announcements.table.actions")}</th>
               </tr>
             </thead>
             <tbody>
               {items.map((a) => {
-                const status = statusLabel(a, now);
+                const status = statusLabel(a, now, {
+                  disabled: t("adminPages.announcements.status.disabled"),
+                  scheduled: t("adminPages.announcements.status.scheduled"),
+                  expired: t("adminPages.announcements.status.expired"),
+                  live: t("adminPages.announcements.status.live"),
+                });
                 return (
                   <tr key={a.id} className="border-t border-subtle">
                     <td className="px-4 py-3 align-top">
@@ -199,7 +217,7 @@ export function AnnouncementsPage() {
                       </span>
                     </td>
                     <td className="px-4 py-3 align-top font-mono text-[11px] text-meta">
-                      {formatRange(a)}
+                      {formatRange(a, t("adminPages.announcements.window.always"))}
                     </td>
                     <td className="px-4 py-3 align-top font-mono text-[11px] text-meta">
                       {new Date(a.createdAt).toLocaleString(undefined, ROW_DATE_FMT)}
@@ -212,14 +230,16 @@ export function AnnouncementsPage() {
                           onClick={() => onToggleEnabled(a)}
                           disabled={updateMut.isPending}
                         >
-                          {a.enabled ? "Disable" : "Enable"}
+                          {a.enabled
+                            ? t("adminPages.announcements.action.disable")
+                            : t("adminPages.announcements.action.enable")}
                         </Button>
                         <Button
                           variant="secondary"
                           size="sm"
                           onClick={() => openEdit(a)}
                         >
-                          Edit
+                          {t("common.edit")}
                         </Button>
                         <Button
                           variant="danger"
@@ -227,7 +247,7 @@ export function AnnouncementsPage() {
                           onClick={() => onDelete(a)}
                           disabled={deleteMut.isPending}
                         >
-                          Delete
+                          {t("common.delete")}
                         </Button>
                       </div>
                     </td>

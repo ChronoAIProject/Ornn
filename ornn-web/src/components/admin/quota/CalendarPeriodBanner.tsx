@@ -7,6 +7,8 @@
  * @module components/admin/quota/CalendarPeriodBanner
  */
 
+import { useTranslation } from "react-i18next";
+
 interface CalendarPeriodBannerProps {
   /** ISO datetime, inclusive — first millisecond of the month (UTC). */
   monthStart: string;
@@ -34,10 +36,11 @@ export function CalendarPeriodBanner({
   monthEnd,
   className = "",
 }: CalendarPeriodBannerProps) {
+  const { t } = useTranslation();
   return (
     <div
       role="status"
-      aria-label="Current quota period"
+      aria-label={t("aria.currentQuotaPeriod")}
       className={`inline-flex items-center gap-3 rounded border border-subtle bg-elevated/40 px-4 py-2 ${className}`}
     >
       <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-meta">

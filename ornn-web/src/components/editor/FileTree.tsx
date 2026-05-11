@@ -6,6 +6,7 @@
  */
 
 import { useState, useCallback, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { motion, AnimatePresence } from "framer-motion";
 
 export interface FileNode {
@@ -116,6 +117,7 @@ function TreeNode({
   onConfirmCreate,
   onCancelCreate,
 }: TreeNodeProps) {
+  const { t } = useTranslation();
   const isFolder = node.type === "folder";
   const isExpanded = expandedIds.has(node.id);
   const isSelected = node.id === selectedId;
@@ -176,7 +178,7 @@ function TreeNode({
                   onCreateFile(node.id);
                 }}
                 className="p-1 rounded hover:bg-accent/20 text-meta hover:text-accent cursor-pointer"
-                title="New file"
+                title={t("fileTree.newFile")}
               >
                 <PlusIcon className="h-3 w-3" />
               </button>
@@ -189,7 +191,7 @@ function TreeNode({
                   onDelete(node.id);
                 }}
                 className="p-1 rounded hover:bg-danger/20 text-meta hover:text-danger cursor-pointer"
-                title="Delete"
+                title={t("common.delete")}
               >
                 <TrashIcon className="h-3 w-3" />
               </button>

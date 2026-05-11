@@ -39,6 +39,7 @@ import {
 import { useToastStore } from "@/stores/toastStore";
 import { ApiClientError } from "@/services/apiClient";
 import { MirrorSetupHelp } from "@/components/admin/MirrorSetupHelp";
+import { translateError } from "@/utils/translateError";
 
 function formatTime(iso: string | null): string {
   if (!iso) return "—";
@@ -185,7 +186,7 @@ export function MirrorPage() {
           : t("adminMirror.savedRepo", "Mirror settings saved."),
       });
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+      const message = translateError(err);
       const code = err instanceof ApiClientError ? err.code : null;
       // Surface the abandon-confirm path even if the modal was bypassed.
       if (code === "OLD_REPO_NOT_CONFIRMED") {
@@ -211,7 +212,7 @@ export function MirrorPage() {
         message: t("adminMirror.savedCreds", "GitHub App credentials saved."),
       });
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+      const message = translateError(err);
       addToast({ type: "error", message });
     }
   };
@@ -227,7 +228,7 @@ export function MirrorPage() {
         ),
       });
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+      const message = translateError(err);
       addToast({ type: "error", message });
     }
   };

@@ -20,6 +20,13 @@ import { SKILL_CATEGORY_INFO } from "@/utils/constants";
 import { OUTPUT_TYPES } from "@/utils/skillFrontmatterSchema";
 import type { BasicInfoData } from "@/utils/skillCreateSchemas";
 import { useTranslation } from "react-i18next";
+import { translateError } from "@/utils/translateError";
+
+/** RHF error messages may be JSON-encoded i18n payloads — route through translateError. */
+function fieldError(msg: string | undefined): string | undefined {
+  if (!msg) return undefined;
+  return translateError(new Error(msg));
+}
 
 export interface StepBasicInfoProps {
   form: UseFormReturn<BasicInfoData>;
@@ -83,7 +90,7 @@ export function StepBasicInfo({
         <Input
           label={t("guided.skillName")}
           placeholder={t("guided.skillNamePlaceholder")}
-          error={form.formState.errors.name?.message}
+          error={fieldError(form.formState.errors.name?.message)}
           {...form.register("name")}
         />
 
@@ -91,7 +98,7 @@ export function StepBasicInfo({
         <Input
           label={t("guided.descLabel")}
           placeholder={t("guided.descPlaceholder")}
-          error={form.formState.errors.description?.message}
+          error={fieldError(form.formState.errors.description?.message)}
           {...form.register("description")}
         />
 
@@ -106,9 +113,9 @@ export function StepBasicInfo({
                   label={t("guided.categoryLabel")}
                   options={categoryOptions}
                   placeholder={t("guided.selectCategory")}
-                  error={
-                    form.formState.errors.metadata?.category?.message
-                  }
+                  error={fieldError(
+                    form.formState.errors.metadata?.category?.message,
+                  )}
                   {...field}
                 />
               )}
@@ -132,9 +139,9 @@ export function StepBasicInfo({
                   label: ot === "text" ? t("guided.textStdout") : t("guided.fileArtifact"),
                 }))}
                 placeholder={t("guided.selectOutputType")}
-                error={
-                  form.formState.errors.metadata?.outputType?.message
-                }
+                error={fieldError(
+                  form.formState.errors.metadata?.outputType?.message,
+                )}
                 {...field}
                 value={field.value ?? ""}
               />
@@ -151,9 +158,9 @@ export function StepBasicInfo({
               <ToolsInput
                 tools={field.value}
                 onChange={field.onChange}
-                error={
-                  form.formState.errors.metadata?.toolList?.message
-                }
+                error={fieldError(
+                  form.formState.errors.metadata?.toolList?.message,
+                )}
               />
             )}
           />
@@ -168,9 +175,9 @@ export function StepBasicInfo({
               <RuntimeSelect
                 selected={field.value}
                 onChange={field.onChange}
-                error={
-                  form.formState.errors.metadata?.runtime?.message
-                }
+                error={fieldError(
+                  form.formState.errors.metadata?.runtime?.message,
+                )}
               />
             )}
           />
@@ -225,7 +232,7 @@ export function StepBasicInfo({
             <TagInput
               tags={field.value}
               onChange={field.onChange}
-              error={form.formState.errors.metadata?.tag?.message}
+              error={fieldError(form.formState.errors.metadata?.tag?.message)}
             />
           )}
         />
@@ -241,7 +248,7 @@ export function StepBasicInfo({
         <Input
           label={t("guided.compatibilityLabel")}
           placeholder={t("guided.compatibilityPlaceholder")}
-          error={form.formState.errors.compatibility?.message}
+          error={fieldError(form.formState.errors.compatibility?.message)}
           {...form.register("compatibility")}
         />
 

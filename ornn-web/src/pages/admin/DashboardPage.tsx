@@ -14,6 +14,7 @@ import { useQuery } from "@tanstack/react-query";
 import { DashboardTile } from "@/components/admin/DashboardTile";
 import { RecentActivities } from "@/components/admin/RecentActivities";
 import { fetchDashboardStats } from "@/services/adminDashboardApi";
+import { translateError } from "@/utils/translateError";
 
 export function DashboardPage() {
   const stats = useQuery({
@@ -23,9 +24,7 @@ export function DashboardPage() {
   });
 
   const errorMsg = stats.error
-    ? stats.error instanceof Error
-      ? stats.error.message
-      : "Failed to load stats"
+    ? translateError(stats.error, "Failed to load stats")
     : null;
 
   const data = stats.data;

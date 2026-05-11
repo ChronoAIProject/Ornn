@@ -9,6 +9,7 @@
  */
 
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { useTranslation } from "react-i18next";
 import type { LifetimeBucket } from "@/services/quotaApi";
 
 interface LifetimeUsageChartProps {
@@ -43,11 +44,12 @@ export function LifetimeUsageChart({
   color = "var(--color-accent)",
   height = 220,
 }: LifetimeUsageChartProps) {
+  const { t } = useTranslation();
   if (items.length === 0) {
     return (
       <div
         role="status"
-        aria-label="No lifetime usage history"
+        aria-label={t("aria.noLifetimeUsageHistory")}
         className="flex h-[220px] items-center justify-center rounded border border-dashed border-subtle bg-elevated/30 font-mono text-[11px] uppercase tracking-[0.14em] text-meta"
       >
         No usage history yet
@@ -57,7 +59,7 @@ export function LifetimeUsageChart({
 
   const data = toData(items);
   return (
-    <div role="img" aria-label="Lifetime monthly usage" style={{ width: "100%", height }}>
+    <div role="img" aria-label={t("aria.lifetimeMonthlyUsage")} style={{ width: "100%", height }}>
       <ResponsiveContainer>
         <BarChart data={data} margin={{ top: 8, right: 8, left: -8, bottom: 0 }}>
           <CartesianGrid stroke="var(--color-subtle)" strokeDasharray="2 4" vertical={false} />

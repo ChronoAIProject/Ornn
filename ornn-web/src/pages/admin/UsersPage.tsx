@@ -5,6 +5,7 @@
  */
 
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
@@ -13,6 +14,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { Badge } from "@/components/ui/Badge";
 import { Pagination } from "@/components/ui/Pagination";
 import { apiGet } from "@/services/apiClient";
+import { translateError } from "@/utils/translateError";
 
 /** User summary shape from the API. */
 interface UserSummary {
@@ -50,6 +52,7 @@ function formatDateSGT(dateStr: string): string {
 const PAGE_SIZE = 20;
 
 export function UsersPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [page, setPage] = useState(1);
 
@@ -73,10 +76,10 @@ export function UsersPage() {
       {/* Header */}
       <div>
         <h1 className="font-display text-2xl font-bold text-accent-support accent-support">
-          Users
+          {t("adminPages.users.title")}
         </h1>
         <p className="mt-1 font-text text-meta">
-          Platform users and their activity
+          {t("adminPages.users.subtitle")}
         </p>
       </div>
 
@@ -92,12 +95,12 @@ export function UsersPage() {
           ) : error ? (
             <div className="py-8 text-center">
               <p className="font-text text-danger">
-                {error instanceof Error ? error.message : "Failed to load users"}
+                {translateError(error, t("adminPages.users.loadFailed"))}
               </p>
             </div>
           ) : data?.items.length === 0 ? (
             <p className="py-8 text-center font-text text-meta">
-              No users found.
+              {t("adminPages.users.empty")}
             </p>
           ) : (
             <div className="overflow-x-auto">
@@ -105,19 +108,19 @@ export function UsersPage() {
                 <thead>
                   <tr className="border-b border-accent/20">
                     <th className="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
-                      User
+                      {t("adminPages.users.table.user")}
                     </th>
                     <th className="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
-                      Email
+                      {t("adminPages.users.table.email")}
                     </th>
                     <th className="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
-                      Skills
+                      {t("adminPages.users.table.skills")}
                     </th>
                     <th className="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
-                      Activities
+                      {t("adminPages.users.table.activities")}
                     </th>
                     <th className="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
-                      Last Active
+                      {t("adminPages.users.table.lastActive")}
                     </th>
                   </tr>
                 </thead>

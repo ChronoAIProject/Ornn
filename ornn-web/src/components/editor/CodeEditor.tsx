@@ -6,6 +6,7 @@
  */
 
 import { useState, useCallback, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import { motion, AnimatePresence } from "framer-motion";
 
 export interface EditorTab {
@@ -89,6 +90,7 @@ interface TabBarProps {
 }
 
 function TabBar({ tabs, activeTabId, onTabChange, onTabClose }: TabBarProps) {
+  const { t } = useTranslation();
   return (
     <div className="flex items-center border-b border-accent/10 bg-card/50 overflow-x-auto">
       {tabs.map((tab) => {
@@ -109,7 +111,7 @@ function TabBar({ tabs, activeTabId, onTabChange, onTabClose }: TabBarProps) {
             <FileTypeIcon filename={tab.name} className="h-4 w-4 shrink-0" />
             <span className="font-mono text-sm whitespace-nowrap">{tab.name}</span>
             {tab.isModified && (
-              <span className="h-2 w-2 rounded-full bg-warning shrink-0" title="Unsaved changes" />
+              <span className="h-2 w-2 rounded-full bg-warning shrink-0" title={t("common.unsavedChanges")} />
             )}
             <button
               type="button"
@@ -142,6 +144,7 @@ interface TextAreaEditorProps {
 }
 
 function TextAreaEditor({ content, onChange, onSave, readOnly }: TextAreaEditorProps) {
+  const { t } = useTranslation();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const lineNumbersRef = useRef<HTMLDivElement>(null);
 
@@ -217,7 +220,7 @@ function TextAreaEditor({ content, onChange, onSave, readOnly }: TextAreaEditorP
           resize-none focus:outline-none
           ${readOnly ? "cursor-not-allowed opacity-75" : ""}
         `}
-        placeholder="Start typing..."
+        placeholder={t("editor.startTyping")}
       />
     </div>
   );

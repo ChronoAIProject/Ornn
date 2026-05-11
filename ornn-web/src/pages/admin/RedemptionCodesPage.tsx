@@ -13,6 +13,7 @@
  */
 
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { motion } from "framer-motion";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -26,6 +27,7 @@ import {
 import { MintRedemptionCodeModal } from "@/components/admin/redemption-codes/MintRedemptionCodeModal";
 import { RedemptionCodeDetailDrawer } from "@/components/admin/redemption-codes/RedemptionCodeDetailDrawer";
 import { RedemptionCodesTable } from "@/components/admin/redemption-codes/RedemptionCodesTable";
+import { translateError } from "@/utils/translateError";
 import type {
   RedemptionCode,
   RedemptionCodeStatus,
@@ -33,14 +35,15 @@ import type {
 
 const PAGE_SIZE = 20;
 
-const STATUS_TABS: Array<{ id: RedemptionCodeStatus | "all"; label: string }> = [
-  { id: "all", label: "All" },
-  { id: "active", label: "Active" },
-  { id: "redeemed", label: "Redeemed" },
-  { id: "invalidated", label: "Invalidated" },
-];
-
 export function RedemptionCodesPage() {
+  const { t } = useTranslation();
+  const STATUS_TABS: Array<{ id: RedemptionCodeStatus | "all"; label: string }> = [
+    { id: "all", label: t("adminPages.redemption.tabs.all") },
+    { id: "active", label: t("adminPages.redemption.tabs.active") },
+    { id: "redeemed", label: t("adminPages.redemption.tabs.redeemed") },
+    { id: "invalidated", label: t("adminPages.redemption.tabs.invalidated") },
+  ];
+
   const [statusFilter, setStatusFilter] = useState<
     RedemptionCodeStatus | "all"
   >("all");
@@ -74,7 +77,7 @@ export function RedemptionCodesPage() {
 
   const onInvalidate = async (code: RedemptionCode) => {
     const ok = window.confirm(
-      `Invalidate code ${code.code}? It will no longer be redeemable.`,
+      t("adminPages.redemption.confirm.invalidate", { code: code.code }),
     );
     if (!ok) return;
     setPendingInvalidateId(code.id);
@@ -82,13 +85,15 @@ export function RedemptionCodesPage() {
       await invalidateCode.mutateAsync(code.id);
       addToast({
         type: "success",
-        message: `Code ${code.code} invalidated.`,
+        message: t("adminPages.redemption.toast.invalidated", { code: code.code }),
       });
     } catch (err) {
       addToast({
         type: "error",
-        message:
-          err instanceof Error ? err.message : "Failed to invalidate code.",
+        message: translateError(
+          err,
+          t("adminPages.redemption.toast.invalidateFailed"),
+        ),
       });
     } finally {
       setPendingInvalidateId(null);
@@ -100,21 +105,20 @@ export function RedemptionCodesPage() {
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="font-display text-2xl font-bold uppercase tracking-tight text-strong">
-            Redemption codes
+            {t("adminPages.redemption.title")}
           </h1>
           <p className="mt-1 font-text text-meta">
-            Mint single-use codes that bundle one or more current-month quota
-            grants. Codes can be invalidated before redemption.
+            {t("adminPages.redemption.subtitle")}
           </p>
         </div>
         <Button size="sm" onClick={() => setMintOpen(true)}>
-          Mint code
+          {t("adminPages.redemption.action.mint")}
         </Button>
       </header>
 
       <nav
         role="tablist"
-        aria-label="Status"
+        aria-label={t("adminPages.redemption.aria.status")}
         className="flex border-b border-subtle"
       >
         {STATUS_TABS.map((t) => {
@@ -145,8 +149,8 @@ export function RedemptionCodesPage() {
             setQuery(e.target.value);
             setPage(1);
           }}
-          placeholder="Filter by code prefix or note…"
-          aria-label="Filter redemption codes"
+          placeholder={t("adminPages.redemption.placeholder.filter")}
+          aria-label={t("adminPages.redemption.aria.filter")}
           className="w-full max-w-sm rounded-sm border border-subtle bg-elevated/40 px-3 py-2 font-mono text-xs text-strong placeholder:text-meta/70 focus:border-accent focus:bg-card focus:outline-none"
         />
       </div>
@@ -162,9 +166,7 @@ export function RedemptionCodesPage() {
             isLoading={codesQuery.isLoading}
             errorMessage={
               codesQuery.error
-                ? codesQuery.error instanceof Error
-                  ? codesQuery.error.message
-                  : "Failed to load redemption codes"
+                ? translateError(codesQuery.error, t("adminPages.redemption.loadFailed"))
                 : null
             }
             invalidatingId={pendingInvalidateId}

@@ -32,6 +32,7 @@ import type { SkillMetadata, SkillMetadataBlock, UploadableFolder } from "@/type
 import { createDefaultSkillMetadata } from "@/types/skillPackage";
 import type { SkillCategory } from "@/utils/constants";
 import { useTranslation } from "react-i18next";
+import { translateError } from "@/utils/translateError";
 
 interface FormState {
   name: string;
@@ -306,7 +307,7 @@ export function CreateSkillGuidedPage() {
       navigate(`/skills/${skill.name}`);
     } catch (err) {
       const message =
-        err instanceof Error ? err.message : t("guided.saveFailed");
+        translateError(err, t("guided.saveFailed"));
       addToast({ type: "error", message });
     }
   };

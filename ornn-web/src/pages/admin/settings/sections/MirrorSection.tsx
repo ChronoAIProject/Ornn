@@ -15,6 +15,7 @@
  */
 
 import { z } from "zod";
+import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import { SectionShell } from "@/components/admin/settings/SectionShell";
 import { UnsavedChangesGuard } from "@/components/admin/settings/UnsavedChangesGuard";
@@ -39,12 +40,13 @@ const Schema = z.object({
 }) satisfies z.ZodType<MS>;
 
 export function MirrorSection() {
+  const { t } = useTranslation();
   const form = useSectionForm<MS>({
     queryKey: ["admin", "settings", "mirror"] as const,
     fetcher: () => fetchSection<MS>("mirror"),
     saver: (input) => putSection<MS>("mirror", input),
     schema: Schema,
-    successMessage: "Mirror config saved",
+    successMessage: t("adminSettings.sections.mirror.savedToast"),
   });
 
   const draft = form.draft;
@@ -56,8 +58,8 @@ export function MirrorSection() {
     <>
       <UnsavedChangesGuard when={form.isDirty} />
       <SectionShell
-        title="GitHub mirror"
-        description="Repo coords + App credentials. Run controls are on the legacy mirror dashboard."
+        title={t("adminSettings.sections.mirror.title")}
+        description={t("adminSettings.sections.mirror.description")}
         isLoading={form.isLoading}
         isSaving={form.isSaving}
         isDirty={form.isDirty}
@@ -70,24 +72,24 @@ export function MirrorSection() {
         {draft && (
           <div className="space-y-4">
             <Toggle
-              label="Mirror enabled"
+              label={t("adminSettings.sections.mirror.label.enabled")}
               value={draft.enabled}
               onChange={(v) => form.patchDraft({ enabled: v })}
             />
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <Field
-                label="Owner"
+                label={t("adminSettings.sections.mirror.label.owner")}
                 value={draft.owner}
                 onChange={(v) => form.patchDraft({ owner: v })}
               />
               <Field
-                label="Repo"
+                label={t("adminSettings.sections.mirror.label.repo")}
                 value={draft.repo}
                 onChange={(v) => form.patchDraft({ repo: v })}
               />
               <Field
-                label="Branch"
+                label={t("adminSettings.sections.mirror.label.branch")}
                 value={draft.branch}
                 onChange={(v) => form.patchDraft({ branch: v })}
               />
@@ -95,12 +97,12 @@ export function MirrorSection() {
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <Field
-                label="App ID"
+                label={t("adminSettings.sections.mirror.label.appId")}
                 value={draft.appId}
                 onChange={(v) => form.patchDraft({ appId: v })}
               />
               <Field
-                label="Installation ID"
+                label={t("adminSettings.sections.mirror.label.installationId")}
                 value={draft.installationId}
                 onChange={(v) => form.patchDraft({ installationId: v })}
               />
@@ -108,7 +110,7 @@ export function MirrorSection() {
 
             <label className="flex flex-col gap-1.5">
               <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
-                App private key (PEM)
+                {t("adminSettings.sections.mirror.label.privateKey")}
               </span>
               <textarea
                 value={draft.appPrivateKey}
@@ -121,8 +123,8 @@ export function MirrorSection() {
               />
               <span className="font-mono text-[10px] text-meta">
                 {secretIsSentinel
-                  ? "(unchanged — secret preserved)"
-                  : "Replace to overwrite. Saving an unchanged mid-mask keeps the existing DB value."}
+                  ? t("adminSettings.secretSentinelHint")
+                  : t("adminSettings.secretReplaceHint")}
               </span>
             </label>
 
@@ -130,7 +132,7 @@ export function MirrorSection() {
               to="/admin/skills"
               className="inline-flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.14em] text-accent hover:text-accent-muted"
             >
-              Open mirror dashboard →
+              {t("adminSettings.sections.mirror.openDashboard")}
             </Link>
           </div>
         )}

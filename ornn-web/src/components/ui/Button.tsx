@@ -15,11 +15,13 @@
  */
 
 import type { ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 
 export interface ButtonProps {
   variant?: "primary" | "secondary" | "danger";
   size?: "sm" | "md" | "lg";
   loading?: boolean;
+  loadingText?: string;
   children: ReactNode;
   onClick?: (e?: React.MouseEvent<HTMLButtonElement>) => void;
   type?: "button" | "submit";
@@ -46,12 +48,14 @@ export function Button({
   variant = "primary",
   size = "md",
   loading = false,
+  loadingText,
   children,
   onClick,
   type = "button",
   disabled = false,
   className = "",
 }: ButtonProps) {
+  const { t } = useTranslation();
   const isDisabled = disabled || loading;
   const letterpressClass =
     variant === "primary"
@@ -75,7 +79,7 @@ export function Button({
       {loading ? (
         <span className="flex items-center justify-center gap-2">
           <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-[1.5px] border-current border-t-transparent" />
-          <span>Loading…</span>
+          <span>{loadingText ?? t("common.loading")}</span>
         </span>
       ) : (
         children

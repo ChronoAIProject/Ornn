@@ -32,6 +32,7 @@ import {
   type UserDirectoryEntry,
 } from "@/services/usersApi";
 import type { SkillDetail } from "@/types/domain";
+import { translateError } from "@/utils/translateError";
 
 interface PermissionsModalProps {
   isOpen: boolean;
@@ -192,7 +193,7 @@ export function PermissionsModal({ isOpen, onClose, skill }: PermissionsModalPro
       });
       onClose();
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+      const message = translateError(err);
       addToast({ type: "error", message });
     }
   };
