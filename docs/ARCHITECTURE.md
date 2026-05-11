@@ -21,24 +21,6 @@ chrono-ornn is an AI skill platform. Users create, publish, search, and execute 
 - Category types: `plain`, `tool-based`, `runtime-based`, `mixed`
 - Output types: `text` (stdout), `file` (generated files retrieved via glob)
 
-## Ornn Core Skills
-
-The `.ornn-apis/` directory contains three plain skills that teach AI agents how to use Ornn:
-
-| Skill | Purpose |
-|-------|---------|
-| `ornn-search-and-run` | Discover, pull, and execute skills via NyxID MCP |
-| `ornn-upload` | Package and upload skills to the registry |
-| `ornn-build` | Generate new skills from natural language via AI |
-
-### Editing Core Skills
-
-When editing skills in `.ornn-apis/`:
-- Each skill is a single directory containing at minimum a `SKILL.md` file
-- `SKILL.md` must have valid YAML frontmatter with `name`, `description`, and `metadata.category`
-- Skills guide AI agents through multi-step MCP workflows — keep instructions precise and include example JSON payloads
-- The upload skill must instruct agents to create ZIPs **with a root folder** (e.g., `skill-name/SKILL.md`), not flat files
-
 ## Audit + analytics (PostHog)
 
 Issue #271 collapsed every observability surface in Ornn — the
