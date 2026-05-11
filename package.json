@@ -4,7 +4,7 @@
   "workspaces": [
     "ornn-api",
     "ornn-web",
-    "ornn-sdk"
+    "sdk/typescript"
   ],
   "scripts": {
     "dev": "bun run dev:api",
@@ -16,11 +16,11 @@
     "test:sdk": "bun run --filter @chronoai/ornn-sdk test",
     "changeset": "changeset",
     "version-packages": "changeset version",
-    "lint": "eslint ornn-api/src ornn-web/src ornn-sdk/src",
-    "lint:fix": "eslint ornn-api/src ornn-web/src ornn-sdk/src --fix",
+    "lint": "eslint ornn-api/src ornn-web/src sdk/typescript/src",
+    "lint:fix": "eslint ornn-api/src ornn-web/src sdk/typescript/src --fix",
     "typecheck:api": "bunx tsc --noEmit -p ornn-api/tsconfig.json",
     "typecheck:web": "bunx tsc --noEmit -p ornn-web/tsconfig.json",
-    "typecheck:sdk": "bunx tsc --noEmit -p ornn-sdk/tsconfig.json",
+    "typecheck:sdk": "bunx tsc --noEmit -p sdk/typescript/tsconfig.json",
     "typecheck": "bun run typecheck:api && bun run typecheck:web && bun run typecheck:sdk",
     "build:web": "bun run --filter ornn-web build"
   },

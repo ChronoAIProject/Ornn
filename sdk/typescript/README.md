@@ -71,7 +71,7 @@ try {
 }
 ```
 
-Error codes follow [`docs/CONVENTIONS.md` §1.4](../docs/CONVENTIONS.md) (lowercase snake_case).
+Error codes follow [`docs/CONVENTIONS.md` §1.4](../../docs/CONVENTIONS.md) (lowercase snake_case).
 
 ## API
 

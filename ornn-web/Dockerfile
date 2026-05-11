@@ -13,14 +13,14 @@ WORKDIR /app
 COPY package.json bun.lock ./
 
 # Copy every workspace package.json the lockfile references. We used to
-# stub ornn-api / ornn-sdk to skip pulling their deps for the frontend
+# stub ornn-api / sdk/typescript to skip pulling their deps for the frontend
 # build, but that's exactly what tripped the hoister: bun.lock was
 # resolved against the real package.jsons, and the stubs (no deps) made
 # bun think hoistable transitive deps weren't needed. Copying the real
 # files keeps the lockfile + workspace graph consistent.
 COPY ornn-web/package.json ornn-web/
 COPY ornn-api/package.json ornn-api/
-COPY ornn-sdk/package.json ornn-sdk/
+COPY sdk/typescript/package.json sdk/typescript/
 
 RUN bun install
 

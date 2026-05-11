@@ -38,12 +38,12 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-          cache-dependency-path: ornn-sdk-python/pyproject.toml
-      - name: Install ornn-sdk-python
-        working-directory: ornn-sdk-python
+          cache-dependency-path: sdk/python/pyproject.toml
+      - name: Install ornn-sdk (python)
+        working-directory: sdk/python
         run: pip install -e ".[dev]"
       - name: Run pytest
-        working-directory: ornn-sdk-python
+        working-directory: sdk/python
         run: pytest -q
 
   build:

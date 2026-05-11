@@ -30,8 +30,8 @@ TypeScript, Bun workspace monorepo
 |---------|------|-------------|
 | `ornn-api` | `ornn-api/` | Backend API (Bun + Hono + MongoDB) |
 | `ornn-web` | `ornn-web/` | React SPA (Vite + React 19 + Zustand + TanStack Query) |
-| `@chronoai/ornn-sdk` | `ornn-sdk/` | TypeScript client for `/api/v1/*` |
-| `ornn-sdk` (Python) | `ornn-sdk-python/` | Python client for `/api/v1/*` (httpx) — separate release cadence |
+| `@chronoai/ornn-sdk` | `sdk/typescript/` | TypeScript client for `/api/v1/*` |
+| `ornn-sdk` (Python) | `sdk/python/` | Python client for `/api/v1/*` (httpx) — separate release cadence |
 
 ## Architecture
 

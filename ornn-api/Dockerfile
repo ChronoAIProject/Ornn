@@ -16,7 +16,7 @@ COPY package.json bun.lock ./
 # package.jsons drifted apart and `bun install` skipped hoistable deps.
 COPY ornn-api/package.json ornn-api/
 COPY ornn-web/package.json ornn-web/
-COPY ornn-sdk/package.json ornn-sdk/
+COPY sdk/typescript/package.json sdk/typescript/
 
 RUN bun install
 
