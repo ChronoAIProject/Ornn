@@ -273,6 +273,13 @@
     "totalPulls": "Total",
     "noUsage": "No usage in this range."
   },
+  "cookieConsent": {
+    "stamp": "[ § ANALYTICS — CONSENT ]",
+    "title": "We use cookies for product analytics.",
+    "body": "Ornn uses <postHogLink>PostHog (EU)</postHogLink> to measure feature usage and improve the platform. Session replay is sampled with input fields masked. See our <privacyLink>Privacy Policy</privacyLink> for details. You can change your choice anytime in settings.",
+    "decline": "Decline",
+    "accept": "Accept"
+  },
   "versionDiff": {
     "openButton": "Compare versions",
     "title": "Compare versions",
