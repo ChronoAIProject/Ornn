@@ -1,11 +1,9 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="ornn-web/public/logo-dark.svg">
-    <img src="ornn-web/public/logo-light.svg" width="320" alt="Ornn" />
+    <img src="ornn-web/public/logo-light.svg" width="200" alt="Ornn" />
   </picture>
 </p>
-
-<h1 align="center">Ornn</h1>
 
 <p align="center">
   <a href="https://github.com/ChronoAIProject/Ornn/actions/workflows/ci.yml"><img src="https://github.com/ChronoAIProject/Ornn/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
@@ -31,30 +29,13 @@ Closest analog: **npm registry + npm CLI fused, model-agnostic** — works for C
 
 `ornn-web` is a secondary surface for skill owners and platform admins; it is not the primary product.
 
-## Packages
+## How to use Ornn
 
-| Package | Path | Description |
-|---------|------|-------------|
-| `ornn-api` | [`ornn-api/`](ornn-api/) | Backend API (Bun + Hono + MongoDB) |
-| `ornn-web` | [`ornn-web/`](ornn-web/) | React SPA (Vite + React 19 + Zustand + TanStack Query) |
-| `@chronoai/ornn-sdk` | [`sdk/typescript/`](sdk/typescript/) | TypeScript client for `/api/v1/*` |
-| `ornn-sdk` (Python) | [`sdk/python/`](sdk/python/) | Python client for `/api/v1/*` (httpx) — separate release cadence |
+Ornn is model-agnostic — any AI agent runtime (Claude, GPT, Gemini, or a custom in-house stack) can connect and consume the full skill-lifecycle API. Three steps to bring an agent online:
 
-## Tech Stack
-
-- **Language / runtime:** TypeScript on Bun (workspace monorepo); Vite for the frontend dev / build.
-- **Backend:** Hono on Bun.
-- **Frontend:** React 19, Zustand, TanStack Query, Tailwind CSS 4, Framer Motion, React Router 7.
-- **Database:** MongoDB 7.
-- **Validation:** Zod.
-- **Logging:** Pino.
-- **Tests:** Bun test (backend); Vitest + Testing Library + jsdom (frontend + TS SDK); pytest + respx (Python SDK).
-
-## Architecture
-
-Two packages — `ornn-api` (backend) and `ornn-web` (web UI). All configurable values come from environment variables; no hardcoded config.
-
-See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for external services, skill format, and the observability pipeline.
+1. **Install the ChronoAI core service skill into the agent.** This is the bootstrap skill — it introduces Ornn to the agent and drives the rest of the setup.
+2. **Let the agent provision the NyxID CLI.** On first run, the core skill instructs the agent to install `nyxid` — the CLI that brokers every Ornn request and response with proper authentication and authorization. The agent follows the skill's setup procedure end-to-end; no manual operator steps required.
+3. **Start the conversation.** Once `nyxid` is configured in the agent's environment, ask it to search, install, run, build, or publish Ornn skills. The agent learns the end-to-end lifecycle — `search → pull → install → execute → build → upload → share` — through the same API it just connected to.
 
 ## Documentation
 
