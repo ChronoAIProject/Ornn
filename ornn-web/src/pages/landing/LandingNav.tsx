@@ -3,27 +3,13 @@ import { Link, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import { useThemeStore } from "@/stores/themeStore";
-import { useAuthStore, useIsAuthenticated, useCurrentUser, isAdmin } from "@/stores/authStore";
+import { useAuthStore, useIsAuthenticated, useCurrentUser } from "@/stores/authStore";
 import { logActivity } from "@/services/activityApi";
-import { config } from "@/config";
+import { useUserMenuGroups, type UserMenuItem } from "@/lib/userMenu";
 import { Logo } from "@/components/brand/Logo";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { EmberLink } from "./EmberButton";
 import { HighlighterMark } from "./HighlighterMark";
-
-/** Derive NyxID home URL from the authorize URL env var. */
-function getNyxIdUrl(): string {
-  try {
-    const authorizeUrl = config.nyxidOauthAuthorizeUrl;
-    if (authorizeUrl) {
-      const url = new URL(authorizeUrl);
-      return url.origin;
-    }
-  } catch {
-    /* ignore */
-  }
-  return "https://nyx.chrono-ai.fun"; // allow-hardcode legacy fallback; runtime config supplies the real value
-}
 
 /**
  * One row inside the desktop avatar dropdown — opens an external URL
@@ -102,6 +88,7 @@ export function LandingNav() {
 
   const isAuthenticated = useIsAuthenticated();
   const user = useCurrentUser();
+  const userMenuGroups = useUserMenuGroups(user);
 
   // Avatar dropdown — mirrors `Navbar.tsx`'s desktop user-menu but
   // restyled in landing tokens. Closes on outside click + ESC.
@@ -133,6 +120,93 @@ export function LandingNav() {
   };
 
   const initial = (user?.displayName || user?.email || "?").charAt(0).toUpperCase();
+
+  /**
+   * Render one row of the desktop avatar dropdown. Each kind maps to
+   * its landing-styled wrapper (DropdownExternal / DropdownInternal
+   * bind to bone/ember/surface-elevated tokens for the dark landing
+   * surface), or to the ember-toned logout button. Items come from
+   * `useUserMenuGroups` — see lib/userMenu.ts.
+   */
+  function renderDesktopItem(item: UserMenuItem) {
+    if (item.kind === "external" && item.href) {
+      return (
+        <DropdownExternal key={item.key} href={item.href}>
+          {item.label}
+        </DropdownExternal>
+      );
+    }
+    if (item.kind === "internal" && item.to) {
+      return (
+        <DropdownInternal key={item.key} to={item.to} onClick={() => setUserMenuOpen(false)}>
+          {item.label}
+        </DropdownInternal>
+      );
+    }
+    // logout
+    return (
+      <button
+        key={item.key}
+        type="button"
+        onClick={handleLogout}
+        className="flex w-full items-center px-4 py-2.5 text-left font-mono text-[11px] uppercase tracking-[0.14em] text-ember transition-colors hover:bg-[color:var(--surface-elevated)]"
+      >
+        {item.label}
+      </button>
+    );
+  }
+
+  /**
+   * Render one row inside the mobile hamburger panel. Larger Inter
+   * body type, border-b separators, bone fill / ember hover — same
+   * Landing tokens as the desktop dropdown's wrappers, just at mobile
+   * scale. Logout uses the same ember mono treatment minus the
+   * border-b (it's the trailing row).
+   */
+  function renderMobileItem(item: UserMenuItem) {
+    const itemRowClass =
+      "border-b border-[color:var(--color-border-subtle)] py-3 font-text text-[16px] text-bone transition-colors hover:text-ember";
+    if (item.kind === "external" && item.href) {
+      return (
+        <a
+          key={item.key}
+          href={item.href}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={closeMenu}
+          tabIndex={menuOpen ? 0 : -1}
+          className={itemRowClass}
+        >
+          {item.label}
+        </a>
+      );
+    }
+    if (item.kind === "internal" && item.to) {
+      return (
+        <Link
+          key={item.key}
+          to={item.to}
+          onClick={closeMenu}
+          tabIndex={menuOpen ? 0 : -1}
+          className={itemRowClass}
+        >
+          {item.label}
+        </Link>
+      );
+    }
+    // logout
+    return (
+      <button
+        key={item.key}
+        type="button"
+        onClick={handleLogout}
+        tabIndex={menuOpen ? 0 : -1}
+        className="flex items-center justify-start py-3 font-mono text-[12px] uppercase tracking-[0.14em] text-ember transition-colors hover:text-parchment"
+      >
+        {item.label}
+      </button>
+    );
+  }
 
   return (
     <nav className="sticky top-0 z-50 border-b border-[color:var(--color-border-subtle)] [background-color:var(--surface-nav)] backdrop-blur-md">
@@ -354,41 +428,14 @@ export function LandingNav() {
                       <p className="truncate font-mono text-[11px] text-bone">{user.email}</p>
                     </div>
 
-                    {/* Per-user external links — open the user's NyxID
-                        portal in a new tab so the landing surface stays
-                        focused on Ornn. */}
-                    <div className="py-1">
-                      <DropdownExternal href={`${getNyxIdUrl()}/settings`}>
-                        {t("nav.myProfile", "My Profile")}
-                      </DropdownExternal>
-                      <DropdownExternal href={`${getNyxIdUrl()}/services`}>
-                        {t("nav.myServices", "My NyxID Services")}
-                      </DropdownExternal>
-                      <DropdownExternal href={`${getNyxIdUrl()}/orgs`}>
-                        {t("nav.myOrgs", "My Organizations")}
-                      </DropdownExternal>
-                      <DropdownExternal href={getNyxIdUrl()}>
-                        {t("nav.goToNyxId")}
-                      </DropdownExternal>
-                    </div>
-
-                    {isAdmin(user) && (
-                      <div className="border-t border-[color:var(--color-border-subtle)] py-1">
-                        <DropdownInternal to="/admin" onClick={() => setUserMenuOpen(false)}>
-                          {t("nav.adminPanel")}
-                        </DropdownInternal>
-                      </div>
-                    )}
-
-                    <div className="border-t border-[color:var(--color-border-subtle)] py-1">
-                      <button
-                        type="button"
-                        onClick={handleLogout}
-                        className="flex w-full items-center px-4 py-2.5 text-left font-mono text-[11px] uppercase tracking-[0.14em] text-ember transition-colors hover:bg-[color:var(--surface-elevated)]"
+                    {userMenuGroups.map((group, i) => (
+                      <div
+                        key={group.id}
+                        className={`py-1 ${i > 0 ? "border-t border-[color:var(--color-border-subtle)]" : ""}`}
                       >
-                        {t("nav.signOut")}
-                      </button>
-                    </div>
+                        {group.items.map((item) => renderDesktopItem(item))}
+                      </div>
+                    ))}
                   </motion.div>
                 )}
               </AnimatePresence>
@@ -621,34 +668,9 @@ export function LandingNav() {
                     <p className="truncate font-mono text-[11px] text-bone">{user.email}</p>
                   </div>
                 </div>
-                <a
-                  href={`${getNyxIdUrl()}/settings`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={closeMenu}
-                  tabIndex={menuOpen ? 0 : -1}
-                  className="border-b border-[color:var(--color-border-subtle)] py-3 font-text text-[16px] text-bone transition-colors hover:text-ember"
-                >
-                  {t("nav.myProfile", "My Profile")}
-                </a>
-                {isAdmin(user) && (
-                  <Link
-                    to="/admin"
-                    onClick={closeMenu}
-                    tabIndex={menuOpen ? 0 : -1}
-                    className="border-b border-[color:var(--color-border-subtle)] py-3 font-text text-[16px] text-bone transition-colors hover:text-ember"
-                  >
-                    {t("nav.adminPanel")}
-                  </Link>
-                )}
-                <button
-                  type="button"
-                  onClick={handleLogout}
-                  tabIndex={menuOpen ? 0 : -1}
-                  className="flex items-center justify-start py-3 font-mono text-[12px] uppercase tracking-[0.14em] text-ember transition-colors hover:text-parchment"
-                >
-                  {t("nav.signOut")}
-                </button>
+                {userMenuGroups
+                  .flatMap((g) => g.items)
+                  .map((item) => renderMobileItem(item))}
               </>
             ) : (
               <>
