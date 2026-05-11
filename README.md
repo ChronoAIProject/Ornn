@@ -4,61 +4,58 @@
 
 <h1 align="center">Ornn</h1>
 
-<p align="center">The end-to-end skill life-cycle manager for AI agents</p>
+<p align="center">
+  <a href="https://github.com/ChronoAIProject/Ornn/actions/workflows/ci.yml"><img src="https://github.com/ChronoAIProject/Ornn/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+  <a href="https://github.com/ChronoAIProject/Ornn/releases"><img src="https://img.shields.io/github/v/release/ChronoAIProject/Ornn" alt="Latest release" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/ChronoAIProject/Ornn" alt="License" /></a>
+</p>
+
+<p align="center">The agent-facing skill-lifecycle API for AI agents.</p>
 
 ---
 
-Ornn is the end-to-end skill life-cycle manager for AI agents — search, install, run, build, audit, and publish AI skills (packaged prompts and scripts that any agent can use) from one platform. The ultimate vision is **Skill-as-a-Service**: plug-and-play skill integration for any AI agent, across the full life-cycle.
-
 ## What is Ornn
 
-A **skill** is a packaged AI capability — a combination of prompts, scripts, and metadata that an AI agent can discover and execute. Ornn manages the full skill life-cycle: skills are authored or AI-generated, validated, versioned, audited, published, discovered, installed, executed, and monitored — all through one platform.
+Ornn is an **agent-facing skill-lifecycle API**, not a human marketplace.
 
-The skill library provides multiple discovery methods:
+The primary consumer is the AI agent developer / agentic-system builder. Agents call Ornn directly — over HTTP or MCP — to manage their own skill lifecycle:
 
-- **Semantic search** — find skills by meaning, not just keywords
-- **Keyword search** — traditional text-based search
-- **Category browsing** — explore skills by type (plain, tool-based, runtime-based, mixed)
+```
+search → pull → install → execute → build → upload → share
+```
 
-The **sandbox playground** lets users test any skill interactively. When a skill involves code execution, the playground integrates with chrono-sandbox to run scripts in an isolated environment with Node.js and Python runtimes, dependency management, and file artifact retrieval.
+Closest analog: **npm registry + npm CLI fused, model-agnostic** — works for Claude, GPT, Gemini, or any custom runtime. Not locked to a single model.
 
-## Target Users
+`ornn-web` is a secondary surface for skill owners and platform admins; it is not the primary product.
 
-| Audience | Use Case |
-|----------|----------|
-| **Web Users** | Browse, create, and test skills via the web UI |
-| **AI Agent Developers** | Integrate skill discovery and execution into agents via the Ornn API or MCP tools |
+## Packages
 
-## Ornn Core Skills
+| Package | Path | Description |
+|---------|------|-------------|
+| `ornn-api` | [`ornn-api/`](ornn-api/) | Backend API (Bun + Hono + MongoDB) |
+| `ornn-web` | [`ornn-web/`](ornn-web/) | React SPA (Vite + React 19 + Zustand + TanStack Query) |
+| `@chronoai/ornn-sdk` | [`ornn-sdk/`](ornn-sdk/) | TypeScript client for `/api/v1/*` |
+| `ornn-sdk` (Python) | [`ornn-sdk-python/`](ornn-sdk-python/) | Python client for `/api/v1/*` (httpx) — separate release cadence |
 
-Ornn ships with three **core skills** that teach AI agents how to interact with the platform. They live in the [`.ornn-skills/`](.ornn-skills/) directory:
+## Tech Stack
 
-| Skill | Description |
-|-------|-------------|
-| `ornn-search-and-run` | Discover, pull, and execute skills from the Ornn library |
-| `ornn-upload` | Package and upload skills to the Ornn registry |
-| `ornn-build` | Generate new skills via AI from natural language descriptions |
+- **Language / runtime:** TypeScript on Bun (workspace monorepo); Vite for the frontend dev / build.
+- **Backend:** Hono on Bun.
+- **Frontend:** React 19, Zustand, TanStack Query, Tailwind CSS 4, Framer Motion, React Router 7.
+- **Database:** MongoDB 7.
+- **Validation:** Zod.
+- **Logging:** Pino.
+- **Tests:** Bun test (backend); Vitest + Testing Library + jsdom (frontend + TS SDK); pytest + respx (Python SDK).
 
-### Installing Core Skills
+## Architecture
 
-Copy the installation prompt for your agent platform and paste it into your agent. It will fetch the skills from GitHub and set them up automatically.
+Two packages — `ornn-api` (backend) and `ornn-web` (web UI). All configurable values come from environment variables; no hardcoded config.
 
-| Platform | Skills directory | Prompt |
-|----------|-----------------|--------|
-| **Claude Code** | `.claude/skills/` | [See installation prompt](#claude-code) |
-| **OpenAI Codex** | `codex/skills/` + `AGENTS.md` | [See installation prompt](#openai-codex) |
-| **Cursor** | `.cursor/rules/` | [See installation prompt](#cursor) |
-| **Antigravity** | `.antigravity/skills/` | [See installation prompt](#antigravity) |
-
-See the [Developer Guide](https://ornn.chrono-ai.fun/docs) for platform-specific installation prompts and detailed usage examples.
-
-### Prerequisites
-
-Core skills require a **NyxID MCP server** connection. Add the NyxID MCP server to your agent's MCP configuration to enable Ornn tool access.
+See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for external services, skill format, and the observability pipeline.
 
 ## Documentation
 
-Full documentation is available at [ornn.chrono-ai.fun/docs](https://ornn.chrono-ai.fun/docs).
+Full documentation lives at [ornn.chrono-ai.fun/docs](https://ornn.chrono-ai.fun/docs).
 
 ## License
 
