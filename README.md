@@ -29,6 +29,14 @@ Closest analog: **npm registry + npm CLI fused, model-agnostic** — works for C
 
 `ornn-web` is a secondary surface for skill owners and platform admins; it is not the primary product.
 
+## How to use Ornn
+
+Ornn is model-agnostic — any AI agent runtime (Claude, GPT, Gemini, or a custom in-house stack) can connect and consume the full skill-lifecycle API. Three steps to bring an agent online:
+
+1. **Install the ChronoAI core service skill into the agent.** This is the bootstrap skill — it introduces Ornn to the agent and drives the rest of the setup.
+2. **Let the agent provision the NyxID CLI.** On first run, the core skill instructs the agent to install `nyxid` — the CLI that brokers every Ornn request and response with proper authentication and authorization. The agent follows the skill's setup procedure end-to-end; no manual operator steps required.
+3. **Start the conversation.** Once `nyxid` is configured in the agent's environment, ask it to search, install, run, build, or publish Ornn skills. The agent learns the end-to-end lifecycle — `search → pull → install → execute → build → upload → share` — through the same API it just connected to.
+
 ## Documentation
 
 Full documentation lives at [ornn.chrono-ai.fun/docs](https://ornn.chrono-ai.fun/docs).
