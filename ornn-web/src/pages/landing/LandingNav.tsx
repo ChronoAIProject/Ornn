@@ -196,6 +196,21 @@ export function LandingNav() {
             )}
           </Link>
           <Link
+            to="/news"
+            aria-current={isNavActive("/news") ? "page" : undefined}
+            className={`focus-ring-ember transition-colors duration-150 ${
+              isNavActive("/news")
+                ? "font-semibold text-parchment"
+                : "hover:text-ember"
+            }`}
+          >
+            {isNavActive("/news") ? (
+              <HighlighterMark className="highlighter-mark--loose">{t("nav.news")}</HighlighterMark>
+            ) : (
+              t("nav.news")
+            )}
+          </Link>
+          <Link
             to="/contact"
             aria-current={isNavActive("/contact") ? "page" : undefined}
             className={`focus-ring-ember transition-colors duration-150 ${
@@ -506,6 +521,23 @@ export function LandingNav() {
                 <HighlighterMark className="highlighter-mark--loose">{t("nav.docs")}</HighlighterMark>
               ) : (
                 t("nav.docs")
+              )}
+            </Link>
+            <Link
+              to="/news"
+              onClick={closeMenu}
+              tabIndex={menuOpen ? 0 : -1}
+              aria-current={isNavActive("/news") ? "page" : undefined}
+              className={`focus-ring-ember border-b border-[color:var(--color-border-subtle)] py-3 font-text text-[16px] transition-colors ${
+                isNavActive("/news")
+                  ? "font-semibold text-parchment"
+                  : "text-bone hover:text-ember"
+              }`}
+            >
+              {isNavActive("/news") ? (
+                <HighlighterMark className="highlighter-mark--loose">{t("nav.news")}</HighlighterMark>
+              ) : (
+                t("nav.news")
               )}
             </Link>
             <Link
