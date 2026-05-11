@@ -69,6 +69,9 @@ const DocsPage = lazy(() =>
 const ContactPage = lazy(() =>
   import("@/pages/ContactPage").then((m) => ({ default: m.ContactPage })),
 );
+const NewsPage = lazy(() =>
+  import("@/pages/NewsPage").then((m) => ({ default: m.NewsPage })),
+);
 const PrivacyPolicyPage = lazy(() =>
   import("@/pages/legal/PrivacyPolicyPage").then((m) => ({
     default: m.PrivacyPolicyPage,
@@ -236,6 +239,7 @@ const router = createBrowserRouter(
       {/* Public routes with RootLayout */}
       <Route element={<RootLayout />}>
         <Route path="/docs" element={<DocsPage />} />
+        <Route path="/news" element={<NewsPage />} />
         <Route path="/contact" element={<ContactPage />} />
         <Route path="/legal/privacy" element={<PrivacyPolicyPage />} />
         <Route path="/legal/terms" element={<TermsOfServicePage />} />

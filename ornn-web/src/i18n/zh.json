@@ -34,6 +34,7 @@
     "registry": "技能库",
     "build": "构建",
     "docs": "文档",
+    "news": "动态",
     "contact": "联系",
     "signIn": "登录",
     "signOut": "退出",
@@ -738,6 +739,20 @@
     "cardGithubLabel": "GITHUB",
     "cardGithubHint": "在 issue 追踪器上提交 bug、Pull Request 与功能请求。",
     "signoff": "[ 完 · 联系 ]"
+  },
+  "news": {
+    "eyebrow": "[ § 01 — 动态 ]",
+    "headlineStart": "锻炉里的",
+    "headlineHighlight": "印记",
+    "headlineEnd": "。",
+    "subhead": "我们发出过的所有公告 —— 发布说明、平台变更与编辑速记。按时间倒序排列。",
+    "archiveLabel": "公告档案",
+    "loading": "[ 正在加载档案… ]",
+    "errorLabel": "档案不可达",
+    "errorBody": "动态加载失败。请稍后重试，若持续异常请前往「联系」页反馈。",
+    "emptyLabel": "暂无印记",
+    "emptyBody": "目前还没有任何公告发布。锻炉冷却后再来看看。",
+    "signoff": "[ 完 · 动态 ]"
   },
   "serviceDetail": {
     "failedToLoad": "加载服务失败: {{error}}",
