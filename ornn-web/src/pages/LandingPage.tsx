@@ -14,7 +14,7 @@
  * remount selectively as the message stabilizes; nothing here is
  * deleted.
  */
-import { LandingNav } from "@/pages/landing/LandingNav";
+import { Navbar } from "@/components/layout/Navbar";
 import { HeroStage } from "@/pages/landing/HeroStage";
 import { LandingFooter } from "@/pages/landing/LandingFooter";
 import { LandingChrome } from "@/pages/landing/LandingChrome";
@@ -29,7 +29,7 @@ export function LandingPage() {
       <LandingChrome />
       {/* SVG turbulence filter for <HighlighterMark> is mounted once at
           the app root in App.tsx so app-shell pages share it. */}
-      <LandingNav />
+      <Navbar showGetStartedCta />
       <main>
         <HeroStage />
       </main>

@@ -1,17 +1,22 @@
 /**
- * Navigation Bar — Forge Workshop app shell.
+ * Navigation Bar — Forge Workshop top-level nav.
  *
- * Sticky 64px nav row with the Ornn wordmark on the left, primary nav
- * links centered on md+, and the right cluster (GitHub / language /
- * theme / notifications / avatar dropdown) on the right. Mobile
- * collapses everything except logo + avatar/sign-in into a hamburger
- * panel that drops below the nav row.
+ * Single source of truth for the top nav across the entire product:
+ * landing surface (`/`) and the app shell (everything routed through
+ * `RootLayout`). The previous split between `Navbar` and
+ * `pages/landing/LandingNav` was a token-aliasing illusion — landing
+ * tokens (parchment / bone / ember) resolve to the exact same colors
+ * as the app shell's semantic tokens (strong / body / accent) in both
+ * themes. The only real differences were:
  *
- * Mirrors `pages/landing/LandingNav` so the app shell and landing
- * surfaces share the same chrome vocabulary: hairline borders, parchment /
- * bone / ember tokens, mono uppercase utility labels, letterpress
- * impression on dropdowns. This is the application of the Forge Workshop
- * language to the app shell per DESIGN.md "Whole-App Application Guidance".
+ *   - landing has an extra "Get started" CTA next to "Sign in"
+ *   - landing animated the avatar dropdown with framer-motion
+ *   - landing used i18n keys for "Language" / "Theme" mobile labels
+ *     while the app navbar hard-coded English (a real i18n bug)
+ *
+ * All three are reconciled here: opt into the landing-style CTA pair
+ * via `showGetStartedCta`, the motion-wrapped dropdown is now default
+ * (cheap and consistent), and all labels go through i18n.
  *
  * @module components/layout/Navbar
  */
@@ -19,12 +24,14 @@
 import { useState, useRef, useEffect } from "react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import { motion, AnimatePresence } from "framer-motion";
 import { useAuthStore, useIsAuthenticated, useCurrentUser } from "@/stores/authStore";
 import { useThemeStore } from "@/stores/themeStore";
 import { logActivity } from "@/services/activityApi";
 import { Logo } from "@/components/brand/Logo";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { HighlighterMark } from "@/pages/landing/HighlighterMark";
+import { EmberLink } from "@/pages/landing/EmberButton";
 import { useUserMenuGroups, type UserMenuItem } from "@/lib/userMenu";
 
 function GitHubIcon({ className }: { className?: string }) {
@@ -66,12 +73,13 @@ const NAV_ITEMS = [
 
 export interface NavbarProps {
   className?: string;
+  /**
+   * Render the landing-style "Sign in + Get started" CTA pair instead
+   * of the lone "Sign in" link. Used by the landing page only.
+   */
+  showGetStartedCta?: boolean;
 }
 
-/**
- * One row inside the desktop avatar dropdown. Opens an external URL
- * (NyxID portal) in a new tab. Styled with Forge Workshop tokens.
- */
 function DropdownExternal({ href, children }: { href: string; children: React.ReactNode }) {
   return (
     <a
@@ -107,7 +115,7 @@ function DropdownInternal({
   );
 }
 
-export function Navbar({ className = "" }: NavbarProps) {
+export function Navbar({ className = "", showGetStartedCta = false }: NavbarProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const { t, i18n } = useTranslation();
@@ -120,13 +128,6 @@ export function Navbar({ className = "" }: NavbarProps) {
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
 
-  /**
-   * Render one dropdown row in the desktop avatar menu. Each kind maps
-   * to its surface-styled wrapper (DropdownExternal / DropdownInternal)
-   * or to the inline ember-toned logout button. The item descriptors
-   * come from `useUserMenuGroups` — see lib/userMenu.ts for the
-   * single-source-of-truth rationale.
-   */
   function renderDesktopItem(
     item: UserMenuItem,
     closeMenu: () => void,
@@ -146,7 +147,6 @@ export function Navbar({ className = "" }: NavbarProps) {
         </DropdownInternal>
       );
     }
-    // logout
     return (
       <button
         key={item.key}
@@ -159,13 +159,6 @@ export function Navbar({ className = "" }: NavbarProps) {
     );
   }
 
-  /**
-   * Render one row inside the mobile hamburger panel. Same items as
-   * the desktop dropdown, different styling: border-b separators
-   * between rows, larger Inter body type, no group-level borders.
-   * The logout row uses the same ember mono treatment as in desktop
-   * but without the border-b (it's the last item).
-   */
   function renderMobileItem(item: UserMenuItem, closeMenu: () => void) {
     const itemRowClass =
       "border-b border-subtle py-3 font-text text-[16px] text-body transition-colors hover:text-accent";
@@ -197,7 +190,6 @@ export function Navbar({ className = "" }: NavbarProps) {
         </Link>
       );
     }
-    // logout
     return (
       <button
         key={item.key}
@@ -211,7 +203,6 @@ export function Navbar({ className = "" }: NavbarProps) {
     );
   }
 
-  // Close avatar dropdown on outside click + ESC
   useEffect(() => {
     if (!userMenuOpen) return;
     const onClick = (e: MouseEvent) => {
@@ -230,13 +221,11 @@ export function Navbar({ className = "" }: NavbarProps) {
     };
   }, [userMenuOpen]);
 
-  // Close menus on navigation
   useEffect(() => {
     setUserMenuOpen(false);
     setMenuOpen(false);
   }, [location.pathname]);
 
-  // Lock body scroll when mobile menu is open
   useEffect(() => {
     document.body.style.overflow = menuOpen ? "hidden" : "";
     return () => {
@@ -255,10 +244,6 @@ export function Navbar({ className = "" }: NavbarProps) {
   const closeMenu = () => setMenuOpen(false);
   const toggleLang = () => i18n.changeLanguage(i18n.language === "zh" ? "en" : "zh");
 
-  // Active-tab styling: the link text is wrapped in <HighlighterMark>
-  // so the active route gets the same hand-drawn ember wash used on the
-  // landing-page headline. The text itself stays bold + strong-color so
-  // the multiply-blended wash reads cleanly on top.
   const navLinkClass = ({ isActive }: { isActive: boolean }) =>
     `font-text text-[15px] transition-colors duration-150 ${
       isActive ? "font-semibold text-strong" : "text-body hover:text-accent"
@@ -266,15 +251,13 @@ export function Navbar({ className = "" }: NavbarProps) {
 
   return (
     <nav
-      className={`sticky top-0 z-40 shrink-0 border-b border-subtle bg-page/95 backdrop-blur-md ${className}`}
+      className={`sticky top-0 z-50 shrink-0 border-b border-subtle bg-page/95 backdrop-blur-md ${className}`}
     >
       <div className="relative mx-auto flex h-[60px] max-w-[1280px] items-center justify-between gap-3 px-6 sm:px-8">
-        {/* Logo */}
         <Link to="/" className="flex items-center gap-2 text-strong" aria-label={t("aria.brandHome", { brand: "Ornn" })}>
           <Logo className="block h-[26px] w-auto" />
         </Link>
 
-        {/* Center nav (md+) */}
         <div className="absolute left-1/2 top-1/2 hidden -translate-x-1/2 -translate-y-1/2 gap-7 md:flex">
           {NAV_ITEMS.map((item) => (
             <NavLink
@@ -300,7 +283,6 @@ export function Navbar({ className = "" }: NavbarProps) {
           ))}
         </div>
 
-        {/* Right cluster (md+) */}
         <div className="hidden items-center gap-3.5 md:flex">
           <a
             href="https://github.com/ChronoAIProject/Ornn"
@@ -329,7 +311,6 @@ export function Navbar({ className = "" }: NavbarProps) {
             {theme === "light" ? <MoonIcon className="h-4 w-4" /> : <SunIcon className="h-4 w-4" />}
           </button>
 
-          {/* Quota indicators moved to RootLayout's breadcrumb rail. */}
           {isAuthenticated && <NotificationBell />}
 
           {isAuthenticated && user ? (
@@ -361,31 +342,46 @@ export function Navbar({ className = "" }: NavbarProps) {
                 </svg>
               </button>
 
-              {userMenuOpen && (
-                <div
-                  role="menu"
-                  className="card-impression absolute right-0 top-full mt-2 w-60 overflow-hidden rounded-sm border border-subtle bg-page"
-                >
-                  <div className="border-b border-subtle px-4 py-3">
-                    <p className="truncate font-display text-sm font-semibold text-strong">
-                      {user.displayName}
-                    </p>
-                    <p className="truncate font-mono text-[11px] text-meta">{user.email}</p>
-                  </div>
-
-                  {userMenuGroups.map((group, i) => (
-                    <div
-                      key={group.id}
-                      className={`py-1 ${i > 0 ? "border-t border-subtle" : ""}`}
-                    >
-                      {group.items.map((item) =>
-                        renderDesktopItem(item, () => setUserMenuOpen(false), handleLogout),
-                      )}
+              <AnimatePresence>
+                {userMenuOpen && (
+                  <motion.div
+                    role="menu"
+                    initial={{ opacity: 0, y: -8, scale: 0.97 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -8, scale: 0.97 }}
+                    transition={{ duration: 0.15, ease: "easeOut" }}
+                    className="card-impression absolute right-0 top-full mt-2 w-60 overflow-hidden rounded-sm border border-subtle bg-page"
+                  >
+                    <div className="border-b border-subtle px-4 py-3">
+                      <p className="truncate font-display text-sm font-semibold text-strong">
+                        {user.displayName}
+                      </p>
+                      <p className="truncate font-mono text-[11px] text-meta">{user.email}</p>
                     </div>
-                  ))}
-                </div>
-              )}
+
+                    {userMenuGroups.map((group, i) => (
+                      <div
+                        key={group.id}
+                        className={`py-1 ${i > 0 ? "border-t border-subtle" : ""}`}
+                      >
+                        {group.items.map((item) =>
+                          renderDesktopItem(item, () => setUserMenuOpen(false), handleLogout),
+                        )}
+                      </div>
+                    ))}
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
+          ) : showGetStartedCta ? (
+            <>
+              <EmberLink to="/login" variant="ghost">
+                {t("nav.signIn")}
+              </EmberLink>
+              <EmberLink to="/login" variant="primary">
+                {t("landing.getStarted")}
+              </EmberLink>
+            </>
           ) : (
             <Link
               to="/login"
@@ -396,7 +392,6 @@ export function Navbar({ className = "" }: NavbarProps) {
           )}
         </div>
 
-        {/* Mobile hamburger */}
         <button
           type="button"
           onClick={() => setMenuOpen((o) => !o)}
@@ -414,8 +409,6 @@ export function Navbar({ className = "" }: NavbarProps) {
         </button>
       </div>
 
-      {/* Mobile dropdown panel — slide-down via grid-rows trick. Solid bg-page
-          so it reads as a discrete surface, not a frosted overlay. */}
       <div
         id="app-mobile-nav-panel"
         data-open={menuOpen}
@@ -470,8 +463,10 @@ export function Navbar({ className = "" }: NavbarProps) {
               tabIndex={menuOpen ? 0 : -1}
               className="flex items-center justify-between border-b border-subtle py-3 font-mono text-[12px] uppercase tracking-[0.14em] text-body transition-colors hover:text-accent"
             >
-              <span>Language</span>
-              <span className="text-accent">{i18n.language === "zh" ? "中文" : "English"}</span>
+              <span>{t("landing.languageLabel")}</span>
+              <span className="text-accent">
+                {i18n.language === "zh" ? t("landing.languageChinese") : t("landing.languageEnglish")}
+              </span>
             </button>
             <button
               type="button"
@@ -479,8 +474,10 @@ export function Navbar({ className = "" }: NavbarProps) {
               tabIndex={menuOpen ? 0 : -1}
               className="flex items-center justify-between border-b border-subtle py-3 font-mono text-[12px] uppercase tracking-[0.14em] text-body transition-colors hover:text-accent"
             >
-              <span>Theme</span>
-              <span className="text-accent">{theme === "light" ? "Light" : "Dark"}</span>
+              <span>{t("landing.themeLabel")}</span>
+              <span className="text-accent">
+                {theme === "light" ? t("landing.themeLight") : t("landing.themeDark")}
+              </span>
             </button>
 
             {isAuthenticated && user ? (
@@ -505,14 +502,25 @@ export function Navbar({ className = "" }: NavbarProps) {
                   .map((item) => renderMobileItem(item, closeMenu))}
               </>
             ) : (
-              <Link
-                to="/login"
-                onClick={closeMenu}
-                tabIndex={menuOpen ? 0 : -1}
-                className="py-3 font-mono text-[12px] uppercase tracking-[0.14em] text-strong transition-colors hover:text-accent"
-              >
-                {t("nav.signIn")} →
-              </Link>
+              <>
+                <Link
+                  to="/login"
+                  onClick={closeMenu}
+                  tabIndex={menuOpen ? 0 : -1}
+                  className="py-3 font-mono text-[12px] uppercase tracking-[0.14em] text-strong transition-colors hover:text-accent"
+                >
+                  {t("nav.signIn")} →
+                </Link>
+                {showGetStartedCta && (
+                  <EmberLink
+                    to="/login"
+                    variant="primary"
+                    className="!mt-2 !w-full !justify-center"
+                  >
+                    {t("landing.getStarted")}
+                  </EmberLink>
+                )}
+              </>
             )}
           </div>
         </div>
