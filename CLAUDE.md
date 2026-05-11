@@ -369,6 +369,20 @@ Issue tracker: https://github.com/ChronoAIProject/Ornn/issues
 8. **Milestone deadlines:** every milestone MUST have a `due_on` date.
 9. **Labels:** every issue MUST carry at least one topic label (e.g., `api`, `dx`, `security`, `infra`, `phase:N`) so the issue's domain is visible at a glance.
 
+## Documentation
+
+### Naming convention
+
+All files under `docs/` MUST use ALL-CAPS filenames (`ARCHITECTURE.md`, `CONVENTIONS.md`, `DESIGN.md`). Applies to existing and future docs. Reference paths from code / CLAUDE.md / READMEs / other docs MUST match the case exactly — these paths are case-sensitive on Linux (CI) even when they appear to work on macOS.
+
+### Doc index
+
+| Doc | When to consult |
+|-----|-----------------|
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | External services, skill format, observability (PostHog) pipeline. Read before touching cross-system integration. |
+| [`docs/CONVENTIONS.md`](docs/CONVENTIONS.md) | **Normative** `/api/v1/*` contract — response envelope, error format (RFC 7807), URL structure, auth, SSE, caching, OpenAPI. MUST be followed by every new endpoint. |
+| [`docs/DESIGN.md`](docs/DESIGN.md) | Visual / UI design source of truth — palette, typography, spacing, motion vocabulary. Read before any UI change. |
+
 ## Design System
 Always read `docs/DESIGN.md` before making any visual or UI decisions.
 All font choices, colors, spacing, and aesthetic direction are defined there.
