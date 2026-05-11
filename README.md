@@ -1,11 +1,9 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="ornn-web/public/logo-dark.svg">
-    <img src="ornn-web/public/logo-light.svg" width="320" alt="Ornn" />
+    <img src="ornn-web/public/logo-light.svg" width="200" alt="Ornn" />
   </picture>
 </p>
-
-<h1 align="center">Ornn</h1>
 
 <p align="center">
   <a href="https://github.com/ChronoAIProject/Ornn/actions/workflows/ci.yml"><img src="https://github.com/ChronoAIProject/Ornn/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
