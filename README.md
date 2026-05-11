@@ -34,8 +34,8 @@ Closest analog: **npm registry + npm CLI fused, model-agnostic** — works for C
 |---------|------|-------------|
 | `ornn-api` | [`ornn-api/`](ornn-api/) | Backend API (Bun + Hono + MongoDB) |
 | `ornn-web` | [`ornn-web/`](ornn-web/) | React SPA (Vite + React 19 + Zustand + TanStack Query) |
-| `@chronoai/ornn-sdk` | [`ornn-sdk/`](ornn-sdk/) | TypeScript client for `/api/v1/*` |
-| `ornn-sdk` (Python) | [`ornn-sdk-python/`](ornn-sdk-python/) | Python client for `/api/v1/*` (httpx) — separate release cadence |
+| `@chronoai/ornn-sdk` | [`sdk/typescript/`](sdk/typescript/) | TypeScript client for `/api/v1/*` |
+| `ornn-sdk` (Python) | [`sdk/python/`](sdk/python/) | Python client for `/api/v1/*` (httpx) — separate release cadence |
 
 ## Tech Stack
 

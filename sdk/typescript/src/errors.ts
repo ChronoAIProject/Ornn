@@ -11,7 +11,7 @@
 export interface OrnnErrorPayload {
   /** HTTP status from the response. 0 when the request never reached the server. */
   readonly status: number;
-  /** Machine-readable error code (lowercase snake_case, per conventions.md §1.4). */
+  /** Machine-readable error code (lowercase snake_case, per CONVENTIONS.md §1.4). */
   readonly code: string;
   /** Human-readable message safe to surface. */
   readonly message: string;
