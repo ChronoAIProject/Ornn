@@ -29,31 +29,6 @@ Closest analog: **npm registry + npm CLI fused, model-agnostic** — works for C
 
 `ornn-web` is a secondary surface for skill owners and platform admins; it is not the primary product.
 
-## Packages
-
-| Package | Path | Description |
-|---------|------|-------------|
-| `ornn-api` | [`ornn-api/`](ornn-api/) | Backend API (Bun + Hono + MongoDB) |
-| `ornn-web` | [`ornn-web/`](ornn-web/) | React SPA (Vite + React 19 + Zustand + TanStack Query) |
-| `@chronoai/ornn-sdk` | [`sdk/typescript/`](sdk/typescript/) | TypeScript client for `/api/v1/*` |
-| `ornn-sdk` (Python) | [`sdk/python/`](sdk/python/) | Python client for `/api/v1/*` (httpx) — separate release cadence |
-
-## Tech Stack
-
-- **Language / runtime:** TypeScript on Bun (workspace monorepo); Vite for the frontend dev / build.
-- **Backend:** Hono on Bun.
-- **Frontend:** React 19, Zustand, TanStack Query, Tailwind CSS 4, Framer Motion, React Router 7.
-- **Database:** MongoDB 7.
-- **Validation:** Zod.
-- **Logging:** Pino.
-- **Tests:** Bun test (backend); Vitest + Testing Library + jsdom (frontend + TS SDK); pytest + respx (Python SDK).
-
-## Architecture
-
-Two packages — `ornn-api` (backend) and `ornn-web` (web UI). All configurable values come from environment variables; no hardcoded config.
-
-See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for external services, skill format, and the observability pipeline.
-
 ## Documentation
 
 Full documentation lives at [ornn.chrono-ai.fun/docs](https://ornn.chrono-ai.fun/docs).
