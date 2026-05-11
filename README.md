@@ -1,5 +1,8 @@
 <p align="center">
-  <img src="ornn-web/public/logo.svg" width="320" />
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="ornn-web/public/logo-dark.svg">
+    <img src="ornn-web/public/logo-light.svg" width="320" alt="Ornn" />
+  </picture>
 </p>
 
 <h1 align="center">Ornn</h1>
