@@ -87,7 +87,36 @@ function useBreadcrumbs() {
       crumbs.push({ label, to: `/docs?section=${section}${title ? `&title=${encodeURIComponent(title)}` : ""}` });
     }
   } else if (path.startsWith("/admin")) {
+    // Admin sub-paths get granular crumbs so users can navigate back
+    // through the section tree from the top breadcrumb instead of the
+    // sidebar. Mirrors the labels the old AdminLayout's own breadcrumb
+    // used before admin pages adopted RootLayout's chrome.
     crumbs.push({ label: t("breadcrumb.admin"), to: "/admin/dashboard" });
+
+    if (path.startsWith("/admin/dashboard")) {
+      crumbs.push({ label: "Dashboard", to: "/admin/dashboard" });
+    } else if (path === "/admin/users-legacy") {
+      crumbs.push({ label: "Users (legacy)", to: "/admin/users-legacy" });
+    } else if (path.startsWith("/admin/users")) {
+      crumbs.push({ label: "Users", to: "/admin/users" });
+    } else if (path.startsWith("/admin/quota")) {
+      crumbs.push({ label: "Quota", to: "/admin/quota" });
+    } else if (path.startsWith("/admin/redemption-codes")) {
+      crumbs.push({ label: "Redemption codes", to: "/admin/redemption-codes" });
+    } else if (path.startsWith("/admin/skills")) {
+      crumbs.push({ label: "Skills", to: "/admin/skills" });
+    } else if (path.startsWith("/admin/announcements")) {
+      crumbs.push({ label: "Announcements", to: "/admin/announcements" });
+    } else if (path.startsWith("/admin/settings")) {
+      crumbs.push({ label: "Settings", to: "/admin/settings" });
+      const tail = path.replace(/^\/admin\/settings\/?/, "");
+      if (tail) {
+        crumbs.push({
+          label: tail.replace(/[/-]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+          to: path,
+        });
+      }
+    }
   }
 
   return crumbs;
