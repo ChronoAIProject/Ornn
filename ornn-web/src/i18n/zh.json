@@ -20,7 +20,14 @@
     "clearSearch": "清除搜索",
     "close": "关闭",
     "gotIt": "知道了",
-    "remove": "移除"
+    "remove": "移除",
+    "unsavedChanges": "未保存的更改",
+    "aria": {
+      "dismissNotification": "关闭通知",
+      "notifications": "通知",
+      "categoryDescriptions": "类别说明",
+      "closeDrawer": "关闭抽屉"
+    }
   },
   "nav": {
     "home": "首页",

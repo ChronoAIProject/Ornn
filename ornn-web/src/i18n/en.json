@@ -20,7 +20,14 @@
     "clearSearch": "Clear Search",
     "close": "Close",
     "gotIt": "Got it",
-    "remove": "Remove"
+    "remove": "Remove",
+    "unsavedChanges": "Unsaved changes",
+    "aria": {
+      "dismissNotification": "Dismiss notification",
+      "notifications": "Notifications",
+      "categoryDescriptions": "Category descriptions",
+      "closeDrawer": "Close drawer"
+    }
   },
   "nav": {
     "home": "Home",

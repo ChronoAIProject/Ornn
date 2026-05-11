@@ -15,6 +15,7 @@
 
 import { useEffect } from "react";
 import { useBlocker } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 
@@ -30,6 +31,7 @@ export function UnsavedChangesGuard({
   when,
   message = DEFAULT_MESSAGE,
 }: UnsavedChangesGuardProps) {
+  const { t } = useTranslation();
   const blocker = useBlocker(
     ({ currentLocation, nextLocation }) =>
       when && currentLocation.pathname !== nextLocation.pathname,
@@ -52,7 +54,7 @@ export function UnsavedChangesGuard({
     <Modal
       isOpen={isBlocked}
       onClose={() => isBlocked && blocker.reset?.()}
-      title="Unsaved changes"
+      title={t("common.unsavedChanges")}
     >
       <p className="font-text text-sm text-body">{message}</p>
       <div className="mt-6 flex items-center justify-end gap-2">

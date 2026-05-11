@@ -11,6 +11,7 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { createPortal } from "react-dom";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/Badge";
 import type {
   ActorMeta,
@@ -64,6 +65,7 @@ export function RedemptionCodeDetailDrawer({
   onClose,
   code,
 }: RedemptionCodeDetailDrawerProps) {
+  const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
@@ -107,7 +109,7 @@ export function RedemptionCodeDetailDrawer({
             exit={{ x: "100%" }}
             transition={{ type: "spring", stiffness: 240, damping: 28, mass: 0.9 }}
             role="dialog"
-            aria-label="Redemption code detail"
+            aria-label={t("aria.redemptionCodeDetail")}
             className="card-impression absolute right-0 top-0 flex h-full w-full max-w-[480px] flex-col gap-5 overflow-y-auto border-l border-subtle bg-page p-6 sm:p-8"
           >
             <header className="flex items-baseline justify-between">
@@ -122,7 +124,7 @@ export function RedemptionCodeDetailDrawer({
               <button
                 type="button"
                 onClick={onClose}
-                aria-label="Close"
+                aria-label={t("common.close")}
                 className="-mr-2 -mt-2 inline-flex h-8 w-8 items-center justify-center rounded-sm text-meta transition-colors hover:bg-elevated hover:text-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
               >
                 <svg

@@ -13,6 +13,7 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { createPortal } from "react-dom";
 import { useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { LifetimeUsageChart } from "./LifetimeUsageChart";
 import { useUserLifetimeQuota } from "@/hooks/useQuota";
@@ -93,6 +94,7 @@ export function QuotaUserDetailDrawer({
   row,
   onGrantClick,
 }: QuotaUserDetailDrawerProps) {
+  const { t } = useTranslation();
   useEffect(() => {
     if (!isOpen) return;
     const onKey = (e: KeyboardEvent) => {
@@ -149,7 +151,7 @@ export function QuotaUserDetailDrawer({
               <button
                 type="button"
                 onClick={onClose}
-                aria-label="Close"
+                aria-label={t("common.close")}
                 className="-mr-2 -mt-2 inline-flex h-8 w-8 items-center justify-center rounded-sm text-meta transition-colors hover:bg-elevated hover:text-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
               >
                 <svg
