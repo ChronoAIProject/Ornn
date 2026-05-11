@@ -64,10 +64,10 @@ function MoonIcon({ className }: { className?: string }) {
 }
 
 const NAV_ITEMS = [
-  { i18nKey: "nav.registry", path: "/registry", requiresAuth: false, exact: true },
-  { i18nKey: "nav.build", path: "/skills/new", requiresAuth: true },
-  { i18nKey: "nav.docs", path: "/docs", requiresAuth: false },
   { i18nKey: "nav.news", path: "/news", requiresAuth: false },
+  { i18nKey: "nav.build", path: "/skills/new", requiresAuth: true },
+  { i18nKey: "nav.registry", path: "/registry", requiresAuth: false, exact: true },
+  { i18nKey: "nav.docs", path: "/docs", requiresAuth: false },
   { i18nKey: "nav.contact", path: "/contact", requiresAuth: false },
 ] as const;
 
