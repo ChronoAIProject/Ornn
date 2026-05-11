@@ -5,6 +5,7 @@
  */
 
 import { useState, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -14,6 +15,7 @@ import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { AvatarUpload } from "./AvatarUpload";
 import type { User } from "@/types/user";
+import { translateError } from "@/utils/translateError";
 
 const profileSchema = z.object({
   displayName: z
@@ -46,6 +48,7 @@ export function ProfileCard({
   onAvatarUpload,
   disabled = false,
 }: ProfileCardProps) {
+  const { t } = useTranslation();
   const [isEditing, setIsEditing] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -92,7 +95,7 @@ export function ProfileCard({
       });
       setIsEditing(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to update profile");
+      setError(translateError(err, "Failed to update profile"));
     } finally {
       setIsLoading(false);
     }
@@ -133,7 +136,7 @@ export function ProfileCard({
           <Input
             label="Display Name"
             type="text"
-            placeholder="Your display name"
+            placeholder={t("userProfile.displayNamePlaceholder")}
             error={errors.displayName?.message}
             disabled={isLoading}
             {...register("displayName")}
@@ -145,7 +148,7 @@ export function ProfileCard({
               Bio
             </label>
             <textarea
-              placeholder="Tell us about yourself..."
+              placeholder={t("userProfile.bioPlaceholder")}
               disabled={isLoading}
               rows={3}
               className={`

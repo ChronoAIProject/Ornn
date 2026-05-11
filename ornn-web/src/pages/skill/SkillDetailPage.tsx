@@ -49,6 +49,7 @@ import { useCurrentUser, useIsAuthenticated, isAdmin } from "@/stores/authStore"
 import { useToastStore } from "@/stores/toastStore";
 import { buildFileTreeFromEntries, type FileTreeEntry } from "@/utils/fileTreeBuilder";
 import { buildTrySkillPrompt } from "@/lib/buildTrySkillPrompt";
+import { translateError } from "@/utils/translateError";
 import { track } from "@/lib/analytics";
 import { useTranslation } from "react-i18next";
 import type { FileNode } from "@/components/editor/FileTree";
@@ -157,7 +158,7 @@ export function SkillDetailPage() {
         await deprecationMutation.mutateAsync({ version, isDeprecated, deprecationNote });
         addToast({ type: "success", message: t("skillDetail.deprecationUpdated") });
       } catch (err) {
-        const message = err instanceof Error ? err.message : t("skillDetail.deprecationFailed");
+        const message = translateError(err, t("skillDetail.deprecationFailed"));
         addToast({ type: "error", message });
       }
     },
@@ -300,7 +301,7 @@ export function SkillDetailPage() {
       setDeletedPaths(new Set());
       refetch();
     } catch (err) {
-      const message = err instanceof Error ? err.message : t("skillDetail.saveFailed");
+      const message = translateError(err, t("skillDetail.saveFailed"));
       addToast({ type: "error", message });
     }
   };
@@ -365,7 +366,7 @@ export function SkillDetailPage() {
         onError: (err) => {
           addToast({
             type: "error",
-            message: err instanceof Error ? err.message : String(err),
+            message: translateError(err),
           });
         },
       },
@@ -1014,10 +1015,10 @@ export function SkillDetailPage() {
             } catch (err) {
               addToast({
                 type: "error",
-                message:
-                  err instanceof Error
-                    ? err.message
-                    : t("skillDetail.versionDeleteFailed", "Failed to delete version"),
+                message: translateError(
+                  err,
+                  t("skillDetail.versionDeleteFailed", "Failed to delete version"),
+                ),
               });
             }
           }}

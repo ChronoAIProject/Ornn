@@ -13,6 +13,7 @@
  */
 
 import { useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
@@ -24,6 +25,7 @@ import {
   type SettingsExport,
   type SettingsImportResponse,
 } from "@/services/settingsApi";
+import { translateError } from "@/utils/translateError";
 
 function downloadAsFile(body: SettingsExport, filename: string) {
   const blob = new Blob([JSON.stringify(body, null, 2)], {
@@ -40,6 +42,7 @@ function downloadAsFile(body: SettingsExport, filename: string) {
 }
 
 export function ExportImportSection() {
+  const { t } = useTranslation();
   const addToast = useToastStore((s) => s.addToast);
   const fileRef = useRef<HTMLInputElement>(null);
   const [downloading, setDownloading] = useState(false);
@@ -59,11 +62,17 @@ export function ExportImportSection() {
     try {
       const { body, filename } = await downloadSettingsExport();
       downloadAsFile(body, filename);
-      addToast({ type: "success", message: `Exported ${filename}` });
+      addToast({
+        type: "success",
+        message: t("adminSettings.sections.exportImport.toast.exported", { filename }),
+      });
     } catch (err) {
       addToast({
         type: "error",
-        message: err instanceof Error ? err.message : "Export failed",
+        message: translateError(
+          err,
+          t("adminSettings.sections.exportImport.toast.exportFailed"),
+        ),
       });
     } finally {
       setDownloading(false);
@@ -79,13 +88,16 @@ export function ExportImportSection() {
       const text = await file.text();
       const parsed = JSON.parse(text) as SettingsExport;
       if (typeof parsed.schemaVersion !== "number" || !parsed.sections) {
-        throw new Error(
-          "File is not a valid Ornn settings export (missing schemaVersion or sections)",
-        );
+        throw new Error(t("adminSettings.sections.exportImport.invalidFile"));
       }
       setParsedFile(parsed);
     } catch (err) {
-      setParseError(err instanceof Error ? err.message : "Parse failed");
+      setParseError(
+        translateError(
+          err,
+          t("adminSettings.sections.exportImport.parseFailed"),
+        ),
+      );
     }
   };
 
@@ -102,7 +114,10 @@ export function ExportImportSection() {
     } catch (err) {
       addToast({
         type: "error",
-        message: err instanceof Error ? err.message : "Dry-run failed",
+        message: translateError(
+          err,
+          t("adminSettings.sections.exportImport.toast.dryRunFailed"),
+        ),
       });
     } finally {
       setRunning(false);
@@ -127,13 +142,16 @@ export function ExportImportSection() {
         type: failed > 0 ? "warning" : "success",
         message:
           failed > 0
-            ? `Import partial — ${failed} section(s) failed.`
-            : "Import applied.",
+            ? t("adminSettings.sections.exportImport.toast.importPartial", { failed })
+            : t("adminSettings.sections.exportImport.toast.importApplied"),
       });
     } catch (err) {
       addToast({
         type: "error",
-        message: err instanceof Error ? err.message : "Import failed",
+        message: translateError(
+          err,
+          t("adminSettings.sections.exportImport.toast.importFailed"),
+        ),
       });
     } finally {
       setRunning(false);
@@ -144,16 +162,13 @@ export function ExportImportSection() {
     <section className="space-y-6">
       <header>
         <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-accent">
-          [§ EXPORT / IMPORT]
+          {t("adminSettings.sections.exportImport.eyebrow")}
         </p>
         <h2 className="mt-1 font-display text-lg font-semibold uppercase tracking-tight text-strong">
-          Export / import
+          {t("adminSettings.sections.exportImport.title")}
         </h2>
         <p className="mt-1 font-text text-sm text-meta">
-          Download the full settings tree as JSON, or import to apply a
-          previously-exported configuration. Secrets in the export are
-          sentinel-redacted; importing a sentinel preserves the existing
-          DB value.
+          {t("adminSettings.sections.exportImport.description")}
         </p>
       </header>
 
@@ -161,10 +176,10 @@ export function ExportImportSection() {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h3 className="font-display text-sm font-semibold uppercase tracking-[0.14em] text-strong">
-              Download
+              {t("adminSettings.sections.exportImport.downloadTitle")}
             </h3>
             <p className="mt-1 font-text text-xs text-meta">
-              File name follows{" "}
+              {t("adminSettings.sections.exportImport.downloadHintPrefix")}{" "}
               <code className="font-mono text-[11px] text-strong">
                 ornn-settings-&lt;iso&gt;.json
               </code>
@@ -177,7 +192,7 @@ export function ExportImportSection() {
             loading={downloading}
             onClick={handleDownload}
           >
-            Export settings
+            {t("adminSettings.sections.exportImport.action.export")}
           </Button>
         </div>
       </Card>
@@ -187,10 +202,10 @@ export function ExportImportSection() {
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h3 className="font-display text-sm font-semibold uppercase tracking-[0.14em] text-strong">
-                Upload + import
+                {t("adminSettings.sections.exportImport.uploadTitle")}
               </h3>
               <p className="mt-1 font-text text-xs text-meta">
-                Step 1: upload. Step 2: dry-run. Step 3: confirm + apply.
+                {t("adminSettings.sections.exportImport.uploadSteps")}
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -207,7 +222,7 @@ export function ExportImportSection() {
                 size="sm"
                 onClick={() => fileRef.current?.click()}
               >
-                Choose file
+                {t("adminSettings.sections.exportImport.action.chooseFile")}
               </Button>
             </div>
           </div>
@@ -224,8 +239,10 @@ export function ExportImportSection() {
           {parsedFile && (
             <div className="space-y-3 rounded border border-subtle bg-elevated/40 p-4">
               <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-meta">
-                Loaded · schemaVersion {parsedFile.schemaVersion} · exported{" "}
-                {parsedFile.exportedAt}
+                {t("adminSettings.sections.exportImport.loaded", {
+                  schemaVersion: parsedFile.schemaVersion,
+                  exportedAt: parsedFile.exportedAt,
+                })}
               </p>
               <div className="flex flex-wrap items-center gap-2">
                 <Button
@@ -235,7 +252,7 @@ export function ExportImportSection() {
                   loading={running && !dryRunResult}
                   onClick={runDryRun}
                 >
-                  Run dry-run preview
+                  {t("adminSettings.sections.exportImport.action.dryRun")}
                 </Button>
                 <Button
                   type="button"
@@ -243,12 +260,15 @@ export function ExportImportSection() {
                   disabled={!dryRunResult}
                   onClick={() => setConfirmOpen(true)}
                 >
-                  Apply import
+                  {t("adminSettings.sections.exportImport.action.apply")}
                 </Button>
               </div>
 
               {dryRunResult && (
-                <ImportResultTable result={dryRunResult} title="Dry-run preview" />
+                <ImportResultTable
+                  result={dryRunResult}
+                  title={t("adminSettings.sections.exportImport.dryRunTitle")}
+                />
               )}
             </div>
           )}
@@ -256,7 +276,7 @@ export function ExportImportSection() {
           {applyResult && (
             <ImportResultTable
               result={applyResult}
-              title="Import applied"
+              title={t("adminSettings.sections.exportImport.appliedTitle")}
             />
           )}
         </div>
@@ -265,12 +285,10 @@ export function ExportImportSection() {
       <Modal
         isOpen={confirmOpen}
         onClose={() => setConfirmOpen(false)}
-        title="Apply import?"
+        title={t("adminSettings.sections.exportImport.confirm.title")}
       >
         <p className="font-text text-sm text-body">
-          This will write every section that passes validation. Sections
-          that fail validation are skipped — the rest still apply.
-          Sentinel-valued secrets keep the existing DB value.
+          {t("adminSettings.sections.exportImport.confirm.body")}
         </p>
         <div className="mt-4 flex justify-end gap-2">
           <Button
@@ -279,7 +297,7 @@ export function ExportImportSection() {
             size="sm"
             onClick={() => setConfirmOpen(false)}
           >
-            Cancel
+            {t("common.cancel")}
           </Button>
           <Button
             type="button"
@@ -287,7 +305,7 @@ export function ExportImportSection() {
             loading={running}
             onClick={apply}
           >
-            Apply
+            {t("adminSettings.sections.exportImport.action.applyConfirm")}
           </Button>
         </div>
       </Modal>
@@ -302,6 +320,7 @@ function ImportResultTable({
   result: SettingsImportResponse;
   title: string;
 }) {
+  const { t } = useTranslation();
   const entries = Object.entries(result.sections);
   return (
     <div>
@@ -312,13 +331,13 @@ function ImportResultTable({
         <thead>
           <tr className="border-b border-accent/20">
             <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
-              Section
+              {t("adminSettings.sections.exportImport.table.section")}
             </th>
             <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
-              Status
+              {t("adminSettings.sections.exportImport.table.status")}
             </th>
             <th className="px-3 py-2 text-left font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
-              Detail
+              {t("adminSettings.sections.exportImport.table.detail")}
             </th>
           </tr>
         </thead>

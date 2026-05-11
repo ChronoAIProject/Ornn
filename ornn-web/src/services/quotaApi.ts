@@ -14,6 +14,7 @@
  */
 
 import { apiGet, apiPost } from "./apiClient";
+import { encodeErrorPayload } from "@/utils/translateError";
 import { QuotaSnapshotSchema, type QuotaSnapshot } from "./quotaApi.schema";
 
 export type { QuotaSnapshot, SurfaceSnapshot } from "./quotaApi.schema";
@@ -23,11 +24,16 @@ export type Surface = "playground" | "skillGen";
 export async function fetchMyQuota(): Promise<QuotaSnapshot> {
   const res = await apiGet<unknown>("/api/v1/me/quota");
   if (!res.data) {
-    throw new Error("Quota snapshot missing");
+    throw new Error("errors.api.quota.snapshotMissing");
   }
   const parsed = QuotaSnapshotSchema.safeParse(res.data);
   if (!parsed.success) {
-    throw new Error(`Quota snapshot shape invalid: ${parsed.error.message}`);
+    throw new Error(
+      encodeErrorPayload({
+        key: "errors.api.quota.snapshotShapeInvalid",
+        params: { detail: parsed.error.message },
+      }),
+    );
   }
   return parsed.data;
 }
@@ -75,7 +81,7 @@ export async function fetchAdminQuotaUsers(params: {
     q: params.q,
   });
   if (!res.data) {
-    throw new Error("Admin quota list missing");
+    throw new Error("errors.api.quota.adminListMissing");
   }
   return res.data;
 }
@@ -106,7 +112,7 @@ export async function fetchUserLifetimeQuota(params: {
     { surface: params.surface },
   );
   if (!res.data) {
-    throw new Error("Lifetime quota response missing");
+    throw new Error("errors.api.quota.lifetimeMissing");
   }
   return res.data;
 }
@@ -129,7 +135,7 @@ export interface GrantResult {
 export async function grantQuota(input: GrantInput): Promise<GrantResult> {
   const res = await apiPost<GrantResult>("/api/v1/admin/quota/grant", input);
   if (!res.data) {
-    throw new Error("Grant response missing");
+    throw new Error("errors.api.quota.grantMissing");
   }
   return res.data;
 }
@@ -161,7 +167,7 @@ export async function bulkGrantQuota(
     input,
   );
   if (!res.data) {
-    throw new Error("Bulk grant response missing");
+    throw new Error("errors.api.quota.bulkGrantMissing");
   }
   return res.data;
 }
@@ -200,7 +206,7 @@ export async function fetchAdminQuotaGrants(params: {
     adminUserId: params.adminUserId,
   });
   if (!res.data) {
-    throw new Error("Audit list missing");
+    throw new Error("errors.api.quota.auditListMissing");
   }
   return res.data;
 }

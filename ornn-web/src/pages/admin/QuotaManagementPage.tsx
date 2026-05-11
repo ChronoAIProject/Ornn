@@ -19,6 +19,7 @@
  */
 
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Card } from "@/components/ui/Card";
@@ -30,20 +31,22 @@ import { QuotaTable } from "@/components/admin/quota/QuotaTable";
 import { QuotaUserDetailDrawer } from "@/components/admin/quota/QuotaUserDetailDrawer";
 import { GrantQuotaModal } from "@/components/admin/quota/GrantQuotaModal";
 import type { AdminQuotaRow, Surface } from "@/services/quotaApi";
+import { translateError } from "@/utils/translateError";
 
 const PAGE_SIZE = 20;
-
-const TABS: Array<{ id: Surface; label: string }> = [
-  { id: "playground", label: "Playground" },
-  { id: "skillGen", label: "Skill Generation" },
-];
 
 function isSurface(s: string | null): s is Surface {
   return s === "playground" || s === "skillGen";
 }
 
 export function QuotaManagementPage() {
+  const { t } = useTranslation();
   const [params, setParams] = useSearchParams();
+
+  const TABS: Array<{ id: Surface; label: string }> = [
+    { id: "playground", label: t("adminPages.quota.tabs.playground") },
+    { id: "skillGen", label: t("adminPages.quota.tabs.skillGen") },
+  ];
 
   const initialSurface = isSurface(params.get("surface")) ? (params.get("surface") as Surface) : "playground";
   const [surface, setSurface] = useState<Surface>(initialSurface);
@@ -107,11 +110,10 @@ export function QuotaManagementPage() {
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="font-display text-2xl font-bold uppercase tracking-tight text-strong">
-            Quota
+            {t("adminPages.quota.title")}
           </h1>
           <p className="mt-1 font-text text-meta">
-            Per-user monthly counters with admin-applied grants. Admin users
-            bypass quota and are excluded from this table.
+            {t("adminPages.quota.subtitle")}
           </p>
         </div>
         {banner && (
@@ -124,7 +126,7 @@ export function QuotaManagementPage() {
 
       <nav
         role="tablist"
-        aria-label="Surface"
+        aria-label={t("adminPages.quota.aria.surface")}
         className="flex border-b border-subtle"
       >
         {TABS.map((t) => {
@@ -155,8 +157,8 @@ export function QuotaManagementPage() {
             setQuery(e.target.value);
             setPage(1);
           }}
-          placeholder="Filter by email or display name…"
-          aria-label="Filter users"
+          placeholder={t("adminPages.quota.placeholder.filter")}
+          aria-label={t("adminPages.quota.aria.filter")}
           className="w-full max-w-sm rounded-sm border border-subtle bg-elevated/40 px-3 py-2 font-mono text-xs text-strong placeholder:text-meta/70 focus:border-accent focus:bg-card focus:outline-none"
         />
       </div>
@@ -173,9 +175,7 @@ export function QuotaManagementPage() {
             isLoading={usersQuery.isLoading}
             errorMessage={
               usersQuery.error
-                ? usersQuery.error instanceof Error
-                  ? usersQuery.error.message
-                  : "Failed to load users"
+                ? translateError(usersQuery.error, t("adminPages.quota.loadFailed"))
                 : null
             }
             onRowClick={(row) => setDrawerRow(row)}

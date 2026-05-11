@@ -24,7 +24,7 @@ export interface DashboardStats {
 export async function fetchDashboardStats(): Promise<DashboardStats> {
   const res = await apiGet<DashboardStats>("/api/v1/admin/dashboard/stats");
   if (!res.data) {
-    throw new Error("Dashboard stats missing");
+    throw new Error("errors.api.adminDashboard.statsMissing");
   }
   return res.data;
 }

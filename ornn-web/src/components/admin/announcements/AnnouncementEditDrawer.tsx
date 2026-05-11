@@ -24,6 +24,7 @@ import type {
   AdminAnnouncement,
   CreateAnnouncementInput,
 } from "@/services/announcementsApi";
+import { translateError } from "@/utils/translateError";
 
 interface DrawerForm {
   title: string;
@@ -203,7 +204,7 @@ export function AnnouncementEditDrawer({
           onError: (err) =>
             addToast({
               type: "error",
-              message: err instanceof Error ? err.message : "Save failed",
+              message: translateError(err, "Save failed"),
             }),
         },
       );
@@ -216,7 +217,7 @@ export function AnnouncementEditDrawer({
         onError: (err) =>
           addToast({
             type: "error",
-            message: err instanceof Error ? err.message : "Save failed",
+            message: translateError(err, "Save failed"),
           }),
       });
     }

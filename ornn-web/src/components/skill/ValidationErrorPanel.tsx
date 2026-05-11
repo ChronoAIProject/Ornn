@@ -7,12 +7,13 @@
  */
 
 import { motion } from "framer-motion";
+import { useTranslation } from "react-i18next";
 import type { FrontmatterValidationError } from "@/utils/skillFrontmatterSchema";
 
 export interface ValidationErrorPanelProps {
   /** Array of structured validation errors */
   errors: FrontmatterValidationError[];
-  /** Optional title override */
+  /** Optional title override (raw string — already translated by caller). */
   title?: string;
   /** Additional CSS classes */
   className?: string;
@@ -20,14 +21,21 @@ export interface ValidationErrorPanelProps {
 
 /**
  * Renders a bg-card panel with danger accent showing validation errors.
- * Each error displays the field path and human-readable message.
+ * Each error displays the field path and a translated message looked up
+ * from the entry's `messageKey` + `params`.
  */
 export function ValidationErrorPanel({
   errors,
-  title = "Frontmatter Validation Errors",
+  title,
   className = "",
 }: ValidationErrorPanelProps) {
+  const { t } = useTranslation();
   if (errors.length === 0) return null;
+
+  const resolvedTitle = title ?? t("errors.frontmatter.panelTitle");
+  const countText = t("errors.frontmatter.panelCount", {
+    count: errors.length,
+  });
 
   return (
     <motion.div
@@ -45,14 +53,11 @@ export function ValidationErrorPanel({
         <div className="flex-1 space-y-3">
           {/* Title */}
           <h3 className="font-display text-sm uppercase tracking-wider text-danger">
-            {title}
+            {resolvedTitle}
           </h3>
 
           {/* Error count */}
-          <p className="font-text text-xs text-meta">
-            {errors.length} {errors.length === 1 ? "error" : "errors"}{" "}
-            found. Fix all errors before saving.
-          </p>
+          <p className="font-text text-xs text-meta">{countText}</p>
 
           {/* Error list */}
           <ul className="space-y-2">
@@ -64,7 +69,7 @@ export function ValidationErrorPanel({
                 </span>
                 {/* Error message */}
                 <span className="font-text text-sm text-strong">
-                  {err.message}
+                  {t(err.messageKey, err.params ?? {})}
                 </span>
               </li>
             ))}

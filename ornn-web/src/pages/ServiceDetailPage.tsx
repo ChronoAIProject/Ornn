@@ -14,6 +14,7 @@ import { Card } from "@/components/ui/Card";
 import { useAuthStore, isAdmin as checkIsAdmin, useCurrentUser } from "@/stores/authStore";
 import { GenerateSkillModal } from "@/components/skill/GenerateSkillModal";
 import { config } from "@/config";
+import { translateError } from "@/utils/translateError";
 
 const NYXID_API_BASE = config.nyxidApiBaseUrl;
 
@@ -74,7 +75,7 @@ export function ServiceDetailPage() {
       })
       .catch((err) => {
         console.error("[ServiceDetail]", err);
-        setError(err.message);
+        setError(translateError(err));
         setIsLoading(false);
       });
   }, [accessToken, id]);

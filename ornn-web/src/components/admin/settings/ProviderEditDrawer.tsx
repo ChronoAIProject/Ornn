@@ -22,6 +22,7 @@ import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { createPortal } from "react-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { z } from "zod";
 import { Button } from "@/components/ui/Button";
 import { useToastStore } from "@/stores/toastStore";
@@ -34,6 +35,7 @@ import {
   type LlmProviderAuth,
   type LlmProviderInput,
 } from "@/services/settingsApi";
+import { translateError } from "@/utils/translateError";
 
 // --------------------------------------------------------------------- form types
 
@@ -214,6 +216,7 @@ export function ProviderEditDrawer({
   onClose,
   provider,
 }: ProviderEditDrawerProps) {
+  const { t } = useTranslation();
   const qc = useQueryClient();
   const addToast = useToastStore((s) => s.addToast);
   const isEdit = provider !== null;
@@ -257,7 +260,7 @@ export function ProviderEditDrawer({
     onError: (err) =>
       addToast({
         type: "error",
-        message: err instanceof Error ? err.message : "Save failed",
+        message: translateError(err, "Save failed"),
       }),
   });
 
@@ -310,7 +313,7 @@ export function ProviderEditDrawer({
               <button
                 type="button"
                 onClick={onClose}
-                aria-label="Close"
+                aria-label={t("common.close")}
                 className="-mr-2 -mt-2 inline-flex h-8 w-8 items-center justify-center rounded-sm text-meta transition-colors hover:bg-elevated hover:text-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
               >
                 <svg

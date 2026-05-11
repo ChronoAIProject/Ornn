@@ -22,6 +22,7 @@ import {
   type AdminUsersSort,
   type AdminUserRow,
 } from "@/services/adminUsersApi";
+import { translateError } from "@/utils/translateError";
 
 const PAGE_SIZE = 20;
 
@@ -121,9 +122,7 @@ export function AdminUsersTable({ role, title, description }: AdminUsersTablePro
           <Skeleton lines={6} />
         ) : usersQuery.error ? (
           <p className="py-8 text-center font-text text-danger">
-            {usersQuery.error instanceof Error
-              ? usersQuery.error.message
-              : "Failed to load users"}
+            {translateError(usersQuery.error, "Failed to load users")}
           </p>
         ) : items.length === 0 ? (
           <p className="py-8 text-center font-text text-meta">No users found.</p>

@@ -1174,5 +1174,90 @@
     "fieldPrivateKey": "App private key (PEM)",
     "confirmTitle": "Confirm: abandon current mirror repo",
     "confirmConfirm": "Yes, change repo"
+  },
+  "errors": {
+    "generic": {
+      "unknown": "Something went wrong"
+    },
+    "api": {
+      "quota": {
+        "snapshotMissing": "Quota snapshot missing",
+        "snapshotShapeInvalid": "Quota snapshot shape invalid: {{detail}}",
+        "adminListMissing": "Admin quota list missing",
+        "lifetimeMissing": "Lifetime quota response missing",
+        "grantMissing": "Grant response missing",
+        "bulkGrantMissing": "Bulk grant response missing",
+        "auditListMissing": "Audit list missing"
+      },
+      "redemption": {
+        "mintMissing": "Mint response missing",
+        "mintShapeInvalid": "Mint response shape invalid: {{detail}}",
+        "adminListMissing": "Admin redemption-code list missing",
+        "adminListShapeInvalid": "Admin redemption-code list shape invalid: {{detail}}",
+        "detailMissing": "Redemption code detail missing",
+        "detailShapeInvalid": "Redemption code shape invalid: {{detail}}",
+        "invalidateMissing": "Invalidate response missing",
+        "invalidateShapeInvalid": "Invalidate response shape invalid: {{detail}}",
+        "redeemMissing": "Redeem response missing",
+        "redeemShapeInvalid": "Redeem response shape invalid: {{detail}}",
+        "historyMissing": "Redemption history missing",
+        "historyShapeInvalid": "Redemption history shape invalid: {{detail}}"
+      },
+      "settings": {
+        "sectionMissing": "Section {{section}} missing from response",
+        "sectionPutMissing": "Section {{section}} update returned no data",
+        "providerNotFound": "Provider not found",
+        "providerCreateFailed": "Failed to create provider",
+        "providerUpdateFailed": "Failed to update provider",
+        "syncFailed": "Failed to sync provider models",
+        "modelPatchFailed": "Failed to update model flags",
+        "exportMissing": "Export response missing",
+        "importMissing": "Import response missing"
+      },
+      "adminUsers": {
+        "listMissing": "Admin users list missing"
+      },
+      "models": {
+        "pickerMissing": "Model picker response missing"
+      },
+      "adminDashboard": {
+        "statsMissing": "Dashboard stats missing"
+      },
+      "audit": {
+        "startMissing": "Audit returned no data"
+      },
+      "skillPackage": {
+        "downloadFailed": "Failed to download skill package: {{status}}",
+        "loadFailed": "Failed to load skill package"
+      }
+    },
+    "zip": {
+      "readFailed": "Failed to read ZIP file. The file may be corrupted.",
+      "skillMdNested": "SKILL.md was found in a subdirectory but must be at the root level.",
+      "skillMdRootRequired": "Invalid skill package: SKILL.md is required at the root of the archive.",
+      "skillMdMultiple": "Multiple SKILL.md files found. Nested skills are not allowed.",
+      "unrecognizedDirs": "Unrecognized directories found: {{dirs}}. Only scripts/, references/, and assets/ are standard.",
+      "frontmatterUnparseable": "Could not extract metadata from SKILL.md frontmatter. You may need to add or fix the YAML frontmatter block.",
+      "onlyZipAccepted": "Only .zip files are accepted.",
+      "fileTooLarge": "File too large ({{size}})."
+    },
+    "frontmatter": {
+      "panelTitle": "Frontmatter Validation Errors",
+      "panelCount": "{{count}} error found. Fix all errors before saving.",
+      "generic": "{{detail}}",
+      "unparseable": "Could not parse SKILL.md frontmatter",
+      "tagFormat": "Tags must be lowercase alphanumeric with hyphens",
+      "envVarFormat": "Environment variable names must be UPPER_SNAKE_CASE",
+      "nameFormat": "Name must start with a letter or number and contain only lowercase letters, numbers, and hyphens",
+      "versionFormat": "version must be in `<major>.<minor>` format, e.g. `1.0` (non-negative integers, no leading zeroes, no patch digit)",
+      "runtimeRequiredForCategory": "runtime is required when category is '{{category}}'",
+      "runtimeForbiddenForCategory": "runtime must not be provided when category is '{{category}}'",
+      "toolListRequiredForCategory": "tool-list is required when category is '{{category}}'",
+      "toolListForbiddenForCategory": "tool-list must not be provided when category is '{{category}}'",
+      "outputTypeRequiredForCategory": "output-type is required when category is '{{category}}'",
+      "outputTypeForbiddenForCategory": "output-type must not be provided when category is '{{category}}'",
+      "runtimeDependencyForbiddenForCategory": "runtime-dependency must not be provided when category is '{{category}}'",
+      "runtimeEnvVarForbiddenForCategory": "runtime-env-var must not be provided when category is '{{category}}'"
+    }
   }
 }

@@ -14,6 +14,7 @@
  */
 
 import { apiGet, apiPost } from "./apiClient";
+import { encodeErrorPayload } from "@/utils/translateError";
 import {
   MintCodeResponseSchema,
   RedeemCodeResponseSchema,
@@ -55,11 +56,16 @@ export interface AdminRedemptionCodeFilters {
 export async function mintCode(req: MintCodeRequest): Promise<MintCodeResponse> {
   const res = await apiPost<unknown>("/api/v1/admin/redemption-codes", req);
   if (!res.data) {
-    throw new Error("Mint response missing");
+    throw new Error("errors.api.redemption.mintMissing");
   }
   const parsed = MintCodeResponseSchema.safeParse(res.data);
   if (!parsed.success) {
-    throw new Error(`Mint response shape invalid: ${parsed.error.message}`);
+    throw new Error(
+      encodeErrorPayload({
+        key: "errors.api.redemption.mintShapeInvalid",
+        params: { detail: parsed.error.message },
+      }),
+    );
   }
   return parsed.data;
 }
@@ -74,12 +80,15 @@ export async function listAdminCodes(
     pageSize: filters.pageSize,
   });
   if (!res.data) {
-    throw new Error("Admin redemption-code list missing");
+    throw new Error("errors.api.redemption.adminListMissing");
   }
   const parsed = RedemptionCodeListResponseSchema.safeParse(res.data);
   if (!parsed.success) {
     throw new Error(
-      `Admin redemption-code list shape invalid: ${parsed.error.message}`,
+      encodeErrorPayload({
+        key: "errors.api.redemption.adminListShapeInvalid",
+        params: { detail: parsed.error.message },
+      }),
     );
   }
   return parsed.data;
@@ -90,11 +99,16 @@ export async function getAdminCodeDetail(id: string): Promise<RedemptionCode> {
     `/api/v1/admin/redemption-codes/${encodeURIComponent(id)}`,
   );
   if (!res.data?.code) {
-    throw new Error("Redemption code detail missing");
+    throw new Error("errors.api.redemption.detailMissing");
   }
   const parsed = RedemptionCodeSchema.safeParse(res.data.code);
   if (!parsed.success) {
-    throw new Error(`Redemption code shape invalid: ${parsed.error.message}`);
+    throw new Error(
+      encodeErrorPayload({
+        key: "errors.api.redemption.detailShapeInvalid",
+        params: { detail: parsed.error.message },
+      }),
+    );
   }
   return parsed.data;
 }
@@ -105,11 +119,16 @@ export async function invalidateCode(id: string): Promise<RedemptionCode> {
     {},
   );
   if (!res.data?.code) {
-    throw new Error("Invalidate response missing");
+    throw new Error("errors.api.redemption.invalidateMissing");
   }
   const parsed = RedemptionCodeSchema.safeParse(res.data.code);
   if (!parsed.success) {
-    throw new Error(`Invalidate response shape invalid: ${parsed.error.message}`);
+    throw new Error(
+      encodeErrorPayload({
+        key: "errors.api.redemption.invalidateShapeInvalid",
+        params: { detail: parsed.error.message },
+      }),
+    );
   }
   return parsed.data;
 }
@@ -119,11 +138,16 @@ export async function redeemCode(code: string): Promise<RedeemCodeResponse> {
     code,
   });
   if (!res.data) {
-    throw new Error("Redeem response missing");
+    throw new Error("errors.api.redemption.redeemMissing");
   }
   const parsed = RedeemCodeResponseSchema.safeParse(res.data);
   if (!parsed.success) {
-    throw new Error(`Redeem response shape invalid: ${parsed.error.message}`);
+    throw new Error(
+      encodeErrorPayload({
+        key: "errors.api.redemption.redeemShapeInvalid",
+        params: { detail: parsed.error.message },
+      }),
+    );
   }
   return parsed.data;
 }
@@ -137,11 +161,16 @@ export async function listMyRedemptionHistory(params: {
     pageSize: params.pageSize,
   });
   if (!res.data) {
-    throw new Error("Redemption history missing");
+    throw new Error("errors.api.redemption.historyMissing");
   }
   const parsed = RedemptionHistoryResponseSchema.safeParse(res.data);
   if (!parsed.success) {
-    throw new Error(`Redemption history shape invalid: ${parsed.error.message}`);
+    throw new Error(
+      encodeErrorPayload({
+        key: "errors.api.redemption.historyShapeInvalid",
+        params: { detail: parsed.error.message },
+      }),
+    );
   }
   return parsed.data;
 }

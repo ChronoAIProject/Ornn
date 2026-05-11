@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/Button";
 import { useAuthStore } from "@/stores/authStore";
 import { logActivity } from "@/services/activityApi";
 import { track } from "@/lib/analytics";
+import { translateError } from "@/utils/translateError";
 
 type CallbackState =
   | { status: "loading" }
@@ -57,7 +58,7 @@ export function OAuthCallbackPage() {
         sessionStorage.removeItem("login_redirect");
         navigate(redirectTo, { replace: true });
       } catch (err) {
-        const message = err instanceof Error ? err.message : "Authentication failed";
+        const message = translateError(err, "Authentication failed");
         setState({ status: "error", message });
       }
     };

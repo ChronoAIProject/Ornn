@@ -68,7 +68,7 @@ export async function fetchAdminUsers(params: {
     dir: sortDir,
   });
   if (!res.data) {
-    throw new Error("Admin users list missing");
+    throw new Error("errors.api.adminUsers.listMissing");
   }
   return res.data;
 }

@@ -1174,5 +1174,90 @@
     "fieldPrivateKey": "App 私钥 (PEM)",
     "confirmTitle": "确认：放弃当前镜像仓库",
     "confirmConfirm": "是，更换仓库"
+  },
+  "errors": {
+    "generic": {
+      "unknown": "出错了"
+    },
+    "api": {
+      "quota": {
+        "snapshotMissing": "配额快照缺失",
+        "snapshotShapeInvalid": "配额快照格式无效：{{detail}}",
+        "adminListMissing": "管理员配额列表缺失",
+        "lifetimeMissing": "历史配额响应缺失",
+        "grantMissing": "授予响应缺失",
+        "bulkGrantMissing": "批量授予响应缺失",
+        "auditListMissing": "审计列表缺失"
+      },
+      "redemption": {
+        "mintMissing": "兑换码生成响应缺失",
+        "mintShapeInvalid": "兑换码生成响应格式无效：{{detail}}",
+        "adminListMissing": "管理员兑换码列表缺失",
+        "adminListShapeInvalid": "管理员兑换码列表格式无效：{{detail}}",
+        "detailMissing": "兑换码详情缺失",
+        "detailShapeInvalid": "兑换码格式无效：{{detail}}",
+        "invalidateMissing": "作废响应缺失",
+        "invalidateShapeInvalid": "作废响应格式无效：{{detail}}",
+        "redeemMissing": "兑换响应缺失",
+        "redeemShapeInvalid": "兑换响应格式无效：{{detail}}",
+        "historyMissing": "兑换历史缺失",
+        "historyShapeInvalid": "兑换历史格式无效：{{detail}}"
+      },
+      "settings": {
+        "sectionMissing": "响应中缺失 {{section}} 段",
+        "sectionPutMissing": "{{section}} 段更新未返回数据",
+        "providerNotFound": "未找到 Provider",
+        "providerCreateFailed": "创建 Provider 失败",
+        "providerUpdateFailed": "更新 Provider 失败",
+        "syncFailed": "同步 Provider 模型失败",
+        "modelPatchFailed": "更新模型标记失败",
+        "exportMissing": "导出响应缺失",
+        "importMissing": "导入响应缺失"
+      },
+      "adminUsers": {
+        "listMissing": "管理员用户列表缺失"
+      },
+      "models": {
+        "pickerMissing": "模型选择响应缺失"
+      },
+      "adminDashboard": {
+        "statsMissing": "仪表板统计缺失"
+      },
+      "audit": {
+        "startMissing": "审计未返回数据"
+      },
+      "skillPackage": {
+        "downloadFailed": "技能包下载失败：{{status}}",
+        "loadFailed": "技能包加载失败"
+      }
+    },
+    "zip": {
+      "readFailed": "读取 ZIP 文件失败。文件可能已损坏。",
+      "skillMdNested": "在子目录中发现 SKILL.md，但它必须位于压缩包根目录。",
+      "skillMdRootRequired": "无效的技能包：根目录必须存在 SKILL.md。",
+      "skillMdMultiple": "发现多个 SKILL.md 文件。不允许嵌套技能。",
+      "unrecognizedDirs": "存在未识别目录：{{dirs}}。仅允许 scripts/、references/、assets/。",
+      "frontmatterUnparseable": "无法从 SKILL.md frontmatter 解析元数据。请检查并修复 YAML frontmatter 块。",
+      "onlyZipAccepted": "仅接受 .zip 文件。",
+      "fileTooLarge": "文件过大（{{size}}）。"
+    },
+    "frontmatter": {
+      "panelTitle": "Frontmatter 校验错误",
+      "panelCount": "{{count}} 个错误。保存前请全部修复。",
+      "generic": "{{detail}}",
+      "unparseable": "无法解析 SKILL.md frontmatter",
+      "tagFormat": "标签必须为小写字母数字，可包含连字符",
+      "envVarFormat": "环境变量名必须为 UPPER_SNAKE_CASE",
+      "nameFormat": "名称必须以字母或数字开头，仅允许小写字母、数字和连字符",
+      "versionFormat": "版本必须为 `<主版本>.<次版本>` 格式，例如 `1.0`（非负整数，不含前导零，不含修订位）",
+      "runtimeRequiredForCategory": "类别为 '{{category}}' 时必须填写 runtime",
+      "runtimeForbiddenForCategory": "类别为 '{{category}}' 时不得填写 runtime",
+      "toolListRequiredForCategory": "类别为 '{{category}}' 时必须填写 tool-list",
+      "toolListForbiddenForCategory": "类别为 '{{category}}' 时不得填写 tool-list",
+      "outputTypeRequiredForCategory": "类别为 '{{category}}' 时必须填写 output-type",
+      "outputTypeForbiddenForCategory": "类别为 '{{category}}' 时不得填写 output-type",
+      "runtimeDependencyForbiddenForCategory": "类别为 '{{category}}' 时不得填写 runtime-dependency",
+      "runtimeEnvVarForbiddenForCategory": "类别为 '{{category}}' 时不得填写 runtime-env-var"
+    }
   }
 }

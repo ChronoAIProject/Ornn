@@ -42,6 +42,7 @@ import {
   validateSkillFrontmatter,
   type FrontmatterValidationError,
 } from "@/utils/skillFrontmatterSchema";
+import { translateError } from "@/utils/translateError";
 
 /** Welded-seam horizontal divider with a rivet dot in the middle. */
 function WeldedSeam({ className = "" }: { className?: string }) {
@@ -140,7 +141,7 @@ export function CreateSkillGenerativePage() {
   const validationErrors = useMemo<FrontmatterValidationError[]>(() => {
     if (!skillMdContent) return [];
     const fm = extractFrontmatter(skillMdContent);
-    if (!fm) return [{ field: "root", message: "Could not parse SKILL.md frontmatter" }];
+    if (!fm) return [{ field: "root", messageKey: "errors.frontmatter.unparseable" }];
     const result = validateSkillFrontmatter(fm);
     if (result.success) return [];
     return result.errors;
@@ -179,7 +180,7 @@ export function CreateSkillGenerativePage() {
       navigate(`/skills/${skill.name}`);
     } catch (err) {
       const message =
-        err instanceof Error ? err.message : t("generative.saveFailed");
+        translateError(err, t("generative.saveFailed"));
       addToast({ type: "error", message });
     }
   };
@@ -364,7 +365,7 @@ export function CreateSkillGenerativePage() {
                 ? "border-accent/60 bg-card text-accent"
                 : "border-subtle bg-card/80 text-meta hover:border-accent/40 hover:text-strong"
             }`}
-            aria-label="Skill package drawer"
+            aria-label={t("aria.skillPackageDrawer")}
           >
             <span
               className="font-mono text-[10px] uppercase tracking-[0.18em]"
@@ -411,7 +412,7 @@ export function CreateSkillGenerativePage() {
                 onMouseLeave={scheduleHoverClose}
                 className="card-impression fixed right-10 top-4 bottom-4 z-40 flex w-[520px] max-w-[calc(100vw-3rem)] flex-col rounded-md border border-subtle bg-card"
                 role="complementary"
-                aria-label="Skill package preview"
+                aria-label={t("aria.skillPackagePreview")}
               >
                 {/* Drawer header */}
                 <div className="flex shrink-0 items-center justify-between gap-2 border-b border-subtle bg-elevated/50 px-4 py-2">
@@ -441,7 +442,7 @@ export function CreateSkillGenerativePage() {
                         setPinnedOpen(false);
                         setHoverDrawerOpen(false);
                       }}
-                      aria-label="Close drawer"
+                      aria-label={t("common.aria.closeDrawer")}
                       className="font-mono text-[12px] text-meta transition-colors hover:text-accent"
                     >
                       ✕

@@ -1,15 +1,23 @@
 /**
- * Skill Frontmatter Zod Schema (Frontend Mirror).
- * Mirror of packages/ornn-shared/src/schemas/skillFrontmatterSchema.ts -- keep in sync.
+ * Skill Frontmatter Zod Schema.
  *
  * Canonical Zod schema for the SKILL.md YAML frontmatter.
  * Covers official Claude skill spec fields (top-level) and
  * Ornn platform extensions (nested under `metadata`).
  *
+ * Validation error messages are JSON-encoded `{ key, params? }`
+ * payloads so the consuming layer can translate them via
+ * `translateError` / `t(key, params)` at render time.
+ *
  * @module utils/skillFrontmatterSchema
  */
 
 import { z } from "zod";
+import { encodeErrorPayload, type ErrorPayload } from "@/utils/translateError";
+
+function issueMessage(payload: ErrorPayload): string {
+  return encodeErrorPayload(payload);
+}
 
 /** Canonical category values (hyphenated, per Claude spec). */
 export const FRONTMATTER_CATEGORIES = [
@@ -36,7 +44,7 @@ const tagItemSchema = z
   .max(30)
   .regex(
     /^[a-z0-9-]+$/,
-    "Tags must be lowercase alphanumeric with hyphens",
+    issueMessage({ key: "errors.frontmatter.tagFormat" }),
   );
 
 const envVarItemSchema = z
@@ -45,7 +53,7 @@ const envVarItemSchema = z
   .max(100)
   .regex(
     /^[A-Z_][A-Z0-9_]*$/,
-    "Environment variable names must be UPPER_SNAKE_CASE",
+    issueMessage({ key: "errors.frontmatter.envVarFormat" }),
   );
 
 const toolItemSchema = z.string().min(1).max(100);
@@ -79,14 +87,20 @@ export const refinedMetadataSchema = metadataSchema.superRefine(
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["runtime"],
-        message: `runtime is required when category is '${category}'`,
+        message: issueMessage({
+          key: "errors.frontmatter.runtimeRequiredForCategory",
+          params: { category },
+        }),
       });
     }
     if (forbidsRuntime && runtime.length > 0) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["runtime"],
-        message: `runtime must not be provided when category is '${category}'`,
+        message: issueMessage({
+          key: "errors.frontmatter.runtimeForbiddenForCategory",
+          params: { category },
+        }),
       });
     }
 
@@ -99,14 +113,20 @@ export const refinedMetadataSchema = metadataSchema.superRefine(
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["toolList"],
-        message: `tool-list is required when category is '${category}'`,
+        message: issueMessage({
+          key: "errors.frontmatter.toolListRequiredForCategory",
+          params: { category },
+        }),
       });
     }
     if (forbidsTools && toolList.length > 0) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["toolList"],
-        message: `tool-list must not be provided when category is '${category}'`,
+        message: issueMessage({
+          key: "errors.frontmatter.toolListForbiddenForCategory",
+          params: { category },
+        }),
       });
     }
 
@@ -115,14 +135,20 @@ export const refinedMetadataSchema = metadataSchema.superRefine(
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["outputType"],
-        message: `output-type is required when category is '${category}'`,
+        message: issueMessage({
+          key: "errors.frontmatter.outputTypeRequiredForCategory",
+          params: { category },
+        }),
       });
     }
     if (forbidsRuntime && data.outputType) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["outputType"],
-        message: `output-type must not be provided when category is '${category}'`,
+        message: issueMessage({
+          key: "errors.frontmatter.outputTypeForbiddenForCategory",
+          params: { category },
+        }),
       });
     }
 
@@ -132,14 +158,20 @@ export const refinedMetadataSchema = metadataSchema.superRefine(
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ["runtimeDependency"],
-          message: `runtime-dependency must not be provided when category is '${category}'`,
+          message: issueMessage({
+            key: "errors.frontmatter.runtimeDependencyForbiddenForCategory",
+            params: { category },
+          }),
         });
       }
       if (data.runtimeEnvVar.length > 0) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ["runtimeEnvVar"],
-          message: `runtime-env-var must not be provided when category is '${category}'`,
+          message: issueMessage({
+            key: "errors.frontmatter.runtimeEnvVarForbiddenForCategory",
+            params: { category },
+          }),
         });
       }
     }
@@ -162,14 +194,14 @@ export const skillFrontmatterSchema = z.object({
     .max(64)
     .regex(
       /^[a-z0-9][a-z0-9-]*$/,
-      "Name must start with a letter or number and contain only lowercase letters, numbers, and hyphens",
+      issueMessage({ key: "errors.frontmatter.nameFormat" }),
     ),
   description: z.string().min(1).max(1024),
   version: z
     .string()
     .regex(
       SKILL_VERSION_REGEX,
-      "version must be in `<major>.<minor>` format, e.g. `1.0` (non-negative integers, no leading zeroes, no patch digit)",
+      issueMessage({ key: "errors.frontmatter.versionFormat" }),
     ),
   disableModelInvocation: z.boolean().default(false),
   userInvocable: z.boolean().default(true),
@@ -195,10 +227,40 @@ export type MetadataOutput = z.output<typeof metadataSchema>;
 
 // --- Validation helper ---
 
+/**
+ * Structured frontmatter validation error. `messageKey` is an i18n key
+ * the consumer translates via `t(messageKey, params)`. When the
+ * underlying Zod issue did not carry an explicit JSON payload (built-in
+ * Zod message such as "Required" / "String must contain at least 1
+ * character(s)"), the falsy-key case is signalled by `messageKey ===
+ * "errors.frontmatter.generic"` and the raw Zod string is supplied via
+ * `params.detail` for display.
+ */
 export interface FrontmatterValidationError {
   field: string;
-  message: string;
+  messageKey: string;
+  params?: Record<string, string | number>;
   received?: unknown;
+}
+
+function parseIssueMessage(raw: string): {
+  key: string;
+  params?: Record<string, string | number>;
+} {
+  if (raw.startsWith("{")) {
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed.key === "string") {
+        return { key: parsed.key, params: parsed.params };
+      }
+    } catch {
+      /* fall through */
+    }
+  }
+  return {
+    key: "errors.frontmatter.generic",
+    params: { detail: raw },
+  };
 }
 
 /**
@@ -215,10 +277,14 @@ export function validateSkillFrontmatter(
     return { success: true, data: result.data };
   }
   const errors: FrontmatterValidationError[] = result.error.issues.map(
-    (issue) => ({
-      field: issue.path.join("."),
-      message: issue.message,
-    }),
+    (issue) => {
+      const parsed = parseIssueMessage(issue.message);
+      return {
+        field: issue.path.join("."),
+        messageKey: parsed.key,
+        params: parsed.params,
+      };
+    },
   );
   return { success: false, errors };
 }

@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/Badge";
 import { useSkill, useUpdateSkill, useUpdateSkillPackage } from "@/hooks/useSkills";
 import { useToastStore } from "@/stores/toastStore";
 import { formatFileSize } from "@/utils/formatters";
+import { translateError } from "@/utils/translateError";
 
 export function EditSkillPage() {
   const { t } = useTranslation();
@@ -34,7 +35,7 @@ export function EditSkillPage() {
       refetch();
     } catch (err) {
       const fallback = t("editSkill.visibilityFailed", "Failed to update visibility");
-      const message = err instanceof Error ? err.message : fallback;
+      const message = translateError(err, fallback);
       addToast({ type: "error", message });
     }
   };
@@ -52,7 +53,7 @@ export function EditSkillPage() {
       refetch();
     } catch (err) {
       const fallback = t("editSkill.packageFailed", "Failed to update package");
-      const message = err instanceof Error ? err.message : fallback;
+      const message = translateError(err, fallback);
       addToast({ type: "error", message });
     }
   };

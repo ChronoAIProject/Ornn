@@ -28,6 +28,7 @@ import { useEffect } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { createPortal } from "react-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { useToastStore } from "@/stores/toastStore";
 import {
   patchProviderModelFlags,
@@ -35,6 +36,7 @@ import {
   type LlmProviderModel,
   type ModelFlagsPatchInput,
 } from "@/services/settingsApi";
+import { translateError } from "@/utils/translateError";
 
 export interface ProviderModelsDrawerProps {
   isOpen: boolean;
@@ -54,6 +56,7 @@ export function ProviderModelsDrawer({
   onClose,
   provider,
 }: ProviderModelsDrawerProps) {
+  const { t } = useTranslation();
   const qc = useQueryClient();
   const addToast = useToastStore((s) => s.addToast);
 
@@ -68,7 +71,7 @@ export function ProviderModelsDrawer({
     onError: (err) =>
       addToast({
         type: "error",
-        message: err instanceof Error ? err.message : "Model patch failed",
+        message: translateError(err, "Model patch failed"),
       }),
   });
 
@@ -127,7 +130,7 @@ export function ProviderModelsDrawer({
               <button
                 type="button"
                 onClick={onClose}
-                aria-label="Close"
+                aria-label={t("common.close")}
                 className="-mr-2 -mt-2 inline-flex h-8 w-8 items-center justify-center rounded-sm text-meta transition-colors hover:bg-elevated hover:text-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
               >
                 <svg

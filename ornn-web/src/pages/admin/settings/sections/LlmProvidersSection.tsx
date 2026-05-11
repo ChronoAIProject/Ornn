@@ -13,6 +13,7 @@
  */
 
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -26,8 +27,10 @@ import {
   type LlmProvider,
   type LlmSyncResult,
 } from "@/services/settingsApi";
+import { translateError } from "@/utils/translateError";
 
 export function LlmProvidersSection() {
+  const { t } = useTranslation();
   const qc = useQueryClient();
   const addToast = useToastStore((s) => s.addToast);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -53,13 +56,21 @@ export function LlmProvidersSection() {
       const provider = list.data?.find((p) => p._id === id);
       addToast({
         type: "success",
-        message: `Synced ${provider?.name ?? id}: +${res.added} added, ${res.updated} updated, ${res.removed} removed.`,
+        message: t("adminSettings.sections.llmProviders.toast.synced", {
+          name: provider?.name ?? id,
+          added: res.added,
+          updated: res.updated,
+          removed: res.removed,
+        }),
       });
     },
     onError: (err) =>
       addToast({
         type: "error",
-        message: err instanceof Error ? err.message : "Sync failed",
+        message: translateError(
+          err,
+          t("adminSettings.sections.llmProviders.toast.syncFailed"),
+        ),
       }),
   });
 
@@ -93,20 +104,17 @@ export function LlmProvidersSection() {
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-accent">
-            [§ LLM PROVIDERS]
+            {t("adminSettings.sections.llmProviders.eyebrow")}
           </p>
           <h2 className="mt-1 font-display text-lg font-semibold uppercase tracking-tight text-strong">
-            LLM providers
+            {t("adminSettings.sections.llmProviders.title")}
           </h2>
           <p className="mt-1 font-text text-sm text-meta">
-            Per-provider gateway, auth, and model catalog. Click{" "}
-            <strong>Models</strong> on a row to enable / disable models and pick
-            per-surface defaults — defaults are global across providers, so
-            setting one unselects every other.
+            {t("adminSettings.sections.llmProviders.description")}
           </p>
         </div>
         <Button type="button" size="sm" onClick={openCreate}>
-          New provider
+          {t("adminSettings.sections.llmProviders.action.new")}
         </Button>
       </header>
 
@@ -115,14 +123,15 @@ export function LlmProvidersSection() {
           <Skeleton lines={4} />
         ) : list.error ? (
           <p className="py-6 text-center font-text text-danger">
-            {list.error instanceof Error
-              ? list.error.message
-              : "Failed to load providers"}
+            {translateError(
+              list.error,
+              t("adminSettings.sections.llmProviders.loadFailed"),
+            )}
           </p>
         ) : (list.data ?? []).length === 0 ? (
           <div className="py-8 text-center">
             <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-meta">
-              No providers configured
+              {t("adminSettings.sections.llmProviders.empty")}
             </p>
             <Button
               type="button"
@@ -131,7 +140,7 @@ export function LlmProvidersSection() {
               className="mt-3"
               onClick={openCreate}
             >
-              Add your first provider
+              {t("adminSettings.sections.llmProviders.action.addFirst")}
             </Button>
           </div>
         ) : (
@@ -140,16 +149,16 @@ export function LlmProvidersSection() {
               <thead>
                 <tr className="border-b border-accent/20">
                   <th className="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
-                    Name
+                    {t("adminSettings.sections.llmProviders.table.name")}
                   </th>
                   <th className="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
-                    Auth
+                    {t("adminSettings.sections.llmProviders.table.auth")}
                   </th>
                   <th className="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
-                    Models
+                    {t("adminSettings.sections.llmProviders.table.models")}
                   </th>
                   <th className="px-4 py-3 text-right font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
-                    Actions
+                    {t("adminSettings.sections.llmProviders.table.actions")}
                   </th>
                 </tr>
               </thead>
@@ -197,6 +206,7 @@ function ProviderRow({
   onEdit: () => void;
   onModels: () => void;
 }) {
+  const { t } = useTranslation();
   const active = provider.models.filter((m) => !m.removed);
   const playground = active.filter((m) => m.enabledForPlayground).length;
   const skillGen = active.filter((m) => m.enabledForSkillGen).length;
@@ -212,11 +222,19 @@ function ProviderRow({
         {provider.auth.kind}
       </td>
       <td className="px-4 py-3 font-mono text-[11px] text-body">
-        <span className="text-strong">{playground}</span> playground ·{" "}
-        <span className="text-strong">{skillGen}</span> skillGen ·{" "}
-        {active.length} total
+        {t("adminSettings.sections.llmProviders.modelCounts", {
+          playground,
+          skillGen,
+          total: active.length,
+        })}
         {removedCount > 0 && (
-          <span className="text-meta"> · {removedCount} archived</span>
+          <span className="text-meta">
+            {" "}
+            ·{" "}
+            {t("adminSettings.sections.llmProviders.archivedCount", {
+              count: removedCount,
+            })}
+          </span>
         )}
       </td>
       <td className="whitespace-nowrap px-4 py-3 text-right">
@@ -226,14 +244,14 @@ function ProviderRow({
             onClick={onModels}
             className="font-mono text-[11px] uppercase tracking-[0.14em] text-accent hover:text-accent-muted"
           >
-            Models
+            {t("adminSettings.sections.llmProviders.action.models")}
           </button>
           <button
             type="button"
             onClick={onEdit}
             className="font-mono text-[11px] uppercase tracking-[0.14em] text-accent hover:text-accent-muted"
           >
-            Edit
+            {t("common.edit")}
           </button>
           <Button
             type="button"
@@ -242,7 +260,7 @@ function ProviderRow({
             loading={syncing}
             onClick={onSync}
           >
-            Sync
+            {t("adminSettings.sections.llmProviders.action.sync")}
           </Button>
         </div>
       </td>

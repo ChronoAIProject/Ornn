@@ -26,6 +26,7 @@ import { ArrowLeftIcon } from "@/components/icons";
 import { usePullSkillFromGitHub } from "@/hooks/useSkills";
 import { useToastStore } from "@/stores/toastStore";
 import { track } from "@/lib/analytics";
+import { translateError } from "@/utils/translateError";
 
 function GitHubMarkIcon({ className }: { className?: string }) {
   return (
@@ -78,10 +79,10 @@ export function CreateSkillFromGitHubPage() {
     } catch (err) {
       addToast({
         type: "error",
-        message:
-          err instanceof Error
-            ? err.message
-            : (t("githubImport.genericError", "Failed to pull from GitHub.") as string),
+        message: translateError(
+          err,
+          t("githubImport.genericError", "Failed to pull from GitHub.") as string,
+        ),
       });
     }
   };

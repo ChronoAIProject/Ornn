@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/Button";
 import { useToastStore } from "@/stores/toastStore";
 import { useBulkGrantQuota } from "@/hooks/useQuota";
 import type { Surface } from "@/services/quotaApi";
+import { translateError } from "@/utils/translateError";
 
 const MAX_USERS = 500;
 
@@ -74,7 +75,7 @@ export function BulkGrantCreditsModal({
     } catch (err) {
       addToast({
         type: "error",
-        message: err instanceof Error ? err.message : "Bulk grant failed",
+        message: translateError(err, "Bulk grant failed"),
       });
     }
   };
