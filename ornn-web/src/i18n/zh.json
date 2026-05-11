@@ -488,7 +488,19 @@
     "signOut": "退出登录",
     "accountMgmt": "账户管理",
     "accountDesc": "你的个人资料、LLM 凭证和安全设置通过 NyxID 管理。",
-    "openNyxID": "打开 NyxID 设置"
+    "openNyxID": "打开 NyxID 设置",
+    "redeemCode": {
+      "title": "兑换码",
+      "placeholder": "输入你的兑换码",
+      "codeAria": "兑换码",
+      "redeem": "兑换",
+      "helpText": "拿到团队发的兑换码？在此输入即可为账户增加额度。",
+      "added": "已添加：",
+      "activeUntil": "有效期至本月末。",
+      "dismissAria": "关闭",
+      "dismiss": "关闭",
+      "recentlyRedeemed": "最近兑换"
+    }
   },
   "login": {
     "eyebrow": "[ § 入口 — NYXID ]",
@@ -555,7 +567,12 @@
     "repoPlaceholder": "https://github.com/...",
     "invalidUrl": "必须是有效的 URL",
     "uploadSkill": "上传技能",
-    "saveChanges": "保存更改"
+    "saveChanges": "保存更改",
+    "tools": {
+      "placeholder": "输入工具名称后按回车",
+      "suggested": "推荐：",
+      "help": "请确保你列出的工具在目标 Claude 客户端环境中可用。引用不可用工具的技能会在运行时失败。"
+    }
   },
   "landing": {
     "scrollHint": "下滑装备 ↓",
@@ -693,7 +710,8 @@
     "syncSuccess": "已从 GitHub 同步,并发布了新版本。",
     "previewTitle": "同步预览",
     "previewSubtitle": "确认后将从已关联的 GitHub 源发布 {{name}} 的 v{{version}} 版本。",
-    "applySync": "应用同步"
+    "applySync": "应用同步",
+    "urlPlaceholder": "https://github.com/owner/repo/tree/main/path/to/skill"
   },
   "githubImport": {
     "title": "从 GitHub 导入",
@@ -773,5 +791,42 @@
     "adminQuotaUnlimited": "管理员 — 无限配额",
     "adminUnlimitedUsageTitle": "管理员 · 无限用量",
     "quotaUsageDetails": "配额使用详情"
+  },
+  "skillComponents": {
+    "generateModal": {
+      "title": "生成技能",
+      "addRefPlaceholder": "添加参考链接...",
+      "add": "添加"
+    },
+    "card": {
+      "linkedToGithub": "已关联到 GitHub"
+    },
+    "grid": {
+      "emptyTitle": "未找到技能",
+      "emptyDesc": "尝试调整搜索或筛选条件，或上传第一个技能。"
+    },
+    "fileBrowser": {
+      "noFiles": "没有可用的包文件"
+    },
+    "frontmatter": {
+      "runtime": "运行时",
+      "requiredTools": "必需工具",
+      "dependencies": "依赖",
+      "envVars": "环境变量",
+      "compatibility": "兼容性"
+    }
+  },
+  "userProfile": {
+    "displayNamePlaceholder": "你的显示名称",
+    "bioPlaceholder": "介绍一下你自己...",
+    "newEmailPlaceholder": "your-new@email.com",
+    "phoneNumberPlaceholder": "电话号码",
+    "searchCountryPlaceholder": "搜索国家/地区...",
+    "apiKeyGeneratedTitle": "API 密钥已生成",
+    "notConnected": "未连接",
+    "unlinkAccountTitle": "解除账户绑定"
+  },
+  "editor": {
+    "startTyping": "开始输入..."
   }
 }

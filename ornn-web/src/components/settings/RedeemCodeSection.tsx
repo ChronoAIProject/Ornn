@@ -15,6 +15,7 @@
  */
 
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/Button";
 import { ApiClientError } from "@/services/apiClient";
@@ -82,6 +83,7 @@ function HistoryRow({ item }: { item: RedemptionHistoryItem }) {
 }
 
 export function RedeemCodeSection() {
+  const { t } = useTranslation();
   const [value, setValue] = useState("");
   const [success, setSuccess] = useState<RedeemAppliedGrant[] | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -159,7 +161,7 @@ export function RedeemCodeSection() {
         id="redeem-code-heading"
         className="mb-3 font-mono text-[11px] uppercase tracking-[0.16em] text-strong"
       >
-        Redeem code
+        {t("settings.redeemCode.title")}
       </h3>
 
       <form onSubmit={onSubmit} className="flex flex-col gap-3 sm:flex-row">
@@ -167,8 +169,8 @@ export function RedeemCodeSection() {
           type="text"
           value={value}
           onChange={(e) => setValue(e.target.value)}
-          placeholder="ENTER YOUR CODE"
-          aria-label="Redemption code"
+          placeholder={t("settings.redeemCode.placeholder")}
+          aria-label={t("settings.redeemCode.codeAria")}
           autoCapitalize="characters"
           autoCorrect="off"
           spellCheck={false}
@@ -181,15 +183,14 @@ export function RedeemCodeSection() {
           loading={redeem.isPending}
           disabled={value.trim().length === 0}
         >
-          Redeem
+          {t("settings.redeemCode.redeem")}
         </Button>
       </form>
 
       <div className="mt-4">
         {showInitialHelp && (
           <p className="font-text text-sm text-meta">
-            Got a code from the team? Enter it here to add quota to your
-            account.
+            {t("settings.redeemCode.helpText")}
           </p>
         )}
 
@@ -200,18 +201,18 @@ export function RedeemCodeSection() {
           >
             <div className="font-text text-sm text-body">
               <p>
-                <span className="font-semibold text-success">Added:</span>{" "}
+                <span className="font-semibold text-success">{t("settings.redeemCode.added")}</span>{" "}
                 {formatGrantSummary(success)}.
               </p>
-              <p className="mt-1 text-meta">Active until end of month.</p>
+              <p className="mt-1 text-meta">{t("settings.redeemCode.activeUntil")}</p>
             </div>
             <button
               type="button"
               onClick={dismissSuccess}
-              aria-label="Dismiss"
+              aria-label={t("settings.redeemCode.dismissAria")}
               className="font-mono text-[11px] uppercase tracking-[0.14em] text-meta hover:text-strong"
             >
-              Dismiss
+              {t("settings.redeemCode.dismiss")}
             </button>
           </div>
         )}
@@ -229,7 +230,7 @@ export function RedeemCodeSection() {
       {historyItems.length > 0 && (
         <div className="mt-6">
           <h4 className="mb-2 font-mono text-[10px] uppercase tracking-[0.18em] text-meta">
-            Recently redeemed
+            {t("settings.redeemCode.recentlyRedeemed")}
           </h4>
           <ul className="space-y-1.5">
             {historyItems.map((item) => (

@@ -488,7 +488,19 @@
     "signOut": "Sign Out",
     "accountMgmt": "Account Management",
     "accountDesc": "Your profile, LLM credentials, and security settings are managed through NyxID.",
-    "openNyxID": "Open NyxID Settings"
+    "openNyxID": "Open NyxID Settings",
+    "redeemCode": {
+      "title": "Redeem code",
+      "placeholder": "ENTER YOUR CODE",
+      "codeAria": "Redemption code",
+      "redeem": "Redeem",
+      "helpText": "Got a code from the team? Enter it here to add quota to your account.",
+      "added": "Added:",
+      "activeUntil": "Active until end of month.",
+      "dismissAria": "Dismiss",
+      "dismiss": "Dismiss",
+      "recentlyRedeemed": "Recently redeemed"
+    }
   },
   "login": {
     "eyebrow": "[ § ENTRY — NYXID ]",
@@ -555,7 +567,12 @@
     "repoPlaceholder": "https://github.com/...",
     "invalidUrl": "Must be a valid URL",
     "uploadSkill": "Upload Skill",
-    "saveChanges": "Save Changes"
+    "saveChanges": "Save Changes",
+    "tools": {
+      "placeholder": "Type a tool name + Enter",
+      "suggested": "Suggested:",
+      "help": "Ensure that the tools you list are available in your target Claude client environment. Skills referencing unavailable tools will fail at runtime."
+    }
   },
   "landing": {
     "scrollHint": "Scroll to equip ↓",
@@ -693,7 +710,8 @@
     "syncSuccess": "Synced from GitHub — new version published.",
     "previewTitle": "Sync preview",
     "previewSubtitle": "Apply this sync to publish v{{version}} of {{name}} from the linked GitHub source.",
-    "applySync": "Apply sync"
+    "applySync": "Apply sync",
+    "urlPlaceholder": "https://github.com/owner/repo/tree/main/path/to/skill"
   },
   "githubImport": {
     "title": "Import from GitHub",
@@ -773,5 +791,42 @@
     "adminQuotaUnlimited": "Admin — quota unlimited",
     "adminUnlimitedUsageTitle": "Admin · Unlimited usage",
     "quotaUsageDetails": "Quota usage details"
+  },
+  "skillComponents": {
+    "generateModal": {
+      "title": "Generate Skill",
+      "addRefPlaceholder": "Add reference URL...",
+      "add": "Add"
+    },
+    "card": {
+      "linkedToGithub": "Linked to GitHub"
+    },
+    "grid": {
+      "emptyTitle": "No skills found",
+      "emptyDesc": "Try adjusting your search or filters, or upload the first skill."
+    },
+    "fileBrowser": {
+      "noFiles": "No package files available"
+    },
+    "frontmatter": {
+      "runtime": "Runtime",
+      "requiredTools": "Required Tools",
+      "dependencies": "Dependencies",
+      "envVars": "Environment Variables",
+      "compatibility": "Compatibility"
+    }
+  },
+  "userProfile": {
+    "displayNamePlaceholder": "Your display name",
+    "bioPlaceholder": "Tell us about yourself...",
+    "newEmailPlaceholder": "your-new@email.com",
+    "phoneNumberPlaceholder": "Phone number",
+    "searchCountryPlaceholder": "Search country...",
+    "apiKeyGeneratedTitle": "API Key Generated",
+    "notConnected": "Not connected",
+    "unlinkAccountTitle": "Unlink Account"
+  },
+  "editor": {
+    "startTyping": "Start typing..."
   }
 }
