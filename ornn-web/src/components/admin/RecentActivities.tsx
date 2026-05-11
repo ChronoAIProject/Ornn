@@ -11,6 +11,7 @@
  */
 
 import { motion } from "framer-motion";
+import { useTranslation } from "react-i18next";
 import { Card } from "@/components/ui/Card";
 import {
   isPostHogConfigured,
@@ -19,6 +20,7 @@ import {
 } from "@/lib/postHogLinks";
 
 export function RecentActivities() {
+  const { t } = useTranslation();
   const configured = isPostHogConfigured();
   const activityUrl = postHogActivityUrl();
   const insightsUrl = postHogInsightsUrl();
@@ -32,21 +34,17 @@ export function RecentActivities() {
       <Card>
         <header className="mb-4 flex items-center justify-between">
           <h2 className="font-display text-lg font-semibold uppercase tracking-tight text-strong">
-            Recent activity
+            {t("adminPages.dashboard.recentActivity.heading")}
           </h2>
         </header>
 
         <p className="font-text text-sm leading-relaxed text-body">
-          Audit + activity events live in PostHog. Every API request,
-          login, skill mutation, and admin action is captured there as
-          a typed event with caller, source IP, status, and timing —
-          searchable, filterable, and pivotable into funnels.
+          {t("adminPages.dashboard.recentActivity.body")}
         </p>
 
         {!configured && (
           <p className="mt-3 font-mono text-[11px] text-meta">
-            PostHog isn't configured yet — set it up under Settings →
-            Telemetry.
+            {t("adminPages.dashboard.recentActivity.notConfigured")}
           </p>
         )}
 
@@ -57,7 +55,7 @@ export function RecentActivities() {
             rel="noopener noreferrer"
             className="inline-flex items-center gap-2 rounded-sm border border-strong-edge bg-card px-3 py-1.5 font-mono text-[11px] font-semibold uppercase tracking-[0.12em] text-strong hover:border-accent"
           >
-            Activity feed ↗
+            {t("adminPages.dashboard.recentActivity.activityFeed")} ↗
           </a>
           <a
             href={insightsUrl}
@@ -65,7 +63,7 @@ export function RecentActivities() {
             rel="noopener noreferrer"
             className="inline-flex items-center gap-2 rounded-sm border border-strong-edge bg-card px-3 py-1.5 font-mono text-[11px] font-semibold uppercase tracking-[0.12em] text-strong hover:border-accent"
           >
-            Insights ↗
+            {t("adminPages.dashboard.recentActivity.insights")} ↗
           </a>
         </div>
       </Card>
