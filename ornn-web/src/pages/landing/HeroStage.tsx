@@ -373,7 +373,7 @@ function ScrubHero() {
       id="hero"
       ref={heroRef}
       className="relative h-[820vh]"
-      aria-label="Ornn product overview"
+      aria-label={t("aria.productOverview", { brand: "Ornn" })}
     >
       <div
         ref={stickyRef}
@@ -551,7 +551,7 @@ function StaticHero() {
     <section
       id="hero"
       className="relative bg-page"
-      aria-label="Ornn product overview"
+      aria-label={t("aria.productOverview", { brand: "Ornn" })}
     >
       <div className="relative min-h-screen overflow-hidden">
         <ForgeBackground />

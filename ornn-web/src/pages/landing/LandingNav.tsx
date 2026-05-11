@@ -139,7 +139,7 @@ export function LandingNav() {
       <div className="relative mx-auto flex h-[60px] max-w-[1280px] items-center justify-between gap-3 px-6 sm:px-8">
         <Link
           to="/"
-          aria-label="ornn home"
+          aria-label={t("aria.brandHome", { brand: "ornn" })}
           className="focus-ring-ember flex items-center gap-2.5 text-parchment no-underline"
         >
           <Logo className="block h-[26px] w-auto" />
@@ -219,7 +219,7 @@ export function LandingNav() {
             href="https://github.com/ChronoAIProject/Ornn"
             target="_blank"
             rel="noopener noreferrer"
-            aria-label="ornn on GitHub"
+            aria-label={t("aria.brandOnGitHub", { brand: "ornn" })}
             className="inline-flex h-9 w-9 items-center justify-center rounded-[2px] border border-[color:var(--color-border-strong)] bg-transparent text-parchment transition-colors duration-200 hover:border-ember hover:text-ember focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ember"
           >
             <svg
@@ -237,7 +237,7 @@ export function LandingNav() {
           </a>
           <button
             type="button"
-            aria-label="Toggle language"
+            aria-label={t("aria.toggleLanguage")}
             onClick={toggleLang}
             className="inline-flex h-9 min-w-[2.25rem] items-center justify-center rounded-[2px] border border-[color:var(--color-border-strong)] bg-transparent px-2 font-mono text-[10px] uppercase tracking-[0.14em] text-parchment transition-colors duration-200 hover:border-ember hover:text-ember focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ember"
           >
@@ -245,7 +245,7 @@ export function LandingNav() {
           </button>
           <button
             type="button"
-            aria-label="Toggle theme"
+            aria-label={t("aria.toggleTheme")}
             aria-pressed={theme === "light"}
             onClick={toggle}
             className="inline-flex h-9 w-9 items-center justify-center rounded-[2px] border border-[color:var(--color-border-strong)] bg-transparent text-parchment transition-colors duration-200 hover:border-ember hover:text-ember focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ember"
@@ -293,7 +293,7 @@ export function LandingNav() {
                 onClick={() => setUserMenuOpen((o) => !o)}
                 aria-haspopup="menu"
                 aria-expanded={userMenuOpen}
-                aria-label="Account menu"
+                aria-label={t("aria.accountMenu")}
                 className="focus-ring-ember flex items-center gap-2 rounded-[2px] border border-[color:var(--color-border-strong)] bg-transparent p-1 pr-2.5 transition-colors duration-200 hover:border-ember"
               >
                 <span className="flex h-7 w-7 items-center justify-center overflow-hidden rounded-full bg-page text-ember">
@@ -399,7 +399,7 @@ export function LandingNav() {
         <button
           type="button"
           onClick={() => setMenuOpen((o) => !o)}
-          aria-label={menuOpen ? "Close menu" : "Open menu"}
+          aria-label={menuOpen ? t("aria.closeMenu") : t("aria.openMenu")}
           aria-expanded={menuOpen}
           aria-controls="mobile-nav-panel"
           data-open={menuOpen}

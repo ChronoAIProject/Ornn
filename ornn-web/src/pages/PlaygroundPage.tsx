@@ -63,6 +63,7 @@ function isRuntimeBased(metadata: Record<string, unknown> | null): boolean {
 
 /** Pre-token streaming indicator — three pulsing ember dots, spring-in. */
 function ThinkingBubble() {
+  const { t } = useTranslation();
   return (
     <motion.div
       initial={{ opacity: 0, y: 8, scale: 0.98 }}
@@ -72,7 +73,7 @@ function ThinkingBubble() {
       className="flex justify-start"
     >
       <div className="rounded-2xl border border-subtle bg-card px-4 py-3">
-        <div className="flex items-center gap-1.5" aria-label="Generating">
+        <div className="flex items-center gap-1.5" aria-label={t("aria.generating")}>
           <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent/70" style={{ animationDelay: "0ms" }} />
           <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent/70" style={{ animationDelay: "150ms" }} />
           <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent/70" style={{ animationDelay: "300ms" }} />
@@ -617,7 +618,7 @@ export function PlaygroundPage() {
                         setPinnedDrawer(null);
                         setHoverDrawer(null);
                       }}
-                      aria-label="Close drawer"
+                      aria-label={t("common.aria.closeDrawer")}
                       className="font-mono text-[12px] text-meta transition-colors hover:text-accent"
                     >
                       ✕

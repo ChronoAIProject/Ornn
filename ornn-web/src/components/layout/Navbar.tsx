@@ -190,7 +190,7 @@ export function Navbar({ className = "" }: NavbarProps) {
     >
       <div className="relative mx-auto flex h-[60px] max-w-[1280px] items-center justify-between gap-3 px-6 sm:px-8">
         {/* Logo */}
-        <Link to="/" className="flex items-center gap-2 text-strong" aria-label="Ornn home">
+        <Link to="/" className="flex items-center gap-2 text-strong" aria-label={t("aria.brandHome", { brand: "Ornn" })}>
           <Logo className="block h-[26px] w-auto" />
         </Link>
 
@@ -226,7 +226,7 @@ export function Navbar({ className = "" }: NavbarProps) {
             href="https://github.com/ChronoAIProject/Ornn"
             target="_blank"
             rel="noopener noreferrer"
-            aria-label="ornn on GitHub"
+            aria-label={t("aria.brandOnGitHub", { brand: "ornn" })}
             className="inline-flex h-9 w-9 items-center justify-center rounded-sm border border-strong-edge bg-transparent text-strong transition-colors duration-200 hover:border-accent hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           >
             <GitHubIcon className="h-4 w-4" />
@@ -234,7 +234,7 @@ export function Navbar({ className = "" }: NavbarProps) {
           <button
             type="button"
             onClick={toggleLang}
-            aria-label="Toggle language"
+            aria-label={t("aria.toggleLanguage")}
             className="inline-flex h-9 min-w-[2.25rem] items-center justify-center rounded-sm border border-strong-edge bg-transparent px-2 font-mono text-[10px] uppercase tracking-[0.14em] text-strong transition-colors duration-200 hover:border-accent hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           >
             {i18n.language === "zh" ? "中" : "EN"}
@@ -242,7 +242,7 @@ export function Navbar({ className = "" }: NavbarProps) {
           <button
             type="button"
             onClick={toggleTheme}
-            aria-label="Toggle theme"
+            aria-label={t("aria.toggleTheme")}
             aria-pressed={theme === "light"}
             className="inline-flex h-9 w-9 items-center justify-center rounded-sm border border-strong-edge bg-transparent text-strong transition-colors duration-200 hover:border-accent hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           >
@@ -259,7 +259,7 @@ export function Navbar({ className = "" }: NavbarProps) {
                 onClick={() => setUserMenuOpen((o) => !o)}
                 aria-haspopup="menu"
                 aria-expanded={userMenuOpen}
-                aria-label="Account menu"
+                aria-label={t("aria.accountMenu")}
                 className="flex items-center gap-2 rounded-sm border border-strong-edge bg-transparent p-1 pr-2.5 transition-colors duration-200 hover:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
               >
                 <span className="flex h-7 w-7 items-center justify-center overflow-hidden rounded-full bg-page text-accent">
@@ -348,7 +348,7 @@ export function Navbar({ className = "" }: NavbarProps) {
         <button
           type="button"
           onClick={() => setMenuOpen((o) => !o)}
-          aria-label={menuOpen ? "Close menu" : "Open menu"}
+          aria-label={menuOpen ? t("aria.closeMenu") : t("aria.openMenu")}
           aria-expanded={menuOpen}
           aria-controls="app-mobile-nav-panel"
           data-open={menuOpen}

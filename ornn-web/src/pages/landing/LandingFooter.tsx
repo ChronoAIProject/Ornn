@@ -20,7 +20,7 @@ export function LandingFooter() {
         <div className="mt-10 flex flex-col justify-between gap-3 border-t border-[color:var(--color-border-subtle)] pt-5 font-mono text-[11px] text-meta sm:flex-row sm:items-center">
           <div>{t("landing.footer.copyright")}</div>
           <nav
-            aria-label="Legal"
+            aria-label={t("aria.legal")}
             className="flex flex-wrap gap-x-5 gap-y-1"
           >
             <Link

@@ -19,6 +19,7 @@
  */
 
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import type { QuotaSnapshot, Surface, SurfaceSnapshot } from "@/services/quotaApi";
 import { useMyQuota } from "@/hooks/useQuota";
 import { QuotaSummary } from "./QuotaSummary";
@@ -101,6 +102,7 @@ interface QuotaChipProps {
 }
 
 export function QuotaChip({ className = "" }: QuotaChipProps) {
+  const { t } = useTranslation();
   const { data: quota } = useMyQuota();
   const [open, setOpen] = useState(false);
 
@@ -115,7 +117,7 @@ export function QuotaChip({ className = "" }: QuotaChipProps) {
     <>
       <div
         role="group"
-        aria-label="Quota usage"
+        aria-label={t("aria.quotaUsage")}
         className={`inline-flex items-center gap-1.5 ${className}`}
       >
         <SurfacePill

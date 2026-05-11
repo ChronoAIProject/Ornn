@@ -9,6 +9,7 @@
  */
 
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/Badge";
 import { Skeleton } from "@/components/ui/Skeleton";
 import type {
@@ -60,6 +61,7 @@ function GrantChips({ grants }: { grants: RedemptionGrantEntry[] }) {
 }
 
 function CodeCell({ code }: { code: string }) {
+  const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
   const onCopy = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -77,7 +79,7 @@ function CodeCell({ code }: { code: string }) {
       <button
         type="button"
         onClick={onCopy}
-        aria-label="Copy code"
+        aria-label={t("aria.copyCode")}
         className="font-mono text-[10px] uppercase tracking-[0.14em] text-meta hover:text-accent"
       >
         {copied ? "Copied" : "Copy"}
@@ -103,6 +105,7 @@ export function RedemptionCodesTable({
   onRowClick,
   onInvalidateClick,
 }: RedemptionCodesTableProps) {
+  const { t } = useTranslation();
   if (isLoading) {
     return <Skeleton lines={8} />;
   }
@@ -183,7 +186,7 @@ export function RedemptionCodesTable({
                   <button
                     type="button"
                     title={tooltip}
-                    aria-label="Invalidate code"
+                    aria-label={t("aria.invalidateCode")}
                     disabled={!canInvalidate || isThisInvalidating}
                     onClick={() => onInvalidateClick(row)}
                     className={`font-mono text-[11px] uppercase tracking-[0.14em] ${
