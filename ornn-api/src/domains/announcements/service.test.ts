@@ -67,6 +67,15 @@ class FakeRepo {
     return matches[0] ?? null;
   }
 
+  async findAllReleased(now: Date): Promise<AnnouncementDocument[]> {
+    return [...this.rows.values()]
+      .filter(
+        (d) =>
+          d.enabled && (d.startsAt === null || d.startsAt.getTime() <= now.getTime()),
+      )
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  }
+
   async update(
     id: string,
     patch: UpdateAnnouncementInput,
@@ -211,5 +220,90 @@ describe("AnnouncementService", () => {
   it("delete on missing id throws ANNOUNCEMENT_NOT_FOUND", async () => {
     const { svc } = makeService();
     await expect(svc.delete("does-not-exist")).rejects.toThrow(/Announcement not found/);
+  });
+
+  // ---- listPublished (#357 News page) ------------------------------------
+
+  it("listPublished returns released announcements newest first", async () => {
+    const now = new Date("2026-05-08T12:00:00Z");
+    const { svc, repo } = makeService(now);
+    const a = await svc.create({ ...baseInput, title: "a" });
+    const b = await svc.create({ ...baseInput, title: "b" });
+    const c = await svc.create({ ...baseInput, title: "c" });
+    repo.setCreatedAt(a._id, new Date("2026-05-01T00:00:00Z"));
+    repo.setCreatedAt(b._id, new Date("2026-05-05T00:00:00Z"));
+    repo.setCreatedAt(c._id, new Date("2026-05-07T00:00:00Z"));
+    const items = await svc.listPublished();
+    expect(items.map((i) => i.title)).toEqual(["c", "b", "a"]);
+  });
+
+  it("listPublished excludes disabled records", async () => {
+    const { svc } = makeService();
+    await svc.create({ ...baseInput, title: "hidden", enabled: false });
+    await svc.create({ ...baseInput, title: "shown" });
+    const items = await svc.listPublished();
+    expect(items.map((i) => i.title)).toEqual(["shown"]);
+  });
+
+  it("listPublished excludes future-scheduled records (startsAt > now)", async () => {
+    const now = new Date("2026-05-08T12:00:00Z");
+    const { svc } = makeService(now);
+    await svc.create({
+      ...baseInput,
+      title: "future",
+      startsAt: new Date("2026-06-01T00:00:00Z"),
+    });
+    await svc.create({ ...baseInput, title: "today" });
+    const items = await svc.listPublished();
+    expect(items.map((i) => i.title)).toEqual(["today"]);
+  });
+
+  it("listPublished INCLUDES expired records (endsAt < now) — archive", async () => {
+    const now = new Date("2026-05-08T12:00:00Z");
+    const { svc } = makeService(now);
+    await svc.create({
+      ...baseInput,
+      title: "expired",
+      startsAt: new Date("2026-04-01T00:00:00Z"),
+      endsAt: new Date("2026-04-15T00:00:00Z"),
+    });
+    const items = await svc.listPublished();
+    expect(items.map((i) => i.title)).toEqual(["expired"]);
+  });
+
+  it("listPublished projects publishedAt = startsAt when set, else createdAt", async () => {
+    const now = new Date("2026-05-08T12:00:00Z");
+    const { svc, repo } = makeService(now);
+    const scheduled = await svc.create({
+      ...baseInput,
+      title: "scheduled",
+      startsAt: new Date("2026-05-01T00:00:00Z"),
+    });
+    const adhoc = await svc.create({ ...baseInput, title: "adhoc" });
+    repo.setCreatedAt(adhoc._id, new Date("2026-05-03T00:00:00Z"));
+    // Force ordering: scheduled.createdAt newer so it sorts first
+    repo.setCreatedAt(scheduled._id, new Date("2026-05-04T00:00:00Z"));
+    const items = await svc.listPublished();
+    expect(items[0]?.publishedAt).toBe("2026-05-01T00:00:00.000Z"); // startsAt wins
+    expect(items[1]?.publishedAt).toBe("2026-05-03T00:00:00.000Z"); // createdAt fallback
+  });
+
+  it("listPublished projects the public shape (no createdBy / enabled / endsAt)", async () => {
+    const { svc } = makeService();
+    await svc.create({
+      ...baseInput,
+      ctaLabel: "Read more",
+      ctaUrl: "https://ornn.dev/news",
+    });
+    const items = await svc.listPublished();
+    expect(items).toHaveLength(1);
+    expect(items[0]).toEqual({
+      id: expect.any(String),
+      title: "Hello",
+      bodyMarkdown: "World",
+      ctaLabel: "Read more",
+      ctaUrl: "https://ornn.dev/news",
+      publishedAt: expect.stringMatching(/\d{4}-\d{2}-\d{2}T/),
+    });
   });
 });

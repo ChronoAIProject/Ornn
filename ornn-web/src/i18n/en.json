@@ -34,6 +34,7 @@
     "registry": "Registry",
     "build": "Build",
     "docs": "Docs",
+    "news": "News",
     "contact": "Contact",
     "signIn": "Sign In",
     "signOut": "Sign Out",
@@ -738,6 +739,20 @@
     "cardGithubLabel": "GITHUB",
     "cardGithubHint": "File bugs, pull requests, and feature requests on the issue tracker.",
     "signoff": "[ END · CONTACT ]"
+  },
+  "news": {
+    "eyebrow": "[ § 01 — NEWS ]",
+    "headlineStart": "Stamps from the",
+    "headlineHighlight": "forge",
+    "headlineEnd": ".",
+    "subhead": "Every announcement we've ever pressed — release notes, platform changes, and editorial dispatches. Newest first.",
+    "archiveLabel": "Announcement archive",
+    "loading": "[ LOADING ARCHIVE… ]",
+    "errorLabel": "ARCHIVE UNREACHABLE",
+    "errorBody": "The news feed didn't load. Retry in a moment, or check the Contact page if it persists.",
+    "emptyLabel": "NO STAMPS YET",
+    "emptyBody": "No announcements have been released yet. Check back when the forge cools.",
+    "signoff": "[ END · NEWS ]"
   },
   "serviceDetail": {
     "failedToLoad": "Failed to load service: {{error}}",

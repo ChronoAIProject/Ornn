@@ -15,6 +15,15 @@ export interface PublicAnnouncement {
   ctaUrl: string | null;
 }
 
+/**
+ * News-page list shape (#357). Extends `PublicAnnouncement` with an ISO
+ * 8601 `publishedAt` so the page can render a locale-aware date eyebrow
+ * above each entry. `publishedAt` is `startsAt ?? createdAt`.
+ */
+export interface PublicAnnouncementListItem extends PublicAnnouncement {
+  publishedAt: string;
+}
+
 export interface AdminAnnouncement {
   id: string;
   title: string;
@@ -49,6 +58,18 @@ export async function fetchActiveAnnouncement(): Promise<PublicAnnouncement | nu
     "/api/v1/announcements/active",
   );
   return res.data?.active ?? null;
+}
+
+/**
+ * Public — anonymous-friendly. Returns every released announcement
+ * (enabled + start gate elapsed), newest first. Powers the News page
+ * archive at `/news` (#357).
+ */
+export async function fetchPublicAnnouncements(): Promise<PublicAnnouncementListItem[]> {
+  const res = await apiGet<{ items: PublicAnnouncementListItem[] }>(
+    "/api/v1/announcements",
+  );
+  return res.data?.items ?? [];
 }
 
 export async function fetchAdminAnnouncements(): Promise<AdminAnnouncement[]> {

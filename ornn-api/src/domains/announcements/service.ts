@@ -17,7 +17,11 @@ import type {
   CreateAnnouncementInput,
   UpdateAnnouncementInput,
 } from "./repository";
-import type { AnnouncementDocument, PublicAnnouncement } from "./types";
+import type {
+  AnnouncementDocument,
+  PublicAnnouncement,
+  PublicAnnouncementListItem,
+} from "./types";
 
 const logger = pino({ level: "info" }).child({ module: "announcementService" });
 
@@ -47,6 +51,17 @@ export class AnnouncementService {
   async getActive(): Promise<PublicAnnouncement | null> {
     const doc = await this.repo.findActive(this.clock());
     return doc ? toPublic(doc) : null;
+  }
+
+  /**
+   * Returns every released announcement for the public News page
+   * (#357), newest first. Anonymous-safe — same audit-field discipline
+   * as `getActive`, plus a serialized `publishedAt` so the page can
+   * render a date eyebrow.
+   */
+  async listPublished(): Promise<PublicAnnouncementListItem[]> {
+    const docs = await this.repo.findAllReleased(this.clock());
+    return docs.map(toPublicListItem);
   }
 
   // ---- Admin surface -----------------------------------------------------
@@ -115,5 +130,17 @@ function toPublic(doc: AnnouncementDocument): PublicAnnouncement {
     bodyMarkdown: doc.bodyMarkdown,
     ctaLabel: doc.ctaLabel,
     ctaUrl: doc.ctaUrl,
+  };
+}
+
+function toPublicListItem(doc: AnnouncementDocument): PublicAnnouncementListItem {
+  // `publishedAt` = when the announcement was meant to go live. Falls
+  // back to `createdAt` when no schedule was set — this is the same
+  // semantics used by the popup's "release gate" filter, so the date
+  // shown to the user always reflects "when this became visible".
+  const publishedAt = (doc.startsAt ?? doc.createdAt).toISOString();
+  return {
+    ...toPublic(doc),
+    publishedAt,
   };
 }

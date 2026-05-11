@@ -2,10 +2,12 @@
  * React Query hooks for announcements.
  *
  *   - `useActiveAnnouncement` — public, anonymous-safe; landing-page popup.
+ *   - `usePublicAnnouncements` — public, anonymous-safe; News page archive (#357).
  *   - `useAdminAnnouncements` — admin list (gated by AdminGuard).
  *   - `useCreate / useUpdate / useDelete` — admin mutations that
- *     invalidate both the admin list and the public active query so a
- *     just-saved announcement appears for visitors immediately.
+ *     invalidate the admin list, the public active query, AND the public
+ *     list query so a just-saved announcement appears for visitors on
+ *     both the popup and the News page immediately.
  *
  * @module hooks/useAnnouncements
  */
@@ -16,14 +18,17 @@ import {
   deleteAnnouncement,
   fetchActiveAnnouncement,
   fetchAdminAnnouncements,
+  fetchPublicAnnouncements,
   updateAnnouncement,
   type AdminAnnouncement,
   type CreateAnnouncementInput,
   type PublicAnnouncement,
+  type PublicAnnouncementListItem,
   type UpdateAnnouncementInput,
 } from "@/services/announcementsApi";
 
 const ACTIVE_KEY = ["announcements", "active"] as const;
+const PUBLIC_LIST_KEY = ["announcements", "public-list"] as const;
 const ADMIN_KEY = ["announcements", "admin"] as const;
 
 export function useActiveAnnouncement(opts: { enabled?: boolean } = {}) {
@@ -33,6 +38,19 @@ export function useActiveAnnouncement(opts: { enabled?: boolean } = {}) {
     // 5min — content rarely changes; admin mutations invalidate explicitly.
     staleTime: 5 * 60_000,
     enabled: opts.enabled ?? true,
+  });
+}
+
+/**
+ * Public-facing list for the News page (#357). Same caching window as
+ * the popup query — content turns over slowly and admin mutations
+ * invalidate explicitly via the shared invalidator.
+ */
+export function usePublicAnnouncements() {
+  return useQuery<PublicAnnouncementListItem[]>({
+    queryKey: PUBLIC_LIST_KEY,
+    queryFn: fetchPublicAnnouncements,
+    staleTime: 5 * 60_000,
   });
 }
 
@@ -49,6 +67,7 @@ function useInvalidateAll() {
   return () => {
     void qc.invalidateQueries({ queryKey: ADMIN_KEY });
     void qc.invalidateQueries({ queryKey: ACTIVE_KEY });
+    void qc.invalidateQueries({ queryKey: PUBLIC_LIST_KEY });
   };
 }
 

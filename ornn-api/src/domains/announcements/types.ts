@@ -37,3 +37,14 @@ export interface PublicAnnouncement {
   readonly ctaLabel: string | null;
   readonly ctaUrl: string | null;
 }
+
+/**
+ * Shape returned by the public list endpoint (#357 News page). Adds
+ * a serialized publish timestamp so the page can render a date eyebrow
+ * above each entry. `publishedAt` is `startsAt ?? createdAt` — i.e.,
+ * when the announcement was meant to go live, falling back to its
+ * authoring time when no schedule was set.
+ */
+export interface PublicAnnouncementListItem extends PublicAnnouncement {
+  readonly publishedAt: string;
+}
