@@ -41,6 +41,7 @@
     "signOut": "Sign Out",
     "settings": "Settings",
     "adminPanel": "Admin Panel",
+    "redeemCode": "Redeem code",
     "goToNyxId": "Go to NyxID",
     "createSkill": "Create Skill",
     "lightMode": "Light Mode",
@@ -846,6 +847,33 @@
     "startTyping": "Start typing..."
   },
   "adminPages": {
+    "dashboard": {
+      "heading": "Dashboard",
+      "subtitle": "Platform snapshot — user breakdown, skill visibility partition, and the latest 10 activities.",
+      "loadFailed": "Failed to load stats",
+      "users": {
+        "heading": "Users",
+        "ariaLabel": "Users overview",
+        "total": "Total users",
+        "admin": "Admin users",
+        "normal": "Normal users",
+        "bypassQuota": "Bypass quota"
+      },
+      "skills": {
+        "heading": "Skills",
+        "ariaLabel": "Skills overview",
+        "system": "System skills",
+        "public": "Public skills",
+        "private": "Private skills"
+      },
+      "recentActivity": {
+        "heading": "Recent activity",
+        "body": "Audit + activity events live in PostHog. Every API request, login, skill mutation, and admin action is captured there as a typed event with caller, source IP, status, and timing — searchable, filterable, and pivotable into funnels.",
+        "notConfigured": "PostHog isn't configured yet — set it up under Settings → Telemetry.",
+        "activityFeed": "Activity feed",
+        "insights": "Insights"
+      }
+    },
     "announcements": {
       "eyebrow": "[§ ADMIN — ANNOUNCEMENTS]",
       "title": "Landing page popup",

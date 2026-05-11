@@ -41,6 +41,7 @@
     "signOut": "退出",
     "settings": "设置",
     "adminPanel": "管理面板",
+    "redeemCode": "兑换码",
     "goToNyxId": "前往 NyxID",
     "createSkill": "创建技能",
     "lightMode": "浅色模式",
@@ -846,6 +847,33 @@
     "startTyping": "开始输入..."
   },
   "adminPages": {
+    "dashboard": {
+      "heading": "仪表盘",
+      "subtitle": "平台快照 —— 用户分布、技能可见性划分,以及最近 10 条活动。",
+      "loadFailed": "加载统计失败",
+      "users": {
+        "heading": "用户",
+        "ariaLabel": "用户概览",
+        "total": "用户总数",
+        "admin": "管理员",
+        "normal": "普通用户",
+        "bypassQuota": "不计配额"
+      },
+      "skills": {
+        "heading": "技能",
+        "ariaLabel": "技能概览",
+        "system": "系统技能",
+        "public": "公开技能",
+        "private": "私有技能"
+      },
+      "recentActivity": {
+        "heading": "近期活动",
+        "body": "审计与活动事件统一记录在 PostHog。每一次 API 调用、登录、技能变更和管理员操作都会被记录为带有调用者、来源 IP、状态与耗时的结构化事件,可搜索、可筛选、可聚合成漏斗分析。",
+        "notConfigured": "PostHog 尚未配置 —— 请在「设置 → 遥测」中完成配置。",
+        "activityFeed": "活动信息流",
+        "insights": "洞察"
+      }
+    },
     "announcements": {
       "eyebrow": "[§ 管理 — 公告]",
       "title": "落地页弹窗",
