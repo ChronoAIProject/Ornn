@@ -77,7 +77,7 @@ export default defineConfig({
     port: 5847,
     proxy: {
       // Single canonical proxy rule. All ornn-api traffic goes through
-      // `/api/v1/*`; see `docs/conventions.md` §2.1 (versioning).
+      // `/api/v1/*`; see `docs/CONVENTIONS.md` §2.1 (versioning).
       //
       // SSE-aware: streaming endpoints (skill generation, playground chat)
       // require passthrough of `text/event-stream` headers so the browser

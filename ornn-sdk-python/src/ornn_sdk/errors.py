@@ -4,7 +4,7 @@ Mirrors the TypeScript SDK's `OrnnError` shape so users who have agents
 written in both languages see the same surface:
 
     status      -- HTTP status from the response (0 if the request never reached the server)
-    code        -- lowercase snake_case code (per docs/conventions.md §1.4)
+    code        -- lowercase snake_case code (per docs/CONVENTIONS.md §1.4)
     message     -- human-readable message safe to surface
     request_id  -- server-side correlation id, when available
     errors      -- structured validation errors (list of dicts), when available

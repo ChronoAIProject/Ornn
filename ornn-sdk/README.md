@@ -71,7 +71,7 @@ try {
 }
 ```
 
-Error codes follow [`docs/conventions.md` §1.4](../docs/conventions.md) (lowercase snake_case).
+Error codes follow [`docs/CONVENTIONS.md` §1.4](../docs/CONVENTIONS.md) (lowercase snake_case).
 
 ## API
 
@@ -86,7 +86,7 @@ Error codes follow [`docs/conventions.md` §1.4](../docs/conventions.md) (lowerc
 | `delete(id)` | `DELETE /skills/:id` |
 | `request(method, path, init)` | escape hatch for any other `/api/v1/...` call |
 
-For the complete contract see `docs/conventions.md` and `/api/v1/openapi.json`.
+For the complete contract see `docs/CONVENTIONS.md` and `/api/v1/openapi.json`.
 
 ## Status
 
