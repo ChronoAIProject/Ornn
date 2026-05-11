@@ -5,12 +5,16 @@
  * with a hairline border and a hard-offset letterpress impression
  * (no soft drop shadow per DESIGN.md). Title uses Space Grotesk display.
  *
+ * Closes on backdrop click + ESC key. Modal callers all expect onClose
+ * to fire on either dismissal vector, so wiring ESC at the primitive
+ * level fixes the parity gap with native dialogs once and for free.
+ *
  * @module components/ui/Modal
  */
 
 import { motion, AnimatePresence } from "framer-motion";
 import { createPortal } from "react-dom";
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 
 export interface ModalProps {
   isOpen: boolean;
@@ -21,6 +25,15 @@ export interface ModalProps {
 }
 
 export function Modal({ isOpen, onClose, title, children, className = "" }: ModalProps) {
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [isOpen, onClose]);
+
   return createPortal(
     <AnimatePresence>
       {isOpen && (

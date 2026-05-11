@@ -2,6 +2,7 @@
   "common": {
     "save": "保存",
     "cancel": "取消",
+    "confirm": "确认",
     "delete": "删除",
     "edit": "编辑",
     "back": "返回",
@@ -871,7 +872,8 @@
         "always": "始终（未设置排期）"
       },
       "confirm": {
-        "delete": "删除公告\"{{title}}\"？"
+        "deleteTitle": "删除公告？",
+        "delete": "\"{{title}}\" 将被永久移除。"
       },
       "toast": {
         "disabled": "公告已停用",
@@ -946,7 +948,9 @@
         "status": "状态"
       },
       "confirm": {
-        "invalidate": "作废兑换码 {{code}}？作废后将无法再被兑换。"
+        "invalidateTitle": "作废兑换码？",
+        "invalidate": "{{code}} 作废后将无法再被兑换。",
+        "invalidateAction": "作废"
       },
       "toast": {
         "invalidated": "兑换码 {{code}} 已作废。",

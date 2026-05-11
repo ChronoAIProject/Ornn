@@ -2,6 +2,7 @@
   "common": {
     "save": "Save",
     "cancel": "Cancel",
+    "confirm": "Confirm",
     "delete": "Delete",
     "edit": "Edit",
     "back": "Back",
@@ -871,7 +872,8 @@
         "always": "Always (no schedule)"
       },
       "confirm": {
-        "delete": "Delete announcement \"{{title}}\"?"
+        "deleteTitle": "Delete announcement?",
+        "delete": "\"{{title}}\" will be removed permanently."
       },
       "toast": {
         "disabled": "Announcement disabled",
@@ -946,7 +948,9 @@
         "status": "Status"
       },
       "confirm": {
-        "invalidate": "Invalidate code {{code}}? It will no longer be redeemable."
+        "invalidateTitle": "Invalidate redemption code?",
+        "invalidate": "{{code}} will no longer be redeemable.",
+        "invalidateAction": "Invalidate"
       },
       "toast": {
         "invalidated": "Code {{code}} invalidated.",

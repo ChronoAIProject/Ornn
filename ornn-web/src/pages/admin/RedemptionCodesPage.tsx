@@ -17,6 +17,7 @@ import { useTranslation } from "react-i18next";
 import { motion } from "framer-motion";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Pagination } from "@/components/ui/Pagination";
 import { useDebounce } from "@/hooks/useDebounce";
 import { useToastStore } from "@/stores/toastStore";
@@ -53,6 +54,9 @@ export function RedemptionCodesPage() {
 
   const [mintOpen, setMintOpen] = useState(false);
   const [drawerCode, setDrawerCode] = useState<RedemptionCode | null>(null);
+  const [pendingInvalidate, setPendingInvalidate] = useState<RedemptionCode | null>(
+    null,
+  );
   const [pendingInvalidateId, setPendingInvalidateId] = useState<string | null>(
     null,
   );
@@ -75,11 +79,13 @@ export function RedemptionCodesPage() {
     setPage(1);
   };
 
-  const onInvalidate = async (code: RedemptionCode) => {
-    const ok = window.confirm(
-      t("adminPages.redemption.confirm.invalidate", { code: code.code }),
-    );
-    if (!ok) return;
+  const onInvalidate = (code: RedemptionCode) => {
+    setPendingInvalidate(code);
+  };
+
+  const onConfirmInvalidate = async () => {
+    const code = pendingInvalidate;
+    if (!code) return;
     setPendingInvalidateId(code.id);
     try {
       await invalidateCode.mutateAsync(code.id);
@@ -97,6 +103,7 @@ export function RedemptionCodesPage() {
       });
     } finally {
       setPendingInvalidateId(null);
+      setPendingInvalidate(null);
     }
   };
 
@@ -189,6 +196,19 @@ export function RedemptionCodesPage() {
         isOpen={drawerCode !== null}
         onClose={() => setDrawerCode(null)}
         code={drawerCode}
+      />
+
+      <ConfirmDialog
+        isOpen={pendingInvalidate !== null}
+        onClose={() => setPendingInvalidate(null)}
+        onConfirm={onConfirmInvalidate}
+        title={t("adminPages.redemption.confirm.invalidateTitle")}
+        description={t("adminPages.redemption.confirm.invalidate", {
+          code: pendingInvalidate?.code ?? "",
+        })}
+        confirmLabel={t("adminPages.redemption.confirm.invalidateAction")}
+        variant="danger"
+        isLoading={pendingInvalidateId !== null}
       />
     </div>
   );

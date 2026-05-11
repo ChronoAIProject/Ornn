@@ -15,6 +15,7 @@ import { useTranslation } from "react-i18next";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { useToastStore } from "@/stores/toastStore";
 import { AnnouncementEditDrawer } from "@/components/admin/announcements/AnnouncementEditDrawer";
@@ -81,6 +82,7 @@ export function AnnouncementsPage() {
 
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editing, setEditing] = useState<AdminAnnouncement | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<AdminAnnouncement | null>(null);
 
   const openCreate = () => {
     setEditing(null);
@@ -114,19 +116,23 @@ export function AnnouncementsPage() {
     );
   };
 
-  const onDelete = (a: AdminAnnouncement) => {
-    if (!confirm(t("adminPages.announcements.confirm.delete", { title: a.title }))) return;
-    deleteMut.mutate(a.id, {
-      onSuccess: () =>
-        addToast({ type: "success", message: t("adminPages.announcements.toast.deleted") }),
-      onError: (err) =>
+  const onConfirmDelete = () => {
+    if (!pendingDelete) return;
+    deleteMut.mutate(pendingDelete.id, {
+      onSuccess: () => {
+        addToast({ type: "success", message: t("adminPages.announcements.toast.deleted") });
+        setPendingDelete(null);
+      },
+      onError: (err) => {
         addToast({
           type: "error",
           message: translateError(
             err,
             t("adminPages.announcements.toast.deleteFailed"),
           ),
-        }),
+        });
+        setPendingDelete(null);
+      },
     });
   };
 
@@ -244,7 +250,7 @@ export function AnnouncementsPage() {
                         <Button
                           variant="danger"
                           size="sm"
-                          onClick={() => onDelete(a)}
+                          onClick={() => setPendingDelete(a)}
                           disabled={deleteMut.isPending}
                         >
                           {t("common.delete")}
@@ -263,6 +269,19 @@ export function AnnouncementsPage() {
         isOpen={drawerOpen}
         onClose={() => setDrawerOpen(false)}
         announcement={editing}
+      />
+
+      <ConfirmDialog
+        isOpen={pendingDelete !== null}
+        onClose={() => setPendingDelete(null)}
+        onConfirm={onConfirmDelete}
+        title={t("adminPages.announcements.confirm.deleteTitle")}
+        description={t("adminPages.announcements.confirm.delete", {
+          title: pendingDelete?.title ?? "",
+        })}
+        confirmLabel={t("common.delete")}
+        variant="danger"
+        isLoading={deleteMut.isPending}
       />
     </motion.div>
   );
