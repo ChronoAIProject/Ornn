@@ -437,7 +437,7 @@
     "contextPaths": "上下文路径",
     "contextPathsPlaceholder": "./path/to/file 后按回车",
     "contextPathsHelper": "作为上下文提供给技能的文件路径",
-    "agentLabel": "Agent",
+    "agentLabel": "代理",
     "agentPlaceholder": "agent-identifier",
     "argumentHint": "参数提示",
     "argumentHintPlaceholder": "例如：文件路径或 URL",
