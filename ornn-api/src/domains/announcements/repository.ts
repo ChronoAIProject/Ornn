@@ -7,6 +7,10 @@
  *     within its [startsAt, endsAt] window, picked by most-recent
  *     createdAt so admins can supersede a live one by simply creating
  *     a new enabled record.
+ *   - findAllReleased(now): public News page (#357) — every enabled
+ *     record whose start gate has elapsed, newest first. Past/expired
+ *     records (endsAt < now) are intentionally retained: the News page
+ *     is an archive.
  *
  * Writes are admin-driven CRUD. No fan-out, no batch jobs.
  *
@@ -101,6 +105,23 @@ export class AnnouncementRepository {
       .limit(1)
       .next();
     return mapDoc(doc);
+  }
+
+  /**
+   * Released announcements for the public News page (#357): enabled,
+   * `startsAt` either null or already elapsed, newest first. Does NOT
+   * filter on `endsAt` — historical records are part of the archive
+   * surface.
+   */
+  async findAllReleased(now: Date): Promise<AnnouncementDocument[]> {
+    const docs = await this.collection
+      .find({
+        enabled: true,
+        $or: [{ startsAt: null }, { startsAt: { $lte: now } }],
+      })
+      .sort({ createdAt: -1 })
+      .toArray();
+    return docs.map((d) => mapDoc(d)!);
   }
 
   async update(id: string, patch: UpdateAnnouncementInput): Promise<AnnouncementDocument | null> {

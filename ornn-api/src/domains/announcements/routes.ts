@@ -1,14 +1,16 @@
 /**
  * Announcement HTTP routes.
  *
- *   GET    /api/v1/announcements/active            — public, anonymous
+ *   GET    /api/v1/announcements                   — public, anonymous (News page list, #357)
+ *   GET    /api/v1/announcements/active            — public, anonymous (landing popup)
  *   GET    /api/v1/admin/announcements             — admin list
  *   POST   /api/v1/admin/announcements             — admin create
  *   PATCH  /api/v1/admin/announcements/:id         — admin update
  *   DELETE /api/v1/admin/announcements/:id         — admin delete
  *
- * The public endpoint never sees `createdBy` or scheduling internals — it
- * only returns the rendering shape used by the landing-page popup.
+ * The public endpoints never see `createdBy` or scheduling internals —
+ * they only return the rendering shape the SPA needs (popup + News
+ * page archive).
  *
  * @module domains/announcements/routes
  */
@@ -66,6 +68,11 @@ export function createAnnouncementRoutes(
   const adminGuard = requirePermission(ADMIN_PERMISSION);
 
   // ---- Public ----
+  app.get("/announcements", async (c) => {
+    const items = await announcementService.listPublished();
+    return c.json({ data: { items }, error: null });
+  });
+
   app.get("/announcements/active", async (c) => {
     const active = await announcementService.getActive();
     return c.json({ data: { active }, error: null });
