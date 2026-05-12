@@ -93,6 +93,27 @@
     "deleteSuccess": "技能删除成功",
     "deleteFailed": "删除技能失败"
   },
+  "skillInstallCard": {
+    "title": "安装",
+    "subtitle": "通过下面任一方式把这个技能装到你自己的 agent 里。",
+    "tablistAria": "安装方式",
+    "tabPrompt": "提示词",
+    "tabNpx": "Npx 命令",
+    "promptHelper": "复制下面这段内容粘贴到你的 agent —— 它会指引 agent 从 Ornn 拉取并安装该技能。",
+    "npxHelper": "已镜像到 GitHub，可在任何 agent 环境中一行命令安装。",
+    "npxNotAvailablePrivate": "不可用 —— 私有技能不会镜像到 GitHub。请改用 Via prompt。",
+    "npxNotAvailableMirrorOff": "不可用 —— 当前部署未配置 GitHub 镜像。请改用 Via prompt。",
+    "copy": "复制",
+    "copied": "已复制",
+    "copyPromptAria": "复制安装提示词",
+    "copyNpxAria": "复制安装命令",
+    "viewOnGithub": "在 GitHub 上查看",
+    "synced": "已同步",
+    "lagging": "落后",
+    "pending": "等待首次同步",
+    "lastSync": "最近同步",
+    "commit": "Commit"
+  },
   "skillDetail": {
     "packageContents": "技能内容",
     "description": "描述",

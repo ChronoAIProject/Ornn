@@ -153,7 +153,11 @@ function CopyBlock({
             // pr-20 reserves a clear gutter so prompt text never slides
             // under the floating COPY button.
             ? "block h-full overflow-y-auto whitespace-pre-wrap break-words px-3 py-2 pr-20 font-mono text-xs leading-relaxed text-strong"
-            : "h-full flex items-center overflow-x-auto px-3 pr-20 font-mono text-sm text-strong"
+            // Single-line command centred both axes inside the h-32
+            // box. Symmetric `px-20` mirrors the COPY-button gutter on
+            // the left so the centred text is visually centred, not
+            // offset by the right-only padding.
+            : "h-full flex items-center justify-center overflow-x-auto px-20 font-mono text-sm text-strong"
         }
       >
         {content}

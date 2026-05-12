@@ -93,6 +93,27 @@
     "deleteSuccess": "Skill deleted successfully",
     "deleteFailed": "Failed to delete skill"
   },
+  "skillInstallCard": {
+    "title": "Install",
+    "subtitle": "Drop this skill into your own agent with one of the two flows below.",
+    "tablistAria": "Install method",
+    "tabPrompt": "Via prompt",
+    "tabNpx": "Via npx",
+    "promptHelper": "Copy the block below and paste it into your agent — it instructs the agent to fetch and install this skill from Ornn.",
+    "npxHelper": "Mirrored to GitHub for one-line installation in any agent harness.",
+    "npxNotAvailablePrivate": "Not available — private skills are never mirrored to GitHub. Use the prompt flow instead.",
+    "npxNotAvailableMirrorOff": "Not available — this deployment doesn't have the GitHub mirror configured. Use the prompt flow instead.",
+    "copy": "Copy",
+    "copied": "Copied",
+    "copyPromptAria": "Copy install prompt",
+    "copyNpxAria": "Copy install command",
+    "viewOnGithub": "View on GitHub",
+    "synced": "Synced",
+    "lagging": "Lagging",
+    "pending": "Pending first sync",
+    "lastSync": "Last sync",
+    "commit": "Commit"
+  },
   "skillDetail": {
     "packageContents": "Package Contents",
     "description": "Description",
