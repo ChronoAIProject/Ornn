@@ -161,10 +161,11 @@ jobs:
           git tag -a "${TAG}" -m "Release ${TAG}"
           git push origin "${TAG}"
 
-          # Release-body resolution, in priority order (#431):
+          # Release-body resolution, in priority order (#431 / #435):
           #
-          #   1. `.github/release-notes-next.md` — if the file exists
-          #      and the author has filled it in (placeholder string
+          #   1. Most recent `.github/release-notes-<yyyymmdd>.md` file
+          #      (filename sort, descending). If it exists and the
+          #      author has filled it in (placeholder string
           #      `(write here)` removed), strip its HTML comment block
           #      and use the remaining prose as the release body.
           #      Footer with CHANGELOG links is always appended.
@@ -174,11 +175,18 @@ jobs:
           #      filled in, or when the full inline notes would
           #      exceed GitHub's 125 000-char body cap (#429 / #430).
           #
+          # `.github/release-notes-template.md` is the immutable
+          # template the dated file is copied from — never read here.
+          # The filename-pattern filter (8-digit date) excludes it
+          # from the dated-file search.
+          #
           # Inline-CHANGELOG body was retired — even when it fits, the
           # raw consumed changesets are engineer-speak that doesn't
           # belong on a public release page. Authors curate the
-          # user-facing summary into release-notes-next.md before
-          # opening their develop → main PR.
+          # user-facing summary into the dated file before opening
+          # their develop → main PR, and the gate in
+          # `.github/workflows/check-release-notes.yml` enforces it
+          # on PRs to main.
           REPO_URL="https://github.com/${GITHUB_REPOSITORY}"
           CHANGELOG_FOOTER=$(cat <<EOF
 
@@ -188,9 +196,13 @@ jobs:
           EOF
           )
 
-          RELEASE_NOTES_FILE=".github/release-notes-next.md"
+          RELEASE_NOTES_FILE=$(ls -1 .github/release-notes-*.md 2>/dev/null \
+            | grep -E '/release-notes-[0-9]{8}\.md$' \
+            | sort -r \
+            | head -1)
+
           USE_CURATED=false
-          if [ -f "$RELEASE_NOTES_FILE" ] && ! grep -qF '(write here)' "$RELEASE_NOTES_FILE"; then
+          if [ -n "$RELEASE_NOTES_FILE" ] && [ -f "$RELEASE_NOTES_FILE" ] && ! grep -qF '(write here)' "$RELEASE_NOTES_FILE"; then
             USE_CURATED=true
           fi
 
@@ -207,7 +219,7 @@ jobs:
             ' "$RELEASE_NOTES_FILE")
             BODY="${CURATED}${CHANGELOG_FOOTER}"
           else
-            echo "release-notes-next.md is missing or unedited — using short-body fallback."
+            echo "No curated dated release-notes file found (or placeholder still present) — using short-body fallback."
             BODY=$(cat <<EOF
           Release notes weren't curated for v${VERSION}. The full per-PR detail is in the in-repo CHANGELOGs on the \`${TAG}\` tag:
           ${CHANGELOG_FOOTER}
