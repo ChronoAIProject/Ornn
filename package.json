@@ -32,5 +32,14 @@
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.5.2",
     "typescript-eslint": "^8.58.1"
+  },
+  "overrides": {
+    "vite": "^6.4.2",
+    "picomatch": "^4.0.4",
+    "postcss": "^8.5.10",
+    "dompurify": "^3.3.4",
+    "uuid": "^14.0.0",
+    "eslint": "10.2.0",
+    "eslint-plugin-react-hooks": "7.0.1"
   }
 }
