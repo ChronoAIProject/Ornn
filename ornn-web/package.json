@@ -15,7 +15,7 @@
     "@hookform/resolvers": "^5.2.2",
     "@tanstack/react-query": "^5.62.0",
     "diff": "^9.0.0",
-    "framer-motion": "^11.15.0",
+    "framer-motion": "^12.38.0",
     "highlight.js": "^11.10.0",
     "i18next": "^25.8.17",
     "jszip": "^3.10.1",
