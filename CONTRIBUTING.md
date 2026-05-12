@@ -1,0 +1,162 @@
+# Contributing to Ornn
+
+Thanks for your interest in Ornn. This guide covers everything an external contributor needs: how to set up the repo, how we branch, how we shape commits, how we wire PRs to issues, and how releases are cut.
+
+If you only read one section, read **[Issue-first workflow](#issue-first-workflow)** — every PR must link a GitHub issue, no exceptions.
+
+---
+
+## Table of contents
+
+- [Code of Conduct](#code-of-conduct)
+- [Getting set up](#getting-set-up)
+- [Issue-first workflow](#issue-first-workflow)
+- [Branching strategy](#branching-strategy)
+- [Commit standards](#commit-standards)
+- [Changesets (required on every PR)](#changesets-required-on-every-pr)
+- [Pull requests](#pull-requests)
+- [Code standards](#code-standards)
+- [Tests](#tests)
+- [Releases](#releases)
+- [Where to ask questions](#where-to-ask-questions)
+
+---
+
+## Code of Conduct
+
+By participating you agree to follow our [Code of Conduct](CODE_OF_CONDUCT.md) (Contributor Covenant 2.1).
+
+## Getting set up
+
+Prerequisites: [Bun](https://bun.sh), Docker, a local Kubernetes cluster for full integration runs.
+
+```bash
+git clone https://github.com/ChronoAIProject/Ornn.git
+cd Ornn
+bun install
+bun run test       # backend (Bun) + frontend (Vitest)
+bun run lint
+bun run typecheck
+bun run build:web
+```
+
+Full local-cluster setup (MongoDB, MinIO, OpenSandbox, NyxID, Ornn services) is documented in the project `CLAUDE.md` under "Local Deployment". You do not need the full cluster to land code changes — unit tests alone are sufficient for most PRs.
+
+## Issue-first workflow
+
+**Every PR must link to at least one GitHub issue.** This is load-bearing — it lets us track work, attribute changes, and auto-close issues on merge.
+
+1. **Before opening a PR, find or create a matching issue.**
+2. If no issue exists, create one using an [issue template](https://github.com/ChronoAIProject/Ornn/issues/new/choose). The template prefills:
+   - Title prefix — one of `[Bug]`, `[Feature]`, `[CI/CD]`, `[Docs]`, `[Misc]`
+   - Default assignee
+   - At least one topic label
+3. Link the issue in your PR body using `Closes #N`, `Fixes #N`, or `Resolves #N` — these keywords auto-close the issue on merge. Prose like "this addresses #N" does **not** auto-close and will be rejected at review.
+
+A PR without an issue link will be held until one is added.
+
+### When to use Discussions instead
+
+- Open-ended ideas, RFCs, brainstorming → [Discussions → Ideas](https://github.com/ChronoAIProject/Ornn/discussions/categories/ideas)
+- Usage questions → [Discussions → Q&A](https://github.com/ChronoAIProject/Ornn/discussions/categories/q-a)
+
+Question-shaped issues will be converted to discussions.
+
+## Branching strategy
+
+- **`main`** — production. Protected. PRs only from `develop`. No direct pushes, no force pushes.
+- **`develop`** — default branch, active development. Protected. PRs accepted from any feature branch.
+- **`feature/<short-name>`** — your branch. Must be created from the latest `origin/develop`.
+
+```bash
+git fetch origin
+git checkout develop
+git pull
+git checkout -b feature/short-name
+```
+
+Never branch off a stale local `develop` or another feature branch.
+
+## Commit standards
+
+Multiple small, self-contained commits are always better than one big combined commit. This is non-negotiable.
+
+Rules:
+
+1. **Each commit is self-contained.** A reviewer reading just that commit's diff and message can understand what changed and why.
+2. **Each commit is small.** One logical change per commit. Schema migration is one commit. New endpoint is another. Frontend drawer is another. Old-page deletion is another.
+3. **Each commit's message is detailed.** Subject line ≤ 72 chars, in conventional-commit style (`feat(api):`, `fix(web):`, `chore(repo):`, `docs:`). Body explains *why*, the constraints, and any non-obvious decisions. Reference the linked issue.
+4. **Order matters.** Stack commits in dependency order so each intermediate commit compiles and tests pass.
+5. **Refactors go in their own commit.** Pure refactor first, behaviour change on top. Never bury a fix inside a "drive-by cleanup."
+6. **No `Co-Authored-By` trailers.** Single-author commits only.
+
+Example for a feature that touches schema + API + frontend:
+
+```
+feat(api): extend Foo schema with bar flag (#NNN)
+feat(api): migration — populate Foo.bar from legacy table (#NNN)
+feat(api): PATCH /admin/foo/:id/bar endpoint (#NNN)
+feat(web): FooDrawer wires the new bar toggle (#NNN)
+chore(web): drop deprecated foo-bar select (#NNN)
+docs: changeset for #NNN
+```
+
+Six commits is fine. One commit covering all of the above is **not fine** — it forecloses bisection and forces the reviewer to re-do the decomposition.
+
+## Changesets (required on every PR)
+
+This project uses [Changesets](https://github.com/changesets/changesets) to manage versions. `ornn-api` and `ornn-web` share a unified version (fixed-linked mode).
+
+Every PR targeting `develop` must include a changeset. CI blocks PRs without one.
+
+```bash
+bun changeset
+```
+
+Select the affected package(s), pick a semver bump level (`patch`, `minor`, `major`), and write a short user-facing description. Commit the generated `.changeset/*.md` file with your PR.
+
+For docs-only, CI-only, or config-only PRs that should not bump the version, use:
+
+```bash
+bun changeset --empty
+```
+
+## Pull requests
+
+- Target branch: `develop` (or `main` only when promoting a release).
+- PR title follows the same conventional-commit style as commits.
+- PR body must use the [pull request template](.github/PULL_REQUEST_TEMPLATE.md) — it includes the `Closes #N` field and the commit-decomposition checklist.
+- Required checks: CI (lint, typecheck, tests, Docker build), changeset presence, branch policy.
+- A maintainer review is required before merge; CODEOWNERS gates trust-critical paths (workflows, Dockerfiles, deployment, package manifests).
+- Branches auto-delete on merge.
+
+## Code standards
+
+- TypeScript + Bun on the backend; React 19 + Vite + Tailwind on the frontend.
+- Use `Result` patterns and Zod validation. No bare `try/catch` in routes — use error middleware.
+- Read all configurable values from environment variables. No hardcoded config.
+- No hardcoded secrets, credentials, API keys, or tokens — ever.
+- Include sufficient logging (Pino). `info` for lifecycle events, `debug` for detailed flow, `error` for failures with context. Never log plaintext secrets.
+- Fewer lines > more abstractions. Keep code simple.
+- Project domain knowledge: see [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) and [`docs/CONVENTIONS.md`](docs/CONVENTIONS.md).
+- Visual / UI changes: see [`docs/DESIGN.md`](docs/DESIGN.md) before deviating from the design system.
+
+## Tests
+
+- Unit tests are colocated with source files.
+- Integration tests live in `tests/`.
+- Run everything locally with `bun run test`.
+- All checks run in CI on every PR.
+
+## Releases
+
+Releases are fully automated via Changesets. Maintainer-driven; contributors don't need to do anything beyond including a changeset on each PR. The flow is documented in [`CLAUDE.md`](CLAUDE.md#versioning--releases).
+
+## Where to ask questions
+
+- Usage / how-to → [Discussions → Q&A](https://github.com/ChronoAIProject/Ornn/discussions/categories/q-a)
+- Design / RFC discussion → [Discussions → Ideas](https://github.com/ChronoAIProject/Ornn/discussions/categories/ideas)
+- Bug? Feature? → file an [issue](https://github.com/ChronoAIProject/Ornn/issues/new/choose)
+- Security report → [Private Vulnerability Reporting](https://github.com/ChronoAIProject/Ornn/security/advisories/new) — see [SECURITY.md](SECURITY.md)
+
+Thanks for contributing.
