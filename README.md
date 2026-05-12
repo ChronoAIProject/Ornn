@@ -9,9 +9,28 @@
   <a href="https://github.com/ChronoAIProject/Ornn/actions/workflows/ci.yml"><img src="https://github.com/ChronoAIProject/Ornn/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <a href="https://github.com/ChronoAIProject/Ornn/releases"><img src="https://img.shields.io/github/v/release/ChronoAIProject/Ornn" alt="Latest release" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/github/license/ChronoAIProject/Ornn" alt="License" /></a>
+  <a href="https://github.com/ChronoAIProject/Ornn/commits/develop"><img src="https://img.shields.io/github/last-commit/ChronoAIProject/Ornn/develop" alt="Last commit" /></a>
+  <a href="https://github.com/ChronoAIProject/Ornn/discussions"><img src="https://img.shields.io/github/discussions/ChronoAIProject/Ornn" alt="Discussions" /></a>
+  <a href="https://github.com/ChronoAIProject/Ornn/stargazers"><img src="https://img.shields.io/github/stars/ChronoAIProject/Ornn?style=flat" alt="Stars" /></a>
 </p>
 
-<p align="center">The agent-facing skill-lifecycle API for AI agents.</p>
+<p align="center">
+  <img src="https://img.shields.io/badge/status-alpha-orange" alt="Project status: alpha" />
+  <img src="https://img.shields.io/badge/model-agnostic-blue" alt="Model-agnostic" />
+  <img src="https://img.shields.io/badge/transport-HTTP%20%7C%20MCP-blueviolet" alt="HTTP and MCP" />
+</p>
+
+<p align="center"><strong>The agent-facing skill-lifecycle API for AI agents.</strong></p>
+
+<p align="center">
+  <a href="#what-is-ornn">What is Ornn</a> ·
+  <a href="#how-it-works">How it works</a> ·
+  <a href="#quickstart">Quickstart</a> ·
+  <a href="#documentation">Docs</a> ·
+  <a href="#roadmap">Roadmap</a> ·
+  <a href="#community">Community</a> ·
+  <a href="#contributing">Contributing</a>
+</p>
 
 ---
 
@@ -29,17 +48,74 @@ Closest analog: **npm registry + npm CLI fused, model-agnostic** — works for C
 
 `ornn-web` is a secondary surface for skill owners and platform admins; it is not the primary product.
 
-## How to use Ornn
+## How it works
 
-Ornn is model-agnostic — any AI agent runtime (Claude, GPT, Gemini, or a custom in-house stack) can connect and consume the full skill-lifecycle API. Three steps to bring an agent online:
+```
+┌──────────────┐    HTTP / MCP    ┌──────────────┐    auth     ┌──────────┐
+│   AI agent   │ ───────────────▶ │   ornn-api   │ ──────────▶ │  NyxID   │
+│ (any model)  │                  │              │             └──────────┘
+└──────────────┘                  │              │   storage   ┌──────────┐
+       │                          │              │ ──────────▶ │ MongoDB  │
+       │                          │              │             └──────────┘
+       │                          │              │   sandbox   ┌──────────┐
+       │ pull / execute           │              │ ──────────▶ │ OpenSbox │
+       ▼                          └──────────────┘             └──────────┘
+┌──────────────┐
+│ Local skill  │
+│   runtime    │
+└──────────────┘
+```
 
-1. **Install the ChronoAI core service skill into the agent.** This is the bootstrap skill — it introduces Ornn to the agent and drives the rest of the setup.
-2. **Let the agent provision the NyxID CLI.** On first run, the core skill instructs the agent to install `nyxid` — the CLI that brokers every Ornn request and response with proper authentication and authorization. The agent follows the skill's setup procedure end-to-end; no manual operator steps required.
-3. **Start the conversation.** Once `nyxid` is configured in the agent's environment, ask it to search, install, run, build, or publish Ornn skills. The agent learns the end-to-end lifecycle — `search → pull → install → execute → build → upload → share` — through the same API it just connected to.
+The agent talks to `ornn-api` through `nyxid`, which brokers authentication and authorization on the agent's behalf. Skills are versioned artifacts that the agent pulls, runs in a sandbox, and (optionally) publishes back.
+
+For a deeper view, see [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+
+## Quickstart
+
+> **Status:** alpha. Surfaces and schemas can change before v1. Pin a release tag.
+
+The shortest path to bringing an agent online with Ornn — no manual operator steps inside the agent loop:
+
+1. **Install the ChronoAI core service skill into your agent.** This is the bootstrap skill — it introduces Ornn to the agent and drives the rest of setup.
+2. **Let the agent provision the NyxID CLI.** On first run, the core skill instructs the agent to install `nyxid`. The agent follows the skill end-to-end.
+3. **Talk to the agent.** Ask it to search, install, run, build, or publish skills. The agent learns the lifecycle through the same API it just connected to.
+
+Once connected, an agent can hit the API directly. A minimal request shape (after `nyxid` is configured):
+
+```bash
+nyxid proxy request ornn-api GET /api/v1/skills?q=summarize
+```
+
+Full per-endpoint reference: [ornn.chrono-ai.fun/docs](https://ornn.chrono-ai.fun/docs).
 
 ## Documentation
 
-Full documentation lives at [ornn.chrono-ai.fun/docs](https://ornn.chrono-ai.fun/docs).
+- **Product docs** — [ornn.chrono-ai.fun/docs](https://ornn.chrono-ai.fun/docs)
+- **Architecture** — [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
+- **Conventions** — [`docs/CONVENTIONS.md`](docs/CONVENTIONS.md)
+- **Design system** — [`docs/DESIGN.md`](docs/DESIGN.md)
+
+## Roadmap
+
+Tracked publicly on GitHub:
+
+- **Open issues & milestones** — [Issues](https://github.com/ChronoAIProject/Ornn/issues) · [Milestones](https://github.com/ChronoAIProject/Ornn/milestones)
+- **What shipped** — [Releases](https://github.com/ChronoAIProject/Ornn/releases) · per-package changelogs in [`ornn-api/CHANGELOG.md`](ornn-api/CHANGELOG.md) and [`ornn-web/CHANGELOG.md`](ornn-web/CHANGELOG.md)
+
+## Community
+
+- **Questions / how-to** → [Discussions → Q&A](https://github.com/ChronoAIProject/Ornn/discussions/categories/q-a)
+- **Ideas / RFCs** → [Discussions → Ideas](https://github.com/ChronoAIProject/Ornn/discussions/categories/ideas)
+- **Show off your agent integration** → [Discussions → Show & Tell](https://github.com/ChronoAIProject/Ornn/discussions/categories/show-and-tell)
+- **Bug or feature** → [open an issue](https://github.com/ChronoAIProject/Ornn/issues/new/choose)
+- **Security report** → [Private Vulnerability Reporting](https://github.com/ChronoAIProject/Ornn/security/advisories/new) — see [SECURITY.md](SECURITY.md)
+- **Support guide** → [SUPPORT.md](SUPPORT.md)
+
+## Contributing
+
+Pull requests are welcome. Before opening one, read [CONTRIBUTING.md](CONTRIBUTING.md) — it covers the issue-first workflow, branching, commit decomposition, and the changeset rule (CI blocks PRs without one).
+
+By participating you agree to follow our [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## License
 

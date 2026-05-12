@@ -1,0 +1,58 @@
+name: Feature request
+description: Propose a new feature or enhancement to an existing one.
+title: "[Feature] "
+labels: ["enhancement"]
+assignees: ["chronoai-shining"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for proposing a feature. If your idea is still exploratory or open-ended, consider starting a thread in [Discussions → Ideas](https://github.com/ChronoAIProject/Ornn/discussions/categories/ideas) first — issues are for tracked, scoped work.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: Describe the user / agent-developer pain point. Avoid jumping straight to a solution.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What should change? API shape, UX flow, deployment behaviour, etc.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Which surface?
+      multiple: true
+      options:
+        - ornn-api (backend)
+        - ornn-web (frontend)
+        - deployment / infra
+        - documentation
+        - other
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What other approaches did you weigh? Why this one?
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope / non-goals
+      description: What is explicitly out of scope for this issue?
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Links to related issues, prior discussions, screenshots, mockups.
