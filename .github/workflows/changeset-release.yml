@@ -20,10 +20,17 @@ name: Changeset release
 #   C) No pending changesets and the tag already exists — a normal
 #      hotfix / docs / CI push that shouldn't release anything. No-op.
 #
-# The bot needs `contents: write` + `pull-requests: write` so it can
-# push branches and open PRs. The org-level "Allow GitHub Actions to
-# create and approve pull requests" must be enabled for the PR-create
-# step to succeed (confirmed April 2026).
+# The bot authenticates as the `ornn-release-bot` GitHub App (issue #237)
+# rather than the default GITHUB_TOKEN. GITHUB_TOKEN-driven pushes do
+# not trigger downstream workflows (GitHub's recursive-run safeguard),
+# which leaves required status checks on bot-opened PRs stuck in
+# "Expected — waiting" forever. App tokens are a separate identity, so
+# the safeguard does not apply.
+#
+# The app needs `contents: write` + `pull-requests: write` on the repo
+# (granted at install time). Org-level "Allow GitHub Actions to create
+# and approve pull requests" must stay enabled regardless of the token
+# in use.
 
 on:
   push:
@@ -36,13 +43,44 @@ concurrency:
 jobs:
   release:
     runs-on: ubuntu-latest
+    # The `permissions:` block governs the default GITHUB_TOKEN; this
+    # workflow doesn't rely on it for any writes (those go through the
+    # app token minted in the first step) but `contents: read` is
+    # needed by the checkout that runs before the app token exists.
     permissions:
-      contents: write
-      pull-requests: write
+      contents: read
     steps:
-      - uses: actions/checkout@v4
+      - name: Mint app token
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.RELEASE_BOT_APP_ID }}
+          private-key: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
+
+      - name: Discover app bot user id (for git commit email)
+        id: bot-id
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          SLUG="${{ steps.app-token.outputs.app-slug }}"
+          # GitHub App bot accounts have a numeric user id used in the
+          # noreply email pattern:
+          #   <user-id>+<slug>[bot]@users.noreply.github.com
+          # The id is stable for the lifetime of the app. Look it up
+          # rather than hardcoding so the workflow keeps working if
+          # the app is ever recreated with the same slug.
+          USER_ID=$(gh api "/users/${SLUG}%5Bbot%5D" --jq .id)
+          echo "slug=${SLUG}" >> "$GITHUB_OUTPUT"
+          echo "user-id=${USER_ID}" >> "$GITHUB_OUTPUT"
+          echo "Resolved ${SLUG}[bot] → user id ${USER_ID}"
+
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
+          # Make git push, gh CLI, and downstream `pull_request` event
+          # fan-out all run under the app identity — this is the whole
+          # point of #237.
+          token: ${{ steps.app-token.outputs.token }}
 
       - name: Detect state
         id: state
@@ -78,12 +116,12 @@ jobs:
       - name: Create release-bump PR (A)
         if: steps.state.outputs.pending != '0'
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GIT_AUTHOR_NAME: github-actions[bot]
-          GIT_AUTHOR_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
-          GIT_COMMITTER_NAME: github-actions[bot]
-          GIT_COMMITTER_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          GIT_AUTHOR_NAME: ${{ steps.bot-id.outputs.slug }}[bot]
+          GIT_AUTHOR_EMAIL: ${{ steps.bot-id.outputs.user-id }}+${{ steps.bot-id.outputs.slug }}[bot]@users.noreply.github.com
+          GIT_COMMITTER_NAME: ${{ steps.bot-id.outputs.slug }}[bot]
+          GIT_COMMITTER_EMAIL: ${{ steps.bot-id.outputs.user-id }}+${{ steps.bot-id.outputs.slug }}[bot]@users.noreply.github.com
         run: |
           bun run version-packages
           NEW_VERSION=$(node -p "require('./ornn-api/package.json').version")
@@ -112,11 +150,11 @@ jobs:
       - name: Create tag + GitHub Release (B)
         if: steps.state.outputs.pending == '0' && steps.state.outputs.tag_exists == 'false'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GIT_AUTHOR_NAME: github-actions[bot]
-          GIT_AUTHOR_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
-          GIT_COMMITTER_NAME: github-actions[bot]
-          GIT_COMMITTER_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          GIT_AUTHOR_NAME: ${{ steps.bot-id.outputs.slug }}[bot]
+          GIT_AUTHOR_EMAIL: ${{ steps.bot-id.outputs.user-id }}+${{ steps.bot-id.outputs.slug }}[bot]@users.noreply.github.com
+          GIT_COMMITTER_NAME: ${{ steps.bot-id.outputs.slug }}[bot]
+          GIT_COMMITTER_EMAIL: ${{ steps.bot-id.outputs.user-id }}+${{ steps.bot-id.outputs.slug }}[bot]@users.noreply.github.com
         run: |
           VERSION="${{ steps.state.outputs.version }}"
           TAG="${{ steps.state.outputs.tag }}"
@@ -148,12 +186,12 @@ jobs:
       - name: Open sync PR main → develop (B)
         if: steps.state.outputs.pending == '0' && steps.state.outputs.tag_exists == 'false'
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GIT_AUTHOR_NAME: github-actions[bot]
-          GIT_AUTHOR_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
-          GIT_COMMITTER_NAME: github-actions[bot]
-          GIT_COMMITTER_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          GIT_AUTHOR_NAME: ${{ steps.bot-id.outputs.slug }}[bot]
+          GIT_AUTHOR_EMAIL: ${{ steps.bot-id.outputs.user-id }}+${{ steps.bot-id.outputs.slug }}[bot]@users.noreply.github.com
+          GIT_COMMITTER_NAME: ${{ steps.bot-id.outputs.slug }}[bot]
+          GIT_COMMITTER_EMAIL: ${{ steps.bot-id.outputs.user-id }}+${{ steps.bot-id.outputs.slug }}[bot]@users.noreply.github.com
         run: |
           VERSION="${{ steps.state.outputs.version }}"
           SYNC_BRANCH="sync/post-release-v${VERSION}"
@@ -213,10 +251,16 @@ jobs:
               echo "::error::refusing to auto-merge: base '$PR_BASE' is not 'develop'"
               exit 1
             fi
+            # Allow the previous github-actions identity (kept for old
+            # in-flight runs that started before the #237 cutover) and
+            # the new release-bot app identity. Anything else is
+            # refused so a hostile actor can't make this safety rail
+            # auto-merge an arbitrary PR.
             case "$PR_AUTHOR" in
               github-actions|app/github-actions|github-actions\[bot\]) ;;
+              ornn-release-bot|app/ornn-release-bot|ornn-release-bot\[bot\]) ;;
               *)
-                echo "::error::refusing to auto-merge: author '$PR_AUTHOR' is not the github-actions bot"
+                echo "::error::refusing to auto-merge: author '$PR_AUTHOR' is not a trusted release bot"
                 exit 1
                 ;;
             esac

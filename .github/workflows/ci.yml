@@ -9,7 +9,7 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: oven-sh/setup-bun@v2
       - run: bun install --frozen-lockfile
       - run: bun run lint
@@ -17,7 +17,7 @@ jobs:
   typecheck:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: oven-sh/setup-bun@v2
       - run: bun install --frozen-lockfile
       - run: bun run typecheck
@@ -25,7 +25,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: oven-sh/setup-bun@v2
       - run: bun install --frozen-lockfile
       - run: bun run test
@@ -33,23 +33,23 @@ jobs:
   python-sdk-test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: pip
-          cache-dependency-path: ornn-sdk-python/pyproject.toml
-      - name: Install ornn-sdk-python
-        working-directory: ornn-sdk-python
+          cache-dependency-path: sdk/python/pyproject.toml
+      - name: Install ornn-sdk (python)
+        working-directory: sdk/python
         run: pip install -e ".[dev]"
       - name: Run pytest
-        working-directory: ornn-sdk-python
+        working-directory: sdk/python
         run: pytest -q
 
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: oven-sh/setup-bun@v2
       - run: bun install --frozen-lockfile
       - run: bun run build:web
@@ -57,7 +57,7 @@ jobs:
   gitleaks:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
       - name: Install gitleaks
@@ -68,11 +68,40 @@ jobs:
       - name: Scan for secrets
         run: gitleaks detect --source . --log-opts="origin/${{ github.base_ref }}..HEAD" --verbose
 
+  audit:
+    # Fails on any high or critical advisory in the Bun workspace. Moderate
+    # and below print to the PR step summary but don't block — Dependabot
+    # picks them up on the weekly cadence (.github/dependabot.yml).
+    #
+    # Ignored advisories — accepted residual risk documented in #385:
+    #   GHSA-r5fr-rjxr-66jc  lodash-es high   (via mermaid)
+    #   GHSA-f23m-r3pf-42rh  lodash-es moderate (via mermaid)
+    # lodash-es is archived at 4.17.21 with no upstream fix; the vulnerable
+    # APIs (_.template / _.unset / _.omit) are not reachable through
+    # mermaid's surface under our usage.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - name: Audit (high+critical block PR)
+        run: bun audit --audit-level=high --ignore=GHSA-r5fr-rjxr-66jc --ignore=GHSA-f23m-r3pf-42rh
+      - name: Audit summary (moderate+ — informational)
+        if: ${{ !cancelled() }}
+        run: |
+          {
+            echo "### bun audit — full report (moderate and above)"
+            echo ""
+            echo '```'
+            bun audit --audit-level=moderate || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
   docker-build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-buildx-action@v3
+      - uses: actions/checkout@v6
+      - uses: docker/setup-buildx-action@v4
       - name: Build ornn-api image
         run: docker build -t ornn-api-ci -f ornn-api/Dockerfile .
       - name: Build ornn-web image

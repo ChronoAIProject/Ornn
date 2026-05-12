@@ -6,7 +6,13 @@
 
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
+import type { Context } from "hono";
 import type { SkillGenerationService } from "./service";
+import type { QuotaService } from "../../quota/service";
+import type { LlmProvidersService } from "../../settings/llmProviders/service";
+import { throwQuotaError } from "../../quota/routes";
+import { throwModelResolutionError } from "../../settings/llmProviders/routes";
+import type { ChargeOutcome } from "../../quota/types";
 import {
   type AuthVariables,
   nyxidAuthMiddleware,
@@ -23,16 +29,81 @@ const logger = pino({ level: "info" }).child({ module: "skillGenerationRoutes" }
 
 export interface GenerationRoutesConfig {
   generationService: SkillGenerationService;
-  keepAliveIntervalMs: number;
+  /**
+   * SSE keep-alive interval (ms). Resolved from admin settings
+   * (`skillGen.sseKeepAliveMs`) on every request so an admin's edit
+   * lands without a redeploy. Internal helpers still take a number
+   * — the route handler resolves once per request and threads it down.
+   */
+  keepAliveIntervalMsResolver: () => Promise<number>;
+  /** Per-user quota gate (charged on completion). */
+  quotaService: QuotaService;
+  /** Admin-curated model catalog (per-provider, #270). */
+  llmProvidersService: LlmProvidersService;
+}
+
+/** Helper to resolve keep-alive ms with a safe fallback. */
+async function resolveKeepAliveMs(
+  resolver: () => Promise<number>,
+): Promise<number> {
+  try {
+    const v = await resolver();
+    return Number.isFinite(v) && v > 0 ? v : 15_000;
+  } catch (err) {
+    logger.warn(
+      { err: (err as Error).message },
+      "Failed to resolve skillGen sseKeepAliveMs; using 15s default",
+    );
+    return 15_000;
+  }
 }
 
 /**
- * Stream generation events via SSE with keep-alive.
+ * Run quota check + model resolution for a skill-gen request. Returns
+ * the resolved model id; throws the appropriate AppError when either
+ * gate fails (quota → 429, models → 503/4xx).
+ */
+async function preflight(
+  c: Context<{ Variables: AuthVariables }>,
+  quotaService: QuotaService,
+  llmProvidersService: LlmProvidersService,
+  requestedModelId: string | undefined,
+): Promise<{ modelId: string; userId: string; permissions: readonly string[] | undefined }> {
+  const authCtx = getAuth(c);
+  const decision = await quotaService.checkAllowed({
+    userId: authCtx.userId,
+    permissions: authCtx.permissions,
+    surface: "skillGen",
+  });
+  if (!decision.allowed) throwQuotaError(decision);
+
+  const resolution = await llmProvidersService.resolveModel({
+    surface: "skillGen",
+    requested: requestedModelId,
+  });
+  if (resolution.kind !== "ok") throwModelResolutionError(resolution);
+  return { modelId: resolution.modelId, userId: authCtx.userId, permissions: authCtx.permissions };
+}
+
+/**
+ * Stream generation events via SSE with keep-alive. When `chargeAfter`
+ * is set, fires a quota charge after the stream finishes — outcome
+ * derived from whether the stream emitted a `generation_complete` event
+ * (skill-side success), a `validation_error` (skill ran but produced
+ * invalid output — still chargeable), or only `error` events
+ * (system_error — no charge).
  */
 async function streamGenerationEvents(
   c: any,
   events: AsyncIterable<{ type: string; [key: string]: unknown }>,
   keepAliveIntervalMs: number,
+  chargeAfter?: {
+    quotaService: QuotaService;
+    userId: string;
+    permissions: readonly string[] | undefined;
+    /** Resolved model id used for the LLM call — flows into `usedByModel`. */
+    modelId: string;
+  },
 ) {
   c.header("Cache-Control", "no-cache");
   c.header("Connection", "keep-alive");
@@ -47,13 +118,33 @@ async function streamGenerationEvents(
     const onAbort = () => clearInterval(keepAlive);
     signal.addEventListener("abort", onAbort, { once: true });
 
+    let outcome: ChargeOutcome = "system_error";
+
     try {
       for await (const event of events) {
         await stream.writeSSE({ data: JSON.stringify(event) });
+        if (event.type === "generation_complete") outcome = "success";
+        else if (event.type === "validation_error") outcome = "skill_error";
       }
     } finally {
       clearInterval(keepAlive);
       signal.removeEventListener("abort", onAbort);
+      if (chargeAfter) {
+        await chargeAfter.quotaService
+          .chargeOnCompletion({
+            userId: chargeAfter.userId,
+            permissions: chargeAfter.permissions,
+            surface: "skillGen",
+            outcome,
+            modelId: chargeAfter.modelId,
+          })
+          .catch((err) => {
+            logger.warn(
+              { userId: chargeAfter.userId, err: (err as Error).message },
+              "Quota charge after skill-gen stream failed",
+            );
+          });
+      }
     }
   });
 }
@@ -102,14 +193,14 @@ async function analyzePackageContent(zipBuffer: Uint8Array): Promise<string> {
 }
 
 export function createGenerationRoutes(config: GenerationRoutesConfig): Hono<{ Variables: AuthVariables }> {
-  const { generationService, keepAliveIntervalMs } = config;
+  const { generationService, keepAliveIntervalMsResolver, quotaService, llmProvidersService } = config;
   const app = new Hono<{ Variables: AuthVariables }>();
 
   const auth = nyxidAuthMiddleware();
 
   /**
    * POST /skills/generate
-   * Input: multipart (prompt + optional package ZIP) or JSON (prompt or messages)
+   * Input: multipart (prompt + optional package ZIP) or JSON (prompt or messages, optional modelId)
    * Response: SSE stream of generation events
    * Requires: ornn:skill:build
    */
@@ -122,6 +213,7 @@ export function createGenerationRoutes(config: GenerationRoutesConfig): Hono<{ V
       const authCtx = getAuth(c);
       let prompt: string;
       let packageContent: string | null = null;
+      let requestedModelId: string | undefined;
 
       if (contentType.includes("multipart/form-data")) {
         const body = await c.req.parseBody({ all: true });
@@ -131,6 +223,10 @@ export function createGenerationRoutes(config: GenerationRoutesConfig): Hono<{ V
         }
         prompt = body["prompt"];
 
+        if (typeof body["modelId"] === "string" && body["modelId"]) {
+          requestedModelId = body["modelId"];
+        }
+
         const packageFile = body["package"];
         if (packageFile instanceof File) {
           const buf = await packageFile.arrayBuffer();
@@ -138,14 +234,20 @@ export function createGenerationRoutes(config: GenerationRoutesConfig): Hono<{ V
         }
       } else if (contentType.includes("application/json")) {
         const body = await c.req.json();
+        if (typeof body.modelId === "string" && body.modelId) {
+          requestedModelId = body.modelId;
+        }
 
         // Multi-turn format: messages array
         if (body.messages && Array.isArray(body.messages)) {
           logger.info({ userId: authCtx.userId, messageCount: body.messages.length }, "Multi-turn generation request");
+          const pf = await preflight(c, quotaService, llmProvidersService, requestedModelId);
+          const keepAliveMs = await resolveKeepAliveMs(keepAliveIntervalMsResolver);
           return streamGenerationEvents(
             c,
-            generationService.generateStreamWithHistory(body.messages, c.req.raw.signal),
-            keepAliveIntervalMs,
+            generationService.generateStreamWithHistory(body.messages, c.req.raw.signal, pf.modelId),
+            keepAliveMs,
+            { quotaService, userId: pf.userId, permissions: pf.permissions, modelId: pf.modelId },
           );
         }
 
@@ -158,17 +260,20 @@ export function createGenerationRoutes(config: GenerationRoutesConfig): Hono<{ V
       }
 
       const signal = c.req.raw.signal;
+      const pf = await preflight(c, quotaService, llmProvidersService, requestedModelId);
 
       const query = packageContent
         ? `Existing skill package content:\n${packageContent}\n\nUser requirement: ${prompt}`
         : prompt;
 
-      logger.info({ userId: authCtx.userId, promptLength: prompt.length }, "Generation request");
+      logger.info({ userId: authCtx.userId, promptLength: prompt.length, modelId: pf.modelId }, "Generation request");
 
+      const keepAliveMs = await resolveKeepAliveMs(keepAliveIntervalMsResolver);
       return streamGenerationEvents(
         c,
-        generationService.generateStream(query, signal),
-        keepAliveIntervalMs,
+        generationService.generateStream(query, signal, pf.modelId),
+        keepAliveMs,
+        { quotaService, userId: pf.userId, permissions: pf.permissions, modelId: pf.modelId },
       );
     },
   );
@@ -198,6 +303,7 @@ export function createGenerationRoutes(config: GenerationRoutesConfig): Hono<{ V
         path?: unknown;
         framework?: unknown;
         description?: unknown;
+        modelId?: unknown;
       };
 
       const inlineCode = typeof body.code === "string" ? body.code : undefined;
@@ -205,6 +311,7 @@ export function createGenerationRoutes(config: GenerationRoutesConfig): Hono<{ V
       const path = typeof body.path === "string" ? body.path : undefined;
       const framework = typeof body.framework === "string" ? body.framework : undefined;
       const description = typeof body.description === "string" ? body.description : undefined;
+      const requestedModelId = typeof body.modelId === "string" ? body.modelId : undefined;
 
       if (!inlineCode && !repoUrl) {
         throw AppError.badRequest(
@@ -260,15 +367,19 @@ export function createGenerationRoutes(config: GenerationRoutesConfig): Hono<{ V
       );
 
       const signal = c.req.raw.signal;
+      const pf = await preflight(c, quotaService, llmProvidersService, requestedModelId);
 
+      const keepAliveMs = await resolveKeepAliveMs(keepAliveIntervalMsResolver);
       return streamGenerationEvents(
         c,
         generationService.generateFromSource(
           code,
           { framework: fetchedFramework, description, sourceUrl },
           signal,
+          pf.modelId,
         ),
-        keepAliveIntervalMs,
+        keepAliveMs,
+        { quotaService, userId: pf.userId, permissions: pf.permissions, modelId: pf.modelId },
       );
     },
   );
@@ -293,6 +404,7 @@ export function createGenerationRoutes(config: GenerationRoutesConfig): Hono<{ V
 
       const endpoints = Array.isArray(body.endpoints) ? body.endpoints : undefined;
       const description = typeof body.description === "string" ? body.description : undefined;
+      const requestedModelId = typeof body.modelId === "string" ? body.modelId : undefined;
 
       logger.info(
         { userId: authCtx.userId, specLength: body.spec.length, endpoints, hasDescription: !!description },
@@ -300,11 +412,14 @@ export function createGenerationRoutes(config: GenerationRoutesConfig): Hono<{ V
       );
 
       const signal = c.req.raw.signal;
+      const pf = await preflight(c, quotaService, llmProvidersService, requestedModelId);
 
+      const keepAliveMs = await resolveKeepAliveMs(keepAliveIntervalMsResolver);
       return streamGenerationEvents(
         c,
-        generationService.generateFromOpenApi(body.spec, { endpoints, description }, signal),
-        keepAliveIntervalMs,
+        generationService.generateFromOpenApi(body.spec, { endpoints, description }, signal, pf.modelId),
+        keepAliveMs,
+        { quotaService, userId: pf.userId, permissions: pf.permissions, modelId: pf.modelId },
       );
     },
   );

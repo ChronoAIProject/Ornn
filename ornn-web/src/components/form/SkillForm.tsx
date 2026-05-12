@@ -8,6 +8,7 @@
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { useTranslation } from "react-i18next";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { Button } from "@/components/ui/Button";
@@ -32,12 +33,19 @@ const skillFormSchema = z.object({
   readmeMd: z.string().max(50000).optional(),
 });
 
-type SkillFormData = z.infer<typeof skillFormSchema>;
+// `z.input` is the pre-validation shape (optional fields where the
+// schema has `.default(...)`); `z.output` is post-validation (defaults
+// applied, so those fields are required). @hookform/resolvers 5 typed
+// the Resolver against the output, so useForm has to be parameterised
+// with both — pre-validation form state and post-validation submit
+// payload — for the SubmitHandler to typecheck.
+type SkillFormInput = z.input<typeof skillFormSchema>;
+type SkillFormData = z.output<typeof skillFormSchema>;
 
 export interface SkillFormProps {
   /** "create" shows all fields; "edit" hides name, version, file */
   mode: "create" | "edit";
-  defaultValues?: Partial<SkillFormData>;
+  defaultValues?: Partial<SkillFormInput>;
   onSubmit: (data: SkillFormData, file?: File) => void;
   isSubmitting?: boolean;
   className?: string;
@@ -55,13 +63,14 @@ export function SkillForm({
   isSubmitting = false,
   className = "",
 }: SkillFormProps) {
+  const { t } = useTranslation();
   const {
     register,
     handleSubmit,
     control,
     watch,
     formState: { errors },
-  } = useForm<SkillFormData>({
+  } = useForm<SkillFormInput, unknown, SkillFormData>({
     resolver: zodResolver(skillFormSchema),
     defaultValues: {
       name: "",
@@ -90,7 +99,7 @@ export function SkillForm({
       {mode === "create" && (
         <Input
           label="Name"
-          placeholder="my-skill-name"
+          placeholder={t("form.namePlaceholder")}
           error={errors.name?.message}
           {...register("name")}
         />
@@ -98,7 +107,7 @@ export function SkillForm({
 
       <Input
         label="Description"
-        placeholder="What does this skill do?"
+        placeholder={t("form.descPlaceholder")}
         error={errors.description?.message}
         {...register("description")}
       />
@@ -110,7 +119,7 @@ export function SkillForm({
           <Select
             label="Category"
             options={categoryOptions}
-            placeholder="Select category"
+            placeholder={t("form.selectCategory")}
             error={errors.category?.message}
             {...field}
           />
@@ -124,11 +133,11 @@ export function SkillForm({
           render={({ field }) => (
             <Select
               label="Output Type"
-              options={OUTPUT_TYPES.map((t) => ({
-                value: t,
-                label: t === "text" ? "Text (stdout)" : "File (artifact)",
+              options={OUTPUT_TYPES.map((ot) => ({
+                value: ot,
+                label: ot === "text" ? "Text (stdout)" : "File (artifact)",
               }))}
-              placeholder="Select output type"
+              placeholder={t("form.selectOutputType")}
               error={errors.outputType?.message}
               {...field}
               value={field.value ?? ""}
@@ -142,7 +151,7 @@ export function SkillForm({
         control={control}
         render={({ field }) => (
           <TagInput
-            tags={field.value}
+            tags={field.value ?? []}
             onChange={field.onChange}
             error={errors.tags?.message}
           />
@@ -152,13 +161,13 @@ export function SkillForm({
       <div className="grid gap-6 sm:grid-cols-2">
         <Input
           label="License"
-          placeholder="MIT, Apache-2.0, etc."
+          placeholder={t("form.licensePlaceholder")}
           error={errors.license?.message}
           {...register("license")}
         />
         <Input
           label="Repository URL"
-          placeholder="https://github.com/..."
+          placeholder={t("form.repoPlaceholder")}
           error={errors.repoUrl?.message}
           {...register("repoUrl")}
         />

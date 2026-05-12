@@ -88,6 +88,66 @@ function extractUserFromClaims(
 }
 
 /**
+ * Whether the resolved user object is missing display-grade profile
+ * info (email or human-readable name). Specifically: empty fields, or
+ * the bug-prone case where `displayName` fell back to the NyxID
+ * GUID because the OAuth id_token didn't carry email/name. The user-
+ * menu and PostHog identify both rely on these, so we re-pull from
+ * `/api/v1/me` whenever this is true.
+ */
+function needsProfileBackfill(user: AuthUser | null): boolean {
+  if (!user) return false;
+  if (!user.email) return true;
+  if (!user.displayName) return true;
+  if (user.displayName === user.id) return true;
+  return false;
+}
+
+/**
+ * Pull `email` / `displayName` / `roles` / `permissions` from
+ * `/api/v1/me` and merge into the persisted user. Used both at
+ * login time (when id_token is light) and on rehydrate (when a
+ * previous Safari session persisted a UUID-as-displayName).
+ *
+ * Idempotent: keeps existing displayName if it's already a real
+ * name (anything other than the NyxID GUID). Failure is logged
+ * and swallowed — UI keeps the UUID rather than crash.
+ */
+async function backfillProfileFromMe(
+  set: (
+    partial:
+      | Partial<AuthState>
+      | ((state: AuthState) => Partial<AuthState>),
+  ) => void,
+): Promise<void> {
+  try {
+    const { fetchMe } = await import("@/services/meApi");
+    const me = await fetchMe();
+    if (!me) return;
+    set((prev) => ({
+      user: prev.user
+        ? {
+            ...prev.user,
+            email: prev.user.email || me.email,
+            displayName:
+              prev.user.displayName && prev.user.displayName !== prev.user.id
+                ? prev.user.displayName
+                : me.displayName || me.email || prev.user.id,
+            roles: prev.user.roles?.length ? prev.user.roles : me.roles,
+            permissions: prev.user.permissions?.length
+              ? prev.user.permissions
+              : me.permissions,
+          }
+        : prev.user,
+    }));
+  } catch (err) {
+    logger.error("Me backfill failed", {
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
+/**
  * Generate a random state parameter for CSRF protection.
  */
 function generateState(): string {
@@ -203,37 +263,10 @@ export const useAuthStore = create<AuthState>()(
 
           // Back-fill from Ornn's /api/v1/me when the OAuth id_token
           // shipped without email / name claims (happens for
-          // admin-created NyxID users). The backend gets the full
-          // profile via the proxy identity token.
-          if (!user.email || !user.displayName || user.displayName === user.id) {
-            void (async () => {
-              try {
-                const { fetchMe } = await import("@/services/meApi");
-                const me = await fetchMe();
-                if (!me) return;
-                set((prev) => ({
-                  ...prev,
-                  user: prev.user
-                    ? {
-                        ...prev.user,
-                        email: prev.user.email || me.email,
-                        displayName:
-                          prev.user.displayName && prev.user.displayName !== prev.user.id
-                            ? prev.user.displayName
-                            : me.displayName || me.email || prev.user.id,
-                        roles: prev.user.roles?.length ? prev.user.roles : me.roles,
-                        permissions: prev.user.permissions?.length
-                          ? prev.user.permissions
-                          : me.permissions,
-                      }
-                    : prev.user,
-                }));
-              } catch (err) {
-                logger.error("Me backfill failed", {
-                  error: err instanceof Error ? err.message : String(err),
-                });
-              }
-            })();
+          // admin-created NyxID users). Fire-and-forget; we don't
+          // block the login path on it.
+          if (needsProfileBackfill(user)) {
+            void backfillProfileFromMe(set);
           }
         } catch (err) {
           logger.error("NyxID OAuth callback failed", {
@@ -351,6 +384,15 @@ export const useAuthStore = create<AuthState>()(
             logger.info("Found valid persisted session");
             set({ isAuthenticated: true, isInitialized: true, isLoading: false });
             get().startTokenRefresh();
+            // Self-heal on rehydrate: a previous session may have
+            // persisted user.displayName === user.id (UUID fallback)
+            // because the original id_token shipped without email/name
+            // and the user closed the tab before the initial backfill
+            // resolved. Re-pull from /me so the Navbar / PostHog
+            // identify see a real name on this and every future tab.
+            if (needsProfileBackfill(state.user)) {
+              void backfillProfileFromMe(set);
+            }
             return;
           }
 
@@ -360,6 +402,12 @@ export const useAuthStore = create<AuthState>()(
             set({ isLoading: true });
             get().refreshToken().then(() => {
               set({ isInitialized: true, isLoading: false });
+              // After refresh, the user object is reconstructed from
+              // the new access token; if it still lacks profile info,
+              // backfill (same self-heal as the un-expired path above).
+              if (needsProfileBackfill(get().user)) {
+                void backfillProfileFromMe(set);
+              }
             });
             return;
           }

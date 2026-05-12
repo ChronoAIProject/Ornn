@@ -5,12 +5,14 @@
  */
 
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { motion } from "framer-motion";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import type { OAuthProvider } from "@/types/user";
 import type { OAuthProviderType } from "@/types/auth";
+import { translateError } from "@/utils/translateError";
 
 export interface LinkedAccountsCardProps {
   /** Linked OAuth providers. */
@@ -68,6 +70,7 @@ export function LinkedAccountsCard({
   onUnlink,
   disabled = false,
 }: LinkedAccountsCardProps) {
+  const { t } = useTranslation();
   const [loadingProvider, setLoadingProvider] = useState<OAuthProviderType | null>(null);
   const [unlinkConfirm, setUnlinkConfirm] = useState<OAuthProviderType | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -82,7 +85,7 @@ export function LinkedAccountsCard({
     try {
       await onLink(provider);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to link account");
+      setError(translateError(err, "Failed to link account"));
     } finally {
       setLoadingProvider(null);
     }
@@ -98,7 +101,7 @@ export function LinkedAccountsCard({
       await onUnlink(unlinkConfirm);
       setUnlinkConfirm(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to unlink account");
+      setError(translateError(err, "Failed to unlink account"));
     } finally {
       setLoadingProvider(null);
     }
@@ -143,7 +146,7 @@ export function LinkedAccountsCard({
                         {formatDate(linked.linkedAt)}
                       </p>
                     ) : (
-                      <p className="text-xs text-meta">Not connected</p>
+                      <p className="text-xs text-meta">{t("userProfile.notConnected")}</p>
                     )}
                   </div>
                 </div>
@@ -196,7 +199,7 @@ export function LinkedAccountsCard({
       <Modal
         isOpen={unlinkConfirm !== null}
         onClose={() => setUnlinkConfirm(null)}
-        title="Unlink Account"
+        title={t("userProfile.unlinkAccountTitle")}
       >
         <div className="space-y-4">
           <p className="font-text text-strong">

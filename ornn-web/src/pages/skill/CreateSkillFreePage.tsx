@@ -13,10 +13,12 @@ import { SkillPackagePreview } from "@/components/skill/SkillPackagePreview";
 import { ValidationErrorPanel } from "@/components/skill/ValidationErrorPanel";
 import { useCreateSkill } from "@/hooks/useSkills";
 import { useToastStore } from "@/stores/toastStore";
+import { track } from "@/lib/analytics";
 import {
   validateSkillZip,
   type ZipValidationResult,
 } from "@/utils/zipValidator";
+import { translateError } from "@/utils/translateError";
 import {
   validateSkillFrontmatter,
   type FrontmatterValidationError,
@@ -184,7 +186,7 @@ export function CreateSkillFreePage() {
         status: "invalid",
         files: [],
         metadata: null,
-        errors: [t("free.onlyZip")],
+        errors: [{ key: "errors.zip.onlyZipAccepted" }],
         warnings: [],
       });
       return;
@@ -198,7 +200,10 @@ export function CreateSkillFreePage() {
         files: [],
         metadata: null,
         errors: [
-          t("free.tooLarge", { size: formatFileSize(file.size) }),
+          {
+            key: "errors.zip.fileTooLarge",
+            params: { size: formatFileSize(file.size) },
+          },
         ],
         warnings: [],
       });
@@ -250,14 +255,27 @@ export function CreateSkillFreePage() {
 
     try {
       const skill = await createMutation.mutateAsync({ zipFile, skipValidation });
+      // Skills land published-by-default on create — emit both the
+      // creation event (for the funnel) and the publish event (for the
+      // "first version live" milestone). Backend separately emits
+      // server-side `api.skill.published`, so this is the client-side
+      // intent signal only.
+      track("skill.created", {
+        skillId: skill.guid,
+        source: "upload",
+        skipValidation,
+      });
+      track("skill.published", {
+        skillId: skill.guid,
+        source: "upload",
+      });
       addToast({
         type: "success",
         message: t("free.uploadSuccess", { name: skill.name }),
       });
       navigate(`/skills/${skill.name}`);
     } catch (err) {
-      const message =
-        err instanceof Error ? err.message : t("free.uploadFailed");
+      const message = translateError(err, t("free.uploadFailed"));
       addToast({ type: "error", message });
       setPageState(
         validationResult?.status === "warning" ? "warning" : "valid",
@@ -381,12 +399,12 @@ export function CreateSkillFreePage() {
           >
             {validationResult.errors.map((err, i) => (
               <p key={i} className="font-text text-sm text-danger">
-                {err}
+                {t(err.key, err.params ?? {})}
               </p>
             ))}
             {validationResult.warnings.map((warn, i) => (
               <p key={i} className="font-text text-sm text-warning">
-                {warn}
+                {t(warn.key, warn.params ?? {})}
               </p>
             ))}
             {pageState === "valid" && !hasFrontmatterErrors && (

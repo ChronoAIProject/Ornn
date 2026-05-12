@@ -18,6 +18,7 @@ import {
   createBrowserRouter,
   createRoutesFromElements,
   Navigate,
+  Outlet,
   Route,
   RouterProvider,
 } from "react-router-dom";
@@ -27,6 +28,26 @@ import { AdminLayout } from "@/components/layout/AdminLayout";
 import { AuthGuard } from "@/components/auth/AuthGuard";
 import { AdminGuard } from "@/components/auth/AdminGuard";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { HighlighterMarkFilter } from "@/pages/landing/HighlighterMark";
+import { VersionUpdateBanner } from "@/components/layout/VersionUpdateBanner";
+import { PostHogProvider } from "@/components/analytics/PostHogProvider";
+import { CookieConsentBanner } from "@/components/analytics/CookieConsentBanner";
+
+/**
+ * Top-level wrapper rendered as the root route's element. Lives INSIDE
+ * the router tree so child analytics hooks (`useLocation`) work, and
+ * renders the consent banner above every page. PostHogProvider has no
+ * DOM output — it just wires init / identify / pageview tracking.
+ */
+function AnalyticsRoot() {
+  return (
+    <>
+      <PostHogProvider />
+      <Outlet />
+      <CookieConsentBanner />
+    </>
+  );
+}
 
 // Route-level code split. Each lazy() call becomes its own async chunk.
 // Pages export named members, so the import() is unwrapped to a default.
@@ -44,6 +65,27 @@ const LandingPage = lazy(() =>
 );
 const DocsPage = lazy(() =>
   import("@/pages/DocsPage").then((m) => ({ default: m.DocsPage })),
+);
+const ContactPage = lazy(() =>
+  import("@/pages/ContactPage").then((m) => ({ default: m.ContactPage })),
+);
+const NewsPage = lazy(() =>
+  import("@/pages/NewsPage").then((m) => ({ default: m.NewsPage })),
+);
+const PrivacyPolicyPage = lazy(() =>
+  import("@/pages/legal/PrivacyPolicyPage").then((m) => ({
+    default: m.PrivacyPolicyPage,
+  })),
+);
+const TermsOfServicePage = lazy(() =>
+  import("@/pages/legal/TermsOfServicePage").then((m) => ({
+    default: m.TermsOfServicePage,
+  })),
+);
+const AcceptableUsePage = lazy(() =>
+  import("@/pages/legal/AcceptableUsePage").then((m) => ({
+    default: m.AcceptableUsePage,
+  })),
 );
 
 const ExplorePage = lazy(() =>
@@ -85,29 +127,84 @@ const ServiceDetailPage = lazy(() =>
 const NotificationsPage = lazy(() =>
   import("@/pages/NotificationsPage").then((m) => ({ default: m.NotificationsPage })),
 );
+const SettingsPage = lazy(() =>
+  import("@/pages/SettingsPage").then((m) => ({ default: m.SettingsPage })),
+);
 
 // Admin pages — bundled into one chunk by virtue of sharing the barrel
 // import path; only loaded when an /admin route activates.
 const AdminDashboardPage = lazy(() =>
   import("@/pages/admin").then((m) => ({ default: m.DashboardPage })),
 );
-const AdminActivitiesPage = lazy(() =>
-  import("@/pages/admin").then((m) => ({ default: m.ActivitiesPage })),
-);
-const AdminUsersPage = lazy(() =>
+const AdminUsersLegacyPage = lazy(() =>
   import("@/pages/admin").then((m) => ({ default: m.UsersPage })),
+);
+const AdminUserManagementPage = lazy(() =>
+  import("@/pages/admin").then((m) => ({ default: m.UserManagementPage })),
 );
 const AdminSkillsPage = lazy(() =>
   import("@/pages/admin").then((m) => ({ default: m.AdminSkillsPage })),
 );
-const AdminCategoriesPage = lazy(() =>
-  import("@/pages/admin").then((m) => ({ default: m.CategoriesPage })),
+const AdminQuotaManagementPage = lazy(() =>
+  import("@/pages/admin").then((m) => ({ default: m.QuotaManagementPage })),
 );
-const AdminTagsPage = lazy(() =>
-  import("@/pages/admin").then((m) => ({ default: m.TagsPage })),
+const AdminRedemptionCodesPage = lazy(() =>
+  import("@/pages/admin").then((m) => ({ default: m.RedemptionCodesPage })),
 );
-const AdminPlatformSettingsPage = lazy(() =>
-  import("@/pages/admin").then((m) => ({ default: m.PlatformSettingsPage })),
+const AdminAnnouncementsPage = lazy(() =>
+  import("@/pages/admin").then((m) => ({ default: m.AnnouncementsPage })),
+);
+
+// Settings layout + section components live under pages/admin/settings.
+const SettingsLayout = lazy(() =>
+  import("@/pages/admin/settings/SettingsLayout").then((m) => ({
+    default: m.SettingsLayout,
+  })),
+);
+const LlmProvidersSection = lazy(() =>
+  import("@/pages/admin/settings/sections").then((m) => ({
+    default: m.LlmProvidersSection,
+  })),
+);
+const PlaygroundSection = lazy(() =>
+  import("@/pages/admin/settings/sections").then((m) => ({
+    default: m.PlaygroundSection,
+  })),
+);
+const SkillGenSection = lazy(() =>
+  import("@/pages/admin/settings/sections").then((m) => ({
+    default: m.SkillGenSection,
+  })),
+);
+const MirrorSection = lazy(() =>
+  import("@/pages/admin/settings/sections").then((m) => ({
+    default: m.MirrorSection,
+  })),
+);
+const NyxIDSection = lazy(() =>
+  import("@/pages/admin/settings/sections").then((m) => ({
+    default: m.NyxIDSection,
+  })),
+);
+const SkillAuditSection = lazy(() =>
+  import("@/pages/admin/settings/sections").then((m) => ({
+    default: m.SkillAuditSection,
+  })),
+);
+const TelemetrySection = lazy(() =>
+  import("@/pages/admin/settings/sections").then((m) => ({
+    default: m.TelemetrySection,
+  })),
+);
+const ExtrasSection = lazy(() =>
+  import("@/pages/admin/settings/sections").then((m) => ({
+    default: m.ExtrasSection,
+  })),
+);
+const ExportImportSection = lazy(() =>
+  import("@/pages/admin/settings/sections").then((m) => ({
+    default: m.ExportImportSection,
+  })),
 );
 
 const queryClient = new QueryClient({
@@ -129,7 +226,7 @@ function RouteFallback() {
 // stable across renders.
 const router = createBrowserRouter(
   createRoutesFromElements(
-    <Route>
+    <Route element={<AnalyticsRoot />}>
       {/* Public routes (no auth) */}
       <Route path="/login" element={<LoginPage />} />
       <Route path="/oauth/callback" element={<OAuthCallbackPage />} />
@@ -142,6 +239,11 @@ const router = createBrowserRouter(
       {/* Public routes with RootLayout */}
       <Route element={<RootLayout />}>
         <Route path="/docs" element={<DocsPage />} />
+        <Route path="/news" element={<NewsPage />} />
+        <Route path="/contact" element={<ContactPage />} />
+        <Route path="/legal/privacy" element={<PrivacyPolicyPage />} />
+        <Route path="/legal/terms" element={<TermsOfServicePage />} />
+        <Route path="/legal/acceptable-use" element={<AcceptableUsePage />} />
         <Route path="/registry" element={<ExplorePage />} />
         <Route path="/skills/:idOrName" element={<SkillDetailPage />} />
         <Route
@@ -164,19 +266,56 @@ const router = createBrowserRouter(
           <Route path="/my-skills" element={<MySkillsPage />} />
           <Route path="/services/:id" element={<ServiceDetailPage />} />
           <Route path="/notifications" element={<NotificationsPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
         </Route>
 
-        {/* Admin routes - separate layout */}
+        {/* Admin routes — new IA per Architecture §6.1. Nested under
+            RootLayout so admin pages share the same Navbar + breadcrumb
+            chrome as every other authenticated route (theme switcher,
+            language switcher, user menu, QuotaChip). AdminLayout is now
+            a thin sidebar wrapper. */}
         <Route element={<AdminGuard />}>
-          <Route element={<AdminLayout />}>
-            <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
-            <Route path="/admin/dashboard" element={<AdminDashboardPage />} />
-            <Route path="/admin/activities" element={<AdminActivitiesPage />} />
-            <Route path="/admin/users" element={<AdminUsersPage />} />
-            <Route path="/admin/skills" element={<AdminSkillsPage />} />
-            <Route path="/admin/categories" element={<AdminCategoriesPage />} />
-            <Route path="/admin/tags" element={<AdminTagsPage />} />
-            <Route path="/admin/settings" element={<AdminPlatformSettingsPage />} />
+          <Route element={<RootLayout />}>
+            <Route element={<AdminLayout />}>
+              <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
+              <Route path="/admin/dashboard" element={<AdminDashboardPage />} />
+              <Route path="/admin/users" element={<AdminUserManagementPage />} />
+              <Route path="/admin/users-legacy" element={<AdminUsersLegacyPage />} />
+              <Route path="/admin/skills" element={<AdminSkillsPage />} />
+              <Route path="/admin/quota" element={<AdminQuotaManagementPage />} />
+              <Route
+                path="/admin/redemption-codes"
+                element={<AdminRedemptionCodesPage />}
+              />
+              <Route path="/admin/announcements" element={<AdminAnnouncementsPage />} />
+
+              {/* /admin/mirror keeps working but redirects to the new
+                  settings/mirror section so existing deep-links + bookmarks
+                  continue to land on the right surface. */}
+              <Route
+                path="/admin/mirror"
+                element={<Navigate to="/admin/settings/mirror" replace />}
+              />
+
+              <Route path="/admin/settings" element={<SettingsLayout />}>
+                <Route
+                  index
+                  element={<Navigate to="/admin/settings/llm-providers" replace />}
+                />
+                <Route path="llm-providers" element={<LlmProvidersSection />} />
+                <Route path="playground" element={<PlaygroundSection />} />
+                <Route path="skill-generation" element={<SkillGenSection />} />
+                <Route path="mirror" element={<MirrorSection />} />
+                <Route path="integrations/nyxid" element={<NyxIDSection />} />
+                <Route path="skill-audit" element={<SkillAuditSection />} />
+                <Route path="posthog" element={<TelemetrySection />} />
+                <Route path="extras" element={<ExtrasSection />} />
+                <Route
+                  path="export-import"
+                  element={<ExportImportSection />}
+                />
+              </Route>
+            </Route>
           </Route>
         </Route>
       </Route>
@@ -191,6 +330,15 @@ export function App() {
   return (
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
+        {/* Singleton SVG turbulence filter referenced by every
+            <HighlighterMark>. Mounted at the app root so both the
+            landing surface and the app-shell nav can use the
+            highlighter wash without duplicating filter IDs in the DOM. */}
+        <HighlighterMarkFilter />
+        {/* Stale-bundle self-recovery — polls /version.json and prompts
+            a reload when a new ornn-web has been deployed. Renders
+            nothing on the happy path. */}
+        <VersionUpdateBanner />
         <Suspense fallback={<RouteFallback />}>
           <RouterProvider router={router} />
         </Suspense>

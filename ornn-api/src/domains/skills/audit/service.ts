@@ -34,13 +34,42 @@ import { resolveZipRoot } from "../../../shared/utils/zip";
 
 const logger = pino({ level: "info" }).child({ module: "auditService" });
 
+/**
+ * Per-call resolution of the audit pipeline's LLM defaults. Sourced
+ * from admin settings (skill-audit section + selected provider). Pulled
+ * fresh on every audit so an admin's edit lands on the next run.
+ */
+export interface AuditLlmDefaults {
+  /** Selected model id. Empty disables LLM audit (returns "skipped" verdict). */
+  model: string;
+  /** Whether LLM audit is enabled at all (skill-audit.llmAuditEnabled). */
+  llmEnabled: boolean;
+  /** AgentSeal subprocess kill switch (skill-audit.agentSealEnabled). */
+  agentSealEnabled: boolean;
+  /** AgentSeal hard timeout — passed to the scanner per scan. */
+  agentSealTimeoutMs: number;
+  /** Risk-threshold for waiver (skill-audit.riskThreshold, replaces auditWaiverThreshold). */
+  riskThreshold: number;
+}
+
+export type AuditDefaultsResolver = () => Promise<AuditLlmDefaults>;
+
+/**
+ * Per-bucket storage resolver — the audit pipeline reads skill packages
+ * from the same bucket the upload path used. Sourced from admin
+ * settings (services section) so a bucket rename doesn't redeploy.
+ */
+export type AuditStorageBucketResolver = () => Promise<string>;
+
 export interface AuditServiceDeps {
   readonly auditRepo: AuditRepository;
   readonly skillService: SkillService;
   readonly storageClient: IStorageClient;
-  readonly storageBucket: string;
+  /** Resolves the active storage bucket from settings. */
+  readonly storageBucketResolver: AuditStorageBucketResolver;
   readonly llmClient: NyxLlmClient;
-  readonly model: string;
+  /** Resolves audit knobs (LLM toggle/model, AgentSeal toggle/timeout, threshold) from settings. */
+  readonly defaultsResolver: AuditDefaultsResolver;
   readonly cacheTtlMs: number;
   /** Optional. When wired, the finalize step fans out audit-result notifications. */
   readonly notificationService?: NotificationService;
@@ -59,9 +88,9 @@ export class AuditService {
   private readonly auditRepo: AuditRepository;
   private readonly skillService: SkillService;
   private readonly storageClient: IStorageClient;
-  private readonly storageBucket: string;
+  private readonly storageBucketResolver: AuditStorageBucketResolver;
   private readonly llmClient: NyxLlmClient;
-  private readonly model: string;
+  private readonly defaultsResolver: AuditDefaultsResolver;
   private readonly cacheTtlMs: number;
   private readonly notificationService?: NotificationService;
   private readonly nyxidOrgsClient?: NyxidOrgsClient;
@@ -70,9 +99,9 @@ export class AuditService {
     this.auditRepo = deps.auditRepo;
     this.skillService = deps.skillService;
     this.storageClient = deps.storageClient;
-    this.storageBucket = deps.storageBucket;
+    this.storageBucketResolver = deps.storageBucketResolver;
     this.llmClient = deps.llmClient;
-    this.model = deps.model;
+    this.defaultsResolver = deps.defaultsResolver;
     this.cacheTtlMs = deps.cacheTtlMs;
     this.notificationService = deps.notificationService;
     this.nyxidOrgsClient = deps.nyxidOrgsClient;
@@ -144,11 +173,17 @@ export class AuditService {
       }
     }
 
+    // Resolve audit defaults from settings up-front so the persisted
+    // `model` field reflects whatever is currently configured. Defaults
+    // are re-resolved inside finalizeAudit as well — the audit row keeps
+    // the snapshot at queue time so historical records stay readable
+    // even after an admin swaps the provider.
+    const defaults = await this.defaultsResolver();
     const running = await this.auditRepo.createRunning({
       skillGuid: guid,
       version,
       skillHash,
-      model: this.model,
+      model: defaults.model,
       triggeredBy: options.triggeredBy,
     });
 
@@ -171,6 +206,7 @@ export class AuditService {
     version: string,
   ): Promise<void> {
     try {
+      const defaults = await this.defaultsResolver();
       const { filesBundle, metadataSummary } = await this.buildAuditContext(guid);
 
       const input: ResponsesApiInputMessage[] = [
@@ -187,7 +223,7 @@ export class AuditService {
       ];
 
       const outputs = await this.llmClient.complete({
-        model: this.model,
+        model: defaults.model,
         input,
         max_output_tokens: 4000,
         temperature: 0.1,
@@ -307,7 +343,8 @@ export class AuditService {
   private async buildAuditContext(
     guid: string,
   ): Promise<{ filesBundle: string; metadataSummary: string }> {
-    const presigned = await this.storageClient.getPresignedUrl(this.storageBucket, `skills/${guid}.zip`).catch(() => null);
+    const storageBucket = await this.storageBucketResolver();
+    const presigned = await this.storageClient.getPresignedUrl(storageBucket, `skills/${guid}.zip`).catch(() => null);
     // The canonical pointer is `skills/{guid}/{version}.zip`; fall back via
     // the skill doc's stored `storageKey` for migrated/legacy rows.
     const skillDoc = await this.skillService.getSkill(guid);

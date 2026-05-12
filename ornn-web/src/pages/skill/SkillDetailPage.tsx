@@ -24,6 +24,7 @@ import { SkillPackagePreview } from "@/components/skill/SkillPackagePreview";
 import { VersionPicker } from "@/components/skill/VersionPicker";
 import { DeprecationBanner } from "@/components/skill/DeprecationBanner";
 import { GitHubOriginChip } from "@/components/skill/GitHubOriginChip";
+import { SkillInstallCard } from "@/components/skill/SkillInstallCard";
 import { UsagePullsCard } from "@/components/skill/UsagePullsCard";
 import { SkillHeroStrip } from "@/components/skill/SkillHeroStrip";
 import { BackLink } from "@/components/layout/BackLink";
@@ -31,6 +32,7 @@ import { useRefreshSkillFromSource } from "@/hooks/useSkills";
 import { useStartAudit, useAuditSummaryByVersion, useSkillAuditHistory } from "@/hooks/useAudit";
 import { useSkillPulls } from "@/hooks/useAnalytics";
 import { SkillVersionList } from "@/components/skill/SkillVersionList";
+import { AgentSealTrustBadge } from "@/components/agentseal/AgentSealTrustBadge";
 import { PermissionsModal } from "@/components/skill/PermissionsModal";
 import { AdvancedOptionsModal } from "@/components/skill/AdvancedOptionsModal";
 import { VersionDiffModal } from "@/components/skill/VersionDiffModal";
@@ -46,7 +48,8 @@ import { useSkillPackage } from "@/hooks/useSkillPackage";
 import { useCurrentUser, useIsAuthenticated, isAdmin } from "@/stores/authStore";
 import { useToastStore } from "@/stores/toastStore";
 import { buildFileTreeFromEntries, type FileTreeEntry } from "@/utils/fileTreeBuilder";
-import { buildTrySkillPrompt } from "@/lib/buildTrySkillPrompt";
+import { translateError } from "@/utils/translateError";
+import { track } from "@/lib/analytics";
 import { useTranslation } from "react-i18next";
 import type { FileNode } from "@/components/editor/FileTree";
 import type { AuditRecord } from "@/types/audit";
@@ -122,7 +125,6 @@ export function SkillDetailPage() {
   const isOwner = !!(isAuthenticated && user?.id && skill?.createdBy === user.id);
   const isAdminUser = isAdmin(user);
   const canManageVersions = isOwner || isAdminUser;
-  const canTryWithCli = !!skill && (!skill.isPrivate || isOwner);
 
   const latestVersion = versionList[0]?.version;
   const viewingLatest = !versionParam || (latestVersion && versionParam === latestVersion);
@@ -154,7 +156,7 @@ export function SkillDetailPage() {
         await deprecationMutation.mutateAsync({ version, isDeprecated, deprecationNote });
         addToast({ type: "success", message: t("skillDetail.deprecationUpdated") });
       } catch (err) {
-        const message = err instanceof Error ? err.message : t("skillDetail.deprecationFailed");
+        const message = translateError(err, t("skillDetail.deprecationFailed"));
         addToast({ type: "error", message });
       }
     },
@@ -287,13 +289,17 @@ export function SkillDetailPage() {
       const blob = await newZip.generateAsync({ type: "blob" });
       const zipFile = new File([blob], `${skill.name}.zip`, { type: "application/zip" });
       await updatePackageMutation.mutateAsync({ zipFile, skipValidation: skip });
+      track("skill.version_published", {
+        skillId: skill.guid,
+        skipValidation: skip,
+      });
       addToast({ type: "success", message: t("skillDetail.updateSuccess") });
       setEditedContents(new Map());
       setAddedPaths([]);
       setDeletedPaths(new Set());
       refetch();
     } catch (err) {
-      const message = err instanceof Error ? err.message : t("skillDetail.saveFailed");
+      const message = translateError(err, t("skillDetail.saveFailed"));
       addToast({ type: "error", message });
     }
   };
@@ -308,23 +314,6 @@ export function SkillDetailPage() {
       addToast({ type: "error", message: t("skillDetail.deleteFailed") });
     } finally {
       setShowDeleteConfirm(false);
-    }
-  };
-
-  const handleCopyTryPrompt = async () => {
-    if (!skill) return;
-    const prompt = buildTrySkillPrompt({
-      guid: skill.guid,
-      name: skill.name,
-      description: skill.description,
-      metadata: skill.metadata ?? {},
-      ornnOrigin: window.location.origin,
-    });
-    try {
-      await navigator.clipboard.writeText(prompt);
-      addToast({ type: "success", message: t("skillDetail.cliPromptCopied") });
-    } catch {
-      addToast({ type: "error", message: t("skillDetail.cliCopyFailed") });
     }
   };
 
@@ -358,7 +347,7 @@ export function SkillDetailPage() {
         onError: (err) => {
           addToast({
             type: "error",
-            message: err instanceof Error ? err.message : String(err),
+            message: translateError(err),
           });
         },
       },
@@ -435,6 +424,14 @@ export function SkillDetailPage() {
           />
         )}
 
+        {/* ── Install card (#411) ── */}
+        {/* Visibility follows the skill (#413): if the viewer can see this
+            skill detail page they can see the install card. The page-level
+            auth + ACL guards already enforce "can this person see this
+            skill at all". Both tabs (prompt + npx) only emit public
+            metadata so there's no reason to gate further. */}
+        <SkillInstallCard className="shrink-0" skill={skill} />
+
         {/* ── Hero strip ── */}
         <SkillHeroStrip
           skill={skill}
@@ -445,8 +442,6 @@ export function SkillDetailPage() {
           ownerDisplayName={ownerDisplayName}
           ownerAvatarUrl={ownerAvatarUrl}
           onTryPlayground={() => navigate(`/playground?skill=${encodeURIComponent(skill.name)}`)}
-          canTryWithCli={canTryWithCli}
-          onCopyCliPrompt={handleCopyTryPrompt}
           onDownloadPackage={rawZip ? handleDownloadPackage : undefined}
           onEditSkill={isOwner ? () => navigate(`/skills/${skill.guid}/edit`) : undefined}
         />
@@ -499,15 +494,19 @@ export function SkillDetailPage() {
         />
 
         {/* ── Main grid ── */}
-        {/* Two-column layout (lg+). Both columns get the *exact same*
-            explicit height ladder so they end at the same y-pixel —
-            stretch via flex was inconsistent because something in
-            the page/PageTransition chain was letting the right rail
-            grow past the row. Belt + braces: explicit h on both. */}
-        <main className="flex flex-col gap-4 lg:flex-row">
+        {/* Two-column layout (lg+). On lg+, the grid is fixed to a
+            viewport-relative height so each column can scroll its own
+            long content without growing the page. `lg:h-[calc(100vh-Y)]`
+            absorbs roughly the top nav + breadcrumb + hero + version
+            banner above; `lg:min-h-[480px]` keeps it usable on short
+            viewports. On mobile we fall back to natural page-flow
+            (no fixed height, no inner scroll — let the OS scroll). */}
+        <main className="flex flex-col gap-4 lg:flex-row lg:items-stretch lg:h-[calc(100vh-280px)] lg:min-h-[480px]">
 
-          {/* Left: tabs + content. */}
-          <section className="card-impression flex min-h-0 flex-col overflow-hidden rounded border border-subtle bg-card lg:h-[80vh] lg:min-h-[640px] lg:max-h-[calc(100vh-140px)] lg:flex-1 lg:min-w-0">
+          {/* Left: tabs + content. Inner overflow is owned by
+              SkillPackagePreview which gets `h-full`; this section
+              just needs `min-h-0` so the flex sizing math works. */}
+          <section className="card-impression flex min-h-[420px] flex-col overflow-hidden rounded border border-subtle bg-card lg:flex-1 lg:min-h-0 lg:min-w-0">
             {/* Toolbar — VersionPicker carries its own "Version" label, so
                 no outer label here (we used to render two). Audit history
                 lives in the right-rail card now. */}
@@ -560,11 +559,12 @@ export function SkillDetailPage() {
             </div>
           </section>
 
-          {/* Right rail — same explicit height ladder as the left so
-              both columns end at the same y-pixel. Cards inside scroll
-              via `overflow-y-auto` when their stacked height exceeds
-              the bounded box. */}
-          <aside className="flex flex-col gap-4 min-h-0 lg:h-[80vh] lg:min-h-[640px] lg:max-h-[calc(100vh-140px)] lg:w-[320px] lg:shrink-0 lg:overflow-y-auto lg:pr-1">
+          {/* Right rail — on lg+, scrolls its own content (audit
+              history, version list, danger zone can all grow long).
+              `lg:min-h-0` + `lg:overflow-y-auto` flips this from
+              "page-grows-with-cards" to "rail scrolls inside the
+              fixed-height main grid". */}
+          <aside className="flex flex-col gap-4 lg:w-[320px] lg:shrink-0 lg:min-h-0 lg:overflow-y-auto">
 
             {/* ── Audit card ── */}
             <section className="rounded-md border border-subtle bg-card p-5 card-impression">
@@ -602,6 +602,21 @@ export function SkillDetailPage() {
                 </Link>
               </div>
             </section>
+
+            {/* ── AgentSeal trust score (#253) ── third-party-verifiable
+                security signal. Sits next to the Audit card so the two
+                trust signals read as siblings; both follow the same tile
+                silhouette inside their card. Admins see a Rescan button
+                in the card header to manually re-trigger the scan
+                (catches false positives, picks up newer AgentSeal rules
+                without waiting for a new publish). */}
+            <AgentSealTrustBadge
+              scan={skill.agentsealScan ?? null}
+              skillIdOrName={skill.name || skill.guid}
+              version={skill.version}
+              canRescan={isAdmin(user)}
+              onRescanned={() => refetch()}
+            />
 
             {/* ── Versions card ── */}
             {versionList.length > 0 && (
@@ -871,12 +886,6 @@ export function SkillDetailPage() {
               </dl>
             </section>
 
-            {/* Spacer — eats any remaining vertical space when the cards
-                still don't fill the 80vh column, so Danger zone hugs
-                the bottom and both columns end at the same y-pixel.
-                Collapses to 0 when overflow-y-auto kicks in. */}
-            <div className="hidden lg:block lg:flex-1 lg:min-h-0" aria-hidden />
-
             {/* ── Danger zone (owner only) ── */}
             {isOwner && (
               <section className="rounded-md border border-subtle bg-card p-5 card-impression">
@@ -987,10 +996,10 @@ export function SkillDetailPage() {
             } catch (err) {
               addToast({
                 type: "error",
-                message:
-                  err instanceof Error
-                    ? err.message
-                    : t("skillDetail.versionDeleteFailed", "Failed to delete version"),
+                message: translateError(
+                  err,
+                  t("skillDetail.versionDeleteFailed", "Failed to delete version"),
+                ),
               });
             }
           }}

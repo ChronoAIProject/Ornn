@@ -26,6 +26,7 @@ import {
 import { useToastStore } from "@/stores/toastStore";
 import type { RefreshPreviewResponse } from "@/services/skillApi";
 import type { SkillDetail } from "@/types/domain";
+import { translateError } from "@/utils/translateError";
 
 type AdvancedSettingId = "nyxid-service-binding" | "github-link";
 
@@ -175,7 +176,7 @@ function NyxidServiceBindingPanel({
       });
       onClose();
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+      const message = translateError(err);
       addToast({ type: "error", message });
     }
   };
@@ -356,7 +357,7 @@ function GithubLinkPanel({ skill, onClose }: { skill: SkillDetail; onClose: () =
     } catch (err) {
       addToast({
         type: "error",
-        message: err instanceof Error ? err.message : String(err),
+        message: translateError(err),
       });
     }
   };
@@ -373,7 +374,7 @@ function GithubLinkPanel({ skill, onClose }: { skill: SkillDetail; onClose: () =
     } catch (err) {
       addToast({
         type: "error",
-        message: err instanceof Error ? err.message : String(err),
+        message: translateError(err),
       });
     }
   };
@@ -395,7 +396,7 @@ function GithubLinkPanel({ skill, onClose }: { skill: SkillDetail; onClose: () =
     } catch (err) {
       addToast({
         type: "error",
-        message: err instanceof Error ? err.message : String(err),
+        message: translateError(err),
       });
     }
   };
@@ -415,7 +416,7 @@ function GithubLinkPanel({ skill, onClose }: { skill: SkillDetail; onClose: () =
     } catch (err) {
       addToast({
         type: "error",
-        message: err instanceof Error ? err.message : String(err),
+        message: translateError(err),
       });
     }
   };
@@ -496,7 +497,7 @@ function GithubLinkPanel({ skill, onClose }: { skill: SkillDetail; onClose: () =
             inputMode="url"
             value={url}
             onChange={(e) => setUrl(e.target.value)}
-            placeholder="https://github.com/owner/repo/tree/main/path/to/skill"
+            placeholder={t("githubLink.urlPlaceholder", "https://github.com/owner/repo/tree/main/path/to/skill")}
             className="
               w-full rounded border border-strong-edge bg-card px-3 py-2
               font-mono text-sm text-strong

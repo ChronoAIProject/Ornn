@@ -6,6 +6,7 @@
  */
 
 import pino from "pino";
+import type { NyxidSaTokenProvider } from "./base";
 
 const logger = pino({ level: "info" }).child({ module: "nyxLlmClient" });
 
@@ -59,15 +60,6 @@ export interface NyxLlmCompleteParams {
   max_output_tokens?: number;
   temperature?: number;
   tools?: ResponsesApiTool[];
-}
-
-// ---------------------------------------------------------------------------
-// SA Token Cache
-// ---------------------------------------------------------------------------
-
-interface CachedToken {
-  accessToken: string;
-  expiresAt: number; // epoch ms
 }
 
 // ---------------------------------------------------------------------------
@@ -147,78 +139,80 @@ async function* parseSSEStream(
 // Client
 // ---------------------------------------------------------------------------
 
-export interface NyxLlmClientConfig {
+/**
+ * Per-call provider config. Resolved on every LLM request from the
+ * `LlmProvidersService` (a wrapper around the `llm_providers`
+ * collection) so an admin's edit lands on the next call without a pod
+ * restart. The resolver chooses the right provider for the surface
+ * (playground vs skill-gen) and projects its `auth` discriminated
+ * union into the simpler {gatewayUrl, apiKey?} shape this client
+ * speaks.
+ *
+ * - `gatewayUrl` is required (validated upstream when the admin saves
+ *   the provider) — empty string means "no provider configured" and
+ *   the call MUST fail-closed; we don't keep an env fallback because
+ *   any silent fallback masks misconfiguration.
+ * - `apiKey` empty triggers the SA token-exchange path
+ *   (`NyxidSaTokenProvider`). Most providers behind the NyxID proxy
+ *   use SA flow; direct-key providers (third-party gateways) bypass it.
+ */
+export interface LlmProviderResolution {
   gatewayUrl: string;
-  tokenUrl: string;
-  clientId: string;
-  clientSecret: string;
+  apiKey: string;
+}
+
+export type LlmProviderResolver = () => Promise<LlmProviderResolution>;
+
+export interface NyxLlmClientConfig {
+  /**
+   * Resolves the effective gateway URL + apiKey for every LLM call from
+   * admin settings. NO env fallback: if the resolver returns an empty
+   * `gatewayUrl`, the call fails-closed with `LLM_PROVIDER_NOT_CONFIGURED`.
+   */
+  resolver: LlmProviderResolver;
+  /**
+   * Shared SA token provider used when the resolved provider has no
+   * direct apiKey (i.e. it sits behind the NyxID proxy and authorizes
+   * via OAuth client_credentials). Owned by bootstrap so all clients
+   * share one token cache.
+   */
+  saTokenProvider: NyxidSaTokenProvider;
 }
 
 export class NyxLlmClient {
-  private readonly gatewayUrl: string;
-  private readonly tokenUrl: string;
-  private readonly clientId: string;
-  private readonly clientSecret: string;
-  private cachedToken: CachedToken | null = null;
+  private readonly resolver: LlmProviderResolver;
+  private readonly saTokenProvider: NyxidSaTokenProvider;
 
   constructor(config: NyxLlmClientConfig) {
-    this.gatewayUrl = config.gatewayUrl;
-    this.tokenUrl = config.tokenUrl;
-    this.clientId = config.clientId;
-    this.clientSecret = config.clientSecret;
-    logger.info({ gatewayUrl: config.gatewayUrl, tokenUrl: config.tokenUrl }, "NyxLlmClient initialized with SA credentials");
+    this.resolver = config.resolver;
+    this.saTokenProvider = config.saTokenProvider;
+    logger.info("NyxLlmClient initialized with settings-driven resolver");
   }
 
   /**
-   * Get a valid SA access token, refreshing if expired or about to expire.
-   * Caches the token and refreshes 60s before expiry.
+   * Resolve the effective gateway URL + auth header for the current
+   * call. Pulls the provider config from settings; SA token is fetched
+   * on demand when the provider has no direct apiKey.
+   *
+   * Fails-closed when no provider is configured — callers see a
+   * structured error rather than a stale env URL.
    */
-  private async getAccessToken(): Promise<string> {
-    const now = Date.now();
-    // Return cached token if still valid (with 60s buffer)
-    if (this.cachedToken && this.cachedToken.expiresAt > now + 60_000) {
-      return this.cachedToken.accessToken;
+  private async resolveCallTarget(): Promise<{
+    gatewayUrl: string;
+    authHeader: string;
+  }> {
+    const provider = await this.resolver();
+    const gatewayUrl = provider.gatewayUrl?.trim().replace(/\/+$/, "");
+    if (!gatewayUrl) {
+      throw new Error("LLM_PROVIDER_NOT_CONFIGURED: no gatewayUrl in settings");
     }
 
-    logger.info("Acquiring new SA access token via client_credentials grant");
-
-    const body = new URLSearchParams({
-      grant_type: "client_credentials",
-      client_id: this.clientId,
-      client_secret: this.clientSecret,
-    });
-
-    const response = await fetch(this.tokenUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: body.toString(),
-    });
-
-    if (!response.ok) {
-      const errText = await response.text().catch(() => "");
-      const msg = `SA token acquisition failed (${response.status}): ${errText.slice(0, 200)}`;
-      logger.error({ status: response.status }, msg);
-      throw new Error(msg);
+    if (provider.apiKey && provider.apiKey.trim().length > 0) {
+      return { gatewayUrl, authHeader: `Bearer ${provider.apiKey.trim()}` };
     }
 
-    const result = (await response.json()) as {
-      access_token: string;
-      expires_in?: number;
-      token_type?: string;
-    };
-
-    if (!result.access_token) {
-      throw new Error("SA token response missing access_token");
-    }
-
-    const expiresInMs = (result.expires_in ?? 900) * 1000;
-    this.cachedToken = {
-      accessToken: result.access_token,
-      expiresAt: now + expiresInMs,
-    };
-
-    logger.info({ expiresInSecs: result.expires_in ?? 900 }, "SA access token acquired");
-    return this.cachedToken.accessToken;
+    const token = await this.saTokenProvider.getAccessToken();
+    return { gatewayUrl, authHeader: `Bearer ${token}` };
   }
 
   /**
@@ -226,8 +220,8 @@ export class NyxLlmClient {
    * Returns an AsyncIterable of SSE events.
    */
   async *stream(params: NyxLlmStreamParams): AsyncIterable<ResponsesApiStreamEvent> {
-    const token = await this.getAccessToken();
-    logger.info({ model: params.model }, "Starting LLM stream request");
+    const { gatewayUrl, authHeader } = await this.resolveCallTarget();
+    logger.info({ model: params.model, gatewayUrl }, "Starting LLM stream request");
 
     const body: Record<string, unknown> = {
       model: params.model,
@@ -245,10 +239,10 @@ export class NyxLlmClient {
       body.tools = params.tools;
     }
 
-    const response = await fetch(`${this.gatewayUrl}/responses`, {
+    const response = await fetch(`${gatewayUrl}/responses`, {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${token}`,
+        "Authorization": authHeader,
         "Content-Type": "application/json",
       },
       body: JSON.stringify(body),
@@ -274,8 +268,8 @@ export class NyxLlmClient {
    * Returns the output array from the response.
    */
   async complete(params: NyxLlmCompleteParams): Promise<ResponsesApiOutput[]> {
-    const token = await this.getAccessToken();
-    logger.info({ model: params.model }, "Starting LLM complete request");
+    const { gatewayUrl, authHeader } = await this.resolveCallTarget();
+    logger.info({ model: params.model, gatewayUrl }, "Starting LLM complete request");
 
     const body: Record<string, unknown> = {
       model: params.model,
@@ -293,10 +287,10 @@ export class NyxLlmClient {
       body.tools = params.tools;
     }
 
-    const response = await fetch(`${this.gatewayUrl}/responses`, {
+    const response = await fetch(`${gatewayUrl}/responses`, {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${token}`,
+        "Authorization": authHeader,
         "Content-Type": "application/json",
       },
       body: JSON.stringify(body),

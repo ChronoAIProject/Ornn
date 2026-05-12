@@ -5,11 +5,13 @@
  */
 
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { motion, AnimatePresence } from "framer-motion";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import type { ApiKeyMeta } from "@/types/auth";
+import { translateError } from "@/utils/translateError";
 
 export interface ApiKeyCardProps {
   /** Current API key metadata. */
@@ -28,6 +30,7 @@ export function ApiKeyCard({
   onRegenerate,
   disabled = false,
 }: ApiKeyCardProps) {
+  const { t } = useTranslation();
   const [isLoading, setIsLoading] = useState(false);
   const [showKeyModal, setShowKeyModal] = useState(false);
   const [newKey, setNewKey] = useState<string | null>(null);
@@ -43,7 +46,7 @@ export function ApiKeyCard({
       setNewKey(key);
       setShowKeyModal(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to generate API key");
+      setError(translateError(err, "Failed to generate API key"));
     } finally {
       setIsLoading(false);
     }
@@ -58,7 +61,7 @@ export function ApiKeyCard({
       setNewKey(key);
       setShowKeyModal(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to regenerate API key");
+      setError(translateError(err, "Failed to regenerate API key"));
     } finally {
       setIsLoading(false);
     }
@@ -187,7 +190,7 @@ export function ApiKeyCard({
       <Modal
         isOpen={showKeyModal}
         onClose={handleCloseModal}
-        title="API Key Generated"
+        title={t("userProfile.apiKeyGeneratedTitle")}
       >
         <div className="space-y-4">
           <div className="rounded border border-warning/30 bg-warning/10 p-3">

@@ -4,29 +4,20 @@ metadata:
   name: ornn-web-config
   namespace: ${NAMESPACE}
 data:
-  # nginx upstreams — consumed by /etc/nginx/templates/default.conf.template
-  # via the image's built-in 20-envsubst-on-templates.sh. NGINX_ENVSUBST_FILTER
-  # narrows substitution so $host / $remote_addr / $scheme etc. inside the
-  # template stay literal.
-  NYXID_BACKEND_URL: "${NYXID_BACKEND_URL}"
-  # Hostname portion of NYXID_BACKEND_URL — used for Host header + SNI when
-  # the upstream is a multi-tenant HTTPS edge (Cloudflare, Vercel, etc.).
-  # e.g. "nyx.chrono-ai.fun" when NYXID_BACKEND_URL is "https://nyx.chrono-ai.fun".
-  # For in-cluster plain-HTTP upstreams this MAY be set to $host (the nginx
-  # built-in) to fall back to standard behavior.
-  NYXID_BACKEND_HOST: "${NYXID_BACKEND_HOST}"
-  ORNN_API_URL: "${ORNN_API_URL}"
-  NGINX_ENVSUBST_FILTER: "^(NYXID_BACKEND_URL|NYXID_BACKEND_HOST|ORNN_API_URL)$"
-
   # Frontend runtime config — consumed by 40-envsubst-config-js.sh,
   # injected into window.__ORNN_CONFIG__ via /config.js at page load.
-  # NYXID_OAUTH_* are the browser-facing public-client credentials
-  # (authorization_code + PKCE). ornn-api uses a different set — the
-  # NYXID_SA_* service-account credentials — for machine-to-machine calls.
-  API_BASE_URL: "${API_BASE_URL}"
-  NYXID_OAUTH_AUTHORIZE_URL: "${NYXID_OAUTH_AUTHORIZE_URL}"
-  NYXID_OAUTH_TOKEN_URL: "${NYXID_OAUTH_TOKEN_URL}"
+  # The SPA composes full URLs from these bases + paths in src/config.ts
+  # and hits NyxID's proxy directly for ornn-api calls, so nginx is no
+  # longer in the API request path.
+  ORNN_API_BASE_URL: "${ORNN_API_BASE_URL}"
+  NYXID_API_BASE_URL: "${NYXID_API_BASE_URL}"
+  NYXID_WEB_BASE_URL: "${NYXID_WEB_BASE_URL}"
+  NYXID_OAUTH_AUTHORIZE_PATH: "${NYXID_OAUTH_AUTHORIZE_PATH}"
+  NYXID_OAUTH_TOKEN_PATH: "${NYXID_OAUTH_TOKEN_PATH}"
+  NYXID_OAUTH_REDIRECT_PATH: "${NYXID_OAUTH_REDIRECT_PATH}"
+  NYXID_LOGOUT_PATH: "${NYXID_LOGOUT_PATH}"
+  NYXID_SETTINGS_PATH: "${NYXID_SETTINGS_PATH}"
   NYXID_OAUTH_CLIENT_ID: "${NYXID_OAUTH_CLIENT_ID}"
-  NYXID_OAUTH_REDIRECT_URI: "${NYXID_OAUTH_REDIRECT_URI}"
-  NYXID_LOGOUT_URL: "${NYXID_LOGOUT_URL}"
-  NYXID_SETTINGS_URL: "${NYXID_SETTINGS_URL}"
+  POSTHOG_API_KEY: "${POSTHOG_API_KEY}"
+  POSTHOG_PROJECT_ID: "${POSTHOG_PROJECT_ID}"
+  POSTHOG_HOST: "${POSTHOG_HOST}"

@@ -8,7 +8,8 @@
 
 export type NotificationCategory =
   | "audit.completed"
-  | "audit.risky_for_consumer";
+  | "audit.risky_for_consumer"
+  | "quota.credits_granted";
 
 export interface Notification {
   _id: string;

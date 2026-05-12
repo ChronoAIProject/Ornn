@@ -2,6 +2,10 @@
  * ZIP Validator Utility.
  * Validates skill package ZIP files client-side using JSZip.
  * Enforces the standard skill package structure.
+ *
+ * Returns structured `ErrorEntry` items (`{ key, params? }`) instead of
+ * pre-rendered strings so the consumer can translate at render time.
+ *
  * @module utils/zipValidator
  */
 
@@ -9,12 +13,18 @@ import JSZip from "jszip";
 import { extractFrontmatter, type SkillFrontmatter } from "@/utils/frontmatter";
 import type { SkillPackageFile, SkillFolder } from "@/types/skillPackage";
 
+/** Structured i18n entry — key + interpolation params. */
+export interface ErrorEntry {
+  key: string;
+  params?: Record<string, string | number>;
+}
+
 export interface ZipValidationResult {
   status: "valid" | "invalid" | "warning";
   files: SkillPackageFile[];
   metadata: SkillFrontmatter | null;
-  errors: string[];
-  warnings: string[];
+  errors: ErrorEntry[];
+  warnings: ErrorEntry[];
 }
 
 /** Recognized top-level directories in a skill package */
@@ -124,8 +134,8 @@ function normalizeEntries(
 export async function validateSkillZip(
   zipFile: File,
 ): Promise<ZipValidationResult> {
-  const errors: string[] = [];
-  const warnings: string[] = [];
+  const errors: ErrorEntry[] = [];
+  const warnings: ErrorEntry[] = [];
   const files: SkillPackageFile[] = [];
 
   let zip: JSZip;
@@ -137,7 +147,7 @@ export async function validateSkillZip(
       status: "invalid",
       files: [],
       metadata: null,
-      errors: ["Failed to read ZIP file. The file may be corrupted."],
+      errors: [{ key: "errors.zip.readFailed" }],
       warnings: [],
     };
   }
@@ -160,17 +170,13 @@ export async function validateSkillZip(
   );
 
   if (skillMdPaths.length === 0 && nestedSkillMds.length > 0) {
-    errors.push(
-      "SKILL.md was found in a subdirectory but must be at the root level.",
-    );
+    errors.push({ key: "errors.zip.skillMdNested" });
   } else if (skillMdPaths.length === 0) {
-    errors.push(
-      "Invalid skill package: SKILL.md is required at the root of the archive.",
-    );
+    errors.push({ key: "errors.zip.skillMdRootRequired" });
   }
 
   if (skillMdPaths.length + nestedSkillMds.length > 1) {
-    errors.push("Multiple SKILL.md files found. Nested skills are not allowed.");
+    errors.push({ key: "errors.zip.skillMdMultiple" });
   }
 
   // Check for unrecognized top-level directories
@@ -189,9 +195,12 @@ export async function validateSkillZip(
   );
 
   if (unrecognizedDirs.length > 0) {
-    warnings.push(
-      `Unrecognized directories found: ${unrecognizedDirs.map((d) => d + "/").join(", ")}. Only scripts/, references/, and assets/ are standard.`,
-    );
+    warnings.push({
+      key: "errors.zip.unrecognizedDirs",
+      params: {
+        dirs: unrecognizedDirs.map((d) => d + "/").join(", "),
+      },
+    });
   }
 
   // If there are errors, return early
@@ -221,9 +230,7 @@ export async function validateSkillZip(
     if (entry.path.toLowerCase() === "skill.md" && textContent) {
       metadata = extractFrontmatter(textContent);
       if (!metadata) {
-        warnings.push(
-          "Could not extract metadata from SKILL.md frontmatter. You may need to add or fix the YAML frontmatter block.",
-        );
+        warnings.push({ key: "errors.zip.frontmatterUnparseable" });
       }
     }
 

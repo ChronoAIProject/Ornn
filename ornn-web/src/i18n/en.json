@@ -2,6 +2,7 @@
   "common": {
     "save": "Save",
     "cancel": "Cancel",
+    "confirm": "Confirm",
     "delete": "Delete",
     "edit": "Edit",
     "back": "Back",
@@ -20,17 +21,27 @@
     "clearSearch": "Clear Search",
     "close": "Close",
     "gotIt": "Got it",
-    "remove": "Remove"
+    "remove": "Remove",
+    "unsavedChanges": "Unsaved changes",
+    "aria": {
+      "dismissNotification": "Dismiss notification",
+      "notifications": "Notifications",
+      "categoryDescriptions": "Category descriptions",
+      "closeDrawer": "Close drawer"
+    }
   },
   "nav": {
     "home": "Home",
     "registry": "Registry",
     "build": "Build",
     "docs": "Docs",
+    "news": "News",
+    "contact": "Contact",
     "signIn": "Sign In",
     "signOut": "Sign Out",
     "settings": "Settings",
     "adminPanel": "Admin Panel",
+    "redeemCode": "Redeem code",
     "goToNyxId": "Go to NyxID",
     "createSkill": "Create Skill",
     "lightMode": "Light Mode",
@@ -82,6 +93,27 @@
     "deleteSuccess": "Skill deleted successfully",
     "deleteFailed": "Failed to delete skill"
   },
+  "skillInstallCard": {
+    "title": "Install",
+    "subtitle": "Drop this skill into your own agent with one of the two flows below.",
+    "tablistAria": "Install method",
+    "tabPrompt": "Via prompt",
+    "tabNpx": "Via npx",
+    "promptHelper": "Copy the block below and paste it into your agent — it instructs the agent to fetch and install this skill from Ornn.",
+    "npxHelper": "Mirrored to GitHub for one-line installation in any agent harness.",
+    "npxNotAvailablePrivate": "Not available — private skills are never mirrored to GitHub. Use the prompt flow instead.",
+    "npxNotAvailableMirrorOff": "Not available — this deployment doesn't have the GitHub mirror configured. Use the prompt flow instead.",
+    "copy": "Copy",
+    "copied": "Copied",
+    "copyPromptAria": "Copy install prompt",
+    "copyNpxAria": "Copy install command",
+    "viewOnGithub": "View on GitHub",
+    "synced": "Synced",
+    "lagging": "Lagging",
+    "pending": "Pending first sync",
+    "lastSync": "Last sync",
+    "commit": "Commit"
+  },
   "skillDetail": {
     "packageContents": "Package Contents",
     "description": "Description",
@@ -119,8 +151,6 @@
     "noPackage": "No package contents available.",
     "downloadSkill": "Download Package",
     "tryWithCli": "Try with Nyx CLI",
-    "cliPromptCopied": "Install prompt copied — paste it into your agent",
-    "cliCopyFailed": "Failed to copy install prompt to clipboard",
     "version": "Version",
     "versions": "Versions",
     "latest": "latest",
@@ -156,8 +186,6 @@
     "heroUpdatedOn": "Updated {{date}}",
     "heroTagsMore": "+{{n}} more",
     "heroTryPlayground": "Try in Playground",
-    "heroMoreActions": "More actions",
-    "heroUseNyxCli": "Install skill to my agent",
     "heroDownload": "Download package",
     "heroEditSkill": "Edit skill",
     "tabContent": "Skill content",
@@ -261,6 +289,13 @@
     "bucketMonth": "Month",
     "totalPulls": "Total",
     "noUsage": "No usage in this range."
+  },
+  "cookieConsent": {
+    "stamp": "[ § ANALYTICS — CONSENT ]",
+    "title": "We use cookies for product analytics.",
+    "body": "Ornn uses <postHogLink>PostHog (EU)</postHogLink> to measure feature usage and improve the platform. Session replay is sampled with input fields masked. See our <privacyLink>Privacy Policy</privacyLink> for details. You can change your choice anytime in settings.",
+    "decline": "Decline",
+    "accept": "Accept"
   },
   "versionDiff": {
     "openButton": "Compare versions",
@@ -480,18 +515,32 @@
     "signOut": "Sign Out",
     "accountMgmt": "Account Management",
     "accountDesc": "Your profile, LLM credentials, and security settings are managed through NyxID.",
-    "openNyxID": "Open NyxID Settings"
+    "openNyxID": "Open NyxID Settings",
+    "redeemCode": {
+      "title": "Redeem code",
+      "placeholder": "ENTER YOUR CODE",
+      "codeAria": "Redemption code",
+      "redeem": "Redeem",
+      "helpText": "Got a code from the team? Enter it here to add quota to your account.",
+      "added": "Added:",
+      "activeUntil": "Active until end of month.",
+      "dismissAria": "Dismiss",
+      "dismiss": "Dismiss",
+      "recentlyRedeemed": "Recently redeemed"
+    }
   },
   "login": {
-    "tagline": "The Forge for AI Capabilities",
+    "eyebrow": "[ § ENTRY — NYXID ]",
+    "tagline": "Skill life-cycle for AI agents",
     "desc": "Sign in with your NyxID account to access the platform.",
     "loginBtn": "Login with NyxID",
     "terms": "By continuing, you agree to our Terms of Service and Privacy Policy."
   },
   "notFound": {
+    "eyebrow": "[ § 404 — NOT FOUND ]",
     "code": "404",
     "message": "This sector of the grid does not exist.",
-    "goHome": "Return to Forge"
+    "goHome": "Return to home"
   },
   "docs": {
     "onThisPage": "On this page",
@@ -545,10 +594,14 @@
     "repoPlaceholder": "https://github.com/...",
     "invalidUrl": "Must be a valid URL",
     "uploadSkill": "Upload Skill",
-    "saveChanges": "Save Changes"
+    "saveChanges": "Save Changes",
+    "tools": {
+      "placeholder": "Type a tool name + Enter",
+      "suggested": "Suggested:",
+      "help": "Ensure that the tools you list are available in your target Claude client environment. Skills referencing unavailable tools will fail at runtime."
+    }
   },
   "landing": {
-    "nowForging": "NOW FORGING · v 0.9.3",
     "scrollHint": "Scroll to equip ↓",
     "browseSkills": "Browse skills →",
     "publishYours": "Publish yours",
@@ -564,8 +617,8 @@
       "headlineNothing": "nothing",
       "headlineEnd": "Ship with",
       "headlineEverything": "everything",
-      "subhead": "A registry of composable skills. Watch a blank screen equip itself — nav, type, hero, motion. Install what you need; skip what you don't.",
-      "subheadStatic": "A registry of composable skills. Install what you need; skip what you don't.",
+      "subhead": "The skill life-cycle manager for AI agents. Search, install, run, build, audit, and publish — one platform from spec to ship, without bolting six tools together.",
+      "subheadStatic": "The skill life-cycle manager for AI agents — search, install, build, publish, audit. One platform, every runtime.",
       "finalLine1": "Your product. Your agent.",
       "finalLine2": "Fully equipped."
     },
@@ -647,7 +700,7 @@
       "alsoOnRegistry": "Also on the registry"
     },
     "footer": {
-      "tagline": "The registry for AI agent skills. From the Chrono AI workshop.",
+      "tagline": "The end-to-end skill life-cycle manager for AI agents.",
       "productHeading": "Product",
       "developersHeading": "Developers",
       "productBrowse": "Browse",
@@ -684,7 +737,8 @@
     "syncSuccess": "Synced from GitHub — new version published.",
     "previewTitle": "Sync preview",
     "previewSubtitle": "Apply this sync to publish v{{version}} of {{name}} from the linked GitHub source.",
-    "applySync": "Apply sync"
+    "applySync": "Apply sync",
+    "urlPlaceholder": "https://github.com/owner/repo/tree/main/path/to/skill"
   },
   "githubImport": {
     "title": "Import from GitHub",
@@ -698,5 +752,583 @@
     "backToModes": "Back to creation modes",
     "success": "Skill pulled from GitHub.",
     "genericError": "Failed to pull from GitHub."
+  },
+  "contact": {
+    "eyebrow": "[ § 01 — CONTACT ]",
+    "headlineStart": "Talk to the",
+    "headlineHighlight": "team",
+    "headlineEnd": ".",
+    "subhead": "Questions, partnerships, or a skill you want to publish? Reach us through any of the channels below — we read everything.",
+    "channelsLabel": "Contact channels",
+    "cardEmailLabel": "EMAIL",
+    "cardEmailHint": "Best for product questions, partnership, and security disclosures. Expect a reply within two business days.",
+    "cardGithubLabel": "GITHUB",
+    "cardGithubHint": "File bugs, pull requests, and feature requests on the issue tracker.",
+    "signoff": "[ END · CONTACT ]"
+  },
+  "news": {
+    "eyebrow": "[ § 01 — NEWS ]",
+    "headlineStart": "Stamps from the",
+    "headlineHighlight": "forge",
+    "headlineEnd": ".",
+    "subhead": "Every announcement we've ever pressed — release notes, platform changes, and editorial dispatches. Newest first.",
+    "archiveLabel": "Announcement archive",
+    "loading": "[ LOADING ARCHIVE… ]",
+    "errorLabel": "ARCHIVE UNREACHABLE",
+    "errorBody": "The news feed didn't load. Retry in a moment, or check the Contact page if it persists.",
+    "emptyLabel": "NO STAMPS YET",
+    "emptyBody": "No announcements have been released yet. Check back when the forge cools.",
+    "signoff": "[ END · NEWS ]"
+  },
+  "serviceDetail": {
+    "failedToLoad": "Failed to load service: {{error}}",
+    "notFound": "Not found",
+    "back": "Back",
+    "backToMy": "Back to My Services",
+    "backToAdmin": "Back to Admin Services",
+    "statusActive": "active",
+    "statusInactive": "inactive",
+    "generateSkillBtn": "Generate Skill",
+    "proxyUrlHeading": "NyxID Proxy URL",
+    "openapiHeading": "OpenAPI Spec URL",
+    "openapiNotConfigured": "No OpenAPI spec configured",
+    "sourceCodeHeading": "Source Code",
+    "homepageHeading": "Homepage",
+    "notConfigured": "Not configured"
+  },
+  "announcementsAdmin": {
+    "noAnnouncements": "No announcements yet",
+    "emptyHint": "Create the first announcement and visitors will see it on their next landing-page load.",
+    "createBtn": "Create announcement"
+  },
+  "aria": {
+    "toggleLanguage": "Toggle language",
+    "toggleTheme": "Toggle theme",
+    "accountMenu": "Account menu",
+    "openMenu": "Open menu",
+    "closeMenu": "Close menu",
+    "dismissAnnouncement": "Dismiss announcement",
+    "legal": "Legal",
+    "productOverview": "{{brand}} product overview",
+    "skillPackageDrawer": "Skill package drawer",
+    "skillPackagePreview": "Skill package preview",
+    "generating": "Generating",
+    "brandHome": "{{brand}} home",
+    "brandOnGitHub": "{{brand}} on GitHub",
+    "expandSidebar": "Expand sidebar",
+    "collapseSidebar": "Collapse sidebar",
+    "closeSidebar": "Close sidebar",
+    "mirrorSetupInstructions": "Mirror setup instructions",
+    "settingsSections": "Settings sections",
+    "noLifetimeUsageHistory": "No lifetime usage history",
+    "lifetimeMonthlyUsage": "Lifetime monthly usage",
+    "currentQuotaPeriod": "Current quota period",
+    "grantAmount": "Grant amount",
+    "copyCode": "Copy code",
+    "invalidateCode": "Invalidate code",
+    "redemptionCodeDetail": "Redemption code detail",
+    "chatMessageInput": "Chat message input",
+    "quotaUsage": "Quota usage",
+    "adminQuotaUnlimited": "Admin — quota unlimited",
+    "adminUnlimitedUsageTitle": "Admin · Unlimited usage",
+    "quotaUsageDetails": "Quota usage details"
+  },
+  "skillComponents": {
+    "generateModal": {
+      "title": "Generate Skill",
+      "addRefPlaceholder": "Add reference URL...",
+      "add": "Add"
+    },
+    "card": {
+      "linkedToGithub": "Linked to GitHub"
+    },
+    "grid": {
+      "emptyTitle": "No skills found",
+      "emptyDesc": "Try adjusting your search or filters, or upload the first skill."
+    },
+    "fileBrowser": {
+      "noFiles": "No package files available"
+    },
+    "frontmatter": {
+      "runtime": "Runtime",
+      "requiredTools": "Required Tools",
+      "dependencies": "Dependencies",
+      "envVars": "Environment Variables",
+      "compatibility": "Compatibility"
+    }
+  },
+  "userProfile": {
+    "displayNamePlaceholder": "Your display name",
+    "bioPlaceholder": "Tell us about yourself...",
+    "newEmailPlaceholder": "your-new@email.com",
+    "phoneNumberPlaceholder": "Phone number",
+    "searchCountryPlaceholder": "Search country...",
+    "apiKeyGeneratedTitle": "API Key Generated",
+    "notConnected": "Not connected",
+    "unlinkAccountTitle": "Unlink Account"
+  },
+  "editor": {
+    "startTyping": "Start typing..."
+  },
+  "adminPages": {
+    "dashboard": {
+      "heading": "Dashboard",
+      "subtitle": "Platform snapshot — user breakdown, skill visibility partition, and the latest 10 activities.",
+      "loadFailed": "Failed to load stats",
+      "users": {
+        "heading": "Users",
+        "ariaLabel": "Users overview",
+        "total": "Total users",
+        "admin": "Admin users",
+        "normal": "Normal users",
+        "bypassQuota": "Bypass quota"
+      },
+      "skills": {
+        "heading": "Skills",
+        "ariaLabel": "Skills overview",
+        "system": "System skills",
+        "public": "Public skills",
+        "private": "Private skills"
+      },
+      "recentActivity": {
+        "heading": "Recent activity",
+        "body": "Audit + activity events live in PostHog. Every API request, login, skill mutation, and admin action is captured there as a typed event with caller, source IP, status, and timing — searchable, filterable, and pivotable into funnels.",
+        "notConfigured": "PostHog isn't configured yet — set it up under Settings → Telemetry.",
+        "activityFeed": "Activity feed",
+        "insights": "Insights"
+      }
+    },
+    "announcements": {
+      "eyebrow": "[§ ADMIN — ANNOUNCEMENTS]",
+      "title": "Landing page popup",
+      "description": "One announcement is shown at a time on the marketing page — the most recently created enabled record currently inside its schedule window. Disabled and out-of-window records stay here for history.",
+      "action": {
+        "new": "New announcement",
+        "disable": "Disable",
+        "enable": "Enable"
+      },
+      "table": {
+        "title": "Title",
+        "status": "Status",
+        "window": "Window",
+        "created": "Created",
+        "actions": "Actions"
+      },
+      "status": {
+        "live": "LIVE",
+        "scheduled": "SCHEDULED",
+        "expired": "EXPIRED",
+        "disabled": "DISABLED"
+      },
+      "window": {
+        "always": "Always (no schedule)"
+      },
+      "confirm": {
+        "deleteTitle": "Delete announcement?",
+        "delete": "\"{{title}}\" will be removed permanently."
+      },
+      "toast": {
+        "disabled": "Announcement disabled",
+        "enabled": "Announcement enabled",
+        "deleted": "Announcement deleted",
+        "updateFailed": "Update failed",
+        "deleteFailed": "Delete failed"
+      }
+    },
+    "skills": {
+      "title": "Skills",
+      "subtitle": "Manage all platform skills",
+      "subtitleForUser": "Skills for selected user",
+      "searchLabel": "Search Skills",
+      "searchPlaceholder": "Search by name or description...",
+      "searchBtn": "Search",
+      "clearBtn": "Clear",
+      "empty": "No skills found.",
+      "loadFailed": "Failed to load skills",
+      "table": {
+        "name": "Name",
+        "author": "Author",
+        "visibility": "Visibility",
+        "tags": "Tags",
+        "created": "Created",
+        "actions": "Actions"
+      },
+      "modal": {
+        "deleteTitle": "Delete Skill?",
+        "deleteBodyPrefix": "Are you sure you want to delete",
+        "deleteBodySuffix": "?",
+        "deleteWarning": "This action cannot be undone. The skill will be permanently removed from the platform."
+      },
+      "toast": {
+        "deleted": "Skill deleted",
+        "deleteFailed": "Failed to delete skill"
+      }
+    },
+    "quota": {
+      "title": "Quota",
+      "subtitle": "Per-user monthly counters with admin-applied grants. Admin users bypass quota and are excluded from this table.",
+      "tabs": {
+        "playground": "Playground",
+        "skillGen": "Skill Generation"
+      },
+      "placeholder": {
+        "filter": "Filter by email or display name…"
+      },
+      "aria": {
+        "filter": "Filter users",
+        "surface": "Surface"
+      },
+      "loadFailed": "Failed to load users"
+    },
+    "redemption": {
+      "title": "Redemption codes",
+      "subtitle": "Mint single-use codes that bundle one or more current-month quota grants. Codes can be invalidated before redemption.",
+      "action": {
+        "mint": "Mint code"
+      },
+      "tabs": {
+        "all": "All",
+        "active": "Active",
+        "redeemed": "Redeemed",
+        "invalidated": "Invalidated"
+      },
+      "placeholder": {
+        "filter": "Filter by code prefix or note…"
+      },
+      "aria": {
+        "filter": "Filter redemption codes",
+        "status": "Status"
+      },
+      "confirm": {
+        "invalidateTitle": "Invalidate redemption code?",
+        "invalidate": "{{code}} will no longer be redeemable.",
+        "invalidateAction": "Invalidate"
+      },
+      "toast": {
+        "invalidated": "Code {{code}} invalidated.",
+        "invalidateFailed": "Failed to invalidate code."
+      },
+      "loadFailed": "Failed to load redemption codes"
+    },
+    "userMgmt": {
+      "title": "Users",
+      "subtitle": "Two views: admins (quota-bypass) and normal users. Per-row Grant quota link deep-links to the Quota page.",
+      "adminTitle": "Admin users",
+      "adminDescription": "Carry ornn:admin:skill — bypass all quota counters.",
+      "normalTitle": "Normal users",
+      "normalDescription": "Subject to monthly playground + skill-gen quotas."
+    },
+    "users": {
+      "title": "Users",
+      "subtitle": "Platform users and their activity",
+      "empty": "No users found.",
+      "loadFailed": "Failed to load users",
+      "table": {
+        "user": "User",
+        "email": "Email",
+        "skills": "Skills",
+        "activities": "Activities",
+        "lastActive": "Last Active"
+      }
+    }
+  },
+  "adminSettings": {
+    "secretSentinelHint": "(unchanged — secret preserved)",
+    "secretReplaceHint": "Replace to overwrite. Saving an unchanged mid-mask keeps the existing DB value.",
+    "sections": {
+      "mirror": {
+        "title": "GitHub mirror",
+        "description": "Repo coords + App credentials. Run controls are on the legacy mirror dashboard.",
+        "savedToast": "Mirror config saved",
+        "label": {
+          "enabled": "Mirror enabled",
+          "owner": "Owner",
+          "repo": "Repo",
+          "branch": "Branch",
+          "appId": "App ID",
+          "installationId": "Installation ID",
+          "privateKey": "App private key (PEM)"
+        },
+        "openDashboard": "Open mirror dashboard →"
+      },
+      "nyxid": {
+        "title": "NyxID integration",
+        "description": "OAuth service-account credentials + the API base URL the backend proxies through, plus the chrono-storage / chrono-sandbox endpoints (folded in here as part of #302 — same NyxID-orbit integration tier). Browser-side link coords live in ornn-web's configmap (NYXID_WEB_BASE_URL + path env vars) — change them there and redeploy.",
+        "savedToast": "NyxID integration saved",
+        "label": {
+          "tokenUrl": "Token URL",
+          "clientId": "Client ID",
+          "clientSecret": "Client Secret",
+          "baseApiUrl": "Base API URL",
+          "chronoStorageUrl": "chrono-storage URL",
+          "chronoStorageBucket": "chrono-storage bucket",
+          "chronoSandboxUrl": "chrono-sandbox URL"
+        }
+      },
+      "telemetry": {
+        "title": "PostHog",
+        "description": "PostHog product analytics + per-request audit. Backend reads this on boot — restart ornn-api to apply changes.",
+        "savedToast": "PostHog config saved",
+        "restartBadge": "Restart required · Backend reads on boot",
+        "label": {
+          "enabled": "PostHog enabled",
+          "apiKey": "Project API key",
+          "host": "Host",
+          "projectId": "Project ID",
+          "errorSampleRate": "api.error sample rate (0–1)"
+        },
+        "apiKeyHint": "Public project key from your PostHog dashboard. Empty disables analytics.",
+        "hostHint": "https://us.i.posthog.com or https://eu.i.posthog.com depending on your region.",
+        "projectIdPlaceholder": "optional — log correlation only",
+        "errorSampleRateHint": "Fraction of 5xx errors emitted as `api.error` events. `api.request` always emits at 100%.",
+        "frontendNote": "Frontend pageviews + identify still run from env-injected `window.__ORNN_CONFIG__` for now — DB-driven frontend runtime config is a follow-up."
+      },
+      "skillAudit": {
+        "title": "Skill auditing",
+        "description": "LLM-driven audit, AgentSeal hardening, risk threshold.",
+        "savedToast": "Skill audit saved",
+        "label": {
+          "llmAuditEnabled": "LLM audit enabled",
+          "provider": "LLM audit provider",
+          "model": "LLM audit model (optional)",
+          "riskThreshold": "Risk threshold (0..10)",
+          "agentSealEnabled": "AgentSeal enabled",
+          "agentSealTimeout": "AgentSeal timeout (ms) — 1000..600000"
+        },
+        "option": {
+          "select": "— select —",
+          "providerDefault": "— provider default —"
+        }
+      },
+      "runtime": {
+        "label": {
+          "defaultProvider": "Default provider",
+          "defaultModel": "Default model",
+          "sseKeepAlive": "SSE keep-alive (ms) — 1000..600000",
+          "defaultMonthlyQuota": "Default monthly quota — non-admin users (0..1,000,000)"
+        },
+        "option": {
+          "none": "— none —",
+          "providerDefault": "— provider default —"
+        },
+        "defaultModelHint": "Only enabled, non-removed models from the selected provider appear.",
+        "defaultMonthlyQuotaHint": "Raising the default mid-month grants existing users headroom; lowering does not retroactively claw back."
+      },
+      "playground": {
+        "title": "Playground",
+        "description": "Runtime defaults for the playground surface.",
+        "savedToast": "Playground settings saved"
+      },
+      "skillGen": {
+        "title": "Skill generation",
+        "description": "Runtime defaults for the AI-assisted skill generation surface.",
+        "savedToast": "Skill-gen settings saved"
+      },
+      "extras": {
+        "title": "Service binding list configuration",
+        "description": "Additional NyxID-managed services proxied through Ornn — bind each by name + base URL + optional scopes.",
+        "savedToast": "Extras saved",
+        "empty": "No extra services configured",
+        "label": {
+          "name": "Name",
+          "baseUrl": "Base URL (optional)",
+          "scopes": "Scopes (comma-separated, optional)"
+        },
+        "aria": {
+          "remove": "Remove {{name}}"
+        },
+        "fallbackRow": "row",
+        "action": {
+          "add": "Add service"
+        }
+      },
+      "llmProviders": {
+        "eyebrow": "[§ LLM PROVIDERS]",
+        "title": "LLM providers",
+        "description": "Per-provider gateway, auth, and model catalog. Click Models on a row to enable / disable models and pick per-surface defaults — defaults are global across providers, so setting one unselects every other.",
+        "action": {
+          "new": "New provider",
+          "addFirst": "Add your first provider",
+          "models": "Models",
+          "sync": "Sync"
+        },
+        "loadFailed": "Failed to load providers",
+        "empty": "No providers configured",
+        "table": {
+          "name": "Name",
+          "auth": "Auth",
+          "models": "Models",
+          "actions": "Actions"
+        },
+        "modelCounts": "{{playground}} playground · {{skillGen}} skillGen · {{total}} total",
+        "archivedCount": "{{count}} archived",
+        "toast": {
+          "synced": "Synced {{name}}: +{{added}} added, {{updated}} updated, {{removed}} removed.",
+          "syncFailed": "Sync failed"
+        }
+      },
+      "exportImport": {
+        "eyebrow": "[§ EXPORT / IMPORT]",
+        "title": "Export / import",
+        "description": "Download the full settings tree as JSON, or import to apply a previously-exported configuration. Secrets in the export are sentinel-redacted; importing a sentinel preserves the existing DB value.",
+        "downloadTitle": "Download",
+        "downloadHintPrefix": "File name follows",
+        "uploadTitle": "Upload + import",
+        "uploadSteps": "Step 1: upload. Step 2: dry-run. Step 3: confirm + apply.",
+        "invalidFile": "File is not a valid Ornn settings export (missing schemaVersion or sections)",
+        "parseFailed": "Parse failed",
+        "loaded": "Loaded · schemaVersion {{schemaVersion}} · exported {{exportedAt}}",
+        "dryRunTitle": "Dry-run preview",
+        "appliedTitle": "Import applied",
+        "action": {
+          "export": "Export settings",
+          "chooseFile": "Choose file",
+          "dryRun": "Run dry-run preview",
+          "apply": "Apply import",
+          "applyConfirm": "Apply"
+        },
+        "confirm": {
+          "title": "Apply import?",
+          "body": "This will write every section that passes validation. Sections that fail validation are skipped — the rest still apply. Sentinel-valued secrets keep the existing DB value."
+        },
+        "table": {
+          "section": "Section",
+          "status": "Status",
+          "detail": "Detail"
+        },
+        "toast": {
+          "exported": "Exported {{filename}}",
+          "exportFailed": "Export failed",
+          "dryRunFailed": "Dry-run failed",
+          "importPartial": "Import partial — {{failed}} section(s) failed.",
+          "importApplied": "Import applied.",
+          "importFailed": "Import failed"
+        }
+      }
+    }
+  },
+  "adminMirror": {
+    "savedRepo": "Mirror settings saved.",
+    "savedCreds": "GitHub App credentials saved.",
+    "title": "GitHub Mirror",
+    "loading": "Loading mirror status…",
+    "loadFailed": "Could not load mirror status.",
+    "featureOn": "Feature enabled",
+    "featureOff": "Feature disabled — flip the toggle below to enable",
+    "branch": "Branch",
+    "lastReconcile": "Last reconcile",
+    "runningSince": "Running since {{when}}",
+    "never": "Never",
+    "duration": "Duration",
+    "lastError": "Last error",
+    "countEligible": "Eligible",
+    "countEligibleHint": "Public + system skills",
+    "countSynced": "Synced",
+    "countSyncedHint": "Latest version on the mirror",
+    "countLagging": "Lagging",
+    "countLaggingHint": "Mirrored, but stale version",
+    "countNeverSynced": "Never synced",
+    "countNeverSyncedOldest": "Oldest pending: {{when}}",
+    "countNeverSyncedNone": "Nothing pending",
+    "reconcileTitle": "Manual reconcile",
+    "reconcileRunning": "Running…",
+    "reconcileButton": "Reconcile now",
+    "repoFormTitle": "Mirror repository",
+    "fieldEnabled": "Mirror enabled",
+    "fieldOwner": "Owner",
+    "fieldRepo": "Repo",
+    "fieldBranch": "Branch",
+    "credsTitle": "GitHub App credentials",
+    "fieldAppId": "App ID",
+    "fieldAppIdHint": "Numeric, from the App settings page on GitHub.",
+    "fieldInstallationId": "Installation ID",
+    "fieldPrivateKey": "App private key (PEM)",
+    "confirmTitle": "Confirm: abandon current mirror repo",
+    "confirmConfirm": "Yes, change repo"
+  },
+  "errors": {
+    "generic": {
+      "unknown": "Something went wrong"
+    },
+    "api": {
+      "quota": {
+        "snapshotMissing": "Quota snapshot missing",
+        "snapshotShapeInvalid": "Quota snapshot shape invalid: {{detail}}",
+        "adminListMissing": "Admin quota list missing",
+        "lifetimeMissing": "Lifetime quota response missing",
+        "grantMissing": "Grant response missing",
+        "bulkGrantMissing": "Bulk grant response missing",
+        "auditListMissing": "Audit list missing"
+      },
+      "redemption": {
+        "mintMissing": "Mint response missing",
+        "mintShapeInvalid": "Mint response shape invalid: {{detail}}",
+        "adminListMissing": "Admin redemption-code list missing",
+        "adminListShapeInvalid": "Admin redemption-code list shape invalid: {{detail}}",
+        "detailMissing": "Redemption code detail missing",
+        "detailShapeInvalid": "Redemption code shape invalid: {{detail}}",
+        "invalidateMissing": "Invalidate response missing",
+        "invalidateShapeInvalid": "Invalidate response shape invalid: {{detail}}",
+        "redeemMissing": "Redeem response missing",
+        "redeemShapeInvalid": "Redeem response shape invalid: {{detail}}",
+        "historyMissing": "Redemption history missing",
+        "historyShapeInvalid": "Redemption history shape invalid: {{detail}}"
+      },
+      "settings": {
+        "sectionMissing": "Section {{section}} missing from response",
+        "sectionPutMissing": "Section {{section}} update returned no data",
+        "providerNotFound": "Provider not found",
+        "providerCreateFailed": "Failed to create provider",
+        "providerUpdateFailed": "Failed to update provider",
+        "syncFailed": "Failed to sync provider models",
+        "modelPatchFailed": "Failed to update model flags",
+        "exportMissing": "Export response missing",
+        "importMissing": "Import response missing"
+      },
+      "adminUsers": {
+        "listMissing": "Admin users list missing"
+      },
+      "models": {
+        "pickerMissing": "Model picker response missing"
+      },
+      "adminDashboard": {
+        "statsMissing": "Dashboard stats missing"
+      },
+      "audit": {
+        "startMissing": "Audit returned no data"
+      },
+      "skillPackage": {
+        "downloadFailed": "Failed to download skill package: {{status}}",
+        "loadFailed": "Failed to load skill package"
+      }
+    },
+    "zip": {
+      "readFailed": "Failed to read ZIP file. The file may be corrupted.",
+      "skillMdNested": "SKILL.md was found in a subdirectory but must be at the root level.",
+      "skillMdRootRequired": "Invalid skill package: SKILL.md is required at the root of the archive.",
+      "skillMdMultiple": "Multiple SKILL.md files found. Nested skills are not allowed.",
+      "unrecognizedDirs": "Unrecognized directories found: {{dirs}}. Only scripts/, references/, and assets/ are standard.",
+      "frontmatterUnparseable": "Could not extract metadata from SKILL.md frontmatter. You may need to add or fix the YAML frontmatter block.",
+      "onlyZipAccepted": "Only .zip files are accepted.",
+      "fileTooLarge": "File too large ({{size}})."
+    },
+    "frontmatter": {
+      "panelTitle": "Frontmatter Validation Errors",
+      "panelCount": "{{count}} error found. Fix all errors before saving.",
+      "generic": "{{detail}}",
+      "unparseable": "Could not parse SKILL.md frontmatter",
+      "tagFormat": "Tags must be lowercase alphanumeric with hyphens",
+      "envVarFormat": "Environment variable names must be UPPER_SNAKE_CASE",
+      "nameFormat": "Name must start with a letter or number and contain only lowercase letters, numbers, and hyphens",
+      "versionFormat": "version must be in `<major>.<minor>` format, e.g. `1.0` (non-negative integers, no leading zeroes, no patch digit)",
+      "runtimeRequiredForCategory": "runtime is required when category is '{{category}}'",
+      "runtimeForbiddenForCategory": "runtime must not be provided when category is '{{category}}'",
+      "toolListRequiredForCategory": "tool-list is required when category is '{{category}}'",
+      "toolListForbiddenForCategory": "tool-list must not be provided when category is '{{category}}'",
+      "outputTypeRequiredForCategory": "output-type is required when category is '{{category}}'",
+      "outputTypeForbiddenForCategory": "output-type must not be provided when category is '{{category}}'",
+      "runtimeDependencyForbiddenForCategory": "runtime-dependency must not be provided when category is '{{category}}'",
+      "runtimeEnvVarForbiddenForCategory": "runtime-env-var must not be provided when category is '{{category}}'"
+    }
   }
 }

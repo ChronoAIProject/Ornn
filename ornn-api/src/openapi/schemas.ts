@@ -63,7 +63,7 @@ export const skillDetailResponseSchema = z.object({
   description: z.string().describe("Brief description of what the skill does and when to use it"),
   license: z.string().nullable().describe("SPDX license identifier (e.g. 'MIT', 'Apache-2.0'), or null if not specified"),
   compatibility: z.string().nullable().describe("Compatible AI model or platform (e.g. 'claude', 'gpt-4'), or null if model-agnostic"),
-  metadata: z.record(z.unknown()).describe("Structured skill metadata including category, outputType, runtimes, tools, and tags. See skill format spec for full schema"),
+  metadata: z.record(z.string(), z.unknown()).describe("Structured skill metadata including category, outputType, runtimes, tools, and tags. See skill format spec for full schema"),
   tags: z.array(z.string()).describe("List of tag names for categorization and search filtering"),
   skillHash: z.string().describe("SHA-256 hash of the skill package contents. Changes when the skill is updated"),
   presignedPackageUrl: z.string().describe("Temporary pre-signed URL to download the skill package ZIP file. Expires after a short period"),
@@ -78,8 +78,8 @@ export const skillDetailApiResponse = apiResponse(skillDetailResponseSchema);
 export const skillJsonResponseSchema = z.object({
   name: z.string().describe("Skill name"),
   description: z.string().describe("Skill description"),
-  metadata: z.record(z.unknown()).describe("Structured skill metadata (category, outputType, runtimes, tools, tags)"),
-  files: z.record(z.string()).describe("Map of relative file path to file content string. Keys are paths like 'skill.md', 'scripts/run.py'. Values are the full text content of each file. Binary files are excluded"),
+  metadata: z.record(z.string(), z.unknown()).describe("Structured skill metadata (category, outputType, runtimes, tools, tags)"),
+  files: z.record(z.string(), z.string()).describe("Map of relative file path to file content string. Keys are paths like 'skill.md', 'scripts/run.py'. Values are the full text content of each file. Binary files are excluded"),
 });
 
 export const skillJsonApiResponse = apiResponse(skillJsonResponseSchema);
@@ -167,17 +167,17 @@ export const chatRequestBodySchema = z.object({
     toolCalls: z.array(z.object({
       id: z.string(),
       name: z.string(),
-      args: z.record(z.unknown()),
+      args: z.record(z.string(), z.unknown()),
     })).optional(),
     toolCallId: z.string().optional(),
   })).min(1).max(100),
   skillId: z.string().optional(),
-  envVars: z.record(z.string()).optional(),
+  envVars: z.record(z.string(), z.string()).optional(),
 });
 
 export const playgroundChatEventSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("text-delta"), delta: z.string() }),
-  z.object({ type: z.literal("tool-call"), toolCall: z.object({ id: z.string(), name: z.string(), args: z.record(z.unknown()) }) }),
+  z.object({ type: z.literal("tool-call"), toolCall: z.object({ id: z.string(), name: z.string(), args: z.record(z.string(), z.unknown()) }) }),
   z.object({ type: z.literal("tool-result"), toolCallId: z.string(), result: z.string() }),
   z.object({ type: z.literal("error"), message: z.string() }),
   z.object({ type: z.literal("finish"), finishReason: z.string() }),

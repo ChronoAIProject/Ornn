@@ -6,6 +6,7 @@
  */
 
 import { useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import { motion } from "framer-motion";
 import { Badge } from "@/components/ui/Badge";
 import { extractFrontmatter } from "@/utils/frontmatter";
@@ -54,6 +55,7 @@ export function FrontmatterMeta({
   content,
   className = "",
 }: FrontmatterMetaProps) {
+  const { t } = useTranslation();
   const frontmatter = useMemo(() => extractFrontmatter(content), [content]);
 
   if (!frontmatter) return null;
@@ -86,7 +88,7 @@ export function FrontmatterMeta({
       className={`bg-card space-y-4 rounded border border-accent/10 p-4 ${className}`}
     >
       {hasRuntimes && (
-        <MetaSection title="Runtime">
+        <MetaSection title={t("skillComponents.frontmatter.runtime")}>
           <div className="flex flex-wrap gap-1.5">
             {runtimes.map((rt) => (
               <Badge key={rt} color="green">
@@ -98,7 +100,7 @@ export function FrontmatterMeta({
       )}
 
       {hasTools && (
-        <MetaSection title="Required Tools">
+        <MetaSection title={t("skillComponents.frontmatter.requiredTools")}>
           <div className="flex flex-wrap gap-1.5">
             {tools.map((tool) => (
               <Badge key={tool} color={getToolColor(tool)}>
@@ -110,7 +112,7 @@ export function FrontmatterMeta({
       )}
 
       {hasDeps && (
-        <MetaSection title="Dependencies">
+        <MetaSection title={t("skillComponents.frontmatter.dependencies")}>
           <div className="flex flex-wrap gap-1.5">
             {deps.map((dep) => (
               <Badge key={dep} color="magenta">
@@ -122,7 +124,7 @@ export function FrontmatterMeta({
       )}
 
       {hasEnv && (
-        <MetaSection title="Environment Variables">
+        <MetaSection title={t("skillComponents.frontmatter.envVars")}>
           <div className="flex flex-wrap gap-1.5">
             {envVars.map((envVar) => (
               <Badge key={envVar} color="yellow">
@@ -134,7 +136,7 @@ export function FrontmatterMeta({
       )}
 
       {hasCompat && (
-        <MetaSection title="Compatibility">
+        <MetaSection title={t("skillComponents.frontmatter.compatibility")}>
           <p className="font-text text-sm text-strong">
             {compatibility}
           </p>

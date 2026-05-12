@@ -6,6 +6,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useTranslation } from "react-i18next";
 import { SKILL_CATEGORY_INFO, type SkillCategory } from "@/utils/constants";
 
 export interface CategoryTooltipProps {
@@ -34,6 +35,7 @@ const CATEGORY_COLORS: Record<SkillCategory, string> = {
 };
 
 export function CategoryTooltip({ className = "" }: CategoryTooltipProps) {
+  const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -55,7 +57,7 @@ export function CategoryTooltip({ className = "" }: CategoryTooltipProps) {
         onMouseLeave={() => setIsOpen(false)}
         onClick={() => setIsOpen((prev) => !prev)}
         className="p-1 text-meta hover:text-accent transition-colors cursor-pointer"
-        aria-label="Category descriptions"
+        aria-label={t("common.aria.categoryDescriptions")}
       >
         <InfoIcon className="h-4 w-4" />
       </button>

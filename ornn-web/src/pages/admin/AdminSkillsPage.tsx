@@ -5,6 +5,7 @@
  */
 
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
@@ -17,6 +18,7 @@ import { Modal } from "@/components/ui/Modal";
 import { Pagination } from "@/components/ui/Pagination";
 import { apiGet, apiDelete } from "@/services/apiClient";
 import { useToastStore } from "@/stores/toastStore";
+import { translateError } from "@/utils/translateError";
 
 /** Skill item shape from admin API. */
 interface AdminSkill {
@@ -58,6 +60,7 @@ function formatDateSGT(dateStr: string): string {
 const PAGE_SIZE = 20;
 
 export function AdminSkillsPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { addToast } = useToastStore();
@@ -89,14 +92,14 @@ export function AdminSkillsPage() {
       await apiDelete(`/api/v1/admin/skills/${skillId}`);
     },
     onSuccess: () => {
-      addToast({ type: "success", message: "Skill deleted" });
+      addToast({ type: "success", message: t("adminPages.skills.toast.deleted") });
       setDeleteTarget(null);
       queryClient.invalidateQueries({ queryKey: ["admin", "skills"] });
     },
     onError: (err) => {
       addToast({
         type: "error",
-        message: err instanceof Error ? err.message : "Failed to delete skill",
+        message: translateError(err, t("adminPages.skills.toast.deleteFailed")),
       });
     },
   });
@@ -127,12 +130,12 @@ export function AdminSkillsPage() {
       {/* Header */}
       <div>
         <h1 className="font-display text-2xl font-bold text-accent-support accent-support">
-          Skills
+          {t("adminPages.skills.title")}
         </h1>
         <p className="mt-1 font-text text-meta">
           {userIdFromUrl
-            ? "Skills for selected user"
-            : "Manage all platform skills"}
+            ? t("adminPages.skills.subtitleForUser")
+            : t("adminPages.skills.subtitle")}
         </p>
       </div>
 
@@ -140,14 +143,14 @@ export function AdminSkillsPage() {
       <form onSubmit={handleSearch} className="flex items-end gap-3">
         <div className="flex-1">
           <Input
-            label="Search Skills"
+            label={t("adminPages.skills.searchLabel")}
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
-            placeholder="Search by name or description..."
+            placeholder={t("adminPages.skills.searchPlaceholder")}
           />
         </div>
         <Button type="submit" variant="primary" size="sm">
-          Search
+          {t("adminPages.skills.searchBtn")}
         </Button>
         {(search || userIdFromUrl) && (
           <Button
@@ -162,7 +165,7 @@ export function AdminSkillsPage() {
               }
             }}
           >
-            Clear
+            {t("adminPages.skills.clearBtn")}
           </Button>
         )}
       </form>
@@ -179,12 +182,14 @@ export function AdminSkillsPage() {
           ) : error ? (
             <div className="py-8 text-center">
               <p className="font-text text-danger">
-                {error instanceof Error ? error.message : "Failed to load skills"}
+                {error instanceof Error
+                  ? error.message
+                  : t("adminPages.skills.loadFailed")}
               </p>
             </div>
           ) : data?.items.length === 0 ? (
             <p className="py-8 text-center font-text text-meta">
-              No skills found.
+              {t("adminPages.skills.empty")}
             </p>
           ) : (
             <div className="overflow-x-auto">
@@ -192,22 +197,22 @@ export function AdminSkillsPage() {
                 <thead>
                   <tr className="border-b border-accent/20">
                     <th className="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
-                      Name
+                      {t("adminPages.skills.table.name")}
                     </th>
                     <th className="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
-                      Author
+                      {t("adminPages.skills.table.author")}
                     </th>
                     <th className="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
-                      Visibility
+                      {t("adminPages.skills.table.visibility")}
                     </th>
                     <th className="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
-                      Tags
+                      {t("adminPages.skills.table.tags")}
                     </th>
                     <th className="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
-                      Created
+                      {t("adminPages.skills.table.created")}
                     </th>
                     <th className="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
-                      Actions
+                      {t("adminPages.skills.table.actions")}
                     </th>
                   </tr>
                 </thead>
@@ -237,7 +242,7 @@ export function AdminSkillsPage() {
                       </td>
                       <td className="px-4 py-3">
                         <Badge color={skill.isPrivate ? "yellow" : "green"}>
-                          {skill.isPrivate ? "Private" : "Public"}
+                          {skill.isPrivate ? t("common.private") : t("common.public")}
                         </Badge>
                       </td>
                       <td className="px-4 py-3">
@@ -261,7 +266,7 @@ export function AdminSkillsPage() {
                           size="sm"
                           onClick={(e) => handleDeleteClick(e as unknown as React.MouseEvent, skill)}
                         >
-                          Delete
+                          {t("common.delete")}
                         </Button>
                       </td>
                     </tr>
@@ -286,18 +291,18 @@ export function AdminSkillsPage() {
       <Modal
         isOpen={!!deleteTarget}
         onClose={() => setDeleteTarget(null)}
-        title="Delete Skill?"
+        title={t("adminPages.skills.modal.deleteTitle")}
       >
         <div className="space-y-4">
           <p className="font-text text-strong">
-            Are you sure you want to delete{" "}
+            {t("adminPages.skills.modal.deleteBodyPrefix")}{" "}
             <span className="font-semibold text-accent">
               {deleteTarget?.name}
             </span>
-            ?
+            {t("adminPages.skills.modal.deleteBodySuffix")}
           </p>
           <p className="font-text text-sm text-meta">
-            This action cannot be undone. The skill will be permanently removed from the platform.
+            {t("adminPages.skills.modal.deleteWarning")}
           </p>
           <div className="flex justify-end gap-3 pt-2">
             <Button
@@ -305,7 +310,7 @@ export function AdminSkillsPage() {
               size="sm"
               onClick={() => setDeleteTarget(null)}
             >
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button
               variant="danger"
@@ -313,7 +318,7 @@ export function AdminSkillsPage() {
               onClick={handleConfirmDelete}
               loading={deleteMutation.isPending}
             >
-              Delete
+              {t("common.delete")}
             </Button>
           </div>
         </div>

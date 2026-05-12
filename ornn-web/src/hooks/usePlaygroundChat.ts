@@ -1,6 +1,20 @@
 /**
  * Hook managing the playground chat send -> stream -> display loop.
- * Dispatches SSE events to the Zustand store with token batching.
+ *
+ * Streaming model:
+ *   - SSE events arrive from the backend at upstream-LLM rate (typically
+ *     2-4 chars per token, ~20 ms between tokens).
+ *   - Incoming text is appended to a `pendingTokensRef` buffer.
+ *   - A pacer (`paceTimerRef`) drains the buffer one character at a time
+ *     onto the displayed assistant message at a fixed cadence
+ *     (`PACE_TICK_MS`). This is the "true" character-by-character
+ *     typewriter — display speed decoupled from network speed.
+ *   - When the LLM races ahead and the pending buffer grows large, the
+ *     pacer takes >1 char per tick so the visible text catches up
+ *     instead of typing out 30s after the response actually finished.
+ *   - On `finish` / `tool-call` / `error` / `abort` we drain whatever's
+ *     left immediately (paced typewriter is a UX nicety, not a contract).
+ *
  * @module hooks/usePlaygroundChat
  */
 
@@ -8,9 +22,26 @@ import { useCallback, useRef, useEffect } from "react";
 import { usePlaygroundStore } from "@/stores/playgroundStore";
 import { streamChat, type StreamHandle } from "@/services/playgroundStreamApi";
 import type { PlaygroundChatEvent, FileOutput } from "@/types/playground";
+import { track } from "@/lib/analytics";
 
-/** Minimum interval (ms) between text-delta flushes to avoid re-render storms. */
-const TOKEN_FLUSH_INTERVAL_MS = 50;
+/**
+ * Pacer tick interval. 22 ms ≈ 45 chars/sec when the buffer is small,
+ * which reads as deliberate typewriter without feeling slow. Combined
+ * with the catch-up logic below the perceived rate scales smoothly.
+ */
+const PACE_TICK_MS = 22;
+/**
+ * Backlog thresholds for adaptive draining. We aim to keep the visible
+ * text within ~1 second of what's actually been received.
+ *   - <  60 chars buffered:  1 char/tick → ~45 chars/sec (calm)
+ *   - <  200 chars buffered: 3 chars/tick → ~135 chars/sec
+ *   - >= 200 chars buffered: ceil(buffer / 60) chars/tick → catch up
+ */
+function charsPerTick(bufferLength: number): number {
+  if (bufferLength < 60) return 1;
+  if (bufferLength < 200) return 3;
+  return Math.ceil(bufferLength / 60);
+}
 
 /** Trigger a browser file download from a base64-encoded FileOutput. */
 function triggerFileDownload(file: FileOutput) {
@@ -33,21 +64,49 @@ function triggerFileDownload(file: FileOutput) {
 export function usePlaygroundChat() {
   const store = usePlaygroundStore();
   const streamRef = useRef<StreamHandle | null>(null);
-  const tokenBufferRef = useRef("");
-  const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const flushTokenBuffer = useCallback(() => {
-    flushTimerRef.current = null;
-    const buffered = tokenBufferRef.current;
-    if (!buffered) return;
-    tokenBufferRef.current = "";
-    usePlaygroundStore.getState().appendAssistantDelta(buffered);
+  // Pacer state — chars received from SSE that haven't been painted yet.
+  const pendingTokensRef = useRef("");
+  const paceTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  /** Pop one tick's worth of chars from the buffer and append. Spread
+   *  via `Array.from` so a 4-byte emoji counts as one character (the
+   *  buffer is a JS string; iterating by code units would split it). */
+  const drainOneTick = useCallback(() => {
+    const buf = pendingTokensRef.current;
+    if (!buf) {
+      // Buffer empty — pause the pacer until more text arrives.
+      if (paceTimerRef.current !== null) {
+        clearInterval(paceTimerRef.current);
+        paceTimerRef.current = null;
+      }
+      return;
+    }
+    const chars = Array.from(buf);
+    const take = Math.min(charsPerTick(chars.length), chars.length);
+    const head = chars.slice(0, take).join("");
+    const tail = chars.slice(take).join("");
+    pendingTokensRef.current = tail;
+    usePlaygroundStore.getState().appendAssistantDelta(head);
   }, []);
 
-  const cancelFlush = useCallback(() => {
-    if (flushTimerRef.current !== null) {
-      clearTimeout(flushTimerRef.current);
-      flushTimerRef.current = null;
+  const ensurePacer = useCallback(() => {
+    if (paceTimerRef.current !== null) return;
+    paceTimerRef.current = setInterval(drainOneTick, PACE_TICK_MS);
+  }, [drainOneTick]);
+
+  /** Drain everything to the display immediately. Used on terminal
+   *  events (finish / error / abort / tool-call) so the typewriter
+   *  doesn't keep ticking past the run. */
+  const drainAll = useCallback(() => {
+    if (paceTimerRef.current !== null) {
+      clearInterval(paceTimerRef.current);
+      paceTimerRef.current = null;
+    }
+    const buf = pendingTokensRef.current;
+    if (buf) {
+      pendingTokensRef.current = "";
+      usePlaygroundStore.getState().appendAssistantDelta(buf);
     }
   }, []);
 
@@ -57,33 +116,19 @@ export function usePlaygroundChat() {
 
       switch (event.type) {
         case "text-delta":
-          // Batch token updates to reduce re-renders
-          tokenBufferRef.current += event.delta;
-          if (flushTimerRef.current === null) {
-            flushTimerRef.current = setTimeout(
-              flushTokenBuffer,
-              TOKEN_FLUSH_INTERVAL_MS,
-            );
-          }
+          // Stuff into the pacer buffer; the interval drains it.
+          pendingTokensRef.current += event.delta;
+          ensurePacer();
           break;
 
         case "tool-call":
-          // Flush pending tokens before handling tool call
-          cancelFlush();
-          if (tokenBufferRef.current) {
-            s.appendAssistantDelta(tokenBufferRef.current);
-            tokenBufferRef.current = "";
-          }
+          drainAll();
           s.finalizeAssistantMessage();
           s.addToolCall(event.toolCall);
           break;
 
         case "tool-result":
-          cancelFlush();
-          if (tokenBufferRef.current) {
-            s.appendAssistantDelta(tokenBufferRef.current);
-            tokenBufferRef.current = "";
-          }
+          drainAll();
           s.addToolResult(event.toolCallId, event.result);
           break;
 
@@ -93,34 +138,38 @@ export function usePlaygroundChat() {
           break;
 
         case "error":
-          cancelFlush();
-          if (tokenBufferRef.current) {
-            s.appendAssistantDelta(tokenBufferRef.current);
-            tokenBufferRef.current = "";
-          }
+          drainAll();
           s.setError(event.message);
           s.setStreaming(false);
+          track("playground.run.failed", { error: event.message });
           break;
 
         case "finish":
-          cancelFlush();
-          if (tokenBufferRef.current) {
-            s.appendAssistantDelta(tokenBufferRef.current);
-            tokenBufferRef.current = "";
-          }
+          drainAll();
           s.finalizeAssistantMessage();
           s.setStreaming(false);
+          track("playground.run.completed", {
+            finishReason: event.finishReason,
+          });
           break;
       }
     },
-    [flushTokenBuffer, cancelFlush],
+    [drainAll, ensurePacer],
   );
 
   const sendMessage = useCallback(
-    (content: string, skillId?: string, envVars?: Record<string, string>) => {
+    (
+      content: string,
+      skillId?: string,
+      envVars?: Record<string, string>,
+      modelId?: string,
+    ) => {
       streamRef.current?.abort();
-      tokenBufferRef.current = "";
-      cancelFlush();
+      pendingTokensRef.current = "";
+      if (paceTimerRef.current !== null) {
+        clearInterval(paceTimerRef.current);
+        paceTimerRef.current = null;
+      }
 
       const s = usePlaygroundStore.getState();
       s.addUserMessage(content);
@@ -128,47 +177,47 @@ export function usePlaygroundChat() {
       s.setError(null);
       s.startAssistantMessage();
 
+      track("playground.run", {
+        skillId: skillId ?? null,
+        promptLength: content.length,
+        hasEnvVars: Boolean(envVars && Object.keys(envVars).length),
+        modelId: modelId ?? null,
+      });
+
       const msgs = usePlaygroundStore.getState().messages;
       const mapped = msgs.map((m) => ({ role: m.role, content: m.content }));
-      const handle = streamChat({ messages: mapped, skillId, envVars }, handleEvent);
+      const handle = streamChat({ messages: mapped, skillId, envVars, modelId }, handleEvent);
       streamRef.current = handle;
     },
-    [handleEvent, cancelFlush],
+    [handleEvent],
   );
 
   const abort = useCallback(() => {
     streamRef.current?.abort();
     streamRef.current = null;
-    cancelFlush();
-
-    // Flush remaining buffered tokens
-    if (tokenBufferRef.current) {
-      usePlaygroundStore
-        .getState()
-        .appendAssistantDelta(tokenBufferRef.current);
-      tokenBufferRef.current = "";
-    }
-
+    drainAll();
     const s = usePlaygroundStore.getState();
     s.finalizeAssistantMessage();
     s.setStreaming(false);
-  }, [cancelFlush]);
+  }, [drainAll]);
 
   const clearChat = useCallback(() => {
     streamRef.current?.abort();
     streamRef.current = null;
-    cancelFlush();
-    tokenBufferRef.current = "";
+    if (paceTimerRef.current !== null) {
+      clearInterval(paceTimerRef.current);
+      paceTimerRef.current = null;
+    }
+    pendingTokensRef.current = "";
     usePlaygroundStore.getState().clearMessages();
-  }, [cancelFlush]);
+  }, []);
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
       streamRef.current?.abort();
-      cancelFlush();
+      if (paceTimerRef.current !== null) clearInterval(paceTimerRef.current);
     };
-  }, [cancelFlush]);
+  }, []);
 
   return {
     messages: store.messages,

@@ -17,19 +17,22 @@ import {
 } from "../../middleware/nyxidAuth";
 import type { NyxidServiceClient } from "../../clients/nyxid/service";
 import type { SkillRepository } from "../skills/crud/repository";
-import type { ActivityRepository } from "../admin/activityRepository";
+import type { UserDirectoryRepository } from "../users/repository";
+import type { AnalyticsEmitter } from "../../infra/analytics";
 import { AppError } from "../../shared/types/index";
 
 export interface MeRoutesConfig {
   /**
-   * Base URL for the NyxID API (same one `NyxidOrgsClient` uses). Used by
-   * the back-fill org-name proxy so the frontend can render org
-   * display_name for orgs the caller is no longer a member of — e.g. a
-   * skill that was shared with "Org X" but the author since left.
+   * Resolves the NyxID API base URL from admin settings. Used by the
+   * back-fill org-name proxy so the frontend can render org
+   * display_name for orgs the caller is no longer a member of.
    */
-  nyxidBaseUrl: string;
+  nyxidBaseUrlResolver: () => Promise<string>;
   skillRepo: SkillRepository;
-  activityRepo: ActivityRepository;
+  /** Identity cache — backs `findByUserIds` for label resolution. */
+  userDirectoryRepo: UserDirectoryRepository;
+  /** PostHog emitter for `user.login` / `user.logout` (issue #271). */
+  analyticsEmitter: AnalyticsEmitter;
   /**
    * Catalog-service client. Powers `GET /me/nyxid-services`, which lists
    * the NyxID services the caller can tie a skill to (public admin
@@ -37,46 +40,50 @@ export interface MeRoutesConfig {
    */
   nyxidServiceClient: NyxidServiceClient;
   /**
-   * Synthetic NyxID service names appended to the bottom of every
-   * `GET /me/nyxid-services` response. Driven by the
-   * `EXTRA_NYXID_SERVICES` env var so operators can surface a
-   * platform-side option (e.g. "NyxID") that isn't (yet) registered in
-   * the catalogue. See `infra/config.ts`.
+   * Resolves synthetic NyxID service names from admin settings (extras
+   * section). Read on every `/me/nyxid-services` and tie call so an
+   * admin can append/remove without redeploying.
    */
-  extraNyxidServices: readonly string[];
+  extraNyxidServicesResolver: () => Promise<readonly string[]>;
 }
 
 export function createMeRoutes(config: MeRoutesConfig): Hono<{ Variables: AuthVariables }> {
   const {
-    nyxidBaseUrl,
+    nyxidBaseUrlResolver,
     skillRepo,
-    activityRepo,
+    userDirectoryRepo,
+    analyticsEmitter,
     nyxidServiceClient,
-    extraNyxidServices,
+    extraNyxidServicesResolver,
   } = config;
-  const baseUrl = nyxidBaseUrl.replace(/\/+$/, "");
   const app = new Hono<{ Variables: AuthVariables }>();
   const auth = nyxidAuthMiddleware();
 
+  const resolveBaseUrl = async () => (await nyxidBaseUrlResolver()).replace(/\/+$/, "");
+
   /**
-   * Pre-compute the synthetic-service rows once. Each entry inherits a
-   * stable id of the form `synthetic:<slug>` so downstream code can
-   * detect them without a round-trip to NyxID; tier is hard-pinned to
-   * `admin` since these stand in for platform-side services.
+   * Build the synthetic-service rows from the resolver output. Each
+   * entry inherits a stable id of the form `synthetic:<slug>` so
+   * downstream code can detect them without a round-trip to NyxID;
+   * tier is hard-pinned to `admin` since these stand in for platform-
+   * side services.
    */
-  const syntheticNyxidServices = extraNyxidServices.map((name) => {
-    const slug = name
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "");
-    return {
-      id: `synthetic:${slug}` as const,
-      slug,
-      label: name,
-      description: "",
-      tier: "admin" as const,
-    };
-  });
+  const buildSyntheticNyxidServices = async () => {
+    const names = await extraNyxidServicesResolver();
+    return names.map((name) => {
+      const slug = name
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "");
+      return {
+        id: `synthetic:${slug}` as const,
+        slug,
+        label: name,
+        description: "",
+        tier: "admin" as const,
+      };
+    });
+  };
 
   /**
    * GET /me/orgs — caller's NyxID org memberships.
@@ -121,20 +128,30 @@ export function createMeRoutes(config: MeRoutesConfig): Hono<{ Variables: AuthVa
    * are pulled from the decoded NyxID identity token (never from
    * client-supplied headers, which the proxy strips).
    *
-   * Kept under `/activity/*` for v0 back-compat — Epic 2 promotes these
-   * to `POST /v1/me/events` with a `{ type: "login" | "logout" }` body.
-   * Moved from the `admin` domain in the Epic 1 reorg; "any authed user"
-   * was never an admin operation.
+   * Issue #271: events go straight to PostHog. The frontend already
+   * emits `login.completed` client-side; this is the server-side ack
+   * (`user.login` / `user.logout`) — both are useful for cross-checking
+   * client-vs-server attribution in dashboards.
    */
   app.post("/activity/login", auth, async (c) => {
     const authCtx = getAuth(c);
-    await activityRepo.log(authCtx.userId, authCtx.email, authCtx.displayName, "login");
+    analyticsEmitter.trackPlatformActivity({
+      userId: authCtx.userId,
+      userEmail: authCtx.email,
+      userDisplayName: authCtx.displayName,
+      action: "user.login",
+    });
     return c.json({ data: { success: true }, error: null });
   });
 
   app.post("/activity/logout", auth, async (c) => {
     const authCtx = getAuth(c);
-    await activityRepo.log(authCtx.userId, authCtx.email, authCtx.displayName, "logout");
+    analyticsEmitter.trackPlatformActivity({
+      userId: authCtx.userId,
+      userEmail: authCtx.email,
+      userDisplayName: authCtx.displayName,
+      action: "user.logout",
+    });
     return c.json({ data: { success: true }, error: null });
   });
 
@@ -168,6 +185,7 @@ export function createMeRoutes(config: MeRoutesConfig): Hono<{ Variables: AuthVa
       throw AppError.notFound("ORG_NOT_FOUND", `Org '${orgId}' not found`);
     }
 
+    const baseUrl = await resolveBaseUrl();
     const resp = await fetch(`${baseUrl}/api/v1/orgs/${encodeURIComponent(orgId)}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
@@ -218,6 +236,7 @@ export function createMeRoutes(config: MeRoutesConfig): Hono<{ Variables: AuthVa
   app.get("/me/nyxid-services", auth, async (c) => {
     const authCtx = getAuth(c);
     const token = authCtx.userAccessToken;
+    const syntheticNyxidServices = await buildSyntheticNyxidServices();
     // Even when the proxy stripped the user's token, still surface the
     // synthetic services — they don't depend on NyxID at all.
     if (!token) {
@@ -262,9 +281,10 @@ export function createMeRoutes(config: MeRoutesConfig): Hono<{ Variables: AuthVa
     const authCtx = getAuth(c);
     const userId = authCtx.userId;
     const raw = await skillRepo.aggregateGrantsByOwner(userId);
+    const baseUrl = await resolveBaseUrl();
     const [orgs, users] = await Promise.all([
       resolveOrgDisplayNames(raw.orgs, authCtx.userAccessToken, baseUrl),
-      resolveUserDisplayNames(raw.users, activityRepo),
+      resolveUserDisplayNames(raw.users, userDirectoryRepo),
     ]);
     return c.json({ data: { orgs, users }, error: null });
   });
@@ -280,9 +300,10 @@ export function createMeRoutes(config: MeRoutesConfig): Hono<{ Variables: AuthVa
     const userId = authCtx.userId;
     const userOrgIds = await readUserOrgIds(c);
     const raw = await skillRepo.aggregateSourcesForReader(userId, userOrgIds);
+    const baseUrl = await resolveBaseUrl();
     const [orgs, users] = await Promise.all([
       resolveOrgDisplayNames(raw.orgs, authCtx.userAccessToken, baseUrl),
-      resolveUserDisplayNames(raw.users, activityRepo),
+      resolveUserDisplayNames(raw.users, userDirectoryRepo),
     ]);
     return c.json({ data: { orgs, users }, error: null });
   });
@@ -323,16 +344,16 @@ async function resolveOrgDisplayNames(
 
 /**
  * Best-effort name resolution for a list of user ids. Hits the
- * activity collection once per unique id through the existing email
- * directory. A user who never signed into Ornn returns as their raw
- * id — which the UI chip displays verbatim.
+ * unified `users` directory once per batch. A user who never signed
+ * into Ornn returns as their raw id — which the UI chip displays
+ * verbatim.
  */
 async function resolveUserDisplayNames(
   raw: Array<{ userId: string; skillCount: number }>,
-  activityRepo: ActivityRepository,
+  userDirectoryRepo: UserDirectoryRepository,
 ): Promise<Array<{ userId: string; email: string; displayName: string; skillCount: number }>> {
   const ids = raw.map((r) => r.userId);
-  const directory = await activityRepo.findByUserIds(ids);
+  const directory = await userDirectoryRepo.findByUserIds(ids);
   const map = new Map(directory.map((d) => [d.userId, d]));
   return raw.map((r) => {
     const d = map.get(r.userId);

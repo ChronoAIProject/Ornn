@@ -1,12 +1,14 @@
 /**
  * Singleton platform-settings document in Mongo. Single row keyed by a
- * fixed `_id`; absent row = defaults.
+ * fixed `_id`. Returns a `Partial<PlatformSettings>` so the service
+ * layer can apply configmap-driven defaults — fields the admin has not
+ * touched come back undefined, NOT pre-filled with sentinel defaults.
  *
  * @module domains/platform/repository
  */
 
 import type { Collection, Db, Document } from "mongodb";
-import { DEFAULT_PLATFORM_SETTINGS, type PlatformSettings } from "./types";
+import type { GithubMirrorConfig, LlmProviderConfig, PlatformSettings } from "./types";
 
 const SETTINGS_ID = "ornn";
 
@@ -17,24 +19,75 @@ export class PlatformSettingsRepository {
     this.collection = db.collection("platform_settings");
   }
 
-  async get(): Promise<PlatformSettings> {
+  /**
+   * Returns the raw stored fields. Anything the admin hasn't touched is
+   * `undefined`. The service layer is responsible for merging with
+   * configmap-derived defaults.
+   */
+  async get(): Promise<Partial<PlatformSettings>> {
     const doc = (await this.collection.findOne({
       _id: SETTINGS_ID as unknown as Document["_id"],
     })) as (Document & Partial<PlatformSettings>) | null;
-    if (!doc) return { ...DEFAULT_PLATFORM_SETTINGS };
-    return {
-      auditWaiverThreshold:
-        typeof doc.auditWaiverThreshold === "number"
-          ? doc.auditWaiverThreshold
-          : DEFAULT_PLATFORM_SETTINGS.auditWaiverThreshold,
-    };
+    if (!doc) return {};
+    const out: { -readonly [K in keyof PlatformSettings]?: PlatformSettings[K] } = {};
+    if (typeof doc.auditWaiverThreshold === "number") {
+      out.auditWaiverThreshold = doc.auditWaiverThreshold;
+    }
+    if (doc.githubMirror && typeof doc.githubMirror === "object") {
+      const m = doc.githubMirror as Partial<GithubMirrorConfig>;
+      out.githubMirror = {
+        enabled: typeof m.enabled === "boolean" ? m.enabled : false,
+        owner: typeof m.owner === "string" ? m.owner : "",
+        repo: typeof m.repo === "string" ? m.repo : "",
+        branch: typeof m.branch === "string" ? m.branch : "",
+        appId: typeof m.appId === "string" ? m.appId : "",
+        installationId: typeof m.installationId === "string" ? m.installationId : "",
+        appPrivateKey: typeof m.appPrivateKey === "string" ? m.appPrivateKey : "",
+      };
+    }
+    if (doc.llmProvider && typeof doc.llmProvider === "object") {
+      const p = doc.llmProvider as Partial<LlmProviderConfig>;
+      out.llmProvider = {
+        gatewayUrl: typeof p.gatewayUrl === "string" ? p.gatewayUrl : "",
+        apiKey: typeof p.apiKey === "string" ? p.apiKey : "",
+      };
+    }
+    return out;
   }
 
-  async patch(partial: Partial<PlatformSettings>): Promise<PlatformSettings> {
+  /**
+   * Partial upsert. Pass only the fields you want to change; nothing
+   * else is touched. `githubMirror` and `llmProvider` are written as full
+   * objects (atomic) — the service layer assembles complete shapes
+   * (including encrypting any sensitive fields) before calling here.
+   */
+  async patch(partial: Partial<PlatformSettings>): Promise<Partial<PlatformSettings>> {
+    const set: Record<string, unknown> = {};
+    if (typeof partial.auditWaiverThreshold === "number") {
+      set.auditWaiverThreshold = partial.auditWaiverThreshold;
+    }
+    if (partial.githubMirror) {
+      set.githubMirror = {
+        enabled: !!partial.githubMirror.enabled,
+        owner: partial.githubMirror.owner ?? "",
+        repo: partial.githubMirror.repo ?? "",
+        branch: partial.githubMirror.branch ?? "",
+        appId: partial.githubMirror.appId ?? "",
+        installationId: partial.githubMirror.installationId ?? "",
+        appPrivateKey: partial.githubMirror.appPrivateKey ?? "",
+      } satisfies GithubMirrorConfig;
+    }
+    if (partial.llmProvider) {
+      set.llmProvider = {
+        gatewayUrl: partial.llmProvider.gatewayUrl ?? "",
+        apiKey: partial.llmProvider.apiKey ?? "",
+      } satisfies LlmProviderConfig;
+    }
+    if (Object.keys(set).length === 0) return this.get();
     await this.collection.updateOne(
       { _id: SETTINGS_ID as unknown as Document["_id"] },
       {
-        $set: partial,
+        $set: set,
         $setOnInsert: { _id: SETTINGS_ID },
       },
       { upsert: true },

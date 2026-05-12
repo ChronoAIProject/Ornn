@@ -89,6 +89,6 @@ export async function startAudit({
     `/api/v1/skills/${encodeURIComponent(idOrName)}/audit`,
     { force },
   );
-  if (!res.data) throw new Error("Audit returned no data");
+  if (!res.data) throw new Error("errors.api.audit.startMissing");
   return res.data;
 }

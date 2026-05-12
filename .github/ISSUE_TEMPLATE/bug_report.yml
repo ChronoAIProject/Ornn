@@ -1,0 +1,75 @@
+name: Bug report
+description: Report something that is broken in Ornn.
+title: "[Bug] "
+labels: ["bug"]
+assignees: ["chronoai-shining"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug. Please fill out the sections below so we can reproduce and triage quickly.
+
+        If this might be a security issue, **stop** and use [Private Vulnerability Reporting](https://github.com/ChronoAIProject/Ornn/security/advisories/new) instead.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear description of the bug.
+      placeholder: "When I call POST /api/v1/skills/foo, the response is 500 instead of 200."
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Minimal, copy-pasteable steps. Include the request payload if relevant.
+      placeholder: |
+        1. ...
+        2. ...
+        3. ...
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version / commit SHA
+      description: The release tag (e.g. v0.9.3) or commit SHA where you observed this.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Which surface?
+      multiple: true
+      options:
+        - ornn-api (backend)
+        - ornn-web (frontend)
+        - deployment / infra
+        - documentation
+        - other
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / error output
+      description: Paste any relevant logs. Redact secrets.
+      render: shell
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Environment details, related issues, anything else useful.

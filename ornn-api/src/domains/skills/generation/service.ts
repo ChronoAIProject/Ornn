@@ -38,34 +38,68 @@ const generatedSkillSchema = z.object({
 
 export { generatedSkillSchema };
 
-export interface GenerationServiceConfig {
-  llmClient: NyxLlmClient;
-  defaultModel: string;
+/**
+ * Per-call resolution of LLM defaults from admin settings (`skillGen`
+ * section + selected provider's `maxOutputTokens` / `defaultTemperature`).
+ * Pulled fresh on every generation so an admin can swap the default
+ * provider without a redeploy.
+ */
+export interface SkillGenLlmDefaults {
+  model: string;
   maxOutputTokens: number;
   temperature: number;
 }
 
+export type SkillGenLlmDefaultsResolver = () => Promise<SkillGenLlmDefaults>;
+
+export interface GenerationServiceConfig {
+  llmClient: NyxLlmClient;
+  /**
+   * Resolver returning the active LLM defaults for the skill-generation
+   * surface. Read on every generate* call. NO env fallback: the route
+   * surfaces an explicit error to the caller when settings are missing.
+   */
+  defaultsResolver: SkillGenLlmDefaultsResolver;
+}
+
 export class SkillGenerationService {
   private readonly llmClient: NyxLlmClient;
-  private readonly defaultModel: string;
-  private readonly maxOutputTokens: number;
-  private readonly temperature: number;
+  private readonly defaultsResolver: SkillGenLlmDefaultsResolver;
 
   constructor(config: GenerationServiceConfig) {
     this.llmClient = config.llmClient;
-    this.defaultModel = config.defaultModel;
-    this.maxOutputTokens = config.maxOutputTokens;
-    this.temperature = config.temperature;
+    this.defaultsResolver = config.defaultsResolver;
+  }
+
+  private async resolveDefaults(): Promise<SkillGenLlmDefaults> {
+    const d = await this.defaultsResolver();
+    if (!d.model || d.model.trim().length === 0) {
+      throw new Error(
+        "SKILLGEN_LLM_NOT_CONFIGURED: default model not set in /admin/settings/skill-generation",
+      );
+    }
+    return d;
   }
 
   /**
    * Direct generation streaming. Streams tokens via SSE events.
-   * Uses Nyx Provider Responses API format.
+   * Uses Nyx Provider Responses API format. `modelOverride` (when set)
+   * picks an admin-curated model; otherwise the service-level default
+   * applies.
    */
   async *generateStream(
     query: string,
     signal?: AbortSignal,
+    modelOverride?: string,
   ): AsyncIterable<SkillStreamEvent> {
+    let defaults: SkillGenLlmDefaults;
+    try {
+      defaults = await this.resolveDefaults();
+    } catch (err) {
+      yield { type: "error", message: (err as Error).message };
+      return;
+    }
+    const model = modelOverride ?? defaults.model;
     if (signal?.aborted) {
       yield { type: "error", message: "Request aborted" };
       return;
@@ -83,10 +117,10 @@ export class SkillGenerationService {
 
     try {
       const streamEvents = this.llmClient.stream({
-        model: this.defaultModel,
+        model,
         input,
-        max_output_tokens: this.maxOutputTokens,
-        temperature: this.temperature,
+        max_output_tokens: defaults.maxOutputTokens,
+        temperature: defaults.temperature,
       });
 
       for await (const event of streamEvents) {
@@ -123,10 +157,10 @@ export class SkillGenerationService {
           ];
 
           const outputs = await this.llmClient.complete({
-            model: this.defaultModel,
+            model,
             input: retryInput,
-            max_output_tokens: this.maxOutputTokens,
-            temperature: this.temperature,
+            max_output_tokens: defaults.maxOutputTokens,
+            temperature: defaults.temperature,
           });
 
           let retryText = "";
@@ -164,7 +198,16 @@ export class SkillGenerationService {
   async *generateStreamWithHistory(
     messages: Array<{ role: "user" | "assistant"; content: string }>,
     signal?: AbortSignal,
+    modelOverride?: string,
   ): AsyncIterable<SkillStreamEvent> {
+    let defaults: SkillGenLlmDefaults;
+    try {
+      defaults = await this.resolveDefaults();
+    } catch (err) {
+      yield { type: "error", message: (err as Error).message };
+      return;
+    }
+    const model = modelOverride ?? defaults.model;
     if (signal?.aborted) {
       yield { type: "error", message: "Request aborted" };
       return;
@@ -194,10 +237,10 @@ export class SkillGenerationService {
 
     try {
       const streamEvents = this.llmClient.stream({
-        model: this.defaultModel,
+        model,
         input,
-        max_output_tokens: this.maxOutputTokens,
-        temperature: this.temperature,
+        max_output_tokens: defaults.maxOutputTokens,
+        temperature: defaults.temperature,
       });
 
       for await (const event of streamEvents) {
@@ -242,7 +285,16 @@ export class SkillGenerationService {
     specContent: string,
     options?: { endpoints?: string[]; description?: string },
     signal?: AbortSignal,
+    modelOverride?: string,
   ): AsyncIterable<SkillStreamEvent> {
+    let defaults: SkillGenLlmDefaults;
+    try {
+      defaults = await this.resolveDefaults();
+    } catch (err) {
+      yield { type: "error", message: (err as Error).message };
+      return;
+    }
+    const model = modelOverride ?? defaults.model;
     if (signal?.aborted) {
       yield { type: "error", message: "Request aborted" };
       return;
@@ -260,10 +312,10 @@ export class SkillGenerationService {
 
     try {
       const streamEvents = this.llmClient.stream({
-        model: this.defaultModel,
+        model,
         input,
-        max_output_tokens: this.maxOutputTokens,
-        temperature: this.temperature,
+        max_output_tokens: defaults.maxOutputTokens,
+        temperature: defaults.temperature,
       });
 
       for await (const event of streamEvents) {
@@ -307,7 +359,16 @@ export class SkillGenerationService {
     code: string,
     options?: { framework?: string; description?: string; sourceUrl?: string },
     signal?: AbortSignal,
+    modelOverride?: string,
   ): AsyncIterable<SkillStreamEvent> {
+    let defaults: SkillGenLlmDefaults;
+    try {
+      defaults = await this.resolveDefaults();
+    } catch (err) {
+      yield { type: "error", message: (err as Error).message };
+      return;
+    }
+    const model = modelOverride ?? defaults.model;
     if (signal?.aborted) {
       yield { type: "error", message: "Request aborted" };
       return;
@@ -325,10 +386,10 @@ export class SkillGenerationService {
 
     try {
       const streamEvents = this.llmClient.stream({
-        model: this.defaultModel,
+        model,
         input,
-        max_output_tokens: this.maxOutputTokens,
-        temperature: this.temperature,
+        max_output_tokens: defaults.maxOutputTokens,
+        temperature: defaults.temperature,
       });
 
       for await (const event of streamEvents) {

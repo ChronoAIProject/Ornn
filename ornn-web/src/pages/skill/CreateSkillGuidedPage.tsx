@@ -23,14 +23,16 @@ import { StepPreview } from "@/components/skill/guided/StepPreview";
 import { useCreateSkill } from "@/hooks/useSkills";
 import { useToastStore } from "@/stores/toastStore";
 import { useAuthStore } from "@/stores/authStore";
+import { track } from "@/lib/analytics";
 import { buildSkillMd } from "@/utils/frontmatterBuilder";
 import { buildFileTreeFromFolders, readUploadedFileContents } from "@/utils/fileTreeBuilder";
-import { basicInfoSchema, contentSchema, type BasicInfoData, type ContentData } from "@/utils/skillCreateSchemas";
+import { basicInfoSchema, contentSchema, type BasicInfoData, type BasicInfoInput, type ContentData, type ContentInput } from "@/utils/skillCreateSchemas";
 import type { FileNode } from "@/components/editor/FileTree";
 import type { SkillMetadata, SkillMetadataBlock, UploadableFolder } from "@/types/skillPackage";
 import { createDefaultSkillMetadata } from "@/types/skillPackage";
 import type { SkillCategory } from "@/utils/constants";
 import { useTranslation } from "react-i18next";
+import { translateError } from "@/utils/translateError";
 
 interface FormState {
   name: string;
@@ -119,7 +121,7 @@ export function CreateSkillGuidedPage() {
   );
 
   // Basic info form (nested metadata)
-  const basicInfoForm = useForm<BasicInfoData>({
+  const basicInfoForm = useForm<BasicInfoInput, unknown, BasicInfoData>({
     resolver: zodResolver(basicInfoSchema),
     defaultValues: {
       name: formData.name,
@@ -138,7 +140,7 @@ export function CreateSkillGuidedPage() {
   });
 
   // Content form
-  const contentForm = useForm<ContentData>({
+  const contentForm = useForm<ContentInput, unknown, ContentData>({
     resolver: zodResolver(contentSchema),
     defaultValues: {
       readmeMd: formData.readmeMd,
@@ -202,7 +204,12 @@ export function CreateSkillGuidedPage() {
     if (currentStep === 0) {
       const isValid = await basicInfoForm.trigger();
       if (isValid) {
-        const data = basicInfoForm.getValues();
+        // `getValues()` returns the pre-validation (input) shape — fields
+        // with `.default(...)` show up as optional even though `trigger()`
+        // just succeeded. Cast to the post-validation type so the
+        // downstream `FormState` merge picks up the now-populated values
+        // without each one needing its own `?? defaultLiteral`.
+        const data = basicInfoForm.getValues() as BasicInfoData;
         setFormData((prev) => ({
           ...prev,
           name: data.name,
@@ -223,7 +230,7 @@ export function CreateSkillGuidedPage() {
     } else if (currentStep === 1) {
       const isValid = await contentForm.trigger();
       if (isValid) {
-        const data = contentForm.getValues();
+        const data = contentForm.getValues() as ContentData;
         setFormData((prev) => ({ ...prev, ...data }));
         setCurrentStep(2);
       }
@@ -290,6 +297,14 @@ export function CreateSkillGuidedPage() {
 
     try {
       const skill = await createMutation.mutateAsync({ zipFile });
+      track("skill.created", {
+        skillId: skill.guid,
+        source: "guided",
+      });
+      track("skill.published", {
+        skillId: skill.guid,
+        source: "guided",
+      });
       addToast({
         type: "success",
         message: t("guided.saveSuccess", { name: skill.name }),
@@ -297,7 +312,7 @@ export function CreateSkillGuidedPage() {
       navigate(`/skills/${skill.name}`);
     } catch (err) {
       const message =
-        err instanceof Error ? err.message : t("guided.saveFailed");
+        translateError(err, t("guided.saveFailed"));
       addToast({ type: "error", message });
     }
   };

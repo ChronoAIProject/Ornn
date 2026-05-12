@@ -16,7 +16,11 @@ type PathItem = Record<string, unknown>;
 type OpenApiSpec = Record<string, unknown>;
 
 function toSchema(zodSchema: ZodTypeAny): JsonSchema {
-  const result = zodToJsonSchema(zodSchema, { target: "openApi3", $refStrategy: "none" }) as JsonSchema;
+  // Zod 4 changed the public ZodType signature; zod-to-json-schema's
+  // type guards still target the v3 shape. Cast through `any` at the
+  // boundary — the runtime shape is unchanged, this is purely the
+  // type bridge.
+  const result = zodToJsonSchema(zodSchema as unknown as Parameters<typeof zodToJsonSchema>[0], { target: "openApi3", $refStrategy: "none" }) as JsonSchema;
   // Remove top-level $schema key (not valid in OpenAPI component schemas)
   delete result.$schema;
   return result;
@@ -384,7 +388,7 @@ export function buildSpec(): OpenApiSpec {
   return {
     ...baseSpec(
       "ornn API",
-      "API for the ornn skill registry. Provides skill CRUD, search, AI-powered generation, playground, and admin endpoints. All endpoints require NyxID authentication via Bearer token. Responses follow a uniform envelope: { data: T | null, error: { code, message } | null }.",
+      "API for ornn — the end-to-end skill life-cycle manager for AI agents. Covers the full life-cycle: skill CRUD, search, AI-powered generation, playground, audit, and admin endpoints — from spec to ship. All endpoints require NyxID authentication via Bearer token. Responses follow a uniform envelope: { data: T | null, error: { code, message } | null }.",
     ),
     tags: [
       { name: "Skills", description: "Upload, retrieve, update, delete, and inspect AI skill packages." },

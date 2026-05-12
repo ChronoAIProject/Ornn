@@ -1,0 +1,38 @@
+name: Documentation task
+description: Improve, add, or fix documentation (README, docs/, in-code, public site).
+title: "[Docs] "
+labels: ["documentation"]
+assignees: ["chronoai-shining"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What needs to change?
+      description: Which doc, which section, and what is wrong or missing.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Where does this doc live?
+      options:
+        - README.md
+        - docs/ in this repo
+        - in-code comments / JSDoc
+        - public docs site (ornn.chrono-ai.fun/docs)
+        - CONTRIBUTING / SECURITY / SUPPORT
+        - other
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed change
+      description: Sketch the new content, or describe what you want explained.
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context

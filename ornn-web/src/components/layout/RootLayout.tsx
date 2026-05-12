@@ -2,6 +2,8 @@ import { Outlet, useLocation, useParams, Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Navbar } from "./Navbar";
 import { ToastContainer } from "@/components/ui/Toast";
+import { QuotaChip } from "@/components/quota/QuotaChip";
+import { useIsAuthenticated } from "@/stores/authStore";
 import { useSkill } from "@/hooks/useSkills";
 
 /** Build breadcrumb segments from current route — every crumb is clickable */
@@ -85,9 +87,36 @@ function useBreadcrumbs() {
       crumbs.push({ label, to: `/docs?section=${section}${title ? `&title=${encodeURIComponent(title)}` : ""}` });
     }
   } else if (path.startsWith("/admin")) {
-    crumbs.push({ label: t("breadcrumb.admin"), to: "/admin/categories" });
-    if (path.includes("categories")) crumbs.push({ label: t("breadcrumb.categories"), to: "/admin/categories" });
-    else if (path.includes("tags")) crumbs.push({ label: t("breadcrumb.tags"), to: "/admin/tags" });
+    // Admin sub-paths get granular crumbs so users can navigate back
+    // through the section tree from the top breadcrumb instead of the
+    // sidebar. Mirrors the labels the old AdminLayout's own breadcrumb
+    // used before admin pages adopted RootLayout's chrome.
+    crumbs.push({ label: t("breadcrumb.admin"), to: "/admin/dashboard" });
+
+    if (path.startsWith("/admin/dashboard")) {
+      crumbs.push({ label: "Dashboard", to: "/admin/dashboard" });
+    } else if (path === "/admin/users-legacy") {
+      crumbs.push({ label: "Users (legacy)", to: "/admin/users-legacy" });
+    } else if (path.startsWith("/admin/users")) {
+      crumbs.push({ label: "Users", to: "/admin/users" });
+    } else if (path.startsWith("/admin/quota")) {
+      crumbs.push({ label: "Quota", to: "/admin/quota" });
+    } else if (path.startsWith("/admin/redemption-codes")) {
+      crumbs.push({ label: "Redemption codes", to: "/admin/redemption-codes" });
+    } else if (path.startsWith("/admin/skills")) {
+      crumbs.push({ label: "Skills", to: "/admin/skills" });
+    } else if (path.startsWith("/admin/announcements")) {
+      crumbs.push({ label: "Announcements", to: "/admin/announcements" });
+    } else if (path.startsWith("/admin/settings")) {
+      crumbs.push({ label: "Settings", to: "/admin/settings" });
+      const tail = path.replace(/^\/admin\/settings\/?/, "");
+      if (tail) {
+        crumbs.push({
+          label: tail.replace(/[/-]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+          to: path,
+        });
+      }
+    }
   }
 
   return crumbs;
@@ -95,39 +124,45 @@ function useBreadcrumbs() {
 
 export function RootLayout() {
   const crumbs = useBreadcrumbs();
+  const isAuthenticated = useIsAuthenticated();
 
   return (
     <div className="flex flex-col h-screen bg-page bg-grid overflow-hidden">
       <Navbar />
       {/* Breadcrumb navigation — hide when only root crumb. Width matches
-          LandingNav (max-w-[1280px] mx-auto px-6 sm:px-8) so app-shell
-          horizontal rhythm aligns with the landing surface. */}
+          Navbar (max-w-[1280px] mx-auto px-6 sm:px-8) so the breadcrumb
+          rail aligns with the nav above it. The right rail hosts the
+          QuotaChip (paired playground + skill-gen pills) when
+          authenticated. */}
       {crumbs.length > 1 && (
       <div className="mx-auto w-full max-w-[1280px] shrink-0 px-6 sm:px-8 pt-3 pb-2">
-        <nav className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.08em]">
-          {crumbs.map((crumb, i) => {
-            const isLast = i === crumbs.length - 1;
-            return (
-              <span key={i} className="flex items-center gap-2">
-                {i > 0 && (
-                  <span className="text-meta opacity-50 select-none">/</span>
-                )}
-                {isLast ? (
-                  <span className="text-accent font-medium">
-                    {crumb.label}
-                  </span>
-                ) : (
-                  <Link
-                    to={crumb.to ?? "#"}
-                    className="text-meta hover:text-strong transition-colors duration-150"
-                  >
-                    {crumb.label}
-                  </Link>
-                )}
-              </span>
-            );
-          })}
-        </nav>
+        <div className="flex items-center justify-between gap-4">
+          <nav className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.08em]">
+            {crumbs.map((crumb, i) => {
+              const isLast = i === crumbs.length - 1;
+              return (
+                <span key={i} className="flex items-center gap-2">
+                  {i > 0 && (
+                    <span className="text-meta opacity-50 select-none">/</span>
+                  )}
+                  {isLast ? (
+                    <span className="text-accent font-medium">
+                      {crumb.label}
+                    </span>
+                  ) : (
+                    <Link
+                      to={crumb.to ?? "#"}
+                      className="text-meta hover:text-strong transition-colors duration-150"
+                    >
+                      {crumb.label}
+                    </Link>
+                  )}
+                </span>
+              );
+            })}
+          </nav>
+          {isAuthenticated && <QuotaChip />}
+        </div>
       </div>
       )}
       <main className="mx-auto w-full max-w-[1280px] flex-1 min-h-0 px-6 sm:px-8 overflow-hidden">

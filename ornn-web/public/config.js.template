@@ -1,9 +1,14 @@
 window.__ORNN_CONFIG__ = {
-  apiBaseUrl: "${API_BASE_URL}",
-  nyxidOauthAuthorizeUrl: "${NYXID_OAUTH_AUTHORIZE_URL}",
-  nyxidOauthTokenUrl: "${NYXID_OAUTH_TOKEN_URL}",
+  ornnApiBaseUrl: "${ORNN_API_BASE_URL}",
+  nyxidApiBaseUrl: "${NYXID_API_BASE_URL}",
+  nyxidWebBaseUrl: "${NYXID_WEB_BASE_URL}",
+  nyxidOauthAuthorizePath: "${NYXID_OAUTH_AUTHORIZE_PATH}",
+  nyxidOauthTokenPath: "${NYXID_OAUTH_TOKEN_PATH}",
+  nyxidOauthRedirectPath: "${NYXID_OAUTH_REDIRECT_PATH}",
+  nyxidLogoutPath: "${NYXID_LOGOUT_PATH}",
+  nyxidSettingsPath: "${NYXID_SETTINGS_PATH}",
   nyxidOauthClientId: "${NYXID_OAUTH_CLIENT_ID}",
-  nyxidOauthRedirectUri: "${NYXID_OAUTH_REDIRECT_URI}",
-  nyxidLogoutUrl: "${NYXID_LOGOUT_URL}",
-  nyxidSettingsUrl: "${NYXID_SETTINGS_URL}"
+  posthogApiKey: "${POSTHOG_API_KEY}",
+  posthogProjectId: "${POSTHOG_PROJECT_ID}",
+  posthogHost: "${POSTHOG_HOST}"
 };

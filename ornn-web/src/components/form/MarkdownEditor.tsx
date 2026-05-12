@@ -6,6 +6,7 @@
  */
 
 import { useState, useCallback, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import { motion, AnimatePresence } from "framer-motion";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -204,6 +205,7 @@ export function MarkdownEditor({
   showPreview = true,
   className = "",
 }: MarkdownEditorProps) {
+  const { t } = useTranslation();
   const [isPreview, setIsPreview] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -265,7 +267,7 @@ export function MarkdownEditor({
               {isPreview ? (
                 <>
                   <EditIcon className="h-4 w-4" />
-                  <span className="hidden sm:inline">Edit</span>
+                  <span className="hidden sm:inline">{t("common.edit")}</span>
                 </>
               ) : (
                 <>

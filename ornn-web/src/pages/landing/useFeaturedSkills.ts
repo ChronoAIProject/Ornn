@@ -69,7 +69,7 @@ function toFeatured(item: SkillSearchResult): FeaturedSkill {
     tag: `FEATURED · ${tag}`,
     name: item.name,
     desc: item.description || "—",
-    install: `ornn install ${item.name}`,
+    tags: item.tags ?? [],
     author: owner.startsWith("@") ? owner : `@${owner}`,
     version: "v 1.0.0",
     date: formatShortDate(item.updatedOn),

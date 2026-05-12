@@ -1,24 +1,22 @@
 /**
- * User-directory endpoints. Backed by Ornn's `activities` collection — we
- * don't maintain a dedicated `users` table. Every authenticated request
- * Ornn sees gets logged to `activities`, which gives us a living directory
- * of everyone who's ever used Ornn keyed by user_id + email + display_name.
+ * User-directory endpoints — read-only lookups against the `users`
+ * collection (lazily populated on every authenticated request, see
+ * `domains/users/repository`). Backs the skill-permissions panel's
+ * collaborator typeahead.
  *
- * This is specifically a read-only lookup for the permissions panel
- * typeahead. No admin-level data is returned; just enough to resolve an
- * email to a user_id.
+ * Replaced the old activities-derived directory in issue #271.
  *
  * @module domains/users/routes
  */
 
 import { Hono } from "hono";
 import { z } from "zod";
-import type { ActivityRepository } from "../admin/activityRepository";
 import {
   type AuthVariables,
   nyxidAuthMiddleware,
 } from "../../middleware/nyxidAuth";
 import { validateQuery, getValidatedQuery } from "../../middleware/validate";
+import type { UserDirectoryRepository } from "./repository";
 
 const searchQuerySchema = z.object({
   q: z.string().max(256).optional().default(""),
@@ -26,11 +24,13 @@ const searchQuerySchema = z.object({
 });
 
 export interface UserRoutesConfig {
-  activityRepo: ActivityRepository;
+  userDirectoryRepo: UserDirectoryRepository;
 }
 
-export function createUserRoutes(config: UserRoutesConfig): Hono<{ Variables: AuthVariables }> {
-  const { activityRepo } = config;
+export function createUserRoutes(
+  config: UserRoutesConfig,
+): Hono<{ Variables: AuthVariables }> {
+  const { userDirectoryRepo } = config;
   const app = new Hono<{ Variables: AuthVariables }>();
   const auth = nyxidAuthMiddleware();
 
@@ -40,7 +40,7 @@ export function createUserRoutes(config: UserRoutesConfig): Hono<{ Variables: Au
    * Any authenticated caller can search — shared skills need sharing
    * targets, and we intentionally don't gate this behind admin. Result
    * set is scoped to users who have actually interacted with Ornn
-   * (have an activity row).
+   * (have a directory row).
    */
   app.get(
     "/users/search",
@@ -48,7 +48,10 @@ export function createUserRoutes(config: UserRoutesConfig): Hono<{ Variables: Au
     validateQuery(searchQuerySchema, "INVALID_QUERY"),
     async (c) => {
       const parsed = getValidatedQuery<z.infer<typeof searchQuerySchema>>(c);
-      const results = await activityRepo.searchUsersByEmail(parsed.q, parsed.limit);
+      const results = await userDirectoryRepo.searchByEmailPrefix(
+        parsed.q,
+        parsed.limit,
+      );
       return c.json({ data: { items: results }, error: null });
     },
   );
@@ -56,14 +59,12 @@ export function createUserRoutes(config: UserRoutesConfig): Hono<{ Variables: Au
   /**
    * GET /users/resolve?ids=id1,id2,...
    *
-   * Batch-resolve a list of user_ids to their email + displayName using
-   * Ornn's activity directory. Used by the permissions panel to render
-   * human labels for `sharedWithUsers` entries that were saved as bare
-   * user_ids — an email-prefix search can't match on a UUID, so we
-   * need a direct id→row lookup.
-   *
-   * Unknown ids (users who never signed into Ornn) are silently dropped
-   * from the response. The UI should fall back to the raw id in that case.
+   * Batch-resolve a list of user_ids to their email + displayName.
+   * Used by the permissions panel to render labels for
+   * `sharedWithUsers` entries that were saved as bare user_ids — an
+   * email-prefix search can't match on a UUID, so we need a direct
+   * id→row lookup. Unknown ids (users who never signed into Ornn)
+   * are silently dropped from the response.
    */
   app.get("/users/resolve", auth, async (c) => {
     const raw = c.req.query("ids") ?? "";
@@ -75,7 +76,7 @@ export function createUserRoutes(config: UserRoutesConfig): Hono<{ Variables: Au
     if (ids.length === 0) {
       return c.json({ data: { items: [] }, error: null });
     }
-    const items = await activityRepo.findByUserIds(ids);
+    const items = await userDirectoryRepo.findByUserIds(ids);
     return c.json({ data: { items }, error: null });
   });
 

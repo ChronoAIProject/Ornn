@@ -13,12 +13,12 @@
  * Users configure their LLM credentials in NyxID, not ornn.
  */
 export const AVAILABLE_MODELS = [
-  { id: "gpt-5.3-codex", label: "GPT-5.3 Codex", provider: "Chrono LLM" },
+  { id: "gpt-5.3-codex", label: "GPT-5.3 Codex", provider: "Chrono LLM" }, // allow-hardcode legacy default; ModelPicker uses runtime catalog
 ] as const;
 
 export type AvailableModelId = (typeof AVAILABLE_MODELS)[number]["id"];
 
-export const DEFAULT_MODEL: AvailableModelId = "gpt-5.3-codex";
+export const DEFAULT_MODEL: AvailableModelId = "gpt-5.3-codex"; // allow-hardcode legacy default
 
 // ---------------------------------------------------------------------------
 // Chat Types (Responses API format)

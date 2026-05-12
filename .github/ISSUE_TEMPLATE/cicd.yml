@@ -1,0 +1,33 @@
+name: CI / CD task
+description: Changes to CI workflows, release automation, branch policy, or build infrastructure.
+title: "[CI/CD] "
+labels: ["infra"]
+assignees: ["chronoai-shining"]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What needs to change in CI/CD?
+    validations:
+      required: true
+
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Why now?
+      description: What problem does this fix or prevent? Link to any failing run / incident.
+    validations:
+      required: true
+
+  - type: textarea
+    id: plan
+    attributes:
+      label: Implementation plan
+      description: Which workflow files / configs change, and how.
+
+  - type: textarea
+    id: risk
+    attributes:
+      label: Rollback plan
+      description: If this breaks CI, how do we revert quickly?

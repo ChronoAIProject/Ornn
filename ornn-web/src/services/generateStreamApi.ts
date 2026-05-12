@@ -14,6 +14,7 @@ const API_BASE = config.apiBaseUrl;
 export interface GenerateStreamParams {
   messages: Array<{ role: string; content: string }>;
   model?: string;
+  modelId?: string;
 }
 
 export interface StreamHandle {
@@ -53,6 +54,7 @@ export function generateSkillStream(
       body: JSON.stringify({
         messages: params.messages,
         model: params.model,
+        modelId: params.modelId,
       }),
       signal: controller.signal,
     },

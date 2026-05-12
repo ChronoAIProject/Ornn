@@ -122,6 +122,65 @@ export class NotificationService {
     });
   }
 
+  /**
+   * Recipient-side notification fired every time an admin grants credits
+   * (single or bulk path) to a user's playground / skill-gen surface.
+   * Surfaces the new balance so the user knows what they just received.
+   */
+  async notifyQuotaCreditsGranted(params: {
+    targetUserId: string;
+    surface: "playground" | "skillGen";
+    amount: number;
+    note?: string;
+    adminDisplayName: string;
+  }): Promise<void> {
+    const surfaceLabel =
+      params.surface === "playground" ? "playground" : "skill-generation";
+    const amountStr = params.amount.toLocaleString("en-US");
+    const title = `Admin granted you +${amountStr} ${surfaceLabel} credits`;
+    const body = params.note
+      ? `Granted by ${params.adminDisplayName}. Note: ${params.note}`
+      : `Granted by ${params.adminDisplayName}. Credits never expire and stack on top of your monthly base.`;
+    await this.emit(params.targetUserId, {
+      category: "quota.credits_granted",
+      title,
+      body,
+      // No deep link target today — settings/profile would be the
+      // closest match; leaving undefined so the bell renders the
+      // notification without a click affordance.
+      data: {
+        surface: params.surface,
+        amount: params.amount,
+        adminDisplayName: params.adminDisplayName,
+      },
+    });
+  }
+
+  /**
+   * One-time notice fired by the quota migration script (Story 10.3) for
+   * each user who held a multi-month grant under the old time-period
+   * model. Tells them their grants now expire at month-end so they
+   * aren't surprised when next-month bucket starts at zero. The
+   * `monthMarker` is the calendar month their existing credits will
+   * still last through (e.g. "2026-05" for credits valid until
+   * 2026-05-31).
+   */
+  async notifyQuotaModelChange(params: {
+    targetUserId: string;
+    monthMarker: string;
+  }): Promise<void> {
+    const title = "Quota model update — your existing credits expire at month end";
+    const body =
+      `Your previously granted credits have been migrated to current-month-only credits ` +
+      `ending ${params.monthMarker}. Contact admin if you need them re-issued next month.`;
+    await this.emit(params.targetUserId, {
+      category: "quota.credits_granted",
+      title,
+      body,
+      data: { kind: "model_change", monthMarker: params.monthMarker },
+    });
+  }
+
   private async emit(
     userId: string,
     payload: {

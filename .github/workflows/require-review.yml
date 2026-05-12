@@ -18,7 +18,7 @@ jobs:
       pull-requests: read
     steps:
       - name: Check if team approval is required
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
@@ -27,12 +27,26 @@ jobs:
 
             // Trusted authors can self-merge without external approval:
             //   - chronoai-shining (maintainer)
-            //   - github-actions[bot] (release-bump + sync PRs opened by
-            //     the changeset-release workflow state machine)
+            //   - github-actions[bot] (legacy — release-bump + sync PRs
+            //     opened by changeset-release before #237 cut over to
+            //     the GitHub App identity; kept so any in-flight bot PRs
+            //     from before that PR landed still pass this gate)
+            //   - ornn-release-bot[bot] (current changeset-release
+            //     identity per #237 — release-bump + sync PRs now come
+            //     from the GitHub App so downstream `pull_request`
+            //     workflows actually fire on its PRs)
+            //   - dependabot[bot] (weekly dep update PRs from the
+            //     supply-chain baseline in #383 — kept defence-in-depth
+            //     by the audit / lint / typecheck / test / docker-build
+            //     gates that still run on every PR)
             const TRUSTED_AUTHORS = new Set([
               'chronoai-shining',
               'github-actions[bot]',
               'app/github-actions',
+              'ornn-release-bot[bot]',
+              'app/ornn-release-bot',
+              'dependabot[bot]',
+              'app/dependabot',
             ]);
             if (TRUSTED_AUTHORS.has(author)) {
               console.log(`PR author is ${author} — no approval required`);

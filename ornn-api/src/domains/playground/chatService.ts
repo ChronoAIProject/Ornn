@@ -140,37 +140,79 @@ const PLAYGROUND_TOOLS: ResponsesApiTool[] = [
   },
 ];
 
+/**
+ * Per-call resolution of LLM defaults from admin settings (`playground`
+ * section + selected provider's `maxOutputTokens` / `defaultTemperature`).
+ * Pulled fresh on every chat so an admin can swap the default provider
+ * without restarting the pod. Caching is the resolver's responsibility
+ * (SettingsService caches with a short TTL).
+ */
+export interface PlaygroundLlmDefaults {
+  /** Default model id when caller does not specify one. */
+  model: string;
+  maxOutputTokens: number;
+  temperature: number;
+}
+
+export type PlaygroundLlmDefaultsResolver = () => Promise<PlaygroundLlmDefaults>;
+
 export interface ChatServiceConfig {
   llmClient: NyxLlmClient;
   sandboxClient: SandboxClient;
   skillService: SkillService;
-  defaultModel: string;
-  maxOutputTokens: number;
-  temperature: number;
+  /**
+   * Resolver returning the active LLM defaults for the playground
+   * surface. Read on every chat. NO env fallback: invalid resolver
+   * output (empty model, non-positive token cap, NaN temperature)
+   * surfaces as a 503 to the caller — never falls through to a stale
+   * literal.
+   */
+  defaultsResolver: PlaygroundLlmDefaultsResolver;
 }
 
 export class PlaygroundChatService {
   private readonly llmClient: NyxLlmClient;
   private readonly sandboxClient: SandboxClient;
   private readonly skillService: SkillService;
-  private readonly defaultModel: string;
-  private readonly maxOutputTokens: number;
-  private readonly temperature: number;
+  private readonly defaultsResolver: PlaygroundLlmDefaultsResolver;
 
   constructor(config: ChatServiceConfig) {
     this.llmClient = config.llmClient;
     this.sandboxClient = config.sandboxClient;
     this.skillService = config.skillService;
-    this.defaultModel = config.defaultModel;
-    this.maxOutputTokens = config.maxOutputTokens;
-    this.temperature = config.temperature;
+    this.defaultsResolver = config.defaultsResolver;
   }
 
   async *chat(
     userId: string,
     request: PlaygroundChatRequest,
     abortSignal?: AbortSignal,
+    options?: { modelId?: string },
   ): AsyncGenerator<PlaygroundChatEvent> {
+    // Resolve LLM defaults from admin settings on every call so
+    // operator updates land without a pod restart.
+    let defaults: PlaygroundLlmDefaults;
+    try {
+      defaults = await this.defaultsResolver();
+    } catch (err) {
+      logger.error(
+        { userId, err: (err as Error).message },
+        "Failed to resolve playground LLM defaults from settings",
+      );
+      yield { type: "error", message: "Playground LLM is not configured. Ask an admin to set the default provider in /admin/settings/playground." };
+      yield { type: "finish", finishReason: "error" };
+      return;
+    }
+    if (!defaults.model || defaults.model.trim().length === 0) {
+      logger.error({ userId }, "Playground default model is empty in settings");
+      yield { type: "error", message: "Playground LLM is not configured. Ask an admin to set the default model in /admin/settings/playground." };
+      yield { type: "finish", finishReason: "error" };
+      return;
+    }
+    // Resolved model id (already validated by the route). Falls back
+    // to settings default for tests / internal callers that don't
+    // go through the model picker.
+    const model = options?.modelId ?? defaults.model;
     const input = this.buildInput(request);
 
     // Inject system prompt as developer message (instructions field is ignored by upstream LLM)
@@ -202,10 +244,10 @@ export class PlaygroundChatService {
     for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
       try {
         const streamEvents = this.llmClient.stream({
-          model: this.defaultModel,
+          model,
           input,
-          max_output_tokens: this.maxOutputTokens,
-          temperature: this.temperature,
+          max_output_tokens: defaults.maxOutputTokens,
+          temperature: defaults.temperature,
           tools: PLAYGROUND_TOOLS,
         });
 

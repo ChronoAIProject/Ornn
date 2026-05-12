@@ -10,6 +10,7 @@
 import { useState, useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
+import { useTranslation } from "react-i18next";
 import { useIsAuthenticated, useCurrentUser, isAdmin } from "@/stores/authStore";
 
 export interface SidebarItem {
@@ -80,6 +81,7 @@ export function Sidebar({
   onMobileClose,
   className = "",
 }: SidebarProps) {
+  const { t } = useTranslation();
   const location = useLocation();
   const isAuthenticated = useIsAuthenticated();
   const user = useCurrentUser();
@@ -112,7 +114,7 @@ export function Sidebar({
             type="button"
             onClick={toggleCollapsed}
             className="flex h-8 w-8 items-center justify-center rounded text-meta transition-colors hover:bg-accent/10 hover:text-accent cursor-pointer"
-            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            aria-label={collapsed ? t("aria.expandSidebar") : t("aria.collapseSidebar")}
           >
             <ChevronIcon
               className="h-4 w-4"
@@ -132,7 +134,7 @@ export function Sidebar({
             type="button"
             onClick={onMobileClose}
             className="flex h-8 w-8 items-center justify-center rounded text-meta transition-colors hover:bg-accent/10 hover:text-accent cursor-pointer"
-            aria-label="Close sidebar"
+            aria-label={t("aria.closeSidebar")}
           >
             <CloseIcon className="h-5 w-5" />
           </button>

@@ -29,9 +29,36 @@ spec:
           imagePullPolicy: ${IMAGE_PULL_POLICY}
           ports:
             - containerPort: 3802
+          # Operator-flippable settings (kill switches, repo coords,
+          # credentials, model + provider config, storage + sandbox
+          # endpoints) live in the platform_settings DB collection and
+          # are managed via the admin UI — see #268, #269, #270, #271.
+          # The Secret carries the six bootstrap-only secrets. Every
+          # entry below is plain operational env consumed by code
+          # (cross-checked against config.ts + infra/url.ts) — no
+          # vestigial keys.
+          env:
+            - name: PORT
+              value: "${PORT}"
+            - name: LOG_LEVEL
+              value: "${LOG_LEVEL}"
+            - name: LOG_PRETTY
+              value: "${LOG_PRETTY}"
+            - name: MONGODB_DB
+              value: "${MONGODB_DB}"
+            - name: MAX_PACKAGE_SIZE_BYTES
+              value: "${MAX_PACKAGE_SIZE_BYTES}"
+            - name: ALLOWED_ORIGINS
+              value: "${ALLOWED_ORIGINS}"
+            - name: ORNN_PUBLIC_ORIGIN
+              value: "${ORNN_PUBLIC_ORIGIN}"
+            - name: ORNN_URL_ALLOWLIST_CIDR
+              value: "${ORNN_URL_ALLOWLIST_CIDR}"
+            - name: AGENTSEAL_PYTHON
+              value: "${AGENTSEAL_PYTHON}"
+            - name: AGENTSEAL_SCRIPT
+              value: "${AGENTSEAL_SCRIPT}"
           envFrom:
-            - configMapRef:
-                name: ornn-api-config
             - secretRef:
                 name: ornn-api-secret
           readinessProbe:

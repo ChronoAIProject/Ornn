@@ -5,11 +5,15 @@
  */
 
 import { Hono } from "hono";
-import { streamSSE } from "hono/streaming";
 import { z } from "zod";
 import type { PlaygroundChatService, PlaygroundChatRequest } from "./chatService";
 import type { SkillService } from "../skills/crud/service";
 import type { AnalyticsService } from "../analytics/service";
+import type { QuotaService } from "../quota/service";
+import type { LlmProvidersService } from "../settings/llmProviders/service";
+import { throwQuotaError } from "../quota/routes";
+import { throwModelResolutionError } from "../settings/llmProviders/routes";
+import type { ChargeOutcome } from "../quota/types";
 import {
   type AuthVariables,
   nyxidAuthMiddleware,
@@ -28,7 +32,7 @@ const playgroundMessageSchema = z.object({
   toolCalls: z.array(z.object({
     id: z.string(),
     name: z.string(),
-    args: z.record(z.unknown()),
+    args: z.record(z.string(), z.unknown()),
   })).optional(),
   toolCallId: z.string().optional(),
 });
@@ -36,20 +40,36 @@ const playgroundMessageSchema = z.object({
 const chatRequestSchema = z.object({
   messages: z.array(playgroundMessageSchema).min(1).max(100),
   skillId: z.string().optional(),
-  envVars: z.record(z.string()).optional(),
+  envVars: z.record(z.string(), z.string()).optional(),
+  /**
+   * Optional admin-curated model id. When omitted, falls back to the
+   * surface default (or 503 if no models are enabled). When provided,
+   * must be enabled for the playground surface — otherwise rejected
+   * with `MODEL_NOT_ENABLED` before any LLM call.
+   */
+  modelId: z.string().optional(),
 });
 
 export interface PlaygroundRoutesConfig {
   chatService: PlaygroundChatService;
-  keepAliveIntervalMs: number;
+  /**
+   * SSE keep-alive interval (ms). Resolved from admin settings
+   * (`playground.sseKeepAliveMs`) on every request — admin edits land
+   * on the next chat without a restart.
+   */
+  keepAliveIntervalMsResolver: () => Promise<number>;
   /** Optional. When set together with `skillService`, the route emits a
    *  `playground` pull event each time a chat references a real skill. */
   analyticsService?: AnalyticsService;
   skillService?: SkillService;
+  /** Per-user quota gate (charged on completion). */
+  quotaService: QuotaService;
+  /** Admin-curated model catalog (per-provider, #270). */
+  llmProvidersService: LlmProvidersService;
 }
 
 export function createPlaygroundRoutes(config: PlaygroundRoutesConfig): Hono<{ Variables: AuthVariables }> {
-  const { chatService, keepAliveIntervalMs, analyticsService, skillService } = config;
+  const { chatService, keepAliveIntervalMsResolver, analyticsService, skillService, quotaService, llmProvidersService } = config;
   const app = new Hono<{ Variables: AuthVariables }>();
 
   const auth = nyxidAuthMiddleware();
@@ -70,6 +90,25 @@ export function createPlaygroundRoutes(config: PlaygroundRoutesConfig): Hono<{ V
       const parsed = getValidatedBody<z.infer<typeof chatRequestSchema>>(c);
 
       logger.info({ userId: authCtx.userId, messageCount: parsed.messages.length }, "Chat request");
+
+      // Quota check — rejects with 429 BEFORE any LLM cost is incurred.
+      // Admins bypass via permission inside the service.
+      const decision = await quotaService.checkAllowed({
+        userId: authCtx.userId,
+        permissions: authCtx.permissions,
+        surface: "playground",
+      });
+      if (!decision.allowed) throwQuotaError(decision);
+
+      // Resolve the model — explicit `modelId` (validated against the
+      // surface's enabled list) or the admin-set default. 503 when no
+      // models are enabled for the playground surface.
+      const resolution = await llmProvidersService.resolveModel({
+        surface: "playground",
+        requested: parsed.modelId,
+      });
+      if (resolution.kind !== "ok") throwModelResolutionError(resolution);
+      const resolvedModelId = resolution.modelId;
 
       // Record a `playground` pull if the chat is bound to a skill. The
       // chat service loads the skill internally; we duplicate the lookup
@@ -92,31 +131,129 @@ export function createPlaygroundRoutes(config: PlaygroundRoutesConfig): Hono<{ V
           });
       }
 
-      c.header("Cache-Control", "no-cache");
-      c.header("Connection", "keep-alive");
-      c.header("X-Accel-Buffering", "no");
+      // Outcome tracks whether the run reached the skill-side. Skill
+      // errors (script ran + threw) charge; system errors (LLM API
+      // timeout, infra 5xx) do not. Default `system_error` is the
+      // safe fallback — only flips to `success` if the stream
+      // completes cleanly.
+      let outcome: ChargeOutcome = "system_error";
 
-      return streamSSE(c, async (stream) => {
-        const keepAlive = setInterval(() => {
-          stream.writeSSE({ data: "", event: "keepalive" }).catch(() => {});
-        }, keepAliveIntervalMs);
+      const encoder = new TextEncoder();
+      const signal = c.req.raw.signal;
+      const chatRequest: PlaygroundChatRequest = parsed;
 
+      // TransformStream: writer.write() back-pressures naturally against
+      // Bun's response consumer, so each `await writer.write(chunk)`
+      // resolves only after the chunk has been picked up by the HTTP
+      // writer. This forces real per-event flushing — the previous
+      // `ReadableStream.start(controller) + IIFE + controller.enqueue`
+      // pattern coalesced 2,000+ enqueues into a single delivery at
+      // stream close under Bun (verified via the EventStream tab: every
+      // event arrived at the browser at the same millisecond despite
+      // upstream LLM emitting deltas over ~45s).
+      const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
+      const writer = writable.getWriter();
+
+      let writerClosed = false;
+      const closeOnce = async () => {
+        if (writerClosed) return;
+        writerClosed = true;
         try {
-          const signal = c.req.raw.signal;
-          const chatRequest: PlaygroundChatRequest = parsed;
+          await writer.close();
+        } catch {
+          /* already closed */
+        }
+      };
+      const writeFrame = async (frame: string) => {
+        if (writerClosed) return;
+        try {
+          await writer.write(encoder.encode(frame));
+        } catch {
+          writerClosed = true;
+        }
+      };
+      const writeEvent = (payload: unknown) =>
+        writeFrame(`data: ${JSON.stringify(payload)}\n\n`);
 
-          for await (const event of chatService.chat(authCtx.userId, chatRequest, signal)) {
-            await stream.writeSSE({ data: JSON.stringify(event) });
+      // Pre-flush a fat comment frame so the response headers + first
+      // chunk hit the wire immediately. SSE comments are spec-mandated
+      // ignores by the browser parser. The 2KB padding defeats any
+      // intermediate proxy that holds the connection until ~2-4KB
+      // arrives.
+      const padding = " ".repeat(2048);
+      void writeFrame(`: stream-open ${Date.now()} ${padding}\n\n`);
+
+      // Keepalive defeats idle-timeout proxies during LLM warmup. The
+      // interval is read from settings on every request — fall back to
+      // a conservative 15s when the resolver throws so a transient
+      // settings outage doesn't break streaming.
+      let keepAliveMs = 15_000;
+      try {
+        const resolved = await keepAliveIntervalMsResolver();
+        if (Number.isFinite(resolved) && resolved > 0) keepAliveMs = resolved;
+      } catch (err) {
+        logger.warn(
+          { err: (err as Error).message },
+          "Failed to resolve playground sseKeepAliveMs; using 15s default",
+        );
+      }
+      const keepAlive = setInterval(() => {
+        void writeFrame(`: keepalive ${Date.now()}\n\n`);
+      }, keepAliveMs);
+
+      const onAbort = () => {
+        clearInterval(keepAlive);
+        void closeOnce();
+      };
+      signal.addEventListener("abort", onAbort);
+
+      // Producer task — pumps chat events into the writer. Runs in
+      // background; the response is returned synchronously below.
+      void (async () => {
+        try {
+          for await (const event of chatService.chat(authCtx.userId, chatRequest, signal, {
+            modelId: resolvedModelId,
+          })) {
+            await writeEvent(event);
+            if (event.type === "tool-result") outcome = "skill_error";
+            if (event.type === "finish") {
+              const reason = (event as { finishReason?: string }).finishReason;
+              if (reason === "stop") outcome = "success";
+            }
           }
         } catch (err) {
           const message = err instanceof Error ? err.message : "Chat stream failed";
           logger.error({ userId: authCtx.userId, err: message }, "Chat stream error");
-          await stream.writeSSE({
-            data: JSON.stringify({ type: "error", message }),
-          });
+          await writeEvent({ type: "error", message });
         } finally {
+          signal.removeEventListener("abort", onAbort);
           clearInterval(keepAlive);
+          await closeOnce();
+          await quotaService
+            .chargeOnCompletion({
+              userId: authCtx.userId,
+              permissions: authCtx.permissions,
+              surface: "playground",
+              outcome,
+              modelId: resolvedModelId,
+            })
+            .catch((err) => {
+              logger.warn(
+                { userId: authCtx.userId, err: (err as Error).message },
+                "Quota charge after playground chat failed",
+              );
+            });
         }
+      })();
+
+      return new Response(readable, {
+        status: 200,
+        headers: {
+          "Content-Type": "text/event-stream; charset=utf-8",
+          "Cache-Control": "no-cache, no-transform",
+          Connection: "keep-alive",
+          "X-Accel-Buffering": "no",
+        },
       });
     },
   );

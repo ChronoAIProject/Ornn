@@ -1,0 +1,14 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Question about using Ornn
+    url: https://github.com/ChronoAIProject/Ornn/discussions/categories/q-a
+    about: Usage questions belong in Discussions Q&A, not Issues. Issues are for bugs and tracked work.
+  - name: Idea, proposal, or RFC
+    url: https://github.com/ChronoAIProject/Ornn/discussions/categories/ideas
+    about: Open-ended ideas and design discussion start in Discussions Ideas. File a Feature issue once the scope is concrete.
+  - name: Security vulnerability
+    url: https://github.com/ChronoAIProject/Ornn/security/advisories/new
+    about: Do not file a public issue. Use Private Vulnerability Reporting.
+  - name: Documentation
+    url: https://ornn.chrono-ai.fun/docs
+    about: Product documentation lives on the docs site.

@@ -30,8 +30,8 @@ TypeScript, Bun workspace monorepo
 |---------|------|-------------|
 | `ornn-api` | `ornn-api/` | Backend API (Bun + Hono + MongoDB) |
 | `ornn-web` | `ornn-web/` | React SPA (Vite + React 19 + Zustand + TanStack Query) |
-| `@chronoai/ornn-sdk` | `ornn-sdk/` | TypeScript client for `/api/v1/*` |
-| `ornn-sdk` (Python) | `ornn-sdk-python/` | Python client for `/api/v1/*` (httpx) — separate release cadence |
+| `@chronoai/ornn-sdk` | `sdk/typescript/` | TypeScript client for `/api/v1/*` |
+| `ornn-sdk` (Python) | `sdk/python/` | Python client for `/api/v1/*` (httpx) — separate release cadence |
 
 ## Architecture
 
@@ -58,6 +58,36 @@ TypeScript, Bun workspace monorepo
 - **Workflow:** `feature/xxx` → PR → `develop` → PR → `main`
 - PR merge auto-deletes the source branch (protected branches excluded).
 - **New work MUST branch from the latest `origin/develop`.** Every feature, bug fix, or any kind of change must start from a freshly fetched `develop` — either a new branch (`git fetch && git checkout develop && git pull && git checkout -b <name>`) or a new worktree created against `origin/develop`. Never branch off a stale local `develop` or another feature branch.
+
+## Commit Standards
+
+Every code change MUST respect commit size. **Multiple small, self-contained commits are always better than one big combined commit, no exceptions.**
+
+Rules:
+
+1. **Each commit is self-contained.** A reviewer reading just that commit's diff + message can understand what changed and why, without context from sibling commits.
+2. **Each commit is small.** One logical change per commit. Schema migration is one commit. New endpoint is another. Frontend drawer is another. Old page deletion is another. Tests can ride with the code they test, but unrelated test additions get their own commit.
+3. **Each commit's message is detailed.** Subject line states the change in one short sentence (≤ 72 chars). Body explains the *why*, the constraints, and any non-obvious decisions. Reference the issue when relevant (`#270`).
+4. **Order matters.** Stack commits in dependency order so the tree compiles + tests pass at every commit (or as close as is practical). A reviewer should be able to `git checkout` any intermediate commit without a broken state.
+5. **Don't bundle for convenience.** "These are all part of the same feature" is not a reason to combine — that's what the PR is for. The PR groups related commits; the commits decompose the change.
+6. **Refactors / renames go in their own commit.** Pure refactors first, then the behaviour change on top. Never bury a bug fix inside a "drive-by cleanup" commit.
+
+What this looks like in practice for a feature like #270 (per-provider model management):
+
+```
+feat(api): extend LlmProviderModel schema with per-surface flags (#270)
+feat(api): boot migration — fold legacy models collection into per-provider arrays (#270)
+feat(api): PATCH /admin/settings/llm-providers/:id/models/:modelId (#270)
+feat(api): rewire /me/models picker + execute-path resolver to per-provider source (#270)
+chore(api): delete domains/models/ module (#270)
+feat(web): ProviderModelsDrawer with per-row toggles + per-surface defaults (#270)
+feat(web): wire ProviderModelsDrawer from LlmProvidersSection, drop Default column (#270)
+chore(web): drop Default model select from ProviderEditDrawer (#270)
+chore(web): remove /admin/models page + AdminModelsPage + admin parts of useModels/modelsApi (#270)
+docs: changeset for #270
+```
+
+Ten commits is fine. Twenty is fine. One commit covering schema + migration + new routes + old module deletion + frontend + cleanup is **not fine** — it forecloses bisection and forces the reviewer to re-do the decomposition in their head.
 
 ## Versioning & Releases
 
@@ -224,9 +254,13 @@ done
 # Backend
 docker build -t "${ORNN_API_IMAGE}" -f ornn-api/Dockerfile .
 
-# Frontend — no build args. All config (nginx upstreams + Vite env)
-# is injected at container startup via the `ornn-web-config` ConfigMap.
-docker build -t "${ORNN_WEB_IMAGE}" -f ornn-web/Dockerfile .
+# Frontend — runtime config (nginx + Vite env) is injected at container
+# startup via the `ornn-web-config` ConfigMap. Pass `GIT_COMMIT` so the
+# stale-bundle auto-reload loop has a fresh build identity baked into
+# both `__APP_VERSION__` and `dist/version.json` (#318).
+docker build \
+  --build-arg GIT_COMMIT=$(git rev-parse --short HEAD) \
+  -t "${ORNN_WEB_IMAGE}" -f ornn-web/Dockerfile .
 ```
 
 ### Step 7: Deploy ornn
@@ -325,20 +359,35 @@ Issue tracker: https://github.com/ChronoAIProject/Ornn/issues
 2. **Default assignee:** every issue MUST be assigned to `chronoai-shining`.
 3. **Title prefix:** every issue title MUST start with a category tag — one of `[Bug]`, `[Feature]`, `[CI/CD]`, `[Docs]`, `[Misc]`. Example: `[Feature] Skill composition & chaining`.
 4. **No duplicates.** Before creating a new issue, search the existing issue list. If duplicates are found, keep one and close the others with a comment `Duplicate of #N`.
-5. **PR ↔ issue linkage:**
-   - Every PR MUST tag the issue(s) it resolves in the PR body (use `Closes #123` / `Fixes #123`).
-   - When the PR merges, all tagged issues MUST be closed.
-   - If a PR solves something with no existing issue, create the issue first, then tag it in the PR.
+5. **PR ↔ issue linkage — load-bearing, no exceptions.**
+   - Every PR MUST link to at least one GitHub issue. The PR body uses `Closes #N` / `Fixes #N` (or `Resolves #N`) so the issue auto-closes on merge — do not link with prose like "this addresses #N", that does NOT auto-close.
+   - **Issue-first workflow.** Before opening a PR, check whether a matching issue already exists. If one exists: link it. If none exists: **STOP, create the issue first** with the right `[Bug]` / `[Feature]` / `[CI/CD]` / `[Docs]` / `[Misc]` title prefix, default assignee, and at least one topic label, **then** open the PR linking it. A PR without an issue link must be amended with one before merge.
+   - When the PR merges, all linked issues MUST be closed (the `Closes` / `Fixes` keyword takes care of this automatically).
+   - This rule applies to **every** PR — features, bugfixes, refactors, docs, CI/CD, infra, design polish. There are no "trivial enough to skip the issue" exceptions.
 6. **Cross-references:** when issues are related or have an execution order, add explicit references in the issue body (`Depends on #X`, `Blocks #Y`, `Related to #Z`).
 7. **Milestones for large work:** any large feature or code change MUST have a milestone, and all related issues MUST be attached to it.
 8. **Milestone deadlines:** every milestone MUST have a `due_on` date.
 9. **Labels:** every issue MUST carry at least one topic label (e.g., `api`, `dx`, `security`, `infra`, `phase:N`) so the issue's domain is visible at a glance.
 
+## Documentation
+
+### Naming convention
+
+All files under `docs/` MUST use ALL-CAPS filenames (`ARCHITECTURE.md`, `CONVENTIONS.md`, `DESIGN.md`). Applies to existing and future docs. Reference paths from code / CLAUDE.md / READMEs / other docs MUST match the case exactly — these paths are case-sensitive on Linux (CI) even when they appear to work on macOS.
+
+### Doc index
+
+| Doc | When to consult |
+|-----|-----------------|
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | External services, skill format, observability (PostHog) pipeline. Read before touching cross-system integration. |
+| [`docs/CONVENTIONS.md`](docs/CONVENTIONS.md) | **Normative** `/api/v1/*` contract — response envelope, error format (RFC 7807), URL structure, auth, SSE, caching, OpenAPI. MUST be followed by every new endpoint. |
+| [`docs/DESIGN.md`](docs/DESIGN.md) | Visual / UI design source of truth — palette, typography, spacing, motion vocabulary. Read before any UI change. |
+
 ## Design System
-Always read DESIGN.md before making any visual or UI decisions.
+Always read `docs/DESIGN.md` before making any visual or UI decisions.
 All font choices, colors, spacing, and aesthetic direction are defined there.
 Do not deviate without explicit user approval.
-In QA mode, flag any code that doesn't match DESIGN.md.
+In QA mode, flag any code that doesn't match `docs/DESIGN.md`.
 
 ## Skill routing
 

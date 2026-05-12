@@ -6,6 +6,7 @@
  */
 
 import { useState, useEffect, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { FileTree, type FileNode } from "@/components/editor/FileTree";
 import { SkillFileViewer } from "@/components/skill/SkillFileViewer";
@@ -106,6 +107,7 @@ function findFirstFile(nodes: FileNode[]): string | undefined {
 }
 
 export function SkillFileBrowser({ skillId, version, isOwner }: SkillFileBrowserProps) {
+  const { t } = useTranslation();
   const addToast = useToastStore((s) => s.addToast);
   const { data, isLoading, error } = useFileTree(skillId, version);
   const updateFile = useUpdateFile(skillId, version);
@@ -179,7 +181,7 @@ export function SkillFileBrowser({ skillId, version, isOwner }: SkillFileBrowser
   if (treeNodes.length === 0) {
     return (
       <div className="card-impression flex items-center justify-center rounded border border-subtle bg-card py-12">
-        <p className="font-text text-sm text-meta">No package files available</p>
+        <p className="font-text text-sm text-meta">{t("skillComponents.fileBrowser.noFiles")}</p>
       </div>
     );
   }

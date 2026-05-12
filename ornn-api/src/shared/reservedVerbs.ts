@@ -1,7 +1,7 @@
 /**
  * Reserved action verbs per resource.
  *
- * Under the API v1 convention (`docs/conventions.md` §2.3), custom
+ * Under the API v1 convention (`docs/CONVENTIONS.md` §2.3), custom
  * actions live as sub-resource paths — `POST /v1/skills/generate`,
  * `POST /v1/skills/validate`, etc. Router configs give these static
  * segments priority over `:id` captures, which means a resource named

@@ -1,17 +1,22 @@
 /**
- * Navigation Bar — Forge Workshop app shell.
+ * Navigation Bar — Forge Workshop top-level nav.
  *
- * Sticky 64px nav row with the Ornn wordmark on the left, primary nav
- * links centered on md+, and the right cluster (GitHub / language /
- * theme / notifications / avatar dropdown) on the right. Mobile
- * collapses everything except logo + avatar/sign-in into a hamburger
- * panel that drops below the nav row.
+ * Single source of truth for the top nav across the entire product:
+ * landing surface (`/`) and the app shell (everything routed through
+ * `RootLayout`). The previous split between `Navbar` and
+ * `pages/landing/LandingNav` was a token-aliasing illusion — landing
+ * tokens (parchment / bone / ember) resolve to the exact same colors
+ * as the app shell's semantic tokens (strong / body / accent) in both
+ * themes. The only real differences were:
  *
- * Mirrors `pages/landing/LandingNav` so the app shell and landing
- * surfaces share the same chrome vocabulary: hairline borders, parchment /
- * bone / ember tokens, mono uppercase utility labels, letterpress
- * impression on dropdowns. This is the application of the Forge Workshop
- * language to the app shell per DESIGN.md "Whole-App Application Guidance".
+ *   - landing has an extra "Get started" CTA next to "Sign in"
+ *   - landing animated the avatar dropdown with framer-motion
+ *   - landing used i18n keys for "Language" / "Theme" mobile labels
+ *     while the app navbar hard-coded English (a real i18n bug)
+ *
+ * All three are reconciled here: opt into the landing-style CTA pair
+ * via `showGetStartedCta`, the motion-wrapped dropdown is now default
+ * (cheap and consistent), and all labels go through i18n.
  *
  * @module components/layout/Navbar
  */
@@ -19,25 +24,15 @@
 import { useState, useRef, useEffect } from "react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { useAuthStore, useIsAuthenticated, useCurrentUser, isAdmin } from "@/stores/authStore";
+import { motion, AnimatePresence } from "framer-motion";
+import { useAuthStore, useIsAuthenticated, useCurrentUser } from "@/stores/authStore";
 import { useThemeStore } from "@/stores/themeStore";
 import { logActivity } from "@/services/activityApi";
 import { Logo } from "@/components/brand/Logo";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
-import { config } from "@/config";
-
-function getNyxIdUrl(): string {
-  try {
-    const authorizeUrl = config.nyxidOauthAuthorizeUrl;
-    if (authorizeUrl) {
-      const url = new URL(authorizeUrl);
-      return url.origin;
-    }
-  } catch {
-    /* ignore */
-  }
-  return "https://nyx.chrono-ai.fun";
-}
+import { HighlighterMark } from "@/pages/landing/HighlighterMark";
+import { EmberLink } from "@/pages/landing/EmberButton";
+import { useUserMenuGroups, type UserMenuItem } from "@/lib/userMenu";
 
 function GitHubIcon({ className }: { className?: string }) {
   return (
@@ -69,19 +64,22 @@ function MoonIcon({ className }: { className?: string }) {
 }
 
 const NAV_ITEMS = [
-  { i18nKey: "nav.registry", path: "/registry", requiresAuth: false, exact: true },
+  { i18nKey: "nav.news", path: "/news", requiresAuth: false },
   { i18nKey: "nav.build", path: "/skills/new", requiresAuth: true },
+  { i18nKey: "nav.registry", path: "/registry", requiresAuth: false, exact: true },
   { i18nKey: "nav.docs", path: "/docs", requiresAuth: false },
+  { i18nKey: "nav.contact", path: "/contact", requiresAuth: false },
 ] as const;
 
 export interface NavbarProps {
   className?: string;
+  /**
+   * Render the landing-style "Sign in + Get started" CTA pair instead
+   * of the lone "Sign in" link. Used by the landing page only.
+   */
+  showGetStartedCta?: boolean;
 }
 
-/**
- * One row inside the desktop avatar dropdown. Opens an external URL
- * (NyxID portal) in a new tab. Styled with Forge Workshop tokens.
- */
 function DropdownExternal({ href, children }: { href: string; children: React.ReactNode }) {
   return (
     <a
@@ -117,19 +115,94 @@ function DropdownInternal({
   );
 }
 
-export function Navbar({ className = "" }: NavbarProps) {
+export function Navbar({ className = "", showGetStartedCta = false }: NavbarProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const { t, i18n } = useTranslation();
   const { theme, toggle: toggleTheme } = useThemeStore();
   const isAuthenticated = useIsAuthenticated();
   const user = useCurrentUser();
+  const userMenuGroups = useUserMenuGroups(user);
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
 
-  // Close avatar dropdown on outside click + ESC
+  function renderDesktopItem(
+    item: UserMenuItem,
+    closeMenu: () => void,
+    onLogout: () => void | Promise<void>,
+  ) {
+    if (item.kind === "external" && item.href) {
+      return (
+        <DropdownExternal key={item.key} href={item.href}>
+          {item.label}
+        </DropdownExternal>
+      );
+    }
+    if (item.kind === "internal" && item.to) {
+      return (
+        <DropdownInternal key={item.key} to={item.to} onClick={closeMenu}>
+          {item.label}
+        </DropdownInternal>
+      );
+    }
+    return (
+      <button
+        key={item.key}
+        type="button"
+        onClick={onLogout}
+        className="flex w-full items-center px-4 py-2.5 text-left font-mono text-[11px] uppercase tracking-[0.14em] text-accent transition-colors hover:bg-elevated"
+      >
+        {item.label}
+      </button>
+    );
+  }
+
+  function renderMobileItem(item: UserMenuItem, closeMenu: () => void) {
+    const itemRowClass =
+      "border-b border-subtle py-3 font-text text-[16px] text-body transition-colors hover:text-accent";
+    if (item.kind === "external" && item.href) {
+      return (
+        <a
+          key={item.key}
+          href={item.href}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={closeMenu}
+          tabIndex={menuOpen ? 0 : -1}
+          className={itemRowClass}
+        >
+          {item.label}
+        </a>
+      );
+    }
+    if (item.kind === "internal" && item.to) {
+      return (
+        <Link
+          key={item.key}
+          to={item.to}
+          onClick={closeMenu}
+          tabIndex={menuOpen ? 0 : -1}
+          className={itemRowClass}
+        >
+          {item.label}
+        </Link>
+      );
+    }
+    return (
+      <button
+        key={item.key}
+        type="button"
+        onClick={handleLogout}
+        tabIndex={menuOpen ? 0 : -1}
+        className="py-3 text-left font-mono text-[12px] uppercase tracking-[0.14em] text-accent transition-colors hover:text-accent-muted"
+      >
+        {item.label}
+      </button>
+    );
+  }
+
   useEffect(() => {
     if (!userMenuOpen) return;
     const onClick = (e: MouseEvent) => {
@@ -148,13 +221,11 @@ export function Navbar({ className = "" }: NavbarProps) {
     };
   }, [userMenuOpen]);
 
-  // Close menus on navigation
   useEffect(() => {
     setUserMenuOpen(false);
     setMenuOpen(false);
   }, [location.pathname]);
 
-  // Lock body scroll when mobile menu is open
   useEffect(() => {
     document.body.style.overflow = menuOpen ? "hidden" : "";
     return () => {
@@ -175,20 +246,18 @@ export function Navbar({ className = "" }: NavbarProps) {
 
   const navLinkClass = ({ isActive }: { isActive: boolean }) =>
     `font-text text-[15px] transition-colors duration-150 ${
-      isActive ? "text-accent" : "text-body hover:text-accent"
+      isActive ? "font-semibold text-strong" : "text-body hover:text-accent"
     }`;
 
   return (
     <nav
-      className={`sticky top-0 z-40 shrink-0 border-b border-subtle bg-page/95 backdrop-blur-md ${className}`}
+      className={`sticky top-0 z-50 shrink-0 border-b border-subtle bg-page/95 backdrop-blur-md ${className}`}
     >
       <div className="relative mx-auto flex h-[60px] max-w-[1280px] items-center justify-between gap-3 px-6 sm:px-8">
-        {/* Logo */}
-        <Link to="/" className="flex items-center gap-2 text-strong" aria-label="Ornn home">
+        <Link to="/" className="flex items-center gap-2 text-strong" aria-label={t("aria.brandHome", { brand: "Ornn" })}>
           <Logo className="block h-[26px] w-auto" />
         </Link>
 
-        {/* Center nav (md+) */}
         <div className="absolute left-1/2 top-1/2 hidden -translate-x-1/2 -translate-y-1/2 gap-7 md:flex">
           {NAV_ITEMS.map((item) => (
             <NavLink
@@ -203,18 +272,23 @@ export function Navbar({ className = "" }: NavbarProps) {
               }}
               className={navLinkClass}
             >
-              {t(item.i18nKey)}
+              {({ isActive }) =>
+                isActive ? (
+                  <HighlighterMark className="highlighter-mark--loose">{t(item.i18nKey)}</HighlighterMark>
+                ) : (
+                  t(item.i18nKey)
+                )
+              }
             </NavLink>
           ))}
         </div>
 
-        {/* Right cluster (md+) */}
         <div className="hidden items-center gap-3.5 md:flex">
           <a
             href="https://github.com/ChronoAIProject/Ornn"
             target="_blank"
             rel="noopener noreferrer"
-            aria-label="ornn on GitHub"
+            aria-label={t("aria.brandOnGitHub", { brand: "ornn" })}
             className="inline-flex h-9 w-9 items-center justify-center rounded-sm border border-strong-edge bg-transparent text-strong transition-colors duration-200 hover:border-accent hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           >
             <GitHubIcon className="h-4 w-4" />
@@ -222,7 +296,7 @@ export function Navbar({ className = "" }: NavbarProps) {
           <button
             type="button"
             onClick={toggleLang}
-            aria-label="Toggle language"
+            aria-label={t("aria.toggleLanguage")}
             className="inline-flex h-9 min-w-[2.25rem] items-center justify-center rounded-sm border border-strong-edge bg-transparent px-2 font-mono text-[10px] uppercase tracking-[0.14em] text-strong transition-colors duration-200 hover:border-accent hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           >
             {i18n.language === "zh" ? "中" : "EN"}
@@ -230,7 +304,7 @@ export function Navbar({ className = "" }: NavbarProps) {
           <button
             type="button"
             onClick={toggleTheme}
-            aria-label="Toggle theme"
+            aria-label={t("aria.toggleTheme")}
             aria-pressed={theme === "light"}
             className="inline-flex h-9 w-9 items-center justify-center rounded-sm border border-strong-edge bg-transparent text-strong transition-colors duration-200 hover:border-accent hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           >
@@ -246,7 +320,7 @@ export function Navbar({ className = "" }: NavbarProps) {
                 onClick={() => setUserMenuOpen((o) => !o)}
                 aria-haspopup="menu"
                 aria-expanded={userMenuOpen}
-                aria-label="Account menu"
+                aria-label={t("aria.accountMenu")}
                 className="flex items-center gap-2 rounded-sm border border-strong-edge bg-transparent p-1 pr-2.5 transition-colors duration-200 hover:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
               >
                 <span className="flex h-7 w-7 items-center justify-center overflow-hidden rounded-full bg-page text-accent">
@@ -268,56 +342,46 @@ export function Navbar({ className = "" }: NavbarProps) {
                 </svg>
               </button>
 
-              {userMenuOpen && (
-                <div
-                  role="menu"
-                  className="card-impression absolute right-0 top-full mt-2 w-60 overflow-hidden rounded-sm border border-subtle bg-page"
-                >
-                  <div className="border-b border-subtle px-4 py-3">
-                    <p className="truncate font-display text-sm font-semibold text-strong">
-                      {user.displayName}
-                    </p>
-                    <p className="truncate font-mono text-[11px] text-meta">{user.email}</p>
-                  </div>
-
-                  <div className="py-1">
-                    <DropdownExternal href={`${getNyxIdUrl()}/settings`}>
-                      {t("nav.myProfile", "My Profile")}
-                    </DropdownExternal>
-                    <DropdownExternal href={`${getNyxIdUrl()}/services`}>
-                      {t("nav.myServices", "My NyxID Services")}
-                    </DropdownExternal>
-                    <DropdownExternal href={`${getNyxIdUrl()}/orgs`}>
-                      {t("nav.myOrgs", "My Organizations")}
-                    </DropdownExternal>
-                    <DropdownExternal href={getNyxIdUrl()}>
-                      {t("nav.goToNyxId")}
-                    </DropdownExternal>
-                  </div>
-
-                  {isAdmin(user) && (
-                    <div className="border-t border-subtle py-1">
-                      <DropdownInternal to="/admin" onClick={() => setUserMenuOpen(false)}>
-                        {t("nav.adminPanel")}
-                      </DropdownInternal>
-                      <DropdownExternal href={`${getNyxIdUrl()}/admin/services`}>
-                        {t("nav.adminServices", "Admin NyxID Services")}
-                      </DropdownExternal>
+              <AnimatePresence>
+                {userMenuOpen && (
+                  <motion.div
+                    role="menu"
+                    initial={{ opacity: 0, y: -8, scale: 0.97 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -8, scale: 0.97 }}
+                    transition={{ duration: 0.15, ease: "easeOut" }}
+                    className="card-impression absolute right-0 top-full mt-2 w-60 overflow-hidden rounded-sm border border-subtle bg-page"
+                  >
+                    <div className="border-b border-subtle px-4 py-3">
+                      <p className="truncate font-display text-sm font-semibold text-strong">
+                        {user.displayName}
+                      </p>
+                      <p className="truncate font-mono text-[11px] text-meta">{user.email}</p>
                     </div>
-                  )}
 
-                  <div className="border-t border-subtle py-1">
-                    <button
-                      type="button"
-                      onClick={handleLogout}
-                      className="flex w-full items-center px-4 py-2.5 text-left font-mono text-[11px] uppercase tracking-[0.14em] text-accent transition-colors hover:bg-elevated"
-                    >
-                      {t("nav.signOut")}
-                    </button>
-                  </div>
-                </div>
-              )}
+                    {userMenuGroups.map((group, i) => (
+                      <div
+                        key={group.id}
+                        className={`py-1 ${i > 0 ? "border-t border-subtle" : ""}`}
+                      >
+                        {group.items.map((item) =>
+                          renderDesktopItem(item, () => setUserMenuOpen(false), handleLogout),
+                        )}
+                      </div>
+                    ))}
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
+          ) : showGetStartedCta ? (
+            <>
+              <EmberLink to="/login" variant="ghost">
+                {t("nav.signIn")}
+              </EmberLink>
+              <EmberLink to="/login" variant="primary">
+                {t("landing.getStarted")}
+              </EmberLink>
+            </>
           ) : (
             <Link
               to="/login"
@@ -328,11 +392,10 @@ export function Navbar({ className = "" }: NavbarProps) {
           )}
         </div>
 
-        {/* Mobile hamburger */}
         <button
           type="button"
           onClick={() => setMenuOpen((o) => !o)}
-          aria-label={menuOpen ? "Close menu" : "Open menu"}
+          aria-label={menuOpen ? t("aria.closeMenu") : t("aria.openMenu")}
           aria-expanded={menuOpen}
           aria-controls="app-mobile-nav-panel"
           data-open={menuOpen}
@@ -346,8 +409,6 @@ export function Navbar({ className = "" }: NavbarProps) {
         </button>
       </div>
 
-      {/* Mobile dropdown panel — slide-down via grid-rows trick. Solid bg-page
-          so it reads as a discrete surface, not a frosted overlay. */}
       <div
         id="app-mobile-nav-panel"
         data-open={menuOpen}
@@ -371,11 +432,17 @@ export function Navbar({ className = "" }: NavbarProps) {
                 tabIndex={menuOpen ? 0 : -1}
                 className={({ isActive }) =>
                   `border-b border-subtle py-3 font-text text-[16px] transition-colors ${
-                    isActive ? "text-accent" : "text-body hover:text-accent"
+                    isActive ? "font-semibold text-strong" : "text-body hover:text-accent"
                   }`
                 }
               >
-                {t(item.i18nKey)}
+                {({ isActive }) =>
+                  isActive ? (
+                    <HighlighterMark className="highlighter-mark--loose">{t(item.i18nKey)}</HighlighterMark>
+                  ) : (
+                    t(item.i18nKey)
+                  )
+                }
               </NavLink>
             ))}
 
@@ -396,8 +463,10 @@ export function Navbar({ className = "" }: NavbarProps) {
               tabIndex={menuOpen ? 0 : -1}
               className="flex items-center justify-between border-b border-subtle py-3 font-mono text-[12px] uppercase tracking-[0.14em] text-body transition-colors hover:text-accent"
             >
-              <span>Language</span>
-              <span className="text-accent">{i18n.language === "zh" ? "中文" : "English"}</span>
+              <span>{t("landing.languageLabel")}</span>
+              <span className="text-accent">
+                {i18n.language === "zh" ? t("landing.languageChinese") : t("landing.languageEnglish")}
+              </span>
             </button>
             <button
               type="button"
@@ -405,8 +474,10 @@ export function Navbar({ className = "" }: NavbarProps) {
               tabIndex={menuOpen ? 0 : -1}
               className="flex items-center justify-between border-b border-subtle py-3 font-mono text-[12px] uppercase tracking-[0.14em] text-body transition-colors hover:text-accent"
             >
-              <span>Theme</span>
-              <span className="text-accent">{theme === "light" ? "Light" : "Dark"}</span>
+              <span>{t("landing.themeLabel")}</span>
+              <span className="text-accent">
+                {theme === "light" ? t("landing.themeLight") : t("landing.themeDark")}
+              </span>
             </button>
 
             {isAuthenticated && user ? (
@@ -426,44 +497,30 @@ export function Navbar({ className = "" }: NavbarProps) {
                     <p className="truncate font-mono text-[11px] text-meta">{user.email}</p>
                   </div>
                 </div>
-                <a
-                  href={`${getNyxIdUrl()}/settings`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={closeMenu}
-                  tabIndex={menuOpen ? 0 : -1}
-                  className="border-b border-subtle py-3 font-text text-[16px] text-body transition-colors hover:text-accent"
-                >
-                  {t("nav.myProfile", "My Profile")}
-                </a>
-                {isAdmin(user) && (
-                  <Link
-                    to="/admin"
-                    onClick={closeMenu}
-                    tabIndex={menuOpen ? 0 : -1}
-                    className="border-b border-subtle py-3 font-text text-[16px] text-body transition-colors hover:text-accent"
-                  >
-                    {t("nav.adminPanel")}
-                  </Link>
-                )}
-                <button
-                  type="button"
-                  onClick={handleLogout}
-                  tabIndex={menuOpen ? 0 : -1}
-                  className="py-3 text-left font-mono text-[12px] uppercase tracking-[0.14em] text-accent transition-colors hover:text-accent-muted"
-                >
-                  {t("nav.signOut")}
-                </button>
+                {userMenuGroups
+                  .flatMap((g) => g.items)
+                  .map((item) => renderMobileItem(item, closeMenu))}
               </>
             ) : (
-              <Link
-                to="/login"
-                onClick={closeMenu}
-                tabIndex={menuOpen ? 0 : -1}
-                className="py-3 font-mono text-[12px] uppercase tracking-[0.14em] text-strong transition-colors hover:text-accent"
-              >
-                {t("nav.signIn")} →
-              </Link>
+              <>
+                <Link
+                  to="/login"
+                  onClick={closeMenu}
+                  tabIndex={menuOpen ? 0 : -1}
+                  className="py-3 font-mono text-[12px] uppercase tracking-[0.14em] text-strong transition-colors hover:text-accent"
+                >
+                  {t("nav.signIn")} →
+                </Link>
+                {showGetStartedCta && (
+                  <EmberLink
+                    to="/login"
+                    variant="primary"
+                    className="!mt-2 !w-full !justify-center"
+                  >
+                    {t("landing.getStarted")}
+                  </EmberLink>
+                )}
+              </>
             )}
           </div>
         </div>

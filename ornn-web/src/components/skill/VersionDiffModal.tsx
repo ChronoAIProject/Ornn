@@ -28,6 +28,7 @@ import { Modal } from "@/components/ui/Modal";
 import { VersionDiffView } from "@/components/skill/VersionDiffView";
 import { useSkillVersionDiff } from "@/hooks/useSkills";
 import type { SkillVersionEntry } from "@/types/domain";
+import { translateError } from "@/utils/translateError";
 
 export interface VersionDiffModalProps {
   isOpen: boolean;
@@ -167,9 +168,7 @@ export function VersionDiffModal({
 
           {!sameVersion && error && (
             <p className="font-text text-sm text-danger">
-              {error instanceof Error
-                ? error.message
-                : t("versionDiff.error", "Failed to compute diff.")}
+              {translateError(error, t("versionDiff.error", "Failed to compute diff."))}
             </p>
           )}
 
