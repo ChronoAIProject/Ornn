@@ -6,7 +6,7 @@
 
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { motion } from "framer-motion";
+import { motion, type Variants } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import { PageTransition } from "@/components/layout/PageTransition";
 import { Button } from "@/components/ui/Button";
@@ -24,12 +24,12 @@ import type { SkillSearchResult } from "@/types/search";
 
 const DEFAULT_PAGE_SIZE = 20;
 
-const containerVariants = {
+const containerVariants: Variants = {
   hidden: {},
   visible: { transition: { staggerChildren: 0.05 } },
 };
 
-const itemVariants = {
+const itemVariants: Variants = {
   hidden: { opacity: 0, y: 10 },
   visible: { opacity: 1, y: 0, transition: { duration: 0.15, ease: "easeOut" } },
 };
