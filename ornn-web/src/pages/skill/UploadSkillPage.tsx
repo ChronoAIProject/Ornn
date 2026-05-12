@@ -143,88 +143,104 @@ export function UploadSkillPage() {
 
   return (
     <PageTransition>
-      <div className="flex flex-col h-full py-2">
-      <nav className="mb-2 max-w-5xl w-full mx-auto">
-        <BackLink label={t("common.back", "Back")} />
-      </nav>
-      <div className="max-w-5xl mx-auto flex-1 flex flex-col justify-center">
-        <p className="font-text text-base text-meta text-center mb-6">
-          {t("upload.chooseMode")}
-        </p>
+      {/*
+        Outer wrapper allows vertical scroll when card grid exceeds viewport
+        height — parent `<main>` is `overflow-hidden`, so without this the
+        bottom row of cards would be clipped on common laptop sizes
+        (1366×768, 1440×900). See #381.
+      */}
+      <div className="flex flex-col h-full overflow-y-auto py-2">
+        <nav className="mb-2 max-w-5xl w-full mx-auto">
+          <BackLink label={t("common.back", "Back")} />
+        </nav>
+        {/*
+          Top-aligned (no `justify-center`) so content flows from the top
+          on short viewports; lets the overflow-y-auto wrapper above carry
+          any extra rows into a scroll instead of clipping them.
+        */}
+        <div className="max-w-5xl w-full mx-auto py-4">
+          <p className="font-text text-sm sm:text-base text-meta text-center mb-4 sm:mb-6">
+            {t("upload.chooseMode")}
+          </p>
 
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-4">
-          {MODE_CARDS.map((card) => {
-            const Icon = card.icon;
-            return (
-              <motion.div
-                key={card.titleKey}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: card.delay }}
-              >
-                <Card
-                  hoverable
-                  onClick={() => navigate(card.route)}
-                  className="h-full cursor-pointer group"
+          {/*
+            Grid laddering: 1 → 2 → 3 → 4 columns. The lg:grid-cols-3 step
+            is the one that fixes 1280–1535 wide laptops, which otherwise
+            either cram four cards into 2×2 (clipped) or jump straight to
+            xl:grid-cols-4 (cards too narrow to read).
+          */}
+          <div className="grid gap-4 sm:gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {MODE_CARDS.map((card) => {
+              const Icon = card.icon;
+              return (
+                <motion.div
+                  key={card.titleKey}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: card.delay }}
                 >
-                  {/*
-                    Inner column is the full card height (h-full) so the
-                    Button can use `mt-auto` to pin to the card's bottom.
-                    All four cards therefore have their CTAs sitting on
-                    exactly the same baseline regardless of whether the
-                    description / bullet list above is shorter or longer.
-                  */}
-                  <div className="flex flex-col items-center text-center p-4 h-full">
-                    <div
-                      className={`mb-6 p-4 rounded ${card.accentBg} border ${card.accentBorder} ${card.accentGlow} transition-all`}
-                    >
-                      <Icon className={`h-12 w-12 ${card.accentColor}`} />
-                    </div>
-
-                    <h2
-                      className={`font-display text-xl ${card.accentColor} mb-3`}
-                    >
-                      {t(card.titleKey)}
-                    </h2>
-
-                    <p className="font-text text-meta mb-6">
-                      {t(card.descKey)}
-                    </p>
-
-                    <ul className="text-left space-y-2 mb-6 w-full">
-                      {(t(card.bulletsKey, { returnObjects: true }) as string[]).map((bullet) => (
-                        <li
-                          key={bullet}
-                          className="flex items-center gap-2 text-sm text-meta"
-                        >
-                          <span
-                            className={`h-1.5 w-1.5 rounded-full ${card.accentBg.replace("/10", "")}`}
-                          />
-                          {bullet}
-                        </li>
-                      ))}
-                    </ul>
-
+                  <Card
+                    hoverable
+                    onClick={() => navigate(card.route)}
+                    className="h-full cursor-pointer group"
+                  >
                     {/*
-                      mt-auto pushes this CTA to the bottom; whitespace-nowrap
-                      keeps the text on one line so all four buttons share
-                      the same height (no two-line wrapping for the longer
-                      "Start Generative Mode" label).
+                      Inner column is the full card height (h-full) so the
+                      Button can use `mt-auto` to pin to the card's bottom.
+                      All four cards therefore have their CTAs sitting on
+                      exactly the same baseline regardless of whether the
+                      description / bullet list above is shorter or longer.
                     */}
-                    <Button
-                      variant={card.variant}
-                      className="w-full mt-auto"
-                    >
-                      {t(card.ctaKey)}
-                    </Button>
-                  </div>
-                </Card>
-              </motion.div>
-            );
-          })}
-        </div>
+                    <div className="flex flex-col items-center text-center p-3 sm:p-4 h-full">
+                      <div
+                        className={`mb-4 sm:mb-6 p-3 sm:p-4 rounded ${card.accentBg} border ${card.accentBorder} ${card.accentGlow} transition-all`}
+                      >
+                        <Icon className={`h-10 w-10 sm:h-12 sm:w-12 ${card.accentColor}`} />
+                      </div>
 
-      </div>
+                      <h2
+                        className={`font-display text-lg sm:text-xl ${card.accentColor} mb-2 sm:mb-3`}
+                      >
+                        {t(card.titleKey)}
+                      </h2>
+
+                      <p className="font-text text-sm sm:text-base text-meta mb-4 sm:mb-6">
+                        {t(card.descKey)}
+                      </p>
+
+                      <ul className="text-left space-y-1.5 sm:space-y-2 mb-4 sm:mb-6 w-full">
+                        {(t(card.bulletsKey, { returnObjects: true }) as string[]).map((bullet) => (
+                          <li
+                            key={bullet}
+                            className="flex items-center gap-2 text-xs sm:text-sm text-meta"
+                          >
+                            <span
+                              className={`h-1.5 w-1.5 rounded-full shrink-0 ${card.accentBg.replace("/10", "")}`}
+                            />
+                            <span className="break-words">{bullet}</span>
+                          </li>
+                        ))}
+                      </ul>
+
+                      {/*
+                        mt-auto pushes this CTA to the bottom; whitespace-nowrap
+                        keeps the text on one line so all four buttons share
+                        the same height (no two-line wrapping for the longer
+                        "Start Generative Mode" label).
+                      */}
+                      <Button
+                        variant={card.variant}
+                        className="w-full mt-auto"
+                      >
+                        {t(card.ctaKey)}
+                      </Button>
+                    </div>
+                  </Card>
+                </motion.div>
+              );
+            })}
+          </div>
+        </div>
       </div>
     </PageTransition>
   );
