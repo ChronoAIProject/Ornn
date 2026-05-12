@@ -2,8 +2,9 @@
  * Ornn wordmark — Forge Workshop expression.
  *
  * Inline SVG with the ember-filled polygon orbit + parchment "rnn"
- * wordmark. Identical mark across the landing page (LandingNav) and
- * every app-shell route so the user never sees the brand jump.
+ * wordmark. Identical mark across the landing page and every app-shell
+ * route (both surfaces share the unified `Navbar`) so the user never
+ * sees the brand jump.
  *
  * Color tokens render via `var(--color-ember)` (orbit) and
  * `currentColor` (wordmark) so the mark inherits the surrounding text

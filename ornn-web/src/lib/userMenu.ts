@@ -1,23 +1,16 @@
 /**
  * Single source of truth for the signed-in avatar dropdown content.
  *
- * The dropdown ships on two surfaces — the app-shell `Navbar` (used in
- * RootLayout) and the landing-page `LandingNav` (used only on `/`).
- * Historically each surface hand-maintained its own item list, which
- * drifted: LandingNav was missing `Redeem code` and `Admin services`;
- * both surfaces' mobile menus were sparser than their own desktop
- * dropdowns. See #363 (and #361 for the i18n drift that surfaced first).
+ * Items live here — typed, i18n-resolved, admin-gated — and the unified
+ * `Navbar` renders them with its dropdown wrappers (`DropdownInternal` /
+ * `DropdownExternal` / inline logout button). Adding or renaming an
+ * item touches one file. Historically this dropdown shipped on two
+ * surfaces (`Navbar` + `LandingNav`) that drifted apart (see #363, #361);
+ * the two surfaces have since been folded into a single `Navbar` —
+ * keeping the item list here is now belt-and-braces but harmless.
  *
- * This module flips the data-flow: the *items* live here, typed and
- * i18n-resolved and admin-gated; each surface renders them with its
- * own wrapper components so the per-surface design tokens
- * (`text-bone`/`hover:text-ember` for landing; `text-body`/
- * `hover:text-accent` for app-shell) stay intact. Adding or renaming
- * an item now touches a single file and lands on both surfaces in the
- * same commit; divergence becomes a TS error rather than a visual one.
- *
- * `getNyxIdUrl()` is also exported from here because both navs were
- * carrying verbatim copies.
+ * `getNyxIdUrl()` is also exported from here because the navs were
+ * carrying verbatim copies before consolidation.
  *
  * @module lib/userMenu
  */

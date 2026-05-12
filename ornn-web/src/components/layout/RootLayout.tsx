@@ -130,10 +130,10 @@ export function RootLayout() {
     <div className="flex flex-col h-screen bg-page bg-grid overflow-hidden">
       <Navbar />
       {/* Breadcrumb navigation — hide when only root crumb. Width matches
-          LandingNav (max-w-[1280px] mx-auto px-6 sm:px-8) so app-shell
-          horizontal rhythm aligns with the landing surface. The right
-          rail hosts the QuotaChip (paired playground + skill-gen pills)
-          when authenticated. */}
+          Navbar (max-w-[1280px] mx-auto px-6 sm:px-8) so the breadcrumb
+          rail aligns with the nav above it. The right rail hosts the
+          QuotaChip (paired playground + skill-gen pills) when
+          authenticated. */}
       {crumbs.length > 1 && (
       <div className="mx-auto w-full max-w-[1280px] shrink-0 px-6 sm:px-8 pt-3 pb-2">
         <div className="flex items-center justify-between gap-4">
