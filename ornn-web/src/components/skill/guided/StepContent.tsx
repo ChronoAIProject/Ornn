@@ -7,11 +7,11 @@
 import { Controller, type UseFormReturn } from "react-hook-form";
 import { motion } from "framer-motion";
 import { MarkdownEditor } from "@/components/form/MarkdownEditor";
-import type { ContentData } from "@/utils/skillCreateSchemas";
+import type { ContentData, ContentInput } from "@/utils/skillCreateSchemas";
 import { useTranslation } from "react-i18next";
 
 export interface StepContentProps {
-  form: UseFormReturn<ContentData>;
+  form: UseFormReturn<ContentInput, unknown, ContentData>;
 }
 
 export function StepContent({ form }: StepContentProps) {
