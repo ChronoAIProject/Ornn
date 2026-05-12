@@ -61,6 +61,7 @@ import { createAuditRoutes } from "./domains/skills/audit/routes";
 import { NotificationRepository } from "./domains/notifications/repository";
 import { NotificationService } from "./domains/notifications/service";
 import { createNotificationRoutes } from "./domains/notifications/routes";
+import { dropLegacyNotificationCategories } from "./domains/notifications/migration";
 
 // Domain: Announcements (landing-page popup)
 import { AnnouncementRepository } from "./domains/announcements/repository";
@@ -428,6 +429,16 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   const notificationRepo = new NotificationRepository(db);
   void notificationRepo.ensureIndexes().catch((err) =>
     logger.warn({ err }, "notifications indexes ensureIndexes failed — proceeding anyway"),
+  );
+  // One-time boot migration (#218) — drop legacy `share.*` rows left over
+  // from the pre-#198 share/audit-gate workflow. Idempotent; no-op after
+  // first run. Failure is non-fatal — old rows surface as ugly UI but
+  // never block the boot.
+  await dropLegacyNotificationCategories(db).catch((err) =>
+    logger.error(
+      { err: err instanceof Error ? err.message : String(err) },
+      "dropLegacyNotificationCategories failed — legacy notification rows may still surface in /notifications until the next deploy",
+    ),
   );
   const notificationService = new NotificationService({ notificationRepo });
   const notificationRoutes = createNotificationRoutes({ notificationService });
