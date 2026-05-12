@@ -68,6 +68,35 @@ jobs:
       - name: Scan for secrets
         run: gitleaks detect --source . --log-opts="origin/${{ github.base_ref }}..HEAD" --verbose
 
+  audit:
+    # Fails on any high or critical advisory in the Bun workspace. Moderate
+    # and below print to the PR step summary but don't block — Dependabot
+    # picks them up on the weekly cadence (.github/dependabot.yml).
+    #
+    # Ignored advisories — accepted residual risk documented in #385:
+    #   GHSA-r5fr-rjxr-66jc  lodash-es high   (via mermaid)
+    #   GHSA-f23m-r3pf-42rh  lodash-es moderate (via mermaid)
+    # lodash-es is archived at 4.17.21 with no upstream fix; the vulnerable
+    # APIs (_.template / _.unset / _.omit) are not reachable through
+    # mermaid's surface under our usage.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - name: Audit (high+critical block PR)
+        run: bun audit --audit-level=high --ignore=GHSA-r5fr-rjxr-66jc --ignore=GHSA-f23m-r3pf-42rh
+      - name: Audit summary (moderate+ — informational)
+        if: ${{ !cancelled() }}
+        run: |
+          {
+            echo "### bun audit — full report (moderate and above)"
+            echo ""
+            echo '```'
+            bun audit --audit-level=moderate || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
   docker-build:
     runs-on: ubuntu-latest
     steps:
