@@ -81,7 +81,7 @@ export function useUserMenuGroups(user: AuthUser | null): UserMenuGroup[] {
       {
         key: "services",
         kind: "external",
-        href: `${nyxid}/services`,
+        href: `${nyxid}/keys`,
         label: t("nav.myServices"),
       },
       {
@@ -120,7 +120,7 @@ export function useUserMenuGroups(user: AuthUser | null): UserMenuGroup[] {
         {
           key: "admin-services",
           kind: "external",
-          href: `${nyxid}/admin/services`,
+          href: `${nyxid}/services`,
           label: t("nav.adminServices"),
         },
       ],
