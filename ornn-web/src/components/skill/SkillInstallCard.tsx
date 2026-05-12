@@ -140,12 +140,13 @@ function CopyBlock({
   };
 
   return (
-    // h-40 on both variants so the install card is the same height on
-    // either tab — switching is a pure content swap, no layout shift
-    // (#414). Single-line content (npx command) gets vertically
-    // centred inside the box; multi-line content (the install prompt)
-    // top-aligns and scrolls.
-    <div className="flex h-40 items-stretch overflow-hidden rounded border border-strong-edge bg-elevated/40">
+    // h-40 on both variants keeps card height stable across tabs
+    // (#414); max-w-2xl caps the code field at a comfortable reading
+    // width even when the card is full-width — so prompt lines wrap
+    // sooner instead of stretching across the whole content area
+    // (#418). The card itself stays full-width; only the code field
+    // is narrower, sitting on the left of the card.
+    <div className="flex h-40 max-w-2xl items-stretch overflow-hidden rounded border border-strong-edge bg-elevated/40">
       <code
         className={
           multiline
@@ -214,12 +215,7 @@ export function SkillInstallCard({ skill, className }: SkillInstallCardProps) {
       : null;
 
   return (
-    // max-w-2xl (672px) caps the card at a comfortable reading width
-    // instead of letting it stretch the full content area. The prompt
-    // tab's helper text + code block read like prose; a narrower box
-    // keeps lines from getting too long without forcing the code area
-    // to disagree with the COPY button's right-edge anchor.
-    <Card className={`max-w-2xl p-4 ${className ?? ""}`.trim()}>
+    <Card className={`p-4 ${className ?? ""}`.trim()}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h3 className="font-display text-sm uppercase tracking-[0.18em] text-strong">
