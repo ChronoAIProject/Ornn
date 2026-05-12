@@ -158,6 +158,20 @@ bun changeset --empty
 
 Releases are fully automated via Changesets. Maintainer-driven; contributors don't need to do anything beyond including a changeset on each PR. The flow is documented in [`CLAUDE.md`](CLAUDE.md#versioning--releases).
 
+### Release notes — maintainer task per release
+
+The auto-generated `CHANGELOG.md` is engineer-speak (PR refs, author thanks, paragraph-long rationales). The public **GitHub Releases page** uses a curated, user-facing summary instead.
+
+Before opening a `develop → main` release PR, the maintainer (or their local Claude) edits **[`.github/release-notes-next.md`](.github/release-notes-next.md)** into a brief three-section summary:
+
+- **Fixed** — bug fixes the user notices. Cluster technical-only fixes into a single trailing `Few technical bugs fixed` bullet.
+- **New Feature** — new features the user notices. Cluster technical-only work into a single trailing `Technical enhancement` bullet.
+- **Changed** — changes to existing features. Same `Technical enhancement` cluster for the technical-only bucket.
+
+One bullet = 6–12 words. Plain prose. No PR / issue refs. The full per-PR detail is linked at the bottom of every release body automatically.
+
+The release workflow (`changeset-release.yml`) reads this file at release time. If it's missing or still contains the placeholder string `(write here)`, the workflow falls back to a short body that links to the in-repo `CHANGELOG.md` files — release still publishes, just without curated prose.
+
 ## Where to ask questions
 
 - Usage / how-to → [Discussions → Q&A](https://github.com/ChronoAIProject/Ornn/discussions/categories/q-a)
