@@ -33,12 +33,19 @@ const skillFormSchema = z.object({
   readmeMd: z.string().max(50000).optional(),
 });
 
-type SkillFormData = z.infer<typeof skillFormSchema>;
+// `z.input` is the pre-validation shape (optional fields where the
+// schema has `.default(...)`); `z.output` is post-validation (defaults
+// applied, so those fields are required). @hookform/resolvers 5 typed
+// the Resolver against the output, so useForm has to be parameterised
+// with both — pre-validation form state and post-validation submit
+// payload — for the SubmitHandler to typecheck.
+type SkillFormInput = z.input<typeof skillFormSchema>;
+type SkillFormData = z.output<typeof skillFormSchema>;
 
 export interface SkillFormProps {
   /** "create" shows all fields; "edit" hides name, version, file */
   mode: "create" | "edit";
-  defaultValues?: Partial<SkillFormData>;
+  defaultValues?: Partial<SkillFormInput>;
   onSubmit: (data: SkillFormData, file?: File) => void;
   isSubmitting?: boolean;
   className?: string;
@@ -63,7 +70,7 @@ export function SkillForm({
     control,
     watch,
     formState: { errors },
-  } = useForm<SkillFormData>({
+  } = useForm<SkillFormInput, unknown, SkillFormData>({
     resolver: zodResolver(skillFormSchema),
     defaultValues: {
       name: "",
@@ -144,7 +151,7 @@ export function SkillForm({
         control={control}
         render={({ field }) => (
           <TagInput
-            tags={field.value}
+            tags={field.value ?? []}
             onChange={field.onChange}
             error={errors.tags?.message}
           />
