@@ -141,6 +141,12 @@ bun changeset --empty
 - Project domain knowledge: see [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) and [`docs/CONVENTIONS.md`](docs/CONVENTIONS.md).
 - Visual / UI changes: see [`docs/DESIGN.md`](docs/DESIGN.md) before deviating from the design system.
 
+### Supply-chain hygiene
+
+- **Dependabot** (configured in [`.github/dependabot.yml`](.github/dependabot.yml)) opens grouped weekly PRs for npm/bun, pip, GitHub Actions, and Docker base images. Treat its PRs as first-class — review on the same cadence as feature work.
+- **`bun audit`** is the local-and-CI vulnerability gate. The CI `audit` job blocks any PR that introduces a **high** or **critical** advisory; moderate+ advisories show up in the PR step summary but don't block. Before opening a PR, run `bun audit --audit-level=high` locally to catch regressions.
+- **Security disclosure** never goes through public issues or PRs — use the Private Vulnerability Reporting flow in [`SECURITY.md`](SECURITY.md).
+
 ## Tests
 
 - Unit tests are colocated with source files.
