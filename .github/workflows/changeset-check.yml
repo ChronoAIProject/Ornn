@@ -14,7 +14,12 @@ jobs:
     # test / build / docker-build / audit gate stack still runs on every
     # Dependabot PR, so behaviour and security regressions are caught
     # downstream. Tracked in #402.
-    if: github.actor != 'dependabot[bot]'
+    #
+    # `github.event.pull_request.user.login` (PR author) instead of
+    # `github.actor` (last pusher) — otherwise a maintainer running
+    # `gh pr update-branch` to sync a Dependabot PR with develop
+    # reverts the actor to themselves and re-arms this gate.
+    if: github.event.pull_request.user.login != 'dependabot[bot]'
     steps:
       - uses: actions/checkout@v6
         with:
