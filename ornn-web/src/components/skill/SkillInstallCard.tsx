@@ -71,6 +71,9 @@ function CheckIcon({ className }: { className?: string }) {
 /**
  * Compact pill describing the sync relationship between this skill's
  * latest version on Ornn and what's currently on the GitHub mirror.
+ * Last-sync timestamp and commit SHA live in the `title` (hover tooltip)
+ * so they don't take up vertical space in the card layout — keeping
+ * the install card height stable across tab switches (#418).
  */
 function SyncChip({ skill }: { skill: SkillDetail }) {
   const { t } = useTranslation();
@@ -78,21 +81,28 @@ function SyncChip({ skill }: { skill: SkillDetail }) {
     return (
       <span className="inline-flex items-center gap-1 rounded-full border border-strong-edge bg-elevated/40 px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
         <span className="h-1.5 w-1.5 rounded-full bg-meta" />
-        {t("skillInstallCard.neverSynced", "Never synced")}
+        {t("skillInstallCard.pending", "Pending first sync")}
       </span>
     );
   }
   const inSync = skill.mirrorSync.version === skill.version;
+  const tooltip = `${t("skillInstallCard.lastSync", "Last sync")} ${relativeTime(skill.mirrorSync.syncedAt)} · ${t("skillInstallCard.commit", "Commit")} ${shortSha(skill.mirrorSync.commitSha)}`;
   if (inSync) {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full border border-success/40 bg-success-soft px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.14em] text-success">
+      <span
+        title={tooltip}
+        className="inline-flex items-center gap-1 rounded-full border border-success/40 bg-success-soft px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.14em] text-success"
+      >
         <span className="h-1.5 w-1.5 rounded-full bg-success" />
         {t("skillInstallCard.synced", "Synced")} · v{skill.mirrorSync.version}
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center gap-1 rounded-full border border-warning/40 bg-warning-soft px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.14em] text-warning">
+    <span
+      title={tooltip}
+      className="inline-flex items-center gap-1 rounded-full border border-warning/40 bg-warning-soft px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.14em] text-warning"
+    >
       <span className="h-1.5 w-1.5 rounded-full bg-warning" />
       {t("skillInstallCard.lagging", "Lagging")} · v{skill.mirrorSync.version} → v{skill.version}
     </span>
@@ -198,17 +208,18 @@ export function SkillInstallCard({ skill, className }: SkillInstallCardProps) {
   const slug = repoCfg && repoCfg.owner && repoCfg.repo ? `${repoCfg.owner}/${repoCfg.repo}` : null;
   const command = slug ? `npx skills add ${slug}/${skill.name}` : "";
 
-  const commitUrl =
-    npxAvailable && slug && skill.mirrorSync
-      ? `https://github.com/${slug}/commit/${skill.mirrorSync.commitSha}`
-      : null;
   const treeUrl =
     npxAvailable && slug && repoCfg
       ? `https://github.com/${slug}/tree/${repoCfg.branch}/${encodeURIComponent(skill.name)}`
       : null;
 
   return (
-    <Card className={`p-4 ${className ?? ""}`.trim()}>
+    // max-w-2xl (672px) caps the card at a comfortable reading width
+    // instead of letting it stretch the full content area. The prompt
+    // tab's helper text + code block read like prose; a narrower box
+    // keeps lines from getting too long without forcing the code area
+    // to disagree with the COPY button's right-edge anchor.
+    <Card className={`max-w-2xl p-4 ${className ?? ""}`.trim()}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h3 className="font-display text-sm uppercase tracking-[0.18em] text-strong">
@@ -221,7 +232,21 @@ export function SkillInstallCard({ skill, className }: SkillInstallCardProps) {
             )}
           </p>
         </div>
-        {tab === "npx" && npxAvailable && <SyncChip skill={skill} />}
+        {tab === "npx" && npxAvailable && (
+          <div className="flex items-center gap-3">
+            <SyncChip skill={skill} />
+            {treeUrl && (
+              <a
+                href={treeUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-mono text-[10px] uppercase tracking-[0.14em] text-meta underline-offset-2 transition hover:text-strong hover:underline"
+              >
+                {t("skillInstallCard.viewOnGithub", "View on GitHub")} →
+              </a>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Tabs */}
@@ -238,11 +263,11 @@ export function SkillInstallCard({ skill, className }: SkillInstallCardProps) {
         </TabButton>
       </div>
 
-      {/* Card height stays put across tab switches because the CopyBlock
-          itself is fixed at h-40 in both variants (not the surrounding
-          tabpanel). The npx tab's small meta footer below the code box
-          adds ~24px on top, which is the only delta between tabs and
-          is barely perceptible. */}
+      {/* Both tabpanels share the same shape — helper text + CopyBlock
+          (h-40 fixed) — so the card height is identical across tabs
+          (#418). Sync state, View-on-GitHub link, and last-sync/commit
+          metadata moved up to the header (SyncChip + adjacent link)
+          so no per-tab footer breaks the symmetry. */}
       {tab === "prompt" && (
         <div role="tabpanel" className="mt-3 space-y-3">
           <p className="font-text text-xs text-meta">
@@ -274,52 +299,6 @@ export function SkillInstallCard({ skill, className }: SkillInstallCardProps) {
                 copyAriaLabel={t("skillInstallCard.copyNpxAria", "Copy install command")}
                 multiline={false}
               />
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 font-mono text-[11px] uppercase tracking-[0.14em] text-meta">
-                {treeUrl && (
-                  <a
-                    href={treeUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="underline-offset-2 transition hover:text-strong hover:underline"
-                  >
-                    {t("skillInstallCard.viewOnGithub", "View on GitHub")} →
-                  </a>
-                )}
-                {skill.mirrorSync ? (
-                  <>
-                    <span className="text-strong-edge">·</span>
-                    <span>
-                      {t("skillInstallCard.lastSync", "Last sync")}{" "}
-                      {relativeTime(skill.mirrorSync.syncedAt)}
-                    </span>
-                    {commitUrl && (
-                      <>
-                        <span className="text-strong-edge">·</span>
-                        <a
-                          href={commitUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="underline-offset-2 transition hover:text-strong hover:underline"
-                          title={skill.mirrorSync.commitSha}
-                        >
-                          {t("skillInstallCard.commit", "Commit")}{" "}
-                          {shortSha(skill.mirrorSync.commitSha)}
-                        </a>
-                      </>
-                    )}
-                  </>
-                ) : (
-                  <>
-                    <span className="text-strong-edge">·</span>
-                    <span>
-                      {t(
-                        "skillInstallCard.pendingFirstSync",
-                        "Pending first sync — mirror commit usually lands within a few minutes.",
-                      )}
-                    </span>
-                  </>
-                )}
-              </div>
             </>
           ) : (
             <p className="font-text text-xs text-meta">
