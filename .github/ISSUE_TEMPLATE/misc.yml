@@ -1,0 +1,26 @@
+name: Misc task
+description: Anything that does not fit Bug / Feature / CI-CD / Docs — e.g. chores, refactors, tracking issues, governance.
+title: "[Misc] "
+labels: ["dx"]
+assignees: ["chronoai-shining"]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+    validations:
+      required: true
+
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Motivation
+      description: Why does this need to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope / checklist
+      description: A checkbox list of concrete steps, if known.
