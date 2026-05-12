@@ -1,0 +1,92 @@
+# Dependabot keeps our supply chain current. Three groupings to minimise
+# PR churn: minor/patch bundled per-ecosystem, security-only PRs come through
+# uncapped (one per CVE), majors stay un-grouped so they're easy to triage.
+#
+# See SECURITY.md for the public vuln disclosure path; CI's `audit` job
+# (CI workflow → audit) is the runtime gate that blocks high/critical
+# regressions from landing.
+
+version: 2
+updates:
+  # ---- Bun workspace (root + ornn-api + ornn-web) -------------------------
+  # Dependabot walks the workspace from /, so a single entry covers every
+  # package.json in the tree.
+  - package-ecosystem: bun
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "08:00"
+      timezone: Asia/Shanghai
+    open-pull-requests-limit: 10
+    labels: ["dependencies", "infra"]
+    groups:
+      bun-minor-and-patch:
+        applies-to: version-updates
+        update-types: ["minor", "patch"]
+    commit-message:
+      prefix: "chore(deps)"
+      include: scope
+
+  # ---- Python SDK ---------------------------------------------------------
+  - package-ecosystem: pip
+    directory: /sdk/python
+    schedule:
+      interval: weekly
+      day: monday
+      time: "08:00"
+      timezone: Asia/Shanghai
+    open-pull-requests-limit: 5
+    labels: ["dependencies", "infra"]
+    groups:
+      pip-minor-and-patch:
+        applies-to: version-updates
+        update-types: ["minor", "patch"]
+    commit-message:
+      prefix: "chore(deps)"
+      include: scope
+
+  # ---- GitHub Actions -----------------------------------------------------
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "08:00"
+      timezone: Asia/Shanghai
+    open-pull-requests-limit: 5
+    labels: ["dependencies", "infra"]
+    groups:
+      actions-all:
+        applies-to: version-updates
+        patterns: ["*"]
+    commit-message:
+      prefix: "chore(ci)"
+      include: scope
+
+  # ---- Docker base images -------------------------------------------------
+  - package-ecosystem: docker
+    directory: /ornn-api
+    schedule:
+      interval: weekly
+      day: monday
+      time: "08:00"
+      timezone: Asia/Shanghai
+    open-pull-requests-limit: 3
+    labels: ["dependencies", "infra"]
+    commit-message:
+      prefix: "chore(docker)"
+      include: scope
+
+  - package-ecosystem: docker
+    directory: /ornn-web
+    schedule:
+      interval: weekly
+      day: monday
+      time: "08:00"
+      timezone: Asia/Shanghai
+    open-pull-requests-limit: 3
+    labels: ["dependencies", "infra"]
+    commit-message:
+      prefix: "chore(docker)"
+      include: scope
