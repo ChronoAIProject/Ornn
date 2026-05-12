@@ -130,15 +130,17 @@ function CopyBlock({
   };
 
   return (
-    <div className="flex items-stretch overflow-hidden rounded border border-strong-edge bg-elevated/40">
-      {/* Fixed-height code area on both variants so switching tabs
-          doesn't change the card height (#414). The prompt is meant to
-          be copied, not read inline — internal scroll for the rest. */}
+    // h-40 on both variants so the install card is the same height on
+    // either tab — switching is a pure content swap, no layout shift
+    // (#414). Single-line content (npx command) gets vertically
+    // centred inside the box; multi-line content (the install prompt)
+    // top-aligns and scrolls.
+    <div className="flex h-40 items-stretch overflow-hidden rounded border border-strong-edge bg-elevated/40">
       <code
         className={
           multiline
-            ? "flex-1 h-40 overflow-y-auto whitespace-pre-wrap break-words px-3 py-2 font-mono text-xs leading-relaxed text-strong"
-            : "flex-1 overflow-x-auto px-3 py-2 font-mono text-sm text-strong"
+            ? "flex-1 h-full overflow-y-auto whitespace-pre-wrap break-words px-3 py-2 font-mono text-xs leading-relaxed text-strong"
+            : "flex-1 h-full flex items-center overflow-x-auto px-3 font-mono text-sm text-strong"
         }
       >
         {content}
@@ -147,7 +149,10 @@ function CopyBlock({
         type="button"
         onClick={handleCopy}
         aria-label={copyAriaLabel}
-        className="flex shrink-0 items-center gap-1 self-start border-l border-strong-edge px-3 py-2 font-mono text-[11px] uppercase tracking-[0.14em] text-meta transition hover:bg-elevated hover:text-strong"
+        // No self-start — the button is a full-height vertical bar on
+        // the right of the code area, matching the original
+        // MirrorInstallCard treatment that worked cleanly.
+        className="flex shrink-0 flex-col items-center justify-center gap-1 border-l border-strong-edge px-3 font-mono text-[11px] uppercase tracking-[0.14em] text-meta transition hover:bg-elevated hover:text-strong"
       >
         {copied ? (
           <>
@@ -233,13 +238,13 @@ export function SkillInstallCard({ skill, className }: SkillInstallCardProps) {
         </TabButton>
       </div>
 
-      {/* Both tabpanels share `min-h-[14rem]` (224px) so the card height
-          stays put as the user switches between them (#414). Picked to
-          accommodate the npx tab's natural content (helper text +
-          command + footer); the prompt tab's fixed-height code block
-          (160px) plus its helper text fits within the same envelope. */}
+      {/* Card height stays put across tab switches because the CopyBlock
+          itself is fixed at h-40 in both variants (not the surrounding
+          tabpanel). The npx tab's small meta footer below the code box
+          adds ~24px on top, which is the only delta between tabs and
+          is barely perceptible. */}
       {tab === "prompt" && (
-        <div role="tabpanel" className="mt-3 min-h-[14rem] space-y-3">
+        <div role="tabpanel" className="mt-3 space-y-3">
           <p className="font-text text-xs text-meta">
             {t(
               "skillInstallCard.promptHelper",
@@ -255,7 +260,7 @@ export function SkillInstallCard({ skill, className }: SkillInstallCardProps) {
       )}
 
       {tab === "npx" && (
-        <div role="tabpanel" className="mt-3 min-h-[14rem] space-y-3">
+        <div role="tabpanel" className="mt-3 space-y-3">
           {npxAvailable ? (
             <>
               <p className="font-text text-xs text-meta">
