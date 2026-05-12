@@ -24,7 +24,7 @@ import { SkillPackagePreview } from "@/components/skill/SkillPackagePreview";
 import { VersionPicker } from "@/components/skill/VersionPicker";
 import { DeprecationBanner } from "@/components/skill/DeprecationBanner";
 import { GitHubOriginChip } from "@/components/skill/GitHubOriginChip";
-import { MirrorInstallCard } from "@/components/skill/MirrorInstallCard";
+import { SkillInstallCard } from "@/components/skill/SkillInstallCard";
 import { UsagePullsCard } from "@/components/skill/UsagePullsCard";
 import { SkillHeroStrip } from "@/components/skill/SkillHeroStrip";
 import { BackLink } from "@/components/layout/BackLink";
@@ -48,7 +48,6 @@ import { useSkillPackage } from "@/hooks/useSkillPackage";
 import { useCurrentUser, useIsAuthenticated, isAdmin } from "@/stores/authStore";
 import { useToastStore } from "@/stores/toastStore";
 import { buildFileTreeFromEntries, type FileTreeEntry } from "@/utils/fileTreeBuilder";
-import { buildTrySkillPrompt } from "@/lib/buildTrySkillPrompt";
 import { translateError } from "@/utils/translateError";
 import { track } from "@/lib/analytics";
 import { useTranslation } from "react-i18next";
@@ -319,23 +318,6 @@ export function SkillDetailPage() {
     }
   };
 
-  const handleCopyTryPrompt = async () => {
-    if (!skill) return;
-    const prompt = buildTrySkillPrompt({
-      guid: skill.guid,
-      name: skill.name,
-      description: skill.description,
-      metadata: skill.metadata ?? {},
-      ornnOrigin: window.location.origin,
-    });
-    try {
-      await navigator.clipboard.writeText(prompt);
-      addToast({ type: "success", message: t("skillDetail.cliPromptCopied") });
-    } catch {
-      addToast({ type: "error", message: t("skillDetail.cliCopyFailed") });
-    }
-  };
-
   const handleDownloadPackage = useCallback(async () => {
     if (!skill || !rawZip) return;
     const blob = await rawZip.generateAsync({ type: "blob" });
@@ -443,11 +425,13 @@ export function SkillDetailPage() {
           />
         )}
 
-        {/* ── Mirror install snippet ── */}
-        {/* Hidden for private skills, when mirror is disabled, and during the
-            initial repo-config fetch — see MirrorInstallCard for the full
-            visibility rules. */}
-        <MirrorInstallCard className="shrink-0" skill={skill} />
+        {/* ── Install card (#411) ── */}
+        {/* Folded the old MirrorInstallCard + the "Install skill to my agent"
+            three-dots menu item into one tabbed card. Gate on canTryWithCli
+            so private-skill owners still see the prompt path (they used to
+            reach it via the now-deleted three-dots menu); strangers viewing
+            a private skill see nothing, same as before. */}
+        {canTryWithCli && <SkillInstallCard className="shrink-0" skill={skill} />}
 
         {/* ── Hero strip ── */}
         <SkillHeroStrip
@@ -459,8 +443,6 @@ export function SkillDetailPage() {
           ownerDisplayName={ownerDisplayName}
           ownerAvatarUrl={ownerAvatarUrl}
           onTryPlayground={() => navigate(`/playground?skill=${encodeURIComponent(skill.name)}`)}
-          canTryWithCli={canTryWithCli}
-          onCopyCliPrompt={handleCopyTryPrompt}
           onDownloadPackage={rawZip ? handleDownloadPackage : undefined}
           onEditSkill={isOwner ? () => navigate(`/skills/${skill.guid}/edit`) : undefined}
         />
