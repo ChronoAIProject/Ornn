@@ -45,7 +45,7 @@ export const basicInfoSchema = z.object({
   context: z.array(z.string()).default([]),
   agent: z.string().max(100).optional(),
   argumentHint: z.string().max(500).optional(),
-  hooks: z.record(z.unknown()).optional(),
+  hooks: z.record(z.string(), z.unknown()).optional(),
 });
 
 /**

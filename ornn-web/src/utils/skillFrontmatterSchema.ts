@@ -209,7 +209,7 @@ export const skillFrontmatterSchema = z.object({
   model: z.string().max(100).optional(),
   context: z.array(z.string()).optional(),
   agent: z.string().max(100).optional(),
-  hooks: z.record(z.unknown()).optional(),
+  hooks: z.record(z.string(), z.unknown()).optional(),
   argumentHint: z.string().max(500).optional(),
 
   // Ornn platform extensions (top-level)
