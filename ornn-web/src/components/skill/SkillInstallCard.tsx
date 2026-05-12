@@ -208,7 +208,12 @@ export function SkillInstallCard({ skill, className }: SkillInstallCardProps) {
       : null;
 
   return (
-    <Card className={`p-4 ${className ?? ""}`.trim()}>
+    // max-w-2xl (672px) caps the card at a comfortable reading width
+    // instead of letting it stretch the full content area. The prompt
+    // tab's helper text + code block read like prose; a narrower box
+    // keeps lines from getting too long without forcing the code area
+    // to disagree with the COPY button's right-edge anchor.
+    <Card className={`max-w-2xl p-4 ${className ?? ""}`.trim()}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h3 className="font-display text-sm uppercase tracking-[0.18em] text-strong">
