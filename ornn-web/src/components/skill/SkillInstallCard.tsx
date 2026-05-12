@@ -10,11 +10,11 @@
  *                   renders an "unavailable" placeholder when those conditions
  *                   don't hold instead of hiding the whole tab.
  *
- * Hidden entirely when the caller is not authenticated, or for non-public
- * skills viewed by a non-owner — i.e. when the caller can't try the skill
- * at all (canTryWithCli is false). Otherwise the card always shows so the
- * prompt path is reachable for private-skill owners and for deployments
- * without the GitHub mirror configured.
+ * Visibility follows the skill itself (#413). The component renders
+ * whenever the skill detail page does — the page-level auth + ACL
+ * guards already enforce "can this person see this skill at all", and
+ * both tabs (prompt + npx) only emit public metadata, so no second
+ * gate is needed here.
  *
  * Replaces the older MirrorInstallCard + the "Install skill to my agent"
  * three-dots menu item (#411).
