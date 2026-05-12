@@ -1,0 +1,72 @@
+name: Check release notes
+
+# Gates every PR targeting `main` on a properly-filled
+# `.github/release-notes-next.md`. The release workflow falls back to a
+# short link-to-CHANGELOG body when the file isn't curated — that
+# fallback is fine for emergencies but a poor default. This gate forces
+# the maintainer to fill in the three-section summary BEFORE the
+# release-bump train starts, so v<X.Y.Z> always ships with curated
+# release notes on the GitHub Releases page. Tracked in #433.
+#
+# Required-status check binding (one-time, in the repo Settings UI):
+# add `Check release notes` to main's branch-protection list so the
+# gate is actually load-bearing.
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, edited]
+
+jobs:
+  check-release-notes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Validate .github/release-notes-next.md
+        run: |
+          set -u
+          FILE=".github/release-notes-next.md"
+
+          # ── 1. File exists ─────────────────────────────────────────
+          if [ ! -f "$FILE" ]; then
+            echo "::error file=$FILE::Release notes file does not exist. Create $FILE with Fixed / New Feature / Changed sections before merging to main."
+            exit 1
+          fi
+
+          FAILED=0
+
+          # ── 2. All three section headings present ──────────────────
+          # `grep -F` so the literal `## ` doesn't get interpreted as
+          # a regex. One section per required heading.
+          for section in "## Fixed" "## New Feature" "## Changed"; do
+            if ! grep -qF "$section" "$FILE"; then
+              echo "::error file=$FILE::Missing required heading: \`$section\`. Release notes must contain Fixed / New Feature / Changed sections — leave an empty section with the technical-bucket bullet (\"Few technical bugs fixed\" / \"Technical enhancement\") if nothing notable happened in that bucket this release."
+              FAILED=1
+            fi
+          done
+
+          # ── 3. Placeholder `(write here)` removed ──────────────────
+          # The seeded template at .github/release-notes-next.md uses
+          # `(write here)` for each bullet slot. Any remaining
+          # occurrence means at least one section hasn't been filled
+          # in — the workflow would fall back to the short link body
+          # at release time, but better to catch it at PR-open time.
+          if grep -qF '(write here)' "$FILE"; then
+            echo "::error file=$FILE::Release notes still contain the \`(write here)\` placeholder. Replace each placeholder with brief user-facing bullets (6-12 words each). Cluster technical-only items into a single \`Few technical bugs fixed\` / \`Technical enhancement\` trailing bullet."
+            FAILED=1
+          fi
+
+          if [ "$FAILED" -ne 0 ]; then
+            echo ""
+            echo "Release-notes flow reminder:"
+            echo "  - Read the comment block at the top of $FILE for the formatting rules."
+            echo "  - Run \`bun changeset status\` to see what's pending for this release."
+            echo "  - One bullet = one product-level fact, 6-12 words."
+            echo "  - Drop a section entirely if there's genuinely nothing for it."
+            exit 1
+          fi
+
+          echo "✓ Release notes valid — all three sections present, no placeholders."
