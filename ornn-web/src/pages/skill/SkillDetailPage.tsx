@@ -125,7 +125,6 @@ export function SkillDetailPage() {
   const isOwner = !!(isAuthenticated && user?.id && skill?.createdBy === user.id);
   const isAdminUser = isAdmin(user);
   const canManageVersions = isOwner || isAdminUser;
-  const canTryWithCli = !!skill && (!skill.isPrivate || isOwner);
 
   const latestVersion = versionList[0]?.version;
   const viewingLatest = !versionParam || (latestVersion && versionParam === latestVersion);
@@ -426,12 +425,12 @@ export function SkillDetailPage() {
         )}
 
         {/* ── Install card (#411) ── */}
-        {/* Folded the old MirrorInstallCard + the "Install skill to my agent"
-            three-dots menu item into one tabbed card. Gate on canTryWithCli
-            so private-skill owners still see the prompt path (they used to
-            reach it via the now-deleted three-dots menu); strangers viewing
-            a private skill see nothing, same as before. */}
-        {canTryWithCli && <SkillInstallCard className="shrink-0" skill={skill} />}
+        {/* Visibility follows the skill (#413): if the viewer can see this
+            skill detail page they can see the install card. The page-level
+            auth + ACL guards already enforce "can this person see this
+            skill at all". Both tabs (prompt + npx) only emit public
+            metadata so there's no reason to gate further. */}
+        <SkillInstallCard className="shrink-0" skill={skill} />
 
         {/* ── Hero strip ── */}
         <SkillHeroStrip
