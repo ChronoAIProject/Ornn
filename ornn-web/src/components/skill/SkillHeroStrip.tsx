@@ -13,7 +13,6 @@
  * @module components/skill/SkillHeroStrip
  */
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type { SkillDetail } from "@/types/domain";
 import type { AuditRecord } from "@/types/audit";
@@ -28,13 +27,9 @@ interface SkillHeroStripProps {
   ownerAvatarUrl?: string | null;
   /** Click handler for the primary "Try in Playground" CTA. */
   onTryPlayground: () => void;
-  /** Authenticated and skill is non-private OR caller is owner. */
-  canTryWithCli: boolean;
-  /** Click handler for the "Use Nyx CLI" secondary action. */
-  onCopyCliPrompt: () => void;
-  /** Click handler for "Download package" — only when raw ZIP is available. */
+  /** Click handler for the download icon — only when raw ZIP is available. */
   onDownloadPackage?: () => void;
-  /** Click handler for "Edit skill" — only when caller is owner/admin. */
+  /** Click handler for the edit icon — only when caller is owner/admin. */
   onEditSkill?: () => void;
 }
 
@@ -89,37 +84,10 @@ export function SkillHeroStrip({
   ownerDisplayName,
   ownerAvatarUrl,
   onTryPlayground,
-  canTryWithCli,
-  onCopyCliPrompt,
   onDownloadPackage,
   onEditSkill,
 }: SkillHeroStripProps) {
   const { t } = useTranslation();
-  const [menuOpen, setMenuOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
-  const triggerRef = useRef<HTMLButtonElement>(null);
-
-  // Close on outside click + ESC.
-  useEffect(() => {
-    if (!menuOpen) return;
-    const onClick = (e: MouseEvent) => {
-      if (
-        menuRef.current && !menuRef.current.contains(e.target as Node) &&
-        triggerRef.current && !triggerRef.current.contains(e.target as Node)
-      ) {
-        setMenuOpen(false);
-      }
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setMenuOpen(false);
-    };
-    document.addEventListener("mousedown", onClick);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onClick);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [menuOpen]);
 
   const visibilityLabel = skill.isPrivate
     ? t("common.private", "Private")
@@ -245,61 +213,48 @@ export function SkillHeroStrip({
                 </svg>
               </a>
             )}
-            {isAuthenticated && (
-              <>
-            <button
-              type="button"
-              onClick={onTryPlayground}
-              className="cta-letterpress inline-flex cursor-pointer items-center gap-2 rounded-sm border border-accent-muted bg-accent px-4 py-2.5 font-mono text-xs font-semibold uppercase tracking-widest text-page hover:bg-accent-muted"
-            >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden><polygon points="6 4 20 12 6 20 6 4" /></svg>
-              {t("skillDetail.heroTryPlayground", "Try in Playground")}
-            </button>
-
-            <div className="relative">
+            {/* Secondary icon-only actions next to the GitHub icon —
+                replaced the older three-dots menu (#411). Each renders
+                independently when its handler is provided, so the row
+                degrades gracefully (e.g. no edit icon for non-owners). */}
+            {isOwner && onEditSkill && (
               <button
-                ref={triggerRef}
                 type="button"
-                aria-label={t("skillDetail.heroMoreActions", "More actions")}
-                aria-haspopup="menu"
-                aria-expanded={menuOpen}
-                onClick={() => setMenuOpen((o) => !o)}
+                onClick={onEditSkill}
+                aria-label={t("skillDetail.heroEditSkill", "Edit skill") as string}
+                title={t("skillDetail.heroEditSkill", "Edit skill") as string}
                 className="inline-flex h-10 w-10 items-center justify-center rounded-sm border border-strong-edge text-body transition-colors hover:bg-elevated hover:text-strong hover:border-strong"
               >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                  <circle cx="12" cy="5" r="0.5" />
-                  <circle cx="12" cy="12" r="0.5" />
-                  <circle cx="12" cy="19" r="0.5" />
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
                 </svg>
               </button>
-              {menuOpen && (
-                <div
-                  ref={menuRef}
-                  role="menu"
-                  className="absolute right-0 top-[calc(100%+8px)] z-20 min-w-[220px] rounded-sm border border-strong-edge bg-card p-1 card-impression"
-                >
-                  {canTryWithCli && (
-                    <DropdownItem onClick={() => { setMenuOpen(false); onCopyCliPrompt(); }}>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="4 17 10 11 4 5" /><line x1="12" y1="19" x2="20" y2="19" /></svg>
-                      {t("skillDetail.heroUseNyxCli", "Use Nyx CLI")}
-                    </DropdownItem>
-                  )}
-                  {onDownloadPackage && (
-                    <DropdownItem onClick={() => { setMenuOpen(false); onDownloadPackage(); }}>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
-                      {t("skillDetail.heroDownload", "Download package")}
-                    </DropdownItem>
-                  )}
-                  {isOwner && onEditSkill && (
-                    <DropdownItem onClick={() => { setMenuOpen(false); onEditSkill(); }}>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
-                      {t("skillDetail.heroEditSkill", "Edit skill")}
-                    </DropdownItem>
-                  )}
-                </div>
-              )}
-            </div>
-              </>
+            )}
+            {onDownloadPackage && (
+              <button
+                type="button"
+                onClick={onDownloadPackage}
+                aria-label={t("skillDetail.heroDownload", "Download package") as string}
+                title={t("skillDetail.heroDownload", "Download package") as string}
+                className="inline-flex h-10 w-10 items-center justify-center rounded-sm border border-strong-edge text-body transition-colors hover:bg-elevated hover:text-strong hover:border-strong"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="7 10 12 15 17 10" />
+                  <line x1="12" y1="15" x2="12" y2="3" />
+                </svg>
+              </button>
+            )}
+            {isAuthenticated && (
+              <button
+                type="button"
+                onClick={onTryPlayground}
+                className="cta-letterpress inline-flex cursor-pointer items-center gap-2 rounded-sm border border-accent-muted bg-accent px-4 py-2.5 font-mono text-xs font-semibold uppercase tracking-widest text-page hover:bg-accent-muted"
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden><polygon points="6 4 20 12 6 20 6 4" /></svg>
+                {t("skillDetail.heroTryPlayground", "Try in Playground")}
+              </button>
             )}
           </div>
         )}
@@ -320,15 +275,3 @@ function buildGithubFolderUrl(source: NonNullable<SkillDetail["source"]>): strin
   return `https://github.com/${source.repo}/tree/${treeRef}${pathSuffix}`;
 }
 
-function DropdownItem({ children, onClick }: { children: ReactNode; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      role="menuitem"
-      onClick={onClick}
-      className="flex w-full items-center gap-2.5 rounded-sm px-3 py-2 text-left font-mono text-[11px] tracking-wider text-body transition-colors hover:bg-elevated hover:text-strong"
-    >
-      {children}
-    </button>
-  );
-}
