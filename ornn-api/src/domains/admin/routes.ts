@@ -140,7 +140,13 @@ export function createAdminRoutes(config: AdminRoutesConfig): Hono<{ Variables: 
     "/admin/skills/:id",
     requirePermission("ornn:admin:skill"),
     async (c) => {
-      const guid = c.req.param("id");
+      // Hono guarantees the :id segment is present when the route matches,
+      // but its 4.12 types now expose param() as `string | undefined`. The
+      // route definition makes the undefined branch unreachable, so we
+      // narrow with `?? ""` — downstream `deleteSkill("")` falls through
+      // to the standard "skill not found" path the API already returns
+      // for malformed identifiers.
+      const guid = c.req.param("id") ?? "";
       const authCtx = getAuth(c);
       await skillService.deleteSkill(guid);
 
@@ -172,8 +178,10 @@ export function createAdminRoutes(config: AdminRoutesConfig): Hono<{ Variables: 
     "/admin/skills/:idOrName/versions/:version/agentseal-rescan",
     requirePermission("ornn:admin:skill"),
     async (c) => {
-      const idOrName = c.req.param("idOrName");
-      const version = c.req.param("version");
+      // See note on /admin/skills/:id above — hono 4.12 types param() as
+      // `string | undefined` even though the route segments are required.
+      const idOrName = c.req.param("idOrName") ?? "";
+      const version = c.req.param("version") ?? "";
       const authCtx = getAuth(c);
 
       if (!agentsealScanner) {
