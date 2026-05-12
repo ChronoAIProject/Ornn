@@ -29,10 +29,16 @@ jobs:
             //   - chronoai-shining (maintainer)
             //   - github-actions[bot] (release-bump + sync PRs opened by
             //     the changeset-release workflow state machine)
+            //   - dependabot[bot] (weekly dep update PRs from the
+            //     supply-chain baseline in #383 — kept defence-in-depth
+            //     by the audit / lint / typecheck / test / docker-build
+            //     gates that still run on every PR)
             const TRUSTED_AUTHORS = new Set([
               'chronoai-shining',
               'github-actions[bot]',
               'app/github-actions',
+              'dependabot[bot]',
+              'app/dependabot',
             ]);
             if (TRUSTED_AUTHORS.has(author)) {
               console.log(`PR author is ${author} — no approval required`);

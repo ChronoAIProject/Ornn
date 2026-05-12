@@ -8,6 +8,13 @@ on:
 jobs:
   check-changeset:
     runs-on: ubuntu-latest
+    # Dependabot PRs are pure dependency bumps that don't produce
+    # user-facing changelog entries; requiring an empty changeset on
+    # every weekly batch is friction-only. The full lint / typecheck /
+    # test / build / docker-build / audit gate stack still runs on every
+    # Dependabot PR, so behaviour and security regressions are caught
+    # downstream. Tracked in #402.
+    if: github.actor != 'dependabot[bot]'
     steps:
       - uses: actions/checkout@v6
         with:
