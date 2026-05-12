@@ -142,15 +142,18 @@ function CopyBlock({
   return (
     // Fixed h-32 on both variants — short enough that the install card
     // doesn't dominate the page vertically, tall enough to preview ~5
-    // lines of the install prompt before it scrolls. Width follows the
-    // surrounding card (full-width). Card height stays stable across
-    // tab switches because the box itself is the same shape in both.
-    <div className="flex h-32 items-stretch overflow-hidden rounded border border-strong-edge bg-elevated/40">
+    // lines of the install prompt before it scrolls. The code area
+    // takes the full width; the COPY button is overlaid as an
+    // absolutely-positioned accent pill in the top-right corner so
+    // the text never has to compete with a sidebar.
+    <div className="relative h-32 overflow-hidden rounded border border-strong-edge bg-elevated/40">
       <code
         className={
           multiline
-            ? "flex-1 h-full overflow-y-auto whitespace-pre-wrap break-words px-3 py-2 font-mono text-xs leading-relaxed text-strong"
-            : "flex-1 h-full flex items-center overflow-x-auto px-3 font-mono text-sm text-strong"
+            // pr-20 reserves a clear gutter so prompt text never slides
+            // under the floating COPY button.
+            ? "block h-full overflow-y-auto whitespace-pre-wrap break-words px-3 py-2 pr-20 font-mono text-xs leading-relaxed text-strong"
+            : "h-full flex items-center overflow-x-auto px-3 pr-20 font-mono text-sm text-strong"
         }
       >
         {content}
@@ -159,19 +162,19 @@ function CopyBlock({
         type="button"
         onClick={handleCopy}
         aria-label={copyAriaLabel}
-        // No self-start — the button is a full-height vertical bar on
-        // the right of the code area, matching the original
-        // MirrorInstallCard treatment that worked cleanly.
-        className="flex shrink-0 flex-col items-center justify-center gap-1 border-l border-strong-edge px-3 font-mono text-[11px] uppercase tracking-[0.14em] text-meta transition hover:bg-elevated hover:text-strong"
+        // Floating accent pill in the top-right. Smaller than the
+        // primary CTA on the hero, sized for an action that lives
+        // inside another component rather than dominating it.
+        className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-sm border border-accent-muted bg-accent px-2.5 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-page shadow-sm transition hover:bg-accent-muted"
       >
         {copied ? (
           <>
-            <CheckIcon className="h-3.5 w-3.5" />
+            <CheckIcon className="h-3 w-3" />
             {t("skillInstallCard.copied", "Copied")}
           </>
         ) : (
           <>
-            <CopyIcon className="h-3.5 w-3.5" />
+            <CopyIcon className="h-3 w-3" />
             {t("skillInstallCard.copy", "Copy")}
           </>
         )}
