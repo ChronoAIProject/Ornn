@@ -131,10 +131,13 @@ function CopyBlock({
 
   return (
     <div className="flex items-stretch overflow-hidden rounded border border-strong-edge bg-elevated/40">
+      {/* Fixed-height code area on both variants so switching tabs
+          doesn't change the card height (#414). The prompt is meant to
+          be copied, not read inline — internal scroll for the rest. */}
       <code
         className={
           multiline
-            ? "flex-1 max-h-72 overflow-auto whitespace-pre-wrap break-words px-3 py-2 font-mono text-xs text-strong"
+            ? "flex-1 h-40 overflow-y-auto whitespace-pre-wrap break-words px-3 py-2 font-mono text-xs leading-relaxed text-strong"
             : "flex-1 overflow-x-auto px-3 py-2 font-mono text-sm text-strong"
         }
       >
@@ -230,8 +233,13 @@ export function SkillInstallCard({ skill, className }: SkillInstallCardProps) {
         </TabButton>
       </div>
 
+      {/* Both tabpanels share `min-h-[14rem]` (224px) so the card height
+          stays put as the user switches between them (#414). Picked to
+          accommodate the npx tab's natural content (helper text +
+          command + footer); the prompt tab's fixed-height code block
+          (160px) plus its helper text fits within the same envelope. */}
       {tab === "prompt" && (
-        <div role="tabpanel" className="mt-3 space-y-3">
+        <div role="tabpanel" className="mt-3 min-h-[14rem] space-y-3">
           <p className="font-text text-xs text-meta">
             {t(
               "skillInstallCard.promptHelper",
@@ -247,7 +255,7 @@ export function SkillInstallCard({ skill, className }: SkillInstallCardProps) {
       )}
 
       {tab === "npx" && (
-        <div role="tabpanel" className="mt-3 space-y-3">
+        <div role="tabpanel" className="mt-3 min-h-[14rem] space-y-3">
           {npxAvailable ? (
             <>
               <p className="font-text text-xs text-meta">
