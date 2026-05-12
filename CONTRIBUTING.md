@@ -162,7 +162,19 @@ Releases are fully automated via Changesets. Maintainer-driven; contributors don
 
 The auto-generated `CHANGELOG.md` is engineer-speak (PR refs, author thanks, paragraph-long rationales). The public **GitHub Releases page** uses a curated, user-facing summary instead.
 
-Before opening a `develop → main` release PR, the maintainer (or their local Claude) edits **[`.github/release-notes-next.md`](.github/release-notes-next.md)** into a brief three-section summary:
+The release-notes flow uses two files:
+
+- **[`.github/release-notes-template.md`](.github/release-notes-template.md)** — the immutable template. Never edited; provides the format and instructions.
+- **`.github/release-notes-<yyyymmdd>.md`** — one per release. Copied from the template, filled in by the maintainer (or their local Claude), and committed to develop before opening the `develop → main` release PR. After release it stays in the repo as a historical record.
+
+Before opening a `develop → main` release PR:
+
+```bash
+cp .github/release-notes-template.md .github/release-notes-$(date -u +%Y%m%d).md
+# edit the new dated file — see the template's comment block for rules
+```
+
+Each dated file has three sections:
 
 - **Fixed** — bug fixes the user notices. Cluster technical-only fixes into a single trailing `Few technical bugs fixed` bullet.
 - **New Feature** — new features the user notices. Cluster technical-only work into a single trailing `Technical enhancement` bullet.
@@ -170,7 +182,9 @@ Before opening a `develop → main` release PR, the maintainer (or their local C
 
 One bullet = 6–12 words. Plain prose. No PR / issue refs. The full per-PR detail is linked at the bottom of every release body automatically.
 
-The release workflow (`changeset-release.yml`) reads this file at release time. If it's missing or still contains the placeholder string `(write here)`, the workflow falls back to a short body that links to the in-repo `CHANGELOG.md` files — release still publishes, just without curated prose.
+**CI gate**: [`.github/workflows/check-release-notes.yml`](.github/workflows/check-release-notes.yml) fails the `develop → main` PR if no dated file exists, if it's missing any of the three section headings, or if the `(write here)` placeholder is still present. The PR can't merge until the gate is green.
+
+**Release workflow** (`changeset-release.yml`) reads the most recent dated file at release time and uses its prose as the GitHub Release body (HTML comment block stripped, CHANGELOG-link footer appended). If no dated file is present, the workflow falls back to a short body that links to the in-repo `CHANGELOG.md` files — release still publishes, just without curated prose.
 
 ## Where to ask questions
 

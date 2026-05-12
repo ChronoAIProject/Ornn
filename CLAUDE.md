@@ -111,7 +111,19 @@ Select affected package(s), semver bump level (`patch` / `minor` / `major`), wri
 
 Fully automated on the `main` side. No local script to run — developer action is "open a PR, review a PR". `.github/workflows/changeset-release.yml` is a state machine driven by `push: main`.
 
-**Step 1 — Promote `develop` → `main`.** Open a PR `develop → main` and merge it. Regular PR; it carries whatever features + unconsumed `.changeset/*.md` files have piled up on `develop` since the last release.
+**Step 0 — Curate release notes.** Before opening the develop → main PR, the maintainer creates a dated release-notes file:
+
+```bash
+cp .github/release-notes-template.md .github/release-notes-$(date -u +%Y%m%d).md
+# edit the new file — replace each `(write here)` with user-facing bullets
+git add .github/release-notes-*.md && git commit && git push
+```
+
+The template (`.github/release-notes-template.md`) is immutable — it stays in the repo and supplies the format / instructions for future releases. The dated file (`.github/release-notes-<yyyymmdd>.md`) is per-release; after release it stays in the repo as a historical record. The release workflow reads the most recent dated file at release time and uses it as the GitHub Release body (HTML comment block stripped, CHANGELOG-link footer appended automatically). The CI gate `.github/workflows/check-release-notes.yml` fails the develop → main PR if no dated file exists, if any of `## Fixed` / `## New Feature` / `## Changed` is missing, or if the `(write here)` placeholder is still in the file.
+
+Each dated file has three sections — see the template's comment block for the formatting rules. The short version: one bullet = one product-level fact, 6–12 words; cluster purely-technical items into a single trailing `Few technical bugs fixed` / `Technical enhancement` bullet per section; no PR / issue refs, no version numbers.
+
+**Step 1 — Promote `develop` → `main`.** Open a PR `develop → main` and merge it. Regular PR; it carries whatever features + unconsumed `.changeset/*.md` files + the new `release-notes-<yyyymmdd>.md` file have piled up on `develop` since the last release.
 
 **Step 2 — Review the bot's release-bump PR.** On the `main` push from Step 1, the workflow sees pending `.changeset/*.md` files, so it:
 
@@ -125,7 +137,7 @@ Review that PR. Merge with **Squash and merge** (keeps history linear; `main` en
 **Step 3 — Tag + GitHub Release + sync back to `develop`.** On the `main` push from Step 2, the workflow sees no pending changesets + `ornn-api/package.json`'s version has no matching `v<version>` tag, so it:
 
 1. Creates an annotated `v<version>` tag and pushes it.
-2. Extracts the `## <version>` section from each package's `CHANGELOG.md`, builds a combined body, and calls `gh release create`.
+2. Finds the most recent `.github/release-notes-<yyyymmdd>.md`, strips its HTML comment block, appends a CHANGELOG-links footer, and calls `gh release create` with that body. If no dated file exists (or it still has the `(write here)` placeholder), falls back to a short body that just links to the in-repo `CHANGELOG.md` files. A length safety check kicks the body back to the short fallback if it exceeds 120 000 chars (GitHub API caps release bodies at 125 000).
 3. Creates branch `sync/post-release-v<version>` from `main`.
 4. Opens PR `sync/post-release-v<version> → develop` — **auto-approved + auto-merged** by the same workflow via a direct `PUT /repos/.../pulls/:n/merge` API call with `merge_method: merge`. No human action for the sync step; the PR is a deterministic replay of a commit that already passed CI on `main`.
 
