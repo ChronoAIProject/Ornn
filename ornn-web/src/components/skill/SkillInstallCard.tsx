@@ -140,13 +140,12 @@ function CopyBlock({
   };
 
   return (
-    // h-40 on both variants keeps card height stable across tabs
-    // (#414); max-w-2xl caps the code field at a comfortable reading
-    // width even when the card is full-width — so prompt lines wrap
-    // sooner instead of stretching across the whole content area
-    // (#418). The card itself stays full-width; only the code field
-    // is narrower, sitting on the left of the card.
-    <div className="flex h-40 max-w-2xl items-stretch overflow-hidden rounded border border-strong-edge bg-elevated/40">
+    // Fixed h-32 on both variants — short enough that the install card
+    // doesn't dominate the page vertically, tall enough to preview ~5
+    // lines of the install prompt before it scrolls. Width follows the
+    // surrounding card (full-width). Card height stays stable across
+    // tab switches because the box itself is the same shape in both.
+    <div className="flex h-32 items-stretch overflow-hidden rounded border border-strong-edge bg-elevated/40">
       <code
         className={
           multiline
