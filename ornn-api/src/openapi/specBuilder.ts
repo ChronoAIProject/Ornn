@@ -16,7 +16,11 @@ type PathItem = Record<string, unknown>;
 type OpenApiSpec = Record<string, unknown>;
 
 function toSchema(zodSchema: ZodTypeAny): JsonSchema {
-  const result = zodToJsonSchema(zodSchema, { target: "openApi3", $refStrategy: "none" }) as JsonSchema;
+  // Zod 4 changed the public ZodType signature; zod-to-json-schema's
+  // type guards still target the v3 shape. Cast through `any` at the
+  // boundary — the runtime shape is unchanged, this is purely the
+  // type bridge.
+  const result = zodToJsonSchema(zodSchema as unknown as Parameters<typeof zodToJsonSchema>[0], { target: "openApi3", $refStrategy: "none" }) as JsonSchema;
   // Remove top-level $schema key (not valid in OpenAPI component schemas)
   delete result.$schema;
   return result;

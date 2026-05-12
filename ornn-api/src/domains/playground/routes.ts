@@ -32,7 +32,7 @@ const playgroundMessageSchema = z.object({
   toolCalls: z.array(z.object({
     id: z.string(),
     name: z.string(),
-    args: z.record(z.unknown()),
+    args: z.record(z.string(), z.unknown()),
   })).optional(),
   toolCallId: z.string().optional(),
 });
@@ -40,7 +40,7 @@ const playgroundMessageSchema = z.object({
 const chatRequestSchema = z.object({
   messages: z.array(playgroundMessageSchema).min(1).max(100),
   skillId: z.string().optional(),
-  envVars: z.record(z.string()).optional(),
+  envVars: z.record(z.string(), z.string()).optional(),
   /**
    * Optional admin-curated model id. When omitted, falls back to the
    * surface default (or 503 if no models are enabled). When provided,

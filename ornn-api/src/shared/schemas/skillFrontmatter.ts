@@ -121,8 +121,16 @@ export const skillFrontmatterSchema = z.object({
   // lossless. A clear message points them at the fix.
   version: z
     .string({
-      invalid_type_error:
-        "version must be a quoted string — write `version: \"0.1\"` in SKILL.md, not `version: 0.1` (YAML parses the unquoted form as a number and loses the trailing zero).",
+      // Zod 4 replaced the per-issue keys (`invalid_type_error`,
+      // `required_error`, …) with a single `error` callback that
+      // receives the issue and decides what to surface. The intent
+      // here is unchanged: only override the message when the parsed
+      // value isn't a string (i.e. YAML parsed `version: 0.1` as a
+      // number).
+      error: (issue) =>
+        issue.code === "invalid_type"
+          ? 'version must be a quoted string — write `version: "0.1"` in SKILL.md, not `version: 0.1` (YAML parses the unquoted form as a number and loses the trailing zero).'
+          : undefined,
     })
     .regex(
       SKILL_VERSION_REGEX,
@@ -139,7 +147,7 @@ export const skillFrontmatterSchema = z.object({
   context: z.array(z.string()).optional(),
   agent: z.string().max(100).optional(),
   "argument-hint": z.string().max(500).optional(),
-  hooks: z.record(z.unknown()).optional(),
+  hooks: z.record(z.string(), z.unknown()).optional(),
 });
 
 export type SkillFrontmatterInput = z.input<typeof skillFrontmatterSchema>;
