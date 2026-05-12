@@ -173,13 +173,39 @@ jobs:
           API_NOTES=$(extract_section "${VERSION}" ornn-api/CHANGELOG.md)
           WEB_NOTES=$(extract_section "${VERSION}" ornn-web/CHANGELOG.md)
 
-          BODY=$(cat <<EOF
+          BODY_FULL=$(cat <<EOF
           ## \`ornn-api\` ${VERSION}
           ${API_NOTES}
           ## \`ornn-web\` ${VERSION}
           ${WEB_NOTES}
           EOF
           )
+
+          # GitHub's create-release API rejects bodies > 125 000 chars
+          # (platform-wide hard limit, not a repo setting — can't be
+          # raised). Big releases — v0.6.0 hit this at #429 — exceed
+          # the cap easily once 50+ changesets stack up. Fall back to
+          # a short body linking to the in-repo CHANGELOG on the tag,
+          # which renders the same content without duplicating it
+          # into the release-create call. 120 000 leaves headroom for
+          # the framing text we wrap around the notes.
+          BODY_LEN=${#BODY_FULL}
+          MAX_LEN=120000
+          if [ "$BODY_LEN" -gt "$MAX_LEN" ]; then
+            echo "Body is ${BODY_LEN} chars (cap ${MAX_LEN}) — using short-body fallback with CHANGELOG links."
+            REPO_URL="https://github.com/${GITHUB_REPOSITORY}"
+            BODY=$(cat <<EOF
+          The combined per-package CHANGELOG section for v${VERSION} exceeds GitHub Releases' 125 000-char body limit, so the release notes themselves live in the in-repo CHANGELOGs on the v${VERSION} tag:
+
+          - **\`ornn-api\` ${VERSION}**: ${REPO_URL}/blob/${TAG}/ornn-api/CHANGELOG.md
+          - **\`ornn-web\` ${VERSION}**: ${REPO_URL}/blob/${TAG}/ornn-web/CHANGELOG.md
+
+          Compare commits: ${REPO_URL}/compare/v\$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "main")...${TAG}
+          EOF
+          )
+          else
+            BODY="$BODY_FULL"
+          fi
 
           gh release create "${TAG}" --title "${TAG}" --notes "${BODY}"
 
