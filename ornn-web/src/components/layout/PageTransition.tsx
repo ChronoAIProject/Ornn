@@ -5,7 +5,7 @@
  * @module components/layout/PageTransition
  */
 
-import { motion, type Variants, type Transition } from "framer-motion";
+import { motion, type Variants, type Transition, type Easing } from "framer-motion";
 import type { ReactNode } from "react";
 
 export type TransitionVariant = "fade" | "slideUp" | "slideDown" | "slideLeft" | "slideRight" | "scale" | "none";
@@ -20,8 +20,10 @@ export interface PageTransitionProps {
   delay?: number;
   /** Whether to animate on exit */
   exitAnimation?: boolean;
-  /** Custom easing function */
-  ease?: string | number[];
+  /** Custom easing — framer-motion's `Easing` union (e.g. "easeOut") or a
+   * 4-point cubic-bezier as a number tuple. framer-motion 12 tightened
+   * this from `string` to a discriminated union. */
+  ease?: Easing | Easing[];
   /** Additional CSS classes */
   className?: string;
 }

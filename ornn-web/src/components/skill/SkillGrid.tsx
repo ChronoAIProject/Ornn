@@ -1,4 +1,4 @@
-import { motion } from "framer-motion";
+import { motion, type Variants } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import { SkillCard } from "./SkillCard";
 import { SkeletonCard } from "@/components/ui/Skeleton";
@@ -13,12 +13,14 @@ export interface SkillGridProps {
   className?: string;
 }
 
-const containerVariants = {
+// `Variants`-annotated so the literal `ease: "easeOut"` narrows to
+// framer-motion 12's `Easing` union instead of widening to `string`.
+const containerVariants: Variants = {
   hidden: {},
   visible: { transition: { staggerChildren: 0.05 } },
 };
 
-const itemVariants = {
+const itemVariants: Variants = {
   hidden: { opacity: 0, y: 10 },
   visible: { opacity: 1, y: 0, transition: { duration: 0.15, ease: "easeOut" } },
 };
