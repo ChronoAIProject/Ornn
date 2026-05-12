@@ -55,5 +55,12 @@ export const contentSchema = z.object({
   readmeMd: z.string().min(50, "Content must be at least 50 characters"),
 });
 
-export type BasicInfoData = z.infer<typeof basicInfoSchema>;
-export type ContentData = z.infer<typeof contentSchema>;
+// `Input` is the pre-validation shape (fields with `.default(...)` are
+// optional); `Data` is the post-validation shape (defaults applied, so
+// those fields are required). @hookform/resolvers 5 typed the Resolver
+// against the output, so consumers of these forms need both variants
+// (input for `useForm` / `UseFormReturn`, output for the submit handler).
+export type BasicInfoInput = z.input<typeof basicInfoSchema>;
+export type BasicInfoData = z.output<typeof basicInfoSchema>;
+export type ContentInput = z.input<typeof contentSchema>;
+export type ContentData = z.output<typeof contentSchema>;

@@ -18,7 +18,7 @@ import { RuntimeSelect } from "@/components/form/RuntimeSelect";
 import { MultiValueInput } from "@/components/form/MultiValueInput";
 import { SKILL_CATEGORY_INFO } from "@/utils/constants";
 import { OUTPUT_TYPES } from "@/utils/skillFrontmatterSchema";
-import type { BasicInfoData } from "@/utils/skillCreateSchemas";
+import type { BasicInfoData, BasicInfoInput } from "@/utils/skillCreateSchemas";
 import { useTranslation } from "react-i18next";
 import { translateError } from "@/utils/translateError";
 
@@ -29,7 +29,7 @@ function fieldError(msg: string | undefined): string | undefined {
 }
 
 export interface StepBasicInfoProps {
-  form: UseFormReturn<BasicInfoData>;
+  form: UseFormReturn<BasicInfoInput, unknown, BasicInfoData>;
   showTools: boolean;
   showRuntimes: boolean;
 }
@@ -156,7 +156,7 @@ export function StepBasicInfo({
             control={form.control}
             render={({ field }) => (
               <ToolsInput
-                tools={field.value}
+                tools={field.value ?? []}
                 onChange={field.onChange}
                 error={fieldError(
                   form.formState.errors.metadata?.toolList?.message,
@@ -173,7 +173,7 @@ export function StepBasicInfo({
             control={form.control}
             render={({ field }) => (
               <RuntimeSelect
-                selected={field.value}
+                selected={field.value ?? []}
                 onChange={field.onChange}
                 error={fieldError(
                   form.formState.errors.metadata?.runtime?.message,
@@ -191,7 +191,7 @@ export function StepBasicInfo({
             render={({ field }) => (
               <MultiValueInput
                 label={t("guided.runtimeDeps")}
-                values={field.value}
+                values={field.value ?? []}
                 onChange={field.onChange}
                 placeholder={t("guided.runtimeDepsPlaceholder")}
                 helperText={t("guided.runtimeDepsHelper")}
@@ -209,7 +209,7 @@ export function StepBasicInfo({
             render={({ field }) => (
               <MultiValueInput
                 label={t("guided.envVars")}
-                values={field.value}
+                values={field.value ?? []}
                 onChange={field.onChange}
                 placeholder={t("guided.envVarsPlaceholder")}
                 helperText={t("guided.envVarsHelper")}
@@ -230,7 +230,7 @@ export function StepBasicInfo({
           control={form.control}
           render={({ field }) => (
             <TagInput
-              tags={field.value}
+              tags={field.value ?? []}
               onChange={field.onChange}
               error={fieldError(form.formState.errors.metadata?.tag?.message)}
             />
@@ -333,7 +333,7 @@ export function StepBasicInfo({
                     render={({ field }) => (
                       <MultiValueInput
                         label={t("guided.allowedTools")}
-                        values={field.value}
+                        values={field.value ?? []}
                         onChange={field.onChange}
                         placeholder={t("guided.allowedToolsPlaceholder")}
                         helperText={t("guided.allowedToolsHelper")}
@@ -356,7 +356,7 @@ export function StepBasicInfo({
                     render={({ field }) => (
                       <MultiValueInput
                         label={t("guided.contextPaths")}
-                        values={field.value}
+                        values={field.value ?? []}
                         onChange={field.onChange}
                         placeholder={t("guided.contextPathsPlaceholder")}
                         helperText={t("guided.contextPathsHelper")}
