@@ -1,5 +1,333 @@
 # ornn-api
 
+## 0.6.0
+
+### Minor Changes
+
+- [#303](https://github.com/ChronoAIProject/Ornn/pull/303) [`5bc542a`](https://github.com/ChronoAIProject/Ornn/commit/5bc542a0ba1a8b93e68adf2e1066491dd8ec2543) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Admin settings reorganization. Trims admin Settings from 11 sections to 9 by folding domain-specific knobs into the section that actually owns them:
+
+  - **Quota Defaults → Playground + Skill Generation.** The standalone `quotaDefaults` section is gone. `defaultMonthlyQuota` lives on each surface's own section.
+  - **Other Services → NyxID Integration.** The standalone `services` section is gone. `chronoStorageUrl`, `chronoStorageBucket`, `chronoSandboxUrl` live on the `integrations/nyxid` section.
+  - **Telemetry → PostHog.** Renamed UI title and API public path (`/admin/settings/telemetry` → `/admin/settings/posthog`). Section id stays `telemetry` so existing Mongo rows keep their `_id`.
+  - **Extras → Service Binding List Configuration.** UI label only.
+
+  Operator action on redeploy: re-enter `defaultMonthlyQuota` under Playground + Skill Generation, and the chrono-storage / chrono-sandbox endpoints under NyxID Integration. The previous `quotaDefaults` and `services` Mongo rows become orphans — safe to leave or drop.
+
+  Closes [#302](https://github.com/ChronoAIProject/Ornn/issues/302).
+
+- [#315](https://github.com/ChronoAIProject/Ornn/pull/315) [`7d6a7a4`](https://github.com/ChronoAIProject/Ornn/commit/7d6a7a48c4543908b62ffadf79eebf80331b3b0e) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - `api.request` PostHog event now also carries:
+
+  - **`userAgent`** — capped at 500 chars (truncate not redact). Distinguishes browser / ornn-sdk / curl / bots.
+  - **`queryParamKeys`** — sorted comma-joined list of query-string KEYS only (never values). 20-key cap. PII-safe by construction.
+  - **`requestBytes`** — Content-Length on the request body when set.
+  - **`responseBytes`** — Content-Length on the response when set (undefined for SSE/chunked).
+
+  All four are dropped when undefined rather than emitted with a sentinel — keeps PostHog property graphs clean.
+
+  Closes [#314](https://github.com/ChronoAIProject/Ornn/issues/314).
+
+- [#295](https://github.com/ChronoAIProject/Ornn/pull/295) [`a542a86`](https://github.com/ChronoAIProject/Ornn/commit/a542a861baa111e7e4d55f9d35fcbbf68a49f841) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Restructure `.env.sample.ornn` into four explicit sections (kubernetes, docker, ornn-api runtime, ornn-web runtime) and trim it down. Two operator-facing changes:
+
+  - **NyxID service-account credentials moved out of env into admin Settings → Integrations → NyxID.** `NYXID_SA_TOKEN_URL`, `NYXID_SA_CLIENT_ID`, `NYXID_SA_CLIENT_SECRET` are gone. `NyxidSaTokenProvider` now resolves credentials lazily from the `integrations/nyxid` settings section on every refresh. After deploy, configure the section once via /admin/settings — SA token minting fails-fast with a clear error until you do.
+  - **ornn-web URL config consolidated to 3 base URLs + 5 paths** (`NYXID_API_BASE_URL`, `NYXID_WEB_BASE_URL`, `ORNN_API_BASE_URL` + `NYXID_OAUTH_{AUTHORIZE,TOKEN,REDIRECT}_PATH` / `NYXID_LOGOUT_PATH` / `NYXID_SETTINGS_PATH`). Replaces 12 full-URL vars. The SPA composes full URLs centrally in `src/config.ts`. `NYXID_BACKEND_HOST` is now derived from `NYXID_API_BASE_URL` by a sourced entrypoint script. Dead vars (`ORNN_API_URL`, `NYXID_BASE_FRONTEND_URL`, `NYXID_MY_*_PATH`) removed.
+
+  Closes [#294](https://github.com/ChronoAIProject/Ornn/issues/294).
+
+- [#249](https://github.com/ChronoAIProject/Ornn/pull/249) [`47092cc`](https://github.com/ChronoAIProject/Ornn/commit/47092cceacc5cb171b8f00e6b926e48b1669197a) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - feat: auto-mirror public + system skills to GitHub for `npx skills add` compatibility, with per-skill sync state, admin console, and runtime-mutable repo coords ([#248](https://github.com/ChronoAIProject/Ornn/issues/248)).
+
+  Every public (`isPrivate: false`) and system (admin-NyxID-service-tied) skill on Ornn now lands as a subdirectory in `ChronoAIProject/ornn-skills` on GitHub the moment it's published. Users install with the community-standard one-liner:
+
+  ```bash
+  npx skills add ChronoAIProject/ornn-skills/<skill-name>
+  ```
+
+  Identical UX to `npx skills add anthropics/skills/<name>` — no NyxID account, no auth, anonymous git clone. Limited-access skills (private + shared) stay Ornn-only; that's the intentional moat.
+
+  Implementation:
+
+  - New `domains/skills/mirror/` module with three pieces: `GitHubAppAuth` (RS256 JWT → installation-token mint, with cache), `GitHubMirrorClient` (Trees / Refs / Tags / Blobs / Commits REST wrapper), and `MirrorService` with `publishSkill(guid)` / `removeSkill(name)` / `reconcileAll()` operations.
+  - Single-commit-per-sync semantics: each successful sync produces one atomic commit + an annotated `sync-<ISO timestamp>` tag — `git tag --list 'sync-*'` is the audit log.
+  - Fire-and-forget hooks on every skill mutation route (create, version-publish, refresh, package update, deprecation toggle, permissions / visibility change, NyxID-service tie, delete, version-delete). Errors swallowed + logged; the hourly reconcile cron picks up anything dropped.
+  - New admin route `POST /api/v1/admin/mirror/reconcile` (`ornn:admin:skill`) for manual full-sweep.
+  - New `scripts/reconcile-mirror.ts` one-shot entry point + `deployment/ornn-api/mirror-cronjob.yaml` k8s `CronJob` (every hour at :17).
+  - Disabled by default. Set `GITHUB_MIRROR_ENABLED=true` + the four GitHub App credentials (`GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY`, `GITHUB_APP_INSTALLATION_ID`, plus `GITHUB_MIRROR_REPO_OWNER` / `_NAME` / `_DEFAULT_BRANCH`) in the ornn-api ConfigMap + Secret to flip on. `assertMirrorConfigComplete` validates at boot — misconfigured deployments fail loud, not silently at first publish.
+  - Added `findAllEligibleForMirror()` to `SkillRepository` mirroring `MirrorService.isEligible` exactly so the privacy predicate lives in one place.
+
+  Per-skill sync state + admin console:
+
+  - `SkillDocument.mirrorSync` (`{ version, syncedAt, commitSha }`) — stamped after every successful publish/reconcile commit; cleared on un-mirror; surfaced on `SkillDetailResponse` so the frontend can render a "Synced / Lagging / Never synced" chip.
+  - Self-healing reconcile: every run starts by clearing stale stamps from skills that flipped private (`{ isPrivate: true, mirrorSync: { $exists: true } }`). The cron is the safety net for incremental-hook failures.
+  - DB-backed runtime mirror coords: `platform_settings` extended with a `githubMirror: { owner, repo, branch }` block. The configmap (`GITHUB_MIRROR_REPO_*`) seeds the defaults; once an admin patches via `POST /api/v1/github/repo`, the DB value wins thereafter. `GitHubMirrorClient` resolves the target on every API call so admin patches propagate without a redeploy. The `GITHUB_MIRROR_ENABLED` kill switch deliberately stays in the configmap — flipping it is an ops decision that should leave a k8s trail, not a one-click in the admin UI.
+  - New routes:
+    - `GET /api/v1/github/repo` — public read; SkillDetailPage uses it to render the install snippet to anonymous viewers.
+    - `POST /api/v1/github/repo` (`ornn:admin:skill`) — admin patch with `confirmAbandonOldRepo: true` required when the change would orphan a non-empty mirror; clears all `mirrorSync` stamps on accepted change so audit links don't dangle into the abandoned repo.
+    - `GET /api/v1/admin/mirror/status` (`ornn:admin:skill`) — eligible/synced/lagging/never-synced counts, oldest-unsynced timestamp, last-reconcile state.
+    - `POST /api/v1/admin/mirror/reconcile` is now fire-and-forget — returns `202` immediately with the run's `startedAt`; admin UI polls the status endpoint until completion.
+  - Frontend:
+    - `MirrorInstallCard` on `SkillDetailPage` — `npx skills add <owner>/<repo>/<name>` with click-to-copy, sync chip (Synced/Lagging/Never synced), GitHub commit + tree links. Hidden for private skills, when feature is off, and during the initial repo-config fetch.
+    - New `/admin/mirror` page in the admin sidebar: feature-enabled banner, status header (repo + last reconcile), counts grid (eligible/synced/lagging/never with oldest-unsynced timestamp), manual reconcile button, repo-coords form with abandon-confirm modal that surfaces the stamped-skill count.
+
+  Privacy regression test included: a private skill (with or without `sharedWithUsers` / `sharedWithOrgs`) is asserted to NEVER appear in any payload sent to GitHub.
+
+- [#255](https://github.com/ChronoAIProject/Ornn/pull/255) [`a5166ad`](https://github.com/ChronoAIProject/Ornn/commit/a5166addd19a2b08a1b9f9da667a6e523bae4454) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Backend integrations for Go-Live: PostHog analytics ([#252](https://github.com/ChronoAIProject/Ornn/issues/252)) and AgentSeal trust scanner ([#253](https://github.com/ChronoAIProject/Ornn/issues/253)).
+
+  - **[#252](https://github.com/ChronoAIProject/Ornn/issues/252) — PostHog server-side analytics.** New `infra/analytics` module wraps `posthog-node` behind an `AnalyticsTracker` interface (Noop sink when `POSTHOG_API_KEY` is unset). High-level emitter exposes `trackSkillPull` (with `callerType` + `skillId`), `trackSkillPublished`, and `trackApiError` (sampled at `POSTHOG_ERROR_SAMPLE_RATE`). Wired into the skill detail/json routes, the `createSkill` and `updateSkill` publish paths, and the global `app.onError` handler. Pino logging on every emission, with property-key lists at `info` and full bodies only at `debug` so we never leak PII.
+  - **[#253](https://github.com/ChronoAIProject/Ornn/issues/253) — AgentSeal subprocess scanner.** New `infra/agentseal` module spawns `agentseal guard --output json` per skill version publish (and first-create) with a configurable timeout (`AGENTSEAL_TIMEOUT_MS`, default 60s). Scan record persisted on `skillVersion.agentsealScan = { score, findings, scannedAt, agentsealVersion }`, with a sparse Mongo index on `agentsealScan.score` for admin queries. v1 is warn-only — failures are logged but never block publish. New admin endpoint `POST /admin/skills/:idOrName/versions/:version/agentseal-rescan` to manually re-trigger a scan. AgentSeal Python package baked into `ornn-api/Dockerfile` (pinned `agentseal==0.5.0` via a `/opt/agentseal` venv).
+
+- [#309](https://github.com/ChronoAIProject/Ornn/pull/309) [`68d8d27`](https://github.com/ChronoAIProject/Ornn/commit/68d8d27d65c76eca0c3a8c68ec61a23af8d1cb7e) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Landing-page announcement popup with admin management. Admins can curate news / changelog blurbs from a new `/admin/announcements` page; the most recent enabled record currently within its `[startsAt, endsAt]` window is shown to every visitor (anonymous + signed-in) on the landing page, dismissible per-id via `localStorage`.
+
+  - **API.** New `announcements` Mongo domain. Public `GET /api/v1/announcements/active` (anonymous-friendly) returns the single live record or `null`. Admin CRUD lives under `/api/v1/admin/announcements` gated on `ornn:admin:skill`.
+  - **Admin UI.** Top-level `/admin/announcements` next to Skills and Quota — list table with LIVE / SCHEDULED / EXPIRED / DISABLED status, per-row enable / edit / delete, and a 560px right-edge drawer for create / edit with a markdown body preview, optional CTA pair, and optional schedule window.
+  - **Landing.** New `AnnouncementPopup` mounted on `/`. One-shot per id: `localStorage` key `ornn:announcement:dismissed:<id>` keeps the same browser from being re-prompted. CTA links open in a new tab and also mark dismissed on click.
+
+  Closes [#307](https://github.com/ChronoAIProject/Ornn/issues/307).
+
+- [#261](https://github.com/ChronoAIProject/Ornn/pull/261) [`1b9da12`](https://github.com/ChronoAIProject/Ornn/commit/1b9da1293094899309d3bd835b3f48e7b5cfef48) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - feat: admin LLM provider config (encrypted at rest, mid-masked in UI), additive quota grants with period, AgentSeal Python wrapper, admin user collection, runtime LLM override.
+
+  **LLM provider override (admin panel)** — `/admin/models` gets a `LlmProviderConfigCard` letting an admin paste a custom gateway URL + bearer key without redeploying. The key is encrypted with AES-256-GCM (`infra/crypto`, scrypt-derived from `ENCRYPTION_KEY`) before hitting Mongo and decrypted at the service boundary on each read; the UI mid-masks the persisted key (first 4 + last 4, bullets in the middle) so the operator can sanity-check which key is in place without exposing the body. Round-tripping the masked value preserves the existing key — the bullet character is the sentinel and is rejected if a fresh key would somehow contain one. Override takes effect on the next LLM call (no pod restart) via a `runtimeOverrideEnabled` resolver on `NyxLlmClient`.
+
+  **Quota grants are additive with a period** — admin grants now stack on top of any existing balance instead of overwriting (`grant()` accepts `periodMonths`, persists to a `quota_grants` ledger with `consumed`/`expiresAt`). The admin quota table shows used/limit · daily · +bonus per user; the playground chip shows the effective remaining balance.
+
+  **AgentSeal trust scanner** — replaced the broken `agentseal guard` CLI with a Python wrapper (`scripts/scan_skill.py`) that drives `agentseal.skill_scanner.SkillScanner` directly, plus a manual rescan button on the trust badge so an operator can re-run a stuck scan without re-publishing.
+
+  **Admin user collection** — replaces `ORNN_ADMIN_EMAILS` env. Authenticated users with `ornn:admin:skill` are lazily inserted into `admin_users` by the auth middleware; routes that need an admin filter consult that collection.
+
+  **New env var** — `ENCRYPTION_KEY` (32+ chars, generate with `openssl rand -hex 32`). When unset, the API falls back to a clearly-marked dev sentinel; production deployments **must** set this — rotating it makes every previously-encrypted secret unreadable.
+
+- [#262](https://github.com/ChronoAIProject/Ornn/pull/262) [`2d28830`](https://github.com/ChronoAIProject/Ornn/commit/2d288308eed5efff6f8e558b682e5b58d2dac5d7) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - feat: GitHub Mirror config moves to DB+UI (encrypted App key), Playground gets a chat-first redesign with hover drawer, and SSE streaming actually streams.
+
+  **GitHub Mirror config in DB instead of configmap.** The kill switch + repo coords + GitHub App credentials (App ID, Installation ID, RSA private key) all live in `platform_settings` now and are managed at `/admin/mirror`. The App private key is encrypted at rest with AES-256-GCM (same `infra/crypto` we used for the LLM apiKey) and mid-masked on read. `MirrorService` is runtime-aware: it asks `PlatformSettingsService` for the active config on every public op and rebuilds its `GitHubMirrorClient` only when the credential fingerprint changes — admins can flip enabled or paste new creds and the next sync (cron at `:17` or manual reconcile) picks them up without a pod restart. The `configmap.yaml` is deleted; non-sensitive operational env (PORT, LOG_LEVEL, MONGODB_DB, NyxID base URL, etc.) inlined into Deployment + CronJob `env:` blocks. Only true bootstrap secrets remain in `ornn-api-secret`. New help popover on the Mirror admin page documents the GitHub App creation flow (which form fields matter, what to skip, App vs OAuth, "Any account" vs "Only on this account") so first-time setup doesn't bounce off GitHub's dense docs.
+
+  **Playground redesign — chat is the page.** Replaced the 40/60 two-column layout with a centered chat hero (max-w-3xl) and a right-edge slide-in drawer with three tabs (Skill / Env / Package). Hover the rail to peek; click a tab to pin (with backdrop). Empty state replaced with a "Probe the skill." headline + 3 skill-aware quick-starter cards that pre-fill the input. Per-skill session lifecycle — chat resets on mount AND on `skillName` change, so navigating away and back gives a fresh conversation. Auto-scroll learns to leave you alone: tracks distance-from-bottom and only follows the stream when you're already at the tail; scroll up at any point and the page stops chasing you.
+
+  **SSE streaming actually streams.** Two bugs were stacked. (1) The audit middleware was calling `await c.res.clone().text()` for every write/error response, which waits for the entire response body to drain before letting Hono send anything to the client — for a 45s LLM stream, the browser saw nothing until completion, then everything at once. Fixed: skip body capture when `Content-Type: text/event-stream`; SSE audits record metadata only (status / duration / route / req body) since multi-MB token streams aren't useful in the audit log anyway. (2) The chat route originally used Hono's `streamSSE` helper, which can batch under Bun. Replaced with a manual `ReadableStream<Uint8Array>` + synchronous `start()` that pre-flushes a 2KB SSE-comment to commit headers immediately, with the async pump deferred to an IIFE so the response body becomes readable on the first byte instead of waiting for the generator to drain. Front-end side: dropped 50ms token batching to render every text-delta synchronously (per-token typewriter feel), made the chat scroll container properly height-constrained (`min-h-0` was missing on the centered chat column), and pulled all live-streaming rendering through the existing `ChatMessage` so markdown + the `animate-blink` ember caret work end-to-end. Verified at the network layer with a `/sse-test` endpoint that streams 16 ticks at 250ms intervals — chunks arrive on time direct, through NyxID's reqwest proxy, and through ornn-web's nginx.
+
+- [#358](https://github.com/ChronoAIProject/Ornn/pull/358) [`61fceb4`](https://github.com/ChronoAIProject/Ornn/commit/61fceb4d55e7dbbe13adb648b87173861de831b2) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Add a public News page at `/news` listing every released announcement (current + historical), and the public list endpoint that powers it.
+
+  - `ornn-api`: new public `GET /api/v1/announcements` endpoint returning `{ items: PublicAnnouncementListItem[] }` — every enabled announcement whose start gate has elapsed, newest first, with a serialized `publishedAt` (`startsAt ?? createdAt`). Past/expired records are intentionally retained: the News page is an archive. The popup-only `/announcements/active` endpoint is unchanged. Added `AnnouncementRepository.findAllReleased` and `AnnouncementService.listPublished` with unit tests.
+  - `ornn-web`: new `NewsPage` route at `/news` mirroring the ContactPage editorial layout (eyebrow + display headline + impression cards). Each entry shows a locale-aware publish date, Space Grotesk title, sanitized markdown body (same `react-markdown` + `remark-gfm` + `rehype-sanitize` pipeline as the popup), and an optional CTA button. Navbar gets a "News / 动态" item between Docs and Contact; admin mutations now invalidate the public list query alongside the existing popup + admin queries so a just-created announcement shows up on the News page immediately.
+
+  Closes [#357](https://github.com/ChronoAIProject/Ornn/issues/357).
+
+- [#272](https://github.com/ChronoAIProject/Ornn/pull/272) [`f55decb`](https://github.com/ChronoAIProject/Ornn/commit/f55decb8d9fe6941aec5c69e347fb337c82dc226) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - feat: fold model catalog into LLM provider settings — single-source per-provider model management ([#270](https://github.com/ChronoAIProject/Ornn/issues/270)).
+
+  Replaces the parallel `/admin/models` global catalog with a single, per-provider, drawer-based flow. Click a provider in **Admin → Settings → LLM Providers** and a new **Models** action opens a side drawer listing every model the provider has synced. Per row: enable for Playground, enable for SkillGen, default for Playground (radio), default for SkillGen (radio). Defaults are global across providers — the server enforces at-most-one-true per surface in the same write that flips a flag, so picking a new default unselects every other model's default for that surface automatically.
+
+  Backend
+
+  - `LlmProviderModel` schema extended: `enabledForPlayground`, `enabledForSkillGen`, `defaultForPlayground`, `defaultForSkillGen`. Old `enabled: boolean` is gone — newly synced models arrive with all four flags `false` so adding a row to the upstream catalog never auto-changes platform behaviour.
+  - `LlmProvider.defaultModelId` removed — defaults live on the per-model rows now, scoped per-surface.
+  - New `PATCH /api/v1/admin/settings/llm-providers/:providerId/models/:modelId` for partial flag updates. Server enforces:
+    - at-most-one default per surface across all providers (single write — `clearDefaultsForSurfaceExcept` runs first),
+    - `defaultForX: true` ⇒ `enabledForX: true` (forced in the same write),
+    - rejects when the row is `removed: true`.
+  - `GET /api/v1/me/models?surface=...` rewired to union across every provider's `models[]`. Picker still returns flat `{ modelId, displayName, isDefault }` rows so SDK callers don't need to handle the provider dimension.
+  - Idempotent boot migration (`migrateModelCatalogIntoProviders`) reads the legacy `models` collection, copies each row's surface flags onto the matching `(providerId, modelId)` slot in `llm_providers.models[]`, then drops the legacy collection. Repository ships a `normalizeModel` shim so reads survive even before the migration runs (e.g. cron pods that boot mid-migration).
+  - `domains/models/` module deleted: routes, service, repository, types. The catalog client (`NyxLlmCatalogClient`) is no longer wired — per-provider sync uses each provider's own `modelListUrl`.
+  - `playground` and `skill-gen` execute paths swapped to `LlmProvidersService.resolveModel({ surface, requested })`. Same `ModelResolution` shape, same HTTP error codes, same `throwModelResolutionError` helper (now exported from `domains/settings/llmProviders/routes.ts`).
+  - 547/547 backend tests pass; new tests cover the at-most-one-default invariant + the `defaultForX → enabledForX` coherence rule.
+
+  Frontend
+
+  - New `ProviderModelsDrawer` (640px slide-in): per-row toggles for the two surface-enable flags, radios for the two surface-defaults, archived rows segregated below. Each interaction fires a per-model PATCH; on success the provider list invalidates so a sibling provider's default flip cascades into the open drawer's view on the next refetch.
+  - `LlmProvidersSection` table now shows per-surface counts (`X playground · Y skillGen · Z total`) and a new **Models** action. The "Default" column is gone (defaults are per-model now).
+  - `ProviderEditDrawer` lost its "Default model" select — that drawer is connection-config only (auth, gateway URLs, max tokens, temperature).
+  - `/admin/models` page removed from the SPA. `services/modelsApi.ts` trimmed to picker-only; `useModels` keeps `usePickerModels` + `usePreferredModel` and drops the admin hooks. `LlmProviderConfigCard` deleted (only consumer was the deleted page). `App.tsx` route + lazy-import dropped. `pages/admin/index.ts` re-export dropped.
+  - Section-level default-model dropdowns (Playground / SkillGen / SkillAudit) now filter the provider's models by the relevant `enabledFor<Surface>` flag instead of the dropped `enabled` boolean.
+
+  Migration / data shape
+
+  The old global `models` collection is dropped automatically on first boot under the new code. Everything that was an enabled/default flag in that collection is now a per-(provider, modelId) flag inside the per-provider arrays. After deploy, admins should re-verify their per-surface defaults via **Admin → Settings → LLM Providers → Models** and not via a separate page.
+
+- [#276](https://github.com/ChronoAIProject/Ornn/pull/276) [`d5df1b3`](https://github.com/ChronoAIProject/Ornn/commit/d5df1b363b7550f42fe4992a03f134f9b5678b92) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - PostHog-only platform analytics + audit. Closes [#271](https://github.com/ChronoAIProject/Ornn/issues/271).
+
+  Replaces every custom audit / activity surface in Ornn with the
+  PostHog SDK as the single source of truth. The OpenTelemetry
+  placeholder section was dropped — Ornn does not run an OTel pipeline.
+
+  **`ornn-api` — added.** New per-request `apiRequestTracking`
+  middleware on `/api/v1/*` emits an `api.request` PostHog event for
+  every authenticated request with `userId`, `callerType` (web / api /
+  system / playground), `method`, `path`, `routePattern`, `status`,
+  `durationMs`, `sourceIp` (truncated /24 IPv4, /48 IPv6 before emit),
+  and `requestId`. New typed `analyticsEmitter.trackPlatformActivity`
+  helper covers every domain action that previously lived in the
+  `activities` Mongo collection — login / logout, skill CRUD + version
+  delete + visibility / permissions changes, source link / unlink,
+  NyxID service tie, AgentSeal rescan, settings export / import. PostHog
+  config now reads from the `telemetry` admin settings section at boot
+  (env vars are bootstrap fallback); a non-empty `postHogApiKey` in the
+  DB makes the whole record authoritative.
+
+  **`ornn-api` — removed.** Universal API audit middleware ([#245](https://github.com/ChronoAIProject/Ornn/issues/245)):
+  `middleware/audit/*`, `ApiAuditRepository`, `AuditBodyStorage`,
+  `api_audit` Mongo collection, audit MinIO bucket usage, env vars
+  `AUDIT_RETENTION_DAYS` / `MINIO_AUDIT_BUCKET` /
+  `AUDIT_BODY_INLINE_MAX_KB` / `AUDIT_GLOBAL_REDACT_PATTERNS`.
+  `ActivityRepository` and the `activities` collection. Endpoints
+  `/admin/activities` and `/admin/stats` (legacy). OpenTelemetry fields
+  on the telemetry settings section schema. The `users_meta` backfill
+  in the quota migration script.
+
+  **`ornn-api` — refactored.** `AdminUsersRepository` and
+  `UsersMetaRepository` collapsed into a single
+  `UserDirectoryRepository` (collection: `users`) — the typeahead,
+  admin user list, and dashboard role partition were derived from
+  `activities` aggregations and needed a different home now that the
+  audit log is gone. Lazy upsert from `proxyAuthSetup.onAuthSeen` on
+  every authenticated request stamps `firstSeenAt`, refreshes
+  `lastSeenAt`, increments `activityCount`, and updates `isAdmin`. NyxID
+  remains authoritative for permission checks; this collection is a
+  display + indexing cache.
+
+  **`ornn-web` — added.** Active `TelemetrySection` replaces the OTel +
+  PostHog placeholder. Admin-editable PostHog enabled flag, API key
+  (encrypted at rest), host, project ID, and error sample rate; saves
+  trigger an explicit "restart required" notice. New `lib/postHogLinks`
+  helper computes the dashboard URL from the ingest host (`eu.i.posthog.com`
+  → `eu.posthog.com`).
+
+  **`ornn-web` — removed.** Activity-feed UI (`ActivitiesPage`) and the
+  `RecentActivities` dashboard widget — both replaced with deep-links
+  to the PostHog Activity / Insights views. `fetchRecentActivities` and
+  the `RecentActivity` type from `services/adminDashboardApi`.
+
+  **Tradeoffs accepted.** No request/response body archive. Audit
+  retention = PostHog retention. PostHog SaaS dependency (long outages
+  drop events). No distributed tracing — OTel deferred to a future
+  issue with a real backend.
+
+  **Operator notes.** New env: `POSTHOG_ENABLED` (bootstrap fallback;
+  admin telemetry section overrides). Operators with existing
+  `api_audit` / `activities` / `admin_users` / `users_meta` Mongo
+  collections + an `ornn-audit` MinIO bucket can drop them at their
+  convenience — Ornn no longer reads or writes any of them. Audit
+  trail post-deploy lives in the configured PostHog project.
+
+- [#269](https://github.com/ChronoAIProject/Ornn/pull/269) [`93bf14d`](https://github.com/ChronoAIProject/Ornn/commit/93bf14d2488fd92d958b51cbd850a063a41d98ff) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Quota redefinition + admin panel restructure.
+
+  - **Quota model**: replaced daily-ceiling + time-period grant ledger with calendar-month buckets. New `quota_buckets` collection, atomic `findOneAndUpdate $inc`, no carry-over, grants apply to the current month only. Admins (`ornn:admin:skill`) continue to bypass.
+  - **Breaking** — `GET /api/v1/me/quota` payload drops the `daily` block. Each surface now exposes `defaultAllotment`, `adminGrant`, `used`, `remaining`, `warningThreshold`, `warning`, plus top-level `monthMarker`, `monthStart`, `monthEnd`, `nextMonthlyResetAt`. ornn-web is the only known consumer and is updated in lockstep.
+  - **Breaking** — `POST /api/v1/admin/quota/grant` and `/grant/bulk` no longer accept `periodMonths`. Grants are additive to the current-month bucket and disappear at month rollover.
+  - **New endpoints** — `/admin/quota/users?surface=` (per-user current-month rows), `/admin/quota/users/:id/lifetime?surface=` (per-month history with `usedByModel` breakdown), `/admin/dashboard/stats`, `/admin/dashboard/recent-activities`, `/admin/users?role=admin|normal&page&pageSize&q&sort&dir`.
+  - **Settings umbrella** — admin settings split into nine per-section docs (LLM providers, playground, skill generation, mirror, NyxID, services, skill audit, telemetry, quota defaults, extras) with sentinel-redacted export/import.
+  - **Hardcode parameterization** — runtime knobs (LLM gateway, default model, storage/sandbox URLs, NyxID base URL, AgentSeal toggle/timeout, SSE keep-alive, extra NyxID services) moved from env to admin settings.
+  - **Migration** — `ornn-api/scripts/migrate-quota-to-buckets.ts` converts old `user_quotas` + `quota_grants` into the new shape, archives the legacy ledger to `_archive_quota_grants` with a 90-day TTL, backfills `users_meta.firstJoinedAt` from `MIN(activities.createdAt)`, and notifies users with multi-month grants per Story 10.3. Idempotent; supports `--dry-run`.
+
+- [#258](https://github.com/ChronoAIProject/Ornn/pull/258) [`50a1233`](https://github.com/ChronoAIProject/Ornn/commit/50a1233349522aa86a6049dc4e86217db7dfbf80) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - feat: per-user playground & skill-gen quota with admin-granted credits ([#250](https://github.com/ChronoAIProject/Ornn/issues/250)) + admin-curated Chrono LLM model selection ([#251](https://github.com/ChronoAIProject/Ornn/issues/251)) — backend.
+
+  [#250](https://github.com/ChronoAIProject/Ornn/issues/250) ships per-user monthly base + daily ceiling counters per surface (200/50 playground, 20/5 skill-gen), non-expiring admin-granted credit buckets, lazy UTC-marker-based resets, and admin-issued grants (per-user + bulk) with full audit trail. Charge fires on completion: skill errors count, system errors don't. Admins exempt. Over-limit returns 429 with the upsell message. New endpoints: `GET /me/quota`, `GET /admin/quota/users`, `POST /admin/quota/grant`, `POST /admin/quota/grant/bulk`, `GET /admin/quota/grants`.
+
+  [#251](https://github.com/ChronoAIProject/Ornn/issues/251) ships an admin-controlled local `models` collection synced on demand from Chrono LLM via the NyxID proxy (`/api/v1/proxy/s/chrono-llm/models`). New rows default disabled; admin enables per-surface and picks a default. Removed upstream models flagged `archived`. Playground/skill-gen execute paths accept an optional `modelId`, validate against the surface's enabled list, and 503 with a `MODEL_UNAVAILABLE` admin-contact message when no models are enabled. New endpoints: `GET /me/models?surface=`, `GET /admin/models`, `POST /admin/models/refresh`, `PATCH /admin/models/:modelId`.
+
+- [#308](https://github.com/ChronoAIProject/Ornn/pull/308) [`1ab68f8`](https://github.com/ChronoAIProject/Ornn/commit/1ab68f80e16601137118673a4d147cec8b4e0705) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Admin-issued redeem codes for quota grants.
+
+  Admins mint single-use, time-bounded codes that carry a multi-surface grant bundle (playground / skillGen). Each code is 16 chars from a confusable-stripped alphabet; the redeem endpoint canonicalises to upper-case at the boundary so users can paste in any case. End users redeem from Settings → Redeem code; the grant lands on the caller's current-month bucket via the existing `QuotaService.grant()` path so existing audit + notification fanout fires.
+
+  Lifecycle: `active → redeemed | invalidated`. Concurrent redemptions of the same code are race-safe — a single atomic `findOneAndUpdate` on `(code, status: "active", expiresAt > now)` is the pivot. Admins can invalidate any `active` code; redeemed and already-invalidated codes return 409.
+
+  New surfaces:
+
+  - `POST /api/v1/admin/redemption-codes` (mint), `GET` (list/filter/search), `GET /:id` (detail), `POST /:id/invalidate`. Gated on `QUOTA_ADMIN_PERMISSION`.
+  - `POST /api/v1/me/redemption-codes/redeem`, `GET /api/v1/me/redemption-codes/history`. Per-error-code messages on the user form (`NOT_FOUND` / `EXPIRED` / `INVALIDATED` / `ALREADY_REDEEMED`).
+  - Admin page at `/admin/redemption-codes`; user form on the Settings page.
+
+  Closes [#306](https://github.com/ChronoAIProject/Ornn/issues/306).
+
+- [#293](https://github.com/ChronoAIProject/Ornn/pull/293) [`caa2ca9`](https://github.com/ChronoAIProject/Ornn/commit/caa2ca9a5b95609d01b7efe61824f0c44ff72cab) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - chore: delete admin Categories / Tags / Auditing / Activities pages ([#292](https://github.com/ChronoAIProject/Ornn/issues/292)).
+
+  Four admin pages with no real workflow gone:
+
+  - **Categories** — admin CRUD over the four-name fixed enum (`plain`, `tool-based`, `runtime-based`, `mixed`) was operator surface area for nothing. Skill metadata's `category` field stays; the values become effectively immutable, matching how the system already worked in practice.
+  - **Tags** — same shape. Predefined-tag list editor goes; skill upload still emits user-typed custom tags.
+  - **Auditing** — pure "Coming soon" placeholder, no backend. Per-skill audit history at `/skills/:idOrName/audits` is a different surface and stays.
+  - **Activities** — redirect-shim to PostHog. Dashboard's `<RecentActivities />` already renders `postHogActivityUrl()`, so the dedicated page was exactly redundant.
+
+  Backend admin endpoints (`/api/v1/admin/categories/*`, `/api/v1/admin/tags/*`) deleted along with `AdminService` + `CategoryRepository` + `TagRepository` (admin-page-only consumers — no other caller). Frontend hooks/services/types wound down to empty stubs (kept as obvious homes for future admin-only frontend code).
+
+  Ships across 7 commits — one page per commit, one for the backend, one for an orphan test file. Backend 477/477, frontend 50/50, typecheck clean both sides.
+
+### Patch Changes
+
+- [#331](https://github.com/ChronoAIProject/Ornn/pull/331) [`c141e90`](https://github.com/ChronoAIProject/Ornn/commit/c141e9007f67eab2d93e4b8f964a9696f9fd9bc1) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Fix admin Settings → Export / Import (both directions broken):
+
+  - **Export**: backend now wraps the export envelope in the standard `{ data, error }` shape so the SPA's `apiGet` can parse it. Previously returned a raw envelope, which made the SPA throw "Export missing" on every click.
+  - **Import**: backend now accepts the `dryRun` flag from the request body (where the SPA sends it) in addition to the query string. Previously query-only — the "Run dry-run preview" button silently committed the import every time.
+
+  Closes [#330](https://github.com/ChronoAIProject/Ornn/issues/330).
+
+- [#239](https://github.com/ChronoAIProject/Ornn/pull/239) [`fbc485c`](https://github.com/ChronoAIProject/Ornn/commit/fbc485ca5189c323f36c03b12855b32f35b07582) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - fix(api): admin user list + permissions-modal user resolve — pick latest **non-empty** email/displayName from activities, not the literal latest row.
+
+  The aggregator's `$last: "$userEmail"` and `$last: "$userDisplayName"` surfaced whatever the most recent activity row carried — even empty strings — so users whose most recent activity was authenticated by a JWT lacking `email` / `name` claims (some admin / proxy / SA-flavored login paths emit those empty) showed up blank in the admin user list and the permissions-modal user chips, even though earlier activities had the labels populated. Sorts the group desc-by-createdAt, `$push`'s the values, then picks the first non-empty per field downstream.
+
+  Also adds `scripts/backfill-skill-author-display-names.ts` to retro-populate `createdByEmail` + `createdByDisplayName` on existing skill docs by joining `skills.createdBy` against the activities directory — older skills predate the cache-at-create-time behavior so the Skill Detail / Skill Card UI was rendering the raw user_id UUID.
+
+- [#385](https://github.com/ChronoAIProject/Ornn/pull/385) [`b1c4f08`](https://github.com/ChronoAIProject/Ornn/commit/b1c4f08e61ee78dab4878775d7ec5abe1d5aaf25) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Drop unused `@xenova/transformers` dependency and bump `hono`, `yaml`, `mermaid`, `posthog-js`, `vite`, and several transitive packages to clear all 34 high/critical/moderate advisories flagged by `bun audit` on the previous lockfile. The matching CI `audit` gate ships in a follow-up PR.
+
+- [#398](https://github.com/ChronoAIProject/Ornn/pull/398) [`6509260`](https://github.com/ChronoAIProject/Ornn/commit/65092600390a18450f9947e153884b8fe793ab7f) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Drop legacy `share.*` notifications on boot. PR [#198](https://github.com/ChronoAIProject/Ornn/issues/198) removed the share/audit-gate workflow but pre-[#198](https://github.com/ChronoAIProject/Ornn/issues/198) notification rows still surfaced via `GET /api/v1/notifications` with dead deep-links into the removed `/shares/*` route tree. A new idempotent boot migration deletes any notification whose category is not in the current allowed set.
+
+- [#336](https://github.com/ChronoAIProject/Ornn/pull/336) [`486c35a`](https://github.com/ChronoAIProject/Ornn/commit/486c35a8a170a62b111c4d677e5f78bef570ef70) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Settings export now drops the `models` array from each LLM provider entry entirely. Previously trimmed to operator flags ([#332](https://github.com/ChronoAIProject/Ornn/issues/332)); now removed. Model catalog is derived data — refreshed by Sync against the upstream gateway via /admin/settings/llm-providers — and doesn't belong in a portable settings export. Per-model flags ride out of band; re-set after Sync.
+
+  Provider container fields (gateway URL, auth, defaults) stay in the export.
+
+  Closes [#335](https://github.com/ChronoAIProject/Ornn/issues/335).
+
+- [#332](https://github.com/ChronoAIProject/Ornn/pull/332) [`997eaa5`](https://github.com/ChronoAIProject/Ornn/commit/997eaa5936a15274c189900ab58112d163759a87) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Settings export trims each LLM provider's `models` array to operator-state fields only. The synced catalog fields (`displayName`, `firstSeenAt`, `lastSyncedAt`) — which are derived data refilled by hitting the upstream gateway via `/admin/settings/llm-providers` Sync — are no longer in the export. Operator flags (`enabledForPlayground`, `enabledForSkillGen`, `defaultForPlayground`, `defaultForSkillGen`, `removed`) stay so the export still captures the choices an admin made about which models to expose.
+
+  Closes part of [#330](https://github.com/ChronoAIProject/Ornn/issues/330) — keeps the export portable without dragging stale upstream catalog snapshots along.
+
+- [#277](https://github.com/ChronoAIProject/Ornn/pull/277) [`56bbf55`](https://github.com/ChronoAIProject/Ornn/commit/56bbf55d62ac9f48beb7754909b0e10664ecd164) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - chore: move browser-only NyxID link coords from admin settings into ornn-web configmap ([#275](https://github.com/ChronoAIProject/Ornn/issues/275)).
+
+  The `nyxid` admin-settings section used to carry five fields with no server-side consumer (`baseFrontendUrl`, `myServicesPath`, `myProfilePath`, `myOrganizationPath`, `servicesListApiPath`). The four frontend link coords now live in ornn-web's configmap (`NYXID_BASE_FRONTEND_URL`, `NYXID_MY_SERVICES_PATH`, `NYXID_MY_PROFILE_PATH`, `NYXID_MY_ORGANIZATION_PATH`) — delivered via the existing `window.__ORNN_CONFIG__` injection alongside `NYXID_OAUTH_*` and `NYXID_LOGOUT_URL`. `servicesListApiPath` is dropped outright (the runtime hard-codes `/api/v1/user-services`).
+
+  The admin NyxID section now contains only `tokenUrl`, `clientId`, `clientSecret`, and `baseApiUrl` — the four fields ornn-api actually consults at runtime.
+
+  Migration-free: pre-existing `platform_settings` docs with the legacy fields keep working — Zod's default strip semantics drop unknown keys on parse. Operators upgrading should add the four new env vars to their ornn-web configmap (see `deployment/.env.sample.ornn`).
+
+- [#263](https://github.com/ChronoAIProject/Ornn/pull/263) [`e4ee670`](https://github.com/ChronoAIProject/Ornn/commit/e4ee670d2d2b2730d50e3aff9efa96815374ae00) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - fix(playground): real per-event SSE streaming via TransformStream + ChatGPT-style chat polish.
+
+  **Streaming fix.** The previous chat route used `new ReadableStream({ start(controller) { ... controller.enqueue(...) } })` with a deferred IIFE producer. Under Bun's HTTP layer, this pattern coalesced 2,000+ enqueues into a single delivery at stream-close — the EventStream tab in DevTools would show every text-delta event arriving at the same millisecond despite the upstream LLM streaming over ~45s. Replaced with `TransformStream + writer.write()`, which establishes proper backpressure with Bun's response consumer: each `await writer.write(chunk)` resolves only once the chunk has been picked up by the HTTP writer, forcing real per-event flushing on the wire. Verified end-to-end via the EventStream tab — events now arrive at distinct timestamps as upstream emits.
+
+  **Character-by-character typewriter.** Replaced the synchronous "render every text-delta as it arrives" path with a paced drain in `usePlaygroundChat`. Incoming chars accumulate in a `pendingTokensRef` buffer; a 22ms `setInterval` drains one character per tick onto the displayed message. Adaptive: if the LLM races ahead (>60 chars buffered) the pacer takes 3 chars/tick; past 200 chars it scales to `ceil(buffer/60)` chars/tick so visible text stays within ~1s of received. On `finish`/`tool-call`/`error`/`abort` it drains everything immediately — paced typewriter is a UX nicety, not a contract. Emoji-safe via `Array.from(buffer)` so a 4-byte 😀 counts as one character.
+
+  **Chat polish.**
+
+  - Composer moved to `max-w-2xl` and lifted off the floor (`pb-6`); model picker + quota chip now sit centered just above the input, ChatGPT-style. Top-right surface header dropped.
+  - User bubbles use the Forge ember palette: `bg-warning-soft` fill + `border-accent/30` ember outline, contrasted against the assistant's cool `bg-card` bubble.
+  - Empty-state hero is vertically centered, narrower hero copy + 3 quick-starter chips below.
+  - Auto-scroll only follows when the user is already at the tail (tracks `distFromBottom < 80`), so scrolling up mid-stream stops the page from chasing.
+  - Per-skill session lifecycle: chat resets on skillName change AND on unmount.
+  - Chat header status row only renders once a conversation is active — no "Idle/Ready" noise on the empty state.
+  - Right-edge drawer (Skill / Env / Package) anchored via `position: fixed` so it stays in view regardless of page scroll.
+
+- [#327](https://github.com/ChronoAIProject/Ornn/pull/327) [`73d624f`](https://github.com/ChronoAIProject/Ornn/commit/73d624fe0b230742277b86b4573fca7ada7ac46b) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Reposition Ornn consistently as **the end-to-end skill life-cycle manager for AI agents** across every public-facing surface — landing footer tagline (EN + ZH), OpenAPI top-level description, repo README, TS + Python SDK package descriptions and READMEs.
+
+  Also drops the Product / Developers link columns from the landing footer — every entry was already reachable from the top nav (Registry / Build / Docs / GitHub icon). Footer now carries logo + tagline + (copyright · legal links · brand string).
+
+  Closes [#326](https://github.com/ChronoAIProject/Ornn/issues/326).
+
+- [#288](https://github.com/ChronoAIProject/Ornn/pull/288) [`a55043d`](https://github.com/ChronoAIProject/Ornn/commit/a55043da1b6d5c9ab690f22f38c87cd26256e3ab) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - chore(deploy): audit + clean env-var surface ([#287](https://github.com/ChronoAIProject/Ornn/issues/287)).
+
+  Three categories of cleanup against `deployment/ornn-api/{deployment.yaml, mirror-cronjob.yaml}` and `deployment/.env.sample.ornn`:
+
+  1. **Removed 11 stale env vars** that no code consumes anymore — each was migrated into `platform_settings` admin sections in earlier rounds ([#268](https://github.com/ChronoAIProject/Ornn/issues/268), [#269](https://github.com/ChronoAIProject/Ornn/issues/269), [#270](https://github.com/ChronoAIProject/Ornn/issues/270), [#271](https://github.com/ChronoAIProject/Ornn/issues/271)): `NYX_LLM_GATEWAY_URL`, `STORAGE_SERVICE_URL`, `STORAGE_BUCKET`, `SANDBOX_SERVICE_URL`, `DEFAULT_LLM_MODEL`, `LLM_MAX_OUTPUT_TOKENS`, `LLM_TEMPERATURE`, `SSE_KEEP_ALIVE_INTERVAL_MS`, `EXTRA_NYXID_SERVICES`, `AGENTSEAL_ENABLED`, `AGENTSEAL_TIMEOUT_MS`.
+  2. **Added 3 missing env vars** that code reads but the manifests were not plumbing through: `AGENTSEAL_PYTHON`, `AGENTSEAL_SCRIPT`, `ORNN_URL_ALLOWLIST_CIDR`.
+  3. **Renamed 3 vars** to drop a useless alias layer — `.env.ornn` keys now match the actual container env-var names: `ORNN_API_PORT → PORT`, `ORNN_API_LOG_LEVEL → LOG_LEVEL`, `ORNN_API_LOG_PRETTY → LOG_PRETTY`.
+
+  **Operator action required.** After pulling this release, update local `deployment/.env.ornn`:
+
+  - Rename `ORNN_API_PORT` → `PORT`, `ORNN_API_LOG_LEVEL` → `LOG_LEVEL`, `ORNN_API_LOG_PRETTY` → `LOG_PRETTY`.
+  - Add `AGENTSEAL_PYTHON` (default `/opt/agentseal/bin/python`), `AGENTSEAL_SCRIPT` (default `/opt/agentseal/scan_skill.py`), and `ORNN_URL_ALLOWLIST_CIDR` (operator-explicit comma-separated allowlist of trusted hostnames + IPv4 CIDRs).
+  - Remove the 11 stale vars listed above — they have no effect anymore.
+
+  ornn-web's configmap + entrypoint were already clean — no change to web manifests.
+
+- [#285](https://github.com/ChronoAIProject/Ornn/pull/285) [`38c4b53`](https://github.com/ChronoAIProject/Ornn/commit/38c4b53786d5389623233ea7edf5f72e0049b879) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - fix: relax Extras section's service-name regex to allow mixed case + dot/underscore ([#284](https://github.com/ChronoAIProject/Ornn/issues/284)).
+
+  Was lowercase-only (`^[a-z0-9-]{1,64}$`), which rejected the legacy `EXTRA_NYXID_SERVICES` env var's own default value (`NyxID`) and any common service identifier with mixed case. Now matches the typical service-id shape: `^[A-Za-z0-9._-]{1,64}$` — covers `NyxID`, `twitter-api`, `openai_v2`, `v1.beta`. Spaces still rejected (the value flows into URL path segments where space encoding is fragile).
+
+- [#409](https://github.com/ChronoAIProject/Ornn/pull/409) [`9c2e54f`](https://github.com/ChronoAIProject/Ornn/commit/9c2e54f357cf8b7b153e76aa8e630090556d8f56) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Upgrade `zod` 3 → 4 across the workspace. Three mechanical breaking-change fixes: `z.record(X)` → `z.record(z.string(), X)`, `invalid_type_error` constructor option → `error` callback, and a one-line type bridge for `zod-to-json-schema` while the upstream package catches up to v4. No runtime behaviour change.
+
 ## 0.5.0
 
 ### Minor Changes
