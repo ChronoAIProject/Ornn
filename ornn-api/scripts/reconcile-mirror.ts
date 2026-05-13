@@ -1,26 +1,23 @@
 /**
  * One-shot mirror reconciliation entry point.
  *
- * Wires up the same dependency graph as `bootstrap.ts` (mongo + skill
- * repo + skill service + platform settings) but skips the HTTP server
- * — runs `MirrorService.reconcileAll()` once and exits with code 0 on
- * success / 1 on failure.
+ * Wires up the dependency graph (mongo + skill repo + skill service +
+ * SettingsService) and runs `MirrorService.reconcileAll()` once, then
+ * exits with code 0 on success / 1 on failure.
  *
- * Used by the k8s `CronJob` (every hour) so any state the publish-time
- * webhook dropped is caught the next time the cron fires. Mirror
- * settings (kill switch + repo coords + GitHub App credentials) live
- * in the `platform_settings` Mongo collection and are surfaced through
- * the admin UI; this script reads them via `PlatformSettingsService`
- * and no-ops cleanly when disabled or incomplete (the same self-gating
+ * The in-process scheduler in `ornn-api` is the production driver for
+ * this work — this script remains as a manual debugging shim operators
+ * can run from a developer box (e.g. to force an immediate reconcile
+ * without waiting for the schedule). Mirror settings (kill switch +
+ * repo coords + GitHub App credentials) live in the `platform_settings`
+ * Mongo collection under the `mirror` section and are surfaced through
+ * the admin UI; this script reads them via `SettingsServiceImpl` and
+ * no-ops cleanly when disabled or incomplete (the same self-gating
  * code path the long-running pod uses).
  *
  * Run locally:
  *   MONGODB_URI=... MONGODB_DB=ornn ENCRYPTION_KEY=... \
  *   bun run scripts/reconcile-mirror.ts
- *
- * NyxID SA credentials and other operator-flippable settings live in
- * the `platform_settings` collection — the script reads them through
- * `SettingsService` and self-gates when missing.
  *
  * @module scripts/reconcile-mirror
  */
@@ -34,8 +31,8 @@ import { SkillRepository } from "../src/domains/skills/crud/repository";
 import { SkillVersionRepository } from "../src/domains/skills/crud/skillVersionRepository";
 import { SkillService } from "../src/domains/skills/crud/service";
 import { MirrorService } from "../src/domains/skills/mirror/mirrorService";
-import { PlatformSettingsRepository } from "../src/domains/platform/repository";
-import { PlatformSettingsService } from "../src/domains/platform/service";
+import { SettingsRepository } from "../src/domains/settings/repository";
+import { SettingsServiceImpl } from "../src/domains/settings/service";
 
 async function main(): Promise<void> {
   const logger = pino({ level: "info" }).child({ service: "reconcile-mirror" });
@@ -47,12 +44,14 @@ async function main(): Promise<void> {
     const skillVersionRepo = new SkillVersionRepository(mongo.db);
     await skillVersionRepo.ensureIndexes();
 
-    const platformSettingsRepo = new PlatformSettingsRepository(mongo.db);
-    const platformSettingsService = new PlatformSettingsService(platformSettingsRepo, {
+    const settingsRepo = new SettingsRepository(mongo.db);
+    const settingsService = new SettingsServiceImpl({
+      repo: settingsRepo,
       encryptionKey: config.encryptionKey,
     });
+
     const saTokenProvider = new NyxidSaTokenProvider(async () => {
-      const s = await platformSettingsService.getNyxidIntegration();
+      const s = await settingsService.getNyxid();
       return {
         tokenUrl: s.tokenUrl,
         clientId: s.clientId,
@@ -60,24 +59,28 @@ async function main(): Promise<void> {
       };
     });
     const getSaAccessToken = () => saTokenProvider.getAccessToken();
-    const needsProxyAuth = config.storageServiceUrl.includes("proxy");
-    const storageClient = new StorageClient(
-      config.storageServiceUrl,
-      needsProxyAuth ? getSaAccessToken : undefined,
-    );
+    const storageClient = new StorageClient({
+      resolver: async () => {
+        const s = await settingsService.getNyxid();
+        return { baseUrl: s.chronoStorageUrl, bucket: s.chronoStorageBucket };
+      },
+      getAccessToken: getSaAccessToken,
+    });
 
     const skillService = new SkillService({
       skillRepo,
       skillVersionRepo,
       storageClient,
-      storageBucket: config.storageBucket,
+      storageBucketResolver: async () =>
+        (await settingsService.getNyxid()).chronoStorageBucket,
     });
 
     // Self-gates on disabled/incomplete config — exits cleanly with a
-    // zero-count result in either case so the cron's exit code stays 0.
-    const runtime = await platformSettingsService.getGithubMirrorConfig();
+    // zero-count result in either case so the manual run's exit code
+    // stays 0 when the operator just wants to verify the wiring.
+    const runtime = await settingsService.getMirror();
     if (!runtime.enabled) {
-      logger.warn("Mirror is disabled in platform_settings — reconcile is a no-op. Exiting.");
+      logger.warn("Mirror is disabled in settings — reconcile is a no-op. Exiting.");
       return;
     }
     if (
@@ -85,7 +88,7 @@ async function main(): Promise<void> {
       !runtime.owner || !runtime.repo
     ) {
       logger.warn(
-        "Mirror is enabled but credentials/coords are incomplete in platform_settings — reconcile is a no-op. Exiting.",
+        "Mirror is enabled but credentials/coords are incomplete in settings — reconcile is a no-op. Exiting.",
       );
       return;
     }
@@ -94,7 +97,7 @@ async function main(): Promise<void> {
       skillRepo,
       skillService,
       ornnPublicOrigin: config.ornnPublicOrigin,
-      platformSettingsService,
+      settingsService,
     });
 
     const t0 = Date.now();

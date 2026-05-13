@@ -626,11 +626,11 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
     skillRepo,
     skillService,
     ornnPublicOrigin: config.ornnPublicOrigin,
-    platformSettingsService,
+    settingsService,
   });
   const mirrorRoutes = createMirrorRoutes({
     mirrorService,
-    platformSettingsService,
+    settingsService,
     skillRepo,
   });
 
