@@ -158,7 +158,7 @@ function toAdminResponse(
   readCount: number,
 ): AdminBroadcastResponse {
   return {
-    id: doc._id,
+    _id: doc._id,
     titleI18n: doc.titleI18n,
     bodyMarkdownI18n: doc.bodyMarkdownI18n,
     createdBy: doc.createdBy,

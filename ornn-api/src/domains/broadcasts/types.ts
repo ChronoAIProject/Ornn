@@ -63,7 +63,7 @@ export interface BroadcastReadReceiptDocument {
  * are first-class.
  */
 export interface AdminBroadcastResponse {
-  readonly id: string;
+  readonly _id: string;
   readonly titleI18n: BroadcastI18nString;
   readonly bodyMarkdownI18n: BroadcastI18nString;
   readonly createdBy: string;
@@ -71,25 +71,4 @@ export interface AdminBroadcastResponse {
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly readCount: number;
-}
-
-/**
- * User-facing projection embedded into the merged `/notifications`
- * feed. Broadcasts surface alongside per-user notifications; the
- * `source: "broadcast"` discriminator lets the UI render them with
- * markdown + bilingual title/body, whereas `source: "user"` items keep
- * the existing single-string title/body shape.
- *
- * `readAt` is left-joined from `broadcast_read_receipts` — `null`
- * when this user has not read the broadcast yet. The `createdAt`
- * ordering key is preserved so the bell can sort the merged feed by
- * recency.
- */
-export interface UserBroadcastFeedItem {
-  readonly id: string;
-  readonly source: "broadcast";
-  readonly titleI18n: BroadcastI18nString;
-  readonly bodyMarkdownI18n: BroadcastI18nString;
-  readonly createdAt: string;
-  readonly readAt: string | null;
 }

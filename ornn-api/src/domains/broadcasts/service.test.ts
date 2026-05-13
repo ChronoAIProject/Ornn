@@ -209,19 +209,19 @@ describe("BroadcastService", () => {
     const { svc, repo } = makeService();
     const b1 = await svc.create(baseInput);
     const b2 = await svc.create(baseInput);
-    await repo.markRead("u-1", b1.id);
-    await repo.markRead("u-2", b1.id);
-    await repo.markRead("u-1", b2.id);
+    await repo.markRead("u-1", b1._id);
+    await repo.markRead("u-2", b1._id);
+    await repo.markRead("u-1", b2._id);
     const items = await svc.listAdmin();
-    const byId = Object.fromEntries(items.map((i) => [i.id, i.readCount]));
-    expect(byId[b1.id]).toBe(2);
-    expect(byId[b2.id]).toBe(1);
+    const byId = Object.fromEntries(items.map((i) => [i._id, i.readCount]));
+    expect(byId[b1._id]).toBe(2);
+    expect(byId[b2._id]).toBe(1);
   });
 
   test("update merges patch + bumps updatedBy", async () => {
     const { svc } = makeService();
     const created = await svc.create(baseInput);
-    const updated = await svc.update(created.id, {
+    const updated = await svc.update(created._id, {
       titleI18n: { en: "Hi" },
       updatedBy: "u-other",
     });
@@ -241,11 +241,11 @@ describe("BroadcastService", () => {
   test("delete cascades receipts via deleteAllForBroadcast", async () => {
     const { svc, repo } = makeService();
     const created = await svc.create(baseInput);
-    await repo.markRead("u-1", created.id);
-    await repo.markRead("u-2", created.id);
+    await repo.markRead("u-1", created._id);
+    await repo.markRead("u-2", created._id);
     expect(repo.getReceiptCount()).toBe(2);
-    await svc.delete(created.id);
-    expect(repo.deleteAllForBroadcastCalls).toEqual([created.id]);
+    await svc.delete(created._id);
+    expect(repo.deleteAllForBroadcastCalls).toEqual([created._id]);
     expect(repo.getReceiptCount()).toBe(0);
   });
 
