@@ -7,6 +7,9 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import rehypeSanitize from "rehype-sanitize";
 import {
   useMarkAllNotificationsRead,
   useMarkNotificationRead,
@@ -14,11 +17,13 @@ import {
 } from "@/hooks/useNotifications";
 import type { Notification, NotificationCategory } from "@/types/notifications";
 import { PageTransition } from "@/components/layout/PageTransition";
+import { pickLocalized } from "@/lib/announcementLocale";
 
 const CATEGORY_LABEL: Record<NotificationCategory, string> = {
   "audit.completed": "Audit",
   "audit.risky_for_consumer": "Audit",
   "quota.credits_granted": "Quota",
+  broadcast: "Broadcast",
 };
 
 function formatTimestamp(iso: string): string {
@@ -28,7 +33,7 @@ function formatTimestamp(iso: string): string {
 }
 
 export function NotificationsPage() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const [unreadOnly, setUnreadOnly] = useState(false);
 
@@ -40,10 +45,29 @@ export function NotificationsPage() {
   const markAll = useMarkAllNotificationsRead();
 
   const hasUnread = useMemo(() => items.some((n) => !n.readAt), [items]);
+  const lang = i18n.language;
 
   const handleOpen = (n: Notification) => {
     if (!n.readAt) markRead.mutate(n._id);
+    // Broadcasts have no deep-link target; clicking only marks read.
+    if (n.source === "broadcast") return;
     if (n.link) navigate(n.link);
+  };
+
+  const resolveTitle = (n: Notification): string => {
+    if (n.source === "broadcast" && n.titleI18n) {
+      return pickLocalized(n.titleI18n.en, n.titleI18n.zh, lang);
+    }
+    return n.title ?? "";
+  };
+
+  const resolveBroadcastBody = (n: Notification): string | null => {
+    if (n.source !== "broadcast" || !n.bodyMarkdownI18n) return null;
+    return pickLocalized(
+      n.bodyMarkdownI18n.en,
+      n.bodyMarkdownI18n.zh,
+      lang,
+    );
   };
 
   return (
@@ -126,14 +150,32 @@ export function NotificationsPage() {
                               n.readAt ? "text-meta" : "text-strong"
                             }`}
                           >
-                            {n.title}
+                            {resolveTitle(n)}
                           </span>
                         </div>
-                        {n.body && (
-                          <p className="font-text text-sm leading-snug text-meta">
-                            {n.body}
-                          </p>
-                        )}
+                        {(() => {
+                          const broadcastBody = resolveBroadcastBody(n);
+                          if (broadcastBody) {
+                            return (
+                              <div className="markdown-body font-text text-sm leading-snug text-meta">
+                                <ReactMarkdown
+                                  remarkPlugins={[remarkGfm]}
+                                  rehypePlugins={[rehypeSanitize]}
+                                >
+                                  {broadcastBody}
+                                </ReactMarkdown>
+                              </div>
+                            );
+                          }
+                          if (n.body) {
+                            return (
+                              <p className="font-text text-sm leading-snug text-meta">
+                                {n.body}
+                              </p>
+                            );
+                          }
+                          return null;
+                        })()}
                       </div>
                     </div>
                     <span className="shrink-0 font-mono text-xs text-meta">
