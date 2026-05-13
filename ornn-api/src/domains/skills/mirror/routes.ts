@@ -39,6 +39,7 @@ import {
 import { AppError } from "../../../shared/types/index";
 import { isMidMaskSentinel, midMaskSecret } from "../../../infra/crypto";
 import type { MirrorService, ReconcileResult } from "./mirrorService";
+import type { MirrorScheduler, ScheduledRunStatus } from "./scheduler";
 import type { SettingsService, SettingsActor } from "../../settings/types";
 import type { MirrorSection } from "../../settings/sections/mirror";
 import type { SkillRepository } from "../crud/repository";
@@ -79,6 +80,14 @@ export interface MirrorRoutesConfig {
    * status endpoint's mirror-counts aggregation.
    */
   skillRepo: SkillRepository;
+  /**
+   * In-process scheduler — the status endpoint reads the last scheduled
+   * fire's outcome from here (persisted in `agendaJobs`, multipod-safe).
+   * Optional: when the scheduler failed to start at boot, this is
+   * `null` and the status endpoint reports `never_run` for the
+   * scheduled-run block.
+   */
+  mirrorScheduler: MirrorScheduler | null;
 }
 
 interface ReconcileRunState {
@@ -93,7 +102,7 @@ interface ReconcileRunState {
 export function createMirrorRoutes(
   config: MirrorRoutesConfig,
 ): Hono<{ Variables: AuthVariables }> {
-  const { mirrorService, settingsService, skillRepo } = config;
+  const { mirrorService, settingsService, skillRepo, mirrorScheduler } = config;
   const app = new Hono<{ Variables: AuthVariables }>();
   const auth = nyxidAuthMiddleware();
 
@@ -400,19 +409,30 @@ export function createMirrorRoutes(
   // ────────────────────────── Admin: GET /admin/mirror/status ──────────────────────────
 
   /**
-   * Snapshot for the admin overview UI. Combines the in-process
-   * reconcile state, the DB-side mirror counts, and the full mirror
-   * config (App private key mid-masked) so the page can render the
-   * settings form pre-populated without a second round-trip.
+   * Snapshot for the admin overview UI. Combines the persisted
+   * scheduled-run status (from the in-process scheduler reading
+   * Agenda's `agendaJobs` doc), the DB-side mirror counts, and the
+   * full mirror config (App private key mid-masked) so the page can
+   * render the settings form pre-populated without a second round-trip.
+   *
+   * Manual `POST /admin/mirror/reconcile` runs do NOT update
+   * `scheduledRun` — they're tracked in the in-process `reconcileState`
+   * which lives on this pod only and feeds the 409 "already running"
+   * guard. If the dashboard needs to surface manual-run progress, it
+   * should consult that out of band; `scheduledRun` is the canonical,
+   * cluster-wide, persisted view of *scheduled* fires.
    */
   app.get(
     "/admin/mirror/status",
     auth,
     requirePermission("ornn:admin:skill"),
     async (c) => {
-      const [counts, cfg] = await Promise.all([
+      const [counts, cfg, scheduledRun] = await Promise.all([
         skillRepo.getMirrorCounts(),
         settingsService.getMirror(),
+        mirrorScheduler
+          ? mirrorScheduler.getScheduledRunStatus()
+          : Promise.resolve(emptyScheduledRun()),
       ]);
       return c.json({
         data: {
@@ -430,14 +450,7 @@ export function createMirrorRoutes(
               ? counts.oldestUnsyncedAt.toISOString()
               : null,
           },
-          lastReconcile: {
-            status: reconcileState.status,
-            startedAt: reconcileState.startedAt?.toISOString() ?? null,
-            finishedAt: reconcileState.finishedAt?.toISOString() ?? null,
-            durationMs: reconcileState.durationMs,
-            result: reconcileState.result,
-            error: reconcileState.error,
-          },
+          scheduledRun: serializeScheduledRun(scheduledRun),
         },
         error: null,
       });
@@ -445,6 +458,35 @@ export function createMirrorRoutes(
   );
 
   return app;
+}
+
+function emptyScheduledRun(): ScheduledRunStatus {
+  return {
+    status: "never_run",
+    lastRunAt: null,
+    lastFinishedAt: null,
+    lastDurationMs: null,
+    lastError: null,
+    nextRunAt: null,
+  };
+}
+
+function serializeScheduledRun(s: ScheduledRunStatus): {
+  status: ScheduledRunStatus["status"];
+  lastRunAt: string | null;
+  lastFinishedAt: string | null;
+  lastDurationMs: number | null;
+  lastError: string | null;
+  nextRunAt: string | null;
+} {
+  return {
+    status: s.status,
+    lastRunAt: s.lastRunAt?.toISOString() ?? null,
+    lastFinishedAt: s.lastFinishedAt?.toISOString() ?? null,
+    lastDurationMs: s.lastDurationMs,
+    lastError: s.lastError,
+    nextRunAt: s.nextRunAt?.toISOString() ?? null,
+  };
 }
 
 /**

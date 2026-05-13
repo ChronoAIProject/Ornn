@@ -72,6 +72,28 @@ export interface MirrorSchedulerDeps {
   processEvery?: string | number;
 }
 
+/**
+ * Snapshot of the recurring `mirror-reconcile` job's last execution.
+ * Derived from the timestamps Agenda stamps on the recurring-job doc;
+ * survives pod restarts and aggregates correctly across replicas.
+ */
+export interface ScheduledRunStatus {
+  /**
+   * Derived status of the most recent scheduled fire:
+   *   - `succeeded` — last fire finished cleanly.
+   *   - `failed`    — last fire threw; `lastError` carries the message.
+   *   - `running`   — a fire is currently in flight on some pod.
+   *   - `never_run` — no doc yet (fresh boot / schedule disabled).
+   */
+  status: "succeeded" | "failed" | "running" | "never_run";
+  lastRunAt: Date | null;
+  lastFinishedAt: Date | null;
+  lastDurationMs: number | null;
+  /** Failure message from the last fire; null when not in `failed` state. */
+  lastError: string | null;
+  nextRunAt: Date | null;
+}
+
 export interface MirrorScheduler {
   /** Spin up Agenda + register both jobs + kick off the first sync. */
   start(): Promise<void>;
@@ -82,6 +104,13 @@ export interface MirrorScheduler {
    * waiting for the next minute. Returns once the tick completes.
    */
   runSyncNow(): Promise<void>;
+  /**
+   * Read-only snapshot of the last scheduled fire's outcome, for the
+   * admin UI. Persisted source (Agenda's `agendaJobs` doc), so it
+   * survives pod restarts and reflects the cluster-wide latest run
+   * rather than per-pod in-process state.
+   */
+  getScheduledRunStatus(): Promise<ScheduledRunStatus>;
 }
 
 export function createMirrorScheduler(deps: MirrorSchedulerDeps): MirrorScheduler {
@@ -204,5 +233,72 @@ export function createMirrorScheduler(deps: MirrorSchedulerDeps): MirrorSchedule
     async runSyncNow() {
       await agenda.now(JOB_SYNC_SCHEDULE);
     },
+    async getScheduledRunStatus(): Promise<ScheduledRunStatus> {
+      let result;
+      try {
+        result = await agenda.queryJobs({ name: JOB_RECONCILE });
+      } catch (err) {
+        // Querying agenda is a single Mongo find; failure here means
+        // the DB is unreachable. Treat as `never_run` rather than
+        // crashing the admin endpoint — the dashboard's poll will
+        // recover on the next tick when DB comes back.
+        logger.warn(
+          { err: err instanceof Error ? err.message : String(err) },
+          "getScheduledRunStatus: queryJobs failed — returning never_run",
+        );
+        return emptyStatus();
+      }
+      const job = result.jobs[0];
+      if (!job) return emptyStatus();
+
+      const lastRunAt = job.lastRunAt ?? null;
+      const lastFinishedAt = job.lastFinishedAt ?? null;
+      const failedAt = job.failedAt ?? null;
+      const lockedAt = job.lockedAt ?? null;
+
+      // Derivation priority:
+      //   1. Locked → running (a pod is executing it right now).
+      //   2. failedAt is the most recent terminal stamp → failed.
+      //   3. lastFinishedAt set → succeeded.
+      //   4. Nothing set yet → never_run.
+      let status: ScheduledRunStatus["status"];
+      if (lockedAt) {
+        status = "running";
+      } else if (
+        failedAt &&
+        (!lastFinishedAt || failedAt.getTime() >= lastFinishedAt.getTime())
+      ) {
+        status = "failed";
+      } else if (lastFinishedAt) {
+        status = "succeeded";
+      } else {
+        status = "never_run";
+      }
+
+      const lastDurationMs =
+        lastFinishedAt && lastRunAt
+          ? lastFinishedAt.getTime() - lastRunAt.getTime()
+          : null;
+
+      return {
+        status,
+        lastRunAt,
+        lastFinishedAt,
+        lastDurationMs,
+        lastError: status === "failed" ? (job.failReason ?? null) : null,
+        nextRunAt: job.nextRunAt ?? null,
+      };
+    },
+  };
+}
+
+function emptyStatus(): ScheduledRunStatus {
+  return {
+    status: "never_run",
+    lastRunAt: null,
+    lastFinishedAt: null,
+    lastDurationMs: null,
+    lastError: null,
+    nextRunAt: null,
   };
 }

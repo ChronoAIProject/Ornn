@@ -233,8 +233,13 @@ export function MirrorPage() {
     }
   };
 
-  const lastRun = status?.lastReconcile;
-  const reconcileRunning = lastRun?.status === "running";
+  // Last *scheduled* reconcile — sourced from the persisted `scheduledRun`
+  // block (Agenda's `agendaJobs` doc), so it survives pod restarts and
+  // aggregates across replicas. Manual `Reconcile now` clicks are tracked
+  // server-side via in-process state for the 409 guard; their progress is
+  // not surfaced in this widget.
+  const lastRun = status?.scheduledRun;
+  const scheduledFireRunning = lastRun?.status === "running";
   const credsConfigured = !!status && !!status.appId && !!status.installationId && !!status.appPrivateKey;
 
   return (
@@ -296,31 +301,25 @@ export function MirrorPage() {
               </div>
               <div className="text-right font-text text-xs text-meta">
                 <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-meta">
-                  {t("adminMirror.lastReconcile", "Last reconcile")}
+                  {t("adminMirror.lastReconcile", "Last scheduled reconcile")}
                 </div>
                 <div className="mt-0.5 text-strong">
-                  {reconcileRunning
+                  {scheduledFireRunning
                     ? t("adminMirror.runningSince", "Running since {{when}}", {
-                        when: formatTime(lastRun?.startedAt ?? null),
+                        when: formatTime(lastRun?.lastRunAt ?? null),
                       })
-                    : lastRun?.finishedAt
-                      ? formatTime(lastRun.finishedAt)
+                    : lastRun?.lastFinishedAt
+                      ? formatTime(lastRun.lastFinishedAt)
                       : t("adminMirror.never", "Never")}
                 </div>
-                {!reconcileRunning && lastRun?.durationMs !== null && lastRun?.durationMs !== undefined && (
+                {!scheduledFireRunning && lastRun?.lastDurationMs != null && (
                   <div>
-                    {t("adminMirror.duration", "Duration")} {formatDuration(lastRun.durationMs)}
+                    {t("adminMirror.duration", "Duration")} {formatDuration(lastRun.lastDurationMs)}
                   </div>
                 )}
-                {lastRun?.error && (
-                  <div className="mt-1 max-w-xs truncate text-danger" title={lastRun.error}>
-                    {t("adminMirror.lastError", "Last error")}: {lastRun.error}
-                  </div>
-                )}
-                {!reconcileRunning && lastRun?.result && (
-                  <div className="mt-1 font-mono text-[11px]">
-                    +{lastRun.result.added} ~{lastRun.result.updated} −{lastRun.result.removed} ={" "}
-                    {lastRun.result.unchanged}
+                {lastRun?.lastError && (
+                  <div className="mt-1 max-w-xs truncate text-danger" title={lastRun.lastError}>
+                    {t("adminMirror.lastError", "Last error")}: {lastRun.lastError}
                   </div>
                 )}
               </div>
@@ -383,12 +382,12 @@ export function MirrorPage() {
               <Button
                 onClick={handleReconcile}
                 disabled={
-                  !status.enabled || !credsConfigured || reconcileRunning || triggerReconcile.isPending
+                  !status.enabled || !credsConfigured || scheduledFireRunning || triggerReconcile.isPending
                 }
-                loading={triggerReconcile.isPending || reconcileRunning}
+                loading={triggerReconcile.isPending || scheduledFireRunning}
               >
-                {reconcileRunning
-                  ? t("adminMirror.reconcileRunning", "Running…")
+                {scheduledFireRunning
+                  ? t("adminMirror.scheduledFireRunning", "Running…")
                   : t("adminMirror.reconcileButton", "Reconcile now")}
               </Button>
             </Card>

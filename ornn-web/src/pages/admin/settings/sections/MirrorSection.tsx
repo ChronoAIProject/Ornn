@@ -18,6 +18,7 @@ import { z } from "zod";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import { CronExpressionParser } from "cron-parser";
+import { useQuery } from "@tanstack/react-query";
 import { SectionShell } from "@/components/admin/settings/SectionShell";
 import { UnsavedChangesGuard } from "@/components/admin/settings/UnsavedChangesGuard";
 import { useSectionForm } from "@/components/admin/settings/useSectionForm";
@@ -27,6 +28,10 @@ import {
   putSection,
   type MirrorSection as MS,
 } from "@/services/settingsApi";
+import {
+  fetchMirrorStatus,
+  type MirrorScheduledRun,
+} from "@/services/githubMirrorApi";
 
 /**
  * Validates a cron string client-side via `cron-parser`. Empty string
@@ -81,6 +86,16 @@ export function MirrorSection() {
   const secretIsSentinel = draft
     ? isSecretPreserveValue(draft.appPrivateKey)
     : false;
+
+  // Poll the mirror status endpoint every 30s for `scheduledRun`
+  // (last-run outcome of the in-process scheduler). Independent of
+  // the form state so saving the form doesn't invalidate the poll.
+  const statusQuery = useQuery({
+    queryKey: ["admin", "mirror", "status"] as const,
+    queryFn: fetchMirrorStatus,
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
+  });
 
   return (
     <>
@@ -159,6 +174,7 @@ export function MirrorSection() {
             <ScheduleField
               value={draft.reconcileSchedule}
               onChange={(v) => form.patchDraft({ reconcileSchedule: v })}
+              scheduledRun={statusQuery.data?.scheduledRun ?? null}
             />
 
             <Link
@@ -212,9 +228,11 @@ function Field({
 function ScheduleField({
   value,
   onChange,
+  scheduledRun,
 }: {
   value: string;
   onChange: (next: string) => void;
+  scheduledRun: MirrorScheduledRun | null;
 }) {
   const { t, i18n } = useTranslation();
   const isPreset = PRESET_VALUES.has(value as (typeof SCHEDULE_PRESETS)[number]["value"]);
@@ -303,7 +321,80 @@ function ScheduleField({
       {nextRunLabel && (
         <span className="font-mono text-[10px] text-meta">{nextRunLabel}</span>
       )}
+      <LastRunLine scheduledRun={scheduledRun} locale={i18n.language || "en"} />
     </div>
+  );
+}
+
+/**
+ * One-line "Last run" summary under the schedule field. Renders only
+ * for scheduled fires (manual `Reconcile now` clicks don't populate
+ * `scheduledRun`). Three real states + a placeholder:
+ *
+ *   • succeeded   → `Last run: <SGT timestamp> · ✓ Succeeded · <ms>s`
+ *   • failed      → same + `✗ Failed`, with the error message on a
+ *                   second line so it can wrap freely.
+ *   • running     → `Last run: <SGT timestamp> · ⟳ Running…` (no
+ *                   duration yet — `lastFinishedAt` is null mid-flight)
+ *   • never_run   → `Last run: —` (no doc yet, or schedule is disabled)
+ */
+function LastRunLine({
+  scheduledRun,
+  locale,
+}: {
+  scheduledRun: MirrorScheduledRun | null;
+  locale: string;
+}) {
+  const { t } = useTranslation();
+  if (!scheduledRun || scheduledRun.status === "never_run") {
+    return (
+      <span className="font-mono text-[10px] text-meta">
+        {t("adminSettings.sections.mirror.schedule.lastRunUnavailable")}
+      </span>
+    );
+  }
+  const formattedAt = scheduledRun.lastRunAt
+    ? new Date(scheduledRun.lastRunAt).toLocaleString(locale, {
+        timeZone: "Asia/Singapore",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : null;
+  const statusLabel = (() => {
+    switch (scheduledRun.status) {
+      case "succeeded":
+        return t("adminSettings.sections.mirror.schedule.lastRunSucceeded");
+      case "failed":
+        return t("adminSettings.sections.mirror.schedule.lastRunFailed");
+      case "running":
+        return t("adminSettings.sections.mirror.schedule.lastRunRunning");
+    }
+  })();
+  const durationLabel =
+    scheduledRun.lastDurationMs != null
+      ? t("adminSettings.sections.mirror.schedule.lastRunDuration", {
+          seconds: (scheduledRun.lastDurationMs / 1000).toFixed(1),
+        })
+      : null;
+  return (
+    <>
+      <span className="font-mono text-[10px] text-meta">
+        {t("adminSettings.sections.mirror.schedule.lastRun", {
+          at: formattedAt ? `${formattedAt} SGT` : "—",
+        })}
+        {" · "}
+        {statusLabel}
+        {durationLabel && ` · ${durationLabel}`}
+      </span>
+      {scheduledRun.lastError && (
+        <span className="font-mono text-[10px] text-[var(--color-danger,#c33)] break-words">
+          {scheduledRun.lastError}
+        </span>
+      )}
+    </>
   );
 }
 

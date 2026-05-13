@@ -648,16 +648,12 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
     ornnPublicOrigin: config.ornnPublicOrigin,
     settingsService,
   });
-  const mirrorRoutes = createMirrorRoutes({
-    mirrorService,
-    settingsService,
-    skillRepo,
-  });
   // In-process mirror reconcile scheduler. Multi-pod-safe (Agenda's
   // per-fire row lock on `agendaJobs`); schedule is driven by
   // `settings.mirror.reconcileSchedule` and updated dynamically by the
   // scheduler's own 1-minute sync tick. Replaces the legacy k8s
-  // CronJob (#437).
+  // CronJob (#437). Constructed before `createMirrorRoutes` so the
+  // status endpoint can read scheduled-run history through it (#475).
   let mirrorScheduler: MirrorScheduler | null = null;
   try {
     mirrorScheduler = createMirrorScheduler({
@@ -674,6 +670,12 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
     );
     mirrorScheduler = null;
   }
+  const mirrorRoutes = createMirrorRoutes({
+    mirrorService,
+    settingsService,
+    skillRepo,
+    mirrorScheduler,
+  });
 
   // Skill routes — sharing is now a direct PUT /permissions write; the
   // audit signal is surfaced as a per-version label, not a gate.

@@ -33,6 +33,10 @@ let agendaCalls: {
 };
 const jobHandlers = new Map<string, () => Promise<void>>();
 
+// Mutable canned `queryJobs` result — tests set this per case.
+let queryJobsResult: { jobs: Array<Record<string, unknown>> } = { jobs: [] };
+let queryJobsThrows: Error | null = null;
+
 // Mock the `agenda` + `@agendajs/mongo-backend` modules BEFORE the
 // scheduler module is imported. We re-import the scheduler in each
 // test via dynamic `import()` to ensure it picks up the mocks.
@@ -70,6 +74,10 @@ mock.module("agenda", () => ({
     async stop() {
       agendaCalls.stopped = true;
     }
+    async queryJobs(_opts: { name: string }) {
+      if (queryJobsThrows) throw queryJobsThrows;
+      return queryJobsResult;
+    }
   },
 }));
 mock.module("@agendajs/mongo-backend", () => ({
@@ -91,6 +99,8 @@ function resetAgendaCalls() {
     stopped: false,
   };
   jobHandlers.clear();
+  queryJobsResult = { jobs: [] };
+  queryJobsThrows = null;
 }
 
 function makeSettings(initial: string): SettingsService & {
@@ -287,6 +297,131 @@ describe("createMirrorScheduler", () => {
     await sched.start();
     // And another sync tick should also be tolerated.
     await sched.runSyncNow();
+    await sched.stop();
+  });
+});
+
+describe("MirrorScheduler.getScheduledRunStatus", () => {
+  function makeScheduler() {
+    return createMirrorScheduler({
+      db: FAKE_DB,
+      logger,
+      mirrorService: makeMirrorService(),
+      settingsService: makeSettings("0 2 * * *"),
+    });
+  }
+
+  test("never_run when no agendaJobs doc exists yet", async () => {
+    queryJobsResult = { jobs: [] };
+    const sched = makeScheduler();
+    await sched.start();
+    const s = await sched.getScheduledRunStatus();
+    expect(s.status).toBe("never_run");
+    expect(s.lastRunAt).toBeNull();
+    expect(s.lastFinishedAt).toBeNull();
+    expect(s.lastDurationMs).toBeNull();
+    expect(s.lastError).toBeNull();
+    expect(s.nextRunAt).toBeNull();
+    await sched.stop();
+  });
+
+  test("succeeded when lastFinishedAt set and no recent failure", async () => {
+    const lastRunAt = new Date("2026-05-13T18:00:00.000Z");
+    const lastFinishedAt = new Date("2026-05-13T18:00:04.213Z");
+    const nextRunAt = new Date("2026-05-14T18:00:00.000Z");
+    queryJobsResult = {
+      jobs: [{ lastRunAt, lastFinishedAt, nextRunAt }],
+    };
+    const sched = makeScheduler();
+    await sched.start();
+    const s = await sched.getScheduledRunStatus();
+    expect(s.status).toBe("succeeded");
+    expect(s.lastRunAt?.toISOString()).toBe(lastRunAt.toISOString());
+    expect(s.lastFinishedAt?.toISOString()).toBe(lastFinishedAt.toISOString());
+    expect(s.lastDurationMs).toBe(4213);
+    expect(s.lastError).toBeNull();
+    expect(s.nextRunAt?.toISOString()).toBe(nextRunAt.toISOString());
+    await sched.stop();
+  });
+
+  test("failed when failedAt is the most recent terminal stamp", async () => {
+    const lastRunAt = new Date("2026-05-13T18:00:00.000Z");
+    const lastFinishedAt = new Date("2026-05-13T17:00:01.000Z"); // older
+    const failedAt = new Date("2026-05-13T18:00:02.000Z"); // newer than lastFinishedAt
+    queryJobsResult = {
+      jobs: [
+        {
+          lastRunAt,
+          lastFinishedAt,
+          failedAt,
+          failReason: "github 502: Bad Gateway",
+        },
+      ],
+    };
+    const sched = makeScheduler();
+    await sched.start();
+    const s = await sched.getScheduledRunStatus();
+    expect(s.status).toBe("failed");
+    expect(s.lastError).toBe("github 502: Bad Gateway");
+    await sched.stop();
+  });
+
+  test("failed when failedAt set and lastFinishedAt never set", async () => {
+    const lastRunAt = new Date("2026-05-13T18:00:00.000Z");
+    const failedAt = new Date("2026-05-13T18:00:02.000Z");
+    queryJobsResult = {
+      jobs: [{ lastRunAt, failedAt, failReason: "boom" }],
+    };
+    const sched = makeScheduler();
+    await sched.start();
+    const s = await sched.getScheduledRunStatus();
+    expect(s.status).toBe("failed");
+    expect(s.lastError).toBe("boom");
+    await sched.stop();
+  });
+
+  test("running when lockedAt is set (regardless of other stamps)", async () => {
+    queryJobsResult = {
+      jobs: [
+        {
+          lastRunAt: new Date("2026-05-13T18:00:00.000Z"),
+          lockedAt: new Date("2026-05-14T18:00:00.000Z"),
+          // Even a stale failedAt doesn't override `running`.
+          failedAt: new Date("2026-05-13T18:01:00.000Z"),
+          failReason: "old failure",
+        },
+      ],
+    };
+    const sched = makeScheduler();
+    await sched.start();
+    const s = await sched.getScheduledRunStatus();
+    expect(s.status).toBe("running");
+    expect(s.lastError).toBeNull();
+    await sched.stop();
+  });
+
+  test("lastDurationMs is null when only lastRunAt set (mid-flight, no finish yet)", async () => {
+    queryJobsResult = {
+      jobs: [
+        {
+          lastRunAt: new Date("2026-05-13T18:00:00.000Z"),
+          lockedAt: new Date("2026-05-13T18:00:00.000Z"),
+        },
+      ],
+    };
+    const sched = makeScheduler();
+    await sched.start();
+    const s = await sched.getScheduledRunStatus();
+    expect(s.lastDurationMs).toBeNull();
+    await sched.stop();
+  });
+
+  test("queryJobs throw → returns never_run, doesn't propagate", async () => {
+    queryJobsThrows = new Error("mongo unreachable");
+    const sched = makeScheduler();
+    await sched.start();
+    const s = await sched.getScheduledRunStatus();
+    expect(s.status).toBe("never_run");
     await sched.stop();
   });
 });

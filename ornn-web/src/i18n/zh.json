@@ -1064,7 +1064,13 @@
           "customHint": "5 位 cron 表达式 (分 时 日 月 周)。",
           "invalidHint": "无效的 cron 表达式。",
           "nextRun": "下次运行：{{at}}",
-          "nextRunUnavailable": "下次运行：—"
+          "nextRunUnavailable": "下次运行：—",
+          "lastRun": "上次运行：{{at}}",
+          "lastRunUnavailable": "上次运行：—",
+          "lastRunSucceeded": "✓ 成功",
+          "lastRunFailed": "✗ 失败",
+          "lastRunRunning": "⟳ 进行中…",
+          "lastRunDuration": "{{seconds}} 秒"
         },
         "openDashboard": "打开镜像看板 →"
       },
