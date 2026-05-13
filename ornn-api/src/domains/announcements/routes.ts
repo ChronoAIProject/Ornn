@@ -12,6 +12,12 @@
  * they only return the rendering shape the SPA needs (popup + News
  * page archive).
  *
+ * Content is bilingual (en + zh). The wire format flattens locales as
+ * `titleEn` / `titleZh` etc. EN fields are required; ZH fields are
+ * optional (default empty string for body/title, null for CTA label).
+ * Frontend resolves at render time, falling back to EN whenever the
+ * active locale's slot is empty.
+ *
  * @module domains/announcements/routes
  */
 
@@ -33,27 +39,73 @@ const isoDateNullable = z
   .union([z.string().datetime({ offset: true }), z.null()])
   .transform((v) => (v === null ? null : new Date(v)));
 
-const optionalString = (max: number) => z.string().trim().min(1).max(max);
+const requiredString = (max: number) => z.string().trim().min(1).max(max);
+/** Optional locale slot — empty string when unset. */
+const optionalLocaleString = (max: number) =>
+  z
+    .string()
+    .max(max)
+    .optional()
+    .transform((v) => (v ?? "").trim());
 
-const createSchema = z.object({
-  title: optionalString(200),
-  bodyMarkdown: z.string().min(1).max(20_000),
-  ctaLabel: z.union([z.string().trim().min(1).max(80), z.null()]).optional(),
-  ctaUrl: z.union([z.string().trim().url().max(2048), z.null()]).optional(),
-  enabled: z.boolean(),
-  startsAt: isoDateNullable.optional(),
-  endsAt: isoDateNullable.optional(),
-});
+const ctaLabelOptional = z
+  .union([z.string().trim().min(1).max(80), z.null()])
+  .optional();
 
-const updateSchema = z.object({
-  title: optionalString(200).optional(),
-  bodyMarkdown: z.string().min(1).max(20_000).optional(),
-  ctaLabel: z.union([z.string().trim().min(1).max(80), z.null()]).optional(),
-  ctaUrl: z.union([z.string().trim().url().max(2048), z.null()]).optional(),
-  enabled: z.boolean().optional(),
-  startsAt: isoDateNullable.optional(),
-  endsAt: isoDateNullable.optional(),
-});
+const createSchema = z
+  .object({
+    titleEn: requiredString(200),
+    titleZh: optionalLocaleString(200),
+    bodyMarkdownEn: requiredString(20_000),
+    bodyMarkdownZh: optionalLocaleString(20_000),
+    ctaLabelEn: ctaLabelOptional,
+    ctaLabelZh: ctaLabelOptional,
+    ctaUrl: z.union([z.string().trim().url().max(2048), z.null()]).optional(),
+    enabled: z.boolean(),
+    startsAt: isoDateNullable.optional(),
+    endsAt: isoDateNullable.optional(),
+  })
+  .superRefine(assertCtaPairing);
+
+const updateSchema = z
+  .object({
+    titleEn: requiredString(200).optional(),
+    titleZh: optionalLocaleString(200).optional(),
+    bodyMarkdownEn: requiredString(20_000).optional(),
+    bodyMarkdownZh: optionalLocaleString(20_000).optional(),
+    ctaLabelEn: ctaLabelOptional,
+    ctaLabelZh: ctaLabelOptional,
+    ctaUrl: z.union([z.string().trim().url().max(2048), z.null()]).optional(),
+    enabled: z.boolean().optional(),
+    startsAt: isoDateNullable.optional(),
+    endsAt: isoDateNullable.optional(),
+  })
+  .superRefine(assertCtaPairing);
+
+/**
+ * "Both-or-neither" rule for the CTA pair on the EN side. `ctaUrl`
+ * either is set with a non-null `ctaLabelEn`, or both are null/absent.
+ * `ctaLabelZh` is independent (optional translation of the label —
+ * frontend falls back to `ctaLabelEn` when empty).
+ */
+function assertCtaPairing(
+  value: {
+    ctaUrl?: string | null;
+    ctaLabelEn?: string | null;
+  },
+  ctx: z.RefinementCtx,
+): void {
+  const hasUrl = typeof value.ctaUrl === "string" && value.ctaUrl.length > 0;
+  const hasEnLabel =
+    typeof value.ctaLabelEn === "string" && value.ctaLabelEn.length > 0;
+  if (hasUrl !== hasEnLabel) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: [hasUrl ? "ctaLabelEn" : "ctaUrl"],
+      message: "ctaLabelEn and ctaUrl must both be set, or both null",
+    });
+  }
+}
 
 export interface AnnouncementRoutesConfig {
   readonly announcementService: AnnouncementService;
@@ -95,9 +147,12 @@ export function createAnnouncementRoutes(
       );
     }
     const created = await announcementService.create({
-      title: parsed.data.title,
-      bodyMarkdown: parsed.data.bodyMarkdown,
-      ctaLabel: parsed.data.ctaLabel ?? null,
+      titleEn: parsed.data.titleEn,
+      titleZh: parsed.data.titleZh,
+      bodyMarkdownEn: parsed.data.bodyMarkdownEn,
+      bodyMarkdownZh: parsed.data.bodyMarkdownZh,
+      ctaLabelEn: parsed.data.ctaLabelEn ?? null,
+      ctaLabelZh: parsed.data.ctaLabelZh ?? null,
       ctaUrl: parsed.data.ctaUrl ?? null,
       enabled: parsed.data.enabled,
       startsAt: parsed.data.startsAt ?? null,
@@ -135,9 +190,12 @@ export function createAnnouncementRoutes(
 
 interface AdminAnnouncementDto {
   id: string;
-  title: string;
-  bodyMarkdown: string;
-  ctaLabel: string | null;
+  titleEn: string;
+  titleZh: string;
+  bodyMarkdownEn: string;
+  bodyMarkdownZh: string;
+  ctaLabelEn: string | null;
+  ctaLabelZh: string | null;
   ctaUrl: string | null;
   enabled: boolean;
   startsAt: string | null;
@@ -150,9 +208,12 @@ interface AdminAnnouncementDto {
 function toAdminDto(doc: AnnouncementDocument): AdminAnnouncementDto {
   return {
     id: doc._id,
-    title: doc.title,
-    bodyMarkdown: doc.bodyMarkdown,
-    ctaLabel: doc.ctaLabel,
+    titleEn: doc.titleEn,
+    titleZh: doc.titleZh,
+    bodyMarkdownEn: doc.bodyMarkdownEn,
+    bodyMarkdownZh: doc.bodyMarkdownZh,
+    ctaLabelEn: doc.ctaLabelEn,
+    ctaLabelZh: doc.ctaLabelZh,
     ctaUrl: doc.ctaUrl,
     enabled: doc.enabled,
     startsAt: doc.startsAt ? doc.startsAt.toISOString() : null,

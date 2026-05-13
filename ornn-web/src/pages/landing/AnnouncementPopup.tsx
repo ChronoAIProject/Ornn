@@ -28,6 +28,10 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeSanitize from "rehype-sanitize";
 import { useActiveAnnouncement } from "@/hooks/useAnnouncements";
+import {
+  pickLocalized,
+  pickLocalizedCtaLabel,
+} from "@/lib/announcementLocale";
 
 const DISMISS_KEY_PREFIX = "ornn:announcement:dismissed:";
 
@@ -67,7 +71,7 @@ const INK_OVERRIDES = {
 } as CSSProperties;
 
 export function AnnouncementPopup() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { data: announcement } = useActiveAnnouncement();
   const [open, setOpen] = useState(false);
 
@@ -98,8 +102,26 @@ export function AnnouncementPopup() {
 
   if (!announcement) return null;
 
+  // Resolve bilingual fields against the active i18n language. EN is the
+  // canonical / required content; ZH falls back to EN when empty so the
+  // popup still renders cleanly for ZH users on a half-translated record.
+  const lang = i18n.language;
+  const displayTitle = pickLocalized(
+    announcement.titleEn,
+    announcement.titleZh,
+    lang,
+  );
+  const displayBody = pickLocalized(
+    announcement.bodyMarkdownEn,
+    announcement.bodyMarkdownZh,
+    lang,
+  );
   const ctaHref = announcement.ctaUrl ?? null;
-  const ctaLabel = announcement.ctaLabel ?? null;
+  const ctaLabel = pickLocalizedCtaLabel(
+    announcement.ctaLabelEn,
+    announcement.ctaLabelZh,
+    lang,
+  );
   const isExternalCta = ctaHref ? /^https?:\/\//i.test(ctaHref) : false;
 
   return createPortal(
@@ -177,7 +199,7 @@ export function AnnouncementPopup() {
                 text-[28px] sm:text-[32px] leading-[1.02] tracking-[-0.025em]
               "
             >
-              {announcement.title}
+              {displayTitle}
             </h2>
 
             {/* Welded-seam divider — hairline + rivet pair pattern in
@@ -201,7 +223,7 @@ export function AnnouncementPopup() {
                 remarkPlugins={[remarkGfm]}
                 rehypePlugins={[rehypeSanitize]}
               >
-                {announcement.bodyMarkdown}
+                {displayBody}
               </ReactMarkdown>
             </div>
 

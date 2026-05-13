@@ -6,14 +6,30 @@
  * recently-created enabled record currently within its `[startsAt, endsAt]`
  * window. A null bound means open-ended on that side.
  *
+ * **Bilingual content (en + zh).** Title, body, and CTA label are stored
+ * per-locale with flat field names (`titleEn` / `titleZh` etc.). EN is
+ * the canonical / required content; ZH is optional — the frontend
+ * resolves at render time, falling back to EN whenever the active
+ * locale's slot is empty.
+ *
  * @module domains/announcements/types
  */
 
 export interface AnnouncementDocument {
   readonly _id: string;
-  readonly title: string;
-  readonly bodyMarkdown: string;
-  readonly ctaLabel: string | null;
+  /** English title — required, non-empty. */
+  readonly titleEn: string;
+  /** Chinese title — optional; empty string when unset. Frontend falls back to `titleEn`. */
+  readonly titleZh: string;
+  /** English body markdown — required, non-empty. */
+  readonly bodyMarkdownEn: string;
+  /** Chinese body markdown — optional; empty string when unset. Frontend falls back to `bodyMarkdownEn`. */
+  readonly bodyMarkdownZh: string;
+  /** English CTA label. Non-null iff `ctaUrl` is non-null. */
+  readonly ctaLabelEn: string | null;
+  /** Chinese CTA label. Optional even when `ctaUrl` is set; frontend falls back to `ctaLabelEn`. */
+  readonly ctaLabelZh: string | null;
+  /** Single CTA URL (locale-independent). */
   readonly ctaUrl: string | null;
   readonly enabled: boolean;
   /** Optional start of the visibility window. `null` = no lower bound. */
@@ -27,14 +43,18 @@ export interface AnnouncementDocument {
 }
 
 /**
- * Shape returned to anonymous landing-page visitors. Strips internal
+ * Shape returned to anonymous landing-page visitors. Returns BOTH locales
+ * so the SPA can switch languages without a refetch. Strips internal
  * scheduling + audit fields — the SPA only needs what it renders.
  */
 export interface PublicAnnouncement {
   readonly id: string;
-  readonly title: string;
-  readonly bodyMarkdown: string;
-  readonly ctaLabel: string | null;
+  readonly titleEn: string;
+  readonly titleZh: string;
+  readonly bodyMarkdownEn: string;
+  readonly bodyMarkdownZh: string;
+  readonly ctaLabelEn: string | null;
+  readonly ctaLabelZh: string | null;
   readonly ctaUrl: string | null;
 }
 
