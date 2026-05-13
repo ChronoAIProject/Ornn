@@ -13,6 +13,7 @@
     "audit:reserved-verbs": "bun run scripts/audit-reserved-verbs.ts"
   },
   "dependencies": {
+    "cron-parser": "^5.5.0",
     "hono": "^4.12.18",
     "jszip": "^3.10.1",
     "mongodb": "^7.0.0",

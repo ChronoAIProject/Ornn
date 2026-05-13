@@ -74,6 +74,7 @@ describe("SettingsImporter", () => {
         appId: "1",
         installationId: "2",
         appPrivateKey: "real-pem-from-db",
+        reconcileSchedule: "0 2 * * *",
       },
     });
     const importer = new SettingsImporter({ settingsService: svc });
@@ -89,6 +90,7 @@ describe("SettingsImporter", () => {
             appId: "1",
             installationId: "2",
             appPrivateKey: redactSentinel("appPrivateKey"),
+        reconcileSchedule: "0 2 * * *",
           },
         },
       },

@@ -276,6 +276,7 @@ describe("section schemas", () => {
         appId: "12345",
         installationId: "67890",
         appPrivateKey: "-----BEGIN PRIVATE KEY-----\n...\n",
+        reconcileSchedule: "0 2 * * *",
       }).success,
     ).toBe(true);
     expect(
@@ -287,8 +288,51 @@ describe("section schemas", () => {
         appId: "",
         installationId: "",
         appPrivateKey: "",
+        reconcileSchedule: "",
       }).success,
     ).toBe(false);
+  });
+
+  it("UT-SCHEMA-MIRROR-002: reconcileSchedule accepts valid crons + empty string", () => {
+    const base = {
+      ...mirrorSection.defaults,
+    };
+    for (const cron of [
+      "0 2 * * *",
+      "0 */6 * * *",
+      "*/30 * * * *",
+      "17 * * * *",
+      "", // disabled
+    ]) {
+      const result = mirrorSection.schema.safeParse({
+        ...base,
+        reconcileSchedule: cron,
+      });
+      expect(result.success).toBe(true);
+    }
+  });
+
+  it("UT-SCHEMA-MIRROR-003: reconcileSchedule rejects invalid cron expressions", () => {
+    const base = { ...mirrorSection.defaults };
+    for (const bad of [
+      "not-a-cron",
+      "61 * * * *", // minute out of range
+      "* * * * * * *", // too many fields
+      "0 25 * * *", // hour out of range
+    ]) {
+      const result = mirrorSection.schema.safeParse({
+        ...base,
+        reconcileSchedule: bad,
+      });
+      expect(result.success).toBe(false);
+    }
+  });
+
+  it("UT-SCHEMA-MIRROR-004: mirror defaults are valid", () => {
+    expect(mirrorSection.schema.safeParse(mirrorSection.defaults).success).toBe(
+      true,
+    );
+    expect(mirrorSection.defaults.reconcileSchedule).toBe("0 2 * * *");
   });
 
   // -------- telemetry --------

@@ -42,6 +42,7 @@ function makeFakeSettings(
     appId: "12345",
     installationId: "67890",
     appPrivateKey: "test-key",
+    reconcileSchedule: "0 2 * * *",
   };
   return {
     getMirror: mock(async () => cfg),
