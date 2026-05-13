@@ -52,10 +52,10 @@ export function useMirrorStatus() {
   return useQuery<MirrorStatus>({
     queryKey: STATUS_KEY,
     queryFn: fetchMirrorStatus,
-    // Poll fast while a reconcile is running so the UI shows progress
-    // landing without a manual refresh; back off when idle.
+    // Poll fast while a scheduled reconcile is running so the UI shows
+    // progress landing without a manual refresh; back off when idle.
     refetchInterval: (q) =>
-      q.state.data?.lastReconcile.status === "running" ? 5_000 : 30_000,
+      q.state.data?.scheduledRun.status === "running" ? 5_000 : 30_000,
     staleTime: 0,
   });
 }

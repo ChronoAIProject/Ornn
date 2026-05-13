@@ -1064,7 +1064,13 @@
           "customHint": "5-field cron expression (minute hour day month weekday).",
           "invalidHint": "Invalid cron expression.",
           "nextRun": "Next run: {{at}}",
-          "nextRunUnavailable": "Next run: —"
+          "nextRunUnavailable": "Next run: —",
+          "lastRun": "Last run: {{at}}",
+          "lastRunUnavailable": "Last run: —",
+          "lastRunSucceeded": "✓ Succeeded",
+          "lastRunFailed": "✗ Failed",
+          "lastRunRunning": "⟳ Running…",
+          "lastRunDuration": "{{seconds}}s"
         },
         "openDashboard": "Open mirror dashboard →"
       },
