@@ -94,6 +94,10 @@ import { createFormatRoutes } from "./domains/skills/format/routes";
 // Domain: GitHub Mirror (public + system skill auto-mirror)
 import { MirrorService } from "./domains/skills/mirror/mirrorService";
 import { createMirrorRoutes } from "./domains/skills/mirror/routes";
+import {
+  createMirrorScheduler,
+  type MirrorScheduler,
+} from "./domains/skills/mirror/scheduler";
 
 // Domain: Me (caller-scoped endpoints)
 import { createMeRoutes } from "./domains/me/routes";
@@ -649,6 +653,27 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
     settingsService,
     skillRepo,
   });
+  // In-process mirror reconcile scheduler. Multi-pod-safe (Agenda's
+  // per-fire row lock on `agendaJobs`); schedule is driven by
+  // `settings.mirror.reconcileSchedule` and updated dynamically by the
+  // scheduler's own 1-minute sync tick. Replaces the legacy k8s
+  // CronJob (#437).
+  let mirrorScheduler: MirrorScheduler | null = null;
+  try {
+    mirrorScheduler = createMirrorScheduler({
+      db,
+      logger,
+      mirrorService,
+      settingsService,
+    });
+    await mirrorScheduler.start();
+  } catch (err) {
+    logger.error(
+      { err: err instanceof Error ? err.message : String(err) },
+      "mirror scheduler failed to start — scheduled reconciles will not run on this pod",
+    );
+    mirrorScheduler = null;
+  }
 
   // Skill routes — sharing is now a direct PUT /permissions write; the
   // audit signal is surfaced as a per-version label, not a gate.
@@ -958,6 +983,16 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   // ---- Shutdown ----
   async function shutdown(): Promise<void> {
     logger.info("Shutting down ornn-api...");
+    // Stop the scheduler first so no new mirror reconciles start while
+    // we're tearing the Mongo connection down. `stop()` is idempotent +
+    // already swallows its own errors.
+    if (mirrorScheduler) {
+      try {
+        await mirrorScheduler.stop();
+      } catch (err) {
+        logger.warn({ err }, "Mirror scheduler stop failed — continuing");
+      }
+    }
     // Drain PostHog buffer before closing Mongo — losing buffered events
     // is the most common cause of "missing api.error" complaints.
     try {
