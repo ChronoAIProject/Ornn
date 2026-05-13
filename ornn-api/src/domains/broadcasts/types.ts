@@ -63,7 +63,7 @@ export interface BroadcastReadReceiptDocument {
  * are first-class.
  */
 export interface AdminBroadcastResponse {
-  readonly _id: string;
+  readonly id: string;
   readonly titleI18n: BroadcastI18nString;
   readonly bodyMarkdownI18n: BroadcastI18nString;
   readonly createdBy: string;
