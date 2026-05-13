@@ -82,23 +82,5 @@ export const patchBroadcastSchema = z
     { message: "i18n patch object must include at least one locale" },
   );
 
-export const adminBroadcastResponseSchema = z.object({
-  id: z.string(),
-  titleI18n: z.object({ en: z.string(), zh: z.string() }),
-  bodyMarkdownI18n: z.object({ en: z.string(), zh: z.string() }),
-  createdBy: z.string(),
-  updatedBy: z.string(),
-  createdAt: z.string().datetime(),
-  updatedAt: z.string().datetime(),
-  readCount: z.number().int().nonnegative(),
-});
-
-export const adminBroadcastListResponseSchema = z.object({
-  data: z.object({
-    items: z.array(adminBroadcastResponseSchema),
-  }),
-  error: z.null(),
-});
-
 export type CreateBroadcastInput = z.infer<typeof createBroadcastSchema>;
 export type PatchBroadcastInput = z.infer<typeof patchBroadcastSchema>;
