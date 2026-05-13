@@ -1,5 +1,13 @@
 # ornn-api
 
+## 0.7.0
+
+### Minor Changes
+
+- [#455](https://github.com/ChronoAIProject/Ornn/pull/455) [`cb24ec8`](https://github.com/ChronoAIProject/Ornn/commit/cb24ec845e7abf135363311e5b48a59054394b72) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - In-process GitHub mirror reconcile scheduler with admin-configurable cadence ([#437](https://github.com/ChronoAIProject/Ornn/issues/437)). The k8s `CronJob` is gone — the periodic mirror reconcile now runs inside the `ornn-api` pod via Agenda, multipod-safe via per-fire row locking on a shared MongoDB collection. The schedule is editable on the admin GitHub mirror settings page (preset dropdown + custom cron), interpreted in Singapore time (UTC+8, no DST), defaulting to `0 2 * * *` (daily 2am SGT). Empty schedule disables the scheduled reconcile without affecting publish-time webhooks. Mirror configuration is now unified under `SettingsService` — a one-shot boot migration copies any legacy `platform_settings.githubMirror` values into the new section on first boot.
+
+- [#476](https://github.com/ChronoAIProject/Ornn/pull/476) [`f8d45d1`](https://github.com/ChronoAIProject/Ornn/commit/f8d45d1b8906604b236d184ea5f039ee8bac7bb7) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Surface last-run status of the scheduled mirror reconcile ([#475](https://github.com/ChronoAIProject/Ornn/issues/475)). Both the GitHub mirror settings page and the legacy mirror dashboard now show whether the most recent _scheduled_ fire succeeded, failed (with the error message), is currently running, or hasn't happened yet — sourced from Agenda's persisted recurring-job doc so the view is consistent across pods and survives restarts. The previous in-process `lastReconcile` block on `GET /admin/mirror/status` is replaced with a new `scheduledRun` block. Manual `Reconcile now` clicks from the dashboard still work but do not appear in this widget; the 409 "already running" guard on the manual reconcile endpoint is unchanged.
+
 ## 0.6.0
 
 ### Minor Changes
