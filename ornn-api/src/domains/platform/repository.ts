@@ -8,7 +8,7 @@
  */
 
 import type { Collection, Db, Document } from "mongodb";
-import type { GithubMirrorConfig, LlmProviderConfig, PlatformSettings } from "./types";
+import type { LlmProviderConfig, PlatformSettings } from "./types";
 
 const SETTINGS_ID = "ornn";
 
@@ -33,18 +33,6 @@ export class PlatformSettingsRepository {
     if (typeof doc.auditWaiverThreshold === "number") {
       out.auditWaiverThreshold = doc.auditWaiverThreshold;
     }
-    if (doc.githubMirror && typeof doc.githubMirror === "object") {
-      const m = doc.githubMirror as Partial<GithubMirrorConfig>;
-      out.githubMirror = {
-        enabled: typeof m.enabled === "boolean" ? m.enabled : false,
-        owner: typeof m.owner === "string" ? m.owner : "",
-        repo: typeof m.repo === "string" ? m.repo : "",
-        branch: typeof m.branch === "string" ? m.branch : "",
-        appId: typeof m.appId === "string" ? m.appId : "",
-        installationId: typeof m.installationId === "string" ? m.installationId : "",
-        appPrivateKey: typeof m.appPrivateKey === "string" ? m.appPrivateKey : "",
-      };
-    }
     if (doc.llmProvider && typeof doc.llmProvider === "object") {
       const p = doc.llmProvider as Partial<LlmProviderConfig>;
       out.llmProvider = {
@@ -57,25 +45,14 @@ export class PlatformSettingsRepository {
 
   /**
    * Partial upsert. Pass only the fields you want to change; nothing
-   * else is touched. `githubMirror` and `llmProvider` are written as full
-   * objects (atomic) — the service layer assembles complete shapes
-   * (including encrypting any sensitive fields) before calling here.
+   * else is touched. `llmProvider` is written as a full object (atomic)
+   * — the service layer assembles complete shapes (including encrypting
+   * any sensitive fields) before calling here.
    */
   async patch(partial: Partial<PlatformSettings>): Promise<Partial<PlatformSettings>> {
     const set: Record<string, unknown> = {};
     if (typeof partial.auditWaiverThreshold === "number") {
       set.auditWaiverThreshold = partial.auditWaiverThreshold;
-    }
-    if (partial.githubMirror) {
-      set.githubMirror = {
-        enabled: !!partial.githubMirror.enabled,
-        owner: partial.githubMirror.owner ?? "",
-        repo: partial.githubMirror.repo ?? "",
-        branch: partial.githubMirror.branch ?? "",
-        appId: partial.githubMirror.appId ?? "",
-        installationId: partial.githubMirror.installationId ?? "",
-        appPrivateKey: partial.githubMirror.appPrivateKey ?? "",
-      } satisfies GithubMirrorConfig;
     }
     if (partial.llmProvider) {
       set.llmProvider = {
