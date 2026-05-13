@@ -368,7 +368,7 @@ export function MirrorPage() {
                 <p className="mt-1 font-text text-xs text-meta">
                   {t(
                     "adminMirror.reconcileSubtitle",
-                    "The hourly cron at :17 runs the same operation. Hit this when you can't wait — fire-and-forget, the page polls until it lands.",
+                    "The in-process scheduler runs the same operation on the cadence set in mirror settings. Hit this when you can't wait — fire-and-forget, the page polls until it lands.",
                   )}
                 </p>
                 {!credsConfigured && status.enabled && (
@@ -473,7 +473,7 @@ export function MirrorPage() {
                       )
                     : t(
                         "adminMirror.repoFormHint",
-                        "Saving updates the next sync's target. The cron's next run picks up the new coords automatically.",
+                        "Saving updates the next sync's target. The scheduler's next run picks up the new coords automatically.",
                       )}
                 </p>
                 <Button
