@@ -69,6 +69,22 @@ export interface MirrorReconcileResult {
   unchanged: number;
 }
 
+/**
+ * Persisted snapshot of the most recent *scheduled* mirror reconcile
+ * fire. Sourced from the in-process scheduler reading Agenda's
+ * `agendaJobs` doc — survives pod restarts, aggregates across replicas.
+ * Manual `Reconcile now` clicks do NOT update this.
+ */
+export interface MirrorScheduledRun {
+  status: "succeeded" | "failed" | "running" | "never_run";
+  lastRunAt: string | null;
+  lastFinishedAt: string | null;
+  lastDurationMs: number | null;
+  /** Last failure message; non-null only when `status === "failed"`. */
+  lastError: string | null;
+  nextRunAt: string | null;
+}
+
 export interface MirrorStatus {
   enabled: boolean;
   repo: { owner: string; repo: string; branch: string };
@@ -88,14 +104,7 @@ export interface MirrorStatus {
     /** ISO of the oldest never-synced skill's `createdOn`, null when none. */
     oldestUnsyncedAt: string | null;
   };
-  lastReconcile: {
-    status: "idle" | "running";
-    startedAt: string | null;
-    finishedAt: string | null;
-    durationMs: number | null;
-    result: MirrorReconcileResult | null;
-    error: string | null;
-  };
+  scheduledRun: MirrorScheduledRun;
 }
 
 export async function fetchGithubRepo(): Promise<GithubRepoConfig> {

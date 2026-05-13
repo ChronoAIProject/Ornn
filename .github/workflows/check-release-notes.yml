@@ -1,0 +1,109 @@
+name: Check release notes
+
+# Gates every PR targeting `main` on a properly-filled
+# `.github/release-notes-<yyyymmdd>.md` file. The release workflow
+# falls back to a short link-to-CHANGELOG body when no dated file
+# exists or it isn't curated — that fallback is fine for emergencies
+# but a poor default. This gate forces the maintainer to create and
+# fill in a dated release-notes file BEFORE the release-bump train
+# starts, so v<X.Y.Z> always ships with curated release notes on the
+# GitHub Releases page. Tracked in #433 / #435.
+#
+# Files involved:
+#   - `.github/release-notes-template.md` — immutable template (never
+#     edited; this gate ignores it and even fails if someone deletes
+#     it).
+#   - `.github/release-notes-<yyyymmdd>.md` — one per release, copied
+#     from the template and filled in. The most recent (by filename
+#     sort) is what the gate validates.
+#
+# Required-status check binding (one-time, in the repo Settings UI):
+# add `Check release notes` to main's branch-protection list so the
+# gate is actually load-bearing.
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, edited]
+
+jobs:
+  check-release-notes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Validate release notes file
+        run: |
+          set -u
+          TEMPLATE=".github/release-notes-template.md"
+
+          # ── 0. Template must exist ─────────────────────────────────
+          # The template is the canonical source for the dated-file
+          # format. If someone deletes it, the next maintainer has no
+          # source to copy from. Fail loud.
+          if [ ! -f "$TEMPLATE" ]; then
+            echo "::error file=$TEMPLATE::Template file does not exist. Restore $TEMPLATE — it is the canonical source for per-release notes files."
+            exit 1
+          fi
+
+          # ── 1. Find the most recent dated release-notes file ──────
+          # Pattern: release-notes-YYYYMMDD.md (8 digits). The
+          # template's filename (release-notes-template.md) does NOT
+          # match this pattern, so it's naturally excluded. Sort
+          # descending so the freshest date wins.
+          LATEST=$(ls -1 .github/release-notes-*.md 2>/dev/null \
+            | grep -E '/release-notes-[0-9]{8}\.md$' \
+            | sort -r \
+            | head -1)
+
+          if [ -z "$LATEST" ]; then
+            EXPECTED=".github/release-notes-$(date -u +%Y%m%d).md"
+            echo "::error file=$TEMPLATE::No dated release-notes file found. Copy the template to a dated file before merging to main:"
+            echo "::error file=$TEMPLATE::    cp $TEMPLATE $EXPECTED"
+            echo "::error file=$TEMPLATE::    \$EDITOR $EXPECTED   # fill in the three sections"
+            exit 1
+          fi
+
+          echo "Validating: $LATEST"
+          FAILED=0
+
+          # ── 2. Filename format sanity ──────────────────────────────
+          # ls already filtered by the regex, but assert again so a
+          # future ls flag change can't silently let through a
+          # `release-notes-foo.md` lookalike.
+          BASENAME=$(basename "$LATEST")
+          if ! echo "$BASENAME" | grep -qE '^release-notes-[0-9]{8}\.md$'; then
+            echo "::error file=$LATEST::Filename does not match the expected pattern \`release-notes-YYYYMMDD.md\` (8 digits). Got: $BASENAME"
+            FAILED=1
+          fi
+
+          # ── 3. All three section headings present ──────────────────
+          for section in "## Fixed" "## New Feature" "## Changed"; do
+            if ! grep -qF "$section" "$LATEST"; then
+              echo "::error file=$LATEST::Missing required heading: \`$section\`. Release notes must contain Fixed / New Feature / Changed sections — leave a section with only the technical-bucket bullet (\"Few technical bugs fixed\" / \"Technical enhancement\") if nothing notable happened in that bucket."
+              FAILED=1
+            fi
+          done
+
+          # ── 4. Placeholder `(write here)` removed ──────────────────
+          # The template uses `(write here)` for each bullet slot. Any
+          # remaining occurrence in the dated file means at least one
+          # section hasn't been filled in.
+          if grep -qF '(write here)' "$LATEST"; then
+            echo "::error file=$LATEST::Release notes still contain the \`(write here)\` placeholder. Replace each placeholder with brief user-facing bullets (6-12 words each). Cluster technical-only items into a single \`Few technical bugs fixed\` / \`Technical enhancement\` trailing bullet."
+            FAILED=1
+          fi
+
+          if [ "$FAILED" -ne 0 ]; then
+            echo ""
+            echo "Release-notes flow reminder:"
+            echo "  - $TEMPLATE has the formatting rules and the per-file copy command."
+            echo "  - Run \`bun changeset status\` to see what's pending for this release."
+            echo "  - One bullet = one product-level fact, 6-12 words."
+            echo "  - Drop a section entirely if there's genuinely nothing for it."
+            exit 1
+          fi
+
+          echo "✓ Release notes valid — $LATEST has all three sections, no placeholders."

@@ -18,23 +18,23 @@
 
 import { describe, expect, it, mock } from "bun:test";
 import { createHash } from "node:crypto";
-import { MirrorService } from "./mirrorService";
+import { MirrorService, type MirrorSettingsReader } from "./mirrorService";
 import type { GitHubMirrorClient, TreeEntry } from "./githubMirrorClient";
 import type { SkillRepository } from "../crud/repository";
 import type { SkillService } from "../crud/service";
 import type { SkillDocument } from "../../../shared/types/index";
-import type { PlatformSettingsService } from "../../platform/service";
+import type { MirrorSection } from "../../settings/sections/mirror";
 
-/** Stub for the PlatformSettingsService dep — returns a fixed mirror config. */
-function makeFakePlatformSettings(
+/** Stub SettingsService surface used by MirrorService — fixed mirror config. */
+function makeFakeSettings(
   overrides: {
     enabled?: boolean;
     owner?: string;
     repo?: string;
     branch?: string;
   } = {},
-): PlatformSettingsService {
-  const cfg = {
+): MirrorSettingsReader {
+  const cfg: MirrorSection = {
     enabled: overrides.enabled ?? true,
     owner: overrides.owner ?? "ChronoAIProject",
     repo: overrides.repo ?? "ornn-skills",
@@ -42,10 +42,11 @@ function makeFakePlatformSettings(
     appId: "12345",
     installationId: "67890",
     appPrivateKey: "test-key",
+    reconcileSchedule: "0 2 * * *",
   };
   return {
-    getGithubMirrorConfig: mock(async () => cfg),
-  } as unknown as PlatformSettingsService;
+    getMirror: mock(async () => cfg),
+  };
 }
 
 /**
@@ -194,7 +195,7 @@ describe("MirrorService disabled", () => {
       skillRepo: makeFakeRepo([makeSkill()]),
       skillService: makeFakeSkillService({}),
       ornnPublicOrigin: "https://example",
-      platformSettingsService: makeFakePlatformSettings({ enabled: false }),
+      settingsService: makeFakeSettings({ enabled: false }),
     });
     await svc.syncSkill("guid-1");
     expect(calls.blobs.length).toBe(0);
@@ -209,7 +210,7 @@ describe("MirrorService disabled", () => {
       skillRepo: makeFakeRepo([makeSkill()]),
       skillService: makeFakeSkillService({}),
       ornnPublicOrigin: "https://example",
-      platformSettingsService: makeFakePlatformSettings({ enabled: false }),
+      settingsService: makeFakeSettings({ enabled: false }),
     });
     const result = await svc.reconcileAll();
     expect(result).toEqual({ added: 0, updated: 0, removed: 0, unchanged: 0 });
@@ -233,7 +234,7 @@ describe("MirrorService privacy regression", () => {
         "g-pub": { "SKILL.md": "# pub" },
       }),
       ornnPublicOrigin: "https://example",
-      platformSettingsService: makeFakePlatformSettings(),
+      settingsService: makeFakeSettings(),
     });
     await svc.reconcileAll();
     // Verify no blob payload contains the private skill's name as a path prefix.
@@ -254,7 +255,7 @@ describe("MirrorService privacy regression", () => {
       skillRepo: makeFakeRepo([skill]),
       skillService: makeFakeSkillService({}),
       ornnPublicOrigin: "https://example",
-      platformSettingsService: makeFakePlatformSettings(),
+      settingsService: makeFakeSettings(),
     });
     await svc.publishSkill("g-priv");
     expect(calls.blobs.length).toBe(0);
@@ -273,7 +274,7 @@ describe("MirrorService privacy regression", () => {
       skillRepo: makeFakeRepo([skill]),
       skillService: makeFakeSkillService({}),
       ornnPublicOrigin: "https://example",
-      platformSettingsService: makeFakePlatformSettings(),
+      settingsService: makeFakeSettings(),
     });
     await svc.syncSkill("g-flip");
     // Expect one tree create with a sha:null entry for flip/SKILL.md.
@@ -320,7 +321,7 @@ describe("MirrorService idempotency", () => {
       skillRepo: makeFakeRepo([skill]),
       skillService: makeFakeSkillService({ g1: skillFiles }),
       ornnPublicOrigin: "https://example",
-      platformSettingsService: makeFakePlatformSettings(),
+      settingsService: makeFakeSettings(),
     });
     const result = await svc.reconcileAll();
     // SKILL.md should be unchanged. The two READMEs (skill + repo) embed

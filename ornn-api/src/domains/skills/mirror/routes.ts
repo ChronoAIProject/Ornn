@@ -39,7 +39,9 @@ import {
 import { AppError } from "../../../shared/types/index";
 import { isMidMaskSentinel, midMaskSecret } from "../../../infra/crypto";
 import type { MirrorService, ReconcileResult } from "./mirrorService";
-import type { PlatformSettingsService } from "../../platform/service";
+import type { MirrorScheduler, ScheduledRunStatus } from "./scheduler";
+import type { SettingsService, SettingsActor } from "../../settings/types";
+import type { MirrorSection } from "../../settings/sections/mirror";
 import type { SkillRepository } from "../crud/repository";
 
 const logger = pino({ level: "info" }).child({ module: "mirrorRoutes" });
@@ -68,15 +70,24 @@ export interface MirrorRoutesConfig {
    */
   mirrorService: MirrorService;
   /**
-   * Platform-settings service for runtime-mutable mirror config.
-   * Source of truth for enabled + repo coords + App credentials.
+   * Settings service — single source of truth for mirror config
+   * (enabled + repo coords + App credentials + reconcile schedule).
+   * Write path goes through `putSection("mirror", ...)`.
    */
-  platformSettingsService: PlatformSettingsService;
+  settingsService: SettingsService;
   /**
    * Skill repository for the abandon-confirm pre-flight check + the
    * status endpoint's mirror-counts aggregation.
    */
   skillRepo: SkillRepository;
+  /**
+   * In-process scheduler — the status endpoint reads the last scheduled
+   * fire's outcome from here (persisted in `agendaJobs`, multipod-safe).
+   * Optional: when the scheduler failed to start at boot, this is
+   * `null` and the status endpoint reports `never_run` for the
+   * scheduled-run block.
+   */
+  mirrorScheduler: MirrorScheduler | null;
 }
 
 interface ReconcileRunState {
@@ -91,7 +102,7 @@ interface ReconcileRunState {
 export function createMirrorRoutes(
   config: MirrorRoutesConfig,
 ): Hono<{ Variables: AuthVariables }> {
-  const { mirrorService, platformSettingsService, skillRepo } = config;
+  const { mirrorService, settingsService, skillRepo, mirrorScheduler } = config;
   const app = new Hono<{ Variables: AuthVariables }>();
   const auth = nyxidAuthMiddleware();
 
@@ -117,7 +128,7 @@ export function createMirrorRoutes(
    * surfaced here.
    */
   app.get("/github/repo", async (c) => {
-    const cfg = await platformSettingsService.getGithubMirrorConfig();
+    const cfg = await settingsService.getMirror();
     return c.json({
       data: {
         owner: cfg.owner,
@@ -149,7 +160,7 @@ export function createMirrorRoutes(
     requirePermission("ornn:admin:skill"),
     async (c) => {
       const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
-      const current = await platformSettingsService.getGithubMirrorConfig();
+      const current = await settingsService.getMirror();
       const confirmAbandonOldRepo = body.confirmAbandonOldRepo === true;
 
       // ---- enabled ----
@@ -251,17 +262,26 @@ export function createMirrorRoutes(
         }
       }
 
-      const updated = await platformSettingsService.patch({
-        githubMirror: {
-          enabled,
-          owner,
-          repo,
-          branch,
-          appId,
-          installationId,
-          appPrivateKey,
-        },
-      });
+      // Preserve any fields the legacy operational endpoint doesn't
+      // edit (e.g., `reconcileSchedule`) by reading them off `current`
+      // and re-passing them through. Settings PUT replaces the whole
+      // section value.
+      const next: MirrorSection = {
+        ...current,
+        enabled,
+        owner,
+        repo,
+        branch,
+        appId,
+        installationId,
+        appPrivateKey,
+      };
+      const actor = mirrorActor(c);
+      const { value: updated } = await settingsService.putSection<MirrorSection>(
+        "mirror",
+        next,
+        actor,
+      );
       if (wouldAbandonOldRepo) {
         // Existing stamps point at commit SHAs in the now-abandoned
         // repo. Clearing them resets every eligible skill to "Never
@@ -274,13 +294,13 @@ export function createMirrorRoutes(
       }
       return c.json({
         data: {
-          enabled: updated.githubMirror.enabled,
-          owner: updated.githubMirror.owner,
-          repo: updated.githubMirror.repo,
-          branch: updated.githubMirror.branch,
-          appId: updated.githubMirror.appId,
-          installationId: updated.githubMirror.installationId,
-          appPrivateKey: midMaskSecret(updated.githubMirror.appPrivateKey),
+          enabled: updated.enabled,
+          owner: updated.owner,
+          repo: updated.repo,
+          branch: updated.branch,
+          appId: updated.appId,
+          installationId: updated.installationId,
+          appPrivateKey: midMaskSecret(updated.appPrivateKey),
         },
         error: null,
       });
@@ -389,19 +409,30 @@ export function createMirrorRoutes(
   // ────────────────────────── Admin: GET /admin/mirror/status ──────────────────────────
 
   /**
-   * Snapshot for the admin overview UI. Combines the in-process
-   * reconcile state, the DB-side mirror counts, and the full mirror
-   * config (App private key mid-masked) so the page can render the
-   * settings form pre-populated without a second round-trip.
+   * Snapshot for the admin overview UI. Combines the persisted
+   * scheduled-run status (from the in-process scheduler reading
+   * Agenda's `agendaJobs` doc), the DB-side mirror counts, and the
+   * full mirror config (App private key mid-masked) so the page can
+   * render the settings form pre-populated without a second round-trip.
+   *
+   * Manual `POST /admin/mirror/reconcile` runs do NOT update
+   * `scheduledRun` — they're tracked in the in-process `reconcileState`
+   * which lives on this pod only and feeds the 409 "already running"
+   * guard. If the dashboard needs to surface manual-run progress, it
+   * should consult that out of band; `scheduledRun` is the canonical,
+   * cluster-wide, persisted view of *scheduled* fires.
    */
   app.get(
     "/admin/mirror/status",
     auth,
     requirePermission("ornn:admin:skill"),
     async (c) => {
-      const [counts, cfg] = await Promise.all([
+      const [counts, cfg, scheduledRun] = await Promise.all([
         skillRepo.getMirrorCounts(),
-        platformSettingsService.getGithubMirrorConfig(),
+        settingsService.getMirror(),
+        mirrorScheduler
+          ? mirrorScheduler.getScheduledRunStatus()
+          : Promise.resolve(emptyScheduledRun()),
       ]);
       return c.json({
         data: {
@@ -419,14 +450,7 @@ export function createMirrorRoutes(
               ? counts.oldestUnsyncedAt.toISOString()
               : null,
           },
-          lastReconcile: {
-            status: reconcileState.status,
-            startedAt: reconcileState.startedAt?.toISOString() ?? null,
-            finishedAt: reconcileState.finishedAt?.toISOString() ?? null,
-            durationMs: reconcileState.durationMs,
-            result: reconcileState.result,
-            error: reconcileState.error,
-          },
+          scheduledRun: serializeScheduledRun(scheduledRun),
         },
         error: null,
       });
@@ -434,4 +458,50 @@ export function createMirrorRoutes(
   );
 
   return app;
+}
+
+function emptyScheduledRun(): ScheduledRunStatus {
+  return {
+    status: "never_run",
+    lastRunAt: null,
+    lastFinishedAt: null,
+    lastDurationMs: null,
+    lastError: null,
+    nextRunAt: null,
+  };
+}
+
+function serializeScheduledRun(s: ScheduledRunStatus): {
+  status: ScheduledRunStatus["status"];
+  lastRunAt: string | null;
+  lastFinishedAt: string | null;
+  lastDurationMs: number | null;
+  lastError: string | null;
+  nextRunAt: string | null;
+} {
+  return {
+    status: s.status,
+    lastRunAt: s.lastRunAt?.toISOString() ?? null,
+    lastFinishedAt: s.lastFinishedAt?.toISOString() ?? null,
+    lastDurationMs: s.lastDurationMs,
+    lastError: s.lastError,
+    nextRunAt: s.nextRunAt?.toISOString() ?? null,
+  };
+}
+
+/**
+ * Build a SettingsActor from the request's auth context. Mirrors the
+ * helper in `domains/settings/routes.ts` so settings writes from the
+ * legacy `/github/repo` POST attribute to the same caller shape that
+ * the new `/admin/settings/mirror` PUT records.
+ */
+function mirrorActor(c: { get: (k: string) => unknown }): SettingsActor {
+  const a = c.get("auth") as
+    | { userId?: string; email?: string; displayName?: string }
+    | undefined;
+  return {
+    userId: a?.userId ?? "unknown",
+    email: a?.email ?? "unknown@local",
+    displayName: a?.displayName,
+  };
 }

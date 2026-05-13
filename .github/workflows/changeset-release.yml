@@ -161,25 +161,83 @@ jobs:
           git tag -a "${TAG}" -m "Release ${TAG}"
           git push origin "${TAG}"
 
-          extract_section() {
-            awk -v v="$1" '
-              /^## / {
-                if (found) { exit }
-                if ($0 ~ "^## " v "$") { found=1; next }
-              }
-              found { print }
-            ' "$2"
-          }
-          API_NOTES=$(extract_section "${VERSION}" ornn-api/CHANGELOG.md)
-          WEB_NOTES=$(extract_section "${VERSION}" ornn-web/CHANGELOG.md)
+          # Release-body resolution, in priority order (#431 / #435):
+          #
+          #   1. Most recent `.github/release-notes-<yyyymmdd>.md` file
+          #      (filename sort, descending). If it exists and the
+          #      author has filled it in (placeholder string
+          #      `(write here)` removed), strip its HTML comment block
+          #      and use the remaining prose as the release body.
+          #      Footer with CHANGELOG links is always appended.
+          #
+          #   2. Short body that just links to the per-package
+          #      CHANGELOG sections on the tag. Used when (1) wasn't
+          #      filled in, or when the full inline notes would
+          #      exceed GitHub's 125 000-char body cap (#429 / #430).
+          #
+          # `.github/release-notes-template.md` is the immutable
+          # template the dated file is copied from — never read here.
+          # The filename-pattern filter (8-digit date) excludes it
+          # from the dated-file search.
+          #
+          # Inline-CHANGELOG body was retired — even when it fits, the
+          # raw consumed changesets are engineer-speak that doesn't
+          # belong on a public release page. Authors curate the
+          # user-facing summary into the dated file before opening
+          # their develop → main PR, and the gate in
+          # `.github/workflows/check-release-notes.yml` enforces it
+          # on PRs to main.
+          REPO_URL="https://github.com/${GITHUB_REPOSITORY}"
+          CHANGELOG_FOOTER=$(cat <<EOF
 
-          BODY=$(cat <<EOF
-          ## \`ornn-api\` ${VERSION}
-          ${API_NOTES}
-          ## \`ornn-web\` ${VERSION}
-          ${WEB_NOTES}
+          ---
+
+          Full per-PR detail: [\`ornn-api\` CHANGELOG](${REPO_URL}/blob/${TAG}/ornn-api/CHANGELOG.md#${VERSION//./}) · [\`ornn-web\` CHANGELOG](${REPO_URL}/blob/${TAG}/ornn-web/CHANGELOG.md#${VERSION//./})
           EOF
           )
+
+          RELEASE_NOTES_FILE=$(ls -1 .github/release-notes-*.md 2>/dev/null \
+            | grep -E '/release-notes-[0-9]{8}\.md$' \
+            | sort -r \
+            | head -1)
+
+          USE_CURATED=false
+          if [ -n "$RELEASE_NOTES_FILE" ] && [ -f "$RELEASE_NOTES_FILE" ] && ! grep -qF '(write here)' "$RELEASE_NOTES_FILE"; then
+            USE_CURATED=true
+          fi
+
+          if $USE_CURATED; then
+            echo "Using curated release notes from $RELEASE_NOTES_FILE"
+            # Strip the leading HTML comment block (instructions to the
+            # author). Everything between `<!--` and the matching `-->`
+            # on its own line is dropped.
+            CURATED=$(awk '
+              BEGIN { in_comment = 0 }
+              /^<!--/ { in_comment = 1; next }
+              /-->$/ { if (in_comment) { in_comment = 0; next } }
+              !in_comment { print }
+            ' "$RELEASE_NOTES_FILE")
+            BODY="${CURATED}${CHANGELOG_FOOTER}"
+          else
+            echo "No curated dated release-notes file found (or placeholder still present) — using short-body fallback."
+            BODY=$(cat <<EOF
+          Release notes weren't curated for v${VERSION}. The full per-PR detail is in the in-repo CHANGELOGs on the \`${TAG}\` tag:
+          ${CHANGELOG_FOOTER}
+          EOF
+          )
+          fi
+
+          # Final length safety check — even a curated body shouldn't
+          # exceed the cap, but guard against an author pasting in a
+          # 100k-char block of prose by accident.
+          if [ ${#BODY} -gt 120000 ]; then
+            echo "::warning::Resolved body is ${#BODY} chars (cap 120 000). Falling back to short link body."
+            BODY=$(cat <<EOF
+          Release notes body exceeded the size cap. Full per-PR detail is in the in-repo CHANGELOGs:
+          ${CHANGELOG_FOOTER}
+          EOF
+          )
+          fi
 
           gh release create "${TAG}" --title "${TAG}" --notes "${BODY}"
 
