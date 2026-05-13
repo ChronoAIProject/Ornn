@@ -1,16 +1,23 @@
 /**
- * Contact Page — Forge Workshop public surface.
+ * Contact Page — public channel-routing surface.
  *
- * Two real channels: support email + GitHub issue tracker. The
- * placeholder Xiaohongshu card and the brand-decorative "WORKSHOP"
- * stamp were dropped in #320 — both offered no contact value, the
- * stamp wasn't even a link.
+ * Three real channels with distinct purposes:
+ *   1. `support@chrono-ai.fun` — sensitive / private (security, account,
+ *      GDPR). Anything you don't want public.
+ *   2. GitHub Discussions — async public community. Q&A, ideas,
+ *      show-and-tell. Default entry point when in doubt.
+ *   3. GitHub Issues / PRs — actionable maintainer work (confirmed bugs
+ *      with repro, accepted feature scope, code contributions).
+ *
+ * Below the three channel cards, a "Discussion categories" section
+ * enumerates every category on the repo with its one-line purpose, so
+ * users land in the right place without trial-and-error.
  *
  * Design language follows DESIGN.md "Whole-App Application Guidance →
- * App Shell": cool steel-paper page background (inherited from RootLayout),
- * letterpress-impression cards via `card-impression`, bracketed mono section
- * label, Space Grotesk display headline with `<HighlighterMark>` on the
- * emphasis noun, Inter body, JetBrains Mono operational labels.
+ * App Shell": letterpress-impression cards via `card-impression`,
+ * bracketed mono section labels, Space Grotesk display headline with
+ * `<HighlighterMark>` on the emphasis noun, Inter body, JetBrains Mono
+ * operational labels.
  *
  * @module pages/ContactPage
  */
@@ -21,6 +28,8 @@ import { HighlighterMark } from "@/pages/landing/HighlighterMark";
 
 const SUPPORT_EMAIL = "support@chrono-ai.fun";
 const GITHUB_REPO_URL = "https://github.com/ChronoAIProject/Ornn";
+const GITHUB_DISCUSSIONS_URL = `${GITHUB_REPO_URL}/discussions`;
+const GITHUB_ISSUES_URL = `${GITHUB_REPO_URL}/issues`;
 
 function MailIcon({ className }: { className?: string }) {
   return (
@@ -52,31 +61,44 @@ function GitHubIcon({ className }: { className?: string }) {
   );
 }
 
+/**
+ * Speech-bubble icon for the Discussions card — distinguishes it from
+ * the Issues card at a glance even though both link to GitHub.
+ */
+function ChatIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+    </svg>
+  );
+}
+
 interface ChannelCardProps {
   label: string;
   icon: React.ReactNode;
   primary: React.ReactNode;
   helper: string;
-  href?: string | null;
+  href: string;
   external?: boolean;
-  disabled?: boolean;
 }
 
 /**
- * One contact channel. Uses `card-impression` for the static letterpress
- * shadow and an inset 1px hairline. When `href` is provided the whole
- * card is a single anchor — the impression communicates "tappable",
- * mono uppercase label communicates "operational metadata".
+ * One contact channel. The whole card is a single anchor — the
+ * letterpress impression communicates "tappable", mono uppercase label
+ * communicates "operational metadata". Border lights up on hover/focus.
  */
-function ChannelCard({
-  label,
-  icon,
-  primary,
-  helper,
-  href,
-  external,
-  disabled,
-}: ChannelCardProps) {
+function ChannelCard({ label, icon, primary, helper, href, external }: ChannelCardProps) {
+  const baseClass =
+    "card-impression flex h-full flex-col rounded-sm border border-subtle bg-card p-6 no-underline transition-colors duration-200 hover:border-accent focus-visible:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent";
   const inner = (
     <>
       <div className="flex items-center justify-between gap-3">
@@ -91,40 +113,97 @@ function ChannelCard({
       </p>
     </>
   );
-
-  const baseClass =
-    "card-impression flex h-full flex-col rounded-sm border border-subtle bg-card p-6 transition-colors duration-200";
-
-  if (disabled || !href) {
-    return (
-      <div className={`${baseClass} cursor-default`} aria-disabled="true">
-        {inner}
-      </div>
-    );
-  }
-
   if (external) {
     return (
-      <a
-        href={href}
-        target="_blank"
-        rel="noopener noreferrer"
-        className={`${baseClass} no-underline hover:border-accent focus-visible:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent`}
-      >
+      <a href={href} target="_blank" rel="noopener noreferrer" className={baseClass}>
         {inner}
       </a>
     );
   }
-
   return (
-    <a
-      href={href}
-      className={`${baseClass} no-underline hover:border-accent focus-visible:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent`}
-    >
+    <a href={href} className={baseClass}>
       {inner}
     </a>
   );
 }
+
+/**
+ * One row in the Discussion-categories list. Whole row is a link to
+ * the GitHub Discussions category page, so the user lands one click
+ * away from posting. Visual treatment is intentionally lighter than
+ * the channel cards above — secondary content, not the primary CTA.
+ */
+function CategoryRow({
+  emoji,
+  name,
+  purpose,
+  href,
+}: {
+  emoji: string;
+  name: string;
+  purpose: string;
+  href: string;
+}) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="group flex items-start gap-3 rounded-sm border border-subtle bg-card px-4 py-3 no-underline transition-colors duration-200 hover:border-accent focus-visible:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+    >
+      <span className="mt-0.5 text-base leading-none" aria-hidden="true">
+        {emoji}
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="font-mono text-[12px] font-medium tracking-tight text-strong">
+          {name}
+        </div>
+        <p className="mt-1 font-text text-[13px] leading-relaxed text-body">
+          {purpose}
+        </p>
+      </div>
+    </a>
+  );
+}
+
+const DISCUSSION_CATEGORIES = [
+  {
+    slug: "announcements",
+    emoji: "📣",
+    nameKey: "contact.categoryAnnouncementsName",
+    purposeKey: "contact.categoryAnnouncementsPurpose",
+  },
+  {
+    slug: "q-a",
+    emoji: "🙏",
+    nameKey: "contact.categoryQaName",
+    purposeKey: "contact.categoryQaPurpose",
+  },
+  {
+    slug: "ideas",
+    emoji: "💡",
+    nameKey: "contact.categoryIdeasName",
+    purposeKey: "contact.categoryIdeasPurpose",
+  },
+  {
+    slug: "show-and-tell",
+    emoji: "🙌",
+    nameKey: "contact.categoryShowAndTellName",
+    purposeKey: "contact.categoryShowAndTellPurpose",
+  },
+  {
+    slug: "general",
+    emoji: "💬",
+    nameKey: "contact.categoryGeneralName",
+    purposeKey: "contact.categoryGeneralPurpose",
+  },
+  {
+    slug: "polls",
+    emoji: "🗳",
+    nameKey: "contact.categoryPollsName",
+    purposeKey: "contact.categoryPollsPurpose",
+  },
+] as const;
 
 export function ContactPage() {
   const { t } = useTranslation();
@@ -150,16 +229,16 @@ export function ContactPage() {
             </p>
           </header>
 
-          {/* Channel grid — 1 col mobile, 2 col sm+. */}
+          {/* Channel grid — 1 col mobile, 3 col on lg+. */}
           <section
             aria-label={t("contact.channelsLabel")}
-            className="grid grid-cols-1 gap-5 sm:grid-cols-2"
+            className="grid grid-cols-1 gap-5 lg:grid-cols-3"
           >
             <ChannelCard
               label={t("contact.cardEmailLabel")}
               icon={<MailIcon className="h-5 w-5" />}
               primary={
-                <span className="block break-words font-mono text-[17px] font-medium tracking-tight">
+                <span className="block break-words font-mono text-[15px] font-medium tracking-tight">
                   {SUPPORT_EMAIL}
                 </span>
               }
@@ -168,17 +247,58 @@ export function ContactPage() {
             />
 
             <ChannelCard
-              label={t("contact.cardGithubLabel")}
-              icon={<GitHubIcon className="h-5 w-5" />}
+              label={t("contact.cardDiscussionsLabel")}
+              icon={<ChatIcon className="h-5 w-5" />}
               primary={
-                <span className="block break-words font-mono text-[17px] font-medium tracking-tight">
-                  github.com/ChronoAIProject/Ornn
+                <span className="block break-words font-mono text-[15px] font-medium tracking-tight">
+                  github.com/.../discussions
                 </span>
               }
-              helper={t("contact.cardGithubHint")}
-              href={GITHUB_REPO_URL}
+              helper={t("contact.cardDiscussionsHint")}
+              href={GITHUB_DISCUSSIONS_URL}
               external
             />
+
+            <ChannelCard
+              label={t("contact.cardIssuesLabel")}
+              icon={<GitHubIcon className="h-5 w-5" />}
+              primary={
+                <span className="block break-words font-mono text-[15px] font-medium tracking-tight">
+                  github.com/.../issues
+                </span>
+              }
+              helper={t("contact.cardIssuesHint")}
+              href={GITHUB_ISSUES_URL}
+              external
+            />
+          </section>
+
+          {/* Discussion categories — secondary, routing-table style. */}
+          <section
+            aria-label={t("contact.categoriesHeadline")}
+            className="mt-16"
+          >
+            <p className="mb-3 font-mono text-[11px] uppercase tracking-[0.22em] text-meta">
+              {t("contact.categoriesEyebrow")}
+            </p>
+            <h2 className="font-display text-[24px] font-semibold leading-tight tracking-tight text-strong sm:text-[28px]">
+              {t("contact.categoriesHeadline")}
+            </h2>
+            <p className="mt-3 max-w-[640px] font-text text-[14px] leading-relaxed text-body">
+              {t("contact.categoriesSubhead")}
+            </p>
+            <ul className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {DISCUSSION_CATEGORIES.map((c) => (
+                <li key={c.slug}>
+                  <CategoryRow
+                    emoji={c.emoji}
+                    name={t(c.nameKey)}
+                    purpose={t(c.purposeKey)}
+                    href={`${GITHUB_DISCUSSIONS_URL}/categories/${c.slug}`}
+                  />
+                </li>
+              ))}
+            </ul>
           </section>
 
           {/* Closing rule — small editorial signoff for credibility */}
