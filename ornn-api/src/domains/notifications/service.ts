@@ -92,7 +92,7 @@ export class NotificationService {
     });
     const userItems: FeedItem[] = perUser.map((n) => ({ ...n, source: "user" }));
 
-    let broadcastItems: FeedItem[] = [];
+    const broadcastItems: FeedItem[] = [];
     if (this.broadcastRepo) {
       const broadcasts = await this.broadcastRepo.listAll();
       if (broadcasts.length > 0) {
