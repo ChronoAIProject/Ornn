@@ -69,6 +69,11 @@ import { AnnouncementService } from "./domains/announcements/service";
 import { createAnnouncementRoutes } from "./domains/announcements/routes";
 import { migrateAnnouncementsToBilingual } from "./domains/announcements/migration";
 
+// Domain: Broadcasts (admin-authored notifications, #500)
+import { BroadcastRepository } from "./domains/broadcasts/repository";
+import { BroadcastService } from "./domains/broadcasts/service";
+import { createBroadcastRoutes } from "./domains/broadcasts/routes";
+
 // Domain: Analytics
 import { AnalyticsRepository } from "./domains/analytics/repository";
 import { AnalyticsService } from "./domains/analytics/service";
@@ -482,6 +487,14 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   );
   const announcementService = new AnnouncementService({ repo: announcementRepo });
   const announcementRoutes = createAnnouncementRoutes({ announcementService });
+
+  // ---- Domain: Broadcasts (admin-authored, fan-out via notifications, #500) ----
+  const broadcastRepo = new BroadcastRepository(db);
+  void broadcastRepo.ensureIndexes().catch((err) =>
+    logger.warn({ err }, "broadcasts indexes ensureIndexes failed — proceeding anyway"),
+  );
+  const broadcastService = new BroadcastService({ repo: broadcastRepo });
+  const broadcastRoutes = createBroadcastRoutes({ broadcastService });
 
   // ---- NyxID Orgs Client — built early so the audit fan-out can expand
   //   sharedWithOrgs into member rosters when sending consumer notifications.
@@ -915,6 +928,7 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   apiApp.route("/", auditRoutes);
   apiApp.route("/", notificationRoutes);
   apiApp.route("/", announcementRoutes);
+  apiApp.route("/", broadcastRoutes);
   apiApp.route("/", analyticsRoutes);
   apiApp.route("/", searchRoutes);
   apiApp.route("/", generationRoutes);

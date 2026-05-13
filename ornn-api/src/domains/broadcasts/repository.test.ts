@@ -62,11 +62,17 @@ describe("BroadcastRepository — broadcasts CRUD", () => {
     // Force a measurable timestamp gap so the sort is deterministic.
     await db
       .collection("broadcasts")
-      .updateOne({ _id: a._id }, { $set: { createdAt: new Date("2026-05-01T00:00:00Z") } });
+      .updateOne(
+        { _id: a._id as unknown as never },
+        { $set: { createdAt: new Date("2026-05-01T00:00:00Z") } },
+      );
     const b = await repo.create({ ...baseInput, titleI18n: { en: "b", zh: "b" } });
     await db
       .collection("broadcasts")
-      .updateOne({ _id: b._id }, { $set: { createdAt: new Date("2026-05-10T00:00:00Z") } });
+      .updateOne(
+        { _id: b._id as unknown as never },
+        { $set: { createdAt: new Date("2026-05-10T00:00:00Z") } },
+      );
     const all = await repo.listAll();
     expect(all.map((d) => d.titleI18n.en)).toEqual(["b", "a"]);
   });
@@ -111,11 +117,21 @@ describe("BroadcastRepository — read receipts", () => {
     // silently drops the constraint.
     await db
       .collection("broadcast_read_receipts")
-      .insertOne({ _id: "r1", userId: "u-1", broadcastId: b._id, readAt: new Date() });
+      .insertOne({
+        _id: "r1" as unknown as never,
+        userId: "u-1",
+        broadcastId: b._id,
+        readAt: new Date(),
+      });
     await expect(
       db
         .collection("broadcast_read_receipts")
-        .insertOne({ _id: "r2", userId: "u-1", broadcastId: b._id, readAt: new Date() }),
+        .insertOne({
+          _id: "r2" as unknown as never,
+          userId: "u-1",
+          broadcastId: b._id,
+          readAt: new Date(),
+        }),
     ).rejects.toBeDefined();
   });
 
