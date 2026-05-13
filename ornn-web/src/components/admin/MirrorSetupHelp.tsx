@@ -186,8 +186,9 @@ export function MirrorSetupHelp({ className = "" }: MirrorSetupHelpProps) {
                   (e.g. <code className="font-mono text-[11px] text-strong">ChronoAIProject / ornn-skills / main</code>),
                   flip the Enable toggle, Save. Then hit{" "}
                   <strong>Reconcile now</strong> — the first run pushes every
-                  public + system skill to the repo. The hourly cron at{" "}
-                  <code className="font-mono text-[11px] text-strong">:17</code> takes over from there.
+                  public + system skill to the repo. The in-process scheduler
+                  (configurable on the settings page; default daily at 02:00 SGT)
+                  takes over from there.
                 </p>
               </li>
             </ol>

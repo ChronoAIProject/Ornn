@@ -82,6 +82,7 @@ describe("IT-SETTINGS export/import", () => {
         appId: "12345",
         installationId: "67890",
         appPrivateKey: "real-pem-content",
+        reconcileSchedule: "0 2 * * *",
       },
       ACTOR,
     );
@@ -114,6 +115,7 @@ describe("IT-SETTINGS export/import", () => {
         appId: "99999",
         installationId: "00000",
         appPrivateKey: redactSentinel("appPrivateKey"), // keep DB
+        reconcileSchedule: "0 2 * * *",
       },
       ACTOR,
     );

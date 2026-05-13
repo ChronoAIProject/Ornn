@@ -29,9 +29,18 @@ import { GitHubMirrorClient, type TreeEntry } from "./githubMirrorClient";
 import type { SkillRepository } from "../crud/repository";
 import type { SkillService } from "../crud/service";
 import type { SkillDocument } from "../../../shared/types/index";
-import type { PlatformSettingsService } from "../../platform/service";
+import type { MirrorSection } from "../../settings/sections/mirror";
 
 const logger = pino({ level: "info" }).child({ module: "mirrorService" });
+
+/**
+ * Narrow surface MirrorService needs from SettingsService. Decouples
+ * the dep from the full SettingsService interface so tests can stub
+ * just this method.
+ */
+export interface MirrorSettingsReader {
+  getMirror(): Promise<MirrorSection>;
+}
 
 export interface MirrorServiceDeps {
   skillRepo: SkillRepository;
@@ -42,10 +51,10 @@ export interface MirrorServiceDeps {
    * Source of truth for the mirror config — kill switch, repo coords,
    * App credentials. Read on every sync so an admin patch via the admin
    * UI takes effect on the next operation without a redeploy. Cached
-   * for 30s by the service itself, so repeated reads inside one sync
-   * are cheap.
+   * for 30s by SettingsService itself, so repeated reads inside one
+   * sync are cheap.
    */
-  platformSettingsService: PlatformSettingsService;
+  settingsService: MirrorSettingsReader;
   /**
    * Optional override — used by tests to inject a stub
    * `GitHubMirrorClient` without going through the GitHub App auth
@@ -64,8 +73,8 @@ export interface ReconcileResult {
 
 /**
  * Mirror service — runtime-aware. Every public method first asks
- * `PlatformSettingsService` for the current mirror config; if disabled
- * or missing any of the four App fields, the call no-ops. The active
+ * `SettingsService` for the current mirror config; if disabled or
+ * missing any of the four App fields, the call no-ops. The active
  * `GitHubMirrorClient` is cached by credential fingerprint so admin-
  * pasted creds take effect on the next call without recreating the
  * client on every blob/tree request.
@@ -89,10 +98,10 @@ export class MirrorService {
     if (this.deps.githubClientForTest) {
       // Test seam: still gate on `enabled` so the disabled-short-circuit
       // assertion can be exercised without rebuilding the auth chain.
-      const cfg = await this.deps.platformSettingsService.getGithubMirrorConfig();
+      const cfg = await this.deps.settingsService.getMirror();
       return cfg.enabled ? this.deps.githubClientForTest : null;
     }
-    const cfg = await this.deps.platformSettingsService.getGithubMirrorConfig();
+    const cfg = await this.deps.settingsService.getMirror();
     if (!cfg.enabled) return null;
     if (!cfg.appId || !cfg.installationId || !cfg.appPrivateKey) return null;
     if (!cfg.owner || !cfg.repo || !cfg.branch) return null;
@@ -126,7 +135,7 @@ export class MirrorService {
     repo: string;
     branch: string;
   }> {
-    const cfg = await this.deps.platformSettingsService.getGithubMirrorConfig();
+    const cfg = await this.deps.settingsService.getMirror();
     const configured =
       !!cfg.appId && !!cfg.installationId && !!cfg.appPrivateKey && !!cfg.owner && !!cfg.repo;
     return {
@@ -362,14 +371,14 @@ export class MirrorService {
    * call time from the platform-settings cache so an admin re-point
    * propagates into READMEs on the next sync. */
   private async getRepoSlug(): Promise<string> {
-    const cfg = await this.deps.platformSettingsService.getGithubMirrorConfig();
+    const cfg = await this.deps.settingsService.getMirror();
     return `${cfg.owner}/${cfg.repo}`;
   }
 
   /** Mirror repo name on its own. Used as the H1 in the top-level
    * README (`# ornn-skills`). */
   private async getRepoName(): Promise<string> {
-    const cfg = await this.deps.platformSettingsService.getGithubMirrorConfig();
+    const cfg = await this.deps.settingsService.getMirror();
     return cfg.repo;
   }
 

@@ -1038,7 +1038,7 @@
     "sections": {
       "mirror": {
         "title": "GitHub mirror",
-        "description": "Repo coords + App credentials. Run controls are on the legacy mirror dashboard.",
+        "description": "Repo coords + App credentials + scheduled reconcile cadence. Run controls are on the legacy mirror dashboard.",
         "savedToast": "Mirror config saved",
         "label": {
           "enabled": "Mirror enabled",
@@ -1047,7 +1047,24 @@
           "branch": "Branch",
           "appId": "App ID",
           "installationId": "Installation ID",
-          "privateKey": "App private key (PEM)"
+          "privateKey": "App private key (PEM)",
+          "schedule": "Reconcile schedule"
+        },
+        "schedule": {
+          "preset": {
+            "disabled": "Disabled",
+            "daily2am": "Daily at 02:00",
+            "every6h": "Every 6 hours",
+            "every12h": "Every 12 hours",
+            "hourly": "Hourly",
+            "custom": "Custom (cron expression)…"
+          },
+          "tzNote": "Schedules are interpreted in Singapore time (UTC+8, no DST).",
+          "disabledHint": "Scheduled reconciles are paused. Publish-time webhooks still fire.",
+          "customHint": "5-field cron expression (minute hour day month weekday).",
+          "invalidHint": "Invalid cron expression.",
+          "nextRun": "Next run: {{at}}",
+          "nextRunUnavailable": "Next run: —"
         },
         "openDashboard": "Open mirror dashboard →"
       },

@@ -39,7 +39,8 @@ import {
 import { AppError } from "../../../shared/types/index";
 import { isMidMaskSentinel, midMaskSecret } from "../../../infra/crypto";
 import type { MirrorService, ReconcileResult } from "./mirrorService";
-import type { PlatformSettingsService } from "../../platform/service";
+import type { SettingsService, SettingsActor } from "../../settings/types";
+import type { MirrorSection } from "../../settings/sections/mirror";
 import type { SkillRepository } from "../crud/repository";
 
 const logger = pino({ level: "info" }).child({ module: "mirrorRoutes" });
@@ -68,10 +69,11 @@ export interface MirrorRoutesConfig {
    */
   mirrorService: MirrorService;
   /**
-   * Platform-settings service for runtime-mutable mirror config.
-   * Source of truth for enabled + repo coords + App credentials.
+   * Settings service — single source of truth for mirror config
+   * (enabled + repo coords + App credentials + reconcile schedule).
+   * Write path goes through `putSection("mirror", ...)`.
    */
-  platformSettingsService: PlatformSettingsService;
+  settingsService: SettingsService;
   /**
    * Skill repository for the abandon-confirm pre-flight check + the
    * status endpoint's mirror-counts aggregation.
@@ -91,7 +93,7 @@ interface ReconcileRunState {
 export function createMirrorRoutes(
   config: MirrorRoutesConfig,
 ): Hono<{ Variables: AuthVariables }> {
-  const { mirrorService, platformSettingsService, skillRepo } = config;
+  const { mirrorService, settingsService, skillRepo } = config;
   const app = new Hono<{ Variables: AuthVariables }>();
   const auth = nyxidAuthMiddleware();
 
@@ -117,7 +119,7 @@ export function createMirrorRoutes(
    * surfaced here.
    */
   app.get("/github/repo", async (c) => {
-    const cfg = await platformSettingsService.getGithubMirrorConfig();
+    const cfg = await settingsService.getMirror();
     return c.json({
       data: {
         owner: cfg.owner,
@@ -149,7 +151,7 @@ export function createMirrorRoutes(
     requirePermission("ornn:admin:skill"),
     async (c) => {
       const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
-      const current = await platformSettingsService.getGithubMirrorConfig();
+      const current = await settingsService.getMirror();
       const confirmAbandonOldRepo = body.confirmAbandonOldRepo === true;
 
       // ---- enabled ----
@@ -251,17 +253,26 @@ export function createMirrorRoutes(
         }
       }
 
-      const updated = await platformSettingsService.patch({
-        githubMirror: {
-          enabled,
-          owner,
-          repo,
-          branch,
-          appId,
-          installationId,
-          appPrivateKey,
-        },
-      });
+      // Preserve any fields the legacy operational endpoint doesn't
+      // edit (e.g., `reconcileSchedule`) by reading them off `current`
+      // and re-passing them through. Settings PUT replaces the whole
+      // section value.
+      const next: MirrorSection = {
+        ...current,
+        enabled,
+        owner,
+        repo,
+        branch,
+        appId,
+        installationId,
+        appPrivateKey,
+      };
+      const actor = mirrorActor(c);
+      const { value: updated } = await settingsService.putSection<MirrorSection>(
+        "mirror",
+        next,
+        actor,
+      );
       if (wouldAbandonOldRepo) {
         // Existing stamps point at commit SHAs in the now-abandoned
         // repo. Clearing them resets every eligible skill to "Never
@@ -274,13 +285,13 @@ export function createMirrorRoutes(
       }
       return c.json({
         data: {
-          enabled: updated.githubMirror.enabled,
-          owner: updated.githubMirror.owner,
-          repo: updated.githubMirror.repo,
-          branch: updated.githubMirror.branch,
-          appId: updated.githubMirror.appId,
-          installationId: updated.githubMirror.installationId,
-          appPrivateKey: midMaskSecret(updated.githubMirror.appPrivateKey),
+          enabled: updated.enabled,
+          owner: updated.owner,
+          repo: updated.repo,
+          branch: updated.branch,
+          appId: updated.appId,
+          installationId: updated.installationId,
+          appPrivateKey: midMaskSecret(updated.appPrivateKey),
         },
         error: null,
       });
@@ -401,7 +412,7 @@ export function createMirrorRoutes(
     async (c) => {
       const [counts, cfg] = await Promise.all([
         skillRepo.getMirrorCounts(),
-        platformSettingsService.getGithubMirrorConfig(),
+        settingsService.getMirror(),
       ]);
       return c.json({
         data: {
@@ -434,4 +445,21 @@ export function createMirrorRoutes(
   );
 
   return app;
+}
+
+/**
+ * Build a SettingsActor from the request's auth context. Mirrors the
+ * helper in `domains/settings/routes.ts` so settings writes from the
+ * legacy `/github/repo` POST attribute to the same caller shape that
+ * the new `/admin/settings/mirror` PUT records.
+ */
+function mirrorActor(c: { get: (k: string) => unknown }): SettingsActor {
+  const a = c.get("auth") as
+    | { userId?: string; email?: string; displayName?: string }
+    | undefined;
+  return {
+    userId: a?.userId ?? "unknown",
+    email: a?.email ?? "unknown@local",
+    displayName: a?.displayName,
+  };
 }

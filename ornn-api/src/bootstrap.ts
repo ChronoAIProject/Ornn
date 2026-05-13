@@ -94,6 +94,10 @@ import { createFormatRoutes } from "./domains/skills/format/routes";
 // Domain: GitHub Mirror (public + system skill auto-mirror)
 import { MirrorService } from "./domains/skills/mirror/mirrorService";
 import { createMirrorRoutes } from "./domains/skills/mirror/routes";
+import {
+  createMirrorScheduler,
+  type MirrorScheduler,
+} from "./domains/skills/mirror/scheduler";
 
 // Domain: Me (caller-scoped endpoints)
 import { createMeRoutes } from "./domains/me/routes";
@@ -110,6 +114,7 @@ import { createPlatformSettingsRoutes } from "./domains/platform/routes";
 import { SettingsRepository } from "./domains/settings/repository";
 import { SettingsServiceImpl } from "./domains/settings/service";
 import { createSettingsRoutes } from "./domains/settings/routes";
+import { migrateLegacyMirrorIntoSettings } from "./domains/settings/sections/mirror.migration";
 import { LlmProvidersRepository } from "./domains/settings/llmProviders/repository";
 import { LlmProvidersService } from "./domains/settings/llmProviders/service";
 import { createLlmProvidersRoutes } from "./domains/settings/llmProviders/routes";
@@ -211,6 +216,21 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
     repo: settingsRepo,
     encryptionKey: config.encryptionKey,
   });
+
+  // One-shot migration: copy any non-default mirror config from the
+  // legacy `platform_settings:{_id:"ornn"}.githubMirror` field into the
+  // new per-section `platform_settings:{_id:"mirror"}` doc. Idempotent;
+  // no-op when the new doc already exists or the legacy field is
+  // absent. Must run BEFORE the first `settingsService.getMirror()`
+  // call (none happen during boot, but be defensive). Failure is
+  // logged + non-fatal — operators can still set mirror config via
+  // the admin UI after boot.
+  await migrateLegacyMirrorIntoSettings(db, logger).catch((err) =>
+    logger.error(
+      { err: err instanceof Error ? err.message : String(err) },
+      "legacy mirror migration failed — admin must re-save mirror config",
+    ),
+  );
 
   // ---- SA Token Provider (shared by proxy-authenticated clients) ----
   // Credentials live in admin Settings → Integrations → NyxID and are
@@ -626,13 +646,34 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
     skillRepo,
     skillService,
     ornnPublicOrigin: config.ornnPublicOrigin,
-    platformSettingsService,
+    settingsService,
   });
   const mirrorRoutes = createMirrorRoutes({
     mirrorService,
-    platformSettingsService,
+    settingsService,
     skillRepo,
   });
+  // In-process mirror reconcile scheduler. Multi-pod-safe (Agenda's
+  // per-fire row lock on `agendaJobs`); schedule is driven by
+  // `settings.mirror.reconcileSchedule` and updated dynamically by the
+  // scheduler's own 1-minute sync tick. Replaces the legacy k8s
+  // CronJob (#437).
+  let mirrorScheduler: MirrorScheduler | null = null;
+  try {
+    mirrorScheduler = createMirrorScheduler({
+      db,
+      logger,
+      mirrorService,
+      settingsService,
+    });
+    await mirrorScheduler.start();
+  } catch (err) {
+    logger.error(
+      { err: err instanceof Error ? err.message : String(err) },
+      "mirror scheduler failed to start — scheduled reconciles will not run on this pod",
+    );
+    mirrorScheduler = null;
+  }
 
   // Skill routes — sharing is now a direct PUT /permissions write; the
   // audit signal is surfaced as a per-version label, not a gate.
@@ -942,6 +983,16 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   // ---- Shutdown ----
   async function shutdown(): Promise<void> {
     logger.info("Shutting down ornn-api...");
+    // Stop the scheduler first so no new mirror reconciles start while
+    // we're tearing the Mongo connection down. `stop()` is idempotent +
+    // already swallows its own errors.
+    if (mirrorScheduler) {
+      try {
+        await mirrorScheduler.stop();
+      } catch (err) {
+        logger.warn({ err }, "Mirror scheduler stop failed — continuing");
+      }
+    }
     // Drain PostHog buffer before closing Mongo — losing buffered events
     // is the most common cause of "missing api.error" complaints.
     try {

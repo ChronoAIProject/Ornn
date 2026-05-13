@@ -95,6 +95,7 @@ describe("SettingsServiceImpl", () => {
         appId: "12345",
         installationId: "67890",
         appPrivateKey: "-----BEGIN PRIVATE KEY-----\nXYZ\n-----END PRIVATE KEY-----",
+        reconcileSchedule: "0 2 * * *",
       },
       ACTOR,
     );
@@ -117,6 +118,7 @@ describe("SettingsServiceImpl", () => {
         appId: "1",
         installationId: "2",
         appPrivateKey: "real-secret-pem",
+        reconcileSchedule: "0 2 * * *",
       },
       ACTOR,
     );
@@ -131,6 +133,7 @@ describe("SettingsServiceImpl", () => {
         appId: "1",
         installationId: "2",
         appPrivateKey: redactSentinel("appPrivateKey"),
+        reconcileSchedule: "0 2 * * *",
       },
       ACTOR,
     );
@@ -151,6 +154,7 @@ describe("SettingsServiceImpl", () => {
         appId: "1",
         installationId: "2",
         appPrivateKey: "another-real-secret-value",
+        reconcileSchedule: "0 2 * * *",
       },
       ACTOR,
     );
@@ -165,6 +169,7 @@ describe("SettingsServiceImpl", () => {
         appId: "1",
         installationId: "2",
         appPrivateKey: masked,
+        reconcileSchedule: "0 2 * * *",
       },
       ACTOR,
     );

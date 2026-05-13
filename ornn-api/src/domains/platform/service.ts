@@ -1,14 +1,17 @@
 /**
  * PlatformSettingsService — thin in-memory cache on top of the
- * repository so hot code paths (the audit-gated permissions handler,
- * MirrorService's per-commit repo-coords lookup) don't hit Mongo on
- * every call.
+ * repository so hot code paths (the audit-gated permissions handler)
+ * don't hit Mongo on every call.
  *
- * Decrypts at-rest secrets (LLM provider `apiKey`, GitHub App
- * `appPrivateKey`) at the service boundary on read; encrypts on write.
- * Every downstream consumer sees plaintext. Failures are non-fatal: an
- * unreadable secret degrades to "no value set" so the rest of the
- * system keeps working.
+ * Decrypts at-rest secrets (LLM provider `apiKey`) at the service
+ * boundary on read; encrypts on write. Every downstream consumer sees
+ * plaintext. Failures are non-fatal: an unreadable secret degrades to
+ * "no value set" so the rest of the system keeps working.
+ *
+ * Mirror config now lives in `SettingsService.getMirror()` —
+ * `MirrorService` consumes it from there directly (#437). This service
+ * remains the home for `auditWaiverThreshold` and the legacy
+ * `llmProvider` override only.
  *
  * @module domains/platform/service
  */
@@ -17,7 +20,6 @@ import { decryptSecret, encryptSecret } from "../../infra/crypto";
 import type { PlatformSettingsRepository } from "./repository";
 import {
   DEFAULT_PLATFORM_SETTINGS,
-  type GithubMirrorConfig,
   type LlmProviderConfig,
   type PlatformSettings,
 } from "./types";
@@ -27,8 +29,8 @@ const logger = pino({ level: "info" }).child({ module: "platformSettingsService"
 export interface PlatformSettingsDefaults {
   /**
    * Master passphrase used to encrypt/decrypt at-rest secrets (LLM
-   * `apiKey`, GitHub App `appPrivateKey`). Sourced from `ENCRYPTION_KEY`
-   * env. Required — the service never sees plaintext at the DB layer.
+   * `apiKey`). Sourced from `ENCRYPTION_KEY` env. Required — the
+   * service never sees plaintext at the DB layer.
    */
   encryptionKey: string;
 }
@@ -61,34 +63,11 @@ export class PlatformSettingsService {
       );
     }
 
-    const mirrorRaw = stored.githubMirror ?? DEFAULT_PLATFORM_SETTINGS.githubMirror;
-    let appPrivateKey = "";
-    try {
-      appPrivateKey = decryptSecret(
-        mirrorRaw.appPrivateKey ?? "",
-        this.defaults.encryptionKey,
-      );
-    } catch (err) {
-      logger.error(
-        { err: (err as Error).message },
-        "Failed to decrypt GitHub App private key — treating as unset",
-      );
-    }
-
     const settings: PlatformSettings = {
       auditWaiverThreshold:
         typeof stored.auditWaiverThreshold === "number"
           ? stored.auditWaiverThreshold
           : DEFAULT_PLATFORM_SETTINGS.auditWaiverThreshold,
-      githubMirror: {
-        enabled: typeof mirrorRaw.enabled === "boolean" ? mirrorRaw.enabled : false,
-        owner: mirrorRaw.owner ?? "",
-        repo: mirrorRaw.repo ?? "",
-        branch: mirrorRaw.branch ?? "",
-        appId: mirrorRaw.appId ?? "",
-        installationId: mirrorRaw.installationId ?? "",
-        appPrivateKey,
-      },
       llmProvider: {
         gatewayUrl: llmRaw.gatewayUrl ?? "",
         apiKey: llmApiKey,
@@ -100,11 +79,6 @@ export class PlatformSettingsService {
 
   async getAuditWaiverThreshold(): Promise<number> {
     return (await this.get()).auditWaiverThreshold;
-  }
-
-  /** Full mirror config — kill switch + repo coords + App credentials. */
-  async getGithubMirrorConfig(): Promise<GithubMirrorConfig> {
-    return (await this.get()).githubMirror;
   }
 
   /** Convenience accessor used by `NyxLlmClient` on every LLM call. */
@@ -125,21 +99,6 @@ export class PlatformSettingsService {
       toStore.llmProvider = {
         gatewayUrl: partial.llmProvider.gatewayUrl ?? "",
         apiKey: enc,
-      };
-    }
-    if (partial.githubMirror) {
-      const enc = encryptSecret(
-        partial.githubMirror.appPrivateKey ?? "",
-        this.defaults.encryptionKey,
-      );
-      toStore.githubMirror = {
-        enabled: !!partial.githubMirror.enabled,
-        owner: partial.githubMirror.owner ?? "",
-        repo: partial.githubMirror.repo ?? "",
-        branch: partial.githubMirror.branch ?? "",
-        appId: partial.githubMirror.appId ?? "",
-        installationId: partial.githubMirror.installationId ?? "",
-        appPrivateKey: enc,
       };
     }
     await this.repo.patch(toStore);

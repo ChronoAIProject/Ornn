@@ -35,10 +35,6 @@ export function maskSensitiveSettings(settings: PlatformSettings): PlatformSetti
       gatewayUrl: settings.llmProvider.gatewayUrl,
       apiKey: midMaskSecret(settings.llmProvider.apiKey),
     },
-    githubMirror: {
-      ...settings.githubMirror,
-      appPrivateKey: midMaskSecret(settings.githubMirror.appPrivateKey),
-    },
   };
 }
 
