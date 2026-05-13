@@ -23,7 +23,6 @@ const CATEGORY_LABEL: Record<NotificationCategory, string> = {
   "audit.completed": "Audit",
   "audit.risky_for_consumer": "Audit",
   "quota.credits_granted": "Quota",
-  broadcast: "Broadcast",
 };
 
 function formatTimestamp(iso: string): string {
@@ -143,7 +142,11 @@ export function NotificationsPage() {
                       <div className="flex flex-col gap-1">
                         <div className="flex items-center gap-2">
                           <span className="rounded border border-accent/20 px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
-                            {CATEGORY_LABEL[n.category] ?? n.category}
+                            {n.source === "broadcast"
+                              ? t("notifications.broadcast.tag")
+                              : (n.category && CATEGORY_LABEL[n.category]) ??
+                                n.category ??
+                                ""}
                           </span>
                           <span
                             className={`font-text text-sm font-medium leading-snug ${

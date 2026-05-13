@@ -147,7 +147,7 @@ export function BroadcastEditDrawer({
     const input = toInput(form);
     if (isEdit && broadcast) {
       updateMut.mutate(
-        { id: broadcast._id, patch: input },
+        { id: broadcast.id, patch: input },
         {
           onSuccess: () => {
             addToast({

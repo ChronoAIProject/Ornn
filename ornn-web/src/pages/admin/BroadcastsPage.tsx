@@ -91,7 +91,7 @@ export function BroadcastsPage() {
 
   const onConfirmDelete = () => {
     if (!pendingDelete) return;
-    deleteMut.mutate(pendingDelete._id, {
+    deleteMut.mutate(pendingDelete.id, {
       onSuccess: () => {
         addToast({
           type: "success",
@@ -208,7 +208,7 @@ export function BroadcastsPage() {
                     BODY_PREVIEW_MAX,
                   );
                   return (
-                    <tr key={b._id} className="border-t border-subtle">
+                    <tr key={b.id} className="border-t border-subtle">
                       <td className="px-4 py-3 align-top">
                         <button
                           type="button"

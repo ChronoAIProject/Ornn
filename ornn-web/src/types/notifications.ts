@@ -9,15 +9,7 @@
 export type NotificationCategory =
   | "audit.completed"
   | "audit.risky_for_consumer"
-  | "quota.credits_granted"
-  /**
-   * Synthetic category attached server-side to merged broadcast items
-   * so renderers that switch on `category` can still classify them.
-   * Distinct from the `source` discriminator below: `category`
-   * answers "what kind of message is this?", `source` answers
-   * "which collection did it come from?".
-   */
-  | "broadcast";
+  | "quota.credits_granted";
 
 /**
  * Discriminator marking whether this row was lifted out of the
@@ -42,7 +34,11 @@ export interface Notification {
    * they're global). Always present on user items.
    */
   userId?: string;
-  category: NotificationCategory;
+  /**
+   * Present on user-source items, absent on broadcast-source items.
+   * Renderers must guard via `source` before keying off `category`.
+   */
+  category?: NotificationCategory;
   /**
    * Optional on broadcast items (locale-resolved at render time from
    * `titleI18n`). Always present on user items.

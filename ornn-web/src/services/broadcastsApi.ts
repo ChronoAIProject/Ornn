@@ -23,9 +23,16 @@ export interface BilingualText {
 /**
  * Admin row shape — includes `readCount` aggregated over the
  * `broadcast_read_receipts` collection plus mutation audit fields.
+ *
+ * Note the field is `id`, NOT `_id`. The admin DTO and the
+ * notification-feed DTO are deliberately different shapes even
+ * though both project off the same `broadcasts` collection — the
+ * feed keeps the `_id` legacy field for backwards compatibility
+ * with per-user notification rows, while the admin surface gets
+ * the cleaner public `id`.
  */
 export interface AdminBroadcast {
-  _id: string;
+  id: string;
   titleI18n: BilingualText;
   bodyMarkdownI18n: BilingualText;
   createdAt: string;
