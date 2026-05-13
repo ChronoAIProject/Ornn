@@ -466,7 +466,18 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
       "dropLegacyNotificationCategories failed — legacy notification rows may still surface in /notifications until the next deploy",
     ),
   );
-  const notificationService = new NotificationService({ notificationRepo });
+  // `broadcastRepo` is constructed in the broadcasts block below; we
+  // need a reference at NotificationService-build time so the merged
+  // feed (#500) can left-join read receipts. Reordered so broadcasts
+  // build first.
+  const broadcastRepoForNotifications = new BroadcastRepository(db);
+  void broadcastRepoForNotifications.ensureIndexes().catch((err) =>
+    logger.warn({ err }, "broadcasts indexes ensureIndexes failed — proceeding anyway"),
+  );
+  const notificationService = new NotificationService({
+    notificationRepo,
+    broadcastRepo: broadcastRepoForNotifications,
+  });
   const notificationRoutes = createNotificationRoutes({ notificationService });
 
   // ---- Domain: Announcements (landing-page popup, issue #307) ----
@@ -489,11 +500,12 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   const announcementRoutes = createAnnouncementRoutes({ announcementService });
 
   // ---- Domain: Broadcasts (admin-authored, fan-out via notifications, #500) ----
-  const broadcastRepo = new BroadcastRepository(db);
-  void broadcastRepo.ensureIndexes().catch((err) =>
-    logger.warn({ err }, "broadcasts indexes ensureIndexes failed — proceeding anyway"),
-  );
-  const broadcastService = new BroadcastService({ repo: broadcastRepo });
+  // Reuse the same `BroadcastRepository` instance the notifications
+  // service got — both surfaces share state (admin CRUD + per-user
+  // feed merge), and a single instance keeps the wiring legible.
+  const broadcastService = new BroadcastService({
+    repo: broadcastRepoForNotifications,
+  });
   const broadcastRoutes = createBroadcastRoutes({ broadcastService });
 
   // ---- NyxID Orgs Client — built early so the audit fan-out can expand

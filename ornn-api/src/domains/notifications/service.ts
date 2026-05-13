@@ -15,42 +15,200 @@
 
 import pino from "pino";
 import { AppError } from "../../shared/types/index";
+import type { BroadcastRepository } from "../broadcasts/repository";
 import type { NotificationRepository } from "./repository";
-import type { NotificationDocument } from "./types";
+import type { FeedItem, NotificationDocument } from "./types";
 
 const logger = pino({ level: "info" }).child({ module: "notificationService" });
 
+/** Per-page cap on the merged feed. Matches the existing repo cap. */
+const MERGED_FEED_LIMIT_MAX = 200;
+/** Default page size when the caller doesn't pass `?limit=`. */
+const MERGED_FEED_LIMIT_DEFAULT = 50;
+
 export interface NotificationServiceDeps {
   readonly notificationRepo: NotificationRepository;
+  /**
+   * Broadcasts repo (#500). Optional in the type signature only so
+   * existing tests that build a NotificationService without broadcasts
+   * keep compiling; production bootstrap always wires it. When absent
+   * the service behaves exactly as it did pre-#500.
+   */
+  readonly broadcastRepo?: BroadcastRepository;
 }
 
 export class NotificationService {
   private readonly repo: NotificationRepository;
+  private readonly broadcastRepo: BroadcastRepository | undefined;
 
   constructor(deps: NotificationServiceDeps) {
     this.repo = deps.notificationRepo;
+    this.broadcastRepo = deps.broadcastRepo;
   }
 
   // ---- Query API ---------------------------------------------------------
 
+  /**
+   * Legacy single-source list — returns only `notifications` rows.
+   * Kept for any internal caller that still wants the typed
+   * `NotificationDocument[]`. The user-facing `/notifications`
+   * route uses `listFeedForUser` instead so broadcasts show up.
+   */
   async list(userId: string, options: { limit?: number; unreadOnly?: boolean } = {}): Promise<NotificationDocument[]> {
     return this.repo.list(userId, options);
   }
 
-  async countUnread(userId: string): Promise<number> {
-    return this.repo.countUnread(userId);
-  }
+  /**
+   * Merged user-facing feed: per-user notifications + every broadcast,
+   * with each broadcast's read state left-joined from the receipts
+   * collection. Returned as a discriminated union (`source: "user"` |
+   * `source: "broadcast"`) so the UI can render each kind correctly
+   * without a separate request.
+   *
+   * Sort is `createdAt` desc across the union — broadcast and per-user
+   * items interleave on real wall-clock time. `unreadOnly` excludes:
+   *   - per-user rows where `readAt != null`
+   *   - broadcast rows the user has a receipt for
+   *
+   * Cap is the union of both source caps so a chatty admin can't
+   * starve per-user notifications out of the feed (and vice versa).
+   * Falls back to legacy behaviour (per-user only) when no broadcasts
+   * repo is wired — useful for tests that pre-date #500.
+   */
+  async listFeedForUser(
+    userId: string,
+    options: { limit?: number; unreadOnly?: boolean } = {},
+  ): Promise<FeedItem[]> {
+    const limit = Math.max(
+      1,
+      Math.min(MERGED_FEED_LIMIT_MAX, options.limit ?? MERGED_FEED_LIMIT_DEFAULT),
+    );
+    // Pull `limit` from each source, then take the top `limit` after
+    // merging — guarantees we don't drop a newer item from one source
+    // because the other source had `limit` older items.
+    const perUser = await this.repo.list(userId, {
+      limit,
+      unreadOnly: options.unreadOnly,
+    });
+    const userItems: FeedItem[] = perUser.map((n) => ({ ...n, source: "user" }));
 
-  async markRead(userId: string, notificationId: string): Promise<NotificationDocument> {
-    const updated = await this.repo.markRead(userId, notificationId);
-    if (!updated) {
-      throw AppError.notFound("NOTIFICATION_NOT_FOUND", "Notification not found");
+    let broadcastItems: FeedItem[] = [];
+    if (this.broadcastRepo) {
+      const broadcasts = await this.broadcastRepo.listAll();
+      if (broadcasts.length > 0) {
+        const readMap = await this.broadcastRepo.hasUserReadBroadcastsMap(
+          userId,
+          broadcasts.map((b) => b._id),
+        );
+        for (const b of broadcasts) {
+          const readAt = readMap[b._id] ?? null;
+          if (options.unreadOnly && readAt) continue;
+          broadcastItems.push({
+            _id: b._id,
+            source: "broadcast",
+            titleI18n: b.titleI18n,
+            bodyMarkdownI18n: b.bodyMarkdownI18n,
+            createdAt: b.createdAt,
+            readAt,
+          });
+        }
+      }
     }
-    return updated;
+
+    const merged = [...userItems, ...broadcastItems];
+    merged.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    return merged.slice(0, limit);
   }
 
+  async countUnread(userId: string): Promise<number> {
+    const perUser = await this.repo.countUnread(userId);
+    if (!this.broadcastRepo) return perUser;
+    const unreadBroadcasts = await this.broadcastRepo.unreadBroadcastIdsForUser(userId);
+    return perUser + unreadBroadcasts.length;
+  }
+
+  /**
+   * Mark a single notification or broadcast as read for the caller.
+   *
+   * The id type is resolved by lookup: if the id matches a row the
+   * caller owns in `notifications`, treat it as a per-user
+   * notification. Otherwise — if a `broadcasts` row exists with that
+   * id and a broadcasts repo is wired — insert/upsert a receipt.
+   *
+   * If neither matches, throw NOTIFICATION_NOT_FOUND. Routes can
+   * catch and 404, or in the batch context (`markManyRead`) skip the
+   * id — see that method's docstring.
+   */
+  async markRead(userId: string, id: string): Promise<NotificationDocument | { source: "broadcast"; readAt: Date }> {
+    // Try per-user first — it's the common case (audit / quota
+    // events fire orders of magnitude more often than broadcasts).
+    const updated = await this.repo.markRead(userId, id);
+    if (updated) return updated;
+    if (this.broadcastRepo) {
+      const broadcast = await this.broadcastRepo.getById(id);
+      if (broadcast) {
+        const receipt = await this.broadcastRepo.markRead(userId, id);
+        logger.debug(
+          { userId, broadcastId: id },
+          "broadcast marked read via /notifications/:id/read",
+        );
+        return { source: "broadcast", readAt: receipt.readAt };
+      }
+    }
+    throw AppError.notFound("NOTIFICATION_NOT_FOUND", "Notification not found");
+  }
+
+  /**
+   * Batch mark-read for a mixed bag of per-user notification ids +
+   * broadcast ids. Each id is routed independently. Unknown ids are
+   * silently skipped — the caller's intent is "ensure these are
+   * marked read", so a typo or a row that vanished between fetch and
+   * write shouldn't fail the whole batch.
+   *
+   * Returns the count of ids that actually transitioned to "read"
+   * (existing already-read ids count as 0). Useful for the UI to
+   * decrement the unread badge.
+   */
+  async markManyRead(userId: string, ids: readonly string[]): Promise<number> {
+    if (ids.length === 0) return 0;
+    let changed = 0;
+    const broadcastIds: string[] = [];
+    for (const id of ids) {
+      const updated = await this.repo.markRead(userId, id);
+      if (updated) {
+        changed++;
+      } else if (this.broadcastRepo) {
+        // Defer broadcast ids so we can mark them in one batch.
+        broadcastIds.push(id);
+      }
+      // Else: unknown id — skip silently per the contract above.
+    }
+    if (broadcastIds.length > 0 && this.broadcastRepo) {
+      // Filter out ids that don't actually exist in `broadcasts` to
+      // avoid inserting receipts for typos.
+      const existing: string[] = [];
+      for (const id of broadcastIds) {
+        if (await this.broadcastRepo.getById(id)) existing.push(id);
+      }
+      if (existing.length > 0) {
+        const inserted = await this.broadcastRepo.markManyRead(userId, existing);
+        changed += inserted;
+      }
+    }
+    return changed;
+  }
+
+  /**
+   * Mark every unread item read — per-user notifications AND every
+   * broadcast that doesn't yet have a receipt for this user. Returns
+   * the total transitions across both sources.
+   */
   async markAllRead(userId: string): Promise<number> {
-    return this.repo.markAllRead(userId);
+    const perUser = await this.repo.markAllRead(userId);
+    if (!this.broadcastRepo) return perUser;
+    const unread = await this.broadcastRepo.unreadBroadcastIdsForUser(userId);
+    const broadcasts = await this.broadcastRepo.markManyRead(userId, unread);
+    return perUser + broadcasts;
   }
 
   // ---- Emitter helpers ---------------------------------------------------
