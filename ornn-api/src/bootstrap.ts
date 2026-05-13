@@ -110,6 +110,7 @@ import { createPlatformSettingsRoutes } from "./domains/platform/routes";
 import { SettingsRepository } from "./domains/settings/repository";
 import { SettingsServiceImpl } from "./domains/settings/service";
 import { createSettingsRoutes } from "./domains/settings/routes";
+import { migrateLegacyMirrorIntoSettings } from "./domains/settings/sections/mirror.migration";
 import { LlmProvidersRepository } from "./domains/settings/llmProviders/repository";
 import { LlmProvidersService } from "./domains/settings/llmProviders/service";
 import { createLlmProvidersRoutes } from "./domains/settings/llmProviders/routes";
@@ -211,6 +212,21 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
     repo: settingsRepo,
     encryptionKey: config.encryptionKey,
   });
+
+  // One-shot migration: copy any non-default mirror config from the
+  // legacy `platform_settings:{_id:"ornn"}.githubMirror` field into the
+  // new per-section `platform_settings:{_id:"mirror"}` doc. Idempotent;
+  // no-op when the new doc already exists or the legacy field is
+  // absent. Must run BEFORE the first `settingsService.getMirror()`
+  // call (none happen during boot, but be defensive). Failure is
+  // logged + non-fatal — operators can still set mirror config via
+  // the admin UI after boot.
+  await migrateLegacyMirrorIntoSettings(db, logger).catch((err) =>
+    logger.error(
+      { err: err instanceof Error ? err.message : String(err) },
+      "legacy mirror migration failed — admin must re-save mirror config",
+    ),
+  );
 
   // ---- SA Token Provider (shared by proxy-authenticated clients) ----
   // Credentials live in admin Settings → Integrations → NyxID and are
