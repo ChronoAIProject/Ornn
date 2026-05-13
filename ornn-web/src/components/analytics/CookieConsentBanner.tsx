@@ -72,14 +72,6 @@ export function CookieConsentBanner() {
               <Trans
                 i18nKey="cookieConsent.body"
                 components={{
-                  postHogLink: (
-                    <a
-                      href="https://posthog.com/eu"
-                      target="_blank"
-                      rel="noreferrer noopener"
-                      className="text-accent underline-offset-2 hover:underline"
-                    />
-                  ),
                   privacyLink: (
                     <Link
                       to="/legal/privacy"
