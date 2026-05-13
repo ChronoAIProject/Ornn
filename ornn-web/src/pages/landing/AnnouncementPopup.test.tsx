@@ -71,9 +71,12 @@ describe("AnnouncementPopup", () => {
     mockActive.mockReturnValue({
       data: {
         id: "a-1",
-        title: "Ornn 1.2 is live",
-        bodyMarkdown: "**Now with** chained skills.",
-        ctaLabel: "See changelog",
+        titleEn: "Ornn 1.2 is live",
+        titleZh: "",
+        bodyMarkdownEn: "**Now with** chained skills.",
+        bodyMarkdownZh: "",
+        ctaLabelEn: "See changelog",
+        ctaLabelZh: "",
         ctaUrl: "https://ornn.dev/changelog",
       },
     });
@@ -91,9 +94,12 @@ describe("AnnouncementPopup", () => {
     mockActive.mockReturnValue({
       data: {
         id: "a-1",
-        title: "Already-seen news",
-        bodyMarkdown: "Body",
-        ctaLabel: null,
+        titleEn: "Already-seen news",
+        titleZh: "",
+        bodyMarkdownEn: "Body",
+        bodyMarkdownZh: "",
+        ctaLabelEn: null,
+        ctaLabelZh: null,
         ctaUrl: null,
       },
     });
@@ -105,9 +111,12 @@ describe("AnnouncementPopup", () => {
     mockActive.mockReturnValue({
       data: {
         id: "a-2",
-        title: "Hello there",
-        bodyMarkdown: "Body",
-        ctaLabel: null,
+        titleEn: "Hello there",
+        titleZh: "",
+        bodyMarkdownEn: "Body",
+        bodyMarkdownZh: "",
+        ctaLabelEn: null,
+        ctaLabelZh: null,
         ctaUrl: null,
       },
     });

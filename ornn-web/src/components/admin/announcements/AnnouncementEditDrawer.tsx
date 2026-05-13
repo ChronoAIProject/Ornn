@@ -1,9 +1,20 @@
 /**
  * AnnouncementEditDrawer — create or edit a single landing-popup
  * announcement. Right-edge slide-in following the QuotaUserDetailDrawer
- * pattern. Fields: title, markdown body (with live preview), CTA
- * label/URL, enabled toggle, optional [startsAt, endsAt] window
- * (datetime-local inputs, persisted as ISO).
+ * pattern.
+ *
+ * Fields (bilingual where applicable):
+ *   - Title (EN required, ZH optional)
+ *   - Body markdown (EN required, ZH optional) — live preview per locale
+ *   - CTA label (EN optional, ZH optional) + CTA URL (single, locale-independent)
+ *   - Enabled toggle
+ *   - Optional [startsAt, endsAt] window (datetime-local inputs, persisted as ISO)
+ *
+ * Bilingual rules: EN slots are the canonical content. ZH slots are
+ * optional — when empty, the user-facing surfaces (popup + News page)
+ * fall back to the EN slot regardless of the visitor's locale. The
+ * existing "CTA label + URL are both-or-neither" rule applies to the
+ * EN side; ZH label is independent (falls back to EN at render time).
  *
  * @module components/admin/announcements/AnnouncementEditDrawer
  */
@@ -27,9 +38,12 @@ import type {
 import { translateError } from "@/utils/translateError";
 
 interface DrawerForm {
-  title: string;
-  bodyMarkdown: string;
-  ctaLabel: string;
+  titleEn: string;
+  titleZh: string;
+  bodyMarkdownEn: string;
+  bodyMarkdownZh: string;
+  ctaLabelEn: string;
+  ctaLabelZh: string;
   ctaUrl: string;
   enabled: boolean;
   /** Empty string ⇒ unset. `<input type="datetime-local">` value, naive local. */
@@ -39,23 +53,26 @@ interface DrawerForm {
 
 const SCHEMA = z
   .object({
-    title: z.string().trim().min(1, "Title is required").max(200),
-    bodyMarkdown: z.string().trim().min(1, "Body is required").max(20_000),
-    ctaLabel: z.string().trim().max(80),
+    titleEn: z.string().trim().min(1, "Title (EN) is required").max(200),
+    titleZh: z.string().trim().max(200),
+    bodyMarkdownEn: z.string().trim().min(1, "Body (EN) is required").max(20_000),
+    bodyMarkdownZh: z.string().trim().max(20_000),
+    ctaLabelEn: z.string().trim().max(80),
+    ctaLabelZh: z.string().trim().max(80),
     ctaUrl: z.string().trim(),
     enabled: z.boolean(),
     startsAtLocal: z.string(),
     endsAtLocal: z.string(),
   })
   .superRefine((v, ctx) => {
-    // CTA pair must be both-or-neither.
-    const hasLabel = v.ctaLabel.length > 0;
+    // EN CTA pair must be both-or-neither.
+    const hasEnLabel = v.ctaLabelEn.length > 0;
     const hasUrl = v.ctaUrl.length > 0;
-    if (hasLabel !== hasUrl) {
+    if (hasEnLabel !== hasUrl) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        path: [hasUrl ? "ctaLabel" : "ctaUrl"],
-        message: "CTA label and URL must both be set, or both be empty",
+        path: [hasUrl ? "ctaLabelEn" : "ctaUrl"],
+        message: "CTA label (EN) and URL must both be set, or both be empty",
       });
     }
     if (hasUrl) {
@@ -71,6 +88,15 @@ const SCHEMA = z
           message: "CTA URL must be a valid http(s) URL",
         });
       }
+    }
+    // ZH CTA label without an EN label OR URL doesn't render — warn.
+    if (v.ctaLabelZh.length > 0 && !hasEnLabel) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["ctaLabelZh"],
+        message:
+          "CTA label (ZH) is set but EN label is empty — set the EN label too, ZH falls back to EN when empty",
+      });
     }
     // Window order: only validate when both are set.
     if (v.startsAtLocal && v.endsAtLocal) {
@@ -88,9 +114,12 @@ const SCHEMA = z
 
 function emptyForm(): DrawerForm {
   return {
-    title: "",
-    bodyMarkdown: "",
-    ctaLabel: "",
+    titleEn: "",
+    titleZh: "",
+    bodyMarkdownEn: "",
+    bodyMarkdownZh: "",
+    ctaLabelEn: "",
+    ctaLabelZh: "",
     ctaUrl: "",
     enabled: true,
     startsAtLocal: "",
@@ -117,9 +146,12 @@ function localInputValueToIso(value: string): string | null {
 
 function fromAnnouncement(a: AdminAnnouncement): DrawerForm {
   return {
-    title: a.title,
-    bodyMarkdown: a.bodyMarkdown,
-    ctaLabel: a.ctaLabel ?? "",
+    titleEn: a.titleEn,
+    titleZh: a.titleZh,
+    bodyMarkdownEn: a.bodyMarkdownEn,
+    bodyMarkdownZh: a.bodyMarkdownZh,
+    ctaLabelEn: a.ctaLabelEn ?? "",
+    ctaLabelZh: a.ctaLabelZh ?? "",
     ctaUrl: a.ctaUrl ?? "",
     enabled: a.enabled,
     startsAtLocal: isoToLocalInputValue(a.startsAt),
@@ -128,12 +160,16 @@ function fromAnnouncement(a: AdminAnnouncement): DrawerForm {
 }
 
 function toInput(form: DrawerForm): CreateAnnouncementInput {
-  const ctaLabel = form.ctaLabel.trim();
+  const ctaLabelEn = form.ctaLabelEn.trim();
+  const ctaLabelZh = form.ctaLabelZh.trim();
   const ctaUrl = form.ctaUrl.trim();
   return {
-    title: form.title.trim(),
-    bodyMarkdown: form.bodyMarkdown.trim(),
-    ctaLabel: ctaLabel ? ctaLabel : null,
+    titleEn: form.titleEn.trim(),
+    titleZh: form.titleZh.trim(),
+    bodyMarkdownEn: form.bodyMarkdownEn.trim(),
+    bodyMarkdownZh: form.bodyMarkdownZh.trim(),
+    ctaLabelEn: ctaLabelEn ? ctaLabelEn : null,
+    ctaLabelZh: ctaLabelZh ? ctaLabelZh : null,
     ctaUrl: ctaUrl ? ctaUrl : null,
     enabled: form.enabled,
     startsAt: localInputValueToIso(form.startsAtLocal),
@@ -161,13 +197,14 @@ export function AnnouncementEditDrawer({
 
   const [form, setForm] = useState<DrawerForm>(() => emptyForm());
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [showPreview, setShowPreview] = useState(false);
+  /** Which locale's body markdown is in preview mode (null = both in edit). */
+  const [previewLocale, setPreviewLocale] = useState<"en" | "zh" | null>(null);
 
   useEffect(() => {
     if (!isOpen) return;
     setForm(announcement ? fromAnnouncement(announcement) : emptyForm());
     setErrors({});
-    setShowPreview(false);
+    setPreviewLocale(null);
   }, [isOpen, announcement]);
 
   useEffect(() => {
@@ -242,7 +279,7 @@ export function AnnouncementEditDrawer({
             transition={{ type: "spring", stiffness: 240, damping: 28, mass: 0.9 }}
             role="dialog"
             aria-label={isEdit ? "Edit announcement" : "New announcement"}
-            className="card-impression absolute right-0 top-0 flex h-full w-full max-w-[560px] flex-col gap-5 overflow-y-auto border-l border-subtle bg-page p-6 sm:p-8"
+            className="card-impression absolute right-0 top-0 flex h-full w-full max-w-[640px] flex-col gap-5 overflow-y-auto border-l border-subtle bg-page p-6 sm:p-8"
           >
             <header className="flex items-baseline justify-between">
               <div>
@@ -250,7 +287,7 @@ export function AnnouncementEditDrawer({
                   [§ {isEdit ? "EDIT" : "NEW"} — ANNOUNCEMENT]
                 </p>
                 <h2 className="mt-1 font-display text-xl font-semibold tracking-tight text-strong">
-                  {isEdit ? announcement?.title : "New announcement"}
+                  {isEdit ? announcement?.titleEn : "New announcement"}
                 </h2>
               </div>
               <button
@@ -271,82 +308,106 @@ export function AnnouncementEditDrawer({
               </button>
             </header>
 
-            <form onSubmit={onSubmit} className="flex flex-col gap-4">
-              <Input
-                label="Title"
-                value={form.title}
-                onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
-                error={errors.title}
-                maxLength={200}
-              />
+            <form onSubmit={onSubmit} className="flex flex-col gap-5">
+              {/* ── English block (canonical / required) ────────────────── */}
+              <section className="flex flex-col gap-4">
+                <h3 className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-accent">
+                  English (required)
+                </h3>
 
-              <div className="flex flex-col gap-1.5">
-                <div className="flex items-center justify-between">
-                  <label className="font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-meta">
-                    Body (markdown)
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => setShowPreview((v) => !v)}
-                    className="font-mono text-[10px] uppercase tracking-[0.14em] text-meta hover:text-accent"
-                  >
-                    {showPreview ? "Edit" : "Preview"}
-                  </button>
-                </div>
-                {showPreview ? (
-                  <div className="min-h-[180px] rounded-sm border border-subtle bg-elevated/40 px-3 py-2">
-                    {form.bodyMarkdown.trim() ? (
-                      <ReadmeViewer content={form.bodyMarkdown} />
-                    ) : (
-                      <p className="font-text text-sm text-meta">Nothing to preview.</p>
-                    )}
-                  </div>
-                ) : (
-                  <textarea
-                    value={form.bodyMarkdown}
-                    onChange={(e) =>
-                      setForm((f) => ({ ...f, bodyMarkdown: e.target.value }))
-                    }
-                    rows={8}
-                    maxLength={20_000}
-                    className={`
-                      w-full rounded-sm border border-subtle bg-elevated/40 px-3 py-2
-                      font-mono text-sm text-strong placeholder:text-meta/70
-                      transition-colors duration-150
-                      focus:border-accent focus:outline-none focus:bg-card
-                      ${errors.bodyMarkdown ? "border-danger! focus:border-danger!" : ""}
-                    `}
-                  />
-                )}
-                {errors.bodyMarkdown && (
-                  <span className="font-mono text-[11px] text-danger">
-                    {errors.bodyMarkdown}
-                  </span>
-                )}
-              </div>
-
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <Input
-                  label="CTA label (optional)"
-                  value={form.ctaLabel}
+                  label="Title (EN)"
+                  value={form.titleEn}
                   onChange={(e) =>
-                    setForm((f) => ({ ...f, ctaLabel: e.target.value }))
+                    setForm((f) => ({ ...f, titleEn: e.target.value }))
                   }
-                  error={errors.ctaLabel}
+                  error={errors.titleEn}
+                  maxLength={200}
+                />
+
+                <BodyMarkdownField
+                  label="Body — EN (markdown)"
+                  value={form.bodyMarkdownEn}
+                  onChange={(v) =>
+                    setForm((f) => ({ ...f, bodyMarkdownEn: v }))
+                  }
+                  error={errors.bodyMarkdownEn}
+                  preview={previewLocale === "en"}
+                  onTogglePreview={() =>
+                    setPreviewLocale((p) => (p === "en" ? null : "en"))
+                  }
+                />
+
+                <Input
+                  label="CTA label EN (optional)"
+                  value={form.ctaLabelEn}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, ctaLabelEn: e.target.value }))
+                  }
+                  error={errors.ctaLabelEn}
                   placeholder="Read the changelog"
                   maxLength={80}
                 />
+              </section>
+
+              {/* ── Chinese block (optional, falls back to EN) ─────────── */}
+              <section className="flex flex-col gap-4 border-t border-subtle pt-5">
+                <div>
+                  <h3 className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-meta">
+                    中文 (optional)
+                  </h3>
+                  <p className="mt-1 font-text text-[11px] text-meta">
+                    Each empty Chinese field falls back to the English value
+                    above when shown to ZH users. Translate at your own pace.
+                  </p>
+                </div>
+
                 <Input
-                  label="CTA URL (optional)"
-                  value={form.ctaUrl}
+                  label="Title (ZH)"
+                  value={form.titleZh}
                   onChange={(e) =>
-                    setForm((f) => ({ ...f, ctaUrl: e.target.value }))
+                    setForm((f) => ({ ...f, titleZh: e.target.value }))
                   }
-                  error={errors.ctaUrl}
-                  placeholder="https://ornn.dev/changelog"
-                  inputMode="url"
+                  error={errors.titleZh}
+                  maxLength={200}
                 />
-              </div>
+
+                <BodyMarkdownField
+                  label="Body — ZH (markdown)"
+                  value={form.bodyMarkdownZh}
+                  onChange={(v) =>
+                    setForm((f) => ({ ...f, bodyMarkdownZh: v }))
+                  }
+                  error={errors.bodyMarkdownZh}
+                  preview={previewLocale === "zh"}
+                  onTogglePreview={() =>
+                    setPreviewLocale((p) => (p === "zh" ? null : "zh"))
+                  }
+                />
+
+                <Input
+                  label="CTA label ZH (optional)"
+                  value={form.ctaLabelZh}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, ctaLabelZh: e.target.value }))
+                  }
+                  error={errors.ctaLabelZh}
+                  placeholder="阅读更新日志"
+                  maxLength={80}
+                />
+              </section>
+
+              {/* ── Locale-independent CTA URL ─────────────────────────── */}
+              <Input
+                label="CTA URL (optional, shared by both locales)"
+                value={form.ctaUrl}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, ctaUrl: e.target.value }))
+                }
+                error={errors.ctaUrl}
+                placeholder="https://ornn.dev/changelog"
+                inputMode="url"
+              />
 
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="flex flex-col gap-1.5">
@@ -413,5 +474,69 @@ export function AnnouncementEditDrawer({
       )}
     </AnimatePresence>,
     document.body,
+  );
+}
+
+/**
+ * One markdown body field with toggleable preview. Lifted out so the
+ * EN and ZH blocks share the same widget without prop drilling
+ * preview state into the parent component for both locales.
+ */
+function BodyMarkdownField({
+  label,
+  value,
+  onChange,
+  error,
+  preview,
+  onTogglePreview,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  error: string | undefined;
+  preview: boolean;
+  onTogglePreview: () => void;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex items-center justify-between">
+        <label className="font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-meta">
+          {label}
+        </label>
+        <button
+          type="button"
+          onClick={onTogglePreview}
+          className="font-mono text-[10px] uppercase tracking-[0.14em] text-meta hover:text-accent"
+        >
+          {preview ? "Edit" : "Preview"}
+        </button>
+      </div>
+      {preview ? (
+        <div className="min-h-[180px] rounded-sm border border-subtle bg-elevated/40 px-3 py-2">
+          {value.trim() ? (
+            <ReadmeViewer content={value} />
+          ) : (
+            <p className="font-text text-sm text-meta">Nothing to preview.</p>
+          )}
+        </div>
+      ) : (
+        <textarea
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          rows={8}
+          maxLength={20_000}
+          className={`
+            w-full rounded-sm border border-subtle bg-elevated/40 px-3 py-2
+            font-mono text-sm text-strong placeholder:text-meta/70
+            transition-colors duration-150
+            focus:border-accent focus:outline-none focus:bg-card
+            ${error ? "border-danger! focus:border-danger!" : ""}
+          `}
+        />
+      )}
+      {error && (
+        <span className="font-mono text-[11px] text-danger">{error}</span>
+      )}
+    </div>
   );
 }

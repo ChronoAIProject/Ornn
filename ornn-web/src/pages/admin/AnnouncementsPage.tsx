@@ -207,11 +207,16 @@ export function AnnouncementsPage() {
                         onClick={() => openEdit(a)}
                         className="text-left font-display text-base font-semibold text-strong hover:text-accent"
                       >
-                        {a.title}
+                        {a.titleEn}
+                        {a.titleZh && (
+                          <span className="ml-2 font-text text-xs font-normal text-meta">
+                            · {a.titleZh}
+                          </span>
+                        )}
                       </button>
                       {a.ctaUrl && (
                         <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
-                          CTA → {a.ctaLabel || a.ctaUrl}
+                          CTA → {a.ctaLabelEn || a.ctaUrl}
                         </p>
                       )}
                     </td>
@@ -277,7 +282,7 @@ export function AnnouncementsPage() {
         onConfirm={onConfirmDelete}
         title={t("adminPages.announcements.confirm.deleteTitle")}
         description={t("adminPages.announcements.confirm.delete", {
-          title: pendingDelete?.title ?? "",
+          title: pendingDelete?.titleEn ?? "",
         })}
         confirmLabel={t("common.delete")}
         variant="danger"
