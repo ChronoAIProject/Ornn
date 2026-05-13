@@ -7,6 +7,10 @@
  *   - "Active = enabled + within window, newest first."
  *   - "endsAt must be strictly after startsAt when both are set."
  *
+ * Content is bilingual at the storage layer (see `types.ts`); this
+ * service is locale-agnostic — it returns both EN and ZH variants in
+ * every read shape and lets the frontend resolve at render time.
+ *
  * @module domains/announcements/service
  */
 
@@ -126,9 +130,12 @@ export class AnnouncementService {
 function toPublic(doc: AnnouncementDocument): PublicAnnouncement {
   return {
     id: doc._id,
-    title: doc.title,
-    bodyMarkdown: doc.bodyMarkdown,
-    ctaLabel: doc.ctaLabel,
+    titleEn: doc.titleEn,
+    titleZh: doc.titleZh,
+    bodyMarkdownEn: doc.bodyMarkdownEn,
+    bodyMarkdownZh: doc.bodyMarkdownZh,
+    ctaLabelEn: doc.ctaLabelEn,
+    ctaLabelZh: doc.ctaLabelZh,
     ctaUrl: doc.ctaUrl,
   };
 }

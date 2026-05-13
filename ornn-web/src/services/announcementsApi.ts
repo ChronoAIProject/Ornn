@@ -2,6 +2,11 @@
  * Announcement API client — both the public popup endpoint and the
  * admin CRUD endpoints.
  *
+ * Content is **bilingual** (`*En` + `*Zh` per field). Public surfaces
+ * receive both locales; consumers resolve at render time via
+ * `pickLocalized()` in `lib/announcementLocale.ts`. EN is canonical /
+ * required; ZH is optional and falls back to EN whenever empty.
+ *
  * @module services/announcementsApi
  */
 
@@ -9,9 +14,12 @@ import { apiDelete, apiGet, apiPatch, apiPost } from "./apiClient";
 
 export interface PublicAnnouncement {
   id: string;
-  title: string;
-  bodyMarkdown: string;
-  ctaLabel: string | null;
+  titleEn: string;
+  titleZh: string;
+  bodyMarkdownEn: string;
+  bodyMarkdownZh: string;
+  ctaLabelEn: string | null;
+  ctaLabelZh: string | null;
   ctaUrl: string | null;
 }
 
@@ -26,9 +34,12 @@ export interface PublicAnnouncementListItem extends PublicAnnouncement {
 
 export interface AdminAnnouncement {
   id: string;
-  title: string;
-  bodyMarkdown: string;
-  ctaLabel: string | null;
+  titleEn: string;
+  titleZh: string;
+  bodyMarkdownEn: string;
+  bodyMarkdownZh: string;
+  ctaLabelEn: string | null;
+  ctaLabelZh: string | null;
   ctaUrl: string | null;
   enabled: boolean;
   /** ISO 8601 string or null. */
@@ -41,9 +52,15 @@ export interface AdminAnnouncement {
 }
 
 export interface CreateAnnouncementInput {
-  title: string;
-  bodyMarkdown: string;
-  ctaLabel?: string | null;
+  titleEn: string;
+  /** Optional — empty string ⇒ frontend will fall back to `titleEn`. */
+  titleZh: string;
+  bodyMarkdownEn: string;
+  /** Optional — empty string ⇒ frontend will fall back to `bodyMarkdownEn`. */
+  bodyMarkdownZh: string;
+  ctaLabelEn?: string | null;
+  /** Optional — null/empty ⇒ frontend will fall back to `ctaLabelEn`. */
+  ctaLabelZh?: string | null;
   ctaUrl?: string | null;
   enabled: boolean;
   startsAt?: string | null;

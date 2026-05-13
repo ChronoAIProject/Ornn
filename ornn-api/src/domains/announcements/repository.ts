@@ -14,6 +14,15 @@
  *
  * Writes are admin-driven CRUD. No fan-out, no batch jobs.
  *
+ * Content is **bilingual** — title, body, and CTA label are stored
+ * per-locale (`titleEn` / `titleZh` etc.). The shape on the read path
+ * is symmetric; consumers (popup + News page) resolve the active
+ * locale at render time. EN is the canonical / required content; ZH
+ * is optional. A boot migration (see `migration.ts`) backfills the
+ * per-locale fields from legacy single-locale `title` / `bodyMarkdown`
+ * / `ctaLabel` columns; this repo's mapper is tolerant of either
+ * shape during the rollout window.
+ *
  * @module domains/announcements/repository
  */
 
@@ -25,9 +34,12 @@ import type { AnnouncementDocument } from "./types";
 const logger = pino({ level: "info" }).child({ module: "announcementRepository" });
 
 export interface CreateAnnouncementInput {
-  title: string;
-  bodyMarkdown: string;
-  ctaLabel?: string | null;
+  titleEn: string;
+  titleZh: string;
+  bodyMarkdownEn: string;
+  bodyMarkdownZh: string;
+  ctaLabelEn?: string | null;
+  ctaLabelZh?: string | null;
   ctaUrl?: string | null;
   enabled: boolean;
   startsAt?: Date | null;
@@ -36,9 +48,12 @@ export interface CreateAnnouncementInput {
 }
 
 export interface UpdateAnnouncementInput {
-  title?: string;
-  bodyMarkdown?: string;
-  ctaLabel?: string | null;
+  titleEn?: string;
+  titleZh?: string;
+  bodyMarkdownEn?: string;
+  bodyMarkdownZh?: string;
+  ctaLabelEn?: string | null;
+  ctaLabelZh?: string | null;
   ctaUrl?: string | null;
   enabled?: boolean;
   startsAt?: Date | null;
@@ -67,9 +82,12 @@ export class AnnouncementRepository {
     const now = new Date();
     const doc: Document = {
       _id: randomUUID() as unknown as Document["_id"],
-      title: input.title,
-      bodyMarkdown: input.bodyMarkdown,
-      ctaLabel: input.ctaLabel ?? null,
+      titleEn: input.titleEn,
+      titleZh: input.titleZh,
+      bodyMarkdownEn: input.bodyMarkdownEn,
+      bodyMarkdownZh: input.bodyMarkdownZh,
+      ctaLabelEn: input.ctaLabelEn ?? null,
+      ctaLabelZh: input.ctaLabelZh ?? null,
       ctaUrl: input.ctaUrl ?? null,
       enabled: input.enabled,
       startsAt: input.startsAt ?? null,
@@ -126,9 +144,12 @@ export class AnnouncementRepository {
 
   async update(id: string, patch: UpdateAnnouncementInput): Promise<AnnouncementDocument | null> {
     const $set: Record<string, unknown> = { updatedAt: new Date() };
-    if (patch.title !== undefined) $set.title = patch.title;
-    if (patch.bodyMarkdown !== undefined) $set.bodyMarkdown = patch.bodyMarkdown;
-    if (patch.ctaLabel !== undefined) $set.ctaLabel = patch.ctaLabel;
+    if (patch.titleEn !== undefined) $set.titleEn = patch.titleEn;
+    if (patch.titleZh !== undefined) $set.titleZh = patch.titleZh;
+    if (patch.bodyMarkdownEn !== undefined) $set.bodyMarkdownEn = patch.bodyMarkdownEn;
+    if (patch.bodyMarkdownZh !== undefined) $set.bodyMarkdownZh = patch.bodyMarkdownZh;
+    if (patch.ctaLabelEn !== undefined) $set.ctaLabelEn = patch.ctaLabelEn;
+    if (patch.ctaLabelZh !== undefined) $set.ctaLabelZh = patch.ctaLabelZh;
     if (patch.ctaUrl !== undefined) $set.ctaUrl = patch.ctaUrl;
     if (patch.enabled !== undefined) $set.enabled = patch.enabled;
     if (patch.startsAt !== undefined) $set.startsAt = patch.startsAt;
@@ -143,13 +164,39 @@ export class AnnouncementRepository {
   }
 }
 
+/**
+ * Map a Mongo doc into the typed shape. Tolerant of legacy single-
+ * locale fields (`title` / `bodyMarkdown` / `ctaLabel`): when the
+ * per-locale columns are missing, falls back to the legacy value as
+ * a temporary safety net. The boot migration owns the real backfill;
+ * this fallback is just so reads keep working between deploy of the
+ * new code and the migration's first pass.
+ */
 function mapDoc(doc: Document | null): AnnouncementDocument | null {
   if (!doc) return null;
+  const legacyTitle = typeof doc.title === "string" ? doc.title : "";
+  const legacyBody = typeof doc.bodyMarkdown === "string" ? doc.bodyMarkdown : "";
+  const legacyCta = doc.ctaLabel == null ? null : String(doc.ctaLabel);
   return {
     _id: String(doc._id),
-    title: String(doc.title ?? ""),
-    bodyMarkdown: String(doc.bodyMarkdown ?? ""),
-    ctaLabel: doc.ctaLabel == null ? null : String(doc.ctaLabel),
+    titleEn: typeof doc.titleEn === "string" ? doc.titleEn : legacyTitle,
+    titleZh: typeof doc.titleZh === "string" ? doc.titleZh : legacyTitle,
+    bodyMarkdownEn:
+      typeof doc.bodyMarkdownEn === "string" ? doc.bodyMarkdownEn : legacyBody,
+    bodyMarkdownZh:
+      typeof doc.bodyMarkdownZh === "string" ? doc.bodyMarkdownZh : legacyBody,
+    ctaLabelEn:
+      doc.ctaLabelEn === null
+        ? null
+        : typeof doc.ctaLabelEn === "string"
+          ? doc.ctaLabelEn
+          : legacyCta,
+    ctaLabelZh:
+      doc.ctaLabelZh === null
+        ? null
+        : typeof doc.ctaLabelZh === "string"
+          ? doc.ctaLabelZh
+          : legacyCta,
     ctaUrl: doc.ctaUrl == null ? null : String(doc.ctaUrl),
     enabled: Boolean(doc.enabled),
     startsAt: toNullableDate(doc.startsAt),

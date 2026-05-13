@@ -30,6 +30,10 @@ import { PageTransition } from "@/components/layout/PageTransition";
 import { HighlighterMark } from "@/pages/landing/HighlighterMark";
 import { usePublicAnnouncements } from "@/hooks/useAnnouncements";
 import type { PublicAnnouncementListItem } from "@/services/announcementsApi";
+import {
+  pickLocalized,
+  pickLocalizedCtaLabel,
+} from "@/lib/announcementLocale";
 
 function formatPublishedAt(iso: string, locale: string): string {
   const date = new Date(iso);
@@ -64,6 +68,20 @@ function NewsEntry({ item, locale }: NewsEntryProps) {
     ? /^https?:\/\//i.test(item.ctaUrl)
     : false;
   const headingId = `news-entry-${item.id}-title`;
+  // Resolve bilingual content against the active locale. ZH falls back
+  // to EN whenever its slot is empty so half-translated records still
+  // render cleanly for ZH visitors.
+  const displayTitle = pickLocalized(item.titleEn, item.titleZh, locale);
+  const displayBody = pickLocalized(
+    item.bodyMarkdownEn,
+    item.bodyMarkdownZh,
+    locale,
+  );
+  const displayCtaLabel = pickLocalizedCtaLabel(
+    item.ctaLabelEn,
+    item.ctaLabelZh,
+    locale,
+  );
 
   return (
     <article
@@ -82,17 +100,17 @@ function NewsEntry({ item, locale }: NewsEntryProps) {
           id={headingId}
           className="font-display text-[24px] font-bold leading-[1.08] tracking-tight text-strong sm:text-[28px]"
         >
-          {item.title}
+          {displayTitle}
         </h2>
       </header>
 
       <div className="markdown-body text-[15px] leading-[1.65] text-body">
         <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeSanitize]}>
-          {item.bodyMarkdown}
+          {displayBody}
         </ReactMarkdown>
       </div>
 
-      {item.ctaUrl && item.ctaLabel && (
+      {item.ctaUrl && displayCtaLabel && (
         <div>
           <a
             href={item.ctaUrl}
@@ -100,7 +118,7 @@ function NewsEntry({ item, locale }: NewsEntryProps) {
             rel={isExternalCta ? "noopener noreferrer" : undefined}
             className="cta-letterpress cta-letterpress--ghost inline-flex items-center gap-2 rounded-sm border border-strong-edge bg-card px-4 py-2 font-mono text-[11px] font-semibold uppercase tracking-[0.16em] text-strong no-underline hover:border-accent hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           >
-            {item.ctaLabel}
+            {displayCtaLabel}
             {isExternalCta && (
               <svg
                 aria-hidden

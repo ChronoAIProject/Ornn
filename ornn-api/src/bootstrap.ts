@@ -67,6 +67,7 @@ import { dropLegacyNotificationCategories } from "./domains/notifications/migrat
 import { AnnouncementRepository } from "./domains/announcements/repository";
 import { AnnouncementService } from "./domains/announcements/service";
 import { createAnnouncementRoutes } from "./domains/announcements/routes";
+import { migrateAnnouncementsToBilingual } from "./domains/announcements/migration";
 
 // Domain: Analytics
 import { AnalyticsRepository } from "./domains/analytics/repository";
@@ -467,6 +468,17 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   const announcementRepo = new AnnouncementRepository(db);
   void announcementRepo.ensureIndexes().catch((err) =>
     logger.warn({ err }, "announcements indexes ensureIndexes failed — proceeding anyway"),
+  );
+  // One-shot bilingual backfill: copies legacy single-locale columns
+  // (title / bodyMarkdown / ctaLabel) into the new per-locale slots
+  // (`*En` + `*Zh`) on existing docs. Idempotent — second boot is a
+  // no-op. Failure is logged + non-fatal; the repo's mapper falls
+  // back to legacy fields if the migration hasn't run yet.
+  await migrateAnnouncementsToBilingual(db, logger).catch((err) =>
+    logger.error(
+      { err: err instanceof Error ? err.message : String(err) },
+      "announcements bilingual migration crashed — repo fallback will cover reads, retry on next boot",
+    ),
   );
   const announcementService = new AnnouncementService({ repo: announcementRepo });
   const announcementRoutes = createAnnouncementRoutes({ announcementService });
