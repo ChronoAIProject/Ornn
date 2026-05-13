@@ -149,7 +149,7 @@ function CategoryRow({
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      className="group flex items-start gap-3 rounded-sm border border-subtle bg-card px-4 py-3 no-underline transition-colors duration-200 hover:border-accent focus-visible:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+      className="group flex h-full items-start gap-3 rounded-sm border border-subtle bg-card px-4 py-3 no-underline transition-colors duration-200 hover:border-accent focus-visible:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
     >
       <span className="mt-0.5 text-base leading-none" aria-hidden="true">
         {emoji}
