@@ -85,6 +85,12 @@ export interface MirrorSection extends SectionMeta {
   installationId: string;
   /** Mid-masked on GET; sentinel-or-plaintext on PUT. */
   appPrivateKey: string;
+  /**
+   * Cron expression for the in-process mirror reconcile scheduler.
+   * Empty string = disabled. Interpreted in `Asia/Singapore` server-side.
+   * Default: `"0 2 * * *"` (daily 2am SGT).
+   */
+  reconcileSchedule: string;
 }
 
 export interface NyxIdSection extends SectionMeta {

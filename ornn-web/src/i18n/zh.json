@@ -1038,7 +1038,7 @@
     "sections": {
       "mirror": {
         "title": "GitHub 镜像",
-        "description": "仓库坐标 + GitHub App 凭据。运行控制位于旧版镜像看板。",
+        "description": "仓库坐标 + GitHub App 凭据 + 定时同步节奏。运行控制位于旧版镜像看板。",
         "savedToast": "镜像配置已保存",
         "label": {
           "enabled": "启用镜像",
@@ -1047,7 +1047,24 @@
           "branch": "分支",
           "appId": "App ID",
           "installationId": "Installation ID",
-          "privateKey": "App 私钥 (PEM)"
+          "privateKey": "App 私钥 (PEM)",
+          "schedule": "同步计划"
+        },
+        "schedule": {
+          "preset": {
+            "disabled": "禁用",
+            "daily2am": "每日 02:00",
+            "every6h": "每 6 小时",
+            "every12h": "每 12 小时",
+            "hourly": "每小时",
+            "custom": "自定义 (cron 表达式)…"
+          },
+          "tzNote": "计划以新加坡时间 (UTC+8，无夏令时) 解析。",
+          "disabledHint": "定时同步已暂停。发布时的 webhook 仍会触发。",
+          "customHint": "5 位 cron 表达式 (分 时 日 月 周)。",
+          "invalidHint": "无效的 cron 表达式。",
+          "nextRun": "下次运行：{{at}}",
+          "nextRunUnavailable": "下次运行：—"
         },
         "openDashboard": "打开镜像看板 →"
       },
