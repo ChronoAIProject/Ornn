@@ -49,7 +49,10 @@
     "myProfile": "个人资料",
     "myOrgs": "我的组织",
     "myServices": "我的服务",
-    "adminServices": "平台服务"
+    "adminServices": "平台服务",
+    "admin": {
+      "broadcasts": "广播通知"
+    }
   },
   "breadcrumb": {
     "ornn": "ornn",
@@ -329,7 +332,10 @@
     "markAllRead": "全部标记为已读",
     "showUnreadOnly": "只看未读",
     "showAll": "全部显示",
-    "viewAll": "查看全部"
+    "viewAll": "查看全部",
+    "broadcast": {
+      "tag": "广播"
+    }
   },
   "permissions": {
     "title": "权限",
@@ -950,6 +956,65 @@
         "deleted": "公告已删除",
         "updateFailed": "更新失败",
         "deleteFailed": "删除失败"
+      }
+    },
+    "broadcasts": {
+      "eyebrow": "[§ 管理 — 广播通知]",
+      "title": "广播通知",
+      "description": "每条广播都会即时出现在每位已登录用户的通知收件箱中。没有排期窗口——发布即上线，删除即下线。中英文均为必填项，以便每位用户都能用自己的语言阅读。",
+      "action": {
+        "new": "新建广播"
+      },
+      "table": {
+        "title": "标题",
+        "preview": "正文摘要",
+        "created": "创建时间",
+        "updated": "更新时间",
+        "readCount": "已读人数",
+        "actions": "操作"
+      },
+      "empty": {
+        "title": "暂无广播",
+        "hint": "创建第一条广播后，所有用户在下次刷新通知铃时即可看到。"
+      },
+      "confirm": {
+        "deleteTitle": "删除广播？",
+        "delete": "\"{{title}}\" 将从所有用户的收件箱中移除，并清除对应的已读记录。"
+      },
+      "toast": {
+        "created": "广播已创建",
+        "updated": "广播已更新",
+        "deleted": "广播已删除",
+        "createFailed": "创建失败",
+        "updateFailed": "更新失败",
+        "deleteFailed": "删除失败"
+      },
+      "drawer": {
+        "eyebrowNew": "[§ 新建 — 广播]",
+        "eyebrowEdit": "[§ 编辑 — 广播]",
+        "newTitle": "新建广播",
+        "newAria": "新建广播",
+        "editAria": "编辑广播",
+        "englishHeading": "English (required)",
+        "chineseHeading": "中文（必填）",
+        "titleEnLabel": "标题 (EN)",
+        "titleZhLabel": "标题（中文）",
+        "titleEnPlaceholder": "简短、易扫读。会展示在通知铃中。",
+        "titleZhPlaceholder": "简短、易扫读。会展示在通知铃中。",
+        "bodyEnLabel": "正文 — EN (markdown)",
+        "bodyZhLabel": "正文 — 中文（Markdown）",
+        "bodyEnPlaceholder": "支持 Markdown。建议控制在一屏内 —— 此内容会直接渲染在通知铃中。",
+        "bodyZhPlaceholder": "支持 Markdown。建议控制在一屏内 —— 此内容会直接渲染在通知铃中。",
+        "createBtn": "创建广播",
+        "saveBtn": "保存修改"
+      },
+      "errors": {
+        "titleEnRequired": "英文标题为必填项",
+        "titleZhRequired": "中文标题为必填项",
+        "bodyEnRequired": "英文正文为必填项",
+        "bodyZhRequired": "中文正文为必填项",
+        "titleTooLong": "标题过长",
+        "bodyTooLong": "正文过长"
       }
     },
     "skills": {
