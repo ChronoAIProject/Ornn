@@ -1,0 +1,5 @@
+---
+"ornn-web": patch
+---
+
+LaunchCelebrationPopup — molten edge flow on offer tiles + caption consistency fix (#526). The two "200 credits" tiles (Playground + Skill Generation) were flat matte rectangles and the eye drifted past them, even though they're the whole reason to read the popup. Added a "molten edge flow" effect: a single bright ember-to-gold comet travels around each tile's perimeter over 5s (staggered by 50% across the two tiles so they read as independent objects), with a soft outer ember halo so the tile radiates heat at rest. Pure CSS via `@property --offer-angle` + conic-gradient + mask-composite; no JS, no Framer Motion. Reduced-motion safe — rotation suppressed, ring falls back to a static diagonal molten gradient. Also fixed a caption inconsistency: both tiles spend the same conversation-credit pool but `credit2Caption` was labeled `"Drafts"` / `"创建额度"` while `credit1Caption` was `"Conversations"` / `"对话额度"`, which read as two different credit types. Aligned `credit2Caption` to match.

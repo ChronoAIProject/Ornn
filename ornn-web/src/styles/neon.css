@@ -325,6 +325,87 @@ html {
   100% { transform: translateX(-50%); }
 }
 
+/* Offer-tile molten edge flow — used by LaunchCelebrationPopup's
+   "200 credit" tiles to draw the eye to the benefit at first glance.
+   One bright ember-to-gold "comet" travels around each tile's perimeter
+   over 5s, with a soft outer ember halo so the tile reads as radiating
+   heat (not just framed). The brightest peak is in molten gold
+   (--color-accent-support) with ember (--color-accent) trailing on
+   either side, fading to transparent across the back half of the
+   perimeter — only one half glows at any moment, which keeps the
+   effect premium-feeling rather than gaudy.
+
+   Implementation: an `::before` pseudo-element holds a conic-gradient
+   whose `from` angle is a custom property; the `@property` declaration
+   registers --offer-angle as <angle> so it can animate smoothly. A
+   composite mask (xor / exclude) carves out the interior so only the
+   1.5px perimeter ring shows. The two tiles stagger by 50% of the
+   cycle via inline `animation-delay: -2.5s` on the second tile so
+   they read as independent objects.
+
+   Reduced-motion safe: the rotation is suppressed and the ring falls
+   back to a static diagonal molten gradient. The halo box-shadow
+   stays in both modes (it's not motion). */
+@property --offer-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+@keyframes offer-tile-rotate {
+  to { --offer-angle: 360deg; }
+}
+
+.offer-tile-glow {
+  position: relative;
+  border-radius: 2px;
+  /* Soft outer ember halo — suggests heat radiating from the tile
+     even before the eye tracks the rotating ring. Layered: short
+     bright inner halo + longer diffuse outer glow. */
+  box-shadow:
+    0 0 4px -1px rgba(232, 179, 65, 0.28),
+    0 0 28px -8px rgba(255, 115, 34, 0.42);
+}
+
+.offer-tile-glow::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: 3px;
+  padding: 1.5px;
+  background: conic-gradient(
+    from var(--offer-angle),
+    transparent 0deg,
+    rgba(255, 115, 34, 0.35) 25deg,
+    var(--color-accent) 55deg,
+    var(--color-accent-support) 85deg,
+    var(--color-accent) 115deg,
+    rgba(255, 115, 34, 0.35) 145deg,
+    transparent 180deg,
+    transparent 360deg
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+          mask-composite: exclude;
+  pointer-events: none;
+  animation: offer-tile-rotate 5s linear infinite;
+  animation-delay: var(--offer-tile-anim-delay, 0s);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .offer-tile-glow::before {
+    animation: none;
+    background: linear-gradient(
+      135deg,
+      var(--color-accent) 0%,
+      var(--color-accent-support) 50%,
+      var(--color-accent-muted) 100%
+    );
+  }
+}
+
 /* Background grid pattern — restrained dot grid in ember tone. */
 .bg-grid {
   background-image: radial-gradient(

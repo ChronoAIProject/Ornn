@@ -193,6 +193,7 @@ export function LaunchCelebrationPopup() {
                 count={t("landing.launchPopup.credit2Number")}
                 label={t("landing.launchPopup.credit2Title")}
                 caption={t("landing.launchPopup.credit2Caption")}
+                animationOffsetSeconds={-2.5}
               />
             </div>
 
@@ -369,23 +370,43 @@ function OfferTile({
   count,
   label,
   caption,
+  animationOffsetSeconds,
 }: {
   count: string;
   label: string;
   caption: string;
+  /**
+   * Negative-valued seconds passed as `animation-delay` on the glow
+   * pseudo-element. Stagger the two tiles by ~50% of the 5s cycle
+   * (-2.5s on the second tile) so the molten "comets" travel out of
+   * phase — feels like two independent objects, not CSS clones. The
+   * delay only takes effect on the `::before`, which we can't target
+   * directly inline; we expose it as a CSS custom property and have
+   * the stylesheet pick it up. CSS reference: see `.offer-tile-glow`
+   * in styles/neon.css.
+   */
+  animationOffsetSeconds?: number;
 }) {
+  const styleVars =
+    animationOffsetSeconds !== undefined
+      ? ({
+          ["--offer-tile-anim-delay" as never]: `${animationOffsetSeconds}s`,
+        } as React.CSSProperties)
+      : undefined;
   return (
-    <div className="rounded-[2px] border border-subtle bg-elevated p-4 sm:p-5">
-      <p className="font-display text-[42px] sm:text-[48px] font-bold leading-none tracking-[-0.02em] text-accent">
-        {count}
-      </p>
-      <div className="mt-3 h-px w-8 bg-accent-muted" aria-hidden />
-      <p className="mt-3 font-mono text-[12px] font-semibold uppercase tracking-[0.16em] text-strong">
-        {label}
-      </p>
-      <p className="mt-1 font-mono text-[11px] uppercase tracking-[0.12em] text-meta">
-        {caption}
-      </p>
+    <div className="offer-tile-glow" style={styleVars}>
+      <div className="rounded-[2px] border border-subtle bg-elevated p-4 sm:p-5">
+        <p className="font-display text-[42px] sm:text-[48px] font-bold leading-none tracking-[-0.02em] text-accent">
+          {count}
+        </p>
+        <div className="mt-3 h-px w-8 bg-accent-muted" aria-hidden />
+        <p className="mt-3 font-mono text-[12px] font-semibold uppercase tracking-[0.16em] text-strong">
+          {label}
+        </p>
+        <p className="mt-1 font-mono text-[11px] uppercase tracking-[0.12em] text-meta">
+          {caption}
+        </p>
+      </div>
     </div>
   );
 }
