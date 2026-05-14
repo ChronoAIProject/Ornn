@@ -328,14 +328,14 @@ export function PlaygroundPage() {
   // which renders CJK upside-down.
   const railTabs: Array<{
     key: DrawerKey;
-    label: string;
+    ariaLabel: string;
     tip: string;
     Icon: ComponentType<IconProps>;
     warn?: boolean;
   }> = [
     {
       key: "skill",
-      label: t("playground.tabSkill", "Skill"),
+      ariaLabel: t("aria.playgroundSkillDrawer"),
       tip: "SKILL",
       Icon: SkillIcon,
     },
@@ -343,7 +343,7 @@ export function PlaygroundPage() {
       ? [
           {
             key: "env" as const,
-            label: t("playground.tabEnv", "Env"),
+            ariaLabel: t("aria.playgroundEnvDrawer"),
             tip: "ENV",
             Icon: EnvIcon,
             warn: envIncomplete,
@@ -352,7 +352,7 @@ export function PlaygroundPage() {
       : []),
     {
       key: "package",
-      label: t("playground.tabPackage", "Package"),
+      ariaLabel: t("aria.skillPackageDrawer"),
       tip: "PACKAGE",
       Icon: PackageIcon,
     },
@@ -566,7 +566,7 @@ export function PlaygroundPage() {
                     ? "border-accent/60 bg-card text-accent"
                     : "border-subtle bg-card/80 text-meta hover:border-accent/40 hover:text-strong"
                 }`}
-                aria-label={`${tab.label} drawer`}
+                aria-label={tab.ariaLabel}
               >
                 <Icon className="h-4 w-4" />
 

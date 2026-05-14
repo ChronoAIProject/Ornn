@@ -933,6 +933,8 @@
     "dismissAnnouncement": "关闭公告",
     "legal": "法律信息",
     "productOverview": "{{brand}} 产品概览",
+    "playgroundSkillDrawer": "技能抽屉",
+    "playgroundEnvDrawer": "环境变量抽屉",
     "skillPackageDrawer": "技能包抽屉",
     "skillPackagePreview": "技能包预览",
     "generating": "生成中",
