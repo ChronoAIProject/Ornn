@@ -2,23 +2,34 @@
  * LaunchCelebrationPopup — hardcoded launch-day modal on the landing
  * page (`/`). Independent of the dynamic announcements collection: the
  * content is baked into the frontend bundle so the public-launch notice
- * cannot be edited away or expire from the admin panel.
+ * cannot be edited away, expire from the admin panel, or depend on
+ * `/announcements/active` uptime during launch traffic.
  *
  * Behavior:
  *   - Opens on every mount of LandingPage (anonymous + signed-in).
- *   - Closing only sets local state — no localStorage write. If the
- *     user navigates away and returns to `/`, the popup shows again.
- *     This is intentional for the launch window; remove the component
- *     from LandingPage when the offer ends.
+ *   - Closing only sets local state — no localStorage write. Navigating
+ *     away and back to `/` reopens the popup. Intentional for the
+ *     launch window; remove the component from LandingPage when the
+ *     offer ends.
  *
- * Surface flips AnnouncementPopup's ember plate to an obsidian panel
- * with parchment ink + ember accents. Same Industrial-Forge vocabulary
- * (Space Grotesk display title, JetBrains Mono bracketed micro-label,
- * welded-seam divider, hard-offset letterpress shadow, press-down CTA),
- * but every body string sits at near-maximum contrast against the
- * surface so the launch notice — especially the GitHub link — reads
- * clearly. AnnouncementPopup keeps the ember plate; this popup is the
- * one-off "big notice" surface.
+ * Visual structure:
+ *   1. Bracketed mono eyebrow + ISO date (publication-cite signal).
+ *   2. Space Grotesk display title (the celebration sentence).
+ *   3. Welded-seam divider with rivet dots in ember.
+ *   4. Two-up offer tiles — "200" numerals as the visual anchor, mono
+ *      uppercase labels, model-name meta caption.
+ *   5. Numbered redemption steps (01 / 02) with ember-mono numerals.
+ *   6. Click-to-copy NyxID invite code chip in molten gold mono.
+ *   7. Limited-slots warning row.
+ *   8. Right-aligned CTAs — ghost Dismiss + primary STAR ON GITHUB,
+ *      both letterpress press-down via `.cta-letterpress`.
+ *
+ * Surface uses semantic theme-aware tokens throughout (`bg-card`,
+ * `text-strong`, `border-accent`, etc.) so dark + light themes both
+ * read with full contrast. The card sits on a hard-offset letterpress
+ * plate in `ember-deep` (DESIGN.md card-shadow color). All press-down
+ * behavior is centralized via the `.cta-letterpress` utility so the
+ * popup carries the same hover semantics as the rest of the landing.
  *
  * @module pages/landing/LaunchCelebrationPopup
  */
@@ -29,11 +40,14 @@ import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 
 const GITHUB_URL = "https://github.com/ChronoAIProject/Ornn";
+const GITHUB_LINK_LABEL = "github.com/ChronoAIProject/Ornn";
 const INVITE_CODE = "NYX-2XXJI08A";
+const COPY_FEEDBACK_MS = 1800;
 
 export function LaunchCelebrationPopup() {
   const { t } = useTranslation();
   const [open, setOpen] = useState(true);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -46,6 +60,17 @@ export function LaunchCelebrationPopup() {
 
   const close = () => setOpen(false);
 
+  const copyInvite = async () => {
+    try {
+      await navigator.clipboard.writeText(INVITE_CODE);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), COPY_FEEDBACK_MS);
+    } catch {
+      // Older Safari / non-secure context — silently no-op. Code is
+      // already visible inline; copy is a convenience, not the contract.
+    }
+  };
+
   return createPortal(
     <AnimatePresence>
       {open && (
@@ -55,38 +80,39 @@ export function LaunchCelebrationPopup() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.18 }}
-            className="absolute inset-0 bg-black/75 backdrop-blur-[2px]"
+            className="absolute inset-0 bg-black/70 backdrop-blur-[2px]"
             onClick={close}
           />
           <motion.div
-            initial={{ opacity: 0, y: 12, scale: 0.97 }}
+            initial={{ opacity: 0, y: 14, scale: 0.97 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 12, scale: 0.97 }}
+            exit={{ opacity: 0, y: 14, scale: 0.97 }}
             transition={{ type: "spring", stiffness: 220, damping: 22, mass: 0.9 }}
             role="dialog"
             aria-modal="true"
             aria-labelledby="launch-popup-title"
             className="
-              relative z-10 mx-4 w-full max-w-2xl max-h-[85vh] overflow-y-auto
-              rounded-[3px] border-2 border-[var(--color-ember)]
-              bg-[var(--color-panel)]
-              p-7 sm:p-9
+              relative z-10 mx-4 w-full max-w-2xl max-h-[88vh] overflow-y-auto
+              rounded-[3px] border-2 border-accent bg-card
+              p-6 sm:p-9
             "
           >
-            {/* Hard-offset letterpress shadow plate in ember-deep. */}
+            {/* Hard-offset letterpress plate in ember-deep (DESIGN.md
+                Material & Print vocabulary — card-shadow impression
+                color, theme-aware). Solid color, not a soft shadow. */}
             <div
               aria-hidden
-              className="pointer-events-none absolute inset-0 -z-10 translate-x-[6px] translate-y-[6px] rounded-[3px] bg-[var(--color-ember-deep)]"
+              className="pointer-events-none absolute inset-0 -z-10 translate-x-[6px] translate-y-[6px] rounded-[3px] bg-ember-deep"
             />
 
-            {/* Eyebrow row: bracketed mono micro-label in ember + date in
-                ash, then the close affordance. */}
-            <div className="mb-4 flex items-start justify-between gap-3">
+            {/* Header row — bracketed mono section-cite + date stacked
+                top-left, close affordance top-right. */}
+            <div className="flex items-start justify-between gap-3">
               <div className="flex flex-col gap-1">
-                <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.22em] text-[var(--color-ember)]">
+                <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.22em] text-accent">
                   {t("landing.launchPopup.eyebrow")}
                 </p>
-                <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-[var(--color-ash)]">
+                <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-meta">
                   {t("landing.launchPopup.date")}
                 </p>
               </div>
@@ -96,10 +122,9 @@ export function LaunchCelebrationPopup() {
                 aria-label={t("landing.launchPopup.dismissAria")}
                 className="
                   -mr-2 -mt-1 inline-flex h-8 w-8 items-center justify-center rounded-[2px]
-                  text-[var(--color-bone)]
-                  transition-colors duration-150
-                  hover:bg-[rgba(241,236,222,0.08)] hover:text-[var(--color-parchment)]
-                  focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ember)]
+                  text-meta transition-colors duration-150
+                  hover:bg-elevated hover:text-strong
+                  focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent
                 "
               >
                 <svg
@@ -114,94 +139,145 @@ export function LaunchCelebrationPopup() {
               </button>
             </div>
 
+            {/* Title — the celebration sentence. Space Grotesk Bold,
+                anchored to text-strong so it reads near-maximum contrast
+                in both themes. */}
             <h2
               id="launch-popup-title"
               className="
-                font-display font-bold
-                text-[var(--color-parchment)]
-                text-[24px] sm:text-[28px] leading-[1.18] tracking-[-0.015em]
+                mt-5 font-display font-bold text-strong
+                text-[22px] sm:text-[26px] leading-[1.22] tracking-[-0.015em]
               "
             >
               {t("landing.launchPopup.title")}
             </h2>
 
-            {/* Welded-seam divider. Hairline in bone-soft, rivet pair in
-                ember so it reads as a forged seam against the dark panel. */}
-            <div className="relative mt-5 mb-5 h-px w-full bg-[rgba(201,191,173,0.22)]">
+            {/* Welded-seam divider — hairline in strong-edge tone +
+                rivet pair in ember accent. */}
+            <div className="relative mt-6 mb-6 h-px w-full bg-strong-edge">
               <span
                 aria-hidden
-                className="absolute -top-[2.5px] left-[25%] h-[5px] w-[5px] rounded-full bg-[var(--color-ember)]"
+                className="absolute -top-[2.5px] left-[25%] h-[5px] w-[5px] rounded-full bg-accent"
               />
               <span
                 aria-hidden
-                className="absolute -top-[2.5px] left-[75%] h-[5px] w-[5px] rounded-full bg-[var(--color-ember)]"
+                className="absolute -top-[2.5px] left-[75%] h-[5px] w-[5px] rounded-full bg-accent"
               />
             </div>
 
-            <p className="text-[15px] leading-[1.65] text-[var(--color-bone)]">
-              {t("landing.launchPopup.intro")}
-            </p>
-
-            <p className="mt-5 text-[15px] leading-[1.65] text-[var(--color-parchment)]">
+            {/* Offer lineup: small mono header followed by two-up tiles.
+                Each tile leads with a big "200" numeral in accent for
+                immediate parsing, then the brand label and the model
+                caption. */}
+            <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.22em] text-meta">
               {t("landing.launchPopup.creditsLead")}
             </p>
-            <ul className="mt-3 ml-4 space-y-2">
-              <li className="text-[15px] font-semibold text-[var(--color-parchment)]">
-                {t("landing.launchPopup.creditItem1")}
-              </li>
-              <li className="text-[15px] font-semibold text-[var(--color-parchment)]">
-                {t("landing.launchPopup.creditItem2")}
-              </li>
-            </ul>
-
-            <h3 className="mt-7 font-display font-bold uppercase text-[var(--color-parchment)] text-[18px] tracking-[-0.01em]">
-              {t("landing.launchPopup.conditionsHeading")}
-            </h3>
-            <p className="mt-2 text-[15px] leading-[1.65] text-[var(--color-bone)]">
-              {t("landing.launchPopup.conditionsBodyStart")}{" "}
-              <a
-                href={GITHUB_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="
-                  font-mono font-semibold
-                  text-[var(--color-ember)]
-                  underline decoration-2 underline-offset-[3px] decoration-[var(--color-ember-dim)]
-                  transition-colors duration-150
-                  hover:text-[var(--color-molten)] hover:decoration-[var(--color-molten)]
-                "
-              >
-                github.com/ChronoAIProject/Ornn
-              </a>{" "}
-              {t("landing.launchPopup.conditionsBodyEnd")}
-            </p>
-
-            {/* Highlighted footer note — ember left bar, slightly elevated
-                surface, italic bone body, mono molten-gold invite code. */}
-            <div className="mt-6 border-l-[3px] border-[var(--color-ember)] bg-[var(--color-elevated)] px-4 py-3">
-              <p className="text-[13px] italic leading-[1.6] text-[var(--color-bone)]">
-                {t("landing.launchPopup.callout")}{" "}
-                <span className="font-mono not-italic font-semibold tracking-[0.04em] text-[var(--color-molten)]">
-                  {INVITE_CODE}
-                </span>
-              </p>
+            <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <OfferTile
+                count={t("landing.launchPopup.credit1Number")}
+                label={t("landing.launchPopup.credit1Title")}
+                caption={t("landing.launchPopup.credit1Caption")}
+              />
+              <OfferTile
+                count={t("landing.launchPopup.credit2Number")}
+                label={t("landing.launchPopup.credit2Title")}
+                caption={t("landing.launchPopup.credit2Caption")}
+              />
             </div>
 
+            {/* Redemption block — section heading + numbered steps. */}
+            <h3 className="mt-7 font-display text-[16px] font-bold uppercase tracking-[-0.005em] text-strong">
+              {t("landing.launchPopup.conditionsHeading")}
+            </h3>
+            <ol className="mt-4 space-y-3">
+              <li className="grid grid-cols-[auto_1fr] items-start gap-x-4">
+                <span className="font-mono text-[13px] font-semibold tabular-nums text-accent pt-[1px]">
+                  01
+                </span>
+                <p className="text-[14px] leading-[1.55] text-body">
+                  {t("landing.launchPopup.step1Before")}{" "}
+                  <a
+                    href={GITHUB_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="
+                      font-mono font-semibold text-accent
+                      underline decoration-2 underline-offset-[3px] decoration-accent-muted
+                      transition-colors duration-150
+                      hover:text-accent-support hover:decoration-accent-support
+                      focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent
+                    "
+                  >
+                    {GITHUB_LINK_LABEL}
+                  </a>{" "}
+                  {t("landing.launchPopup.step1After")}
+                </p>
+              </li>
+              <li className="grid grid-cols-[auto_1fr] items-start gap-x-4">
+                <span className="font-mono text-[13px] font-semibold tabular-nums text-accent pt-[1px]">
+                  02
+                </span>
+                <p className="text-[14px] leading-[1.55] text-body">
+                  {t("landing.launchPopup.step2")}
+                </p>
+              </li>
+            </ol>
+
+            {/* Invite-code chip — click-to-copy with mono molten-gold
+                code. Treated as a button (not a div) for keyboard
+                affordance + screen-reader semantics. */}
+            <div className="mt-6">
+              <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.22em] text-meta">
+                {t("landing.launchPopup.inviteLabel")}
+              </p>
+              <button
+                type="button"
+                onClick={copyInvite}
+                aria-label={t("landing.launchPopup.inviteAria")}
+                className="
+                  mt-2 group flex w-full items-center justify-between gap-3
+                  rounded-[2px] border border-accent-support/55 bg-elevated
+                  px-4 py-3
+                  transition-[border-color,background-color] duration-150
+                  hover:border-accent-support hover:bg-accent-support/10
+                  focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-support
+                "
+              >
+                <code className="font-mono text-[17px] font-semibold tracking-[0.06em] text-accent-support">
+                  {INVITE_CODE}
+                </code>
+                <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-meta group-hover:text-accent-support">
+                  {copied
+                    ? `${t("landing.launchPopup.copied")} ✓`
+                    : `${t("landing.launchPopup.copy")} ⧉`}
+                </span>
+              </button>
+            </div>
+
+            {/* Limited-slots warning — mono caption, italic, ember
+                triangle as a visual cue without saturating the row. */}
+            <p className="mt-5 flex items-start gap-2 font-mono text-[11px] italic uppercase tracking-[0.14em] text-meta">
+              <span aria-hidden className="text-accent not-italic">
+                ▲
+              </span>
+              <span>{t("landing.launchPopup.limitedSlots")}</span>
+            </p>
+
+            {/* CTAs — ghost Dismiss + primary STAR ON GITHUB. Both
+                ride `.cta-letterpress` for the canonical press-down +
+                shadow behavior, reduced-motion safe. */}
             <div className="mt-7 flex flex-wrap items-center justify-end gap-3">
               <button
                 type="button"
                 onClick={close}
                 className="
+                  cta-letterpress cta-letterpress--ghost
                   inline-flex items-center justify-center
-                  rounded-[2px] border border-[var(--color-bone)]/40
-                  bg-transparent
+                  rounded-sm border border-strong-edge bg-card
                   px-4 py-2
                   font-mono text-[11px] font-semibold uppercase tracking-[0.18em]
-                  text-[var(--color-bone)]
-                  transition-[transform,background-color,border-color,color] duration-150
-                  hover:bg-[rgba(241,236,222,0.08)] hover:border-[var(--color-parchment)] hover:text-[var(--color-parchment)]
-                  focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ember)]
-                  motion-reduce:transition-none
+                  text-body
+                  hover:border-accent hover:text-strong
                 "
               >
                 {t("landing.launchPopup.dismiss")}
@@ -211,24 +287,17 @@ export function LaunchCelebrationPopup() {
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={close}
-                style={{ boxShadow: "4px 4px 0 0 var(--color-ember-deep)" }}
                 className="
-                  relative inline-flex items-center justify-center gap-2
-                  rounded-[2px] border border-[var(--color-ember)]
-                  bg-[var(--color-ember)]
+                  cta-letterpress
+                  inline-flex items-center justify-center gap-2
+                  rounded-sm border border-accent-muted bg-accent
                   px-5 py-2
                   font-mono text-[11px] font-semibold uppercase tracking-[0.16em]
-                  text-[var(--color-obsidian)]
-                  transition-[transform,box-shadow,background-color] duration-150
-                  hover:translate-x-[2px] hover:translate-y-[2px]
-                  hover:shadow-[2px_2px_0_0_var(--color-ember-deep)]
-                  active:translate-x-[4px] active:translate-y-[4px]
-                  active:shadow-none
-                  focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-parchment)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-panel)]
-                  motion-reduce:hover:translate-x-0 motion-reduce:hover:translate-y-0
-                  motion-reduce:active:translate-x-0 motion-reduce:active:translate-y-0
+                  text-page
+                  hover:bg-accent-muted
                 "
               >
+                <span aria-hidden>★</span>
                 {t("landing.launchPopup.cta")}
                 <svg
                   aria-hidden
@@ -247,5 +316,30 @@ export function LaunchCelebrationPopup() {
       )}
     </AnimatePresence>,
     document.body,
+  );
+}
+
+function OfferTile({
+  count,
+  label,
+  caption,
+}: {
+  count: string;
+  label: string;
+  caption: string;
+}) {
+  return (
+    <div className="rounded-[2px] border border-subtle bg-elevated p-4 sm:p-5">
+      <p className="font-display text-[42px] sm:text-[48px] font-bold leading-none tracking-[-0.02em] text-accent">
+        {count}
+      </p>
+      <div className="mt-3 h-px w-8 bg-accent-muted" aria-hidden />
+      <p className="mt-3 font-mono text-[12px] font-semibold uppercase tracking-[0.16em] text-strong">
+        {label}
+      </p>
+      <p className="mt-1 font-mono text-[11px] uppercase tracking-[0.12em] text-meta">
+        {caption}
+      </p>
+    </div>
   );
 }
