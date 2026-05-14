@@ -631,6 +631,17 @@
     "callsLeft": "剩余",
     "grantSuffix": "+{{value}} 追加"
   },
+  "modelPicker": {
+    "label": "模型",
+    "defaultSuffix": " — 默认",
+    "defaultBadge": "默认",
+    "loading": "加载模型中…",
+    "unavailable": "{{surface}} — 暂不可用，请联系管理员。",
+    "ariaPlayground": "试验场",
+    "ariaSkillGen": "技能生成",
+    "ariaTrigger": "{{label}}：{{selected}}",
+    "ariaOptions": "{{label}} 候选项"
+  },
   "fileTree": {
     "files": "文件",
     "noFiles": "还没有文件",

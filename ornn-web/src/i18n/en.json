@@ -631,6 +631,17 @@
     "callsLeft": "left",
     "grantSuffix": "+{{value}} grant"
   },
+  "modelPicker": {
+    "label": "Model",
+    "defaultSuffix": " — default",
+    "defaultBadge": "default",
+    "loading": "Loading models…",
+    "unavailable": "{{surface}} — temporarily unavailable. Contact admin.",
+    "ariaPlayground": "Playground",
+    "ariaSkillGen": "Skill Generation",
+    "ariaTrigger": "{{label}}: {{selected}}",
+    "ariaOptions": "{{label}} options"
+  },
   "fileTree": {
     "files": "Files",
     "noFiles": "No files yet",
