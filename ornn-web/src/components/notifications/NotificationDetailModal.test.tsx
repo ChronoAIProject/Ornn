@@ -113,4 +113,39 @@ describe("NotificationDetailModal", () => {
     expect(container.firstChild).toBeNull();
     expect(screen.queryByText(/Maintenance window/)).toBeNull();
   });
+
+  // #532 — quota credit notifications used to be a dead click because
+  // they carry no `link` and broadcasts were the only thing the modal
+  // would open for. The fix routes them through this same modal in
+  // plain-text mode.
+  it("renders title + plain-text body + category tag for a user-source notification (#532)", () => {
+    const userNotification: Notification = {
+      _id: "n-2",
+      source: "user",
+      category: "quota.credits_granted",
+      title: "Admin granted you +100 playground credits",
+      body: "Granted by Shining Wang 2. Note: Redeemed code Y69HABCDE.\nEnjoy.",
+      createdAt: "2026-05-14T00:00:00.000Z",
+      readAt: null,
+    };
+
+    render(
+      <NotificationDetailModal
+        notification={userNotification}
+        onClose={() => {}}
+        onMarkRead={() => {}}
+      />,
+    );
+
+    expect(
+      screen.getByText("Admin granted you +100 playground credits"),
+    ).toBeInTheDocument();
+    // Plain text — no markdown bolding, no extra DOM transforms; whole
+    // note (including newline) survives as one block.
+    expect(
+      screen.getByText(/Redeemed code Y69HABCDE/),
+    ).toBeInTheDocument();
+    // Category tag resolves to "Quota" (not the broadcast tag).
+    expect(screen.getByText("Quota")).toBeInTheDocument();
+  });
 });

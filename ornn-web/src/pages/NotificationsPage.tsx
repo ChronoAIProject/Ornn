@@ -56,8 +56,21 @@ export function NotificationsPage() {
       setDetailNotification(n);
       return;
     }
+    // User notifications: prefer the deep-link target when present
+    // (audit items carry one) — navigating is more useful than a
+    // modal. Otherwise, if there's body text, open the modal so the
+    // row isn't a dead click (#532 — quota notes are emitted without
+    // a link by design but still carry the full note in `body`).
+    if (n.link) {
+      if (!n.readAt) markRead.mutate(n._id);
+      navigate(n.link);
+      return;
+    }
+    if (n.body) {
+      setDetailNotification(n);
+      return;
+    }
     if (!n.readAt) markRead.mutate(n._id);
-    if (n.link) navigate(n.link);
   };
 
   const resolveTitle = (n: Notification): string => {

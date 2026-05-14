@@ -338,6 +338,11 @@
       "modal": {
         "aria": "Broadcast notification details"
       }
+    },
+    "detail": {
+      "modal": {
+        "aria": "Notification details"
+      }
     }
   },
   "permissions": {
