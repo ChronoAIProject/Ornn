@@ -262,4 +262,40 @@ describe("BroadcastService", () => {
     const { svc } = makeService();
     await expect(svc.getById("does-not-exist")).rejects.toThrow(/Broadcast not found/);
   });
+
+  test("create without recipientUserIds round-trips as broadcast-to-all (null)", async () => {
+    const { svc } = makeService();
+    const created = await svc.create(baseInput);
+    expect(created.recipientUserIds).toBeNull();
+    // Persisted shape matches — admin list shows null too.
+    const [listed] = await svc.listAdmin();
+    expect(listed?.recipientUserIds).toBeNull();
+  });
+
+  test("create with recipientUserIds round-trips as targeted broadcast", async () => {
+    const { svc } = makeService();
+    const created = await svc.create({
+      ...baseInput,
+      recipientUserIds: ["u-1", "u-2"],
+    });
+    expect(created.recipientUserIds).toEqual(["u-1", "u-2"]);
+    const [listed] = await svc.listAdmin();
+    expect(listed?.recipientUserIds).toEqual(["u-1", "u-2"]);
+  });
+
+  test("update does NOT touch recipientUserIds — field is immutable post-create", async () => {
+    const { svc } = makeService();
+    const created = await svc.create({
+      ...baseInput,
+      recipientUserIds: ["u-1", "u-2"],
+    });
+    // The service `update` input type doesn't expose `recipientUserIds`
+    // (compile-time enforcement). At runtime, passing only an `updatedBy`
+    // + title patch must leave the recipients array untouched.
+    const updated = await svc.update(created.id, {
+      titleI18n: { en: "Edited" },
+      updatedBy: "u-other",
+    });
+    expect(updated.recipientUserIds).toEqual(["u-1", "u-2"]);
+  });
 });
