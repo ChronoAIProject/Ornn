@@ -97,18 +97,31 @@ export function NotificationBell() {
     // Broadcasts open a full markdown viewer modal so a user can read
     // long-form content without leaving the page. Mark-read fires from
     // the modal's open effect so the bell badge updates immediately.
-    // User-side notifications keep the existing navigate behavior.
     if (n.source === "broadcast") {
       setOpen(false);
       setDetailNotification(n);
       return;
     }
-    if (!n.readAt) {
-      markRead.mutate(n._id);
+    // User notifications: link wins (audit deep-links go to the audit
+    // page). If there's no link but the row carries body text, open
+    // the detail modal in place — quota notes are emitted without a
+    // link but the body is what the user wants to see (#532). Bare
+    // notifications with neither still hand off to the full list page
+    // so the click isn't lost.
+    if (n.link) {
+      if (!n.readAt) markRead.mutate(n._id);
+      setOpen(false);
+      navigate(n.link);
+      return;
     }
+    if (n.body) {
+      setOpen(false);
+      setDetailNotification(n);
+      return;
+    }
+    if (!n.readAt) markRead.mutate(n._id);
     setOpen(false);
-    if (n.link) navigate(n.link);
-    else navigate("/notifications");
+    navigate("/notifications");
   };
 
   /** Resolve the display title for either source. */
