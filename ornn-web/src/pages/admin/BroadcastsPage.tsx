@@ -114,7 +114,10 @@ export function BroadcastsPage() {
     });
   };
 
-  const items = broadcastsQuery.data ?? [];
+  const items = useMemo(
+    () => broadcastsQuery.data ?? [],
+    [broadcastsQuery.data],
+  );
   const lang = i18n.language;
 
   // Resolve targeted broadcast recipient_user_ids to display emails for
