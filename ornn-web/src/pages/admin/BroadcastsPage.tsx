@@ -11,9 +11,10 @@
  * @module pages/admin/BroadcastsPage
  */
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { motion } from "framer-motion";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
@@ -25,6 +26,7 @@ import {
   useDeleteBroadcast,
 } from "@/hooks/useBroadcasts";
 import type { AdminBroadcast } from "@/services/broadcastsApi";
+import { fetchAdminUsers } from "@/services/adminUsersApi";
 import { pickLocalized } from "@/lib/announcementLocale";
 import { translateError } from "@/utils/translateError";
 
@@ -115,6 +117,38 @@ export function BroadcastsPage() {
   const items = broadcastsQuery.data ?? [];
   const lang = i18n.language;
 
+  // Resolve targeted broadcast recipient_user_ids to display emails for
+  // the Recipients-column tooltip. Pulled lazily — only when at least
+  // one row is targeted. Admin user lists are small enough that one
+  // page-of-200 is sufficient and cheaper than per-row lookups.
+  const hasTargetedRows = useMemo(
+    () => items.some((b) => b.recipientUserIds != null),
+    [items],
+  );
+  const emailLookupQuery = useQuery({
+    queryKey: ["admin", "users", "broadcasts-emails"],
+    enabled: hasTargetedRows,
+    staleTime: 60_000,
+    queryFn: async () => {
+      const page = await fetchAdminUsers({
+        role: "normal",
+        page: 1,
+        pageSize: 200,
+      });
+      return page.items;
+    },
+  });
+  const emailById = useMemo<Map<string, string>>(() => {
+    const map = new Map<string, string>();
+    for (const row of emailLookupQuery.data ?? []) {
+      map.set(row.userId, row.email);
+    }
+    return map;
+  }, [emailLookupQuery.data]);
+
+  const recipientsTooltip = (ids: string[]): string =>
+    ids.map((id) => emailById.get(id) ?? id).join("\n");
+
   const pendingDeleteTitle = pendingDelete
     ? pickLocalized(
         pendingDelete.titleI18n.en,
@@ -178,6 +212,9 @@ export function BroadcastsPage() {
                     {t("adminPages.broadcasts.table.preview")}
                   </th>
                   <th className="px-4 py-3">
+                    {t("adminPages.broadcasts.table.recipients")}
+                  </th>
+                  <th className="px-4 py-3">
                     {t("adminPages.broadcasts.table.created")}
                   </th>
                   <th className="px-4 py-3">
@@ -222,6 +259,22 @@ export function BroadcastsPage() {
                         <p className="font-text text-sm text-meta">
                           {preview}
                         </p>
+                      </td>
+                      <td className="px-4 py-3 align-top">
+                        {b.recipientUserIds == null ? (
+                          <span className="font-text text-sm text-meta">
+                            {t("adminPages.broadcasts.recipients.summaryAll")}
+                          </span>
+                        ) : (
+                          <span
+                            title={recipientsTooltip(b.recipientUserIds)}
+                            className="inline-flex items-center gap-1 rounded-sm border border-subtle bg-elevated/40 px-2 py-0.5 font-mono text-[11px] text-strong"
+                          >
+                            {t("adminPages.broadcasts.recipients.summaryCount", {
+                              count: b.recipientUserIds.length,
+                            })}
+                          </span>
+                        )}
                       </td>
                       <td className="px-4 py-3 align-top font-mono text-[11px] text-meta">
                         {new Date(b.createdAt).toLocaleString(
