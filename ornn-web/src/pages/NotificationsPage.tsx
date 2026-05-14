@@ -17,6 +17,7 @@ import {
 } from "@/hooks/useNotifications";
 import type { Notification, NotificationCategory } from "@/types/notifications";
 import { PageTransition } from "@/components/layout/PageTransition";
+import { NotificationDetailModal } from "@/components/notifications/NotificationDetailModal";
 import { pickLocalized } from "@/lib/announcementLocale";
 
 const CATEGORY_LABEL: Record<NotificationCategory, string> = {
@@ -35,6 +36,8 @@ export function NotificationsPage() {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const [unreadOnly, setUnreadOnly] = useState(false);
+  const [detailNotification, setDetailNotification] =
+    useState<Notification | null>(null);
 
   const { data: items = [], isLoading, isError } = useNotifications({
     unread: unreadOnly,
@@ -47,9 +50,13 @@ export function NotificationsPage() {
   const lang = i18n.language;
 
   const handleOpen = (n: Notification) => {
+    // Broadcasts pop a markdown detail modal so the full bilingual body
+    // is readable in place. The modal owns mark-read on open.
+    if (n.source === "broadcast") {
+      setDetailNotification(n);
+      return;
+    }
     if (!n.readAt) markRead.mutate(n._id);
-    // Broadcasts have no deep-link target; clicking only marks read.
-    if (n.source === "broadcast") return;
     if (n.link) navigate(n.link);
   };
 
@@ -191,6 +198,12 @@ export function NotificationsPage() {
           </ul>
         )}
       </div>
+
+      <NotificationDetailModal
+        notification={detailNotification}
+        onClose={() => setDetailNotification(null)}
+        onMarkRead={(id) => markRead.mutate(id)}
+      />
     </PageTransition>
   );
 }

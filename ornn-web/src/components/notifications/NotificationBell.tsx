@@ -25,6 +25,7 @@ import {
 } from "@/hooks/useNotifications";
 import type { Notification } from "@/types/notifications";
 import { pickLocalized } from "@/lib/announcementLocale";
+import { NotificationDetailModal } from "./NotificationDetailModal";
 
 /** Size used in navbar + empty-state. */
 const POPOVER_ITEM_CAP = 10;
@@ -62,6 +63,8 @@ export function NotificationBell() {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
+  const [detailNotification, setDetailNotification] =
+    useState<Notification | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
 
   const { data: unread = 0 } = useUnreadNotificationCount();
@@ -91,15 +94,17 @@ export function NotificationBell() {
   }, [open]);
 
   const handleItemClick = (n: Notification) => {
-    if (!n.readAt) {
-      markRead.mutate(n._id);
-    }
-    // Broadcasts have no deep-link target — clicking marks read and
-    // collapses the popover in place. User-side notifications still
-    // navigate (link → that link, no link → /notifications page).
+    // Broadcasts open a full markdown viewer modal so a user can read
+    // long-form content without leaving the page. Mark-read fires from
+    // the modal's open effect so the bell badge updates immediately.
+    // User-side notifications keep the existing navigate behavior.
     if (n.source === "broadcast") {
       setOpen(false);
+      setDetailNotification(n);
       return;
+    }
+    if (!n.readAt) {
+      markRead.mutate(n._id);
     }
     setOpen(false);
     if (n.link) navigate(n.link);
@@ -251,6 +256,12 @@ export function NotificationBell() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      <NotificationDetailModal
+        notification={detailNotification}
+        onClose={() => setDetailNotification(null)}
+        onMarkRead={(id) => markRead.mutate(id)}
+      />
     </div>
   );
 }
