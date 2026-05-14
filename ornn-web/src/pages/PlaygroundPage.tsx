@@ -23,7 +23,6 @@ import { useSearchParams, Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { PageTransition } from "@/components/layout/PageTransition";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { Badge } from "@/components/ui/Badge";
 import { ChatInput, type ChatInputHandle } from "@/components/playground/ChatInput";
 import { ChatMessage } from "@/components/playground/ChatMessage";
 import { SkillPackagePreview } from "@/components/skill/SkillPackagePreview";
@@ -81,17 +80,6 @@ function ThinkingBubble() {
         </div>
       </div>
     </motion.div>
-  );
-}
-
-/** Welded-seam horizontal divider with a rivet dot in the middle. */
-function WeldedSeam({ className = "" }: { className?: string }) {
-  return (
-    <div className={`flex items-center gap-2 ${className}`} aria-hidden>
-      <span className="h-px flex-1 bg-strong-edge/40" />
-      <span className="h-1 w-1 rounded-full bg-accent/40" />
-      <span className="h-px flex-1 bg-strong-edge/40" />
-    </div>
   );
 }
 
@@ -623,7 +611,7 @@ export function PlaygroundPage() {
                 transition={{ duration: 0.18, ease: "easeOut" }}
                 onMouseEnter={() => openHover(activeDrawer)}
                 onMouseLeave={scheduleHoverClose}
-                className="card-impression fixed right-10 top-4 bottom-4 z-40 flex w-[420px] max-w-[calc(100vw-3rem)] flex-col rounded-md border border-subtle bg-card"
+                className="card-impression fixed right-10 top-[68px] bottom-4 z-40 flex w-[min(560px,40vw)] max-w-[calc(100vw-3rem)] flex-col rounded-md border border-subtle bg-card"
                 role="complementary"
                 aria-label={`${activeDrawer} panel`}
               >
@@ -664,73 +652,43 @@ export function PlaygroundPage() {
                 </div>
 
                 {/* Drawer body */}
-                <div className="min-h-0 flex-1 overflow-y-auto">
+                <div className="flex min-h-0 flex-1 flex-col">
                   {activeDrawer === "skill" && skill && (
-                    <div className="space-y-4 p-4">
-                      <div className="flex items-start gap-3">
-                        <div
-                          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-sm border border-strong-edge bg-warning-soft text-accent"
-                          aria-hidden
-                        >
-                          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                            <polyline points="16 18 22 12 16 6" />
-                            <polyline points="8 6 2 12 8 18" />
-                          </svg>
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <h2 className="break-words font-display text-base font-semibold leading-tight tracking-tight text-strong">
+                    <div className="flex min-h-0 flex-1 flex-col">
+                      {/* Identity strip — flat, hairline-separated, matches
+                          the SkillPackagePreview redesign on the gen page. */}
+                      <div className="shrink-0 border-b border-subtle bg-elevated/30 px-5 py-4">
+                        <div className="flex items-baseline justify-between gap-4">
+                          <h2 className="truncate font-display text-xl font-semibold leading-tight text-strong">
                             {skill.name}
                           </h2>
-                          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
-                            <span className="inline-flex items-center rounded-sm border border-strong-edge px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.14em] text-strong">
-                              v{skill.version}
-                            </span>
+                          <span className="shrink-0 font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
+                            v{skill.version}
+                          </span>
+                        </div>
+                        {(skillCategory || (skill.tags && skill.tags.length > 0)) && (
+                          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[10px] uppercase tracking-[0.14em]">
                             {skillCategory && (
-                              <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
-                                {skillCategory}
+                              <span className="text-accent">
+                                [§&nbsp;{skillCategory}]
+                              </span>
+                            )}
+                            {skill.tags && skill.tags.length > 0 && (
+                              <span className="text-meta">
+                                {skill.tags.join("  ·  ")}
                               </span>
                             )}
                           </div>
-                        </div>
+                        )}
+                        {skill.description && (
+                          <p className="mt-3 break-words font-text text-sm leading-relaxed text-body">
+                            {skill.description}
+                          </p>
+                        )}
                       </div>
 
-                      {skill.description && (
-                        <>
-                          <WeldedSeam />
-                          <div>
-                            <div className="mb-1.5 font-mono text-[10px] uppercase tracking-[0.18em] text-meta">
-                              {t("playground.aboutThisSkill", "About")}
-                            </div>
-                            <p className="break-words font-text text-sm leading-relaxed text-body">
-                              {skill.description}
-                            </p>
-                          </div>
-                        </>
-                      )}
-
-                      {skill.tags && skill.tags.length > 0 && (
-                        <>
-                          <WeldedSeam />
-                          <div>
-                            <div className="mb-2 font-mono text-[10px] uppercase tracking-[0.18em] text-meta">
-                              {t("playground.tags", "Tags")}
-                            </div>
-                            <div className="flex flex-wrap gap-1.5">
-                              {skill.tags.map((tag) => (
-                                <span
-                                  key={tag}
-                                  className="inline-flex items-center rounded-sm border border-subtle bg-elevated/40 px-1.5 py-0.5 font-mono text-[10px] text-body"
-                                >
-                                  #{tag}
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-                        </>
-                      )}
-
-                      <WeldedSeam />
-                      <div className="flex items-center justify-between">
+                      {/* Footer — registry link pinned at the bottom. */}
+                      <div className="mt-auto flex shrink-0 items-center justify-between border-t border-subtle bg-elevated/30 px-5 py-3">
                         <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-meta">
                           {t("playground.openDetail", "Skill page")}
                         </span>
@@ -745,50 +703,57 @@ export function PlaygroundPage() {
                   )}
 
                   {activeDrawer === "env" && needsEnvVars && (
-                    <div className="space-y-4 p-4">
-                      <div>
+                    <div className="flex min-h-0 flex-1 flex-col">
+                      {/* Header strip — same flat voice as the skill drawer. */}
+                      <div className="shrink-0 border-b border-subtle bg-elevated/30 px-5 py-4">
                         <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-accent">
-                          {t("playground.envVars")}
+                          [§&nbsp;{t("playground.envVars")}]
                         </div>
-                        <p className="mt-1 font-text text-xs leading-relaxed text-body">
+                        <p className="mt-2 font-text text-sm leading-relaxed text-body">
                           {t("playground.envVarsDesc")}
                         </p>
                       </div>
-                      <WeldedSeam />
-                      <div className="space-y-3">
-                        {envVarKeys.map((key) => (
-                          <div key={key} className="space-y-1">
-                            <div className="flex items-center justify-between">
-                              <label className="block max-w-full truncate font-mono text-[11px] text-strong" title={key}>
-                                {key}
-                              </label>
-                              {envVars[key]?.trim() ? (
-                                <Badge color="green">{t("common.set")}</Badge>
-                              ) : (
-                                <Badge color="cyan">{t("common.required")}</Badge>
-                              )}
+
+                      {/* Form */}
+                      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-5 py-4">
+                        {envVarKeys.map((key) => {
+                          const filled = !!envVars[key]?.trim();
+                          return (
+                            <div key={key} className="space-y-1">
+                              <div className="flex items-center justify-between gap-2">
+                                <label
+                                  className="block min-w-0 flex-1 truncate font-mono text-[11px] text-strong"
+                                  title={key}
+                                >
+                                  {key}
+                                </label>
+                                <span
+                                  className={`shrink-0 font-mono text-[10px] uppercase tracking-[0.14em] ${
+                                    filled ? "text-success" : "text-meta"
+                                  }`}
+                                >
+                                  {filled ? t("common.set") : t("common.required")}
+                                </span>
+                              </div>
+                              <input
+                                type="text"
+                                value={envVars[key] ?? ""}
+                                onChange={(e) => handleEnvVarChange(key, e.target.value)}
+                                placeholder={t("playground.enterValue")}
+                                className="w-full rounded-sm border border-subtle bg-page px-2.5 py-1.5 font-mono text-xs text-strong placeholder:text-meta/50 focus:border-accent/60 focus:outline-none"
+                              />
                             </div>
-                            <input
-                              type="text"
-                              value={envVars[key] ?? ""}
-                              onChange={(e) => handleEnvVarChange(key, e.target.value)}
-                              placeholder={t("playground.enterValue")}
-                              className="w-full rounded-sm border border-subtle bg-page px-2.5 py-1.5 font-mono text-xs text-strong placeholder:text-meta/50 focus:border-accent/60 focus:outline-none"
-                            />
-                          </div>
-                        ))}
-                      </div>
-                      {!allEnvVarsFilled && (
-                        <>
-                          <WeldedSeam />
-                          <p className="font-text text-[11px] leading-relaxed text-meta">
+                          );
+                        })}
+                        {!allEnvVarsFilled && (
+                          <p className="pt-2 font-text text-[11px] leading-relaxed text-meta">
                             {t(
                               "playground.envVarsLockHint",
                               "Chat is locked until every required env var has a value.",
                             )}
                           </p>
-                        </>
-                      )}
+                        )}
+                      </div>
                     </div>
                   )}
 
