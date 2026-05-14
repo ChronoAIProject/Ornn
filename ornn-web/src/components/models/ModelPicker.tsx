@@ -13,6 +13,7 @@
  */
 
 import { useEffect, useRef, useState, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { usePreferredModel } from "@/hooks/useModels";
 import type { Surface } from "@/services/quotaApi";
 
@@ -21,20 +22,22 @@ interface ModelPickerProps {
   /** Fired whenever the effective modelId changes (initial load + user pick). */
   onChange?: (modelId: string | null) => void;
   className?: string;
+  /** Override the localized "Model" trigger label. */
   label?: string;
 }
-
-const SURFACE_LABEL: Record<Surface, string> = {
-  playground: "Playground",
-  skillGen: "Skill Generation",
-};
 
 export function ModelPicker({
   surface,
   onChange,
   className = "",
-  label = "Model",
+  label,
 }: ModelPickerProps) {
+  const { t } = useTranslation();
+  const resolvedLabel = label ?? t("modelPicker.label", "Model");
+  const surfaceAriaLabel =
+    surface === "playground"
+      ? t("modelPicker.ariaPlayground", "Playground")
+      : t("modelPicker.ariaSkillGen", "Skill Generation");
   const {
     options,
     effectiveModelId,
@@ -144,7 +147,7 @@ export function ModelPicker({
         className={`inline-flex items-center gap-2 rounded-sm border border-subtle bg-elevated/40 px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.14em] text-meta ${className}`}
       >
         <span className="h-2 w-2 animate-pulse rounded-full bg-accent" />
-        Loading models…
+        {t("modelPicker.loading", "Loading models…")}
       </div>
     );
   }
@@ -155,7 +158,11 @@ export function ModelPicker({
         role="status"
         className={`inline-flex items-center gap-2 rounded-sm border border-warning/40 bg-warning-soft px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.14em] text-warning ${className}`}
       >
-        {SURFACE_LABEL[surface]} — temporarily unavailable. Contact admin.
+        {t(
+          "modelPicker.unavailable",
+          "{{surface}} — temporarily unavailable. Contact admin.",
+          { surface: surfaceAriaLabel },
+        )}
       </div>
     );
   }
@@ -166,7 +173,7 @@ export function ModelPicker({
   return (
     <div className={`relative inline-flex items-center gap-2 ${className}`}>
       <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
-        {label}
+        {resolvedLabel}
       </span>
       <button
         ref={triggerRef}
@@ -174,7 +181,10 @@ export function ModelPicker({
         onClick={handleToggleOpen}
         aria-haspopup="listbox"
         aria-expanded={open}
-        aria-label={`${label}: ${selected?.displayName ?? "—"}`}
+        aria-label={t("modelPicker.ariaTrigger", "{{label}}: {{selected}}", {
+          label: resolvedLabel,
+          selected: selected?.displayName ?? "—",
+        })}
         className="
           inline-flex min-w-[12rem] items-center justify-between gap-2 rounded-sm
           border border-subtle bg-elevated/40 px-2.5 py-1.5
@@ -189,7 +199,9 @@ export function ModelPicker({
         <span className="truncate text-left">
           {selected?.displayName ?? "—"}
           {selected?.isDefault && (
-            <span className="text-meta"> — default</span>
+            <span className="text-meta">
+              {t("modelPicker.defaultSuffix", " — default")}
+            </span>
           )}
         </span>
         <svg
@@ -210,7 +222,9 @@ export function ModelPicker({
         <div
           ref={menuRef}
           role="listbox"
-          aria-label={`${label} options`}
+          aria-label={t("modelPicker.ariaOptions", "{{label}} options", {
+            label: resolvedLabel,
+          })}
           className={`
             card-impression absolute right-0 z-30
             min-w-[16rem] max-h-[20rem] overflow-y-auto
@@ -257,7 +271,7 @@ export function ModelPicker({
                 <span className="flex-1 truncate">{opt.displayName}</span>
                 {opt.isDefault && (
                   <span className="font-mono text-[9px] uppercase tracking-[0.16em] text-meta">
-                    default
+                    {t("modelPicker.defaultBadge", "default")}
                   </span>
                 )}
               </button>
