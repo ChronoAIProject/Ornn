@@ -47,8 +47,20 @@ export interface CreateBroadcastParams {
   titleI18n: BroadcastI18nString;
   bodyMarkdownI18n: BroadcastI18nString;
   createdBy: string;
+  /**
+   * Targeted recipients (#502). Omit / `undefined` → broadcast to
+   * every user. Non-empty array → targeted to that user list. Empty
+   * array is rejected upstream by the Zod schema; this type doesn't
+   * defend against it again.
+   */
+  recipientUserIds?: readonly string[];
 }
 
+/**
+ * Update params (#502): `recipientUserIds` is intentionally absent —
+ * recipient targeting is immutable after create. Adding it on a PATCH
+ * path is a compile error, matching the repository's enforcement.
+ */
 export interface UpdateBroadcastParams {
   titleI18n?: Partial<BroadcastI18nString>;
   bodyMarkdownI18n?: Partial<BroadcastI18nString>;
@@ -89,10 +101,18 @@ export class BroadcastService {
       titleI18n: params.titleI18n,
       bodyMarkdownI18n: params.bodyMarkdownI18n,
       createdBy: params.createdBy,
+      recipientUserIds: params.recipientUserIds,
     };
     const doc = await this.repo.create(input);
     logger.info(
-      { broadcastId: doc._id, by: params.createdBy },
+      {
+        broadcastId: doc._id,
+        by: params.createdBy,
+        // Recipient count only — never log the user_id list (it's
+        // PII-adjacent and pointless for ops debugging).
+        recipientCount:
+          doc.recipientUserIds === null ? "all" : doc.recipientUserIds.length,
+      },
       "broadcast created",
     );
     // New broadcasts have zero readers by definition — skip the count
@@ -163,6 +183,10 @@ function toAdminResponse(
     bodyMarkdownI18n: doc.bodyMarkdownI18n,
     createdBy: doc.createdBy,
     updatedBy: doc.updatedBy,
+    // Normalise `undefined` (defence in depth — the repo mapper
+    // already does this for absent fields) into `null` so the wire
+    // shape is `string[] | null`, never `undefined`.
+    recipientUserIds: doc.recipientUserIds ?? null,
     createdAt: doc.createdAt.toISOString(),
     updatedAt: doc.updatedAt.toISOString(),
     readCount,

@@ -66,6 +66,7 @@ export function createBroadcastRoutes(
       titleI18n: parsed.data.titleI18n,
       bodyMarkdownI18n: parsed.data.bodyMarkdownI18n,
       createdBy: authCtx.userId,
+      recipientUserIds: parsed.data.recipientUserIds,
     });
     return c.json({ data: created, error: null }, 201);
   });

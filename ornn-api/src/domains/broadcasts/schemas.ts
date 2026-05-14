@@ -52,6 +52,15 @@ export const createBroadcastSchema = z
   .object({
     titleI18n: broadcastI18nCreateSchema(TITLE_MAX),
     bodyMarkdownI18n: broadcastI18nCreateSchema(BODY_MAX),
+    /**
+     * Targeted recipients (#502). Optional. Omit the key entirely for
+     * a broadcast-to-all (the #500 default). When present, must be a
+     * non-empty array of non-empty user_ids — `null`, `[]`, and arrays
+     * with empty strings are rejected. Recipients are immutable after
+     * create (see `patchBroadcastSchema` — `.strict()` rejects this
+     * field on PATCH).
+     */
+    recipientUserIds: z.array(z.string().min(1)).min(1).optional(),
   })
   .strict();
 

@@ -30,6 +30,10 @@ export interface BilingualText {
  * feed keeps the `_id` legacy field for backwards compatibility
  * with per-user notification rows, while the admin surface gets
  * the cleaner public `id`.
+ *
+ * `recipientUserIds` is `null` for a broadcast-to-all and a
+ * non-empty array for a targeted broadcast. Recipients are locked
+ * at create — see `CreateBroadcastInput` / `UpdateBroadcastInput`.
  */
 export interface AdminBroadcast {
   id: string;
@@ -40,19 +44,30 @@ export interface AdminBroadcast {
   createdBy: string;
   updatedBy: string;
   readCount: number;
+  recipientUserIds: string[] | null;
 }
 
 export interface CreateBroadcastInput {
   titleI18n: BilingualText;
   bodyMarkdownI18n: BilingualText;
+  /**
+   * Optional list of user_ids to target. Omit / undefined → broadcast
+   * to every authenticated user. A non-empty array scopes delivery to
+   * exactly those users. An empty array is rejected by the API (400).
+   */
+  recipientUserIds?: string[];
 }
 
 /**
  * Patch input — both locales of a given field must arrive together if
- * any does (the drawer enforces non-empty on both anyway). Modeled as
- * `Partial<CreateBroadcastInput>` so callers can omit untouched fields.
+ * any does (the drawer enforces non-empty on both anyway). Recipients
+ * are deliberately omitted: the API rejects PATCH bodies that try to
+ * change `recipientUserIds`, so we keep the field off the type to make
+ * that impossible at compile time.
  */
-export type UpdateBroadcastInput = Partial<CreateBroadcastInput>;
+export type UpdateBroadcastInput = Partial<
+  Pick<CreateBroadcastInput, "titleI18n" | "bodyMarkdownI18n">
+>;
 
 export async function fetchAdminBroadcasts(): Promise<AdminBroadcast[]> {
   const res = await apiGet<{ items: AdminBroadcast[] }>(
