@@ -41,6 +41,7 @@ import { useTranslation } from "react-i18next";
 
 const GITHUB_URL = "https://github.com/ChronoAIProject/Ornn";
 const GITHUB_LINK_LABEL = "github.com/ChronoAIProject/Ornn";
+const DISCUSSIONS_URL = "https://github.com/ChronoAIProject/Ornn/discussions/521";
 const INVITE_CODE = "NYX-2XXJI08A";
 const COPY_FEEDBACK_MS = 1800;
 
@@ -271,6 +272,32 @@ export function LaunchCelebrationPopup() {
                 {t("landing.launchPopup.inviteHelp")}
               </p>
             </div>
+
+            {/* Fulfillment note — body prose covering what happens
+                after redemption: code delivered to in-app notification
+                inbox within 24h, where to find it (bell top-right +
+                profile dropdown → Redeem code), plus a discussions-thread
+                link for support. Sibling block (not inside the invite-
+                code section) so the post-redemption flow doesn't read
+                as just another caption under the code chip. */}
+            <p className="mt-6 text-[12.5px] leading-[1.6] text-body">
+              {t("landing.launchPopup.fulfillmentBefore")}{" "}
+              <a
+                href={DISCUSSIONS_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="
+                  font-mono font-semibold text-accent
+                  underline decoration-2 underline-offset-[3px] decoration-accent-muted
+                  transition-colors duration-150
+                  hover:text-accent-support hover:decoration-accent-support
+                  focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent
+                "
+              >
+                {t("landing.launchPopup.fulfillmentLinkLabel")}
+              </a>{" "}
+              {t("landing.launchPopup.fulfillmentAfter")}
+            </p>
 
             {/* Limited-slots warning — mono caption, italic, ember
                 triangle as a visual cue without saturating the row. */}
