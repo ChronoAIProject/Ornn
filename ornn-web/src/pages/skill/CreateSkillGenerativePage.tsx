@@ -30,6 +30,7 @@ import { GenerationChatMessage } from "@/components/skill/GenerationChatMessage"
 import { ModelPicker } from "@/components/models/ModelPicker";
 import { OverLimitPage } from "@/components/quota/OverLimitPage";
 import { QuotaInline } from "@/components/quota/QuotaInline";
+import { PackageIcon } from "@/components/icons";
 import { useSkillGeneration } from "@/hooks/useSkillGeneration";
 import { useCreateSkill } from "@/hooks/useSkills";
 import { useMyQuota } from "@/hooks/useQuota";
@@ -360,22 +361,29 @@ export function CreateSkillGenerativePage() {
             type="button"
             onMouseEnter={openHover}
             onClick={togglePin}
-            className={`group relative flex items-center gap-1.5 rounded-l-sm border-y border-l px-2.5 py-3 transition-all ${
+            className={`group relative flex h-11 w-9 items-center justify-center rounded-l-sm border-y border-l transition-colors ${
               drawerOpen
                 ? "border-accent/60 bg-card text-accent"
                 : "border-subtle bg-card/80 text-meta hover:border-accent/40 hover:text-strong"
             }`}
             aria-label={t("aria.skillPackageDrawer")}
           >
-            <span
-              className="font-mono text-[10px] uppercase tracking-[0.18em]"
-              style={{ writingMode: "vertical-rl", transform: "rotate(180deg)" }}
-            >
-              {t("generative.tabPackage", "Package")}
-            </span>
+            <PackageIcon className="h-4 w-4" />
+
+            {/* Horizontal tooltip — fades in on hover when the drawer is
+                not already open. Matches the drawer header voice. */}
+            {!drawerOpen && (
+              <span
+                className="pointer-events-none absolute right-full top-1/2 mr-2 -translate-y-1/2 whitespace-nowrap rounded-sm border border-subtle bg-card px-2 py-1 font-mono text-[10px] uppercase tracking-[0.18em] text-strong opacity-0 transition-opacity duration-150 group-hover:opacity-100"
+                aria-hidden
+              >
+                [§&nbsp;PACKAGE]
+              </span>
+            )}
+
             {hasFrontmatterErrors && (
               <span
-                className="absolute -left-1 top-2 h-1.5 w-1.5 rounded-full bg-warning"
+                className="absolute -left-1 top-1.5 h-1.5 w-1.5 rounded-full bg-warning"
                 aria-hidden
               />
             )}

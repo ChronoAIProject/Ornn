@@ -18,7 +18,7 @@
  * @module pages/PlaygroundPage
  */
 
-import { useState, useRef, useEffect, useMemo, useCallback } from "react";
+import { useState, useRef, useEffect, useMemo, useCallback, type ComponentType } from "react";
 import { useSearchParams, Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { PageTransition } from "@/components/layout/PageTransition";
@@ -30,6 +30,7 @@ import { SkillPackagePreview } from "@/components/skill/SkillPackagePreview";
 import { ModelPicker } from "@/components/models/ModelPicker";
 import { OverLimitPage } from "@/components/quota/OverLimitPage";
 import { QuotaInline } from "@/components/quota/QuotaInline";
+import { SkillIcon, EnvIcon, PackageIcon, type IconProps } from "@/components/icons";
 import { useSkill } from "@/hooks/useSkills";
 import { useSkillPackage } from "@/hooks/useSkillPackage";
 import { usePlaygroundChat } from "@/hooks/usePlaygroundChat";
@@ -321,13 +322,40 @@ export function PlaygroundPage() {
   const starters = defaultPromptStarters(skillName, t);
   const conversationActive = messages.length > 0 || !!currentAssistantContent || isStreaming;
 
-  // Right-edge rail tabs (visible on the right side of the chat).
-  const railTabs: Array<{ key: DrawerKey; label: string; warn?: boolean }> = [
-    { key: "skill", label: t("playground.tabSkill", "Skill") },
+  // Right-edge rail tabs. Each tab renders as a compact icon handle —
+  // the `tip` is a horizontal mono-uppercase label shown on hover (matches
+  // the drawer header `[§ NAME]` voice). Avoids vertical-text rotation
+  // which renders CJK upside-down.
+  const railTabs: Array<{
+    key: DrawerKey;
+    ariaLabel: string;
+    tip: string;
+    Icon: ComponentType<IconProps>;
+    warn?: boolean;
+  }> = [
+    {
+      key: "skill",
+      ariaLabel: t("aria.playgroundSkillDrawer"),
+      tip: "SKILL",
+      Icon: SkillIcon,
+    },
     ...(needsEnvVars
-      ? [{ key: "env" as const, label: t("playground.tabEnv", "Env"), warn: envIncomplete }]
+      ? [
+          {
+            key: "env" as const,
+            ariaLabel: t("aria.playgroundEnvDrawer"),
+            tip: "ENV",
+            Icon: EnvIcon,
+            warn: envIncomplete,
+          },
+        ]
       : []),
-    { key: "package", label: t("playground.tabPackage", "Package") },
+    {
+      key: "package",
+      ariaLabel: t("aria.skillPackageDrawer"),
+      tip: "PACKAGE",
+      Icon: PackageIcon,
+    },
   ];
 
   return (
@@ -526,28 +554,37 @@ export function PlaygroundPage() {
         >
           {railTabs.map((tab) => {
             const active = activeDrawer === tab.key;
+            const Icon = tab.Icon;
             return (
               <button
                 key={tab.key}
                 type="button"
                 onMouseEnter={() => openHover(tab.key)}
                 onClick={() => togglePin(tab.key)}
-                className={`group relative flex items-center gap-1.5 rounded-l-sm border-y border-l px-2.5 py-3 transition-all ${
+                className={`group relative flex h-11 w-9 items-center justify-center rounded-l-sm border-y border-l transition-colors ${
                   active
                     ? "border-accent/60 bg-card text-accent"
                     : "border-subtle bg-card/80 text-meta hover:border-accent/40 hover:text-strong"
                 }`}
-                aria-label={`${tab.label} drawer`}
+                aria-label={tab.ariaLabel}
               >
-                <span
-                  className="font-mono text-[10px] uppercase tracking-[0.18em]"
-                  style={{ writingMode: "vertical-rl", transform: "rotate(180deg)" }}
-                >
-                  {tab.label}
-                </span>
+                <Icon className="h-4 w-4" />
+
+                {/* Horizontal tooltip — fades in on hover when the drawer
+                    for this tab is not already open. Matches the drawer
+                    header voice `[§ NAME]`. */}
+                {!active && (
+                  <span
+                    className="pointer-events-none absolute right-full top-1/2 mr-2 -translate-y-1/2 whitespace-nowrap rounded-sm border border-subtle bg-card px-2 py-1 font-mono text-[10px] uppercase tracking-[0.18em] text-strong opacity-0 transition-opacity duration-150 group-hover:opacity-100"
+                    aria-hidden
+                  >
+                    [§&nbsp;{tab.tip}]
+                  </span>
+                )}
+
                 {tab.warn && (
                   <span
-                    className="absolute -left-1 top-2 h-1.5 w-1.5 rounded-full bg-warning"
+                    className="absolute -left-1 top-1.5 h-1.5 w-1.5 rounded-full bg-warning"
                     aria-hidden
                   />
                 )}

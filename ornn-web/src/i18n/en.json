@@ -933,6 +933,8 @@
     "dismissAnnouncement": "Dismiss announcement",
     "legal": "Legal",
     "productOverview": "{{brand}} product overview",
+    "playgroundSkillDrawer": "Skill drawer",
+    "playgroundEnvDrawer": "Env drawer",
     "skillPackageDrawer": "Skill package drawer",
     "skillPackagePreview": "Skill package preview",
     "generating": "Generating",
