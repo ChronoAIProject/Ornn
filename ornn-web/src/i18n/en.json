@@ -334,7 +334,10 @@
     "showAll": "Show all",
     "viewAll": "View all",
     "broadcast": {
-      "tag": "Broadcast"
+      "tag": "Broadcast",
+      "modal": {
+        "aria": "Broadcast notification details"
+      }
     }
   },
   "permissions": {
@@ -968,10 +971,24 @@
       "table": {
         "title": "Title",
         "preview": "Preview",
+        "recipients": "Recipients",
         "created": "Created",
         "updated": "Updated",
         "readCount": "Read by",
         "actions": "Actions"
+      },
+      "recipients": {
+        "heading": "Recipients",
+        "audienceAll": "All users",
+        "audienceSpecific": "Specific users",
+        "summaryAll": "All users",
+        "summaryCount": "{{count}} users",
+        "lockedHint": "Recipients are locked after creation.",
+        "searchPlaceholder": "Type an email to add a recipient",
+        "searchAria": "Search users by email",
+        "loading": "Searching…",
+        "noMatches": "No matching users.",
+        "remove": "Remove {{email}}"
       },
       "empty": {
         "title": "No broadcasts yet",
@@ -1014,7 +1031,8 @@
         "bodyEnRequired": "English body is required",
         "bodyZhRequired": "中文正文为必填项",
         "titleTooLong": "Title is too long",
-        "bodyTooLong": "Body is too long"
+        "bodyTooLong": "Body is too long",
+        "recipientsRequired": "Add at least one recipient or switch to 'All users'."
       }
     },
     "skills": {
