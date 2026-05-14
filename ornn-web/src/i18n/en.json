@@ -49,7 +49,10 @@
     "myProfile": "My Profile",
     "myOrgs": "My Organizations",
     "myServices": "My Services",
-    "adminServices": "Admin Services"
+    "adminServices": "Admin Services",
+    "admin": {
+      "broadcasts": "Broadcasts"
+    }
   },
   "breadcrumb": {
     "ornn": "ornn",
@@ -329,7 +332,10 @@
     "markAllRead": "Mark all read",
     "showUnreadOnly": "Show unread only",
     "showAll": "Show all",
-    "viewAll": "View all"
+    "viewAll": "View all",
+    "broadcast": {
+      "tag": "Broadcast"
+    }
   },
   "permissions": {
     "title": "Permissions",
@@ -950,6 +956,65 @@
         "deleted": "Announcement deleted",
         "updateFailed": "Update failed",
         "deleteFailed": "Delete failed"
+      }
+    },
+    "broadcasts": {
+      "eyebrow": "[§ ADMIN — BROADCASTS]",
+      "title": "Broadcast notifications",
+      "description": "Every broadcast lands in every authenticated user's notification inbox immediately. There is no schedule window — a broadcast is live the moment it's created and gone the moment it's deleted. Both English and Chinese are required so every user reads in their own language.",
+      "action": {
+        "new": "New broadcast"
+      },
+      "table": {
+        "title": "Title",
+        "preview": "Preview",
+        "created": "Created",
+        "updated": "Updated",
+        "readCount": "Read by",
+        "actions": "Actions"
+      },
+      "empty": {
+        "title": "No broadcasts yet",
+        "hint": "Create the first broadcast and it will appear in every user's notification bell on their next refresh."
+      },
+      "confirm": {
+        "deleteTitle": "Delete broadcast?",
+        "delete": "\"{{title}}\" will be removed from every user's inbox and its read receipts will be cleared."
+      },
+      "toast": {
+        "created": "Broadcast created",
+        "updated": "Broadcast updated",
+        "deleted": "Broadcast deleted",
+        "createFailed": "Create failed",
+        "updateFailed": "Update failed",
+        "deleteFailed": "Delete failed"
+      },
+      "drawer": {
+        "eyebrowNew": "[§ NEW — BROADCAST]",
+        "eyebrowEdit": "[§ EDIT — BROADCAST]",
+        "newTitle": "New broadcast",
+        "newAria": "New broadcast",
+        "editAria": "Edit broadcast",
+        "englishHeading": "English (required)",
+        "chineseHeading": "中文 (required)",
+        "titleEnLabel": "Title (EN)",
+        "titleZhLabel": "Title (ZH)",
+        "titleEnPlaceholder": "Short, scannable. Visible in the bell.",
+        "titleZhPlaceholder": "简短、易扫读。展示在通知铃中。",
+        "bodyEnLabel": "Body — EN (markdown)",
+        "bodyZhLabel": "Body — ZH (markdown)",
+        "bodyEnPlaceholder": "Markdown supported. Keep it under a screenful — this renders inline in the notification bell.",
+        "bodyZhPlaceholder": "支持 Markdown。建议控制在一屏内 —— 此内容将直接渲染在通知铃中。",
+        "createBtn": "Create broadcast",
+        "saveBtn": "Save changes"
+      },
+      "errors": {
+        "titleEnRequired": "English title is required",
+        "titleZhRequired": "中文标题为必填项",
+        "bodyEnRequired": "English body is required",
+        "bodyZhRequired": "中文正文为必填项",
+        "titleTooLong": "Title is too long",
+        "bodyTooLong": "Body is too long"
       }
     },
     "skills": {

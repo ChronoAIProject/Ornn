@@ -16,10 +16,14 @@
 
 import { Outlet, NavLink, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
+import { useTranslation } from "react-i18next";
 
 interface NavItem {
   path: string;
+  /** Either a literal label or an i18n key resolved at render time. */
   label: string;
+  /** When true, `label` is treated as an i18n key. */
+  i18nLabel?: boolean;
   icon: React.ReactNode;
 }
 
@@ -79,6 +83,19 @@ const NAV_ITEMS: NavItem[] = [
     ),
   },
   {
+    path: "/admin/broadcasts",
+    label: "nav.admin.broadcasts",
+    i18nLabel: true,
+    icon: (
+      // lucide-react `Bell` icon path, inlined to match the other nav
+      // entries' bare-SVG style and avoid a new dep just for this row.
+      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+      </svg>
+    ),
+  },
+  {
     path: "/admin/settings",
     label: "Settings",
     icon: (
@@ -92,6 +109,10 @@ const NAV_ITEMS: NavItem[] = [
 
 export function AdminLayout() {
   const location = useLocation();
+  const { t } = useTranslation();
+
+  const renderLabel = (item: NavItem): string =>
+    item.i18nLabel ? t(item.label) : item.label;
 
   return (
     <div className="flex h-full min-h-0 gap-6 py-4">
@@ -114,7 +135,7 @@ export function AdminLayout() {
               }
             >
               {item.icon}
-              {item.label}
+              {renderLabel(item)}
             </NavLink>
           ))}
         </nav>
@@ -137,7 +158,7 @@ export function AdminLayout() {
             }
           >
             {item.icon}
-            {item.label}
+            {renderLabel(item)}
           </NavLink>
         ))}
       </nav>
