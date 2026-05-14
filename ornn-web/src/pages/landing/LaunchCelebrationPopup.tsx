@@ -88,22 +88,32 @@ export function LaunchCelebrationPopup() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 14, scale: 0.97 }}
             transition={{ type: "spring", stiffness: 220, damping: 22, mass: 0.9 }}
+            className="relative z-10 mx-4 w-full max-w-2xl"
+          >
+            {/* Hard-offset letterpress plate in ember-deep (DESIGN.md
+                Material & Print vocabulary — card-shadow impression
+                color, theme-aware). Solid color, not a soft shadow.
+                Painted as a SIBLING of the card (not a child) so the
+                card's opaque bg sits cleanly on top of it. Earlier
+                version used `-z-10` on a child of the card; because
+                the card establishes its own stacking context via
+                `position: relative + z-index: 10`, the negative-z
+                child paints OVER the card's bg, not behind it —
+                visible immediately on the light-mode white card. */}
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-0 translate-x-[6px] translate-y-[6px] rounded-[3px] bg-ember-deep"
+            />
+          <div
             role="dialog"
             aria-modal="true"
             aria-labelledby="launch-popup-title"
             className="
-              relative z-10 mx-4 w-full max-w-2xl max-h-[88vh] overflow-y-auto
+              relative max-h-[88vh] overflow-y-auto
               rounded-[3px] border-2 border-accent bg-card
               p-6 sm:p-9
             "
           >
-            {/* Hard-offset letterpress plate in ember-deep (DESIGN.md
-                Material & Print vocabulary — card-shadow impression
-                color, theme-aware). Solid color, not a soft shadow. */}
-            <div
-              aria-hidden
-              className="pointer-events-none absolute inset-0 -z-10 translate-x-[6px] translate-y-[6px] rounded-[3px] bg-ember-deep"
-            />
 
             {/* Header row — bracketed mono section-cite + date stacked
                 top-left, close affordance top-right. */}
@@ -311,6 +321,7 @@ export function LaunchCelebrationPopup() {
                 </svg>
               </a>
             </div>
+          </div>
           </motion.div>
         </div>
       )}
