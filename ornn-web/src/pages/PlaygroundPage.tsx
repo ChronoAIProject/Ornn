@@ -271,6 +271,31 @@ export function PlaygroundPage() {
 
   const activeDrawer = pinnedDrawer ?? hoverDrawer;
 
+  const skillCategory = (skill?.metadata as Record<string, unknown> | null)?.category as string | undefined;
+
+  // Synthesise a SkillMetadata-shaped object from the registry skill record
+  // so SkillPackagePreview can render the same flat identity strip as the
+  // generative page. The preview only reads name / description / category /
+  // tag, so we don't need to faithfully reproduce the rest of the shape —
+  // `createDefaultSkillMetadata` fills the unused fields with safe defaults.
+  // Declared above the early-return guards so the hook order is stable.
+  const previewMetadata = useMemo<SkillMetadata | null>(() => {
+    if (!skill) return null;
+    return createDefaultSkillMetadata({
+      name: skill.name,
+      description: skill.description ?? "",
+      version: skill.version,
+      metadata: {
+        category: (skillCategory as SkillCategory) ?? "plain",
+        runtime: [],
+        runtimeDependency: [],
+        runtimeEnvVar: [],
+        toolList: [],
+        tag: skill.tags ?? [],
+      },
+    });
+  }, [skill, skillCategory]);
+
   // No skill specified
   if (!skillName) {
     return (
@@ -310,30 +335,6 @@ export function PlaygroundPage() {
       </PageTransition>
     );
   }
-
-  const skillCategory = (skill?.metadata as Record<string, unknown> | null)?.category as string | undefined;
-
-  // Synthesise a SkillMetadata-shaped object from the registry skill record
-  // so SkillPackagePreview can render the same flat identity strip as the
-  // generative page. The preview only reads name / description / category /
-  // tag, so we don't need to faithfully reproduce the rest of the shape —
-  // `createDefaultSkillMetadata` fills the unused fields with safe defaults.
-  const previewMetadata = useMemo<SkillMetadata | null>(() => {
-    if (!skill) return null;
-    return createDefaultSkillMetadata({
-      name: skill.name,
-      description: skill.description ?? "",
-      version: skill.version,
-      metadata: {
-        category: (skillCategory as SkillCategory) ?? "plain",
-        runtime: [],
-        runtimeDependency: [],
-        runtimeEnvVar: [],
-        toolList: [],
-        tag: skill.tags ?? [],
-      },
-    });
-  }, [skill, skillCategory]);
 
   const starters = defaultPromptStarters(skillName, t);
   const conversationActive = messages.length > 0 || !!currentAssistantContent || isStreaming;
