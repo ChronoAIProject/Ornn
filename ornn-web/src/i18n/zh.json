@@ -709,6 +709,7 @@
       "inviteAria": "复制 NyxID 邀请码",
       "copy": "复制",
       "copied": "已复制",
+      "inviteHelp": "点击 Ornn 右上角的「登录」后，会跳转到我们的身份服务 NyxID 完成登录。请在 NyxID 页面填入上方邀请码，然后选择 GitHub 登录即可完成注册。",
       "limitedSlots": "名额有限 — 先到先得。",
       "dismiss": "关闭",
       "cta": "前往 GitHub 点 Star",

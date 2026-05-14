@@ -709,6 +709,7 @@
       "inviteAria": "Copy NyxID invite code",
       "copy": "Copy",
       "copied": "Copied",
+      "inviteHelp": "When you click Sign In (top-right of Ornn), you'll be redirected to NyxID — our identity provider — to complete login. On the NyxID page, paste this invite code into the invite field, then choose GitHub to finish sign-up.",
       "limitedSlots": "Limited slots — first come, first served.",
       "dismiss": "Dismiss",
       "cta": "Star on GitHub",

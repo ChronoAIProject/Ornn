@@ -262,6 +262,14 @@ export function LaunchCelebrationPopup() {
                     : `${t("landing.launchPopup.copy")} ⧉`}
                 </span>
               </button>
+              {/* Helper prose — explains the actual sign-in flow:
+                  clicking Sign In in Ornn redirects to NyxID (our IdP),
+                  where the invite code is required on first visit before
+                  the user can continue with GitHub. Without this, the
+                  code chip reads as "magic value, purpose unknown". */}
+              <p className="mt-3 text-[12.5px] leading-[1.6] text-body">
+                {t("landing.launchPopup.inviteHelp")}
+              </p>
             </div>
 
             {/* Limited-slots warning — mono caption, italic, ember
