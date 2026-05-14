@@ -74,6 +74,36 @@ describe("NotificationDetailModal", () => {
     expect(onMarkRead).not.toHaveBeenCalled();
   });
 
+  it("does not refire onMarkRead when the parent rerenders with a new function reference (#509)", async () => {
+    const calls: string[] = [];
+    // Each "render pass" gets a fresh closure, simulating the inline
+    // arrow `(id) => markRead.mutate(id)` that NotificationBell and
+    // NotificationsPage pass today.
+    const { rerender } = render(
+      <NotificationDetailModal
+        notification={SAMPLE}
+        onClose={() => {}}
+        onMarkRead={(id) => calls.push(id)}
+      />,
+    );
+    await waitFor(() => expect(calls.length).toBe(1));
+
+    for (let i = 0; i < 5; i++) {
+      rerender(
+        <NotificationDetailModal
+          notification={SAMPLE}
+          onClose={() => {}}
+          onMarkRead={(id) => calls.push(id)}
+        />,
+      );
+    }
+
+    // Despite 5 extra rerenders with a fresh onMarkRead each time, the
+    // mutation must still have fired exactly once for this opened item.
+    await new Promise((r) => setTimeout(r, 10));
+    expect(calls).toEqual(["n-1"]);
+  });
+
   it("renders nothing when notification is null", () => {
     const { container } = render(
       <NotificationDetailModal notification={null} onClose={() => {}} />,
