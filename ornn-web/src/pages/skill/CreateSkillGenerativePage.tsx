@@ -226,6 +226,28 @@ export function CreateSkillGenerativePage() {
   const hasPreview = generation.metadata !== null;
   const conversationActive = hasMessages || isGenerating;
   const drawerOpen = pinnedOpen || hoverDrawerOpen;
+
+  // New-iteration hint — pulse the rail tab when a generation lands while
+  // the drawer is closed. The chat lets the user refine across many turns,
+  // so each `phase: generating → preview` transition produces a fresh skill
+  // package; without this nudge the only signal is the chat message itself,
+  // which the user may scroll past while typing the next refinement.
+  const [hasUnseenIteration, setHasUnseenIteration] = useState(false);
+  const prevPhaseRef = useRef(generation.phase);
+  useEffect(() => {
+    if (
+      prevPhaseRef.current === "generating" &&
+      generation.phase === "preview" &&
+      !drawerOpen
+    ) {
+      setHasUnseenIteration(true);
+    }
+    prevPhaseRef.current = generation.phase;
+  }, [generation.phase, drawerOpen]);
+  useEffect(() => {
+    if (drawerOpen) setHasUnseenIteration(false);
+  }, [drawerOpen]);
+
   const starters = defaultPromptStarters(t);
 
   const chatInputPlaceholder = isGenerating
@@ -364,11 +386,36 @@ export function CreateSkillGenerativePage() {
             className={`group relative flex h-11 w-9 items-center justify-center rounded-l-sm border-y border-l transition-colors ${
               drawerOpen
                 ? "border-accent/60 bg-card text-accent"
-                : "border-subtle bg-card/80 text-meta hover:border-accent/40 hover:text-strong"
+                : hasUnseenIteration
+                  ? "border-accent bg-card text-accent"
+                  : "border-subtle bg-card/80 text-meta hover:border-accent/40 hover:text-strong"
             }`}
             aria-label={t("aria.skillPackageDrawer")}
           >
             <PackageIcon className="h-4 w-4" />
+
+            {/* New-iteration hint — pulsing ember rings around the tab
+                when a generation lands while the drawer is closed. Two
+                layers: a steady accent ring + an `animate-ping` ring
+                that scales out to draw the eye. Clears on drawer open. */}
+            {hasUnseenIteration && !drawerOpen && (
+              <>
+                <span
+                  className="pointer-events-none absolute -inset-px rounded-l-sm ring-2 ring-accent/70"
+                  aria-hidden
+                />
+                <span
+                  className="pointer-events-none absolute -inset-px animate-ping rounded-l-sm ring-2 ring-accent/40"
+                  aria-hidden
+                />
+                {/* Small ember dot top-right to signal "new" even at the
+                    button's outer edge when ring blends into the card. */}
+                <span
+                  className="pointer-events-none absolute -right-1 -top-1 h-2 w-2 animate-pulse rounded-full bg-accent"
+                  aria-hidden
+                />
+              </>
+            )}
 
             {/* Horizontal tooltip — fades in on hover when the drawer is
                 not already open. Matches the drawer header voice. */}
