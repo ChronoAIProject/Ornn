@@ -1,5 +1,21 @@
 # ornn-api
 
+## 0.8.0
+
+### Minor Changes
+
+- [#501](https://github.com/ChronoAIProject/Ornn/pull/501) [`f2f9f6a`](https://github.com/ChronoAIProject/Ornn/commit/f2f9f6a5e4ba2392610196b5600af085d3f7e583) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Admin broadcast notifications ([#500](https://github.com/ChronoAIProject/Ornn/issues/500)). Admins can now author bilingual (EN + ZH) markdown notifications from `/admin/broadcasts` that land in every user's `NotificationBell` inbox; edits propagate to all users, hard delete clears the message and cascades read receipts. Backend exposes admin-guarded CRUD at `/api/v1/admin/broadcasts/*` and merges broadcasts into the existing `/api/v1/notifications` feed under a `source: "broadcast"` discriminator, with per-user read state stored in a separate `broadcast_read_receipts` collection.
+
+- [#504](https://github.com/ChronoAIProject/Ornn/pull/504) [`d183cff`](https://github.com/ChronoAIProject/Ornn/commit/d183cffc6070fc5314dacdac102f0b300c3ea638) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Targeted broadcasts + click-to-popup markdown viewer ([#502](https://github.com/ChronoAIProject/Ornn/issues/502)). Builds on [#500](https://github.com/ChronoAIProject/Ornn/issues/500). Admins can now choose between broadcasting to all users (existing behaviour) and targeting specific users by email. Recipients are immutable after create — edits only touch the bilingual title/body, deletes still cascade read receipts. End-user side: clicking a broadcast notification in the bell or `/notifications` page now opens a modal that renders the full bilingual markdown body (existing audit / quota notifications keep their navigate-to-link behaviour). The merged `/notifications` feed, unread count, mark-read, and mark-all-read all transparently filter targeted broadcasts so non-recipients never see them.
+
+### Patch Changes
+
+- [#510](https://github.com/ChronoAIProject/Ornn/pull/510) [`815b776`](https://github.com/ChronoAIProject/Ornn/commit/815b7769ac0e65412db92a736966b232b9e75878) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Fix click-to-popup broadcast notification ([#502](https://github.com/ChronoAIProject/Ornn/issues/502)) crashing with React error [#185](https://github.com/ChronoAIProject/Ornn/issues/185) (Maximum update depth exceeded). The mark-read effect inside `NotificationDetailModal` re-fired on every parent rerender because the parent passed an inline arrow callback. Modal now stores the callback in a "latest ref" and tracks the last marked id, so mark-read fires exactly once per opened broadcast no matter how the parent rerenders.
+
+- [#550](https://github.com/ChronoAIProject/Ornn/pull/550) [`1038bfc`](https://github.com/ChronoAIProject/Ornn/commit/1038bfc7bb4834c154950948b08cad7460ed9fac) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Swap the privacy-mask glyph in redemption-code grant notes from `…` (U+2026) to `****`. The ellipsis is unambiguous in the audit log but reads as "text truncated, click to see more" in the new `/notifications` detail modal ([#532](https://github.com/ChronoAIProject/Ornn/issues/532)), so users kept asking why the full code was hidden. The mask now signals _masked_ rather than _truncated_. Only the first four chars of the code still leak — privacy intent unchanged. Closes [#549](https://github.com/ChronoAIProject/Ornn/issues/549).
+
+  Affects new audit + notification rows generated after this lands; historical rows continue to carry `…` (no migration — old rows are clearly QUOTA-tagged and redemption-sourced, no semantic loss).
+
 ## 0.7.2
 
 ### Patch Changes
