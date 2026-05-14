@@ -418,7 +418,7 @@ export function CreateSkillGenerativePage() {
                 transition={{ duration: 0.18, ease: "easeOut" }}
                 onMouseEnter={openHover}
                 onMouseLeave={scheduleHoverClose}
-                className="card-impression fixed right-10 top-4 bottom-4 z-40 flex w-[520px] max-w-[calc(100vw-3rem)] flex-col rounded-md border border-subtle bg-card"
+                className="card-impression fixed right-10 top-[68px] bottom-4 z-40 flex w-[min(960px,65vw)] max-w-[calc(100vw-3rem)] flex-col rounded-md border border-subtle bg-card"
                 role="complementary"
                 aria-label={t("aria.skillPackagePreview")}
               >
@@ -458,10 +458,14 @@ export function CreateSkillGenerativePage() {
                   </div>
                 </div>
 
-                {/* Drawer body */}
-                <div className="min-h-0 flex-1 overflow-y-auto">
+                {/* Drawer body — flex column with the preview claiming the
+                    space between validation errors (top) and action buttons
+                    (bottom). The body itself does NOT scroll; scrolling lives
+                    inside the preview's panes so Start over / Save skill stay
+                    visible at all times. */}
+                <div className="flex min-h-0 flex-1 flex-col">
                   {hasPreview ? (
-                    <div className="flex flex-col gap-4 p-4">
+                    <div className="flex min-h-0 flex-1 flex-col gap-4 p-4">
                       {hasFrontmatterErrors && (
                         <ValidationErrorPanel
                           errors={validationErrors}
@@ -480,11 +484,12 @@ export function CreateSkillGenerativePage() {
                         onContentChange={generation.updateFileContent}
                         onFileDelete={generation.deleteFile}
                         authorName={user?.displayName ?? undefined}
+                        className="min-h-0 flex-1"
                       />
 
-                      <WeldedSeam />
+                      <WeldedSeam className="shrink-0" />
 
-                      <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="flex shrink-0 flex-wrap items-center justify-between gap-3">
                         <Button variant="secondary" size="sm" onClick={generation.reset}>
                           {t("generative.startOver", "Start over")}
                         </Button>
