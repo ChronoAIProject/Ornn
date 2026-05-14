@@ -16,13 +16,15 @@
  * @module components/admin/broadcasts/BroadcastEditDrawer
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { MarkdownEditor } from "@/components/form/MarkdownEditor";
+import { UserEmailPicker } from "@/components/admin/UserEmailPicker";
 import { useToastStore } from "@/stores/toastStore";
 import {
   useCreateBroadcast,
@@ -32,16 +34,21 @@ import type {
   AdminBroadcast,
   CreateBroadcastInput,
 } from "@/services/broadcastsApi";
+import { fetchAdminUsers } from "@/services/adminUsersApi";
 import { translateError } from "@/utils/translateError";
 
 const TITLE_MAX = 200;
 const BODY_MAX = 20_000;
+
+type Audience = "all" | "specific";
 
 interface DrawerForm {
   titleEn: string;
   titleZh: string;
   bodyEn: string;
   bodyZh: string;
+  audience: Audience;
+  recipientUserIds: string[];
 }
 
 interface FieldErrors {
@@ -49,10 +56,18 @@ interface FieldErrors {
   titleZh?: string;
   bodyEn?: string;
   bodyZh?: string;
+  recipients?: string;
 }
 
 function emptyForm(): DrawerForm {
-  return { titleEn: "", titleZh: "", bodyEn: "", bodyZh: "" };
+  return {
+    titleEn: "",
+    titleZh: "",
+    bodyEn: "",
+    bodyZh: "",
+    audience: "all",
+    recipientUserIds: [],
+  };
 }
 
 function fromBroadcast(b: AdminBroadcast): DrawerForm {
@@ -61,18 +76,25 @@ function fromBroadcast(b: AdminBroadcast): DrawerForm {
     titleZh: b.titleI18n.zh,
     bodyEn: b.bodyMarkdownI18n.en,
     bodyZh: b.bodyMarkdownI18n.zh,
+    audience: b.recipientUserIds == null ? "all" : "specific",
+    recipientUserIds: b.recipientUserIds ?? [],
   };
 }
 
 function toInput(form: DrawerForm): CreateBroadcastInput {
-  return {
+  const base: CreateBroadcastInput = {
     titleI18n: { en: form.titleEn.trim(), zh: form.titleZh.trim() },
     bodyMarkdownI18n: { en: form.bodyEn.trim(), zh: form.bodyZh.trim() },
   };
+  if (form.audience === "specific") {
+    base.recipientUserIds = form.recipientUserIds;
+  }
+  return base;
 }
 
 function validate(
   form: DrawerForm,
+  isEdit: boolean,
   t: (k: string) => string,
 ): FieldErrors {
   const errors: FieldErrors = {};
@@ -95,6 +117,11 @@ function validate(
     errors.bodyZh = t("adminPages.broadcasts.errors.bodyZhRequired");
   } else if (form.bodyZh.trim().length > BODY_MAX) {
     errors.bodyZh = t("adminPages.broadcasts.errors.bodyTooLong");
+  }
+  // Recipient validation only matters on create — on edit the audience
+  // is read-only and locked to whatever was chosen at create time.
+  if (!isEdit && form.audience === "specific" && form.recipientUserIds.length === 0) {
+    errors.recipients = t("adminPages.broadcasts.errors.recipientsRequired");
   }
   return errors;
 }
@@ -121,6 +148,32 @@ export function BroadcastEditDrawer({
   const [form, setForm] = useState<DrawerForm>(() => emptyForm());
   const [errors, setErrors] = useState<FieldErrors>({});
 
+  // Read-only edit mode resolves the locked recipient list to emails for
+  // display. Pull the first big page of normal users from cache — the
+  // same pattern UserEmailPicker uses for chip resolution.
+  const editRecipientsList = isEdit ? broadcast?.recipientUserIds ?? null : null;
+  const userLookupQuery = useQuery({
+    queryKey: ["admin", "users", "broadcast-edit-lookup"],
+    enabled: isOpen && editRecipientsList != null && editRecipientsList.length > 0,
+    staleTime: 60_000,
+    queryFn: async () => {
+      const page = await fetchAdminUsers({
+        role: "normal",
+        page: 1,
+        pageSize: 200,
+      });
+      return page.items;
+    },
+  });
+
+  const resolvedEmails = useMemo<string[]>(() => {
+    if (!editRecipientsList) return [];
+    const cache = new Map(
+      (userLookupQuery.data ?? []).map((row) => [row.userId, row.email]),
+    );
+    return editRecipientsList.map((id) => cache.get(id) ?? id);
+  }, [editRecipientsList, userLookupQuery.data]);
+
   useEffect(() => {
     if (!isOpen) return;
     setForm(broadcast ? fromBroadcast(broadcast) : emptyForm());
@@ -138,7 +191,7 @@ export function BroadcastEditDrawer({
 
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const next = validate(form, t);
+    const next = validate(form, isEdit, t);
     if (Object.keys(next).length > 0) {
       setErrors(next);
       return;
@@ -146,8 +199,11 @@ export function BroadcastEditDrawer({
     setErrors({});
     const input = toInput(form);
     if (isEdit && broadcast) {
+      // PATCH is title + body only — strip recipientUserIds if present.
+      const { recipientUserIds: _ignored, ...patch } = input;
+      void _ignored;
       updateMut.mutate(
-        { id: broadcast.id, patch: input },
+        { id: broadcast.id, patch },
         {
           onSuccess: () => {
             addToast({
@@ -248,8 +304,97 @@ export function BroadcastEditDrawer({
             </header>
 
             <form onSubmit={onSubmit} className="flex flex-col gap-6">
+              {/* Recipients — editable on create, read-only on edit.
+                  Recipients are locked at create time and PATCH rejects
+                  any attempt to change them, so the edit-mode UI is a
+                  pure summary card. */}
+              <section className="flex flex-col gap-3">
+                <h3 className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-accent">
+                  {t("adminPages.broadcasts.recipients.heading")}
+                </h3>
+                {isEdit ? (
+                  <div className="flex flex-col gap-2 rounded-sm border border-subtle bg-elevated/40 p-3">
+                    <p className="font-text text-sm text-strong">
+                      {editRecipientsList == null
+                        ? t("adminPages.broadcasts.recipients.summaryAll")
+                        : t("adminPages.broadcasts.recipients.summaryCount", {
+                            count: editRecipientsList.length,
+                          })}
+                    </p>
+                    {editRecipientsList != null && editRecipientsList.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {resolvedEmails.map((email, idx) => (
+                          <span
+                            key={`${editRecipientsList[idx]}-${idx}`}
+                            className="rounded-sm border border-subtle bg-card px-2 py-0.5 font-mono text-[11px] text-meta"
+                          >
+                            {email}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
+                      {t("adminPages.broadcasts.recipients.lockedHint")}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-3">
+                    <div className="flex flex-wrap gap-4">
+                      <label className="flex items-center gap-2 font-text text-sm text-strong">
+                        <input
+                          type="radio"
+                          name="broadcast-audience"
+                          checked={form.audience === "all"}
+                          onChange={() =>
+                            setForm((f) => ({
+                              ...f,
+                              audience: "all",
+                              recipientUserIds: [],
+                            }))
+                          }
+                          className="accent-accent"
+                        />
+                        <span>
+                          {t("adminPages.broadcasts.recipients.audienceAll")}
+                        </span>
+                      </label>
+                      <label className="flex items-center gap-2 font-text text-sm text-strong">
+                        <input
+                          type="radio"
+                          name="broadcast-audience"
+                          checked={form.audience === "specific"}
+                          onChange={() =>
+                            setForm((f) => ({ ...f, audience: "specific" }))
+                          }
+                          className="accent-accent"
+                        />
+                        <span>
+                          {t("adminPages.broadcasts.recipients.audienceSpecific")}
+                        </span>
+                      </label>
+                    </div>
+                    {form.audience === "specific" && (
+                      <div className="flex flex-col gap-1.5">
+                        <UserEmailPicker
+                          value={form.recipientUserIds}
+                          onChange={(next) =>
+                            setForm((f) => ({ ...f, recipientUserIds: next }))
+                          }
+                          disabled={saving}
+                        />
+                        {errors.recipients && (
+                          <span className="font-mono text-[11px] text-danger">
+                            {errors.recipients}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </section>
+
               {/* English block — required */}
-              <section className="flex flex-col gap-4">
+              <section className="flex flex-col gap-4 border-t border-subtle pt-5">
                 <h3 className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-accent">
                   {t("adminPages.broadcasts.drawer.englishHeading")}
                 </h3>

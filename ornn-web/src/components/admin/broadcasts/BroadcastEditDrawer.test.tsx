@@ -15,6 +15,8 @@
 
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import type { ReactNode } from "react";
 
 const createMutate = vi.fn();
 const updateMutate = vi.fn();
@@ -32,7 +34,25 @@ vi.mock("@/stores/toastStore", () => ({
     selector({ addToast }),
 }));
 
+// Avoid pulling in apiClient via UserEmailPicker → adminUsersApi.
+vi.mock("@/services/adminUsersApi", () => ({
+  fetchAdminUsers: vi.fn().mockResolvedValue({
+    items: [],
+    total: 0,
+    page: 1,
+    pageSize: 0,
+    totalPages: 1,
+  }),
+}));
+
 import { BroadcastEditDrawer } from "./BroadcastEditDrawer";
+
+function wrap(ui: ReactNode) {
+  const qc = new QueryClient({
+    defaultOptions: { queries: { retry: false, gcTime: 0 } },
+  });
+  return render(<QueryClientProvider client={qc}>{ui}</QueryClientProvider>);
+}
 
 beforeEach(() => {
   createMutate.mockReset();
@@ -80,7 +100,7 @@ describe("BroadcastEditDrawer", () => {
       },
     );
 
-    render(
+    wrap(
       <BroadcastEditDrawer
         isOpen={true}
         onClose={onClose}
@@ -118,7 +138,7 @@ describe("BroadcastEditDrawer", () => {
   });
 
   it("does not submit when one of the four required fields is empty", async () => {
-    render(
+    wrap(
       <BroadcastEditDrawer
         isOpen={true}
         onClose={() => {}}
@@ -140,6 +160,37 @@ describe("BroadcastEditDrawer", () => {
 
     // Mutation never fires; the drawer remains open (onClose isn't
     // called from a failed submission path).
+    expect(createMutate).not.toHaveBeenCalled();
+  });
+
+  it("blocks submit when 'Specific users' is selected with no recipients", async () => {
+    wrap(
+      <BroadcastEditDrawer
+        isOpen={true}
+        onClose={() => {}}
+        broadcast={null}
+      />,
+    );
+
+    fillBilingual({
+      titleEn: "Targeted",
+      titleZh: "定向",
+      bodyEn: "Hello",
+      bodyZh: "你好",
+    });
+
+    // Flip to "Specific users" but add no recipients.
+    const radios = screen.getAllByRole("radio") as HTMLInputElement[];
+    const specificRadio = radios.find((r) =>
+      (r.parentElement?.textContent ?? "").toLowerCase().includes("specific"),
+    );
+    expect(specificRadio).toBeTruthy();
+    fireEvent.click(specificRadio!);
+
+    const buttons = screen.getAllByRole("button");
+    const submitBtn = buttons.find((b) => b.getAttribute("type") === "submit");
+    fireEvent.click(submitBtn!);
+
     expect(createMutate).not.toHaveBeenCalled();
   });
 });
