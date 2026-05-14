@@ -18,7 +18,7 @@
  * @module components/notifications/NotificationDetailModal
  */
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
@@ -58,12 +58,44 @@ export function NotificationDetailModal({
     return () => document.removeEventListener("keydown", onKey);
   }, [isOpen, onClose]);
 
-  // Fire mark-read once per open transition for unread items. Guarding
-  // on `id + readAt` makes this idempotent if the parent rerenders.
+  // Fire mark-read once per open transition for unread items.
+  //
+  // The naive form was `useEffect(() => ..., [isOpen, id, readAt, onMarkRead])`
+  // with an `if (readAt) return` guard. That looked safe but produced a
+  // React #185 update-depth loop in prod (#509):
+  //
+  //   1. Parents (NotificationBell, NotificationsPage) pass `onMarkRead`
+  //      as an inline arrow → new reference every render.
+  //   2. `readAt` here reads from the `notification` prop, which is a
+  //      snapshot taken when the user clicked — it never updates from
+  //      the live query cache after mark-read succeeds.
+  //   3. Mutation kicks the parent into an `isPending` rerender →
+  //      fresh arrow → effect deps shift → mark-read fires again →
+  //      next render → next fire → loop.
+  //
+  // Two defenses, layered:
+  //   (a) Stash `onMarkRead` in a "latest ref" so it can be invoked at
+  //       the right time without entering the effect's dep array.
+  //   (b) Track the last id we've already marked, so even if the
+  //       effect did somehow rerun for the same opened item, we don't
+  //       refire the mutation.
+  const onMarkReadRef = useRef(onMarkRead);
   useEffect(() => {
-    if (!isOpen || !id || readAt || !onMarkRead) return;
-    onMarkRead(id);
-  }, [isOpen, id, readAt, onMarkRead]);
+    onMarkReadRef.current = onMarkRead;
+  });
+  const markedForIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!isOpen) {
+      // Reset so reopening the modal (potentially for a different item)
+      // is allowed to fire once.
+      markedForIdRef.current = null;
+      return;
+    }
+    if (!id || readAt) return;
+    if (markedForIdRef.current === id) return;
+    markedForIdRef.current = id;
+    onMarkReadRef.current?.(id);
+  }, [isOpen, id, readAt]);
 
   if (!notification) return null;
 
