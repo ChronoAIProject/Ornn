@@ -35,8 +35,20 @@ export interface CreateBroadcastDocInput {
   titleI18n: BroadcastI18nString;
   bodyMarkdownI18n: BroadcastI18nString;
   createdBy: string;
+  /**
+   * Targeted recipients (#502). Omit / `undefined` → broadcast to all
+   * (persisted as `null`). Non-empty `string[]` → targeted. The
+   * service / Zod layer guarantees we never see an empty array here.
+   */
+  recipientUserIds?: readonly string[];
 }
 
+/**
+ * Update input type (#502): `recipientUserIds` is intentionally not
+ * accepted here — recipient targeting is immutable after create. Adding
+ * the field on a PATCH path is a compile error, which is the cheapest
+ * guard against a future caller forgetting the invariant.
+ */
 export interface UpdateBroadcastDocInput {
   titleI18n?: Partial<BroadcastI18nString>;
   bodyMarkdownI18n?: Partial<BroadcastI18nString>;
@@ -75,6 +87,15 @@ export class BroadcastRepository {
 
   async create(input: CreateBroadcastDocInput): Promise<BroadcastDocument> {
     const now = new Date();
+    // `null` is the canonical "broadcast to all users" value. Storing
+    // an explicit `null` (rather than omitting the field) keeps the
+    // doc shape uniform across pre- and post-#502 rows after the boot
+    // migration runs, so feed-time consumers can rely on the field
+    // always being present.
+    const recipientUserIds =
+      input.recipientUserIds && input.recipientUserIds.length > 0
+        ? [...input.recipientUserIds]
+        : null;
     const doc: Document = {
       _id: randomUUID() as unknown as Document["_id"],
       titleI18n: { en: input.titleI18n.en, zh: input.titleI18n.zh },
@@ -84,11 +105,18 @@ export class BroadcastRepository {
       },
       createdBy: input.createdBy,
       updatedBy: input.createdBy,
+      recipientUserIds,
       createdAt: now,
       updatedAt: now,
     };
     await this.broadcasts.insertOne(doc);
-    logger.debug({ broadcastId: String(doc._id) }, "broadcast inserted");
+    logger.debug(
+      {
+        broadcastId: String(doc._id),
+        recipientCount: recipientUserIds === null ? "all" : recipientUserIds.length,
+      },
+      "broadcast inserted",
+    );
     return mapBroadcastDoc(doc)!;
   }
 
@@ -303,6 +331,15 @@ function mapBroadcastDoc(doc: Document | null): BroadcastDocument | null {
   if (!doc) return null;
   const titleI18n = (doc.titleI18n as Partial<BroadcastI18nString>) ?? {};
   const bodyI18n = (doc.bodyMarkdownI18n as Partial<BroadcastI18nString>) ?? {};
+  // Pre-#502 docs predate the field — normalise both `undefined` (no
+  // key in Mongo) and explicit `null` to `null` so downstream code
+  // can branch on a single sentinel. Non-array values (corruption /
+  // bad migration) also fall back to `null` rather than crashing the
+  // mapper.
+  const rawRecipients = doc.recipientUserIds;
+  const recipientUserIds: readonly string[] | null = Array.isArray(rawRecipients)
+    ? rawRecipients.map((id) => String(id))
+    : null;
   return {
     _id: String(doc._id),
     titleI18n: {
@@ -315,6 +352,7 @@ function mapBroadcastDoc(doc: Document | null): BroadcastDocument | null {
     },
     createdBy: String(doc.createdBy ?? ""),
     updatedBy: String(doc.updatedBy ?? doc.createdBy ?? ""),
+    recipientUserIds,
     createdAt: toDate(doc.createdAt),
     updatedAt: toDate(doc.updatedAt ?? doc.createdAt),
   };

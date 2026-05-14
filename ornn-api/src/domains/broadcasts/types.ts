@@ -41,6 +41,19 @@ export interface BroadcastDocument {
   readonly createdBy: string;
   /** NyxID user_id of the admin who last edited; equals `createdBy` on create. */
   readonly updatedBy: string;
+  /**
+   * Targeting list (#502). `null` means broadcast to every user (the
+   * #500 default). A non-empty `string[]` of NyxID user_ids means the
+   * broadcast is only visible to those specific users — the merged
+   * feed, unread count, and markAllRead are filtered accordingly.
+   *
+   * **Immutable after create.** PATCH never changes this field — we
+   * can't yank a message back from a user who has already seen it, so
+   * the targeting decision is frozen at create time. The repository's
+   * `update` input type omits the field to enforce this at the
+   * compile boundary.
+   */
+  readonly recipientUserIds: readonly string[] | null;
   readonly createdAt: Date;
   readonly updatedAt: Date;
 }
@@ -68,6 +81,13 @@ export interface AdminBroadcastResponse {
   readonly bodyMarkdownI18n: BroadcastI18nString;
   readonly createdBy: string;
   readonly updatedBy: string;
+  /**
+   * Targeting list (#502). Always present on the wire — `null` for an
+   * everyone-broadcast, non-empty array for a targeted broadcast.
+   * Absent in the persisted doc is normalised to `null` by the read
+   * service so the wire shape is stable.
+   */
+  readonly recipientUserIds: readonly string[] | null;
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly readCount: number;

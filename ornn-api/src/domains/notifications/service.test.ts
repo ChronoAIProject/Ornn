@@ -160,6 +160,7 @@ function makeBroadcast(overrides: Partial<BroadcastDocument> & { _id: string }):
     bodyMarkdownI18n: { en: "Body", zh: "内容" },
     createdBy: "u-admin",
     updatedBy: "u-admin",
+    recipientUserIds: null,
     createdAt: new Date(),
     updatedAt: new Date(),
     ...overrides,
@@ -323,5 +324,149 @@ describe("NotificationService — merged feed (#500)", () => {
     expect(feed[0]?.source).toBe("user");
     expect(await svc.countUnread("u1")).toBe(1);
     expect(await svc.markAllRead("u1")).toBe(1);
+  });
+});
+
+describe("NotificationService — recipientUserIds filter (#502)", () => {
+  test("listFeedForUser shows targeted broadcasts to recipients", async () => {
+    const { svc, broadcastRepo } = makeService();
+    broadcastRepo.broadcasts.push(
+      makeBroadcast({
+        _id: "b-targeted",
+        recipientUserIds: ["u-1", "u-2"],
+      }),
+    );
+    const feedU1 = await svc.listFeedForUser("u-1");
+    expect(feedU1.map((i) => i._id)).toEqual(["b-targeted"]);
+    const feedU2 = await svc.listFeedForUser("u-2");
+    expect(feedU2.map((i) => i._id)).toEqual(["b-targeted"]);
+  });
+
+  test("listFeedForUser hides targeted broadcasts from non-recipients", async () => {
+    const { svc, broadcastRepo } = makeService();
+    broadcastRepo.broadcasts.push(
+      makeBroadcast({
+        _id: "b-targeted",
+        recipientUserIds: ["u-1"],
+      }),
+    );
+    const feedU3 = await svc.listFeedForUser("u-3");
+    expect(feedU3).toEqual([]);
+  });
+
+  test("listFeedForUser still shows everyone-broadcasts (recipientUserIds: null)", async () => {
+    const { svc, broadcastRepo } = makeService();
+    broadcastRepo.broadcasts.push(
+      makeBroadcast({ _id: "b-all", recipientUserIds: null }),
+    );
+    const feedU1 = await svc.listFeedForUser("u-1");
+    const feedU99 = await svc.listFeedForUser("u-99");
+    expect(feedU1.map((i) => i._id)).toEqual(["b-all"]);
+    expect(feedU99.map((i) => i._id)).toEqual(["b-all"]);
+  });
+
+  test("listFeedForUser interleaves targeted + everyone-broadcasts per recipient", async () => {
+    const { svc, broadcastRepo } = makeService();
+    broadcastRepo.broadcasts.push(
+      makeBroadcast({
+        _id: "b-all",
+        recipientUserIds: null,
+        createdAt: new Date("2026-05-01T00:00:00Z"),
+      }),
+      makeBroadcast({
+        _id: "b-targeted-u1",
+        recipientUserIds: ["u-1"],
+        createdAt: new Date("2026-05-10T00:00:00Z"),
+      }),
+      makeBroadcast({
+        _id: "b-targeted-u2",
+        recipientUserIds: ["u-2"],
+        createdAt: new Date("2026-05-05T00:00:00Z"),
+      }),
+    );
+    const feedU1 = await svc.listFeedForUser("u-1");
+    expect(feedU1.map((i) => i._id)).toEqual(["b-targeted-u1", "b-all"]);
+    const feedU2 = await svc.listFeedForUser("u-2");
+    expect(feedU2.map((i) => i._id)).toEqual(["b-targeted-u2", "b-all"]);
+    const feedU3 = await svc.listFeedForUser("u-3");
+    expect(feedU3.map((i) => i._id)).toEqual(["b-all"]);
+  });
+
+  test("countUnread counts targeted broadcasts only for recipients", async () => {
+    const { svc, broadcastRepo } = makeService();
+    broadcastRepo.broadcasts.push(
+      makeBroadcast({ _id: "b-all", recipientUserIds: null }),
+      makeBroadcast({ _id: "b-targeted", recipientUserIds: ["u-1"] }),
+    );
+    // u-1 sees both unread: count = 2
+    expect(await svc.countUnread("u-1")).toBe(2);
+    // u-2 sees only the everyone-broadcast unread: count = 1
+    expect(await svc.countUnread("u-2")).toBe(1);
+  });
+
+  test("markAllRead writes receipts only for visible broadcasts", async () => {
+    const { svc, broadcastRepo } = makeService();
+    broadcastRepo.broadcasts.push(
+      makeBroadcast({ _id: "b-all", recipientUserIds: null }),
+      makeBroadcast({ _id: "b-targeted-u1", recipientUserIds: ["u-1"] }),
+      makeBroadcast({ _id: "b-targeted-u2", recipientUserIds: ["u-2"] }),
+    );
+    const changed = await svc.markAllRead("u-1");
+    // u-1 marks: b-all + b-targeted-u1 = 2; b-targeted-u2 stays unread for u-1.
+    expect(changed).toBe(2);
+    const receiptKeys = broadcastRepo.receipts.map((r) => `${r.userId}:${r.broadcastId}`).sort();
+    expect(receiptKeys).toEqual(["u-1:b-all", "u-1:b-targeted-u1"]);
+    // u-2 is unaffected — markAllRead for u-1 does not write a receipt
+    // for any broadcast u-2 can see.
+    expect(await svc.countUnread("u-2")).toBe(2);
+  });
+
+  test("markRead on a targeted broadcast by a non-recipient throws NOTIFICATION_NOT_FOUND", async () => {
+    const { svc, broadcastRepo } = makeService();
+    broadcastRepo.broadcasts.push(
+      makeBroadcast({ _id: "b-targeted", recipientUserIds: ["u-1"] }),
+    );
+    await expect(svc.markRead("u-3", "b-targeted")).rejects.toThrow(
+      /Notification not found/,
+    );
+    // No receipt was written — the non-recipient can't even probe.
+    expect(broadcastRepo.receipts).toHaveLength(0);
+  });
+
+  test("markRead on a targeted broadcast by a recipient succeeds", async () => {
+    const { svc, broadcastRepo } = makeService();
+    broadcastRepo.broadcasts.push(
+      makeBroadcast({ _id: "b-targeted", recipientUserIds: ["u-1"] }),
+    );
+    const result = await svc.markRead("u-1", "b-targeted");
+    expect("source" in result && result.source === "broadcast").toBe(true);
+    expect(broadcastRepo.receipts).toHaveLength(1);
+  });
+
+  test("markManyRead silently skips targeted broadcasts the caller can't see", async () => {
+    const { svc, broadcastRepo } = makeService();
+    broadcastRepo.broadcasts.push(
+      makeBroadcast({ _id: "b-all", recipientUserIds: null }),
+      makeBroadcast({ _id: "b-targeted-other", recipientUserIds: ["u-99"] }),
+    );
+    // u-3 tries to mark both — only b-all should transition.
+    const changed = await svc.markManyRead("u-3", ["b-all", "b-targeted-other"]);
+    expect(changed).toBe(1);
+    expect(broadcastRepo.receipts).toHaveLength(1);
+    expect(broadcastRepo.receipts[0]?.broadcastId).toBe("b-all");
+  });
+
+  test("listFeedForUser unreadOnly + recipient filter compose correctly", async () => {
+    const { svc, broadcastRepo } = makeService();
+    broadcastRepo.broadcasts.push(
+      makeBroadcast({ _id: "b-all-read", recipientUserIds: null }),
+      makeBroadcast({ _id: "b-targeted-u1-read", recipientUserIds: ["u-1"] }),
+      makeBroadcast({ _id: "b-targeted-u1-unread", recipientUserIds: ["u-1"] }),
+      makeBroadcast({ _id: "b-targeted-u2", recipientUserIds: ["u-2"] }),
+    );
+    await broadcastRepo.markRead("u-1", "b-all-read");
+    await broadcastRepo.markRead("u-1", "b-targeted-u1-read");
+    const feed = await svc.listFeedForUser("u-1", { unreadOnly: true });
+    expect(feed.map((i) => i._id)).toEqual(["b-targeted-u1-unread"]);
   });
 });
