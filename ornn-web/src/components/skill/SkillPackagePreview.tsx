@@ -8,9 +8,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { FileTree, type FileNode } from "@/components/editor/FileTree";
 import { SkillFileViewer } from "@/components/skill/SkillFileViewer";
-import { Badge } from "@/components/ui/Badge";
 import type { SkillMetadata } from "@/types/skillPackage";
-import type { SkillCategory } from "@/utils/constants";
 
 export interface SkillPackagePreviewProps {
   /** FileTree data structure */
@@ -32,27 +30,6 @@ export interface SkillPackagePreviewProps {
   /** Author name (display only) */
   authorName?: string;
   className?: string;
-}
-
-/** Badge color mapping for categories */
-const CATEGORY_BADGE_COLORS: Record<SkillCategory, "cyan" | "magenta" | "yellow" | "green"> = {
-  plain: "cyan",
-  "tool-based": "magenta",
-  "runtime-based": "yellow",
-  mixed: "green",
-};
-
-/** Tag color palette using deterministic hash */
-const TAG_COLORS: Array<"cyan" | "magenta" | "yellow" | "green"> = [
-  "cyan",
-  "magenta",
-  "yellow",
-  "green",
-];
-
-function getTagColor(tag: string): "cyan" | "magenta" | "yellow" | "green" {
-  const hash = tag.split("").reduce((a, c) => a + c.charCodeAt(0), 0);
-  return TAG_COLORS[hash % TAG_COLORS.length];
 }
 
 /**
@@ -111,7 +88,7 @@ function ResizablePanes({
   style?: React.CSSProperties;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [leftWidth, setLeftWidth] = useState(30); // percentage
+  const [leftWidth, setLeftWidth] = useState(26); // percentage
   const isDragging = useRef(false);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
@@ -212,48 +189,56 @@ export function SkillPackagePreview({
     }
   };
 
+  // Restrained mono labels — DESIGN.md says ember is the action voice,
+  // not a rainbow tag palette. Tags render as dot-separated plain text
+  // in the meta colour; the category gets the single bracketed accent
+  // marker to match the drawer-header `[§ NAME]` voice and read as the
+  // primary identity hint.
+  const tagLine = metadata?.metadata.tag ?? [];
+
   return (
-    <div className={`flex flex-col ${className}`}>
-      {/* Metadata summary bar — kept as its own card above the package
-          panel; this is a different concern (skill identity) from the
-          file browser below. */}
+    <div
+      className={`card-impression flex flex-col overflow-hidden rounded border border-subtle bg-card ${className}`}
+    >
+      {/* Identity strip — flat section, no nested card. Three rows:
+          name + author, mono category + tags, description. */}
       {metadata && (
-        <div className="card-impression mb-4 rounded border border-subtle bg-card p-4">
-          <div className="flex flex-wrap items-center gap-3">
-            <h3 className="font-display text-lg font-semibold text-strong">
+        <div className="shrink-0 border-b border-subtle bg-elevated/30 px-5 py-4">
+          <div className="flex items-baseline justify-between gap-4">
+            <h3 className="truncate font-display text-xl font-semibold leading-tight text-strong">
               {metadata.name}
             </h3>
-            <Badge color={CATEGORY_BADGE_COLORS[metadata.metadata.category]}>
-              {metadata.metadata.category}
-            </Badge>
-            {metadata.metadata.tag.map((tag) => (
-              <Badge key={tag} color={getTagColor(tag)}>
-                {tag}
-              </Badge>
-            ))}
             {authorName && (
-              <span className="ml-auto font-text text-xs text-meta">
-                by {authorName}
+              <span className="shrink-0 font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
+                by&nbsp;{authorName}
               </span>
             )}
           </div>
+
+          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[10px] uppercase tracking-[0.14em]">
+            <span className="text-accent">
+              [§&nbsp;{metadata.metadata.category}]
+            </span>
+            {tagLine.length > 0 && (
+              <span className="text-meta">
+                {tagLine.join("  ·  ")}
+              </span>
+            )}
+          </div>
+
           {metadata.description && (
-            <p className="mt-2 font-text text-sm text-meta">
+            <p className="mt-3 font-text text-sm leading-relaxed text-body">
               {metadata.description}
             </p>
           )}
         </div>
       )}
 
-      {/* Unified package panel: the file tree and the viewer share one
-          rounded letterpressed surface, separated by a hairline draggable
-          divider. No double borders, no nested cards. */}
-      <div
-        className="card-impression flex-1 overflow-hidden rounded border border-subtle bg-card"
-        style={{ minHeight: "300px" }}
-      >
+      {/* File tree + content viewer share one surface, separated by a
+          hairline draggable divider. Each pane scrolls internally so the
+          host page can pin its action buttons. */}
+      <div className="min-h-0 flex-1 overflow-hidden">
         <ResizablePanes className="h-full min-h-0">
-          {/* Left: file tree (no outer chrome — parent panel owns it) */}
           <div className="flex h-full flex-col">
             <FileTree
               files={files}
@@ -265,7 +250,6 @@ export function SkillPackagePreview({
             />
           </div>
 
-          {/* Right: file content viewer (also naked) */}
           <div className="h-full min-w-0">
             {selectedFileId ? (
               <SkillFileViewer
