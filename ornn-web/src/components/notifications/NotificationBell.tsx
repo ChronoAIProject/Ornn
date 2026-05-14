@@ -14,6 +14,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import { useTranslation } from "react-i18next";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import rehypeSanitize from "rehype-sanitize";
 import {
   useMarkAllNotificationsRead,
   useMarkNotificationRead,
@@ -21,6 +24,8 @@ import {
   useUnreadNotificationCount,
 } from "@/hooks/useNotifications";
 import type { Notification } from "@/types/notifications";
+import { pickLocalized } from "@/lib/announcementLocale";
+import { NotificationDetailModal } from "./NotificationDetailModal";
 
 /** Size used in navbar + empty-state. */
 const POPOVER_ITEM_CAP = 10;
@@ -55,9 +60,11 @@ function formatRelative(iso: string): string {
 }
 
 export function NotificationBell() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
+  const [detailNotification, setDetailNotification] =
+    useState<Notification | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
 
   const { data: unread = 0 } = useUnreadNotificationCount();
@@ -72,6 +79,8 @@ export function NotificationBell() {
     [items],
   );
 
+  const lang = i18n.language;
+
   // Close popover on outside click.
   useEffect(() => {
     if (!open) return;
@@ -85,12 +94,52 @@ export function NotificationBell() {
   }, [open]);
 
   const handleItemClick = (n: Notification) => {
-    if (!n.readAt) {
-      markRead.mutate(n._id);
+    // Broadcasts open a full markdown viewer modal so a user can read
+    // long-form content without leaving the page. Mark-read fires from
+    // the modal's open effect so the bell badge updates immediately.
+    if (n.source === "broadcast") {
+      setOpen(false);
+      setDetailNotification(n);
+      return;
     }
+    // User notifications: link wins (audit deep-links go to the audit
+    // page). If there's no link but the row carries body text, open
+    // the detail modal in place — quota notes are emitted without a
+    // link but the body is what the user wants to see (#532). Bare
+    // notifications with neither still hand off to the full list page
+    // so the click isn't lost.
+    if (n.link) {
+      if (!n.readAt) markRead.mutate(n._id);
+      setOpen(false);
+      navigate(n.link);
+      return;
+    }
+    if (n.body) {
+      setOpen(false);
+      setDetailNotification(n);
+      return;
+    }
+    if (!n.readAt) markRead.mutate(n._id);
     setOpen(false);
-    if (n.link) navigate(n.link);
-    else navigate("/notifications");
+    navigate("/notifications");
+  };
+
+  /** Resolve the display title for either source. */
+  const resolveTitle = (n: Notification): string => {
+    if (n.source === "broadcast" && n.titleI18n) {
+      return pickLocalized(n.titleI18n.en, n.titleI18n.zh, lang);
+    }
+    return n.title ?? "";
+  };
+
+  /** Resolve the locale-correct markdown body for a broadcast item. */
+  const resolveBroadcastBody = (n: Notification): string | null => {
+    if (n.source !== "broadcast" || !n.bodyMarkdownI18n) return null;
+    return pickLocalized(
+      n.bodyMarkdownI18n.en,
+      n.bodyMarkdownI18n.zh,
+      lang,
+    );
   };
 
   const badgeLabel = unread > 99 ? "99+" : String(unread);
@@ -146,34 +195,62 @@ export function NotificationBell() {
                   {t("notifications.empty", "You're all caught up.")}
                 </div>
               ) : (
-                visibleItems.map((n) => (
-                  <button
-                    key={n._id}
-                    type="button"
-                    onClick={() => handleItemClick(n)}
-                    className={`flex w-full flex-col gap-1 border-b border-accent/5 px-4 py-3 text-left transition-colors last:border-b-0 cursor-pointer ${
-                      n.readAt
-                        ? "hover:bg-accent/5"
-                        : "bg-accent/[0.04] hover:bg-accent/10"
-                    }`}
-                  >
-                    <div className="flex items-start gap-2">
-                      {!n.readAt && (
-                        <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-accent" />
-                      )}
-                      <span
-                        className={`font-text text-sm leading-snug ${
-                          n.readAt ? "text-meta" : "text-strong"
-                        }`}
-                      >
-                        {n.title}
+                visibleItems.map((n) => {
+                  const isBroadcast = n.source === "broadcast";
+                  const title = resolveTitle(n);
+                  const broadcastBody = resolveBroadcastBody(n);
+                  return (
+                    <button
+                      key={n._id}
+                      type="button"
+                      onClick={() => handleItemClick(n)}
+                      className={`flex w-full flex-col gap-1 border-b border-accent/5 px-4 py-3 text-left transition-colors last:border-b-0 cursor-pointer ${
+                        n.readAt
+                          ? "hover:bg-accent/5"
+                          : "bg-accent/[0.04] hover:bg-accent/10"
+                      }`}
+                    >
+                      <div className="flex items-start gap-2">
+                        {!n.readAt && (
+                          <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-accent" />
+                        )}
+                        <div className="flex min-w-0 flex-1 flex-col gap-1">
+                          <div className="flex items-center gap-1.5">
+                            {isBroadcast && (
+                              <span className="rounded-sm border border-accent/30 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.14em] text-accent">
+                                {t("notifications.broadcast.tag")}
+                              </span>
+                            )}
+                            <span
+                              className={`font-text text-sm font-medium leading-snug ${
+                                n.readAt ? "text-meta" : "text-strong"
+                              }`}
+                            >
+                              {title}
+                            </span>
+                          </div>
+                          {broadcastBody && (
+                            <div
+                              className={`markdown-body font-text text-xs leading-snug ${
+                                n.readAt ? "text-meta/80" : "text-meta"
+                              }`}
+                            >
+                              <ReactMarkdown
+                                remarkPlugins={[remarkGfm]}
+                                rehypePlugins={[rehypeSanitize]}
+                              >
+                                {broadcastBody}
+                              </ReactMarkdown>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <span className="font-mono text-xs text-meta pl-4">
+                        {formatRelative(n.createdAt)}
                       </span>
-                    </div>
-                    <span className="font-mono text-xs text-meta pl-4">
-                      {formatRelative(n.createdAt)}
-                    </span>
-                  </button>
-                ))
+                    </button>
+                  );
+                })
               )}
             </div>
 
@@ -192,6 +269,12 @@ export function NotificationBell() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      <NotificationDetailModal
+        notification={detailNotification}
+        onClose={() => setDetailNotification(null)}
+        onMarkRead={(id) => markRead.mutate(id)}
+      />
     </div>
   );
 }

@@ -154,6 +154,9 @@ const AdminRedemptionCodesPage = lazy(() =>
 const AdminAnnouncementsPage = lazy(() =>
   import("@/pages/admin").then((m) => ({ default: m.AnnouncementsPage })),
 );
+const AdminBroadcastsPage = lazy(() =>
+  import("@/pages/admin").then((m) => ({ default: m.BroadcastsPage })),
+);
 
 // Settings layout + section components live under pages/admin/settings.
 const SettingsLayout = lazy(() =>
@@ -288,6 +291,7 @@ const router = createBrowserRouter(
                 element={<AdminRedemptionCodesPage />}
               />
               <Route path="/admin/announcements" element={<AdminAnnouncementsPage />} />
+              <Route path="/admin/broadcasts" element={<AdminBroadcastsPage />} />
 
               {/* /admin/mirror keeps working but redirects to the new
                   settings/mirror section so existing deep-links + bookmarks

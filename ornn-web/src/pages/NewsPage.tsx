@@ -28,6 +28,7 @@ import remarkGfm from "remark-gfm";
 import rehypeSanitize from "rehype-sanitize";
 import { PageTransition } from "@/components/layout/PageTransition";
 import { HighlighterMark } from "@/pages/landing/HighlighterMark";
+import { LaunchCelebrationNewsEntry } from "@/pages/LaunchCelebrationNewsEntry";
 import { usePublicAnnouncements } from "@/hooks/useAnnouncements";
 import type { PublicAnnouncementListItem } from "@/services/announcementsApi";
 import {
@@ -173,6 +174,13 @@ export function NewsPage() {
           </header>
 
           <section aria-label={t("news.archiveLabel")} className="flex flex-col gap-6">
+            {/* Hardcoded launch promo — stamped at the top of every News
+                render, independent of the announcements API. Sibling of
+                the landing-page LaunchCelebrationPopup; same i18n keys,
+                same content contract. Remove the import + this element
+                when the offer ends. */}
+            <LaunchCelebrationNewsEntry />
+
             {isLoading && (
               <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-meta">
                 {t("news.loading")}

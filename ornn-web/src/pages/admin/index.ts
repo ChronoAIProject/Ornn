@@ -12,3 +12,4 @@ export { MirrorPage } from "./MirrorPage";
 export { QuotaManagementPage } from "./QuotaManagementPage";
 export { RedemptionCodesPage } from "./RedemptionCodesPage";
 export { AnnouncementsPage } from "./AnnouncementsPage";
+export { BroadcastsPage } from "./BroadcastsPage";

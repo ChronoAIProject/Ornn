@@ -128,6 +128,32 @@ describe("RedemptionCodeService.redeem — happy path", () => {
     const audits = await db.collection("quota_grants_audit").countDocuments();
     expect(audits).toBe(2);
   });
+
+  // The grant audit / quota notification carries a privacy-masked note
+  // so the full redemption code never leaks downstream. Mask glyph is
+  // `****` (NOT `…`) because users see the full body in the
+  // /notifications detail modal (#532) and an ellipsis reads as "text
+  // truncated, click to see more" — which it isn't. See #549.
+  test("writes a privacy-masked redemption note on each grant audit row", async () => {
+    const doc = await service.mint({
+      admin: ADMIN,
+      grants: [{ surface: "playground", amount: 7 }],
+      expiresAt: plusDays(7),
+    });
+    await service.redeem({
+      code: doc.code,
+      redeemer: REDEEMER,
+      permissions: [],
+    });
+    const expectedNote = `Redeemed code ${doc.code.slice(0, 4)}****`;
+    const audits = await db
+      .collection<{ note?: string }>("quota_grants_audit")
+      .find({})
+      .toArray();
+    expect(audits.length).toBe(1);
+    expect(audits[0]?.note).toBe(expectedNote);
+    expect(audits[0]?.note).not.toContain("…");
+  });
 });
 
 describe("RedemptionCodeService.redeem — race", () => {

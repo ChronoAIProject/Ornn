@@ -273,7 +273,11 @@ export class RedemptionCodeService {
       // The redeemer is passed as both `admin` and `targetUserId` —
       // grant() requires admin metadata for the audit row. The audit
       // entry transparently shows a self-grant; the note carries the
-      // code prefix so it's clear this came from a redemption.
+      // first four chars of the code so it's clear this came from a
+      // redemption while keeping the remainder of the token masked.
+      // Mask glyph is `****` rather than `…` because the ellipsis
+      // reads as "text truncated" in the detail modal users now see
+      // (#549) — `****` is unambiguously a privacy mask.
       // Deliberately NO rollback if a later grant fails: the code is
       // already consumed by the atomic pivot above. An admin can
       // top-up the missing surface manually from the audit log.
@@ -282,7 +286,7 @@ export class RedemptionCodeService {
         targetUserId: params.redeemer.userId,
         surface: grant.surface,
         amount: grant.amount,
-        note: `Redeemed code ${codePrefix}…`,
+        note: `Redeemed code ${codePrefix}****`,
         now,
       });
       applied.push({

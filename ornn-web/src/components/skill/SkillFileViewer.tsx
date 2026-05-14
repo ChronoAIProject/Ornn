@@ -77,13 +77,7 @@ function ViewerHeader({
   trailing?: React.ReactNode;
 }) {
   return (
-    <div className="flex shrink-0 items-center gap-3 border-b border-subtle bg-elevated/40 px-4 py-2">
-      <span
-        aria-hidden
-        className="font-mono text-[10px] font-semibold uppercase tracking-[0.2em] text-meta"
-      >
-        FILE
-      </span>
+    <div className="flex h-9 shrink-0 items-center gap-3 border-b border-subtle bg-elevated/40 px-4">
       <span className="min-w-0 flex-1 truncate font-mono text-sm text-strong">
         {filename}
       </span>

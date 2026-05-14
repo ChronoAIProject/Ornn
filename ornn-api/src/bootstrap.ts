@@ -69,6 +69,12 @@ import { AnnouncementService } from "./domains/announcements/service";
 import { createAnnouncementRoutes } from "./domains/announcements/routes";
 import { migrateAnnouncementsToBilingual } from "./domains/announcements/migration";
 
+// Domain: Broadcasts (admin-authored notifications, #500)
+import { BroadcastRepository } from "./domains/broadcasts/repository";
+import { BroadcastService } from "./domains/broadcasts/service";
+import { createBroadcastRoutes } from "./domains/broadcasts/routes";
+import { backfillBroadcastRecipientUserIds } from "./domains/broadcasts/migration";
+
 // Domain: Analytics
 import { AnalyticsRepository } from "./domains/analytics/repository";
 import { AnalyticsService } from "./domains/analytics/service";
@@ -461,7 +467,30 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
       "dropLegacyNotificationCategories failed — legacy notification rows may still surface in /notifications until the next deploy",
     ),
   );
-  const notificationService = new NotificationService({ notificationRepo });
+  // `broadcastRepo` is constructed in the broadcasts block below; we
+  // need a reference at NotificationService-build time so the merged
+  // feed (#500) can left-join read receipts. Reordered so broadcasts
+  // build first.
+  const broadcastRepoForNotifications = new BroadcastRepository(db);
+  void broadcastRepoForNotifications.ensureIndexes().catch((err) =>
+    logger.warn({ err }, "broadcasts indexes ensureIndexes failed — proceeding anyway"),
+  );
+  // One-shot bilingual + targeting backfill for broadcasts. Pre-#502
+  // docs don't carry `recipientUserIds`; this migration writes an
+  // explicit `null` on every absent doc so the merged feed can rely
+  // on a stable `string[] | null` shape. Idempotent; failure is
+  // non-fatal — the repo mapper's `Array.isArray` guard already
+  // normalises absent fields to `null` on the read path.
+  await backfillBroadcastRecipientUserIds(db, logger).catch((err) =>
+    logger.error(
+      { err: err instanceof Error ? err.message : String(err) },
+      "broadcasts recipientUserIds backfill crashed — mapper fallback will cover reads, retry on next boot",
+    ),
+  );
+  const notificationService = new NotificationService({
+    notificationRepo,
+    broadcastRepo: broadcastRepoForNotifications,
+  });
   const notificationRoutes = createNotificationRoutes({ notificationService });
 
   // ---- Domain: Announcements (landing-page popup, issue #307) ----
@@ -482,6 +511,15 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   );
   const announcementService = new AnnouncementService({ repo: announcementRepo });
   const announcementRoutes = createAnnouncementRoutes({ announcementService });
+
+  // ---- Domain: Broadcasts (admin-authored, fan-out via notifications, #500) ----
+  // Reuse the same `BroadcastRepository` instance the notifications
+  // service got — both surfaces share state (admin CRUD + per-user
+  // feed merge), and a single instance keeps the wiring legible.
+  const broadcastService = new BroadcastService({
+    repo: broadcastRepoForNotifications,
+  });
+  const broadcastRoutes = createBroadcastRoutes({ broadcastService });
 
   // ---- NyxID Orgs Client — built early so the audit fan-out can expand
   //   sharedWithOrgs into member rosters when sending consumer notifications.
@@ -915,6 +953,7 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   apiApp.route("/", auditRoutes);
   apiApp.route("/", notificationRoutes);
   apiApp.route("/", announcementRoutes);
+  apiApp.route("/", broadcastRoutes);
   apiApp.route("/", analyticsRoutes);
   apiApp.route("/", searchRoutes);
   apiApp.route("/", generationRoutes);

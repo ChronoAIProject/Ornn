@@ -19,11 +19,6 @@ import { useTranslation } from "react-i18next";
 import type { Surface, SurfaceSnapshot } from "@/services/quotaApi";
 import { useMyQuota } from "@/hooks/useQuota";
 
-const SURFACE_LABEL: Record<Surface, string> = {
-  playground: "playground",
-  skillGen: "skill-gen",
-};
-
 interface QuotaInlineProps {
   surface: Surface;
   className?: string;
@@ -41,6 +36,11 @@ export function QuotaInline({ surface, className = "" }: QuotaInlineProps) {
   const { t } = useTranslation();
   const { data: quota } = useMyQuota();
   if (!quota) return null;
+
+  const surfaceLabel =
+    surface === "playground"
+      ? t("quota.surfaceLabelPlayground", "playground")
+      : t("quota.surfaceLabelSkillGen", "skill-gen");
 
   // Admin bypass — show a stable "UNLIMITED" stamp so admins still get
   // visual confirmation of their own quota state in the surface header.
@@ -65,9 +65,13 @@ export function QuotaInline({ surface, className = "" }: QuotaInlineProps) {
           <path d="M5 12h14" />
           <path d="M19 5v14" />
         </svg>
-        <span>Admin</span>
+        <span>{t("quota.admin", "Admin")}</span>
         <span className="text-meta">·</span>
-        <span>Unlimited {SURFACE_LABEL[surface]}</span>
+        <span>
+          {t("quota.adminUnlimited", "Unlimited {{surface}}", {
+            surface: surfaceLabel,
+          })}
+        </span>
       </span>
     );
   }
@@ -79,6 +83,15 @@ export function QuotaInline({ surface, className = "" }: QuotaInlineProps) {
   const warning = snap.warning && !exhausted;
 
   if (warning) {
+    const percent = cap > 0 ? Math.round((snap.used / cap) * 100) : 0;
+    const adminGrantSuffix =
+      snap.adminGrant > 0
+        ? t(
+            "quota.warningAdminGrantSuffix",
+            " (includes +{{value}} admin grant)",
+            { value: nfmt(snap.adminGrant) },
+          )
+        : "";
     return (
       <div
         role="status"
@@ -98,14 +111,22 @@ export function QuotaInline({ surface, className = "" }: QuotaInlineProps) {
         </svg>
         <div className="flex-1">
           <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.14em] text-warning">
-            {SURFACE_LABEL[surface]} — {cap > 0 ? Math.round((snap.used / cap) * 100) : 0}% used this month
+            {t(
+              "quota.warningHeading",
+              "{{surface}} — {{percent}}% used this month",
+              { surface: surfaceLabel, percent },
+            )}
           </p>
           <p className="mt-1 font-text text-xs leading-relaxed text-body">
-            {nfmt(remaining)} {SURFACE_LABEL[surface]} calls left
-            {snap.adminGrant > 0
-              ? ` (includes +${nfmt(snap.adminGrant)} admin grant)`
-              : ""}
-            . Click the quota chip in the nav for full breakdown.
+            {t(
+              "quota.warningBody",
+              "{{remaining}} {{surface}} calls left{{adminGrant}}. Click the quota chip in the nav for full breakdown.",
+              {
+                remaining: nfmt(remaining),
+                surface: surfaceLabel,
+                adminGrant: adminGrantSuffix,
+              },
+            )}
           </p>
         </div>
       </div>
@@ -121,12 +142,16 @@ export function QuotaInline({ surface, className = "" }: QuotaInlineProps) {
       className={`inline-flex items-center gap-2 rounded-sm border border-subtle bg-elevated/40 px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.14em] text-meta ${className}`}
     >
       <span className="text-accent">{nfmt(remaining)}</span>
-      <span className="opacity-70">/{nfmt(cap)} {SURFACE_LABEL[surface]} left</span>
+      <span className="opacity-70">
+        /{nfmt(cap)} {surfaceLabel} {t("quota.callsLeft", "left")}
+      </span>
       {snap.adminGrant > 0 ? (
         <>
           <span className="hidden sm:inline opacity-50">·</span>
           <span className="hidden sm:inline opacity-70 text-accent-support">
-            +{nfmt(snap.adminGrant)} grant
+            {t("quota.grantSuffix", "+{{value}} grant", {
+              value: nfmt(snap.adminGrant),
+            })}
           </span>
         </>
       ) : null}

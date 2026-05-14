@@ -24,11 +24,6 @@ import type { QuotaSnapshot, Surface, SurfaceSnapshot } from "@/services/quotaAp
 import { useMyQuota } from "@/hooks/useQuota";
 import { QuotaSummary } from "./QuotaSummary";
 
-const SURFACE_LABEL: Record<Surface, string> = {
-  playground: "Playground",
-  skillGen: "Skill-gen",
-};
-
 function nfmt(n: number): string {
   return n.toLocaleString("en-US");
 }
@@ -42,13 +37,23 @@ interface SurfacePillProps {
 
 /** A single surface's pill — always part of the paired chip group. */
 function SurfacePill({ surface, snapshot, isAdmin, onOpen }: SurfacePillProps) {
+  const { t } = useTranslation();
+  const surfaceLabel =
+    surface === "playground"
+      ? t("quota.surfacePlayground", "Playground")
+      : t("quota.surfaceSkillGen", "Skill-gen");
+
   if (isAdmin) {
     return (
       <button
         type="button"
         onClick={onOpen}
-        aria-label={`${SURFACE_LABEL[surface]} quota — admin unlimited`}
-        title={`${SURFACE_LABEL[surface]} · Unlimited (admin bypass)`}
+        aria-label={t("quota.chipAriaAdmin", "{{surface}} quota — admin unlimited", {
+          surface: surfaceLabel,
+        })}
+        title={t("quota.chipTitleAdmin", "{{surface}} · Unlimited (admin bypass)", {
+          surface: surfaceLabel,
+        })}
         className="
           inline-flex h-7 items-center gap-1.5 rounded-sm border border-accent/40 bg-accent/5
           px-2 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-accent
@@ -56,7 +61,7 @@ function SurfacePill({ surface, snapshot, isAdmin, onOpen }: SurfacePillProps) {
           focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent
         "
       >
-        <span className="opacity-70">{SURFACE_LABEL[surface]}</span>
+        <span className="opacity-70">{surfaceLabel}</span>
         <span aria-hidden className="text-meta opacity-60">·</span>
         <span aria-hidden className="text-base leading-none">∞</span>
       </button>
@@ -79,8 +84,16 @@ function SurfacePill({ surface, snapshot, isAdmin, onOpen }: SurfacePillProps) {
     <button
       type="button"
       onClick={onOpen}
-      aria-label={`${SURFACE_LABEL[surface]} quota — ${nfmt(remaining)} of ${nfmt(ceiling)} remaining`}
-      title={`${SURFACE_LABEL[surface]}: ${nfmt(remaining)} / ${nfmt(ceiling)} this month`}
+      aria-label={t(
+        "quota.chipAriaRemaining",
+        "{{surface}} quota — {{remaining}} of {{ceiling}} remaining",
+        { surface: surfaceLabel, remaining: nfmt(remaining), ceiling: nfmt(ceiling) },
+      )}
+      title={t(
+        "quota.chipTitleRemaining",
+        "{{surface}}: {{remaining}} / {{ceiling}} this month",
+        { surface: surfaceLabel, remaining: nfmt(remaining), ceiling: nfmt(ceiling) },
+      )}
       className={`
         inline-flex h-7 items-center gap-1.5 rounded-sm border bg-transparent
         px-2 font-mono text-[10px] font-semibold uppercase tracking-[0.12em]
@@ -89,7 +102,7 @@ function SurfacePill({ surface, snapshot, isAdmin, onOpen }: SurfacePillProps) {
         ${toneClass}
       `}
     >
-      <span className="opacity-70">{SURFACE_LABEL[surface]}</span>
+      <span className="opacity-70">{surfaceLabel}</span>
       <span aria-hidden className="opacity-50">·</span>
       <span>{nfmt(remaining)}</span>
       <span className="text-meta opacity-70">/{nfmt(ceiling)}</span>

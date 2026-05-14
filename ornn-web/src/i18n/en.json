@@ -49,7 +49,10 @@
     "myProfile": "My Profile",
     "myOrgs": "My Organizations",
     "myServices": "My Services",
-    "adminServices": "Admin Services"
+    "adminServices": "Admin Services",
+    "admin": {
+      "broadcasts": "Broadcasts"
+    }
   },
   "breadcrumb": {
     "ornn": "ornn",
@@ -329,7 +332,18 @@
     "markAllRead": "Mark all read",
     "showUnreadOnly": "Show unread only",
     "showAll": "Show all",
-    "viewAll": "View all"
+    "viewAll": "View all",
+    "broadcast": {
+      "tag": "Broadcast",
+      "modal": {
+        "aria": "Broadcast notification details"
+      }
+    },
+    "detail": {
+      "modal": {
+        "aria": "Notification details"
+      }
+    }
   },
   "permissions": {
     "title": "Permissions",
@@ -370,10 +384,32 @@
     "askAbout": "Ask me anything about \"{{name}}\" or tell me to run it.",
     "envVars": "Environment Variables",
     "envVarsDesc": "This skill requires the following environment variables. Fill them in before chatting.",
+    "envVarsLockHint": "Chat is locked until every required env var has a value.",
     "enterValue": "Enter value...",
     "noPackage": "No package contents",
     "fillFirst": "Fill in env vars to start chatting...",
-    "askPlaceholder": "Ask about \"{{name}}\" or tell me to run it..."
+    "askPlaceholder": "Ask about \"{{name}}\" or tell me to run it...",
+    "heroTitle": "Probe the skill.",
+    "heroSubtitle": "Ask anything about {{name}}, or have it run with sample input.",
+    "heroEnvFirst": "Set the runtime env vars in the Env drawer on the right, then start chatting.",
+    "starter1Label": "Walk me through it",
+    "starter1Body": "Walk me through what `{{name}}` does and the main ways I'd use it.",
+    "starter2Label": "Show an example",
+    "starter2Body": "Give me a concrete usage example for `{{name}}` — make up sample input and run it.",
+    "starter3Label": "List capabilities",
+    "starter3Body": "List every capability `{{name}}` exposes, with a one-line description for each.",
+    "drawerHint": "Skill · Env · Package on the right edge",
+    "kbHint": "Enter to send · Shift + Enter for newline",
+    "tabSkill": "Skill",
+    "tabEnv": "Env",
+    "tabPackage": "Package",
+    "pin": "Pin",
+    "unpin": "Unpin",
+    "pinned": "Pinned",
+    "aboutThisSkill": "About",
+    "tags": "Tags",
+    "openDetail": "Skill page",
+    "openInRegistry": "Open in registry →"
   },
   "upload": {
     "chooseMode": "Choose how you want to create your skill",
@@ -485,12 +521,30 @@
     "desc": "Describe the skill you need and AI will generate it for you. You can refine it with follow-up messages.",
     "note": "Generated skills are plain or runtime-based only.",
     "placeholder": "Generating...",
+    "askPlaceholder": "Describe the skill you want to create…",
     "emptyPreview": "Generate a skill to preview its contents",
-    "startOver": "Start Over",
-    "saveSkill": "Save Skill",
+    "emptyPreviewHero": "Package preview lands here once the model drafts a skill.",
+    "emptyPreviewHint": "Send a prompt on the left to start.",
+    "startOver": "Start over",
+    "saveSkill": "Save skill",
     "fixErrors": "Fix frontmatter validation errors before saving",
     "saveSuccess": "Skill \"{{name}}\" saved to My Skills",
-    "saveFailed": "Failed to create skill"
+    "saveFailed": "Failed to create skill",
+    "eyebrow": "Generative skill builder",
+    "heroTitle": "Describe a skill. Build it.",
+    "heroSubtitle": "Tell the model what the skill should do. It drafts the package; you iterate; you save.",
+    "drawerHint": "Package preview + Save on the right edge",
+    "tabPackage": "Package",
+    "pin": "Pin",
+    "unpin": "Unpin",
+    "pinned": "Pinned",
+    "validationTitle": "Validation Errors",
+    "starter1Label": "Slack notifier",
+    "starter1Body": "Build a skill that posts a formatted message to a Slack channel via webhook. Take channel + message as inputs.",
+    "starter2Label": "Fetch GitHub PRs",
+    "starter2Body": "Build a skill that lists open pull requests for a given GitHub repo, sorted by latest activity.",
+    "starter3Label": "CSV → JSON",
+    "starter3Body": "Build a skill that reads a CSV file and outputs a JSON array, inferring types per column."
   },
   "free": {
     "backToModes": "Back to mode selection",
@@ -567,6 +621,35 @@
     "stopGeneration": "Stop generation",
     "sendMessage": "Send message"
   },
+  "quota": {
+    "surfacePlayground": "Playground",
+    "surfaceSkillGen": "Skill-gen",
+    "surfaceLabelPlayground": "playground",
+    "surfaceLabelSkillGen": "skill-gen",
+    "admin": "Admin",
+    "adminUnlimited": "Unlimited {{surface}}",
+    "chipAriaAdmin": "{{surface}} quota — admin unlimited",
+    "chipTitleAdmin": "{{surface}} · Unlimited (admin bypass)",
+    "chipAriaRemaining": "{{surface}} quota — {{remaining}} of {{ceiling}} remaining",
+    "chipTitleRemaining": "{{surface}}: {{remaining}} / {{ceiling}} this month",
+    "groupAriaLabel": "Quota usage",
+    "warningHeading": "{{surface}} — {{percent}}% used this month",
+    "warningBody": "{{remaining}} {{surface}} calls left{{adminGrant}}. Click the quota chip in the nav for full breakdown.",
+    "warningAdminGrantSuffix": " (includes +{{value}} admin grant)",
+    "callsLeft": "left",
+    "grantSuffix": "+{{value}} grant"
+  },
+  "modelPicker": {
+    "label": "Model",
+    "defaultSuffix": " — default",
+    "defaultBadge": "default",
+    "loading": "Loading models…",
+    "unavailable": "{{surface}} — temporarily unavailable. Contact admin.",
+    "ariaPlayground": "Playground",
+    "ariaSkillGen": "Skill Generation",
+    "ariaTrigger": "{{label}}: {{selected}}",
+    "ariaOptions": "{{label}} options"
+  },
   "fileTree": {
     "files": "Files",
     "noFiles": "No files yet",
@@ -612,6 +695,34 @@
     "languageLabel": "Language",
     "languageEnglish": "English",
     "languageChinese": "中文",
+    "launchPopup": {
+      "eyebrow": "[§ LAUNCH — ORNN]",
+      "date": "2026 · 05 · 13",
+      "title": "To celebrate Ornn's official launch, we've set aside extra free credit for our users as a heartfelt thank-you.",
+      "creditsLead": "First 500 users get",
+      "credit1Number": "200",
+      "credit1Title": "Playground",
+      "credit1Caption": "Conversations · GPT-5.5",
+      "credit2Number": "200",
+      "credit2Title": "Skill Generation",
+      "credit2Caption": "Conversations · GPT-5.5",
+      "conditionsHeading": "How to redeem",
+      "step1Before": "Star",
+      "step1After": "on GitHub",
+      "step2": "Sign in with the same GitHub account to claim your free credit.",
+      "inviteLabel": "NyxID invite · first-time users",
+      "inviteAria": "Copy NyxID invite code",
+      "copy": "Copy",
+      "copied": "Copied",
+      "inviteHelp": "When you click Sign In (top-right of Ornn), you'll be redirected to NyxID — our identity provider — to complete login. On the NyxID page, paste this invite code into the invite field, then choose GitHub to finish sign-up.",
+      "fulfillmentBefore": "Once you've signed in and starred the GitHub repository, your redemption code will be delivered to your notification inbox within 24 hours. Open the bell icon at the top-right of Ornn to view it, then apply it from your profile dropdown under \"Redeem code\". If you encounter any issues during redemption, please reach out on the",
+      "fulfillmentLinkLabel": "Ornn discussions thread",
+      "fulfillmentAfter": "for assistance.",
+      "limitedSlots": "Limited slots — first come, first served.",
+      "dismiss": "Dismiss",
+      "cta": "Star on GitHub",
+      "dismissAria": "Dismiss launch announcement"
+    },
     "hero": {
       "headlineStart": "Start with",
       "headlineNothing": "nothing",
@@ -827,6 +938,8 @@
     "dismissAnnouncement": "Dismiss announcement",
     "legal": "Legal",
     "productOverview": "{{brand}} product overview",
+    "playgroundSkillDrawer": "Skill drawer",
+    "playgroundEnvDrawer": "Env drawer",
     "skillPackageDrawer": "Skill package drawer",
     "skillPackagePreview": "Skill package preview",
     "generating": "Generating",
@@ -950,6 +1063,80 @@
         "deleted": "Announcement deleted",
         "updateFailed": "Update failed",
         "deleteFailed": "Delete failed"
+      }
+    },
+    "broadcasts": {
+      "eyebrow": "[§ ADMIN — BROADCASTS]",
+      "title": "Broadcast notifications",
+      "description": "Every broadcast lands in every authenticated user's notification inbox immediately. There is no schedule window — a broadcast is live the moment it's created and gone the moment it's deleted. Both English and Chinese are required so every user reads in their own language.",
+      "action": {
+        "new": "New broadcast"
+      },
+      "table": {
+        "title": "Title",
+        "preview": "Preview",
+        "recipients": "Recipients",
+        "created": "Created",
+        "updated": "Updated",
+        "readCount": "Read by",
+        "actions": "Actions"
+      },
+      "recipients": {
+        "heading": "Recipients",
+        "audienceAll": "All users",
+        "audienceSpecific": "Specific users",
+        "summaryAll": "All users",
+        "summaryCount": "{{count}} users",
+        "lockedHint": "Recipients are locked after creation.",
+        "searchPlaceholder": "Type an email to add a recipient",
+        "searchAria": "Search users by email",
+        "loading": "Searching…",
+        "noMatches": "No matching users.",
+        "remove": "Remove {{email}}"
+      },
+      "empty": {
+        "title": "No broadcasts yet",
+        "hint": "Create the first broadcast and it will appear in every user's notification bell on their next refresh."
+      },
+      "confirm": {
+        "deleteTitle": "Delete broadcast?",
+        "delete": "\"{{title}}\" will be removed from every user's inbox and its read receipts will be cleared."
+      },
+      "toast": {
+        "created": "Broadcast created",
+        "updated": "Broadcast updated",
+        "deleted": "Broadcast deleted",
+        "createFailed": "Create failed",
+        "updateFailed": "Update failed",
+        "deleteFailed": "Delete failed"
+      },
+      "drawer": {
+        "eyebrowNew": "[§ NEW — BROADCAST]",
+        "eyebrowEdit": "[§ EDIT — BROADCAST]",
+        "newTitle": "New broadcast",
+        "newAria": "New broadcast",
+        "editAria": "Edit broadcast",
+        "englishHeading": "English (required)",
+        "chineseHeading": "中文 (required)",
+        "titleEnLabel": "Title (EN)",
+        "titleZhLabel": "Title (ZH)",
+        "titleEnPlaceholder": "Short, scannable. Visible in the bell.",
+        "titleZhPlaceholder": "简短、易扫读。展示在通知铃中。",
+        "bodyEnLabel": "Body — EN (markdown)",
+        "bodyZhLabel": "Body — ZH (markdown)",
+        "bodyEnPlaceholder": "Markdown supported. Keep it under a screenful — this renders inline in the notification bell.",
+        "bodyZhPlaceholder": "支持 Markdown。建议控制在一屏内 —— 此内容将直接渲染在通知铃中。",
+        "createBtn": "Create broadcast",
+        "saveBtn": "Save changes"
+      },
+      "errors": {
+        "titleEnRequired": "English title is required",
+        "titleZhRequired": "中文标题为必填项",
+        "bodyEnRequired": "English body is required",
+        "bodyZhRequired": "中文正文为必填项",
+        "titleTooLong": "Title is too long",
+        "bodyTooLong": "Body is too long",
+        "recipientsRequired": "Add at least one recipient or switch to 'All users'."
       }
     },
     "skills": {

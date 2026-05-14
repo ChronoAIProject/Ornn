@@ -18,18 +18,23 @@
  * @module pages/PlaygroundPage
  */
 
-import { useState, useRef, useEffect, useMemo, useCallback } from "react";
+import { useState, useRef, useEffect, useMemo, useCallback, type ComponentType } from "react";
 import { useSearchParams, Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { PageTransition } from "@/components/layout/PageTransition";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { Badge } from "@/components/ui/Badge";
 import { ChatInput, type ChatInputHandle } from "@/components/playground/ChatInput";
 import { ChatMessage } from "@/components/playground/ChatMessage";
 import { SkillPackagePreview } from "@/components/skill/SkillPackagePreview";
 import { ModelPicker } from "@/components/models/ModelPicker";
 import { OverLimitPage } from "@/components/quota/OverLimitPage";
 import { QuotaInline } from "@/components/quota/QuotaInline";
+import { EnvIcon, PackageIcon, type IconProps } from "@/components/icons";
+import {
+  createDefaultSkillMetadata,
+  type SkillMetadata,
+} from "@/types/skillPackage";
+import type { SkillCategory } from "@/utils/constants";
 import { useSkill } from "@/hooks/useSkills";
 import { useSkillPackage } from "@/hooks/useSkillPackage";
 import { usePlaygroundChat } from "@/hooks/usePlaygroundChat";
@@ -83,17 +88,6 @@ function ThinkingBubble() {
   );
 }
 
-/** Welded-seam horizontal divider with a rivet dot in the middle. */
-function WeldedSeam({ className = "" }: { className?: string }) {
-  return (
-    <div className={`flex items-center gap-2 ${className}`} aria-hidden>
-      <span className="h-px flex-1 bg-strong-edge/40" />
-      <span className="h-1 w-1 rounded-full bg-accent/40" />
-      <span className="h-px flex-1 bg-strong-edge/40" />
-    </div>
-  );
-}
-
 interface PromptStarter {
   label: string;
   body: string;
@@ -124,7 +118,7 @@ function defaultPromptStarters(skillName: string, t: TFunc): PromptStarter[] {
   ];
 }
 
-type DrawerKey = "skill" | "package" | "env";
+type DrawerKey = "package" | "env";
 
 export function PlaygroundPage() {
   const { t } = useTranslation();
@@ -277,6 +271,31 @@ export function PlaygroundPage() {
 
   const activeDrawer = pinnedDrawer ?? hoverDrawer;
 
+  const skillCategory = (skill?.metadata as Record<string, unknown> | null)?.category as string | undefined;
+
+  // Synthesise a SkillMetadata-shaped object from the registry skill record
+  // so SkillPackagePreview can render the same flat identity strip as the
+  // generative page. The preview only reads name / description / category /
+  // tag, so we don't need to faithfully reproduce the rest of the shape —
+  // `createDefaultSkillMetadata` fills the unused fields with safe defaults.
+  // Declared above the early-return guards so the hook order is stable.
+  const previewMetadata = useMemo<SkillMetadata | null>(() => {
+    if (!skill) return null;
+    return createDefaultSkillMetadata({
+      name: skill.name,
+      description: skill.description ?? "",
+      version: skill.version,
+      metadata: {
+        category: (skillCategory as SkillCategory) ?? "plain",
+        runtime: [],
+        runtimeDependency: [],
+        runtimeEnvVar: [],
+        toolList: [],
+        tag: skill.tags ?? [],
+      },
+    });
+  }, [skill, skillCategory]);
+
   // No skill specified
   if (!skillName) {
     return (
@@ -317,17 +336,38 @@ export function PlaygroundPage() {
     );
   }
 
-  const skillCategory = (skill?.metadata as Record<string, unknown> | null)?.category as string | undefined;
   const starters = defaultPromptStarters(skillName, t);
   const conversationActive = messages.length > 0 || !!currentAssistantContent || isStreaming;
 
-  // Right-edge rail tabs (visible on the right side of the chat).
-  const railTabs: Array<{ key: DrawerKey; label: string; warn?: boolean }> = [
-    { key: "skill", label: t("playground.tabSkill", "Skill") },
+  // Right-edge rail tabs. Each tab renders as a compact icon handle —
+  // the `tip` is a horizontal mono-uppercase label shown on hover (matches
+  // the drawer header `[§ NAME]` voice). The Package drawer now hosts the
+  // skill identity (name + category + tags + description) at the top of
+  // `SkillPackagePreview`, so a separate Skill tab would be redundant.
+  const railTabs: Array<{
+    key: DrawerKey;
+    ariaLabel: string;
+    tip: string;
+    Icon: ComponentType<IconProps>;
+    warn?: boolean;
+  }> = [
     ...(needsEnvVars
-      ? [{ key: "env" as const, label: t("playground.tabEnv", "Env"), warn: envIncomplete }]
+      ? [
+          {
+            key: "env" as const,
+            ariaLabel: t("aria.playgroundEnvDrawer"),
+            tip: "ENV",
+            Icon: EnvIcon,
+            warn: envIncomplete,
+          },
+        ]
       : []),
-    { key: "package", label: t("playground.tabPackage", "Package") },
+    {
+      key: "package",
+      ariaLabel: t("aria.skillPackageDrawer"),
+      tip: "PACKAGE",
+      Icon: PackageIcon,
+    },
   ];
 
   return (
@@ -526,28 +566,37 @@ export function PlaygroundPage() {
         >
           {railTabs.map((tab) => {
             const active = activeDrawer === tab.key;
+            const Icon = tab.Icon;
             return (
               <button
                 key={tab.key}
                 type="button"
                 onMouseEnter={() => openHover(tab.key)}
                 onClick={() => togglePin(tab.key)}
-                className={`group relative flex items-center gap-1.5 rounded-l-sm border-y border-l px-2.5 py-3 transition-all ${
+                className={`group relative flex h-11 w-9 items-center justify-center rounded-l-sm border-y border-l transition-colors ${
                   active
                     ? "border-accent/60 bg-card text-accent"
                     : "border-subtle bg-card/80 text-meta hover:border-accent/40 hover:text-strong"
                 }`}
-                aria-label={`${tab.label} drawer`}
+                aria-label={tab.ariaLabel}
               >
-                <span
-                  className="font-mono text-[10px] uppercase tracking-[0.18em]"
-                  style={{ writingMode: "vertical-rl", transform: "rotate(180deg)" }}
-                >
-                  {tab.label}
-                </span>
+                <Icon className="h-4 w-4" />
+
+                {/* Horizontal tooltip — fades in on hover when the drawer
+                    for this tab is not already open. Matches the drawer
+                    header voice `[§ NAME]`. */}
+                {!active && (
+                  <span
+                    className="pointer-events-none absolute right-full top-1/2 mr-2 -translate-y-1/2 whitespace-nowrap rounded-sm border border-subtle bg-card px-2 py-1 font-mono text-[10px] uppercase tracking-[0.18em] text-strong opacity-0 transition-opacity duration-150 group-hover:opacity-100"
+                    aria-hidden
+                  >
+                    [§&nbsp;{tab.tip}]
+                  </span>
+                )}
+
                 {tab.warn && (
                   <span
-                    className="absolute -left-1 top-2 h-1.5 w-1.5 rounded-full bg-warning"
+                    className="absolute -left-1 top-1.5 h-1.5 w-1.5 rounded-full bg-warning"
                     aria-hidden
                   />
                 )}
@@ -586,7 +635,7 @@ export function PlaygroundPage() {
                 transition={{ duration: 0.18, ease: "easeOut" }}
                 onMouseEnter={() => openHover(activeDrawer)}
                 onMouseLeave={scheduleHoverClose}
-                className="card-impression fixed right-10 top-4 bottom-4 z-40 flex w-[420px] max-w-[calc(100vw-3rem)] flex-col rounded-md border border-subtle bg-card"
+                className="card-impression fixed right-10 top-[68px] bottom-4 z-40 flex w-[min(960px,65vw)] max-w-[calc(100vw-3rem)] flex-col rounded-md border border-subtle bg-card"
                 role="complementary"
                 aria-label={`${activeDrawer} panel`}
               >
@@ -627,161 +676,78 @@ export function PlaygroundPage() {
                 </div>
 
                 {/* Drawer body */}
-                <div className="min-h-0 flex-1 overflow-y-auto">
-                  {activeDrawer === "skill" && skill && (
-                    <div className="space-y-4 p-4">
-                      <div className="flex items-start gap-3">
-                        <div
-                          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-sm border border-strong-edge bg-warning-soft text-accent"
-                          aria-hidden
-                        >
-                          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                            <polyline points="16 18 22 12 16 6" />
-                            <polyline points="8 6 2 12 8 18" />
-                          </svg>
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <h2 className="break-words font-display text-base font-semibold leading-tight tracking-tight text-strong">
-                            {skill.name}
-                          </h2>
-                          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
-                            <span className="inline-flex items-center rounded-sm border border-strong-edge px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.14em] text-strong">
-                              v{skill.version}
-                            </span>
-                            {skillCategory && (
-                              <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
-                                {skillCategory}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-
-                      {skill.description && (
-                        <>
-                          <WeldedSeam />
-                          <div>
-                            <div className="mb-1.5 font-mono text-[10px] uppercase tracking-[0.18em] text-meta">
-                              {t("playground.aboutThisSkill", "About")}
-                            </div>
-                            <p className="break-words font-text text-sm leading-relaxed text-body">
-                              {skill.description}
-                            </p>
-                          </div>
-                        </>
-                      )}
-
-                      {skill.tags && skill.tags.length > 0 && (
-                        <>
-                          <WeldedSeam />
-                          <div>
-                            <div className="mb-2 font-mono text-[10px] uppercase tracking-[0.18em] text-meta">
-                              {t("playground.tags", "Tags")}
-                            </div>
-                            <div className="flex flex-wrap gap-1.5">
-                              {skill.tags.map((tag) => (
-                                <span
-                                  key={tag}
-                                  className="inline-flex items-center rounded-sm border border-subtle bg-elevated/40 px-1.5 py-0.5 font-mono text-[10px] text-body"
-                                >
-                                  #{tag}
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-                        </>
-                      )}
-
-                      <WeldedSeam />
-                      <div className="flex items-center justify-between">
-                        <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-meta">
-                          {t("playground.openDetail", "Skill page")}
-                        </span>
-                        <Link
-                          to={`/skills/${encodeURIComponent(skill.name)}`}
-                          className="font-mono text-[11px] text-accent hover:underline"
-                        >
-                          /skills/{skill.name} →
-                        </Link>
-                      </div>
-                    </div>
-                  )}
-
+                <div className="flex min-h-0 flex-1 flex-col">
                   {activeDrawer === "env" && needsEnvVars && (
-                    <div className="space-y-4 p-4">
-                      <div>
+                    <div className="flex min-h-0 flex-1 flex-col">
+                      {/* Header strip — same flat voice as the skill drawer. */}
+                      <div className="shrink-0 border-b border-subtle bg-elevated/30 px-5 py-4">
                         <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-accent">
-                          {t("playground.envVars")}
+                          [§&nbsp;{t("playground.envVars")}]
                         </div>
-                        <p className="mt-1 font-text text-xs leading-relaxed text-body">
+                        <p className="mt-2 font-text text-sm leading-relaxed text-body">
                           {t("playground.envVarsDesc")}
                         </p>
                       </div>
-                      <WeldedSeam />
-                      <div className="space-y-3">
-                        {envVarKeys.map((key) => (
-                          <div key={key} className="space-y-1">
-                            <div className="flex items-center justify-between">
-                              <label className="block max-w-full truncate font-mono text-[11px] text-strong" title={key}>
-                                {key}
-                              </label>
-                              {envVars[key]?.trim() ? (
-                                <Badge color="green">{t("common.set")}</Badge>
-                              ) : (
-                                <Badge color="cyan">{t("common.required")}</Badge>
-                              )}
+
+                      {/* Form */}
+                      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-5 py-4">
+                        {envVarKeys.map((key) => {
+                          const filled = !!envVars[key]?.trim();
+                          return (
+                            <div key={key} className="space-y-1">
+                              <div className="flex items-center justify-between gap-2">
+                                <label
+                                  className="block min-w-0 flex-1 truncate font-mono text-[11px] text-strong"
+                                  title={key}
+                                >
+                                  {key}
+                                </label>
+                                <span
+                                  className={`shrink-0 font-mono text-[10px] uppercase tracking-[0.14em] ${
+                                    filled ? "text-success" : "text-meta"
+                                  }`}
+                                >
+                                  {filled ? t("common.set") : t("common.required")}
+                                </span>
+                              </div>
+                              <input
+                                type="text"
+                                value={envVars[key] ?? ""}
+                                onChange={(e) => handleEnvVarChange(key, e.target.value)}
+                                placeholder={t("playground.enterValue")}
+                                className="w-full rounded-sm border border-subtle bg-page px-2.5 py-1.5 font-mono text-xs text-strong placeholder:text-meta/50 focus:border-accent/60 focus:outline-none"
+                              />
                             </div>
-                            <input
-                              type="text"
-                              value={envVars[key] ?? ""}
-                              onChange={(e) => handleEnvVarChange(key, e.target.value)}
-                              placeholder={t("playground.enterValue")}
-                              className="w-full rounded-sm border border-subtle bg-page px-2.5 py-1.5 font-mono text-xs text-strong placeholder:text-meta/50 focus:border-accent/60 focus:outline-none"
-                            />
-                          </div>
-                        ))}
-                      </div>
-                      {!allEnvVarsFilled && (
-                        <>
-                          <WeldedSeam />
-                          <p className="font-text text-[11px] leading-relaxed text-meta">
+                          );
+                        })}
+                        {!allEnvVarsFilled && (
+                          <p className="pt-2 font-text text-[11px] leading-relaxed text-meta">
                             {t(
                               "playground.envVarsLockHint",
                               "Chat is locked until every required env var has a value.",
                             )}
                           </p>
-                        </>
-                      )}
+                        )}
+                      </div>
                     </div>
                   )}
 
                   {activeDrawer === "package" && (
-                    <div className="flex h-full flex-col">
-                      <div className="flex shrink-0 items-center justify-between border-b border-subtle px-4 py-2">
-                        <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-meta">
-                          {skill ? `${skill.name}@v${skill.version}` : ""}
-                        </span>
-                        {skill && (
-                          <Link
-                            to={`/skills/${encodeURIComponent(skill.name)}`}
-                            className="font-mono text-[10px] uppercase tracking-[0.14em] text-meta transition-colors hover:text-accent"
-                          >
-                            {t("playground.openInRegistry", "Open in registry →")}
-                          </Link>
-                        )}
-                      </div>
-                      <div className="min-h-0 flex-1">
+                    <div className="flex min-h-0 flex-1 flex-col">
+                      {/* Padded content area — must itself be a flex column
+                          so the preview's `flex-1 min-h-0` actually claims
+                          the remaining height and the file viewer scrolls
+                          internally instead of bleeding past the footer. */}
+                      <div className="flex min-h-0 flex-1 flex-col p-4">
                         {packageLoading ? (
-                          <div className="p-4">
-                            <Skeleton lines={8} />
-                          </div>
+                          <Skeleton lines={8} />
                         ) : packageFiles.length > 0 ? (
                           <SkillPackagePreview
                             files={packageFiles}
                             fileContents={packageContents}
-                            metadata={null}
+                            metadata={previewMetadata}
                             editable={false}
-                            className="h-full"
+                            className="min-h-0 flex-1"
                           />
                         ) : (
                           <div className="flex h-32 items-center justify-center">
@@ -789,6 +755,22 @@ export function PlaygroundPage() {
                           </div>
                         )}
                       </div>
+
+                      {/* Footer — registry link pinned at the bottom,
+                          matching the Skill drawer's pattern. */}
+                      {skill && (
+                        <div className="flex shrink-0 items-center justify-between border-t border-subtle bg-elevated/30 px-5 py-3">
+                          <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-meta">
+                            {skill.name}@v{skill.version}
+                          </span>
+                          <Link
+                            to={`/skills/${encodeURIComponent(skill.name)}`}
+                            className="font-mono text-[11px] text-accent hover:underline"
+                          >
+                            {t("playground.openInRegistry", "Open in registry →")}
+                          </Link>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

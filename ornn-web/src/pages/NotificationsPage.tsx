@@ -7,6 +7,9 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import rehypeSanitize from "rehype-sanitize";
 import {
   useMarkAllNotificationsRead,
   useMarkNotificationRead,
@@ -14,6 +17,8 @@ import {
 } from "@/hooks/useNotifications";
 import type { Notification, NotificationCategory } from "@/types/notifications";
 import { PageTransition } from "@/components/layout/PageTransition";
+import { NotificationDetailModal } from "@/components/notifications/NotificationDetailModal";
+import { pickLocalized } from "@/lib/announcementLocale";
 
 const CATEGORY_LABEL: Record<NotificationCategory, string> = {
   "audit.completed": "Audit",
@@ -28,9 +33,11 @@ function formatTimestamp(iso: string): string {
 }
 
 export function NotificationsPage() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const [unreadOnly, setUnreadOnly] = useState(false);
+  const [detailNotification, setDetailNotification] =
+    useState<Notification | null>(null);
 
   const { data: items = [], isLoading, isError } = useNotifications({
     unread: unreadOnly,
@@ -40,10 +47,46 @@ export function NotificationsPage() {
   const markAll = useMarkAllNotificationsRead();
 
   const hasUnread = useMemo(() => items.some((n) => !n.readAt), [items]);
+  const lang = i18n.language;
 
   const handleOpen = (n: Notification) => {
+    // Broadcasts pop a markdown detail modal so the full bilingual body
+    // is readable in place. The modal owns mark-read on open.
+    if (n.source === "broadcast") {
+      setDetailNotification(n);
+      return;
+    }
+    // User notifications: prefer the deep-link target when present
+    // (audit items carry one) — navigating is more useful than a
+    // modal. Otherwise, if there's body text, open the modal so the
+    // row isn't a dead click (#532 — quota notes are emitted without
+    // a link by design but still carry the full note in `body`).
+    if (n.link) {
+      if (!n.readAt) markRead.mutate(n._id);
+      navigate(n.link);
+      return;
+    }
+    if (n.body) {
+      setDetailNotification(n);
+      return;
+    }
     if (!n.readAt) markRead.mutate(n._id);
-    if (n.link) navigate(n.link);
+  };
+
+  const resolveTitle = (n: Notification): string => {
+    if (n.source === "broadcast" && n.titleI18n) {
+      return pickLocalized(n.titleI18n.en, n.titleI18n.zh, lang);
+    }
+    return n.title ?? "";
+  };
+
+  const resolveBroadcastBody = (n: Notification): string | null => {
+    if (n.source !== "broadcast" || !n.bodyMarkdownI18n) return null;
+    return pickLocalized(
+      n.bodyMarkdownI18n.en,
+      n.bodyMarkdownI18n.zh,
+      lang,
+    );
   };
 
   return (
@@ -119,21 +162,43 @@ export function NotificationsPage() {
                       <div className="flex flex-col gap-1">
                         <div className="flex items-center gap-2">
                           <span className="rounded border border-accent/20 px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
-                            {CATEGORY_LABEL[n.category] ?? n.category}
+                            {n.source === "broadcast"
+                              ? t("notifications.broadcast.tag")
+                              : (n.category && CATEGORY_LABEL[n.category]) ??
+                                n.category ??
+                                ""}
                           </span>
                           <span
                             className={`font-text text-sm font-medium leading-snug ${
                               n.readAt ? "text-meta" : "text-strong"
                             }`}
                           >
-                            {n.title}
+                            {resolveTitle(n)}
                           </span>
                         </div>
-                        {n.body && (
-                          <p className="font-text text-sm leading-snug text-meta">
-                            {n.body}
-                          </p>
-                        )}
+                        {(() => {
+                          const broadcastBody = resolveBroadcastBody(n);
+                          if (broadcastBody) {
+                            return (
+                              <div className="markdown-body font-text text-sm leading-snug text-meta">
+                                <ReactMarkdown
+                                  remarkPlugins={[remarkGfm]}
+                                  rehypePlugins={[rehypeSanitize]}
+                                >
+                                  {broadcastBody}
+                                </ReactMarkdown>
+                              </div>
+                            );
+                          }
+                          if (n.body) {
+                            return (
+                              <p className="font-text text-sm leading-snug text-meta">
+                                {n.body}
+                              </p>
+                            );
+                          }
+                          return null;
+                        })()}
                       </div>
                     </div>
                     <span className="shrink-0 font-mono text-xs text-meta">
@@ -146,6 +211,12 @@ export function NotificationsPage() {
           </ul>
         )}
       </div>
+
+      <NotificationDetailModal
+        notification={detailNotification}
+        onClose={() => setDetailNotification(null)}
+        onMarkRead={(id) => markRead.mutate(id)}
+      />
     </PageTransition>
   );
 }

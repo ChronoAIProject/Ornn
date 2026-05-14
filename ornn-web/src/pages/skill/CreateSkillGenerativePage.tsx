@@ -30,6 +30,7 @@ import { GenerationChatMessage } from "@/components/skill/GenerationChatMessage"
 import { ModelPicker } from "@/components/models/ModelPicker";
 import { OverLimitPage } from "@/components/quota/OverLimitPage";
 import { QuotaInline } from "@/components/quota/QuotaInline";
+import { PackageIcon } from "@/components/icons";
 import { useSkillGeneration } from "@/hooks/useSkillGeneration";
 import { useCreateSkill } from "@/hooks/useSkills";
 import { useMyQuota } from "@/hooks/useQuota";
@@ -225,6 +226,28 @@ export function CreateSkillGenerativePage() {
   const hasPreview = generation.metadata !== null;
   const conversationActive = hasMessages || isGenerating;
   const drawerOpen = pinnedOpen || hoverDrawerOpen;
+
+  // New-iteration hint — pulse the rail tab when a generation lands while
+  // the drawer is closed. The chat lets the user refine across many turns,
+  // so each `phase: generating → preview` transition produces a fresh skill
+  // package; without this nudge the only signal is the chat message itself,
+  // which the user may scroll past while typing the next refinement.
+  const [hasUnseenIteration, setHasUnseenIteration] = useState(false);
+  const prevPhaseRef = useRef(generation.phase);
+  useEffect(() => {
+    if (
+      prevPhaseRef.current === "generating" &&
+      generation.phase === "preview" &&
+      !drawerOpen
+    ) {
+      setHasUnseenIteration(true);
+    }
+    prevPhaseRef.current = generation.phase;
+  }, [generation.phase, drawerOpen]);
+  useEffect(() => {
+    if (drawerOpen) setHasUnseenIteration(false);
+  }, [drawerOpen]);
+
   const starters = defaultPromptStarters(t);
 
   const chatInputPlaceholder = isGenerating
@@ -360,22 +383,54 @@ export function CreateSkillGenerativePage() {
             type="button"
             onMouseEnter={openHover}
             onClick={togglePin}
-            className={`group relative flex items-center gap-1.5 rounded-l-sm border-y border-l px-2.5 py-3 transition-all ${
+            className={`group relative flex h-11 w-9 items-center justify-center rounded-l-sm border-y border-l transition-colors ${
               drawerOpen
                 ? "border-accent/60 bg-card text-accent"
-                : "border-subtle bg-card/80 text-meta hover:border-accent/40 hover:text-strong"
+                : hasUnseenIteration
+                  ? "border-accent bg-card text-accent"
+                  : "border-subtle bg-card/80 text-meta hover:border-accent/40 hover:text-strong"
             }`}
             aria-label={t("aria.skillPackageDrawer")}
           >
-            <span
-              className="font-mono text-[10px] uppercase tracking-[0.18em]"
-              style={{ writingMode: "vertical-rl", transform: "rotate(180deg)" }}
-            >
-              {t("generative.tabPackage", "Package")}
-            </span>
+            <PackageIcon className="h-4 w-4" />
+
+            {/* New-iteration hint — pulsing ember rings around the tab
+                when a generation lands while the drawer is closed. Two
+                layers: a steady accent ring + an `animate-ping` ring
+                that scales out to draw the eye. Clears on drawer open. */}
+            {hasUnseenIteration && !drawerOpen && (
+              <>
+                <span
+                  className="pointer-events-none absolute -inset-px rounded-l-sm ring-2 ring-accent/70"
+                  aria-hidden
+                />
+                <span
+                  className="pointer-events-none absolute -inset-px animate-ping rounded-l-sm ring-2 ring-accent/40"
+                  aria-hidden
+                />
+                {/* Small ember dot top-right to signal "new" even at the
+                    button's outer edge when ring blends into the card. */}
+                <span
+                  className="pointer-events-none absolute -right-1 -top-1 h-2 w-2 animate-pulse rounded-full bg-accent"
+                  aria-hidden
+                />
+              </>
+            )}
+
+            {/* Horizontal tooltip — fades in on hover when the drawer is
+                not already open. Matches the drawer header voice. */}
+            {!drawerOpen && (
+              <span
+                className="pointer-events-none absolute right-full top-1/2 mr-2 -translate-y-1/2 whitespace-nowrap rounded-sm border border-subtle bg-card px-2 py-1 font-mono text-[10px] uppercase tracking-[0.18em] text-strong opacity-0 transition-opacity duration-150 group-hover:opacity-100"
+                aria-hidden
+              >
+                [§&nbsp;PACKAGE]
+              </span>
+            )}
+
             {hasFrontmatterErrors && (
               <span
-                className="absolute -left-1 top-2 h-1.5 w-1.5 rounded-full bg-warning"
+                className="absolute -left-1 top-1.5 h-1.5 w-1.5 rounded-full bg-warning"
                 aria-hidden
               />
             )}
@@ -410,7 +465,7 @@ export function CreateSkillGenerativePage() {
                 transition={{ duration: 0.18, ease: "easeOut" }}
                 onMouseEnter={openHover}
                 onMouseLeave={scheduleHoverClose}
-                className="card-impression fixed right-10 top-4 bottom-4 z-40 flex w-[520px] max-w-[calc(100vw-3rem)] flex-col rounded-md border border-subtle bg-card"
+                className="card-impression fixed right-10 top-[68px] bottom-4 z-40 flex w-[min(960px,65vw)] max-w-[calc(100vw-3rem)] flex-col rounded-md border border-subtle bg-card"
                 role="complementary"
                 aria-label={t("aria.skillPackagePreview")}
               >
@@ -450,10 +505,14 @@ export function CreateSkillGenerativePage() {
                   </div>
                 </div>
 
-                {/* Drawer body */}
-                <div className="min-h-0 flex-1 overflow-y-auto">
+                {/* Drawer body — flex column with the preview claiming the
+                    space between validation errors (top) and action buttons
+                    (bottom). The body itself does NOT scroll; scrolling lives
+                    inside the preview's panes so Start over / Save skill stay
+                    visible at all times. */}
+                <div className="flex min-h-0 flex-1 flex-col">
                   {hasPreview ? (
-                    <div className="flex flex-col gap-4 p-4">
+                    <div className="flex min-h-0 flex-1 flex-col gap-4 p-4">
                       {hasFrontmatterErrors && (
                         <ValidationErrorPanel
                           errors={validationErrors}
@@ -472,11 +531,12 @@ export function CreateSkillGenerativePage() {
                         onContentChange={generation.updateFileContent}
                         onFileDelete={generation.deleteFile}
                         authorName={user?.displayName ?? undefined}
+                        className="min-h-0 flex-1"
                       />
 
-                      <WeldedSeam />
+                      <WeldedSeam className="shrink-0" />
 
-                      <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="flex shrink-0 flex-wrap items-center justify-between gap-3">
                         <Button variant="secondary" size="sm" onClick={generation.reset}>
                           {t("generative.startOver", "Start over")}
                         </Button>

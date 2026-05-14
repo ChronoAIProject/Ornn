@@ -19,6 +19,7 @@ import { HeroStage } from "@/pages/landing/HeroStage";
 import { LandingFooter } from "@/pages/landing/LandingFooter";
 import { LandingChrome } from "@/pages/landing/LandingChrome";
 import { AnnouncementPopup } from "@/pages/landing/AnnouncementPopup";
+import { LaunchCelebrationPopup } from "@/pages/landing/LaunchCelebrationPopup";
 
 export function LandingPage() {
   return (
@@ -35,6 +36,7 @@ export function LandingPage() {
       </main>
       <LandingFooter />
       <AnnouncementPopup />
+      <LaunchCelebrationPopup />
     </div>
   );
 }
