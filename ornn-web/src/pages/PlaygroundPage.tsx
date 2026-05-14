@@ -29,7 +29,12 @@ import { SkillPackagePreview } from "@/components/skill/SkillPackagePreview";
 import { ModelPicker } from "@/components/models/ModelPicker";
 import { OverLimitPage } from "@/components/quota/OverLimitPage";
 import { QuotaInline } from "@/components/quota/QuotaInline";
-import { SkillIcon, EnvIcon, PackageIcon, type IconProps } from "@/components/icons";
+import { EnvIcon, PackageIcon, type IconProps } from "@/components/icons";
+import {
+  createDefaultSkillMetadata,
+  type SkillMetadata,
+} from "@/types/skillPackage";
+import type { SkillCategory } from "@/utils/constants";
 import { useSkill } from "@/hooks/useSkills";
 import { useSkillPackage } from "@/hooks/useSkillPackage";
 import { usePlaygroundChat } from "@/hooks/usePlaygroundChat";
@@ -113,7 +118,7 @@ function defaultPromptStarters(skillName: string, t: TFunc): PromptStarter[] {
   ];
 }
 
-type DrawerKey = "skill" | "package" | "env";
+type DrawerKey = "package" | "env";
 
 export function PlaygroundPage() {
   const { t } = useTranslation();
@@ -266,6 +271,31 @@ export function PlaygroundPage() {
 
   const activeDrawer = pinnedDrawer ?? hoverDrawer;
 
+  const skillCategory = (skill?.metadata as Record<string, unknown> | null)?.category as string | undefined;
+
+  // Synthesise a SkillMetadata-shaped object from the registry skill record
+  // so SkillPackagePreview can render the same flat identity strip as the
+  // generative page. The preview only reads name / description / category /
+  // tag, so we don't need to faithfully reproduce the rest of the shape —
+  // `createDefaultSkillMetadata` fills the unused fields with safe defaults.
+  // Declared above the early-return guards so the hook order is stable.
+  const previewMetadata = useMemo<SkillMetadata | null>(() => {
+    if (!skill) return null;
+    return createDefaultSkillMetadata({
+      name: skill.name,
+      description: skill.description ?? "",
+      version: skill.version,
+      metadata: {
+        category: (skillCategory as SkillCategory) ?? "plain",
+        runtime: [],
+        runtimeDependency: [],
+        runtimeEnvVar: [],
+        toolList: [],
+        tag: skill.tags ?? [],
+      },
+    });
+  }, [skill, skillCategory]);
+
   // No skill specified
   if (!skillName) {
     return (
@@ -306,14 +336,14 @@ export function PlaygroundPage() {
     );
   }
 
-  const skillCategory = (skill?.metadata as Record<string, unknown> | null)?.category as string | undefined;
   const starters = defaultPromptStarters(skillName, t);
   const conversationActive = messages.length > 0 || !!currentAssistantContent || isStreaming;
 
   // Right-edge rail tabs. Each tab renders as a compact icon handle —
   // the `tip` is a horizontal mono-uppercase label shown on hover (matches
-  // the drawer header `[§ NAME]` voice). Avoids vertical-text rotation
-  // which renders CJK upside-down.
+  // the drawer header `[§ NAME]` voice). The Package drawer now hosts the
+  // skill identity (name + category + tags + description) at the top of
+  // `SkillPackagePreview`, so a separate Skill tab would be redundant.
   const railTabs: Array<{
     key: DrawerKey;
     ariaLabel: string;
@@ -321,12 +351,6 @@ export function PlaygroundPage() {
     Icon: ComponentType<IconProps>;
     warn?: boolean;
   }> = [
-    {
-      key: "skill",
-      ariaLabel: t("aria.playgroundSkillDrawer"),
-      tip: "SKILL",
-      Icon: SkillIcon,
-    },
     ...(needsEnvVars
       ? [
           {
@@ -611,7 +635,7 @@ export function PlaygroundPage() {
                 transition={{ duration: 0.18, ease: "easeOut" }}
                 onMouseEnter={() => openHover(activeDrawer)}
                 onMouseLeave={scheduleHoverClose}
-                className="card-impression fixed right-10 top-[68px] bottom-4 z-40 flex w-[min(560px,40vw)] max-w-[calc(100vw-3rem)] flex-col rounded-md border border-subtle bg-card"
+                className="card-impression fixed right-10 top-[68px] bottom-4 z-40 flex w-[min(960px,65vw)] max-w-[calc(100vw-3rem)] flex-col rounded-md border border-subtle bg-card"
                 role="complementary"
                 aria-label={`${activeDrawer} panel`}
               >
@@ -653,55 +677,6 @@ export function PlaygroundPage() {
 
                 {/* Drawer body */}
                 <div className="flex min-h-0 flex-1 flex-col">
-                  {activeDrawer === "skill" && skill && (
-                    <div className="flex min-h-0 flex-1 flex-col">
-                      {/* Identity strip — flat, hairline-separated, matches
-                          the SkillPackagePreview redesign on the gen page. */}
-                      <div className="shrink-0 border-b border-subtle bg-elevated/30 px-5 py-4">
-                        <div className="flex items-baseline justify-between gap-4">
-                          <h2 className="truncate font-display text-xl font-semibold leading-tight text-strong">
-                            {skill.name}
-                          </h2>
-                          <span className="shrink-0 font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
-                            v{skill.version}
-                          </span>
-                        </div>
-                        {(skillCategory || (skill.tags && skill.tags.length > 0)) && (
-                          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[10px] uppercase tracking-[0.14em]">
-                            {skillCategory && (
-                              <span className="text-accent">
-                                [§&nbsp;{skillCategory}]
-                              </span>
-                            )}
-                            {skill.tags && skill.tags.length > 0 && (
-                              <span className="text-meta">
-                                {skill.tags.join("  ·  ")}
-                              </span>
-                            )}
-                          </div>
-                        )}
-                        {skill.description && (
-                          <p className="mt-3 break-words font-text text-sm leading-relaxed text-body">
-                            {skill.description}
-                          </p>
-                        )}
-                      </div>
-
-                      {/* Footer — registry link pinned at the bottom. */}
-                      <div className="mt-auto flex shrink-0 items-center justify-between border-t border-subtle bg-elevated/30 px-5 py-3">
-                        <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-meta">
-                          {t("playground.openDetail", "Skill page")}
-                        </span>
-                        <Link
-                          to={`/skills/${encodeURIComponent(skill.name)}`}
-                          className="font-mono text-[11px] text-accent hover:underline"
-                        >
-                          /skills/{skill.name} →
-                        </Link>
-                      </div>
-                    </div>
-                  )}
-
                   {activeDrawer === "env" && needsEnvVars && (
                     <div className="flex min-h-0 flex-1 flex-col">
                       {/* Header strip — same flat voice as the skill drawer. */}
@@ -758,32 +733,21 @@ export function PlaygroundPage() {
                   )}
 
                   {activeDrawer === "package" && (
-                    <div className="flex h-full flex-col">
-                      <div className="flex shrink-0 items-center justify-between border-b border-subtle px-4 py-2">
-                        <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-meta">
-                          {skill ? `${skill.name}@v${skill.version}` : ""}
-                        </span>
-                        {skill && (
-                          <Link
-                            to={`/skills/${encodeURIComponent(skill.name)}`}
-                            className="font-mono text-[10px] uppercase tracking-[0.14em] text-meta transition-colors hover:text-accent"
-                          >
-                            {t("playground.openInRegistry", "Open in registry →")}
-                          </Link>
-                        )}
-                      </div>
-                      <div className="min-h-0 flex-1">
+                    <div className="flex min-h-0 flex-1 flex-col">
+                      {/* Padded content area — must itself be a flex column
+                          so the preview's `flex-1 min-h-0` actually claims
+                          the remaining height and the file viewer scrolls
+                          internally instead of bleeding past the footer. */}
+                      <div className="flex min-h-0 flex-1 flex-col p-4">
                         {packageLoading ? (
-                          <div className="p-4">
-                            <Skeleton lines={8} />
-                          </div>
+                          <Skeleton lines={8} />
                         ) : packageFiles.length > 0 ? (
                           <SkillPackagePreview
                             files={packageFiles}
                             fileContents={packageContents}
-                            metadata={null}
+                            metadata={previewMetadata}
                             editable={false}
-                            className="h-full"
+                            className="min-h-0 flex-1"
                           />
                         ) : (
                           <div className="flex h-32 items-center justify-center">
@@ -791,6 +755,22 @@ export function PlaygroundPage() {
                           </div>
                         )}
                       </div>
+
+                      {/* Footer — registry link pinned at the bottom,
+                          matching the Skill drawer's pattern. */}
+                      {skill && (
+                        <div className="flex shrink-0 items-center justify-between border-t border-subtle bg-elevated/30 px-5 py-3">
+                          <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-meta">
+                            {skill.name}@v{skill.version}
+                          </span>
+                          <Link
+                            to={`/skills/${encodeURIComponent(skill.name)}`}
+                            className="font-mono text-[11px] text-accent hover:underline"
+                          >
+                            {t("playground.openInRegistry", "Open in registry →")}
+                          </Link>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
