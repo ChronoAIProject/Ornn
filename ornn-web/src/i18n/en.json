@@ -613,6 +613,24 @@
     "stopGeneration": "Stop generation",
     "sendMessage": "Send message"
   },
+  "quota": {
+    "surfacePlayground": "Playground",
+    "surfaceSkillGen": "Skill-gen",
+    "surfaceLabelPlayground": "playground",
+    "surfaceLabelSkillGen": "skill-gen",
+    "admin": "Admin",
+    "adminUnlimited": "Unlimited {{surface}}",
+    "chipAriaAdmin": "{{surface}} quota — admin unlimited",
+    "chipTitleAdmin": "{{surface}} · Unlimited (admin bypass)",
+    "chipAriaRemaining": "{{surface}} quota — {{remaining}} of {{ceiling}} remaining",
+    "chipTitleRemaining": "{{surface}}: {{remaining}} / {{ceiling}} this month",
+    "groupAriaLabel": "Quota usage",
+    "warningHeading": "{{surface}} — {{percent}}% used this month",
+    "warningBody": "{{remaining}} {{surface}} calls left{{adminGrant}}. Click the quota chip in the nav for full breakdown.",
+    "warningAdminGrantSuffix": " (includes +{{value}} admin grant)",
+    "callsLeft": "left",
+    "grantSuffix": "+{{value}} grant"
+  },
   "fileTree": {
     "files": "Files",
     "noFiles": "No files yet",

@@ -613,6 +613,24 @@
     "stopGeneration": "停止生成",
     "sendMessage": "发送消息"
   },
+  "quota": {
+    "surfacePlayground": "试验场",
+    "surfaceSkillGen": "技能生成",
+    "surfaceLabelPlayground": "试验场",
+    "surfaceLabelSkillGen": "技能生成",
+    "admin": "管理员",
+    "adminUnlimited": "{{surface}}不限额",
+    "chipAriaAdmin": "{{surface}}配额 — 管理员不限",
+    "chipTitleAdmin": "{{surface}} · 不限额（管理员）",
+    "chipAriaRemaining": "{{surface}}配额 — 剩余 {{remaining}} / {{ceiling}}",
+    "chipTitleRemaining": "{{surface}}：本月剩余 {{remaining}} / {{ceiling}}",
+    "groupAriaLabel": "配额使用情况",
+    "warningHeading": "{{surface}} — 本月已使用 {{percent}}%",
+    "warningBody": "本月{{surface}}还可调用 {{remaining}} 次{{adminGrant}}。点击导航栏的配额徽章查看完整明细。",
+    "warningAdminGrantSuffix": "（含管理员追加 +{{value}}）",
+    "callsLeft": "剩余",
+    "grantSuffix": "+{{value}} 追加"
+  },
   "fileTree": {
     "files": "文件",
     "noFiles": "还没有文件",
