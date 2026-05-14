@@ -106,8 +106,8 @@ Permissions are issued by NyxID as part of the proxy-forwarded identity. Roles m
 | `ornn:skill:delete` | `ornn-user` | `DELETE /skills/:id`, `DELETE /skills/:idOrName/versions/:version` |
 | `ornn:skill:build` | `ornn-user` | `POST /skills/generate`, `POST /skills/generate/from-source`, `POST /skills/generate/from-openapi` |
 | `ornn:playground:use` | `ornn-user` | `POST /playground/chat` |
-| `ornn:admin:skill` | `ornn-admin` | All `/admin/*` skill-scoped routes; admin force-audit; platform settings |
-| `ornn:admin:category` | `ornn-admin` | `GET/POST/PUT/DELETE /admin/categories/*` |
+| `ornn:admin:skill` | `ornn-admin` | All `/admin/*` skill-scoped routes; admin force-audit; sectioned platform settings; mirror config; announcements / broadcasts |
+| `ornn:quota:admin` | `ornn-admin` | `GET /admin/dashboard/stats`; all `/admin/quota/*`; all `/admin/redemption-codes/*` |
 
 A few endpoints (`POST /skills/:idOrName/audit`, the various caller-scoped reads) gate on **ownership** instead of (or in addition to) a permission — those are documented per-endpoint.
 
@@ -137,13 +137,15 @@ Writing / managing a skill (`canManageSkill`) collapses to: **author OR platform
 | Status | Used for |
 |---|---|
 | 200 | Successful read or write |
-| 201 | Resource created (admin category / tag create) |
+| 201 | Resource created (admin announcement / broadcast / redemption-code create) |
 | 400 | Validation error, malformed body, bad query param |
 | 401 | `AUTH_MISSING` — no usable identity from the proxy |
 | 403 | `FORBIDDEN` — authed but missing permission, ownership check failed, or trying to mutate someone else's skill |
 | 404 | `*_NOT_FOUND` — resource missing or hidden under visibility rules |
-| 409 | Conflict (e.g. duplicate version on publish) |
+| 409 | Conflict (e.g. `REDEMPTION_CODE_ALREADY_REDEEMED`) |
+| 410 | Gone (e.g. `REDEMPTION_CODE_EXPIRED`, `REDEMPTION_CODE_INVALIDATED`) |
 | 413 | `PAYLOAD_TOO_LARGE` — ZIP exceeds `MAX_PACKAGE_SIZE_BYTES` (default 50 MiB) |
+| 429 | `QUOTA_EXCEEDED` — caller has burned this month's allotment on the metered surface. Check `/me/quota`. |
 | 500 | `INTERNAL_ERROR` or domain-specific 500 — retry with backoff and include `X-Request-ID` if reporting |
 | 503 | `/readyz` only — Mongo unreachable |
 
@@ -181,6 +183,14 @@ The codes below appear across many endpoints. Per-endpoint sections list any add
 | `NYXID_SERVICE_NOT_ELIGIBLE` | 403 | Caller is not allowed to tie a skill to that service (would tie to another user's personal service). |
 | `SYSTEM_SKILL_MUST_BE_PUBLIC` | 400 | Skill tied to an admin service cannot be made private. Untie first. |
 | `QUERY_REQUIRED` / `AUTH_REQUIRED` | 400 | `/skill-search` invariant violated (semantic mode needs both query and auth). |
+| `INVALID_SURFACE` | 400 | `/me/models` `surface` query param is not `playground` or `skillGen`. |
+| `QUOTA_EXCEEDED` | 429 | Monthly allotment burned on the metered surface (`playground` or `skillGen`). Read `/me/quota` for the snapshot. |
+| `MODEL_UNAVAILABLE` / `MODEL_NOT_ENABLED` / `MODEL_NOT_FOUND` | 400 | SSE pre-stream: requested `modelId` is unknown or not enabled for this surface. Call `/me/models` to discover valid ids. |
+| `NOTIFICATION_NOT_FOUND` | 404 | `POST /notifications/:id/read` — the id is neither a per-user notification nor a broadcast the caller can see. |
+| `REDEMPTION_CODE_NOT_FOUND` | 404 | Redemption code does not exist. |
+| `REDEMPTION_CODE_EXPIRED` | 410 | Past `expiresAt`. |
+| `REDEMPTION_CODE_INVALIDATED` | 410 | Admin revoked the code. |
+| `REDEMPTION_CODE_ALREADY_REDEEMED` | 409 | Already consumed (codes are single-use). |
 | `PAYLOAD_TOO_LARGE` | 413 | Upload exceeds `MAX_PACKAGE_SIZE_BYTES`. |
 | `PACKAGE_DOWNLOAD_FAILED` | 500 | The backend could not retrieve the skill ZIP from object storage. |
 | `NYXID_ORG_LOOKUP_FAILED` | 500 | NyxID returned a non-OK response when the backend tried to resolve an org on the caller's behalf. |
@@ -1442,14 +1452,18 @@ The backend runs up to 5 rounds of tool-use; when the LLM emits a `function_call
 
 Four endpoints. All require auth. All scoped to the caller — no cross-user reads.
 
-Two notification categories are emitted today; both come from the audit pipeline:
+After [#500](https://github.com/ChronoAIProject/Ornn/pull/500) the feed is a **discriminated union** of per-user notifications and admin-authored broadcasts. Each item carries a `source` field — `"user"` for the audit-pipeline notifications below, `"broadcast"` for platform-wide markdown notices. The two variants share `_id`, `readAt`, `createdAt`; everything else is variant-specific. `unread-count` and `mark-all-read` cover both sources in one shot. `POST /:id/read` accepts either kind of id and routes by lookup.
+
+Per-user (`source: "user"`) categories emitted today; both come from the audit pipeline:
 
 | Category | Sent to | Trigger |
 |---|---|---|
 | `audit.completed` | The skill **owner** | Every audit completion. Body distinguishes `green` from `yellow`/`red` and links to the audit history page. |
 | `audit.risky_for_consumer` | Every consumer of a `yellow`/`red`-verdict skill — every user in `sharedWithUsers`, plus the membership of every org in `sharedWithOrgs` (resolved via NyxID at fan-out time) | Same audit completion. Skipped for `green`. |
 
-There are no other categories; share / waiver / review notifications were removed when the audit-gated share workflow was retired.
+There are no other per-user categories; share / waiver / review notifications were removed when the audit-gated share workflow was retired.
+
+Broadcasts (`source: "broadcast"`) are bilingual platform-wide notices authored via `POST /admin/broadcasts` (admin-only). They have no `category` — every row in this lane is treated as informational.
 
 ### 9.1 List notifications — `GET /api/v1/notifications`
 
@@ -1457,10 +1471,10 @@ There are no other categories; share / waiver / review notifications were remove
 
 | Query param | Type | Notes |
 |---|---|---|
-| `unread` | `"true"` | Optional. Restrict to unread. |
-| `limit` | int 1–200 | Default 50. |
+| `unread` | `"true"` | Optional. Restrict to unread items (across both sources). |
+| `limit` | int 1–200 | Default 50. Caps the merged feed length. |
 
-Response 200:
+Response 200 — the `items` array is a discriminated union on `source`:
 
 ```jsonc
 {
@@ -1468,6 +1482,7 @@ Response 200:
     "items": [
       {
         "_id": "ntf_...",
+        "source": "user",
         "userId": "user_...",
         "category": "audit.risky_for_consumer",
         "title": "Audit found risk in 'csv-tools' (yellow)",
@@ -1476,12 +1491,22 @@ Response 200:
         "data": { "skillGuid": "skl_...", "version": "1.3", "verdict": "yellow" },
         "readAt": null,
         "createdAt": "2026-04-28T..."
+      },
+      {
+        "_id": "bc_...",
+        "source": "broadcast",
+        "titleI18n":        { "en": "Scheduled maintenance",  "zh": "计划维护" },
+        "bodyMarkdownI18n": { "en": "We will be down at...",  "zh": "我们将在..." },
+        "readAt": null,
+        "createdAt": "2026-04-29T..."
       }
     ]
   },
   "error": null
 }
 ```
+
+Switch on `source` before reading variant-specific fields. `body` / `link` / `data` exist only on `source: "user"`; `titleI18n` / `bodyMarkdownI18n` exist only on `source: "broadcast"`.
 
 ### 9.2 Unread count — `GET /api/v1/notifications/unread-count`
 
@@ -1495,24 +1520,24 @@ Response 200:
 
 ### 9.3 Mark one read — `POST /api/v1/notifications/:id/read`
 
-**Auth: required.** Sets `readAt` to `now()` and returns the updated row.
+**Auth: required.** Sets `readAt` to `now()`. The handler routes by id-lookup: a `:id` that matches a per-user notification updates that row; one that matches a broadcast inserts (or updates) a read-receipt for the caller. Unknown ids surface `NOTIFICATION_NOT_FOUND`.
 
 Path param: `:id`. Body: ignored (send `{}`).
 
 Response 200:
 
 ```jsonc
-{ "data": <NotificationDocument with readAt set>, "error": null }
+{ "data": <updated record — per-user notification doc OR broadcast read-receipt doc>, "error": null }
 ```
 
 | Code | Status | Cause |
 |---|---|---|
 | `AUTH_MISSING` | 401 | Standard. |
-| `NOT_FOUND` | 404 | Notification does not belong to the caller (or does not exist). |
+| `NOTIFICATION_NOT_FOUND` | 404 | The id is neither a per-user notification belonging to the caller nor a broadcast the caller can see. |
 
 ### 9.4 Mark all read — `POST /api/v1/notifications/mark-all-read`
 
-**Auth: required.** Marks every unread notification belonging to the caller as read.
+**Auth: required.** Marks every unread per-user notification belonging to the caller as read AND inserts read receipts for every currently-unread broadcast in one shot.
 
 Body: ignored.
 
@@ -1521,6 +1546,8 @@ Response 200:
 ```jsonc
 { "data": { "updated": 12 }, "error": null }
 ```
+
+`updated` is the total count across both sources.
 
 ---
 
@@ -1610,7 +1637,7 @@ Response 200:
 
 ## 11. Me — caller scope
 
-Eight endpoints. All require auth and are scoped to the caller — there is no "read another user's …" surface here.
+Twelve endpoints. All require auth and are scoped to the caller — there is no "read another user's …" surface here.
 
 ### 11.1 Identity snapshot — `GET /api/v1/me`
 
@@ -1743,6 +1770,155 @@ Display names are resolved best-effort (NyxID for orgs, Ornn's activity director
 
 Response 200: same shape as 11.7.
 
+### 11.9 Monthly quota — `GET /api/v1/me/quota`
+
+**Auth: required.** Caller-scoped snapshot of the metered surfaces (`playground`, `skillGen`). Read before any SSE call so you can short-circuit on `remaining: 0` instead of burning the request to a 429.
+
+Response 200:
+
+```jsonc
+{
+  "data": {
+    "isAdmin": false,
+    "monthMarker":           "2026-05",
+    "monthStart":            "2026-05-01T00:00:00Z",
+    "monthEnd":              "2026-06-01T00:00:00Z",
+    "nextMonthlyResetAt":    "2026-06-01T00:00:00Z",
+    "playground": {
+      "defaultAllotment": 50,
+      "adminGrant":       10,
+      "used":             37,
+      "remaining":        23,
+      "warningThreshold": 0.8,
+      "warning":          false
+    },
+    "skillGen": {
+      "defaultAllotment": 20,
+      "adminGrant":       0,
+      "used":             20,
+      "remaining":        0,
+      "warningThreshold": 0.8,
+      "warning":          true
+    }
+  },
+  "error": null
+}
+```
+
+Field semantics:
+
+- `isAdmin: true` — caller has admin bypass; every charge is free. The per-surface counters are still populated (for visibility) but never block.
+- `defaultAllotment` — platform-wide monthly base for the surface (set in `/admin/settings/quota`).
+- `adminGrant` — additive top-up granted to this user (via `/admin/quota/grant` or by redeeming a code).
+- `remaining = defaultAllotment + adminGrant − used`, clamped to ≥ 0. A successful chargeable call decrements `remaining` on completion.
+- `warning: true` when `used / (defaultAllotment + adminGrant) ≥ warningThreshold`. UI surfaces a soft chip; agents can treat it as "consider stopping".
+- Buckets reset at `nextMonthlyResetAt` (first day of next UTC month). Unused balance does not roll over.
+
+No error codes beyond the standard `AUTH_MISSING`.
+
+### 11.10 Model picker — `GET /api/v1/me/models`
+
+**Auth: required.** List the LLM models the deployment has enabled for one of the SSE surfaces, sorted with that surface's default first.
+
+| Query param | Values | Notes |
+|---|---|---|
+| `surface` | `playground` \| `skillGen` | **Required.** Mismatched values → `INVALID_SURFACE`. |
+
+Response 200:
+
+```jsonc
+{
+  "data": {
+    "items": [
+      { "modelId": "claude-3-5-sonnet-latest", "displayName": "Claude 3.5 Sonnet", "isDefault": true  },
+      { "modelId": "gpt-4o",                   "displayName": "GPT-4o",            "isDefault": false }
+    ],
+    "defaultModelId": "claude-3-5-sonnet-latest"
+  },
+  "error": null
+}
+```
+
+`items[].modelId` is what you pass as `modelId` to `POST /skills/generate*` or `POST /playground/chat`. Empty list means the admin has not enabled any model for this surface — SSE calls will pre-stream `MODEL_UNAVAILABLE`. `defaultModelId` mirrors the `isDefault: true` row; absent when the list is empty.
+
+| Code | Status | Cause |
+|---|---|---|
+| `INVALID_SURFACE` | 400 | Query param missing or not in the enum. |
+| `AUTH_MISSING` | 401 | Standard. |
+
+### 11.11 Redeem a code — `POST /api/v1/me/redemption-codes/redeem`
+
+**Auth: required.** Consume a one-time redemption code; lands additive grants on the caller's quota buckets for the current month.
+
+Request body (`application/json`):
+
+```jsonc
+{ "code": "ORNN-XXXX-YYYY-ZZZZ" }
+```
+
+Schema: `z.object({ code: z.string().min(1).max(128) })`.
+
+Response 200:
+
+```jsonc
+{
+  "data": {
+    "codeId":     "rdm_...",
+    "redeemedAt": "2026-05-14T12:00:00Z",
+    "grants": [
+      { "surface": "playground", "amount": 50, "monthMarker": "2026-05", "newAdminGrant": 60 },
+      { "surface": "skillGen",   "amount": 10, "monthMarker": "2026-05", "newAdminGrant": 10 }
+    ]
+  },
+  "error": null
+}
+```
+
+`newAdminGrant` is the post-redeem total for that surface, useful for echoing to the user. Codes are single-use across all users; consuming one invalidates it everywhere.
+
+| Code | Status | Cause |
+|---|---|---|
+| `INVALID_REDEEM_BODY` | 400 | Body failed Zod validation. |
+| `REDEMPTION_CODE_NOT_FOUND` | 404 | Code string doesn't exist. |
+| `REDEMPTION_CODE_EXPIRED` | 410 | Past `expiresAt`. |
+| `REDEMPTION_CODE_INVALIDATED` | 410 | Admin revoked the code. |
+| `REDEMPTION_CODE_ALREADY_REDEEMED` | 409 | Already consumed (codes are single-use). |
+| `AUTH_MISSING` | 401 | Standard. |
+
+### 11.12 Redemption history — `GET /api/v1/me/redemption-codes/history`
+
+**Auth: required.** Caller's own redemption log, newest first.
+
+| Query param | Values | Default |
+|---|---|---|
+| `page` | int ≥ 1 | 1 |
+| `pageSize` | int 1–100 | 20 |
+
+Response 200:
+
+```jsonc
+{
+  "data": {
+    "items": [
+      {
+        "id": "rdm_...",
+        "code": "ORNN-XXXX-YYYY-ZZZZ",
+        "grants": [{ "surface": "playground", "amount": 50 }],
+        "note": null,
+        "redeemedAt": "2026-05-14T12:00:00Z",
+        "expiresAt":  "2026-06-30T23:59:59Z",
+        "createdAt":  "2026-05-01T00:00:00Z"
+      }
+    ],
+    "total": 3,
+    "page": 1,
+    "pageSize": 20,
+    "totalPages": 1
+  },
+  "error": null
+}
+```
+
 ---
 
 ## 12. Users directory
@@ -1799,303 +1975,175 @@ Response 200:
 
 ## 13. Admin
 
-Thirteen endpoints. All under `/api/v1/admin/*`. All require auth. Most agents never call these; they exist for the platform-admin UI.
+All endpoints under `/api/v1/admin/*`. All require auth. Most agents never call these — they back the platform-admin UI. This section gives the path + permission + intent so an agent invoked as a "platform-admin assistant" knows where to look; full request/response shapes live in `GET /api/v1/openapi.json`.
 
-### 13.1 Stats — `GET /api/v1/admin/stats`
+The legacy `GET /admin/stats` and `GET /admin/activities` endpoints were removed in [#271](https://github.com/ChronoAIProject/Ornn/pull/271) — admin totals moved to §13.1 below, and activity feeds live in PostHog now (the admin UI deep-links into the PostHog dashboard). The legacy `/admin/categories/*` and `/admin/tags/*` CRUD also no longer exist — tags now flow through `metadata.tag` on the skill frontmatter and are exposed read-only via `/skill-facets/tags` (§5.2); the `category` concept collapsed into a free-form `metadata.category` string.
 
-**Auth: required.** **Permission: `ornn:admin:skill`.**
+### 13.1 Dashboard tiles — `GET /api/v1/admin/dashboard/stats`
 
-Response 200:
+**Auth: required. Permission: `ornn:quota:admin`.**
+
+User + skill totals for the admin dashboard.
 
 ```jsonc
 {
   "data": {
-    "totalUsers": 124,
-    "totalSkills": 412,
-    "publicSkills": 271,
-    "privateSkills": 141,
-    "recentActivities": 87
+    "users":  { "total": 124, "admin": 3,  "normal": 121 },
+    "skills": { "total": 412, "system": 8, "public": 263, "private": 141 }
   },
   "error": null
 }
 ```
 
-`recentActivities` is the count of activity-log rows in the last 24 hours.
+Skill partition is disjoint (`total = system + public + private`): `system` = `isSystemSkill: true`; `public` = `isPrivate: false ∧ isSystemSkill !== true`; `private` = `isPrivate: true`.
 
-### 13.2 Activities — `GET /api/v1/admin/activities`
+### 13.2 User directory — `GET /api/v1/admin/users`
 
-**Auth: required.** **Permission: `ornn:admin:skill`.**
+**Auth: required. Permission: `ornn:admin:skill`.**
 
-| Query param | Type | Notes |
-|---|---|---|
-| `page` | int ≥ 1 | Default 1. |
-| `pageSize` | int 1–100 | Default 20. |
-| `action` | activity action | Filter by action type (`login`, `skill:create`, `skill:update`, `skill:delete`, …). |
-| `userId` | string | Filter by user. |
+| Query param | Notes |
+|---|---|
+| `page` | int ≥ 1, default 1 |
+| `pageSize` | int 1–100, default 20 |
 
-Response 200:
+Response: `{ data: { items: [{ userId, email, displayName, lastActiveAt, activityCount, skillCount }], total, page, pageSize, totalPages }, error: null }`.
 
-```jsonc
-{
-  "data": {
-    "items": [
-      {
-        "id": "act_...",
-        "userId": "user_...",
-        "userEmail": "...",
-        "userDisplayName": "...",
-        "action": "skill:create",
-        "details": { "skillId": "skl_...", "skillName": "my-skill" },
-        "createdAt": "2026-04-28T..."
-      }
-    ],
-    "total": 412,
-    "page": 1,
-    "pageSize": 20,
-    "totalPages": 21
-  },
-  "error": null
-}
-```
+### 13.3 Skill admin browse + delete
 
-### 13.3 Users — `GET /api/v1/admin/users`
+Cross-user browse with no visibility filtering, plus force-delete bypassing the author check.
 
-**Auth: required.** **Permission: `ornn:admin:skill`.**
+| Method | Path | Permission | Notes |
+|---|---|---|---|
+| `GET` | `/admin/skills` | `ornn:admin:skill` | Query: `page`, `pageSize`, `q` (name+description substring), `userId`. Returns the same `SkillSummary` shape `/skill-search` does. |
+| `DELETE` | `/admin/skills/:id` | `ornn:admin:skill` | Same effect as `DELETE /skills/:id` (§3.11). Returns `{ data: { success: true }, error: null }`. |
 
-| Query param | Type | Notes |
-|---|---|---|
-| `page` | int ≥ 1 | Default 1. |
-| `pageSize` | int 1–100 | Default 20. |
+### 13.4 Force-audit — `POST /api/v1/admin/skills/:idOrName/audit`
 
-Aggregates the activity collection into a per-user roster. Each item is enriched with skill counts:
+Cross-ref §4.5.
 
-```jsonc
-{
-  "data": {
-    "items": [
-      {
-        "userId": "user_...",
-        "email": "...",
-        "displayName": "...",
-        "lastActiveAt": "2026-04-28T...",
-        "activityCount": 87,
-        "skillCount": 5
-      }
-    ],
-    "total": 124,
-    "page": 1,
-    "pageSize": 20,
-    "totalPages": 7
-  },
-  "error": null
-}
-```
+### 13.5 AgentSeal rescan — `POST /api/v1/admin/skills/:idOrName/versions/:version/agentseal-rescan`
 
-### 13.4 Skills (admin-wide) — `GET /api/v1/admin/skills`
+**Auth: required. Permission: `ornn:admin:skill`.**
 
-**Auth: required.** **Permission: `ornn:admin:skill`.**
+Re-runs the AgentSeal scanner against a specific version's package and refreshes the cached verdict on that version. Body: ignored. Returns the refreshed scan record.
 
-| Query param | Type | Notes |
-|---|---|---|
-| `page`, `pageSize` | as above | |
-| `q` | string | Substring match against name and description. |
-| `userId` | string | Filter by author. |
+### 13.6 Quota administration
 
-Response 200:
+All under `/admin/quota/*`. **Auth: required. Permission: `ornn:quota:admin`.**
 
-```jsonc
-{
-  "data": {
-    "items": [
-      {
-        "guid": "skl_...",
-        "name": "my-skill",
-        "description": "...",
-        "createdBy": "user_...",
-        "createdByEmail": "...",
-        "createdByDisplayName": "...",
-        "createdOn": "2026-04-28T...",
-        "updatedOn": "2026-04-28T...",
-        "isPrivate": true,
-        "tags": ["..."]
-      }
-    ],
-    "total": 412,
-    "page": 1,
-    "pageSize": 20,
-    "totalPages": 21
-  },
-  "error": null
-}
-```
+| Method | Path | Body | Notes |
+|---|---|---|---|
+| `GET` | `/admin/quota/users?surface=playground\|skillGen&page=...&pageSize=...` | — | Per-user quota tiles for the requested surface. |
+| `GET` | `/admin/quota/users/:userId/lifetime?surface=...` | — | Lifetime grant audit + usage for one user, one surface. |
+| `GET` | `/admin/quota/grants?page=...&pageSize=...` | — | Paginated grant audit log across all users. |
+| `POST` | `/admin/quota/grant` | `{ userId, surface, amount, note? }` | Additive grant onto current-month bucket. |
+| `POST` | `/admin/quota/grant/bulk` | `{ userIds: [], surface, amount, note? }` | Same, multi-user. |
 
-Admin browse — no visibility filtering. Every skill in the registry is reachable here regardless of `isPrivate` / share-list.
+### 13.7 Redemption codes
 
-### 13.5 Admin delete — `DELETE /api/v1/admin/skills/:id`
+All under `/admin/redemption-codes/*`. **Auth: required. Permission: `ornn:quota:admin`.** Caller-side `redeem` and `history` live at `/me/redemption-codes/*` (§11.11, §11.12).
 
-**Auth: required.** **Permission: `ornn:admin:skill`.** Same effect as `DELETE /skills/:id` (§3.11) but bypasses the author check.
+| Method | Path | Body | Notes |
+|---|---|---|---|
+| `GET` | `/admin/redemption-codes?page=...&pageSize=...` | — | Paginated admin list. |
+| `POST` | `/admin/redemption-codes` | `{ code?, grants: [{ surface, amount }], expiresAt, note? }` | Create. `code` auto-generated when omitted. Returns 201. |
+| `DELETE` | `/admin/redemption-codes/:id` | — | Hard delete (unredeemed only). |
+| `POST` | `/admin/redemption-codes/:id/invalidate` | — | Soft-revoke. Future `/me/redemption-codes/redeem` calls return `REDEMPTION_CODE_INVALIDATED`. |
 
-Response 200: `{ "data": { "success": true }, "error": null }`.
+### 13.8 Mirror admin
 
-| Code | Status | Cause |
-|---|---|---|
-| `SKILL_NOT_FOUND` | 404 | Skill missing. |
-| `FORBIDDEN` | 403 | Missing `ornn:admin:skill`. |
+| Method | Path | Permission | Notes |
+|---|---|---|---|
+| `POST` | `/admin/mirror/reconcile` | `ornn:admin:skill` | Fire-and-forget reconcile run. **202** with `{ data: { status: "running", startedAt }, error: null }` on accept. Refusals: `503 MIRROR_DISABLED` (kill-switch off or required GitHub App creds missing), `409 RECONCILE_ALREADY_RUNNING` (another reconcile is in progress on this pod). |
+| `GET` | `/admin/mirror/status` | `ornn:admin:skill` | Counts + last-run summary. Response combines DB-side mirror counts, the persisted scheduled-run status (cluster-wide), and the current `mirror` settings section (App private key mid-masked) so the admin UI can render without a second round-trip. |
 
-### 13.6 List categories — `GET /api/v1/admin/categories`
+The mirror **config** (repo, branch, GitHub App id, encrypted private key, enabled flag, cadence) lives under the sectioned platform settings (§14.2, `mirror`). The two endpoints above only operate the scheduler. Manual `reconcile` runs are tracked in pod-local state and do not update `scheduledRun` in the status response.
 
-**Auth: required.** **Permission: `ornn:admin:category`.**
+### 13.9 Announcements
 
-Response 200:
+Public anonymous reads + admin CRUD. Bilingual EN + ZH content; ZH falls back to EN at render time when empty.
 
-```jsonc
-{
-  "data": [
-    {
-      "_id": "cat_...",
-      "name": "tool-based",
-      "slug": "tool-based",
-      "description": "...",
-      "order": 2,
-      "createdAt": "...",
-      "updatedAt": "..."
-    }
-  ],
-  "error": null
-}
-```
+| Method | Path | Auth | Notes |
+|---|---|---|---|
+| `GET` | `/announcements` | anon | Listed published announcements (News page). |
+| `GET` | `/announcements/active` | anon | Currently active row(s) for the landing-page popup. |
+| `GET` | `/admin/announcements` | `ornn:admin:skill` | Admin browse — every row including disabled / future. |
+| `POST` | `/admin/announcements` | `ornn:admin:skill` | Create. Body: `{ titleEn, titleZh?, bodyMarkdownEn, bodyMarkdownZh?, ctaLabelEn?, ctaLabelZh?, ctaUrl?, enabled, startsAt?, endsAt? }`. Returns 201. |
+| `PATCH` | `/admin/announcements/:id` | `ornn:admin:skill` | Partial update. |
+| `DELETE` | `/admin/announcements/:id` | `ornn:admin:skill` | Hard delete. |
 
-### 13.7 Create category — `POST /api/v1/admin/categories`
+CTA pairing rule: `ctaUrl` and `ctaLabelEn` must both be set or both null (validated server-side as `INVALID_ANNOUNCEMENT_INPUT`). `ctaLabelZh` is independently optional.
 
-**Auth: required.** **Permission: `ornn:admin:category`.**
+### 13.10 Broadcasts
 
-Body:
+Admin-authored notifications that fan out into every user's `/notifications` feed (§9) as `source: "broadcast"` rows.
 
-```jsonc
-{
-  "name": "tool-based",                 // one of: plain | tool-based | runtime-based | mixed
-  "slug": "tool-based",                 // 1–50 chars, lowercase alphanumeric + hyphens
-  "description": "...",                 // 1–500 chars
-  "order": 2                            // optional, ≥ 0
-}
-```
-
-Response 201: the new `CategoryDocument`.
-
-| Code | Status | Cause |
-|---|---|---|
-| `VALIDATION_ERROR` | 400 | Body failed Zod validation. |
-
-### 13.8 Update category — `PUT /api/v1/admin/categories/:id`
-
-**Auth: required.** **Permission: `ornn:admin:category`.**
-
-Path param: `:id` — category id.
-
-Body (any subset):
-
-```jsonc
-{
-  "description": "...",   // 1–500 chars
-  "order": 3              // ≥ 0
-}
-```
-
-Response 200: the updated `CategoryDocument`.
-
-| Code | Status | Cause |
-|---|---|---|
-| `VALIDATION_ERROR` | 400 | Body failed validation. |
-| `NOT_FOUND` | 404 | No such category. |
-
-### 13.9 Delete category — `DELETE /api/v1/admin/categories/:id`
-
-**Auth: required.** **Permission: `ornn:admin:category`.**
-
-Response 200: `{ "data": { "success": true }, "error": null }`.
-
-### 13.10 List tags — `GET /api/v1/admin/tags`
-
-**Auth: required.** **Permission: `ornn:admin:skill`.**
-
-Query: `type` (`predefined` | `custom`) — optional filter.
-
-Response 200:
-
-```jsonc
-{ "data": [{ "_id": "tag_...", "name": "translation", "createdAt": "..." }], "error": null }
-```
-
-### 13.11 Create tag — `POST /api/v1/admin/tags`
-
-**Auth: required.** **Permission: `ornn:admin:skill`.**
-
-Body:
-
-```jsonc
-{ "name": "translation" }
-```
-
-`name` must be 1–30 chars and match `/^[a-z0-9-_]+$/`.
-
-Response 201: the new `TagDocument`.
-
-| Code | Status | Cause |
-|---|---|---|
-| `VALIDATION_ERROR` | 400 | Body failed validation. |
-
-### 13.12 Delete tag — `DELETE /api/v1/admin/tags/:id`
-
-**Auth: required.** **Permission: `ornn:admin:skill`.** Response: `{ "data": { "success": true }, "error": null }`.
-
-### 13.13 Admin force-audit — `POST /api/v1/admin/skills/:idOrName/audit`
-
-Documented as §4.5 above (audit section).
+| Method | Path | Permission | Notes |
+|---|---|---|---|
+| `GET` | `/admin/broadcasts` | `ornn:admin:skill` | List all broadcasts. |
+| `POST` | `/admin/broadcasts` | `ornn:admin:skill` | Create. Body carries bilingual `titleI18n` / `bodyMarkdownI18n`. Returns 201. |
+| `PATCH` | `/admin/broadcasts/:id` | `ornn:admin:skill` | Partial update. |
+| `DELETE` | `/admin/broadcasts/:id` | `ornn:admin:skill` | Hard delete (read receipts cascade). |
 
 ---
 
 ## 14. Platform settings
 
-Two endpoints. Editable per-deployment thresholds the platform admin controls. `auditWaiverThreshold` is the only field at the moment; new settings will be added here as features land.
+The platform-admin configuration lives in four parallel route groups under `/api/v1/admin/settings/*`. **Every endpoint here requires `ornn:admin:skill`** (the LLM-provider routes too). Agents rarely call these; they back the Settings tab of the admin UI.
 
-### 14.1 Read settings — `GET /api/v1/admin/settings`
+### 14.1 Legacy single-document settings — `GET / PATCH /api/v1/admin/settings`
 
-**Auth: required.** **Permission: `ornn:admin:skill`.**
+Mostly historical. The only remaining live field is `auditWaiverThreshold` (0–10 number; informational only — kept on the document because earlier designs surfaced a "low risk → auto-share" UI hint that the current sharing path does not consume).
 
-Response 200:
+`PATCH` body accepts a partial update; out-of-range values surface `INVALID_SETTING` (400). All real configuration lands in the sectioned routes below — not here.
 
-```jsonc
-{
-  "data": {
-    "auditWaiverThreshold": 7.5
-  },
-  "error": null
-}
-```
+### 14.2 Sectioned settings — `GET / PUT /api/v1/admin/settings/{section}`
 
-`auditWaiverThreshold` is a 0–10 number; it is currently informational only — kept on the document because earlier designs surfaced a "low risk → auto-share" UI hint. The current sharing path does not consume it.
+Each section is its own row in the `platform_settings` collection. Reads mid-mask secret fields; writes accept plaintext, redaction sentinels, or mid-mask sentinels for those same fields (the service resolves "preserve DB" sentinels).
 
-### 14.2 Patch settings — `PATCH /api/v1/admin/settings`
+| `{section}` (URL path) | Covers |
+|---|---|
+| `playground` | Playground SSE knobs (per-call budgets, sandbox image, etc.) |
+| `skill-generation` | Skill-generation SSE knobs (max output tokens, validation retries, etc.) |
+| `mirror` | GitHub mirror — repo, branch, App ID, installation id, encrypted private key, enabled flag, reconcile cadence |
+| `integrations/nyxid` | NyxID proxy + service ids the backend talks to |
+| `skill-audit` | Audit pipeline — risk threshold, LLM choice, cache TTL |
+| `posthog` | PostHog telemetry — host, project key, ingestion toggles |
+| `extras` | Catch-all for one-off feature flags |
 
-**Auth: required.** **Permission: `ornn:admin:skill`.**
-
-Request body (`application/json`, partial):
-
-```jsonc
-{ "auditWaiverThreshold": 7.5 }
-```
-
-`auditWaiverThreshold` must be a number in `[0, 10]`. Values are rounded to one decimal.
-
-Response 200: the updated settings document.
+Response shape on read: `{ data: <sectionPayload>, error: null }`. On write: `{ data: <sectionPayload>, error: null, meta: { changedFields: [...] } }` — no-op writes still 200 with an empty `changedFields`.
 
 | Code | Status | Cause |
 |---|---|---|
-| `INVALID_SETTING` | 400 | Field out of range or no recognised fields in body. |
-| `FORBIDDEN` | 403 | Missing `ornn:admin:skill`. |
+| `INVALID_BODY` | 400 | Body not a JSON object. |
+| `VALIDATION_ERROR` | 400 | Body failed the section's Zod schema. |
+| `SECTION_NOT_FOUND` | 404 | Unknown `{section}` path. |
+
+### 14.3 LLM providers — `/admin/settings/llm-providers[/:id]`
+
+Multi-provider model catalog. Each provider row carries credentials + per-model toggles for the two SSE surfaces.
+
+| Method | Path | Body | Notes |
+|---|---|---|---|
+| `GET` | `/admin/settings/llm-providers` | — | List all providers. Secrets mid-masked. |
+| `POST` | `/admin/settings/llm-providers` | `{ name, gatewayUrl, auth, maxOutputTokens, defaultTemperature, ... }` | Create. Returns 201. |
+| `GET` | `/admin/settings/llm-providers/:id` | — | Read one. |
+| `PUT` | `/admin/settings/llm-providers/:id` | partial | Update. Accepts plaintext or mid-mask sentinel for secret fields. |
+| `DELETE` | `/admin/settings/llm-providers/:id` | — | Hard delete + cascade through model catalog. |
+| `POST` | `/admin/settings/llm-providers/:id/sync` | — | Re-pull model list from the provider gateway. Response `{ data: { synced: int }, error: null }`. |
+| `PATCH` | `/admin/settings/llm-providers/:id/models/:modelId` | `{ enabledForPlayground?, enabledForSkillGen?, defaultForPlayground?, defaultForSkillGen? }` | Per-row surface flags. Setting `defaultFor*: true` unsets the previous default atomically. |
+
+The picker `GET /me/models` (§11.10) reads through this catalog.
+
+### 14.4 Export / import — `/admin/settings/export` and `/admin/settings/import`
+
+| Method | Path | Notes |
+|---|---|---|
+| `GET` | `/admin/settings/export` | Returns full settings + LLM-provider snapshot as JSON. Secrets are redacted. |
+| `POST` | `/admin/settings/import` | Body: a prior export JSON. Replays into `platform_settings` + `llm_providers`. Diff is reported in `meta.changedFields`. |
 
 ---
 
 ## Appendix — staying in sync with this file
 
-When the API surface changes, the change lands in `ornn-api/src/domains/**/routes.ts` first. This file should be updated in the same PR. The `version:` field in the parent `SKILL.md` is bumped on every doc-affecting change; agents pulling the skill will see the bump on `GET /api/v1/skills/ornn-agent-manual/json` and can refresh their context. There is no out-of-band changelog — `git log skills/ornn-agent-manual/` is the changelog.
+When the API surface changes, the change lands in `ornn-api/src/domains/**/routes.ts` first. This file should be updated in the same PR. The `version:` field in the parent `SKILL.md` is bumped on every doc-affecting change; agents pulling the skill will see the bump on `GET /api/v1/skills/ornn-agent-manual-cli/json` and can refresh their context (see SKILL.md §0). There is no out-of-band changelog — `git log skills/ornn-agent-manual-cli/` is the changelog.
