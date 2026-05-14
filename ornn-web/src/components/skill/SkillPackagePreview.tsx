@@ -88,7 +88,10 @@ function ResizablePanes({
   style?: React.CSSProperties;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [leftWidth, setLeftWidth] = useState(26); // percentage
+  // 32 % gives ~300 px on a 960 px drawer — enough for typical skill folder
+  // names like `ornn-agent-manual-cli` without ellipsis truncation. User can
+  // drag the divider in either direction; this is just the rest state.
+  const [leftWidth, setLeftWidth] = useState(32);
   const isDragging = useRef(false);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
