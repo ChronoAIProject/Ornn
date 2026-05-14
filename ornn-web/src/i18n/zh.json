@@ -690,6 +690,22 @@
     "languageLabel": "语言",
     "languageEnglish": "English",
     "languageChinese": "中文",
+    "launchPopup": {
+      "eyebrow": "[§ LAUNCH — ORNN]",
+      "date": "2026年5月13日",
+      "title": "为庆祝 Ornn 正式上线，我们特别为用户准备了额外的免费使用额度，以表达我们诚挚的感谢。",
+      "intro": "为庆祝 Ornn 正式上线，我们特别为用户准备了额外的免费使用额度，以表达我们诚挚的感谢。",
+      "creditsLead": "前 500 位用户 可凭专属兑换码，免费领取：",
+      "creditItem1": "200 条 Playground 对话额度（GPT-5.5）",
+      "creditItem2": "200 条 Skill Generation 额度（GPT-5.5）",
+      "conditionsHeading": "兑换条件",
+      "conditionsBodyStart": "前往我们的 GitHub 仓库",
+      "conditionsBodyEnd": "点亮 ⭐ Star，并使用同一 GitHub 账号登录平台，即可领取免费额度。",
+      "callout": "名额有限，先到先得，立即兑换您的专属福利！第一次登录 Ornn 的用户请使用 NyxID 邀请码 —",
+      "dismiss": "关闭",
+      "cta": "前往 GitHub 点 Star",
+      "dismissAria": "关闭上线公告"
+    },
     "hero": {
       "headlineStart": "从",
       "headlineNothing": "零",
