@@ -1,11 +1,15 @@
 /**
- * NotificationDetailModal — click-to-popup viewer for a broadcast-source
- * notification.
+ * NotificationDetailModal — click-to-popup viewer for any notification
+ * row that has body content the list view can't show in full.
  *
- * Renders the bilingual broadcast in full: locale-resolved title as the
- * modal heading, locale-resolved markdown body sanitized through the
- * same safe stack used by AnnouncementPopup (`remark-gfm` +
- * `rehype-sanitize`).
+ * Two render shapes share the same chrome:
+ *   - `source === "broadcast"` — bilingual `titleI18n` / `bodyMarkdownI18n`
+ *     resolved against the active locale, body rendered as sanitized
+ *     markdown (remark-gfm + rehype-sanitize).
+ *   - `source !== "broadcast"` — plain `title` / `body` strings emitted
+ *     by the per-user notification service. Body is rendered as
+ *     pre-wrapped plain text so admin-supplied notes (#532) survive
+ *     newlines and long redemption-code strings without HTML risk.
  *
  * Side effect on open: if `readAt == null`, fires the existing
  * mark-read mutation so the bell badge updates without an extra
@@ -25,8 +29,17 @@ import { useTranslation } from "react-i18next";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeSanitize from "rehype-sanitize";
-import type { Notification } from "@/types/notifications";
+import type {
+  Notification,
+  NotificationCategory,
+} from "@/types/notifications";
 import { pickLocalized } from "@/lib/announcementLocale";
+
+const CATEGORY_LABEL: Record<NotificationCategory, string> = {
+  "audit.completed": "Audit",
+  "audit.risky_for_consumer": "Audit",
+  "quota.credits_granted": "Quota",
+};
 
 export interface NotificationDetailModalProps {
   /** Notification to display. The modal renders nothing when null. */
@@ -100,6 +113,7 @@ export function NotificationDetailModal({
   if (!notification) return null;
 
   const lang = i18n.language;
+  const isBroadcast = notification.source === "broadcast";
   const titleText =
     notification.titleI18n
       ? pickLocalized(
@@ -115,6 +129,15 @@ export function NotificationDetailModal({
         lang,
       )
     : "";
+  const tagLabel = isBroadcast
+    ? t("notifications.broadcast.tag")
+    : notification.category
+      ? CATEGORY_LABEL[notification.category]
+      : "";
+  const ariaLabel = isBroadcast
+    ? t("notifications.broadcast.modal.aria")
+    : t("notifications.detail.modal.aria");
+  const plainBody = !isBroadcast ? notification.body ?? "" : "";
 
   return createPortal(
     <AnimatePresence>
@@ -135,14 +158,16 @@ export function NotificationDetailModal({
             transition={{ type: "spring", stiffness: 220, damping: 22, mass: 0.9 }}
             role="dialog"
             aria-modal="true"
-            aria-label={t("notifications.broadcast.modal.aria")}
+            aria-label={ariaLabel}
             className="card-impression relative z-10 mx-4 flex w-full max-w-2xl max-h-[80vh] flex-col gap-4 overflow-hidden rounded border border-strong-edge bg-card p-6"
           >
             <header className="flex items-start justify-between gap-4">
               <div className="flex min-w-0 flex-col gap-1">
-                <span className="self-start rounded-sm border border-accent/30 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.16em] text-accent">
-                  {t("notifications.broadcast.tag")}
-                </span>
+                {tagLabel && (
+                  <span className="self-start rounded-sm border border-accent/30 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.16em] text-accent">
+                    {tagLabel}
+                  </span>
+                )}
                 <h2 className="font-display text-xl font-semibold tracking-tight text-strong">
                   {titleText}
                 </h2>
@@ -170,12 +195,16 @@ export function NotificationDetailModal({
             </header>
 
             <div className="markdown-body overflow-y-auto font-text text-[15px] leading-relaxed text-body">
-              <ReactMarkdown
-                remarkPlugins={[remarkGfm]}
-                rehypePlugins={[rehypeSanitize]}
-              >
-                {bodyMarkdown}
-              </ReactMarkdown>
+              {isBroadcast ? (
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm]}
+                  rehypePlugins={[rehypeSanitize]}
+                >
+                  {bodyMarkdown}
+                </ReactMarkdown>
+              ) : (
+                <p className="whitespace-pre-wrap break-words">{plainBody}</p>
+              )}
             </div>
           </motion.div>
         </div>

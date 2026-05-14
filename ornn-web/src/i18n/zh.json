@@ -338,6 +338,11 @@
       "modal": {
         "aria": "广播通知详情"
       }
+    },
+    "detail": {
+      "modal": {
+        "aria": "通知详情"
+      }
     }
   },
   "permissions": {
