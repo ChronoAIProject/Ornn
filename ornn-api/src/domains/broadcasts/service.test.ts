@@ -43,6 +43,10 @@ class FakeRepo {
       },
       createdBy: input.createdBy,
       updatedBy: input.createdBy,
+      recipientUserIds:
+        input.recipientUserIds && input.recipientUserIds.length > 0
+          ? [...input.recipientUserIds]
+          : null,
       createdAt: now,
       updatedAt: now,
     };

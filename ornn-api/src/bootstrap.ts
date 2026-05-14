@@ -73,6 +73,7 @@ import { migrateAnnouncementsToBilingual } from "./domains/announcements/migrati
 import { BroadcastRepository } from "./domains/broadcasts/repository";
 import { BroadcastService } from "./domains/broadcasts/service";
 import { createBroadcastRoutes } from "./domains/broadcasts/routes";
+import { backfillBroadcastRecipientUserIds } from "./domains/broadcasts/migration";
 
 // Domain: Analytics
 import { AnalyticsRepository } from "./domains/analytics/repository";
@@ -473,6 +474,18 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   const broadcastRepoForNotifications = new BroadcastRepository(db);
   void broadcastRepoForNotifications.ensureIndexes().catch((err) =>
     logger.warn({ err }, "broadcasts indexes ensureIndexes failed — proceeding anyway"),
+  );
+  // One-shot bilingual + targeting backfill for broadcasts. Pre-#502
+  // docs don't carry `recipientUserIds`; this migration writes an
+  // explicit `null` on every absent doc so the merged feed can rely
+  // on a stable `string[] | null` shape. Idempotent; failure is
+  // non-fatal — the repo mapper's `Array.isArray` guard already
+  // normalises absent fields to `null` on the read path.
+  await backfillBroadcastRecipientUserIds(db, logger).catch((err) =>
+    logger.error(
+      { err: err instanceof Error ? err.message : String(err) },
+      "broadcasts recipientUserIds backfill crashed — mapper fallback will cover reads, retry on next boot",
+    ),
   );
   const notificationService = new NotificationService({
     notificationRepo,

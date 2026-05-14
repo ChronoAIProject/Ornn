@@ -160,6 +160,7 @@ function makeBroadcast(overrides: Partial<BroadcastDocument> & { _id: string }):
     bodyMarkdownI18n: { en: "Body", zh: "内容" },
     createdBy: "u-admin",
     updatedBy: "u-admin",
+    recipientUserIds: null,
     createdAt: new Date(),
     updatedAt: new Date(),
     ...overrides,
