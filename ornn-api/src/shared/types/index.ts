@@ -499,3 +499,64 @@ export type PlaygroundChatEvent =
 export function isDuplicateKeyError(err: unknown): boolean {
   return typeof err === "object" && err !== null && "code" in err && (err as { code: number }).code === 11000;
 }
+
+// ---------------------------------------------------------------------------
+// RFC 7807 error body (#456)
+// ---------------------------------------------------------------------------
+
+/**
+ * Wire shape of the RFC 7807 `application/problem+json` body the API
+ * emits on every 4xx/5xx response. Fields at the root, not inside an
+ * envelope. See CONVENTIONS.md §1.3 and docs/ERRORS.md.
+ */
+export interface ProblemJsonBody {
+  readonly type: string;
+  readonly title: string;
+  readonly status: number;
+  readonly detail: string;
+  readonly instance: string;
+  readonly code: string;
+  readonly requestId: string | null;
+  readonly errors?: ReadonlyArray<{ path?: string; code?: string; message: string }>;
+}
+
+/**
+ * Short human-readable summary for the RFC 7807 `title` field. Used by
+ * the live bootstrap handler AND the per-domain test stubs so they stay
+ * in lockstep on the wire shape.
+ */
+export function rfc7807TitleForStatus(status: number): string {
+  if (status === 400) return "Validation failed";
+  if (status === 401) return "Authentication required";
+  if (status === 403) return "Permission denied";
+  if (status === 404) return "Resource not found";
+  if (status === 409) return "Resource conflict";
+  if (status === 413) return "Payload too large";
+  if (status === 415) return "Unsupported media type";
+  if (status === 429) return "Rate limited";
+  if (status >= 500 && status < 600) return "Server error";
+  return "Request failed";
+}
+
+/**
+ * Build the canonical RFC 7807 body from an `AppError`-like + the path
+ * the request hit. Shared between bootstrap.ts (live) and per-domain
+ * test stubs so wire shape never drifts between dev and CI.
+ */
+export function buildProblemJsonBody(input: {
+  statusCode: number;
+  code: string;
+  message: string;
+  instance: string;
+  requestId: string | null;
+}): ProblemJsonBody {
+  return {
+    type: `https://github.com/ChronoAIProject/Ornn/blob/main/docs/ERRORS.md#${input.code}`,
+    title: rfc7807TitleForStatus(input.statusCode),
+    status: input.statusCode,
+    detail: input.message,
+    instance: input.instance,
+    code: input.code,
+    requestId: input.requestId,
+  };
+}

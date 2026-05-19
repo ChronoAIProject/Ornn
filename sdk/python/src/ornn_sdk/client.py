@@ -207,6 +207,10 @@ class OrnnClient:
 
         Returns the unwrapped ``data`` field on success. Raises
         :class:`OrnnError` on any failure.
+
+        Success responses keep the legacy ``{data, error: null}`` envelope.
+        Error responses are RFC 7807 ``application/problem+json`` (#456) —
+        fields at the body root.
         """
         res = self._raw_request(method, path, **kwargs)
         body: Any = None
@@ -214,8 +218,14 @@ class OrnnClient:
             body = res.json()
         except ValueError:
             body = None
-        if res.status_code >= 400 or not isinstance(body, dict) or body.get("error") is not None:
+        if res.status_code >= 400:
             raise _build_error(res, body)
+        if not isinstance(body, dict) or body.get("error") is not None:
+            raise OrnnError(
+                status=res.status_code,
+                code="unknown_error",
+                message=f"Ornn API returned {res.status_code} with an unexpected body shape",
+            )
         return body.get("data")
 
     # ---- Plumbing -----------------------------------------------------------
@@ -236,22 +246,29 @@ def _quote(segment: str) -> str:
 
 
 def _build_error(res: httpx.Response, body: Any | None = None) -> OrnnError:
+    """Build an OrnnError from an RFC 7807 problem+json response (#456).
+
+    Fields live at the body root now (``code``, ``status``, ``detail``,
+    ``title``, ``type``, ``instance``, ``requestId``, optional
+    ``errors[]``). The pre-#456 ``{data, error: {…}}`` envelope is no
+    longer emitted.
+    """
     if body is None:
         try:
             body = res.json()
         except ValueError:
             body = None
-    if isinstance(body, dict) and isinstance(body.get("error"), dict):
-        err = body["error"]
+    if isinstance(body, dict) and (body.get("code") or body.get("detail") or body.get("title")):
+        message = body.get("detail") or body.get("title") or f"Ornn API returned {res.status_code}"
         return OrnnError(
-            status=res.status_code,
-            code=str(err.get("code") or "unknown_error"),
-            message=str(err.get("message") or f"Ornn API returned {res.status_code}"),
-            request_id=err.get("requestId"),
-            errors=list(err.get("errors") or []) or None,
+            status=int(body.get("status") or res.status_code),
+            code=str(body.get("code") or "unknown_error"),
+            message=str(message),
+            request_id=body.get("requestId"),
+            errors=list(body.get("errors") or []) or None,
         )
     return OrnnError(
         status=res.status_code,
         code="unknown_error",
-        message=f"Ornn API returned {res.status_code} without a recognized error envelope",
+        message=f"Ornn API returned {res.status_code} without a recognized error body",
     )

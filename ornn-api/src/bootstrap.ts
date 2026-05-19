@@ -7,6 +7,7 @@
  */
 
 import { Hono } from "hono";
+import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { cors } from "hono/cors";
 import { join } from "node:path";
 import { readFileSync } from "node:fs";
@@ -158,7 +159,7 @@ import { createLlmPickerRoutes } from "./domains/settings/llmProviders/routes";
 import { buildSpec } from "./openapi/specBuilder";
 
 // Error handler
-import { AppError } from "./shared/types/index";
+import { AppError, buildProblemJsonBody } from "./shared/types/index";
 
 export interface BootstrapResult {
   app: Hono;
@@ -845,49 +846,52 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
     }, "Request completed");
   });
 
-  // Global error handler — single `AppError` hierarchy across the whole
-  // service, so `instanceof` is sufficient (no more duck-typing).
+  // Global error handler — emits RFC 7807 `application/problem+json`
+  // per CONVENTIONS.md §1.3 (#456). The legacy `{ data, error }`
+  // envelope is gone; clients read fields at the body root now (`code`,
+  // `status`, `detail`, `title`, `type`, `instance`, `requestId`).
   app.onError((err, c) => {
     const requestId = getRequestId(c);
-    // userId is optional on auth-context; use null distinct id when absent.
     const authCtx = (c.get as (k: string) => unknown)("auth") as
       | { userId?: string }
       | undefined;
     const userId = authCtx?.userId ?? null;
 
-    if (err instanceof AppError) {
-      logger.warn({ requestId, code: err.code, status: err.statusCode }, err.message);
-      // 5xx AppErrors are still real server failures — emit api.error
-      // (sampled) so PostHog has the same fidelity as runtime crashes.
-      if (err.statusCode >= 500) {
-        analyticsEmitter.trackApiError({
-          userId,
-          statusCode: err.statusCode,
-          errorCode: err.code,
-          method: c.req.method,
-          path: c.req.path,
-          requestId,
-        });
-      }
-      return c.json(
-        { data: null, error: { code: err.code, message: err.message } },
-        err.statusCode as any,
-      );
+    const appError = err instanceof AppError ? err : null;
+    const statusCode = appError?.statusCode ?? 500;
+    const code = appError?.code ?? "internal_error";
+    const detail = appError ? appError.message : "Internal server error";
+
+    if (appError) {
+      logger.warn({ requestId, code, status: statusCode }, appError.message);
+    } else {
+      logger.error({ requestId, err }, "Unhandled error");
     }
 
-    logger.error({ requestId, err }, "Unhandled error");
-    analyticsEmitter.trackApiError({
-      userId,
-      statusCode: 500,
-      errorCode: "internal_error",
-      method: c.req.method,
-      path: c.req.path,
+    // 5xx errors (AppError or unhandled crash) feed PostHog so runtime
+    // crashes and `AppError.serviceUnavailable`-class failures land in
+    // the same dashboard.
+    if (statusCode >= 500) {
+      analyticsEmitter.trackApiError({
+        userId,
+        statusCode,
+        errorCode: code,
+        method: c.req.method,
+        path: c.req.path,
+        requestId,
+      });
+    }
+
+    const body = buildProblemJsonBody({
+      statusCode,
+      code,
+      message: detail,
+      instance: c.req.path,
       requestId,
     });
-    return c.json(
-      { data: null, error: { code: "internal_error", message: "Internal server error" } },
-      500,
-    );
+    return c.json(body, statusCode as ContentfulStatusCode, {
+      "Content-Type": "application/problem+json",
+    });
   });
 
   // ---- API routes — all traffic via NyxID proxy, trust proxy headers ----

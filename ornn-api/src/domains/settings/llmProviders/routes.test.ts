@@ -14,6 +14,7 @@ import {
 } from "./service";
 import type { StoredProvider } from "./repository";
 import { createLlmProvidersRoutes } from "./routes";
+import { buildProblemJsonBody } from "../../../shared/types/index";
 
 const KEY = "ornn-test-passphrase-32-chars-min-okOK";
 
@@ -71,10 +72,16 @@ describe("LlmProviders POST", () => {
     app.onError((err, c) => {
       const code = (err as { code?: string }).code ?? "internal_error";
       const status = (err as { statusCode?: number }).statusCode ?? 500;
-      return c.json(
-        { data: null, error: { code, message: err.message } },
-        status as never,
-      );
+      const body = buildProblemJsonBody({
+        statusCode: status,
+        code,
+        message: err.message,
+        instance: c.req.path,
+        requestId: null,
+      });
+      return c.json(body, status as never, {
+        "Content-Type": "application/problem+json",
+      });
     });
 
     const plaintext = "sk-real-plaintext-secret-12345";
