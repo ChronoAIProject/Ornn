@@ -67,7 +67,9 @@ jobs:
         run: pip install pip-audit
       - name: Audit dependencies
         working-directory: sdk/python
-        run: pip-audit --strict --disable-pip
+        # `--strict` fails on any known CVE. Walks the installed
+        # editable env so transitive deps are included.
+        run: pip-audit --strict
 
   build:
     runs-on: ubuntu-latest
