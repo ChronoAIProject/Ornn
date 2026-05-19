@@ -57,6 +57,50 @@ function formatInterfaceChanges(changes: InterfaceChange[]): string {
   return changes.map((c) => `${c.field} ${c.kind} ${c.detail}`).join("; ");
 }
 
+/**
+ * Dist-tag name rule (#463): npm-style — lowercase ASCII, leading
+ * letter, optional hyphens, max 50 chars. The leading-letter rule
+ * stops tags from looking like version numbers (`1`, `0.5`).
+ */
+const DIST_TAG_NAME_RE = /^[a-z][a-z0-9-]{0,49}$/;
+
+export function isValidTagName(tag: string): boolean {
+  return typeof tag === "string" && DIST_TAG_NAME_RE.test(tag);
+}
+
+/**
+ * Map the `version` query-param value to the concrete version the
+ * caller wants. Recognized forms (#463):
+ *   - undefined / empty → undefined (caller wants latest, handled upstream)
+ *   - `@<tag>` → resolved via `skill.distTags`, or fallback to
+ *     `latestVersion` when `tag === "latest"` and the skill predates
+ *     the dist-tags feature
+ *   - everything else → returned verbatim (literal `<major>.<minor>`)
+ *
+ * Returning undefined here means "caller didn't specify"; returning a
+ * concrete string means "use exactly this version". A missing tag
+ * resolves to `null` and we surface it as an explicit 404 from the
+ * caller so the user sees `Tag 'beta' not found` rather than `Version
+ * '@beta' not found` — the latter would be confusing.
+ */
+export function resolveDistTag(skill: SkillDocument, version: string): string | undefined {
+  if (version.length === 0) return undefined;
+  if (!version.startsWith("@")) return version;
+  const tag = version.slice(1);
+  if (!tag) {
+    throw AppError.badRequest("invalid_dist_tag", "Dist-tag name is empty");
+  }
+  const resolved = skill.distTags?.[tag];
+  if (resolved) return resolved;
+  // Legacy compatibility: `@latest` on a pre-#463 skill (no distTags
+  // field) falls back to the cached `latestVersion` pointer.
+  if (tag === "latest") return skill.latestVersion;
+  throw AppError.notFound(
+    "skill_version_not_found",
+    `Dist-tag '${tag}' is not set for skill '${skill.name}'`,
+  );
+}
+
 export interface SkillServiceDeps {
   skillRepo: SkillRepository;
   skillVersionRepo: SkillVersionRepository;
@@ -183,6 +227,11 @@ export class SkillService {
       releaseNotes,
     });
 
+    // Seed `distTags.latest` so the auto-managed tag exists from the
+    // first publish (#463). Custom tags (`stable`, `beta`, ...) are
+    // owner-managed via the `/dist-tags/:tag` routes.
+    await this.skillRepo.setDistTag(guid, "latest", version);
+
     // 8. Fire-and-forget product-analytics + AgentSeal trust scan. Both are
     //    deliberately not awaited so a slow PostHog backend or AgentSeal
     //    subprocess can't block the response. Failures inside either path
@@ -204,19 +253,108 @@ export class SkillService {
    * cached pointer). With `version`, reads from the `skill_versions` collection
    * and overlays that version's storageKey / metadata / hash on the identity
    * fields from the skill doc.
+   *
+   * Dist-tag resolution (#463): when `version` starts with `@`, the
+   * remainder is looked up in `skill.distTags`. Failed lookup is a 404
+   * (`skill_version_not_found`) — same error as a missing literal
+   * version, since from the caller's perspective both mean "no such
+   * version".
    */
   async getSkill(idOrName: string, version?: string): Promise<SkillDetailResponse> {
     const skill = await this.findSkillByIdOrName(idOrName);
-    if (version !== undefined) {
+    const resolvedVersion = version === undefined ? undefined : resolveDistTag(skill, version);
+    if (resolvedVersion !== undefined) {
       // Validate format early so clients get a clear 400, not a 404.
-      parseVersion(version);
-      const versionDoc = await this.skillVersionRepo.findBySkillAndVersion(skill.guid, version);
+      parseVersion(resolvedVersion);
+      const versionDoc = await this.skillVersionRepo.findBySkillAndVersion(skill.guid, resolvedVersion);
       if (!versionDoc) {
-        throw AppError.notFound("skill_version_not_found", `Version '${version}' not found for skill '${skill.name}'`);
+        throw AppError.notFound(
+          "skill_version_not_found",
+          `Version '${resolvedVersion}' not found for skill '${skill.name}'`,
+        );
       }
       return this.buildDetailResponse(skill, versionDoc);
     }
     return this.buildDetailResponse(skill);
+  }
+
+  /**
+   * Read the dist-tags map for a skill (#463). Read-only — no auth
+   * check here; the route layer applies the same visibility rules as
+   * the read endpoint (anonymous can see public, etc.).
+   *
+   * Always returns `latest` (synthesized from `latestVersion` for
+   * legacy skills predating #463 that never had the field set).
+   */
+  async getDistTags(idOrName: string): Promise<Record<string, string>> {
+    const skill = await this.findSkillByIdOrName(idOrName);
+    const tags: Record<string, string> = { ...(skill.distTags ?? {}) };
+    if (!tags.latest) {
+      tags.latest = skill.latestVersion;
+    }
+    return tags;
+  }
+
+  /**
+   * Set a dist-tag → version mapping (#463). Owner / platform-admin
+   * only — the route layer enforces that. `latest` is auto-managed by
+   * the publish path and cannot be set via this endpoint.
+   *
+   * The version must already exist on the `skill_versions` collection;
+   * otherwise we'd be creating a dangling tag.
+   */
+  async setDistTag(
+    idOrName: string,
+    tag: string,
+    version: string,
+  ): Promise<Record<string, string>> {
+    if (!isValidTagName(tag)) {
+      throw AppError.badRequest(
+        "invalid_dist_tag",
+        `Dist-tag '${tag}' is invalid — must match /^[a-z][a-z0-9-]{0,49}$/`,
+      );
+    }
+    if (tag === "latest") {
+      throw AppError.badRequest(
+        "dist_tag_immutable",
+        "`latest` is auto-managed on publish and cannot be set directly",
+      );
+    }
+    // Format-validate the version before hitting Mongo.
+    parseVersion(version);
+    const skill = await this.findSkillByIdOrName(idOrName);
+    const versionDoc = await this.skillVersionRepo.findBySkillAndVersion(skill.guid, version);
+    if (!versionDoc) {
+      throw AppError.notFound(
+        "skill_version_not_found",
+        `Version '${version}' not found for skill '${skill.name}'`,
+      );
+    }
+    await this.skillRepo.setDistTag(skill.guid, tag, version);
+    return this.getDistTags(skill.guid);
+  }
+
+  /**
+   * Remove a dist-tag (#463). `latest` is refused with
+   * `dist_tag_immutable` to preserve the invariant that every skill
+   * has a `latest` pointer.
+   */
+  async deleteDistTag(idOrName: string, tag: string): Promise<Record<string, string>> {
+    if (tag === "latest") {
+      throw AppError.badRequest(
+        "dist_tag_immutable",
+        "`latest` is auto-managed and cannot be deleted",
+      );
+    }
+    if (!isValidTagName(tag)) {
+      throw AppError.badRequest(
+        "invalid_dist_tag",
+        `Dist-tag '${tag}' is invalid — must match /^[a-z][a-z0-9-]{0,49}$/`,
+      );
+    }
+    const skill = await this.findSkillByIdOrName(idOrName);
+    await this.skillRepo.deleteDistTag(skill.guid, tag);
+    return this.getDistTags(skill.guid);
   }
 
   /**
@@ -470,6 +608,13 @@ export class SkillService {
         storageKey,
         latestVersion: version,
       });
+
+      // Keep `distTags.latest` in lockstep with `latestVersion` on
+      // every publish (#463). The two writes can briefly race the
+      // doc-level `update` below, but readers tolerate a transient
+      // mismatch (resolution falls back to `latestVersion` when the
+      // tag isn't set) so we don't bother with a transaction.
+      await this.skillRepo.setDistTag(guid, "latest", version);
     }
 
     if (options.isPrivate !== undefined) {
@@ -1298,6 +1443,10 @@ export class SkillService {
       nyxidServiceSlug: skill.nyxidServiceSlug ?? null,
       nyxidServiceLabel: skill.nyxidServiceLabel ?? null,
       isSystemSkill: skill.isSystemSkill === true,
+      // Always surface a `latest` tag — legacy skills predating #463
+      // get one synthesized from `latestVersion` so consumers can rely
+      // on `distTags.latest` always being set.
+      distTags: { latest: skill.latestVersion, ...(skill.distTags ?? {}) },
       ...(skill.mirrorSync && skill.mirrorSync.syncedAt instanceof Date
         ? {
             mirrorSync: {

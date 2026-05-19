@@ -229,6 +229,34 @@ export class SkillRepository {
     return (await this.findByGuid(guid))!;
   }
 
+  /**
+   * Set a single dist-tag (#463) atomically via `$set` on a dotted path.
+   * Doesn't validate that `version` exists — that's the service's job;
+   * the repo just writes whatever's handed in.
+   */
+  async setDistTag(guid: string, tag: string, version: string): Promise<void> {
+    await this.collection.updateOne(
+      { _id: skillId(guid) },
+      { $set: { [`distTags.${tag}`]: version, updatedOn: new Date() } },
+    );
+    logger.info({ guid, tag, version }, "Dist-tag set");
+  }
+
+  /**
+   * Remove a single dist-tag (#463). `$unset` on a dotted path leaves
+   * sibling tags intact; if the resulting object would be empty the
+   * field stays as `{}` (mongo cleans it up on the next full doc
+   * write). Callers that care about empty-object cleanup can
+   * subsequently `$unset` the parent.
+   */
+  async deleteDistTag(guid: string, tag: string): Promise<void> {
+    await this.collection.updateOne(
+      { _id: skillId(guid) },
+      { $unset: { [`distTags.${tag}`]: "" }, $set: { updatedOn: new Date() } },
+    );
+    logger.info({ guid, tag }, "Dist-tag deleted");
+  }
+
   async hardDelete(guid: string): Promise<void> {
     await this.collection.deleteOne({ _id: skillId(guid) });
     logger.info({ guid }, "Skill hard-deleted");
@@ -959,7 +987,21 @@ function mapDoc(doc: Document | null): SkillDocument | null {
             commitSha: doc.mirrorSync.commitSha,
           }
         : undefined,
+    // Dist-tags (#463). Coerce defensively — pre-#463 docs have no
+    // field; corrupted entries with non-string values get filtered.
+    distTags: mapDistTags(doc.distTags),
   };
+}
+
+function mapDistTags(raw: unknown): Record<string, string> | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof v === "string" && v.length > 0) {
+      out[k] = v;
+    }
+  }
+  return Object.keys(out).length === 0 ? undefined : out;
 }
 
 function escapeRegex(str: string): string {
