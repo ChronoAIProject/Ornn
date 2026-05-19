@@ -123,7 +123,7 @@ describe("OrnnClient", () => {
     expect(err.code).toBe("unknown_error");
   });
 
-  test("search(): maps q → query and appends params correctly", async () => {
+  test("search(): sends q= and appends params correctly", async () => {
     let capturedUrl = "";
     const fetchMock = mockFetch((url) => {
       capturedUrl = url;
@@ -141,7 +141,9 @@ describe("OrnnClient", () => {
       pageSize: 50,
     });
     expect(capturedUrl).toContain("/api/v1/skill-search?");
-    expect(capturedUrl).toContain("query=pdf");
+    // Canonical search param per CONVENTIONS.md §4.1 (#586).
+    expect(capturedUrl).toContain("q=pdf");
+    expect(capturedUrl).not.toContain("query=pdf");
     expect(capturedUrl).toContain("scope=public");
     expect(capturedUrl).toContain("category=utils");
     expect(capturedUrl).toContain("page=2");

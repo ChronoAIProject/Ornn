@@ -125,7 +125,7 @@ class TestEnvelope:
 
 class TestSearch:
     @respx.mock
-    def test_maps_q_to_query_param(self) -> None:
+    def test_maps_q_to_canonical_q_param(self) -> None:
         route = respx.get(f"{BASE}/api/v1/skill-search").respond(
             200,
             json={
@@ -143,7 +143,9 @@ class TestSearch:
             result = ornn.search(q="pdf", scope="public", page=2, page_size=50)
         assert isinstance(result, SkillSearchResult)
         req_url = str(route.calls.last.request.url)
-        assert "query=pdf" in req_url
+        # Canonical search param is `q` (CONVENTIONS.md §4.1 / #586).
+        assert "q=pdf" in req_url
+        assert "query=pdf" not in req_url
         assert "scope=public" in req_url
         assert "page=2" in req_url
         assert "pageSize=50" in req_url

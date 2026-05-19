@@ -104,7 +104,8 @@ class OrnnClient:
         """Search skills. Returns a paginated :class:`SkillSearchResult`."""
         params: dict[str, str] = {}
         if q is not None:
-            params["query"] = q
+            # Canonical search param is `q` per CONVENTIONS.md §4.1 (#586).
+            params["q"] = q
         if scope is not None:
             params["scope"] = scope
         if category is not None:

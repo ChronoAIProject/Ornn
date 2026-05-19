@@ -9,7 +9,8 @@ export async function searchSkills(
   params: SkillSearchParams
 ): Promise<SkillSearchResponse> {
   const queryParams: Record<string, string | number | undefined> = {
-    query: params.query,
+    // Canonical search param is `q` per CONVENTIONS.md §4.1 (#586).
+    q: params.query,
     mode: params.mode,
     scope: params.scope,
     page: params.page,

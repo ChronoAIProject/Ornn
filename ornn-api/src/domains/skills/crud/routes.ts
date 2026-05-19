@@ -673,14 +673,23 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
         }
       }
 
-      // Signal deprecation via response headers so non-JSON-aware clients
-      // (CLIs, agents) still get the warning. Notes are URL-encoded to keep
-      // header values ASCII-safe per RFC 7230.
+      // Signal deprecation via standard RFC 8594 headers (#586) — no
+      // custom `X-Skill-Deprecated` style. CLIs, agents, and proxies
+      // can read these without an Ornn-specific parser.
+      //
+      //   Deprecation: true
+      //   Link: <…/DEPRECATIONS.md#{guid}>; rel="deprecation"
+      //
+      // The deprecation note lives in the response body
+      // (`deprecationNote` on the SkillDetailResponse), where free-form
+      // text belongs. Sunset header is reserved for when we wire up the
+      // sunset-date field on the doc.
       if (skill.isDeprecated) {
-        c.header("X-Skill-Deprecated", "true");
-        if (skill.deprecationNote) {
-          c.header("X-Skill-Deprecation-Note", encodeURIComponent(skill.deprecationNote));
-        }
+        c.header("Deprecation", "true");
+        c.header(
+          "Link",
+          `<https://github.com/ChronoAIProject/Ornn/blob/main/docs/DEPRECATIONS.md#${skill.guid}>; rel="deprecation"`,
+        );
       }
 
       // Web-side pull. The detail endpoint is what the SkillDetailPage
@@ -709,25 +718,29 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
   );
 
   /**
-   * PATCH /skills/:idOrName/versions/:version
-   * Toggle the deprecation flag on a specific version.
+   * PATCH /skills/:id/versions/:version
+   *
+   * Toggle the deprecation flag on a specific version. Per
+   * CONVENTIONS.md §2.2 (#586): write operations accept only the
+   * stable GUID, not the name. Callers with a name should resolve
+   * via the read endpoint first.
+   *
    * Requires: ornn:skill:update + owner or admin on the skill.
    */
   app.patch(
-    "/skills/:idOrName/versions/:version",
+    "/skills/:id/versions/:version",
     auth,
     requirePermission("ornn:skill:update"),
-    validateBody(deprecationPatchSchema, "INVALID_DEPRECATION_PATCH"),
+    validateBody(deprecationPatchSchema, "invalid_deprecation_patch"),
     async (c) => {
-      const idOrName = c.req.param("idOrName");
+      const id = c.req.param("id");
       const version = c.req.param("version");
       const authCtx = getAuth(c);
 
-      const existing =
-        (await skillRepo.findByGuid(idOrName)) ??
-        (await skillRepo.findByName(idOrName));
+      // GUID-only — name fallback removed in #586.
+      const existing = await skillRepo.findByGuid(id);
       if (!existing) {
-        throw AppError.notFound("skill_not_found", `Skill '${idOrName}' not found`);
+        throw AppError.notFound("skill_not_found", `Skill '${id}' not found`);
       }
       const memberships = await readUserOrgMemberships(c);
       const actor = {
@@ -744,7 +757,7 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
 
       const body = getValidatedBody<z.infer<typeof deprecationPatchSchema>>(c);
       const result = await skillService.setVersionDeprecation(
-        idOrName,
+        id,
         version,
         body.isDeprecated,
         body.deprecationNote ?? null,
@@ -1166,18 +1179,18 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
    * Requires: ornn:skill:delete + owner or admin.
    */
   app.delete(
-    "/skills/:idOrName/versions/:version",
+    "/skills/:id/versions/:version",
     auth,
     requirePermission("ornn:skill:delete"),
     async (c) => {
-      const idOrName = c.req.param("idOrName");
+      // GUID-only on write per CONVENTIONS.md §2.2 (#586).
+      const id = c.req.param("id");
       const version = c.req.param("version");
       const authCtx = getAuth(c);
 
-      let skill = await skillRepo.findByGuid(idOrName);
-      if (!skill) skill = await skillRepo.findByName(idOrName);
+      const skill = await skillRepo.findByGuid(id);
       if (!skill) {
-        throw AppError.notFound("skill_not_found", `Skill '${idOrName}' not found`);
+        throw AppError.notFound("skill_not_found", `Skill '${id}' not found`);
       }
       const memberships = await readUserOrgMemberships(c);
       const actor = {
