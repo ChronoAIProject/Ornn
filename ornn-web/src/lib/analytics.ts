@@ -23,15 +23,9 @@
 import posthog from "posthog-js";
 import { config } from "@/config";
 import { hasConsent, onConsentChange } from "./cookieConsent";
+import { createLogger } from "./logger";
 
-const logger = {
-  info: (msg: string, data?: Record<string, unknown>) =>
-    console.log(`[analytics] ${msg}`, data ?? ""),
-  warn: (msg: string, data?: Record<string, unknown>) =>
-    console.warn(`[analytics] ${msg}`, data ?? ""),
-  error: (msg: string, data?: Record<string, unknown>) =>
-    console.error(`[analytics] ${msg}`, data ?? ""),
-};
+const logger = createLogger("analytics");
 
 /**
  * Strongly-typed event names. Matches the spec in #252 — every call site
