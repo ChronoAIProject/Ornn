@@ -54,7 +54,7 @@ function makeApp(handler: (counter: { value: number }) => Promise<Response> | Re
     await next();
   });
   app.use("*", idempotencyMiddleware({ repo }));
-  app.all("/api/v1/skills", async (c) => {
+  app.all("/api/v1/skills", async () => {
     counter.value += 1;
     return handler(counter);
   });
