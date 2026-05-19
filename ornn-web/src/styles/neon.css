@@ -75,6 +75,19 @@ html {
   --color-arc-soft: rgba(91, 200, 232, 0.10);
   --color-ember-glow: rgba(255, 115, 34, 0.30);      /* hero floor / pulse glows */
 
+  /* Landing-chrome tokens (#452) — referenced from PhoneMockup and
+     AnimatedTerminal so hex literals stay out of JSX. Same values in
+     both themes: the macOS-style traffic-light dots and the phone
+     bezel shadows read consistently on either page background. */
+  --color-bezel-edge: #1A1713;                       /* phone side rails + lens depth shadow */
+  --color-bezel-rim: #2A2620;                        /* phone outer rim */
+  --color-lens-deep: #0B1520;                        /* camera-lens base */
+  --color-lens-rim: #3A5060;                         /* camera-lens specular */
+  --color-traffic-red: #C94A4A;
+  --color-traffic-amber: #C9A64A;
+  --color-traffic-green: #5A9B5A;
+  --color-terminal-ok: #7DC97D;                      /* terminal-output checkmark green */
+
   --font-display: "Space Grotesk", "Inter", system-ui, sans-serif;
   --font-text: "Inter", system-ui, sans-serif;
   --font-ui: "Inter", system-ui, sans-serif;
