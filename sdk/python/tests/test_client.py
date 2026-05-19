@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import httpx
 import pytest
 import respx
 
@@ -13,7 +12,6 @@ from ornn_sdk import (
     SkillSearchResult,
     UpdateSkillMetadata,
 )
-
 
 BASE = "https://ornn.example.com"
 
@@ -44,9 +42,7 @@ class TestAuth:
 
     @respx.mock
     def test_resolver_takes_precedence(self) -> None:
-        route = respx.get(f"{BASE}/api/v1/me").respond(
-            200, json={"data": {}, "error": None}
-        )
+        route = respx.get(f"{BASE}/api/v1/me").respond(200, json={"data": {}, "error": None})
         with make_client(
             token="tok_static",
             token_resolver=lambda: "tok_dynamic",
@@ -56,9 +52,7 @@ class TestAuth:
 
     @respx.mock
     def test_no_auth_header_when_no_token(self) -> None:
-        route = respx.get(f"{BASE}/api/v1/public").respond(
-            200, json={"data": {}, "error": None}
-        )
+        route = respx.get(f"{BASE}/api/v1/public").respond(200, json={"data": {}, "error": None})
         with make_client() as ornn:
             ornn.request("GET", "/public")
         assert "authorization" not in route.calls.last.request.headers

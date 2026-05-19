@@ -44,6 +44,8 @@ dev = [
     "pytest>=9.0.3,<10",
     "respx>=0.21,<1.0",
     "pytest-asyncio>=0.23,<2.0",
+    "ruff>=0.6",
+    "mypy>=1.11",
 ]
 
 [project.urls]
@@ -56,3 +58,50 @@ packages = ["src/ornn_sdk"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+
+# ──────────────── ruff (#583) ────────────────
+# Lint + format the SDK. Default ruleset (E, W, F) + isort (I) + a few
+# refinements that catch the bugs we'd actually see in a thin HTTP
+# client: pyflakes is the floor, bugbear catches misuse, pyupgrade
+# keeps us on modern Python.
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "B", "UP"]
+ignore = [
+    # pytest fixtures legitimately use names that shadow outer scope.
+    "F811",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = [
+    # Test fixtures shadow names freely; allowed.
+    "F811",
+    # Tests use long mock data strings.
+    "E501",
+]
+
+# ──────────────── mypy (#583) ────────────────
+# Strict-ish gate on the SDK surface; the public client is the one
+# place we cannot let type drift go unobserved. Tests run in a looser
+# config because respx fixtures are dynamically typed.
+[tool.mypy]
+python_version = "3.10"
+files = ["src"]
+strict = true
+# `Any` from upstream (httpx, respx) is expected at the boundary;
+# our internal code stays strict.
+disallow_any_unimported = false
+warn_unused_ignores = true
+show_error_codes = true
+# httpx ships its own inline types; older typeshed stubs may not
+# expose every method. Permit the import without per-line ignores.
+[[tool.mypy.overrides]]
+module = "httpx.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+ignore_errors = true
