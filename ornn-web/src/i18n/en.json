@@ -378,6 +378,8 @@
   },
   "playground": {
     "selectSkill": "Select a skill to try in the playground.",
+    "notFoundTitle": "Skill not found",
+    "notFoundBody": "This skill doesn't exist, or you don't have access to it.",
     "browseSkills": "Browse Skills",
     "clearChat": "Clear Chat",
     "fillEnvVars": "Fill in the required environment variables on the right to start chatting.",
