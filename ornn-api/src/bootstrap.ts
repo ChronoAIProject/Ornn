@@ -27,6 +27,13 @@ import { requestIdMiddleware, getRequestId } from "./middleware/requestId";
 // status, durationMs, sourceIp, requestId.
 import { apiRequestTrackingMiddleware } from "./middleware/apiRequestTracking";
 
+// Idempotency-Key middleware (#459). Caches state-changing-request
+// responses for 24h so retries don't create duplicates.
+import {
+  IdempotencyKeyRepository,
+  idempotencyMiddleware,
+} from "./middleware/idempotency";
+
 // Infrastructure
 import { connectMongo, type MongoConnection } from "./infra/db/mongodb";
 import { createAnalyticsEmitter } from "./infra/analytics";
@@ -314,6 +321,15 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   const userDirectoryRepo = new UserDirectoryRepository(db);
   void userDirectoryRepo.ensureIndexes().catch((err) =>
     logger.warn({ err }, "users indexes ensureIndexes failed — proceeding anyway"),
+  );
+
+  // ---- Idempotency-Key cache (#459). 24h TTL on `idempotency_keys`;
+  // mongo's TTL monitor sweeps once a minute. Index creation is
+  // fire-and-forget so a single-replica boot still comes up if the
+  // monitor temporarily refuses (it'll be re-attempted on next boot).
+  const idempotencyKeyRepo = new IdempotencyKeyRepository(db);
+  void idempotencyKeyRepo.ensureIndexes().catch((err) =>
+    logger.warn({ err }, "idempotency_keys indexes ensureIndexes failed — proceeding anyway"),
   );
 
   // Convenience: resolve the LLM provider for a given surface in a
@@ -924,6 +940,13 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   // route sees the same cached result — avoids re-querying NyxID within a
   // single request even when multiple routes call `readUserOrgMemberships`.
   apiApp.use("*", nyxidOrgLookupMiddleware(nyxidOrgsClient));
+
+  // Idempotency-Key replay cache (#459). Mounted AFTER `proxyAuthSetup`
+  // so it can scope cache entries per `auth.userId` — without that, two
+  // unrelated callers using the same key would replay each other's
+  // response. Non-mutating methods (GET/HEAD/OPTIONS) and requests
+  // without an `Idempotency-Key` header are passed through untouched.
+  apiApp.use("*", idempotencyMiddleware({ repo: idempotencyKeyRepo }));
 
   // ---- Admin routes (engineer-1): dashboard, users, quota admin ----
   const adminDashboardService = new AdminDashboardService({
