@@ -35,7 +35,7 @@ class SkillSummary:
     _extra: dict[str, Any] = field(default_factory=dict, repr=False)
 
     @classmethod
-    def from_dict(cls, raw: dict[str, Any]) -> "SkillSummary":
+    def from_dict(cls, raw: dict[str, Any]) -> SkillSummary:
         known = {
             "id",
             "name",
@@ -72,7 +72,7 @@ class SkillDetail(SkillSummary):
     shared_with_orgs: list[str] = field(default_factory=list)
 
     @classmethod
-    def from_dict(cls, raw: dict[str, Any]) -> "SkillDetail":
+    def from_dict(cls, raw: dict[str, Any]) -> SkillDetail:
         base = SkillSummary.from_dict(raw).__dict__
         base.pop("_extra")
         known_extra = {"ownerId", "storageKey", "sharedWithUsers", "sharedWithOrgs"}
@@ -88,11 +88,7 @@ class SkillDetail(SkillSummary):
             "latestVersion",
             "metadata",
         }
-        extra = {
-            k: v
-            for k, v in raw.items()
-            if k not in summary_known and k not in known_extra
-        }
+        extra = {k: v for k, v in raw.items() if k not in summary_known and k not in known_extra}
         return cls(
             **base,
             owner_id=raw.get("ownerId", ""),
@@ -113,7 +109,7 @@ class SkillVersionEntry:
     deprecation_note: str | None = None
 
     @classmethod
-    def from_dict(cls, raw: dict[str, Any]) -> "SkillVersionEntry":
+    def from_dict(cls, raw: dict[str, Any]) -> SkillVersionEntry:
         return cls(
             version=raw["version"],
             created_on=raw.get("createdOn", ""),
@@ -134,7 +130,7 @@ class SkillSearchResult:
     mode: str | None = None
 
     @classmethod
-    def from_dict(cls, raw: dict[str, Any]) -> "SkillSearchResult":
+    def from_dict(cls, raw: dict[str, Any]) -> SkillSearchResult:
         return cls(
             items=[SkillSummary.from_dict(i) for i in raw.get("items") or []],
             total=int(raw.get("total", 0)),

@@ -80,7 +80,7 @@ class OrnnClient:
     def close(self) -> None:
         self._http.close()
 
-    def __enter__(self) -> "OrnnClient":
+    def __enter__(self) -> OrnnClient:
         return self
 
     def __exit__(self, *_: Any) -> None:
@@ -138,10 +138,14 @@ class OrnnClient:
 
     def download_package(self, guid: str, version: str) -> bytes:
         """Download a skill package ZIP. Returns raw bytes."""
-        res = self._raw_request("GET", f"/skills/{_quote(guid)}/versions/{_quote(version)}/download")
+        path = f"/skills/{_quote(guid)}/versions/{_quote(version)}/download"
+        res = self._raw_request("GET", path)
         if res.status_code >= 400:
             raise _build_error(res)
-        return res.content
+        # httpx exposes res.content as bytes at runtime; the typeshed
+        # stub annotates it as Any. Cast explicitly so strict mypy is
+        # happy without disabling the rule.
+        return bytes(res.content)
 
     def publish(self, zip_bytes: bytes, *, skip_validation: bool = False) -> SkillDetail:
         """Publish a new skill from a ZIP package (raw bytes)."""
