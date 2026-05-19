@@ -68,6 +68,8 @@ export function createBroadcastRoutes(
       createdBy: authCtx.userId,
       recipientUserIds: parsed.data.recipientUserIds,
     });
+    // 201 + Location per CONVENTIONS.md §3.2 (#458).
+    c.header("Location", `/api/v1/admin/broadcasts/${created.id}`);
     return c.json({ data: created, error: null }, 201);
   });
 
