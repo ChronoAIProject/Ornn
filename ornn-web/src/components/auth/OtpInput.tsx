@@ -25,6 +25,9 @@ export function OtpInput({ length = 6, onComplete, disabled, error }: OtpInputPr
   return (
     <div className="flex gap-2 justify-center">
       {Array.from({ length }).map((_, i) => (
+        // OTP cells are positional (cell N is always cell N); the parent
+        // never re-renders with a different `length`, so key={i} is
+        // intentional and reconciliation-stable (#451).
         <input
           key={i}
           type="text"

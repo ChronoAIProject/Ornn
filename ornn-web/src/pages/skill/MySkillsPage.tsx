@@ -102,6 +102,7 @@ export function MySkillsPage() {
         {isLoading ? (
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 pb-4">
             {Array.from({ length: 6 }).map((_, i) => (
+              // Positional list — never reorders, key={i} is intentional (#451).
               <SkeletonCard key={i} />
             ))}
           </div>
