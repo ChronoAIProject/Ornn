@@ -398,12 +398,15 @@ export function CreateSkillFreePage() {
             }`}
           >
             {validationResult.errors.map((err, i) => (
-              <p key={i} className="font-text text-sm text-danger">
+              // Each error key is unique per validation run; combining
+              // key with index defends against duplicate keys when the
+              // same error fires twice (#451).
+              <p key={`err-${i}-${err.key}`} className="font-text text-sm text-danger">
                 {t(err.key, err.params ?? {})}
               </p>
             ))}
             {validationResult.warnings.map((warn, i) => (
-              <p key={i} className="font-text text-sm text-warning">
+              <p key={`warn-${i}-${warn.key}`} className="font-text text-sm text-warning">
                 {t(warn.key, warn.params ?? {})}
               </p>
             ))}
