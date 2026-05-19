@@ -255,53 +255,17 @@ export async function apiPatch<T>(
 
 /**
  * DELETE request with auth.
+ *
+ * Routes through `fetchWithRetry` (#578) so the proactive-refresh /
+ * 401-retry / redirect-to-login logic stays in one place. The DELETE
+ * response is discarded — most ornn-api DELETEs return 204, and the
+ * caller only cares about success vs. an `ApiClientError`.
  */
 export async function apiDelete(path: string): Promise<void> {
-  // Proactively refresh expired tokens before sending
-  if (getAccessToken()) {
-    await useAuthStore.getState().ensureFreshToken();
-  }
-
-  const response = await fetch(buildUrl(path), {
+  await fetchWithRetry<unknown>(buildUrl(path), {
     method: "DELETE",
     headers: createHeaders(),
   });
-
-  // Handle 401 (not 403 — token refresh cannot resolve permission errors).
-  if (response.status === 401) {
-    const refreshSuccess = await attemptTokenRefresh();
-
-    if (refreshSuccess) {
-      const retryResponse = await fetch(buildUrl(path), {
-        method: "DELETE",
-        headers: createHeaders(),
-      });
-
-      if (!retryResponse.ok) {
-        const json = await retryResponse.json().catch(() => null);
-        throw new ApiClientError(
-          (json as ApiResponse<unknown>)?.error?.code ?? "DELETE_FAILED",
-          (json as ApiResponse<unknown>)?.error?.message ?? "Delete failed",
-          retryResponse.status,
-        );
-      }
-      return;
-    }
-
-    logger.error("Token refresh failed during DELETE, redirecting to login");
-    if (typeof window !== "undefined") {
-      window.location.href = "/login";
-    }
-  }
-
-  if (!response.ok) {
-    const json = await response.json().catch(() => null);
-    throw new ApiClientError(
-      (json as ApiResponse<unknown>)?.error?.code ?? "DELETE_FAILED",
-      (json as ApiResponse<unknown>)?.error?.message ?? "Delete failed",
-      response.status,
-    );
-  }
 }
 
 export { ApiClientError as ApiError };
