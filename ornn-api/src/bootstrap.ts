@@ -437,6 +437,7 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
 
   // ---- Repositories ----
   const skillRepo = new SkillRepository(db);
+  await skillRepo.ensureIndexes();
   const skillVersionRepo = new SkillVersionRepository(db);
   await skillVersionRepo.ensureIndexes();
 
