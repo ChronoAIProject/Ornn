@@ -9,6 +9,25 @@ import type { SkillRepository } from "../crud/repository";
 import type { NyxLlmClient } from "../../../clients/nyxid/llm";
 import type { SkillDocument, SkillSearchItem, SkillSearchResponse } from "../../../shared/types/index";
 import pino from "pino";
+import { z } from "zod";
+
+/**
+ * Shape the LLM re-ranker contract promises: an array of
+ * `{ id, score, reason? }` rows. Parsed with Zod (#444) instead of an
+ * `as` cast — `JSON.parse(...) as Array<...>` is a runtime no-op and
+ * a malformed model response previously slipped through the GUID
+ * filter and broke downstream score arithmetic with `NaN`.
+ *
+ * Rows with `score <= 0` are still dropped, but that filter is now
+ * applied after schema validation; the schema itself only enforces
+ * the shape.
+ */
+const rerankRowSchema = z.object({
+  id: z.string().min(1),
+  score: z.number().finite(),
+  reason: z.string().optional(),
+});
+const rerankResponseSchema = z.array(rerankRowSchema);
 
 /**
  * Per-item response enrichment context. The system-skill predicate is
@@ -323,12 +342,20 @@ ${JSON.stringify(skillList, null, 2)}`;
         return [];
       }
 
-      const parsed = JSON.parse(jsonMatch[0]) as Array<{ id: string; score: number; reason?: string }>;
+      const parseResult = rerankResponseSchema.safeParse(JSON.parse(jsonMatch[0]));
+      if (!parseResult.success) {
+        logger.warn(
+          { batchSize: batch.length, issues: parseResult.error.issues.slice(0, 3) },
+          "Semantic search: LLM output failed schema validation",
+        );
+        return [];
+      }
+      const parsed = parseResult.data;
 
       // Validate and map
       const validGuids = new Set(batch.map((s) => s.guid));
       return parsed
-        .filter((r) => validGuids.has(r.id) && typeof r.score === "number" && r.score > 0)
+        .filter((r) => validGuids.has(r.id) && r.score > 0)
         .map((r) => ({
           guid: r.id,
           score: Math.min(10, Math.max(0, r.score)),
