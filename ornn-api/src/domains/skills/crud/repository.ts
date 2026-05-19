@@ -8,6 +8,44 @@ import type { SkillDocument, SkillMetadata } from "../../../shared/types/index";
 import { AppError } from "../../../shared/types/index";
 import pino from "pino";
 
+/**
+ * Coerce a string GUID into the shape MongoDB's driver expects for
+ * `_id` queries on the skills collection (#448). The collection uses
+ * UUID strings instead of `ObjectId`s; the driver's filter typing
+ * (`ObjectId | string` discriminator) doesn't see that without help.
+ *
+ * One named helper instead of `as any` at every call site:
+ *   - validates the input (empty string would silently match zero
+ *     docs, the failure mode the issue flagged)
+ *   - keeps the necessary cast in a single, named place
+ *
+ * Return type is `never` so the call site accepts both `findOne`
+ * filters and `insertOne` documents — the actual stored value is a
+ * string, but the driver's type slot is `ObjectId`.
+ */
+function skillId(guid: string): never {
+  if (typeof guid !== "string" || guid.length === 0) {
+    throw AppError.badRequest(
+      "INVALID_SKILL_ID",
+      "Skill id must be a non-empty string",
+    );
+  }
+  return guid as never;
+}
+
+/** Same shape for `$in` filters on `_id`. Validates each guid up front. */
+function skillIdList(guids: readonly string[]): never {
+  for (const g of guids) {
+    if (typeof g !== "string" || g.length === 0) {
+      throw AppError.badRequest(
+        "INVALID_SKILL_ID",
+        "Skill id must be a non-empty string",
+      );
+    }
+  }
+  return guids as never;
+}
+
 const logger = pino({ level: "info" }).child({ module: "skillCrudRepository" });
 
 export interface CreateSkillData {
@@ -98,7 +136,7 @@ export class SkillRepository {
   }
 
   async findByGuid(guid: string): Promise<SkillDocument | null> {
-    const doc = await this.collection.findOne({ _id: guid as any });
+    const doc = await this.collection.findOne({ _id: skillId(guid) });
     return mapDoc(doc);
   }
 
@@ -110,7 +148,7 @@ export class SkillRepository {
   async create(data: CreateSkillData): Promise<SkillDocument> {
     const now = new Date();
     const doc: Record<string, unknown> = {
-      _id: data.guid as any,
+      _id: skillId(data.guid),
       name: data.name,
       description: data.description,
       license: data.license ?? null,
@@ -169,13 +207,13 @@ export class SkillRepository {
     if (data.source !== undefined) setFields.source = data.source;
     if (data.latestVersion !== undefined) setFields.latestVersion = data.latestVersion;
 
-    await this.collection.updateOne({ _id: guid as any }, { $set: setFields });
+    await this.collection.updateOne({ _id: skillId(guid) }, { $set: setFields });
     logger.info({ guid }, "Skill updated");
     return (await this.findByGuid(guid))!;
   }
 
   async hardDelete(guid: string): Promise<void> {
-    await this.collection.deleteOne({ _id: guid as any });
+    await this.collection.deleteOne({ _id: skillId(guid) });
     logger.info({ guid }, "Skill hard-deleted");
   }
 
@@ -187,7 +225,7 @@ export class SkillRepository {
    */
   async clearSource(guid: string, updatedBy: string): Promise<SkillDocument | null> {
     await this.collection.updateOne(
-      { _id: guid as any },
+      { _id: skillId(guid) },
       {
         $set: { updatedBy, updatedOn: new Date() },
         $unset: { source: "" },
@@ -225,7 +263,7 @@ export class SkillRepository {
     if (data.isPrivate !== undefined) {
       setFields.isPrivate = data.isPrivate;
     }
-    await this.collection.updateOne({ _id: guid as any }, { $set: setFields });
+    await this.collection.updateOne({ _id: skillId(guid) }, { $set: setFields });
     logger.info(
       { guid, nyxidServiceId: data.nyxidServiceId, isSystemSkill: data.isSystemSkill },
       "Skill NyxID service tie updated",
@@ -352,7 +390,7 @@ export class SkillRepository {
 
   async findByGuids(guids: string[]): Promise<SkillDocument[]> {
     if (guids.length === 0) return [];
-    const docs = await this.collection.find({ _id: { $in: guids } as any }).toArray();
+    const docs = await this.collection.find({ _id: { $in: skillIdList(guids) } }).toArray();
     return docs.map((d) => mapDoc(d)!);
   }
 
