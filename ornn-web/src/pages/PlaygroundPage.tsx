@@ -125,7 +125,7 @@ export function PlaygroundPage() {
   const [searchParams] = useSearchParams();
   const skillName = searchParams.get("skill");
 
-  const { data: skill, isLoading: skillLoading } = useSkill(skillName ?? "");
+  const { data: skill, isLoading: skillLoading, error: skillError } = useSkill(skillName ?? "");
   const {
     files: packageFiles,
     fileContents: packageContents,
@@ -319,6 +319,35 @@ export function PlaygroundPage() {
       <PageTransition>
         <div className="flex h-full items-center justify-center">
           <Skeleton lines={4} />
+        </div>
+      </PageTransition>
+    );
+  }
+
+  // After loading: no skill data means the caller doesn't have access
+  // (404 SKILL_NOT_FOUND on a private skill they aren't allowed to see),
+  // OR the slug is bogus. Either way, render the not-found state —
+  // never the playground UI (#563). Without this gate, starter prompts
+  // and the chat input were rendering for unauthorized users even
+  // though every API call would 404.
+  if (skillError || !skill) {
+    return (
+      <PageTransition>
+        <div className="flex h-full items-center justify-center">
+          <div className="text-center max-w-md">
+            <p className="mb-2 font-display text-lg text-strong">
+              {t("playground.notFoundTitle", "Skill not found")}
+            </p>
+            <p className="mb-4 font-text text-sm text-meta">
+              {t(
+                "playground.notFoundBody",
+                "This skill doesn't exist, or you don't have access to it.",
+              )}
+            </p>
+            <Link to="/registry" className="font-text text-sm text-accent hover:underline">
+              {t("playground.browseSkills")}
+            </Link>
+          </div>
         </div>
       </PageTransition>
     );
