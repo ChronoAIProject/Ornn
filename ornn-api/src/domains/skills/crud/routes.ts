@@ -55,6 +55,19 @@ const nyxidServicePatchSchema = z.object({
   nyxidServiceId: z.string().min(1).max(128).nullable(),
 });
 
+/**
+ * Body for `PUT /api/v1/skills/:id/dist-tags/:tag` (#463). Just the
+ * version string the tag should point at; the service validates that
+ * the version exists.
+ */
+const distTagSetSchema = z.object({
+  version: z
+    .string()
+    .min(1)
+    .max(20)
+    .regex(/^(0|[1-9]\d*)\.(0|[1-9]\d*)$/, "version must be <major>.<minor>"),
+});
+
 const logger = pino({ level: "info" }).child({ module: "skillCrudRoutes" });
 
 export interface SkillRoutesConfig {
@@ -776,6 +789,126 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
       fireMirrorSync(result.skillGuid);
 
       return c.json({ data: result, error: null });
+    },
+  );
+
+  // -------- Dist-tags (#463) --------
+  //
+  // Three endpoints mirror npm's `dist-tag` surface: read all, set
+  // one, delete one. `latest` is auto-managed by the publish path —
+  // PUT / DELETE against it return `dist_tag_immutable` from the
+  // service layer.
+
+  /**
+   * GET /skills/:idOrName/dist-tags — Read the dist-tags map for a
+   * skill (#463). Anonymous can read public skills; private skills
+   * require the same auth posture as the read endpoint.
+   */
+  app.get(
+    "/skills/:idOrName/dist-tags",
+    optionalAuth,
+    async (c) => {
+      const idOrName = c.req.param("idOrName");
+      const authCtx = c.get("auth");
+      const skill = await skillRepo.findByGuid(idOrName)
+        ?? await skillRepo.findByName(idOrName);
+      if (!skill) {
+        throw AppError.notFound("skill_not_found", `Skill '${idOrName}' not found`);
+      }
+      if (!authCtx && skill.isPrivate) {
+        throw AppError.notFound("skill_not_found", `Skill '${idOrName}' not found`);
+      }
+      if (authCtx && skill.isPrivate) {
+        const memberships = await readUserOrgMemberships(c);
+        const actor = {
+          userId: authCtx.userId,
+          memberships,
+          isPlatformAdmin: authCtx.permissions.includes("ornn:admin:skill"),
+        };
+        if (!canReadSkill(skill, actor)) {
+          throw AppError.notFound("skill_not_found", `Skill '${idOrName}' not found`);
+        }
+      }
+      const tags = await skillService.getDistTags(skill.guid);
+      return c.json({ data: { tags }, error: null });
+    },
+  );
+
+  /**
+   * PUT /skills/:id/dist-tags/:tag — Set or update a dist-tag (#463).
+   *
+   * Owner / platform-admin only (same gate as the rest of `/skills/:id/*`
+   * write paths). `latest` is rejected with `dist_tag_immutable`.
+   * Per CONVENTIONS.md §2.2, the `:id` slot is the stable GUID — no
+   * polymorphic name resolution on writes.
+   */
+  app.put(
+    "/skills/:id/dist-tags/:tag",
+    auth,
+    requirePermission("ornn:skill:update"),
+    validateBody(distTagSetSchema, "invalid_dist_tag_body"),
+    async (c) => {
+      const id = c.req.param("id");
+      const tag = c.req.param("tag");
+      const authCtx = getAuth(c);
+
+      const existing = await skillRepo.findByGuid(id);
+      if (!existing) {
+        throw AppError.notFound("skill_not_found", `Skill '${id}' not found`);
+      }
+      const memberships = await readUserOrgMemberships(c);
+      const actor = {
+        userId: authCtx.userId,
+        memberships,
+        isPlatformAdmin: authCtx.permissions.includes("ornn:admin:skill"),
+      };
+      if (!canManageSkill(existing, actor)) {
+        throw AppError.forbidden(
+          "forbidden",
+          "You do not have permission to manage this skill",
+        );
+      }
+
+      const body = getValidatedBody<z.infer<typeof distTagSetSchema>>(c);
+      const tags = await skillService.setDistTag(id, tag, body.version);
+      return c.json({ data: { tags }, error: null });
+    },
+  );
+
+  /**
+   * DELETE /skills/:id/dist-tags/:tag — Remove a dist-tag (#463).
+   *
+   * Owner / platform-admin only. `latest` is rejected with
+   * `dist_tag_immutable` to preserve the auto-managed invariant.
+   */
+  app.delete(
+    "/skills/:id/dist-tags/:tag",
+    auth,
+    requirePermission("ornn:skill:update"),
+    async (c) => {
+      const id = c.req.param("id");
+      const tag = c.req.param("tag");
+      const authCtx = getAuth(c);
+
+      const existing = await skillRepo.findByGuid(id);
+      if (!existing) {
+        throw AppError.notFound("skill_not_found", `Skill '${id}' not found`);
+      }
+      const memberships = await readUserOrgMemberships(c);
+      const actor = {
+        userId: authCtx.userId,
+        memberships,
+        isPlatformAdmin: authCtx.permissions.includes("ornn:admin:skill"),
+      };
+      if (!canManageSkill(existing, actor)) {
+        throw AppError.forbidden(
+          "forbidden",
+          "You do not have permission to manage this skill",
+        );
+      }
+
+      const tags = await skillService.deleteDistTag(id, tag);
+      return c.json({ data: { tags }, error: null });
     },
   );
 
