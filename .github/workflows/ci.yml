@@ -46,6 +46,29 @@ jobs:
         working-directory: sdk/python
         run: pytest -q
 
+  # Audit the Python SDK's transitive deps for known CVEs (#445).
+  # pip-audit walks the installed environment + the package's
+  # requirements and queries the OSV database. Runs on every PR so
+  # a CVE landing on an upstream package fails CI loudly instead
+  # of silently shipping.
+  python-sdk-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: sdk/python/pyproject.toml
+      - name: Install ornn-sdk (python)
+        working-directory: sdk/python
+        run: pip install -e ".[dev]"
+      - name: Install pip-audit
+        run: pip install pip-audit
+      - name: Audit dependencies
+        working-directory: sdk/python
+        run: pip-audit --strict --disable-pip
+
   build:
     runs-on: ubuntu-latest
     steps:
