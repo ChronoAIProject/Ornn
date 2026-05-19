@@ -74,7 +74,6 @@ function makeSkill(overrides: Partial<SkillDocument> = {}): SkillDocument {
     metadata: { category: "plain" } as unknown as SkillDocument["metadata"],
     skillHash: "hash",
     storageKey: "key",
-    ownerId: "u1",
     createdBy: "u1",
     createdOn: new Date(),
     updatedBy: "u1",

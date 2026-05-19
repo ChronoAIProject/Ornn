@@ -27,7 +27,6 @@ export interface SkillSummary {
 
 /** Full skill detail returned by single-skill reads. */
 export interface SkillDetail extends SkillSummary {
-  readonly ownerId: string;
   readonly storageKey?: string;
   readonly sharedWithUsers?: readonly string[];
   readonly sharedWithOrgs?: readonly string[];

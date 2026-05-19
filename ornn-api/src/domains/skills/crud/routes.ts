@@ -1090,7 +1090,6 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
         guid: s.guid,
         name: s.name,
         description: s.description,
-        ownerId: s.ownerId,
         createdBy: s.createdBy,
         createdByEmail: s.createdByEmail,
         createdByDisplayName: s.createdByDisplayName,

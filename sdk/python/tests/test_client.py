@@ -198,7 +198,6 @@ class TestGet:
                     "isPrivate": False,
                     "createdBy": "u1",
                     "createdOn": "2026-01-01T00:00:00Z",
-                    "ownerId": "u1",
                 },
                 "error": None,
             },
@@ -206,7 +205,7 @@ class TestGet:
         with make_client() as ornn:
             detail = ornn.get("my/weird name")
         assert isinstance(detail, SkillDetail)
-        assert detail.owner_id == "u1"
+        assert detail.created_by == "u1"
         assert route.called
 
     @respx.mock
@@ -288,7 +287,6 @@ class TestPublish:
                     "isPrivate": True,
                     "createdBy": "u1",
                     "createdOn": "2026-01-01T00:00:00Z",
-                    "ownerId": "u1",
                 },
                 "error": None,
             },
@@ -313,7 +311,6 @@ class TestPublish:
                     "isPrivate": False,
                     "createdBy": "admin",
                     "createdOn": "2026-01-01T00:00:00Z",
-                    "ownerId": "admin",
                 },
                 "error": None,
             },
@@ -338,7 +335,6 @@ class TestUpdate:
                     "isPrivate": False,
                     "createdBy": "u1",
                     "createdOn": "2026-01-01T00:00:00Z",
-                    "ownerId": "u1",
                 },
                 "error": None,
             },
@@ -361,7 +357,6 @@ class TestUpdate:
                     "isPrivate": False,
                     "createdBy": "u1",
                     "createdOn": "2026-01-01T00:00:00Z",
-                    "ownerId": "u1",
                 },
                 "error": None,
             },

@@ -81,16 +81,10 @@ export interface SkillDocument {
   skillHash: string;
   storageKey: string;
   /**
-   * Legacy back-compat field. Was used by an earlier "org-as-owner" design
-   * to drive visibility; visibility logic no longer consults it. New skills
-   * copy `createdBy` into it; safe to drop in a future cleanup migration.
-   */
-  ownerId: string;
-  /**
    * The actual person who authored the skill. ALWAYS a person user_id —
    * never an org. Authors are the only non-admin principals allowed to
    * manage their skill (edit package, toggle public, change permissions,
-   * delete).
+   * delete). #581 removed the legacy `ownerId` mirror of this field.
    */
   createdBy: string;
   createdByEmail?: string;
@@ -292,8 +286,6 @@ export interface SkillDetailResponse {
   skillHash: string;
   presignedPackageUrl: string;
   isPrivate: boolean;
-  /** Legacy back-compat field. Not used for visibility; equals `createdBy` on new skills. */
-  ownerId: string;
   createdBy: string;
   createdByEmail?: string;
   createdByDisplayName?: string;
@@ -368,8 +360,6 @@ export interface SkillSearchItem {
   guid: string;
   name: string;
   description: string;
-  /** Owner entity — person user_id or org user_id. */
-  ownerId: string;
   createdBy: string;
   createdByEmail?: string;
   createdByDisplayName?: string;
@@ -495,33 +485,17 @@ export type PlaygroundChatEvent =
   | { type: "finish"; finishReason: string };
 
 // ---------------------------------------------------------------------------
-// Auth Types
-// ---------------------------------------------------------------------------
-
-export interface ApiKeyInfo {
-  userId: string;
-  email: string;
-  roles: string[];
-  permissions: string[];
-}
-
-// ---------------------------------------------------------------------------
 // Auth Utilities
 // ---------------------------------------------------------------------------
 
-export const INTERNAL_AUTH_HEADER = "X-Internal-Auth";
+// `ApiKeyInfo` + `INTERNAL_AUTH_HEADER` were removed in #581. They
+// existed only to support the dead `clients/nyxid/auth.ts` AuthClient,
+// itself an unmounted middleware leftover.
+//
+// `createErrorHandler` was also removed — the live error handler lives
+// on the Hono app via `app.onError(...)` in bootstrap.ts; no route
+// imported this function.
 
 export function isDuplicateKeyError(err: unknown): boolean {
   return typeof err === "object" && err !== null && "code" in err && (err as { code: number }).code === 11000;
 }
-
-export function createErrorHandler(logger: { error: (...args: unknown[]) => void }) {
-  return (err: Error, c: { json: (body: unknown, status: number) => unknown }) => {
-    if (err instanceof AppError) {
-      return c.json({ data: null, error: { code: err.code, message: err.message } }, err.statusCode);
-    }
-    logger.error(err, "Unhandled error");
-    return c.json({ data: null, error: { code: "internal_error", message: "Internal server error" } }, 500);
-  };
-}
-
