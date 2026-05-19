@@ -6,15 +6,10 @@
 
 import { useAuthStore } from "@/stores/authStore";
 import { config } from "@/config";
+import { createLogger } from "@/lib/logger";
 
 const API_BASE = config.apiBaseUrl;
-
-const logger = {
-  info: (msg: string, data?: Record<string, unknown>) =>
-    console.log(`[activityApi] ${msg}`, data ?? ""),
-  warn: (msg: string, data?: Record<string, unknown>) =>
-    console.warn(`[activityApi] ${msg}`, data ?? ""),
-};
+const logger = createLogger("activityApi");
 
 /**
  * Log a user activity (login or logout).
