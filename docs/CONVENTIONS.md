@@ -378,6 +378,22 @@ Every response carries:
 - CI contract test asserts every handler in code appears in the spec with complete metadata.
 - Error `type` URLs point to live documentation per § 1.6.
 
+### 10.1 Skill manifest JSON Schema
+
+The canonical JSON Schema for `SKILL.md` YAML frontmatter is published at:
+
+```
+GET /api/v1/skill-manifest-schema.json
+```
+
+- Generated from the Zod source of truth (`ornn-api/src/shared/schemas/skillFrontmatter.ts`) at server boot — the published schema cannot drift from the runtime validator.
+- Output is JSON Schema **draft-2020-12** (`$schema`) — what current IDEs (VS Code, Cursor, JetBrains) and `schemastore.org` consume.
+- Served with `Content-Type: application/schema+json` (IANA registration). No `{ data, error }` envelope — the body root is the schema document itself, because that's what schema-store tools expect.
+- Public, no auth required. `Cache-Control: public, max-age=3600`.
+- `SKILL_MANIFEST_SCHEMA_VERSION` (currently `"1"`) is bumped manually when the frontmatter contract changes in a way external tooling cares about. Out of an abundance of caution while we're pre-1.0, this version is not yet baked into the URL; consumers should re-fetch on a finite TTL.
+
+Skill authors and tooling SHOULD point their YAML language servers at this URL via `# yaml-language-server: $schema=...` so SKILL.md gets autocomplete + inline validation.
+
 ---
 
 ## 11. Architecture conventions
