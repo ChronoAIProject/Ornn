@@ -47,10 +47,12 @@ jobs:
         run: pytest -q
 
   # Audit the Python SDK's transitive deps for known CVEs (#445).
-  # pip-audit walks the installed environment + the package's
-  # requirements and queries the OSV database. Runs on every PR so
-  # a CVE landing on an upstream package fails CI loudly instead
-  # of silently shipping.
+  # We install the runtime deps directly (httpx + dev tools) rather
+  # than `pip install -e .` because pip-audit refuses editable
+  # installs of packages that aren't on PyPI yet (ornn-sdk is held
+  # for v1 per #473). The audit walks the resolved env via the OSV
+  # database — transitive deps (h11, anyio, certifi, idna, …) are
+  # all covered.
   python-sdk-audit:
     runs-on: ubuntu-latest
     steps:
@@ -58,20 +60,23 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
-          cache: pip
-          cache-dependency-path: sdk/python/pyproject.toml
-      - name: Install ornn-sdk (python)
+      - name: Install runtime + dev deps directly
         working-directory: sdk/python
-        run: pip install -e ".[dev]"
-      - name: Install pip-audit
-        run: pip install pip-audit
+        # Read the bounds from pyproject.toml without installing
+        # ornn-sdk itself. tomllib is stdlib in 3.11+; we're on 3.12.
+        run: |
+          python -c "
+          import tomllib, subprocess, sys
+          cfg = tomllib.load(open('pyproject.toml', 'rb'))
+          deps = cfg['project']['dependencies']
+          deps += cfg['project']['optional-dependencies']['dev']
+          subprocess.check_call([sys.executable, '-m', 'pip', 'install', *deps])
+          "
+          pip install pip-audit
       - name: Audit dependencies
         working-directory: sdk/python
-        # `--strict` fails on any known CVE. `--skip-editable`
-        # skips ornn-sdk itself (not yet on PyPI — see #473);
-        # transitive deps (httpx, anyio, certifi, …) are still
-        # audited.
-        run: pip-audit --strict --skip-editable
+        # `--strict` fails on any known CVE in the installed env.
+        run: pip-audit --strict
 
   build:
     runs-on: ubuntu-latest
