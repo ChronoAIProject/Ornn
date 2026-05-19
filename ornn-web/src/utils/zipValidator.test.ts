@@ -16,14 +16,6 @@ import {
   validateSkillZip,
 } from "./zipValidator";
 
-function fileFromZip(zip: JSZip, name = "skill.zip"): File {
-  // jsdom doesn't provide a real File constructor without a Blob shim
-  // — we construct from the underlying Uint8Array and trust the
-  // function only calls arrayBuffer() on it.
-  return new File([], name) as File & { arrayBuffer: () => Promise<ArrayBuffer> } &
-    { _zip: JSZip };
-}
-
 async function zipToFile(zip: JSZip): Promise<File> {
   const blob = await zip.generateAsync({ type: "blob" });
   return new File([blob], "skill.zip");
