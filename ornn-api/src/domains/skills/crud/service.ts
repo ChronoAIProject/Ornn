@@ -14,6 +14,21 @@ import { AppError } from "../../../shared/types/index";
 import { fetchSkillFromGitHub, parseGithubUrl, type GitHubPullInput } from "./utils/githubPull";
 import { computeVersionDiff, type VersionDiffResult } from "./utils/versionDiff";
 import { isReservedVerb } from "../../../shared/reservedVerbs";
+
+/**
+ * Convert the stored hex `skillHash` into npm-style Subresource Integrity
+ * (#461): `sha256-<base64-of-raw-digest>`. Equivalent to
+ * `package-lock.json`'s `integrity:` field — clients verify a downloaded
+ * package byte-for-byte before installing.
+ */
+function hexToIntegrity(hex: string): string {
+  if (!hex || hex.length === 0) return "";
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < bytes.length; i++) {
+    bytes[i] = parseInt(hex.substr(i * 2, 2), 16);
+  }
+  return `sha256-${Buffer.from(bytes).toString("base64")}`;
+}
 import { validateSkillFrontmatter } from "../../../shared/schemas/skillFrontmatter";
 import { resolveZipRoot } from "../../../shared/utils/zip";
 import { parseVersion, isGreater } from "./version";
@@ -216,6 +231,13 @@ export class SkillService {
   async listSkillVersions(idOrName: string): Promise<Array<{
     version: string;
     skillHash: string;
+    /**
+     * npm-style Subresource Integrity (#461). `sha256-<base64(skillHash)>`.
+     * Clients verify a downloaded package matches this value byte-for-byte
+     * before installing. Equivalent in spirit to npm's `integrity:` field
+     * on `package-lock.json` and PyPI's `sha256_digest` per file.
+     */
+    integrity: string;
     createdBy: string;
     createdByEmail?: string;
     createdByDisplayName?: string;
@@ -229,6 +251,7 @@ export class SkillService {
     return versions.map((v) => ({
       version: v.version,
       skillHash: v.skillHash,
+      integrity: hexToIntegrity(v.skillHash),
       createdBy: v.createdBy,
       createdByEmail: v.createdByEmail,
       createdByDisplayName: v.createdByDisplayName,
