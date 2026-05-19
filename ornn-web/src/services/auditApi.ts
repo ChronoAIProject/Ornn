@@ -31,7 +31,7 @@ export async function fetchAudit(
     );
     return res.data ?? null;
   } catch (err) {
-    if (err instanceof ApiClientError && err.code === "AUDIT_NOT_FOUND") {
+    if (err instanceof ApiClientError && err.code === "audit_not_found") {
       return null;
     }
     throw err;

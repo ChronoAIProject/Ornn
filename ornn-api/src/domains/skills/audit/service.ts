@@ -355,7 +355,7 @@ export class AuditService {
     // Prefer the skill doc's presigned URL — `getSkill` already minted one.
     const url = (skillDoc as unknown as { presignedPackageUrl?: string }).presignedPackageUrl;
     if (!url) {
-      throw AppError.internalError("AUDIT_PACKAGE_UNAVAILABLE", "No storage URL for skill package");
+      throw AppError.internalError("audit_package_unavailable", "No storage URL for skill package");
     }
     const res = await fetch(url);
     if (!res.ok) {

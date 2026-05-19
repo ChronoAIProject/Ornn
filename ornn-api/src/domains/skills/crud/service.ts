@@ -114,7 +114,7 @@ export class SkillService {
       const violations = await this.validateZipFormat(zipBuffer);
       if (violations.length > 0) {
         throw AppError.badRequest(
-          "VALIDATION_FAILED",
+          "validation_failed",
           violations.map((v) => `[${v.rule}] ${v.message}`).join("; "),
         );
       }
@@ -128,7 +128,7 @@ export class SkillService {
     //     action paths and make the skill unreachable via the canonical read.
     if (isReservedVerb("skill", name)) {
       throw AppError.badRequest(
-        "RESERVED_NAME",
+        "reserved_name",
         `Skill name '${name}' is reserved — pick a different name`,
       );
     }
@@ -136,7 +136,7 @@ export class SkillService {
     // 3b. Check name uniqueness
     const existing = await this.skillRepo.findByName(name);
     if (existing) {
-      throw AppError.conflict("SKILL_NAME_EXISTS", `Skill '${name}' already exists`);
+      throw AppError.conflict("skill_name_exists", `Skill '${name}' already exists`);
     }
 
     // 4. Generate GUID and hash
@@ -216,7 +216,7 @@ export class SkillService {
       parseVersion(version);
       const versionDoc = await this.skillVersionRepo.findBySkillAndVersion(skill.guid, version);
       if (!versionDoc) {
-        throw AppError.notFound("SKILL_VERSION_NOT_FOUND", `Version '${version}' not found for skill '${skill.name}'`);
+        throw AppError.notFound("skill_version_not_found", `Version '${version}' not found for skill '${skill.name}'`);
       }
       return this.buildDetailResponse(skill, versionDoc);
     }
@@ -305,7 +305,7 @@ export class SkillService {
       skill = await this.skillRepo.findByName(idOrName);
     }
     if (!skill) {
-      throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${idOrName}' not found`);
+      throw AppError.notFound("skill_not_found", `Skill '${idOrName}' not found`);
     }
     return skill;
   }
@@ -330,7 +330,7 @@ export class SkillService {
   ): Promise<SkillDetailResponse> {
     const existing = await this.skillRepo.findByGuid(guid);
     if (!existing) {
-      throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${guid}' not found`);
+      throw AppError.notFound("skill_not_found", `Skill '${guid}' not found`);
     }
 
     // System-skill invariant: a skill tied to an admin NyxID service is
@@ -378,7 +378,7 @@ export class SkillService {
   ): Promise<SkillDetailResponse> {
     const existing = await this.skillRepo.findByGuid(guid);
     if (!existing) {
-      throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${guid}' not found`);
+      throw AppError.notFound("skill_not_found", `Skill '${guid}' not found`);
     }
 
     // System-skill invariant — same as setSkillPermissions. Block
@@ -400,7 +400,7 @@ export class SkillService {
         const violations = await this.validateZipFormat(options.zipBuffer);
         if (violations.length > 0) {
           throw AppError.badRequest(
-            "VALIDATION_FAILED",
+            "validation_failed",
             violations.map((v) => `[${v.rule}] ${v.message}`).join("; "),
           );
         }
@@ -534,7 +534,7 @@ export class SkillService {
   ): Promise<SkillDetailResponse> {
     const existing = await this.skillRepo.findByGuid(guid);
     if (!existing) {
-      throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${guid}' not found`);
+      throw AppError.notFound("skill_not_found", `Skill '${guid}' not found`);
     }
     if (!existing.source || existing.source.type !== "github") {
       throw AppError.badRequest(
@@ -582,7 +582,7 @@ export class SkillService {
   ): Promise<SkillDetailResponse> {
     const existing = await this.skillRepo.findByGuid(guid);
     if (!existing) {
-      throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${guid}' not found`);
+      throw AppError.notFound("skill_not_found", `Skill '${guid}' not found`);
     }
 
     if (githubUrl === null) {
@@ -595,7 +595,7 @@ export class SkillService {
       parsed = parseGithubUrl(githubUrl);
     } catch (err) {
       throw AppError.badRequest(
-        "INVALID_GITHUB_URL",
+        "invalid_github_url",
         err instanceof Error ? err.message : String(err),
       );
     }
@@ -629,7 +629,7 @@ export class SkillService {
   }> {
     const existing = await this.skillRepo.findByGuid(guid);
     if (!existing) {
-      throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${guid}' not found`);
+      throw AppError.notFound("skill_not_found", `Skill '${guid}' not found`);
     }
     if (!existing.source || existing.source.type !== "github") {
       throw AppError.badRequest(
@@ -708,7 +708,7 @@ export class SkillService {
   }> {
     if (fromVersion === toVersion) {
       throw AppError.badRequest(
-        "SAME_VERSION",
+        "same_version",
         `'from' and 'to' refer to the same version '${fromVersion}'`,
       );
     }
@@ -724,13 +724,13 @@ export class SkillService {
     ]);
     if (!fromDoc) {
       throw AppError.notFound(
-        "SKILL_VERSION_NOT_FOUND",
+        "skill_version_not_found",
         `Version '${fromVersion}' not found for skill '${skill.name}'`,
       );
     }
     if (!toDoc) {
       throw AppError.notFound(
-        "SKILL_VERSION_NOT_FOUND",
+        "skill_version_not_found",
         `Version '${toVersion}' not found for skill '${skill.name}'`,
       );
     }
@@ -776,7 +776,7 @@ export class SkillService {
     const res = await fetch(presigned.presignedUrl);
     if (!res.ok) {
       throw AppError.internalError(
-        "PACKAGE_DOWNLOAD_FAILED",
+        "package_download_failed",
         `Failed to download package for key '${storageKey}' (HTTP ${res.status})`,
       );
     }
@@ -799,12 +799,12 @@ export class SkillService {
     let skill = await this.skillRepo.findByGuid(idOrName);
     if (!skill) skill = await this.skillRepo.findByName(idOrName);
     if (!skill) {
-      throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${idOrName}' not found`);
+      throw AppError.notFound("skill_not_found", `Skill '${idOrName}' not found`);
     }
     const versionDoc = await this.skillVersionRepo.findBySkillAndVersion(skill.guid, version);
     if (!versionDoc) {
       throw AppError.notFound(
-        "SKILL_VERSION_NOT_FOUND",
+        "skill_version_not_found",
         `Version '${version}' not found for skill '${skill.name}'`,
       );
     }
@@ -871,7 +871,7 @@ export class SkillService {
   ): Promise<SkillDetailResponse> {
     const existing = await this.skillRepo.findByGuid(guid);
     if (!existing) {
-      throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${guid}' not found`);
+      throw AppError.notFound("skill_not_found", `Skill '${guid}' not found`);
     }
 
     // Untie path — wipe all four cached fields, leave `isPrivate` alone.
@@ -924,7 +924,7 @@ export class SkillService {
   async deleteSkill(guid: string): Promise<void> {
     const existing = await this.skillRepo.findByGuid(guid);
     if (!existing) {
-      throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${guid}' not found`);
+      throw AppError.notFound("skill_not_found", `Skill '${guid}' not found`);
     }
 
     // Collect every storage key to clean up: the current pointer on the skill
@@ -967,14 +967,14 @@ export class SkillService {
       skill = await this.skillRepo.findByName(idOrName);
     }
     if (!skill) {
-      throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${idOrName}' not found`);
+      throw AppError.notFound("skill_not_found", `Skill '${idOrName}' not found`);
     }
 
     // 2. Download ZIP from storage
     const presigned = await this.storageClient.getPresignedUrl((await this.storageBucketResolver()), skill.storageKey);
     const response = await fetch(presigned.presignedUrl);
     if (!response.ok) {
-      throw AppError.internalError("PACKAGE_DOWNLOAD_FAILED", "Failed to download skill package from storage");
+      throw AppError.internalError("package_download_failed", "Failed to download skill package from storage");
     }
     const zipBuffer = new Uint8Array(await response.arrayBuffer());
 
@@ -1045,7 +1045,7 @@ export class SkillService {
     const versionDoc = await this.skillVersionRepo.findBySkillAndVersion(skill.guid, version);
     if (!versionDoc) {
       throw AppError.notFound(
-        "SKILL_VERSION_NOT_FOUND",
+        "skill_version_not_found",
         `Version '${version}' not found for skill '${skill.name}'`,
       );
     }
@@ -1128,13 +1128,13 @@ export class SkillService {
 
     const skillMdEntry = getFile("SKILL.md");
     if (!skillMdEntry) {
-      throw AppError.badRequest("MISSING_SKILL_MD", "SKILL.md not found in package");
+      throw AppError.badRequest("missing_skill_md", "SKILL.md not found in package");
     }
 
     const content = await skillMdEntry.async("string");
     const fmMatch = content.match(FRONTMATTER_REGEX);
     if (!fmMatch) {
-      throw AppError.badRequest("MISSING_FRONTMATTER", "SKILL.md must have a frontmatter section");
+      throw AppError.badRequest("missing_frontmatter", "SKILL.md must have a frontmatter section");
     }
 
     let rawFrontmatter: Record<string, unknown>;
@@ -1155,7 +1155,7 @@ export class SkillService {
     const validation = validateSkillFrontmatter(rawFrontmatter);
     if (!validation.success) {
       const errorMsg = validation.errors.map((e) => `${e.field}: ${e.message}`).join("; ");
-      throw AppError.badRequest("FRONTMATTER_VALIDATION_FAILED", errorMsg);
+      throw AppError.badRequest("frontmatter_validation_failed", errorMsg);
     }
 
     const fm = validation.data;

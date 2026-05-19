@@ -217,7 +217,7 @@ export function nyxidAuthMiddleware() {
   return createMiddleware<{ Variables: AuthVariables }>(async (c, next) => {
     const auth = c.get("auth");
     if (!auth) {
-      throw new AppError(401, "AUTH_MISSING", "Authentication required");
+      throw new AppError(401, "auth_missing", "Authentication required");
     }
     await next();
   });
@@ -243,13 +243,13 @@ export function requirePermission(...required: string[]) {
   return async (c: Context<{ Variables: AuthVariables }>, next: Next) => {
     const auth = c.get("auth");
     if (!auth) {
-      throw new AppError(401, "AUTH_MISSING", "Not authenticated");
+      throw new AppError(401, "auth_missing", "Not authenticated");
     }
 
     for (const perm of required) {
       if (!auth.permissions.includes(perm)) {
         logger.warn({ userId: auth.userId, missing: perm }, "Permission denied");
-        throw new AppError(403, "FORBIDDEN", `Missing permission: ${perm}`);
+        throw new AppError(403, "forbidden", `Missing permission: ${perm}`);
       }
     }
 
@@ -264,12 +264,12 @@ export function requireOwnerOrAdmin(getResourceOwnerId: (c: Context) => Promise<
   return async (c: Context<{ Variables: AuthVariables }>, next: Next) => {
     const auth = c.get("auth");
     if (!auth) {
-      throw new AppError(401, "AUTH_MISSING", "Not authenticated");
+      throw new AppError(401, "auth_missing", "Not authenticated");
     }
 
     const ownerId = await getResourceOwnerId(c);
     if (auth.userId !== ownerId && !auth.permissions.includes("ornn:admin:skill")) {
-      throw new AppError(403, "FORBIDDEN", "You can only operate on your own resources");
+      throw new AppError(403, "forbidden", "You can only operate on your own resources");
     }
 
     await next();
@@ -282,7 +282,7 @@ export function requireOwnerOrAdmin(getResourceOwnerId: (c: Context) => Promise<
 export function getAuth(c: Context<{ Variables: AuthVariables }>): AuthContext {
   const auth = c.get("auth");
   if (!auth) {
-    throw new AppError(401, "AUTH_MISSING", "Not authenticated");
+    throw new AppError(401, "auth_missing", "Not authenticated");
   }
   return auth;
 }

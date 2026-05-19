@@ -48,7 +48,7 @@ export function createAdminUsersRoutes(
     async (c) => {
       const roleParse = roleSchema.safeParse(c.req.query("role") ?? "normal");
       if (!roleParse.success) {
-        throw new AppError(400, "INVALID_ROLE", "role must be 'admin' or 'normal'");
+        throw new AppError(400, "invalid_role", "role must be 'admin' or 'normal'");
       }
       const role: Role = roleParse.data;
       const page = Math.max(1, Number(c.req.query("page")) || 1);

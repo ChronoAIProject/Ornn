@@ -77,7 +77,7 @@ export class AnnouncementService {
   async getById(id: string): Promise<AnnouncementDocument> {
     const doc = await this.repo.findById(id);
     if (!doc) {
-      throw AppError.notFound("ANNOUNCEMENT_NOT_FOUND", "Announcement not found");
+      throw AppError.notFound("announcement_not_found", "Announcement not found");
     }
     return doc;
   }
@@ -103,7 +103,7 @@ export class AnnouncementService {
     }
     const updated = await this.repo.update(id, patch);
     if (!updated) {
-      throw AppError.notFound("ANNOUNCEMENT_NOT_FOUND", "Announcement not found");
+      throw AppError.notFound("announcement_not_found", "Announcement not found");
     }
     logger.info({ announcementId: id, enabled: updated.enabled }, "Announcement updated");
     return updated;
@@ -112,7 +112,7 @@ export class AnnouncementService {
   async delete(id: string): Promise<void> {
     const removed = await this.repo.delete(id);
     if (!removed) {
-      throw AppError.notFound("ANNOUNCEMENT_NOT_FOUND", "Announcement not found");
+      throw AppError.notFound("announcement_not_found", "Announcement not found");
     }
     logger.info({ announcementId: id }, "Announcement deleted");
   }

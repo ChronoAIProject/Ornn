@@ -399,7 +399,7 @@ export class LlmProvidersService {
   ): Promise<LlmProvider> {
     const existing = await this.repo.findById(id);
     if (!existing) {
-      throw AppError.notFound("PROVIDER_NOT_FOUND", `No provider ${id}`);
+      throw AppError.notFound("provider_not_found", `No provider ${id}`);
     }
     const patch = parse(providerUpdateSchema, input);
 
@@ -480,7 +480,7 @@ export class LlmProvidersService {
     const flags = parse(modelFlagsPatchSchema, input);
     const existing = await this.repo.findById(providerId);
     if (!existing) {
-      throw AppError.notFound("PROVIDER_NOT_FOUND", `No provider ${providerId}`);
+      throw AppError.notFound("provider_not_found", `No provider ${providerId}`);
     }
     const idx = existing.models.findIndex((m) => m.id === modelId);
     if (idx === -1) {
@@ -570,7 +570,7 @@ export class LlmProvidersService {
   }> {
     const existing = await this.repo.findById(id);
     if (!existing) {
-      throw AppError.notFound("PROVIDER_NOT_FOUND", `No provider ${id}`);
+      throw AppError.notFound("provider_not_found", `No provider ${id}`);
     }
     const decryptedAuth = this.decryptAuth(existing.auth);
     let upstream: ReadonlyArray<{ id: string; displayName: string }>;
@@ -808,5 +808,5 @@ function zodToAppError(err: ZodError): AppError {
   const first = err.issues[0];
   const path = first.path.join(".");
   const msg = path.length > 0 ? `${path}: ${first.message}` : first.message;
-  return AppError.badRequest("INVALID_PROVIDER_INPUT", msg);
+  return AppError.badRequest("invalid_provider_input", msg);
 }

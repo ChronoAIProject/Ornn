@@ -189,7 +189,7 @@ export function MirrorPage() {
       const message = translateError(err);
       const code = err instanceof ApiClientError ? err.code : null;
       // Surface the abandon-confirm path even if the modal was bypassed.
-      if (code === "OLD_REPO_NOT_CONFIRMED") {
+      if (code === "old_repo_not_confirmed") {
         setConfirmModalOpen(true);
       } else {
         addToast({ type: "error", message });

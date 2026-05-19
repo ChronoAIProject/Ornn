@@ -87,7 +87,7 @@ export function createLlmProvidersRoutes(
 
   app.post(base, auth, adminGuard, async (c) => {
     const body = await c.req.json().catch(() => null);
-    if (!body) throw AppError.badRequest("INVALID_BODY", "JSON body required");
+    if (!body) throw AppError.badRequest("invalid_body", "JSON body required");
     const actor = currentActor(c);
     const created = await llmProvidersService.create(body, actor);
     // Re-fetch through the admin path so the 201 body never carries
@@ -100,7 +100,7 @@ export function createLlmProvidersRoutes(
     const id = c.req.param("id");
     const item = await llmProvidersService.getForAdmin(id);
     if (!item) {
-      throw AppError.notFound("PROVIDER_NOT_FOUND", `No provider ${id}`);
+      throw AppError.notFound("provider_not_found", `No provider ${id}`);
     }
     return c.json({ data: item, error: null });
   });
@@ -108,7 +108,7 @@ export function createLlmProvidersRoutes(
   app.put(`${base}/:id`, auth, adminGuard, async (c) => {
     const id = c.req.param("id");
     const body = await c.req.json().catch(() => null);
-    if (!body) throw AppError.badRequest("INVALID_BODY", "JSON body required");
+    if (!body) throw AppError.badRequest("invalid_body", "JSON body required");
     const actor = currentActor(c);
     await llmProvidersService.update(id, body, actor);
     const masked = await llmProvidersService.getForAdmin(id);
@@ -119,7 +119,7 @@ export function createLlmProvidersRoutes(
     const id = c.req.param("id");
     const ok = await llmProvidersService.deleteById(id);
     if (!ok) {
-      throw AppError.notFound("PROVIDER_NOT_FOUND", `No provider ${id}`);
+      throw AppError.notFound("provider_not_found", `No provider ${id}`);
     }
     return c.body(null, 204);
   });
@@ -146,7 +146,7 @@ export function createLlmProvidersRoutes(
       const providerId = c.req.param("id");
       const modelId = c.req.param("modelId");
       const body = await c.req.json().catch(() => null);
-      if (!body) throw AppError.badRequest("INVALID_BODY", "JSON body required");
+      if (!body) throw AppError.badRequest("invalid_body", "JSON body required");
       const actor = currentActor(c);
       await llmProvidersService.patchModel(providerId, modelId, body, actor);
       const masked = await llmProvidersService.getForAdmin(providerId);
@@ -176,7 +176,7 @@ export function createLlmPickerRoutes(
     const parsed = surfaceSchema.safeParse(surfaceRaw);
     if (!parsed.success) {
       throw AppError.badRequest(
-        "INVALID_SURFACE",
+        "invalid_surface",
         "Query param 'surface' must be 'playground' or 'skillGen'",
       );
     }

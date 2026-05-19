@@ -47,11 +47,11 @@ export class AppError extends Error {
   }
 
   static payloadTooLarge(message: string): AppError {
-    return new AppError(413, "PAYLOAD_TOO_LARGE", message);
+    return new AppError(413, "payload_too_large", message);
   }
 
   static internal(message: string): AppError {
-    return new AppError(500, "INTERNAL_ERROR", message);
+    return new AppError(500, "internal_error", message);
   }
 
   static internalError(code: string, message: string): AppError {
@@ -521,7 +521,7 @@ export function createErrorHandler(logger: { error: (...args: unknown[]) => void
       return c.json({ data: null, error: { code: err.code, message: err.message } }, err.statusCode);
     }
     logger.error(err, "Unhandled error");
-    return c.json({ data: null, error: { code: "INTERNAL_ERROR", message: "Internal server error" } }, 500);
+    return c.json({ data: null, error: { code: "internal_error", message: "Internal server error" } }, 500);
   };
 }
 

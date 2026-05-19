@@ -56,7 +56,7 @@ export function createBroadcastRoutes(
     const parsed = createBroadcastSchema.safeParse(body);
     if (!parsed.success) {
       throw AppError.badRequest(
-        "INVALID_BROADCAST_INPUT",
+        "invalid_broadcast_input",
         parsed.error.issues
           .map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`)
           .join("; "),
@@ -80,7 +80,7 @@ export function createBroadcastRoutes(
     const parsed = patchBroadcastSchema.safeParse(body);
     if (!parsed.success) {
       throw AppError.badRequest(
-        "INVALID_BROADCAST_INPUT",
+        "invalid_broadcast_input",
         parsed.error.issues
           .map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`)
           .join("; "),

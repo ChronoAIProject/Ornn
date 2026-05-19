@@ -72,7 +72,7 @@ export function createSearchRoutes(config: SearchRoutesConfig): Hono<{ Variables
   app.get(
     "/skill-search",
     optionalAuth,
-    validateQuery(searchQuerySchema, "INVALID_QUERY"),
+    validateQuery(searchQuerySchema, "invalid_query"),
     async (c) => {
       const parsed = getValidatedQuery<z.infer<typeof searchQuerySchema>>(c);
       const { query, mode, page, pageSize, model, systemFilter } = parsed;
@@ -148,7 +148,7 @@ export function createSearchRoutes(config: SearchRoutesConfig): Hono<{ Variables
     const scopeRaw = (c.req.query("scope") || "public") as string;
     const allowed = ["public", "private", "mixed", "shared-with-me", "mine", "system"] as const;
     if (!(allowed as readonly string[]).includes(scopeRaw)) {
-      throw AppError.badRequest("INVALID_SCOPE", `Unknown scope '${scopeRaw}'`);
+      throw AppError.badRequest("invalid_scope", `Unknown scope '${scopeRaw}'`);
     }
     const scope = scopeRaw as (typeof allowed)[number];
     if ((scope === "mine" || scope === "shared-with-me") && !authCtx) {
@@ -177,7 +177,7 @@ export function createSearchRoutes(config: SearchRoutesConfig): Hono<{ Variables
     const allowed = ["public", "shared-with-me", "system", "mixed"] as const;
     if (!(allowed as readonly string[]).includes(scopeRaw)) {
       throw AppError.badRequest(
-        "INVALID_SCOPE",
+        "invalid_scope",
         `Unknown or unsupported scope '${scopeRaw}' for authors facet`,
       );
     }

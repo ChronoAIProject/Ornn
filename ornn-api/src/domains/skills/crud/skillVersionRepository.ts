@@ -225,7 +225,7 @@ export class SkillVersionRepository {
     const updated = mapDoc(result);
     if (!updated) {
       throw AppError.notFound(
-        "SKILL_VERSION_NOT_FOUND",
+        "skill_version_not_found",
         `Version '${version}' not found for skill '${skillGuid}'`,
       );
     }

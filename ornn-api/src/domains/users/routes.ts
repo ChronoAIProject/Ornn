@@ -45,7 +45,7 @@ export function createUserRoutes(
   app.get(
     "/users/search",
     auth,
-    validateQuery(searchQuerySchema, "INVALID_QUERY"),
+    validateQuery(searchQuerySchema, "invalid_query"),
     async (c) => {
       const parsed = getValidatedQuery<z.infer<typeof searchQuerySchema>>(c);
       const results = await userDirectoryRepo.searchByEmailPrefix(

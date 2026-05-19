@@ -85,7 +85,7 @@ describe("AnalyticsEmitter", () => {
     emitter.trackApiError({
       userId: "u-3",
       statusCode: 500,
-      errorCode: "INTERNAL_ERROR",
+      errorCode: "internal_error",
       method: "POST",
       path: "/api/v1/skills",
       requestId: "rid-1",
@@ -95,7 +95,7 @@ describe("AnalyticsEmitter", () => {
     expect(tracker.calls[0]!.event).toBe("api.error");
     expect(tracker.calls[0]!.properties).toMatchObject({
       statusCode: 500,
-      errorCode: "INTERNAL_ERROR",
+      errorCode: "internal_error",
       method: "POST",
       path: "/api/v1/skills",
       requestId: "rid-1",
@@ -110,7 +110,7 @@ describe("AnalyticsEmitter", () => {
     emitter.trackApiError({
       userId: "u-3",
       statusCode: 500,
-      errorCode: "INTERNAL_ERROR",
+      errorCode: "internal_error",
       method: "POST",
       path: "/api/v1/skills",
     });
@@ -126,7 +126,7 @@ describe("AnalyticsEmitter", () => {
     emitter.trackApiError({
       userId: "u-3",
       statusCode: 500,
-      errorCode: "INTERNAL_ERROR",
+      errorCode: "internal_error",
       method: "POST",
       path: "/api/v1/skills",
     });
@@ -142,7 +142,7 @@ describe("AnalyticsEmitter", () => {
     emitter.trackApiError({
       userId: null,
       statusCode: 503,
-      errorCode: "UPSTREAM_DOWN",
+      errorCode: "upstream_down",
       method: "GET",
       path: "/livez",
     });

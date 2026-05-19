@@ -71,7 +71,7 @@ export function createAdminQuotaRoutes(
       const surfaceParam = c.req.query("surface") ?? "playground";
       const parsedSurface = surfaceSchema.safeParse(surfaceParam);
       if (!parsedSurface.success) {
-        throw new AppError(400, "INVALID_SURFACE", "Invalid surface query parameter");
+        throw new AppError(400, "invalid_surface", "Invalid surface query parameter");
       }
       const surface = parsedSurface.data;
       const page = Math.max(1, Number(c.req.query("page")) || 1);
@@ -127,11 +127,11 @@ export function createAdminQuotaRoutes(
     requirePermission(QUOTA_ADMIN_PERMISSION),
     async (c) => {
       const userId = c.req.param("userId");
-      if (!userId) throw new AppError(400, "INVALID_USER_ID", "userId is required");
+      if (!userId) throw new AppError(400, "invalid_user_id", "userId is required");
       const surfaceParam = c.req.query("surface") ?? "playground";
       const parsedSurface = surfaceSchema.safeParse(surfaceParam);
       if (!parsedSurface.success) {
-        throw new AppError(400, "INVALID_SURFACE", "Invalid surface query parameter");
+        throw new AppError(400, "invalid_surface", "Invalid surface query parameter");
       }
       const surface = parsedSurface.data;
       const buckets = await quotaService.getLifetime(userId, surface);
@@ -186,7 +186,7 @@ export function createAdminQuotaRoutes(
         });
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        throw new AppError(400, "INVALID_GRANT_AMOUNT", msg);
+        throw new AppError(400, "invalid_grant_amount", msg);
       }
     },
   );

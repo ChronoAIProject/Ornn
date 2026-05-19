@@ -114,7 +114,7 @@ export function createSettingsExportImportRoutes(
           {
             data: null,
             error: {
-              code: "PAYLOAD_TOO_LARGE",
+              code: "payload_too_large",
               message: `import body must be ≤ ${importMaxBytes} bytes`,
             },
           },
@@ -124,7 +124,7 @@ export function createSettingsExportImportRoutes(
     async (c) => {
       const body = await c.req.json().catch(() => null);
       if (!body || typeof body !== "object") {
-        throw AppError.badRequest("INVALID_BODY", "JSON body required");
+        throw AppError.badRequest("invalid_body", "JSON body required");
       }
       // Accept dryRun from either the body (the SPA path) OR the
       // query string (curl / scripts). Body takes precedence. Was

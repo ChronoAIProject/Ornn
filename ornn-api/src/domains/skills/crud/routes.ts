@@ -207,12 +207,12 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
 
       const contentType = c.req.header("content-type") ?? "";
       if (!contentType.includes("application/zip") && !contentType.includes("application/octet-stream")) {
-        throw AppError.badRequest("INVALID_CONTENT_TYPE", "Expected application/zip content type");
+        throw AppError.badRequest("invalid_content_type", "Expected application/zip content type");
       }
 
       const body = await c.req.arrayBuffer();
       if (!body || body.byteLength === 0) {
-        throw AppError.badRequest("EMPTY_BODY", "Request body is empty");
+        throw AppError.badRequest("empty_body", "Request body is empty");
       }
 
       if (body.byteLength > maxFileSize) {
@@ -295,7 +295,7 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
           path = parsed.path;
         } catch (err) {
           throw AppError.badRequest(
-            "INVALID_GITHUB_URL",
+            "invalid_github_url",
             err instanceof Error ? err.message : String(err),
           );
         }
@@ -305,7 +305,7 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
         path = typeof body.path === "string" ? body.path : undefined;
       } else {
         throw AppError.badRequest(
-          "MISSING_SOURCE",
+          "missing_source",
           "Provide either 'githubUrl' (preferred) or 'repo' (with optional 'ref'/'path').",
         );
       }
@@ -346,7 +346,7 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
       } catch (err) {
         if (err instanceof AppError) throw err;
         const message = err instanceof Error ? err.message : String(err);
-        throw AppError.badRequest("PULL_FAILED", message);
+        throw AppError.badRequest("pull_failed", message);
       }
     },
   );
@@ -376,7 +376,7 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
       const isPlatformAdmin = authCtx.permissions.includes("ornn:admin:skill");
       if (existing.createdBy !== authCtx.userId && !isPlatformAdmin) {
         throw AppError.forbidden(
-          "NOT_SKILL_OWNER",
+          "not_skill_owner",
           "Only the skill's author or a platform admin may refresh it",
         );
       }
@@ -391,7 +391,7 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
         } catch (err) {
           if (err instanceof AppError) throw err;
           const message = err instanceof Error ? err.message : String(err);
-          throw AppError.badRequest("REFRESH_PREVIEW_FAILED", message);
+          throw AppError.badRequest("refresh_preview_failed", message);
         }
       }
 
@@ -427,7 +427,7 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
       } catch (err) {
         if (err instanceof AppError) throw err;
         const message = err instanceof Error ? err.message : String(err);
-        throw AppError.badRequest("REFRESH_FAILED", message);
+        throw AppError.badRequest("refresh_failed", message);
       }
     },
   );
@@ -457,7 +457,7 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
       const isPlatformAdmin = authCtx.permissions.includes("ornn:admin:skill");
       if (existing.createdBy !== authCtx.userId && !isPlatformAdmin) {
         throw AppError.forbidden(
-          "NOT_SKILL_OWNER",
+          "not_skill_owner",
           "Only the skill's author or a platform admin may set its source",
         );
       }
@@ -469,7 +469,7 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
         githubUrl = body.githubUrl;
       } else {
         throw AppError.badRequest(
-          "INVALID_BODY",
+          "invalid_body",
           "Body must include 'githubUrl' as a string (to link) or null (to unlink).",
         );
       }
@@ -520,7 +520,7 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
         const authCtx = c.get("auth");
         // `requirePermission` above guarantees authCtx is set.
         if (!authCtx) {
-          throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${idOrName}' not found`);
+          throw AppError.notFound("skill_not_found", `Skill '${idOrName}' not found`);
         }
         const memberships = await readUserOrgMemberships(c);
         const actor = {
@@ -529,7 +529,7 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
           isPlatformAdmin: authCtx.permissions.includes("ornn:admin:skill"),
         };
         if (!canReadSkill(skill, actor)) {
-          throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${idOrName}' not found`);
+          throw AppError.notFound("skill_not_found", `Skill '${idOrName}' not found`);
         }
       }
 
@@ -580,7 +580,7 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
       const skill = await skillService.getSkill(idOrName);
       // Anonymous viewers only see public skills.
       if (!authCtx && skill.isPrivate) {
-        throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${idOrName}' not found`);
+        throw AppError.notFound("skill_not_found", `Skill '${idOrName}' not found`);
       }
       if (authCtx && skill.isPrivate) {
         const memberships = await readUserOrgMemberships(c);
@@ -590,7 +590,7 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
           isPlatformAdmin: authCtx.permissions.includes("ornn:admin:skill"),
         };
         if (!canReadSkill(skill, actor)) {
-          throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${idOrName}' not found`);
+          throw AppError.notFound("skill_not_found", `Skill '${idOrName}' not found`);
         }
       }
 
@@ -620,7 +620,7 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
 
       const skill = await skillService.getSkill(idOrName);
       if (!authCtx && skill.isPrivate) {
-        throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${idOrName}' not found`);
+        throw AppError.notFound("skill_not_found", `Skill '${idOrName}' not found`);
       }
       if (authCtx && skill.isPrivate) {
         const memberships = await readUserOrgMemberships(c);
@@ -630,7 +630,7 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
           isPlatformAdmin: authCtx.permissions.includes("ornn:admin:skill"),
         };
         if (!canReadSkill(skill, actor)) {
-          throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${idOrName}' not found`);
+          throw AppError.notFound("skill_not_found", `Skill '${idOrName}' not found`);
         }
       }
 
@@ -657,7 +657,7 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
 
       // Anonymous users can only see public skills.
       if (!authCtx && skill.isPrivate) {
-        throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${idOrName}' not found`);
+        throw AppError.notFound("skill_not_found", `Skill '${idOrName}' not found`);
       }
 
       // Authenticated users: apply the full ownership/org-visibility rules.
@@ -669,7 +669,7 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
           isPlatformAdmin: authCtx.permissions.includes("ornn:admin:skill"),
         };
         if (!canReadSkill(skill, actor)) {
-          throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${idOrName}' not found`);
+          throw AppError.notFound("skill_not_found", `Skill '${idOrName}' not found`);
         }
       }
 
@@ -727,7 +727,7 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
         (await skillRepo.findByGuid(idOrName)) ??
         (await skillRepo.findByName(idOrName));
       if (!existing) {
-        throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${idOrName}' not found`);
+        throw AppError.notFound("skill_not_found", `Skill '${idOrName}' not found`);
       }
       const memberships = await readUserOrgMemberships(c);
       const actor = {
@@ -737,7 +737,7 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
       };
       if (!canManageSkill(existing, actor)) {
         throw AppError.forbidden(
-          "FORBIDDEN",
+          "forbidden",
           "You do not have permission to manage this skill",
         );
       }
@@ -783,7 +783,7 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
 
       const existing = await skillRepo.findByGuid(guid);
       if (!existing) {
-        throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${guid}' not found`);
+        throw AppError.notFound("skill_not_found", `Skill '${guid}' not found`);
       }
       const memberships = await readUserOrgMemberships(c);
       const actor = {
@@ -793,7 +793,7 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
       };
       if (!canManageSkill(existing, actor)) {
         throw AppError.forbidden(
-          "FORBIDDEN",
+          "forbidden",
           "You do not have permission to update this skill",
         );
       }
@@ -830,7 +830,7 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
       }
 
       if (zipBuffer === undefined && isPrivate === undefined) {
-        throw AppError.badRequest("NO_UPDATE", "No update data provided. Send a ZIP file and/or isPrivate field.");
+        throw AppError.badRequest("no_update", "No update data provided. Send a ZIP file and/or isPrivate field.");
       }
 
       logger.info({ guid, userId: authCtx.userId }, "Skill update via API");
@@ -877,14 +877,14 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
     "/skills/:id/permissions",
     auth,
     requirePermission("ornn:skill:update"),
-    validateBody(permissionsPatchSchema, "INVALID_PERMISSIONS"),
+    validateBody(permissionsPatchSchema, "invalid_permissions"),
     async (c) => {
       const guid = c.req.param("id");
       const authCtx = getAuth(c);
 
       const existing = await skillRepo.findByGuid(guid);
       if (!existing) {
-        throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${guid}' not found`);
+        throw AppError.notFound("skill_not_found", `Skill '${guid}' not found`);
       }
       const memberships = await readUserOrgMemberships(c);
       const actor = {
@@ -894,7 +894,7 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
       };
       if (!canManageSkill(existing, actor)) {
         throw AppError.forbidden(
-          "FORBIDDEN",
+          "forbidden",
           "You do not have permission to change this skill's visibility",
         );
       }
@@ -952,14 +952,14 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
 
       const existing = await skillRepo.findByGuid(guid);
       if (!existing) {
-        throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${guid}' not found`);
+        throw AppError.notFound("skill_not_found", `Skill '${guid}' not found`);
       }
       const memberships = await readUserOrgMemberships(c);
       const isPlatformAdmin = authCtx.permissions.includes("ornn:admin:skill");
       const actor = { userId: authCtx.userId, memberships, isPlatformAdmin };
       if (!canManageSkill(existing, actor)) {
         throw AppError.forbidden(
-          "FORBIDDEN",
+          "forbidden",
           "You do not have permission to change this skill's NyxID service tie",
         );
       }
@@ -1125,7 +1125,7 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
       const authCtx = getAuth(c);
       const skill = await skillRepo.findByGuid(guid);
       if (!skill) {
-        throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${guid}' not found`);
+        throw AppError.notFound("skill_not_found", `Skill '${guid}' not found`);
       }
       const memberships = await readUserOrgMemberships(c);
       const actor = {
@@ -1135,7 +1135,7 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
       };
       if (!canManageSkill(skill, actor)) {
         throw AppError.forbidden(
-          "FORBIDDEN",
+          "forbidden",
           "You do not have permission to delete this skill",
         );
       }
@@ -1177,7 +1177,7 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
       let skill = await skillRepo.findByGuid(idOrName);
       if (!skill) skill = await skillRepo.findByName(idOrName);
       if (!skill) {
-        throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${idOrName}' not found`);
+        throw AppError.notFound("skill_not_found", `Skill '${idOrName}' not found`);
       }
       const memberships = await readUserOrgMemberships(c);
       const actor = {
@@ -1187,7 +1187,7 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
       };
       if (!canManageSkill(skill, actor)) {
         throw AppError.forbidden(
-          "FORBIDDEN",
+          "forbidden",
           "You do not have permission to delete this skill version",
         );
       }

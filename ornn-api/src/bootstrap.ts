@@ -879,13 +879,13 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
     analyticsEmitter.trackApiError({
       userId,
       statusCode: 500,
-      errorCode: "INTERNAL_ERROR",
+      errorCode: "internal_error",
       method: c.req.method,
       path: c.req.path,
       requestId,
     });
     return c.json(
-      { data: null, error: { code: "INTERNAL_ERROR", message: "Internal server error" } },
+      { data: null, error: { code: "internal_error", message: "Internal server error" } },
       500,
     );
   });

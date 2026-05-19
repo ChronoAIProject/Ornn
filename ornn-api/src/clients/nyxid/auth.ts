@@ -31,7 +31,7 @@ export class AuthClient implements IAuthClient {
 
     if (!res.ok) {
       if (res.status === 404 || res.status === 401) return null;
-      throw AppError.serviceUnavailable("AUTH_SERVICE_ERROR", `Auth service returned ${res.status}`);
+      throw AppError.serviceUnavailable("auth_service_error", `Auth service returned ${res.status}`);
     }
 
     const json = await res.json() as { data: ApiKeyInfo | null };

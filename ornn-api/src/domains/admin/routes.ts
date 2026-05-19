@@ -201,7 +201,7 @@ export function createAdminRoutes(config: AdminRoutesConfig): Hono<{ Variables: 
           {
             data: null,
             error: {
-              code: "AGENTSEAL_DISABLED",
+              code: "agentseal_disabled",
               message: "AgentSeal scanner is not configured on this deployment",
             },
           },

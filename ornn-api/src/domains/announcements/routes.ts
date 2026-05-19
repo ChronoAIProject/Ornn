@@ -142,7 +142,7 @@ export function createAnnouncementRoutes(
     const parsed = createSchema.safeParse(body);
     if (!parsed.success) {
       throw AppError.badRequest(
-        "INVALID_ANNOUNCEMENT_INPUT",
+        "invalid_announcement_input",
         parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; "),
       );
     }
@@ -170,12 +170,12 @@ export function createAnnouncementRoutes(
     const parsed = updateSchema.safeParse(body);
     if (!parsed.success) {
       throw AppError.badRequest(
-        "INVALID_ANNOUNCEMENT_INPUT",
+        "invalid_announcement_input",
         parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; "),
       );
     }
     if (Object.keys(parsed.data).length === 0) {
-      throw AppError.badRequest("INVALID_ANNOUNCEMENT_INPUT", "No fields to update");
+      throw AppError.badRequest("invalid_announcement_input", "No fields to update");
     }
     const updated = await announcementService.update(id, parsed.data);
     return c.json({ data: toAdminDto(updated), error: null });
