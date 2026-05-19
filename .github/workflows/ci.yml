@@ -67,9 +67,11 @@ jobs:
         run: pip install pip-audit
       - name: Audit dependencies
         working-directory: sdk/python
-        # `--strict` fails on any known CVE. Walks the installed
-        # editable env so transitive deps are included.
-        run: pip-audit --strict
+        # `--strict` fails on any known CVE. `--skip-editable`
+        # skips ornn-sdk itself (not yet on PyPI — see #473);
+        # transitive deps (httpx, anyio, certifi, …) are still
+        # audited.
+        run: pip-audit --strict --skip-editable
 
   build:
     runs-on: ubuntu-latest
