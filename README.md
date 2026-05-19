@@ -85,9 +85,9 @@ Call Ornn directly from code. The SDKs wrap `/api/v1/*` and handle auth header i
 **TypeScript** ([`sdk/typescript`](sdk/typescript))
 
 ```bash
-# Pre-publish — install from this monorepo via your package manager's
-# workspace / git subdirectory mechanism. See #473 for npm publish status.
-npm install @chronoai/ornn-sdk
+# Pre-publish — install from this monorepo via `bun link` or
+# git-subdirectory pinning. See docs/SDK_PUBLISHING.md.
+bun add @chronoai/ornn-sdk
 ```
 
 ```ts

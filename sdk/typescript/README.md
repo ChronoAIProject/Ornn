@@ -8,7 +8,20 @@ Wraps the `/api/v1/*` HTTP surface with auth injection, response-envelope unwrap
 
 ## Install
 
-This package lives inside the Ornn monorepo. Once published to npm:
+> **Status: pre-publish.** Not yet on npm — both SDKs are held for v1.0 so the surface stops shifting under early adopters. See [`docs/SDK_PUBLISHING.md`](../../docs/SDK_PUBLISHING.md) and [#473](https://github.com/ChronoAIProject/Ornn/issues/473).
+
+Until v1 ships, install from source via `bun link`:
+
+```bash
+# Inside the Ornn monorepo
+cd sdk/typescript
+bun link
+
+# Then in the consuming project
+bun link @chronoai/ornn-sdk
+```
+
+After v1 publishes:
 
 ```bash
 bun add @chronoai/ornn-sdk
