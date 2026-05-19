@@ -1537,7 +1537,9 @@
       "unrecognizedDirs": "Unrecognized directories found: {{dirs}}. Only scripts/, references/, and assets/ are standard.",
       "frontmatterUnparseable": "Could not extract metadata from SKILL.md frontmatter. You may need to add or fix the YAML frontmatter block.",
       "onlyZipAccepted": "Only .zip files are accepted.",
-      "fileTooLarge": "File too large ({{size}})."
+      "fileTooLarge": "File too large ({{size}}).",
+      "unsafePath": "Unsafe path in ZIP entry: '{{path}}'. Paths may not contain '..', leading slashes, backslashes, or drive-letter prefixes.",
+      "uncompressedTooLarge": "ZIP expands to {{actual}} bytes, which exceeds the limit of {{max}} bytes."
     },
     "frontmatter": {
       "panelTitle": "Frontmatter Validation Errors",
