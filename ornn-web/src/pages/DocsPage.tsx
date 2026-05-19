@@ -256,6 +256,39 @@ function getMermaidConfig(theme: "dark" | "light") {
 // Initial init with current theme
 mermaid.initialize(getMermaidConfig(useThemeStore.getState().theme));
 
+/* ──────────────── Mermaid sandboxed renderer ──────────────── */
+
+/**
+ * Render an SVG string inside a sandboxed iframe (#440).
+ *
+ * Mermaid is the only producer today, and the diagram source comes
+ * from trusted in-repo markdown — so this is purely defence-in-depth.
+ * If any future code path ever feeds user-controlled diagram source
+ * (e.g. user-authored skill READMEs embedding ` ```mermaid `), the
+ * iframe `sandbox=""` boundary prevents script execution, form
+ * submission, navigation, and storage access without us having to
+ * audit Mermaid's output for XSS first.
+ *
+ * Layout: the iframe fills its container; the parent owns the
+ * transform/pan/zoom, so the existing lightbox interactions keep
+ * working unchanged.
+ */
+function SandboxedSvg({ svg, className }: { svg: string; className?: string }) {
+  // Strict sandbox: no scripts, no forms, no top navigation, no
+  // popups, no same-origin. The iframe can render the SVG and that's
+  // all.
+  const srcDoc = `<!doctype html><html><head><meta charset="utf-8"><style>html,body{margin:0;padding:0;background:transparent;display:flex;align-items:center;justify-content:center}svg{max-width:100%;max-height:100%;width:100%;height:100%}</style></head><body>${svg}</body></html>`;
+  return (
+    <iframe
+      sandbox=""
+      srcDoc={srcDoc}
+      title="diagram"
+      className={className}
+      style={{ width: "100%", height: "100%", border: "none", background: "transparent" }}
+    />
+  );
+}
+
 /* ──────────────── Mermaid lightbox (zoom + pan) ──────────────── */
 
 function MermaidLightbox({ svg, onClose }: { svg: string; onClose: () => void }) {
@@ -323,9 +356,18 @@ function MermaidLightbox({ svg, onClose }: { svg: string; onClose: () => void })
         <div
           ref={contentRef}
           className="absolute left-1/2 top-1/2 mermaid-container [&_svg]:max-w-none"
-          style={{ transform: `translate(-50%, -50%) translate(${translate.x}px, ${translate.y}px) scale(${scale})`, transformOrigin: "center center" }}
-          dangerouslySetInnerHTML={{ __html: svg }}
-        />
+          style={{
+            transform: `translate(-50%, -50%) translate(${translate.x}px, ${translate.y}px) scale(${scale})`,
+            transformOrigin: "center center",
+            // Fixed dimensions so the sandboxed iframe has something
+            // concrete to fill — the parent's pan/zoom transform
+            // still handles all the interaction.
+            width: "min(90vw, 80vh)",
+            height: "min(80vh, 90vw)",
+          }}
+        >
+          <SandboxedSvg svg={svg} />
+        </div>
       </div>
     </div>
   );
@@ -361,10 +403,12 @@ function MermaidBlock({ chart }: { chart: string }) {
     <>
       <div
         ref={containerRef}
-        className="mermaid-container group relative my-4 overflow-x-auto rounded border border-accent/10 bg-page p-4 cursor-pointer [&_svg]:mx-auto [&_svg]:max-w-full"
+        className="mermaid-container group relative my-4 overflow-x-auto rounded border border-accent/10 bg-page p-4 cursor-pointer"
         onClick={() => setLightboxOpen(true)}
-        dangerouslySetInnerHTML={{ __html: svg }}
-      />
+        style={{ minHeight: svg ? "240px" : undefined }}
+      >
+        {svg ? <SandboxedSvg svg={svg} /> : null}
+      </div>
       {lightboxOpen && <MermaidLightbox svg={svg} onClose={() => setLightboxOpen(false)} />}
     </>
   );
