@@ -41,17 +41,21 @@ interface EnvelopeSuccess<T> {
   readonly error: null;
 }
 
-interface EnvelopeFailure {
-  readonly data: null;
-  readonly error: {
-    readonly code: string;
-    readonly message: string;
-    readonly requestId?: string;
-    readonly errors?: ReadonlyArray<{ path?: string; code?: string; message: string }>;
-  };
+/**
+ * Wire shape for error responses post-#456 — RFC 7807
+ * `application/problem+json`. Fields at the body root; `error` /
+ * `data` are gone.
+ */
+interface ProblemJson {
+  readonly type?: string;
+  readonly title?: string;
+  readonly status?: number;
+  readonly code?: string;
+  readonly detail?: string;
+  readonly instance?: string;
+  readonly requestId?: string;
+  readonly errors?: ReadonlyArray<{ path?: string; code?: string; message: string }>;
 }
-
-type Envelope<T> = EnvelopeSuccess<T> | EnvelopeFailure;
 
 export class OrnnClient {
   private readonly baseUrl: string;
@@ -183,11 +187,21 @@ export class OrnnClient {
     init: { body?: BodyInit; headers?: Record<string, string> } = {},
   ): Promise<T> {
     const res = await this.rawRequest(method, path, init);
-    const body = (await res.json().catch(() => null)) as Envelope<T> | null;
-    if (!res.ok || !body || body.error !== null) {
-      throw buildError(res.status, body);
+    const body = (await res.json().catch(() => null)) as unknown;
+    if (!res.ok) {
+      // Error responses are RFC 7807 (#456) — fields at the body root.
+      throw buildError(res.status, body as ProblemJson | null);
     }
-    return (body as EnvelopeSuccess<T>).data;
+    // Success responses keep the `{ data, error: null }` envelope.
+    const env = body as EnvelopeSuccess<T> | null;
+    if (!env || env.error !== null) {
+      throw new OrnnError({
+        status: res.status,
+        code: "unknown_error",
+        message: `Ornn API returned ${res.status} with an unexpected body shape`,
+      });
+    }
+    return env.data;
   }
 
   private async rawRequest(
@@ -214,25 +228,24 @@ function zipToBlob(zip: Blob | ArrayBuffer | Uint8Array): Blob {
 }
 
 async function parseError(res: Response): Promise<OrnnError> {
-  const body = (await res.json().catch(() => null)) as Envelope<unknown> | null;
+  const body = (await res.json().catch(() => null)) as ProblemJson | null;
   return buildError(res.status, body);
 }
 
-function buildError(status: number, body: Envelope<unknown> | null): OrnnError {
-  if (body && body.error) {
-    const err = body.error;
+function buildError(status: number, body: ProblemJson | null): OrnnError {
+  if (body && (body.code || body.detail || body.title)) {
     const payload: OrnnErrorPayload = {
-      status,
-      code: err.code,
-      message: err.message,
-      requestId: err.requestId,
-      errors: err.errors,
+      status: body.status ?? status,
+      code: body.code ?? "unknown_error",
+      message: body.detail ?? body.title ?? `Ornn API returned ${status}`,
+      requestId: body.requestId,
+      errors: body.errors,
     };
     return new OrnnError(payload);
   }
   return new OrnnError({
     status,
     code: "unknown_error",
-    message: `Ornn API returned ${status} without a recognized error envelope`,
+    message: `Ornn API returned ${status} without a recognized error body`,
   });
 }

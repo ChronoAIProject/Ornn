@@ -116,17 +116,35 @@ async function handleResponse<T>(response: Response): Promise<ApiResponse<T>> {
     return { data: null, error: null };
   }
 
-  const json = (await response.json()) as ApiResponse<T>;
+  const json = (await response.json()) as unknown;
 
-  if (!response.ok || json.error) {
+  if (!response.ok) {
+    // Error responses are RFC 7807 `application/problem+json` (#456)
+    // — fields at the body root. The pre-#456 `{ data, error: {…} }`
+    // envelope is no longer emitted.
+    const problem = (json ?? {}) as {
+      code?: string;
+      detail?: string;
+      title?: string;
+      status?: number;
+    };
     throw new ApiClientError(
-      json.error?.code ?? "UNKNOWN_ERROR",
-      json.error?.message ?? "An unexpected error occurred",
-      response.status,
+      problem.code ?? "unknown_error",
+      problem.detail ?? problem.title ?? "An unexpected error occurred",
+      problem.status ?? response.status,
     );
   }
 
-  return json;
+  // Success: legacy `{ data, error: null }` envelope (unchanged).
+  const envelope = json as ApiResponse<T>;
+  if (envelope?.error) {
+    throw new ApiClientError(
+      envelope.error.code ?? "unknown_error",
+      envelope.error.message ?? "An unexpected error occurred",
+      response.status,
+    );
+  }
+  return envelope;
 }
 
 /**

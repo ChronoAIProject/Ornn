@@ -18,6 +18,7 @@ import { QuotaRepository } from "../../quota/repository";
 import { QuotaService } from "../../quota/service";
 import type { AuthVariables } from "../../../middleware/nyxidAuth";
 import { createAdminQuotaRoutes } from "./routes";
+import { buildProblemJsonBody } from "../../../shared/types/index";
 
 let mongo: MongoMemoryServer;
 let client: MongoClient;
@@ -62,16 +63,18 @@ beforeAll(async () => {
   });
   app.onError((err, c) => {
     const e = err as { statusCode?: number; code?: string; message: string };
-    if (e.statusCode && e.code) {
-      return c.json(
-        { data: null, error: { code: e.code, message: e.message } },
-        e.statusCode as never,
-      );
-    }
-    return c.json(
-      { data: null, error: { code: "internal_error", message: e.message } },
-      500,
-    );
+    const statusCode = e.statusCode ?? 500;
+    const code = e.code ?? "internal_error";
+    const body = buildProblemJsonBody({
+      statusCode,
+      code,
+      message: e.message ?? "",
+      instance: c.req.path,
+      requestId: null,
+    });
+    return c.json(body, statusCode as never, {
+      "Content-Type": "application/problem+json",
+    });
   });
   app.route("/", router);
 });

@@ -17,6 +17,7 @@ import {
 } from "./routes";
 import { sections } from "../sections";
 import type { SettingsService } from "../types";
+import { buildProblemJsonBody } from "../../../shared/types/index";
 
 function fakeSettingsService(): SettingsService {
   const store = new Map<string, Record<string, unknown>>();
@@ -80,10 +81,16 @@ function makeApp(opts: {
   app.onError((err, c) => {
     const code = (err as { code?: string }).code ?? "internal_error";
     const status = (err as { statusCode?: number }).statusCode ?? 500;
-    return c.json(
-      { data: null, error: { code, message: err.message } },
-      status as never,
-    );
+    const body = buildProblemJsonBody({
+      statusCode: status,
+      code,
+      message: err.message,
+      instance: c.req.path,
+      requestId: null,
+    });
+    return c.json(body, status as never, {
+      "Content-Type": "application/problem+json",
+    });
   });
   return { app };
 }

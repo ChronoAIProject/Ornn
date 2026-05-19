@@ -89,15 +89,16 @@ describe("OrnnClient", () => {
     expect(result.items[0]!.id).toBe("abc");
   });
 
-  test("throws OrnnError with code + status + requestId on envelope failure", async () => {
+  test("throws OrnnError parsing RFC 7807 problem+json body (#456)", async () => {
     const fetchMock = mockFetch(() =>
       jsonResponse(403, {
-        data: null,
-        error: {
-          code: "permission_denied",
-          message: "Missing ornn:skill:admin",
-          requestId: "req_01",
-        },
+        type: "https://github.com/.../ERRORS.md#permission_denied",
+        title: "Permission denied",
+        status: 403,
+        code: "permission_denied",
+        detail: "Missing ornn:skill:admin",
+        instance: "/v1/admin/stats",
+        requestId: "req_01",
       }),
     );
     const client = new OrnnClient({ baseUrl: "https://x", fetch: fetchMock });
@@ -220,8 +221,15 @@ describe("OrnnClient", () => {
   });
 
   test("downloadPackage(): throws OrnnError on 404", async () => {
+    // 404 body is RFC 7807 problem+json (#456) — fields at the root.
     const fetchMock = mockFetch(() =>
-      jsonResponse(404, { data: null, error: { code: "resource_not_found", message: "no such version" } }),
+      jsonResponse(404, {
+        type: "https://github.com/.../ERRORS.md#resource_not_found",
+        title: "Resource not found",
+        status: 404,
+        code: "resource_not_found",
+        detail: "no such version",
+      }),
     );
     const client = new OrnnClient({ baseUrl: "https://x", fetch: fetchMock });
     const err = (await client.downloadPackage("abc", "9.9").catch((e) => e)) as OrnnError;

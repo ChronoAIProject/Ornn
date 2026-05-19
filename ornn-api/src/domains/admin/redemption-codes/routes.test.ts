@@ -17,6 +17,7 @@ import { QuotaService } from "../../quota/service";
 import { RedemptionCodeRepository } from "../../redemption-codes/repository";
 import { RedemptionCodeService } from "../../redemption-codes/service";
 import type { AuthVariables } from "../../../middleware/nyxidAuth";
+import { buildProblemJsonBody } from "../../../shared/types/index";
 import { createAdminRedemptionCodesRoutes } from "./routes";
 
 let mongo: MongoMemoryServer;
@@ -64,16 +65,18 @@ beforeAll(async () => {
   });
   app.onError((err, c) => {
     const e = err as { statusCode?: number; code?: string; message: string };
-    if (e.statusCode && e.code) {
-      return c.json(
-        { data: null, error: { code: e.code, message: e.message } },
-        e.statusCode as never,
-      );
-    }
-    return c.json(
-      { data: null, error: { code: "internal_error", message: e.message } },
-      500,
-    );
+    const statusCode = e.statusCode ?? 500;
+    const code = e.code ?? "internal_error";
+    const body = buildProblemJsonBody({
+      statusCode,
+      code,
+      message: e.message ?? "",
+      instance: c.req.path,
+      requestId: null,
+    });
+    return c.json(body, statusCode as never, {
+      "Content-Type": "application/problem+json",
+    });
   });
   app.route("/", router);
 });
@@ -174,8 +177,8 @@ describe("POST /admin/redemption-codes/:id/invalidate", () => {
       { method: "POST", headers: authHeaders() },
     );
     expect(res.status).toBe(409);
-    const json = (await res.json()) as { error: { code: string } };
-    expect(json.error.code).toBe("redemption_code_already_redeemed");
+    const json = (await res.json()) as { code: string; detail: string; status: number };
+    expect(json.code).toBe("redemption_code_already_redeemed");
   });
 
   test("on already-invalidated → 409 ALREADY_INVALIDATED", async () => {
@@ -193,8 +196,8 @@ describe("POST /admin/redemption-codes/:id/invalidate", () => {
       { method: "POST", headers: authHeaders() },
     );
     expect(res.status).toBe(409);
-    const json = (await res.json()) as { error: { code: string } };
-    expect(json.error.code).toBe("redemption_code_already_invalidated");
+    const json = (await res.json()) as { code: string; detail: string; status: number };
+    expect(json.code).toBe("redemption_code_already_invalidated");
   });
 
   test("unknown id → 404", async () => {
