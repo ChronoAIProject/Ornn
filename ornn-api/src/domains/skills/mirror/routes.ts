@@ -43,6 +43,7 @@ import type { MirrorScheduler, ScheduledRunStatus } from "./scheduler";
 import type { SettingsService, SettingsActor } from "../../settings/types";
 import type { MirrorSection } from "../../settings/sections/mirror";
 import type { SkillRepository } from "../crud/repository";
+import { validateGitHubAppPrivateKey } from "./privateKeyValidation";
 
 const logger = pino({ level: "info" }).child({ module: "mirrorRoutes" });
 
@@ -242,8 +243,18 @@ export function createMirrorRoutes(
         if (isMidMaskSentinel(v)) {
           // Round-trip of the mid-masked display value — keep stored key.
           appPrivateKey = current.appPrivateKey;
-        } else {
+        } else if (v === "") {
+          // Explicit clear.
           appPrivateKey = v;
+        } else {
+          const validated = validateGitHubAppPrivateKey(v);
+          if (!validated.ok) {
+            throw AppError.badRequest(
+              "INVALID_SETTING",
+              `'appPrivateKey' ${validated.reason}.`,
+            );
+          }
+          appPrivateKey = validated.value;
         }
       }
 
