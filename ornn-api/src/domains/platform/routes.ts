@@ -61,7 +61,7 @@ export function createPlatformSettingsRoutes(
       const n = Number(body.auditWaiverThreshold);
       if (!Number.isFinite(n) || n < 0 || n > 10) {
         throw AppError.badRequest(
-          "INVALID_SETTING",
+          "invalid_setting",
           "'auditWaiverThreshold' must be a number between 0 and 10",
         );
       }
@@ -72,7 +72,7 @@ export function createPlatformSettingsRoutes(
       const lp = body.llmProvider;
       if (!lp || typeof lp !== "object") {
         throw AppError.badRequest(
-          "INVALID_SETTING",
+          "invalid_setting",
           "'llmProvider' must be an object with optional gatewayUrl + apiKey",
         );
       }
@@ -83,7 +83,7 @@ export function createPlatformSettingsRoutes(
         const u = lpObj.gatewayUrl;
         if (typeof u !== "string") {
           throw AppError.badRequest(
-            "INVALID_SETTING",
+            "invalid_setting",
             "'llmProvider.gatewayUrl' must be a string (empty = use env default)",
           );
         }
@@ -93,7 +93,7 @@ export function createPlatformSettingsRoutes(
             new URL(trimmed); // validate
           } catch {
             throw AppError.badRequest(
-              "INVALID_SETTING",
+              "invalid_setting",
               "'llmProvider.gatewayUrl' must be a valid URL",
             );
           }
@@ -109,7 +109,7 @@ export function createPlatformSettingsRoutes(
         const k = lpObj.apiKey;
         if (typeof k !== "string") {
           throw AppError.badRequest(
-            "INVALID_SETTING",
+            "invalid_setting",
             "'llmProvider.apiKey' must be a string (empty = clear)",
           );
         }
@@ -131,7 +131,7 @@ export function createPlatformSettingsRoutes(
     }
 
     if (Object.keys(patch).length === 0) {
-      throw AppError.badRequest("INVALID_SETTING", "No valid setting fields in body");
+      throw AppError.badRequest("invalid_setting", "No valid setting fields in body");
     }
 
     const updated = await platformSettingsService.patch(patch);

@@ -71,7 +71,7 @@ beforeAll(async () => {
       );
     }
     return c.json(
-      { data: null, error: { code: "INTERNAL", message: e.message } },
+      { data: null, error: { code: "internal_error", message: e.message } },
       500,
     );
   });
@@ -175,7 +175,7 @@ describe("POST /admin/redemption-codes/:id/invalidate", () => {
     );
     expect(res.status).toBe(409);
     const json = (await res.json()) as { error: { code: string } };
-    expect(json.error.code).toBe("REDEMPTION_CODE_ALREADY_REDEEMED");
+    expect(json.error.code).toBe("redemption_code_already_redeemed");
   });
 
   test("on already-invalidated → 409 ALREADY_INVALIDATED", async () => {
@@ -194,7 +194,7 @@ describe("POST /admin/redemption-codes/:id/invalidate", () => {
     );
     expect(res.status).toBe(409);
     const json = (await res.json()) as { error: { code: string } };
-    expect(json.error.code).toBe("REDEMPTION_CODE_ALREADY_INVALIDATED");
+    expect(json.error.code).toBe("redemption_code_already_invalidated");
   });
 
   test("unknown id → 404", async () => {

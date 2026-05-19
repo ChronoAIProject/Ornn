@@ -69,7 +69,7 @@ describe("LlmProviders POST", () => {
     });
     app.route("/api/v1", routes);
     app.onError((err, c) => {
-      const code = (err as { code?: string }).code ?? "INTERNAL_ERROR";
+      const code = (err as { code?: string }).code ?? "internal_error";
       const status = (err as { statusCode?: number }).statusCode ?? 500;
       return c.json(
         { data: null, error: { code, message: err.message } },

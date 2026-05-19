@@ -91,7 +91,7 @@ export class BroadcastService {
   async getById(id: string): Promise<BroadcastDocument> {
     const doc = await this.repo.getById(id);
     if (!doc) {
-      throw AppError.notFound("BROADCAST_NOT_FOUND", "Broadcast not found");
+      throw AppError.notFound("broadcast_not_found", "Broadcast not found");
     }
     return doc;
   }
@@ -131,7 +131,7 @@ export class BroadcastService {
     };
     const updated = await this.repo.update(id, patch);
     if (!updated) {
-      throw AppError.notFound("BROADCAST_NOT_FOUND", "Broadcast not found");
+      throw AppError.notFound("broadcast_not_found", "Broadcast not found");
     }
     logger.info(
       { broadcastId: id, by: params.updatedBy },
@@ -154,7 +154,7 @@ export class BroadcastService {
     // "ok, deleted nothing" on a typo.
     const removed = await this.repo.delete(id);
     if (!removed) {
-      throw AppError.notFound("BROADCAST_NOT_FOUND", "Broadcast not found");
+      throw AppError.notFound("broadcast_not_found", "Broadcast not found");
     }
     try {
       const receiptsRemoved = await this.repo.deleteAllForBroadcast(id);

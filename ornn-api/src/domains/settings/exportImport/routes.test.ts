@@ -78,7 +78,7 @@ function makeApp(opts: {
   // AppError is a domain error; the test app needs a tiny error handler so
   // 4xx surfaces with the expected status (otherwise Hono returns 500).
   app.onError((err, c) => {
-    const code = (err as { code?: string }).code ?? "INTERNAL_ERROR";
+    const code = (err as { code?: string }).code ?? "internal_error";
     const status = (err as { statusCode?: number }).statusCode ?? 500;
     return c.json(
       { data: null, error: { code, message: err.message } },

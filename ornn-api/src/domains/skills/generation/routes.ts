@@ -219,7 +219,7 @@ export function createGenerationRoutes(config: GenerationRoutesConfig): Hono<{ V
         const body = await c.req.parseBody({ all: true });
 
         if (typeof body["prompt"] !== "string" || !body["prompt"]) {
-          throw AppError.badRequest("MISSING_PROMPT", "A 'prompt' field is required");
+          throw AppError.badRequest("missing_prompt", "A 'prompt' field is required");
         }
         prompt = body["prompt"];
 
@@ -252,11 +252,11 @@ export function createGenerationRoutes(config: GenerationRoutesConfig): Hono<{ V
         }
 
         if (!body.prompt || typeof body.prompt !== "string") {
-          throw AppError.badRequest("MISSING_PROMPT", "A 'prompt' field is required");
+          throw AppError.badRequest("missing_prompt", "A 'prompt' field is required");
         }
         prompt = body.prompt;
       } else {
-        throw AppError.badRequest("INVALID_CONTENT_TYPE", "Expected multipart/form-data or application/json");
+        throw AppError.badRequest("invalid_content_type", "Expected multipart/form-data or application/json");
       }
 
       const signal = c.req.raw.signal;
@@ -315,7 +315,7 @@ export function createGenerationRoutes(config: GenerationRoutesConfig): Hono<{ V
 
       if (!inlineCode && !repoUrl) {
         throw AppError.badRequest(
-          "MISSING_SOURCE",
+          "missing_source",
           "Provide either 'code' (inline source) or 'repoUrl' (public GitHub URL)",
         );
       }
@@ -347,12 +347,12 @@ export function createGenerationRoutes(config: GenerationRoutesConfig): Hono<{ V
           );
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
-          throw AppError.badRequest("REPO_FETCH_FAILED", `Could not fetch repository: ${message}`);
+          throw AppError.badRequest("repo_fetch_failed", `Could not fetch repository: ${message}`);
         }
       }
 
       if (!code.trim()) {
-        throw AppError.badRequest("EMPTY_SOURCE", "Source code is empty — nothing to analyze");
+        throw AppError.badRequest("empty_source", "Source code is empty — nothing to analyze");
       }
 
       logger.info(
@@ -399,7 +399,7 @@ export function createGenerationRoutes(config: GenerationRoutesConfig): Hono<{ V
       const body = await c.req.json();
 
       if (!body.spec || typeof body.spec !== "string") {
-        throw AppError.badRequest("MISSING_SPEC", "An OpenAPI 'spec' field (JSON or YAML string) is required");
+        throw AppError.badRequest("missing_spec", "An OpenAPI 'spec' field (JSON or YAML string) is required");
       }
 
       const endpoints = Array.isArray(body.endpoints) ? body.endpoints : undefined;

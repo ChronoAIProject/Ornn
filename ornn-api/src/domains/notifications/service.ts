@@ -197,7 +197,7 @@ export class NotificationService {
         return { source: "broadcast", readAt: receipt.readAt };
       }
     }
-    throw AppError.notFound("NOTIFICATION_NOT_FOUND", "Notification not found");
+    throw AppError.notFound("notification_not_found", "Notification not found");
   }
 
   /**

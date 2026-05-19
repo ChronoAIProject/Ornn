@@ -168,7 +168,7 @@ export function createMirrorRoutes(
       let enabled = current.enabled;
       if ("enabled" in body) {
         if (typeof body.enabled !== "boolean") {
-          throw AppError.badRequest("INVALID_SETTING", "'enabled' must be a boolean.");
+          throw AppError.badRequest("invalid_setting", "'enabled' must be a boolean.");
         }
         enabled = body.enabled;
       }
@@ -181,7 +181,7 @@ export function createMirrorRoutes(
         const v = typeof body.owner === "string" ? body.owner.trim() : "";
         if (v.length > 0 && !OWNER_RE.test(v)) {
           throw AppError.badRequest(
-            "INVALID_OWNER",
+            "invalid_owner",
             "'owner' must be 1–39 chars of letters/digits/dashes, no leading/trailing dash.",
           );
         }
@@ -191,7 +191,7 @@ export function createMirrorRoutes(
         const v = typeof body.repo === "string" ? body.repo.trim() : "";
         if (v.length > 0 && !REPO_RE.test(v)) {
           throw AppError.badRequest(
-            "INVALID_REPO",
+            "invalid_repo",
             "'repo' must be 1–100 chars of letters/digits/dot/dash/underscore.",
           );
         }
@@ -216,7 +216,7 @@ export function createMirrorRoutes(
         const v = typeof body.appId === "string" ? body.appId.trim() : "";
         if (v.length > 0 && !APP_ID_RE.test(v)) {
           throw AppError.badRequest(
-            "INVALID_SETTING",
+            "invalid_setting",
             "'appId' must be 1–15 digits.",
           );
         }
@@ -226,7 +226,7 @@ export function createMirrorRoutes(
         const v = typeof body.installationId === "string" ? body.installationId.trim() : "";
         if (v.length > 0 && !INSTALLATION_ID_RE.test(v)) {
           throw AppError.badRequest(
-            "INVALID_SETTING",
+            "invalid_setting",
             "'installationId' must be 1–20 digits.",
           );
         }
@@ -236,7 +236,7 @@ export function createMirrorRoutes(
         const v = body.appPrivateKey;
         if (typeof v !== "string") {
           throw AppError.badRequest(
-            "INVALID_SETTING",
+            "invalid_setting",
             "'appPrivateKey' must be a string (empty = clear).",
           );
         }
@@ -250,7 +250,7 @@ export function createMirrorRoutes(
           const validated = validateGitHubAppPrivateKey(v);
           if (!validated.ok) {
             throw AppError.badRequest(
-              "INVALID_SETTING",
+              "invalid_setting",
               `'appPrivateKey' ${validated.reason}.`,
             );
           }
@@ -265,7 +265,7 @@ export function createMirrorRoutes(
         const stampedCount = counts.synced + counts.lagging;
         if (stampedCount > 0 && !confirmAbandonOldRepo) {
           throw AppError.conflict(
-            "OLD_REPO_NOT_CONFIRMED",
+            "old_repo_not_confirmed",
             `Changing the mirror to ${owner}/${repo} would abandon ${stampedCount} skill(s) ` +
               `currently mirrored to ${current.owner}/${current.repo}. ` +
               `Pass confirmAbandonOldRepo: true to proceed; the old repo will not be cleaned up automatically.`,
@@ -343,7 +343,7 @@ export function createMirrorRoutes(
           {
             data: null,
             error: {
-              code: "MIRROR_DISABLED",
+              code: "mirror_disabled",
               message: !runtime.enabled
                 ? "GitHub mirror is disabled. Flip the kill switch in the admin UI to enable."
                 : "GitHub mirror is missing required credentials. Set owner/repo/branch + GitHub App credentials in the admin UI.",
@@ -357,7 +357,7 @@ export function createMirrorRoutes(
           {
             data: null,
             error: {
-              code: "RECONCILE_ALREADY_RUNNING",
+              code: "reconcile_already_running",
               message: `A reconcile is already in progress (started at ${reconcileState.startedAt?.toISOString() ?? "unknown"}).`,
             },
           },

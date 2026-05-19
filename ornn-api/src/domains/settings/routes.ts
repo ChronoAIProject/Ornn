@@ -51,7 +51,7 @@ export function createSettingsRoutes(
     app.put(path, auth, adminGuard, async (c) => {
       const body = await c.req.json().catch(() => null);
       if (!body || typeof body !== "object") {
-        throw AppError.badRequest("INVALID_BODY", "request body must be a JSON object");
+        throw AppError.badRequest("invalid_body", "request body must be a JSON object");
       }
       const actor = currentActor(c);
       const result = await settingsService.putSection<Record<string, unknown>>(

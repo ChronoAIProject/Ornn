@@ -92,12 +92,12 @@ export function createFormatRoutes(config: FormatRoutesConfig): Hono<{ Variables
     async (c) => {
       const contentType = c.req.header("content-type") ?? "";
       if (!contentType.includes("application/zip") && !contentType.includes("application/octet-stream")) {
-        throw AppError.badRequest("INVALID_CONTENT_TYPE", "Expected application/zip content type");
+        throw AppError.badRequest("invalid_content_type", "Expected application/zip content type");
       }
 
       const body = await c.req.arrayBuffer();
       if (!body || body.byteLength === 0) {
-        throw AppError.badRequest("EMPTY_BODY", "Request body is empty");
+        throw AppError.badRequest("empty_body", "Request body is empty");
       }
 
       const zipBuffer = new Uint8Array(body);

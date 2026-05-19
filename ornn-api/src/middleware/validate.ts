@@ -8,7 +8,7 @@
  *     "/skills",
  *     auth,
  *     requirePermission("ornn:skill:create"),
- *     validateBody(skillCreateSchema, "INVALID_SKILL_BODY"),
+ *     validateBody(skillCreateSchema, "invalid_skill_body"),
  *     async (c) => {
  *       const data = getValidatedBody<z.infer<typeof skillCreateSchema>>(c);
  *       ...
@@ -53,7 +53,7 @@ function formatIssues(issues: z.ZodIssue[]): string {
  */
 export function validateBody<T extends z.ZodTypeAny>(
   schema: T,
-  errorCode: string = "INVALID_BODY",
+  errorCode: string = "invalid_body",
 ): MiddlewareHandler {
   return async (c, next) => {
     let raw: unknown;
@@ -78,7 +78,7 @@ export function validateBody<T extends z.ZodTypeAny>(
  */
 export function validateQuery<T extends z.ZodTypeAny>(
   schema: T,
-  errorCode: string = "INVALID_QUERY",
+  errorCode: string = "invalid_query",
 ): MiddlewareHandler {
   return async (c, next) => {
     const raw: Record<string, string | undefined> = {};
@@ -101,7 +101,7 @@ export function validateQuery<T extends z.ZodTypeAny>(
  */
 export function validateParams<T extends z.ZodTypeAny>(
   schema: T,
-  errorCode: string = "INVALID_PARAMS",
+  errorCode: string = "invalid_params",
 ): MiddlewareHandler {
   return async (c, next) => {
     const result = schema.safeParse(c.req.param());

@@ -8,7 +8,9 @@ type: https://github.com/ChronoAIProject/Ornn/blob/main/docs/ERRORS.md#<code>
 
 The catalog is normative — handlers MUST NOT invent new codes. Adding or renaming a code requires updating this doc and `docs/CONVENTIONS.md` §1.4 in the same PR.
 
-> **Note — code-case migration.** [`docs/CONVENTIONS.md`](CONVENTIONS.md) §1.4 mandates `lowercase_snake_case` codes; the current implementation still emits `SCREAMING_SNAKE_CASE`. Tracked in [#585](https://github.com/ChronoAIProject/Ornn/issues/585). Until that lands, headings below show **both** forms so an anchor link works no matter which the server emitted today.
+All codes are `lowercase_snake_case` per CONVENTIONS.md §1.4. The §1.4 catalog defines the **parent** taxonomy (`validation_error`, `permission_denied`, `resource_not_found`, …); specific subcodes (e.g. `skill_not_found` under `resource_not_found`) live under the parent's section here and follow the same lowercase format.
+
+The pre-#585 `SCREAMING_SNAKE_CASE` shape (`SKILL_NOT_FOUND`, `INVALID_BODY`, …) is no longer emitted. Clients that pinned to those strings need to switch to the lowercase form on the next SDK bump.
 
 ---
 
@@ -27,14 +29,14 @@ The catalog is normative — handlers MUST NOT invent new codes. Adding or renam
 - 500 — [`internal_error`](#internal_error)
 - 502 / 503 — [`upstream_unavailable`](#upstream_unavailable)
 
-**Implementation-code appendix** — every `SCREAMING_SNAKE_CASE` code currently emitted by the server, with the target lowercase code it maps to: [Appendix](#appendix-current-implementation-codes).
+**Pre-#585 migration map** — every `SCREAMING_SNAKE_CASE` code clients used to receive, with the new `lowercase_snake_case` it became: [Appendix](#appendix-pre-585-migration-map).
 
 ---
 
 ## validation_error
 
 **HTTP:** `400 Bad Request`
-**Current code (pre-#585):** `INVALID_BODY`, `INVALID_QUERY`, `INVALID_PARAMS`, `INVALID_CONTENT_TYPE`, `INVALID_*`, `EMPTY_BODY`, `MISSING_*`, `FRONTMATTER_VALIDATION_FAILED`, `INVALID_PERMISSIONS`, …
+**Common subcodes (lowercase post-#585):** `invalid_body`, `invalid_query`, `invalid_params`, `invalid_*` (per-field), `empty_body`, `missing_*`, `frontmatter_validation_failed`, `invalid_permissions`, …
 
 Request body, query string, or path parameter failed validation. Per-field details are in `errors[]`.
 
@@ -62,7 +64,7 @@ Content-Type: application/problem+json
 ## authentication_required
 
 **HTTP:** `401 Unauthorized`
-**Current code (pre-#585):** `AUTH_MISSING`, `AUTH_INVALID`
+**Common subcodes (lowercase post-#585):** `auth_missing`, `auth_invalid`
 
 No identity could be resolved from the request — either no `Authorization` header, an unparseable header, or the token is expired / revoked.
 
@@ -73,7 +75,7 @@ No identity could be resolved from the request — either no `Authorization` hea
 ## permission_denied
 
 **HTTP:** `403 Forbidden`
-**Current code (pre-#585):** `FORBIDDEN`, `INSUFFICIENT_PERMISSIONS`
+**Common subcodes (lowercase post-#585):** `forbidden`, `insufficient_permissions`
 
 The caller is authenticated but lacks the permission required for this resource or action. The response `detail` names the missing permission when safe to disclose.
 
@@ -84,7 +86,7 @@ The caller is authenticated but lacks the permission required for this resource 
 ## resource_not_found
 
 **HTTP:** `404 Not Found`
-**Current code (pre-#585):** `SKILL_NOT_FOUND`, `SKILL_VERSION_NOT_FOUND`, `ORG_NOT_FOUND`, `PROVIDER_NOT_FOUND`, `ANNOUNCEMENT_NOT_FOUND`, `BROADCAST_NOT_FOUND`, `NOTIFICATION_NOT_FOUND`, `AUDIT_NOT_FOUND`, `REDEMPTION_CODE_NOT_FOUND`, …
+**Common subcodes (lowercase post-#585):** `skill_not_found`, `skill_version_not_found`, `org_not_found`, `provider_not_found`, `announcement_not_found`, `broadcast_not_found`, `notification_not_found`, `audit_not_found`, `redemption_code_not_found`, …
 
 The target resource does not exist, **or** it exists but is not visible to the caller (private skill outside their access scope). The two cases are intentionally not distinguished — disclosing existence is itself information.
 
@@ -95,7 +97,7 @@ The target resource does not exist, **or** it exists but is not visible to the c
 ## resource_conflict
 
 **HTTP:** `409 Conflict`
-**Current code (pre-#585):** `SKILL_NAME_EXISTS`, `NAME_CONFLICT`, `VERSION_CONFLICT`, `RECONCILE_ALREADY_RUNNING`, …
+**Common subcodes (lowercase post-#585):** `skill_name_exists`, `reconcile_already_running`, `redemption_code_expired`, `redemption_code_already_redeemed`, `redemption_code_already_invalidated`, `old_repo_not_confirmed`, …
 
 The request collides with current state — a duplicate skill name on create, a concurrent modification, a job that's already running, etc.
 
@@ -106,7 +108,7 @@ The request collides with current state — a duplicate skill name on create, a 
 ## payload_too_large
 
 **HTTP:** `413 Payload Too Large`
-**Current code (pre-#585):** `PAYLOAD_TOO_LARGE`
+**Common subcodes (lowercase post-#585):** `payload_too_large`
 
 The upload exceeds the per-endpoint size cap (currently 5 MB on `/skills` upload; see `ornn-api/src/middleware/uploadLimit.ts`).
 
@@ -117,7 +119,7 @@ The upload exceeds the per-endpoint size cap (currently 5 MB on `/skills` upload
 ## unsupported_media_type
 
 **HTTP:** `415 Unsupported Media Type`
-**Current code (pre-#585):** `INVALID_CONTENT_TYPE`
+**Common subcodes (lowercase post-#585):** `invalid_content_type`
 
 The `Content-Type` header is missing or names a representation this endpoint does not accept. Skill upload requires `application/zip`; most write endpoints require `application/json`.
 
@@ -128,7 +130,7 @@ The `Content-Type` header is missing or names a representation this endpoint doe
 ## rate_limited
 
 **HTTP:** `429 Too Many Requests`
-**Current code (pre-#585):** *not yet emitted — see [#439](https://github.com/ChronoAIProject/Ornn/issues/439) (rate limit middleware).*
+**Common subcodes (lowercase post-#585):** *not yet emitted — see [#439](https://github.com/ChronoAIProject/Ornn/issues/439) (rate limit middleware).*
 
 Caller exceeded a rate limit (per-IP for unauthenticated routes, per-user for authenticated). Once [#460](https://github.com/ChronoAIProject/Ornn/issues/460) lands, response will also include the standard RFC 9239 headers (`RateLimit-Limit`, `RateLimit-Remaining`, `Retry-After`).
 
@@ -139,7 +141,7 @@ Caller exceeded a rate limit (per-IP for unauthenticated routes, per-user for au
 ## internal_error
 
 **HTTP:** `500 Internal Server Error`
-**Current code (pre-#585):** `INTERNAL_ERROR`, `INTERNAL`
+**Common subcodes (lowercase post-#585):** `internal_error`
 
 Unhandled server error — should never appear under normal operation. The `requestId` is the load-bearing field for log correlation.
 
@@ -150,7 +152,7 @@ Unhandled server error — should never appear under normal operation. The `requ
 ## upstream_unavailable
 
 **HTTP:** `502 Bad Gateway` / `503 Service Unavailable`
-**Current code (pre-#585):** `UPSTREAM_DOWN`, `MIRROR_DISABLED`, `AGENTSEAL_DISABLED`, `PULL_FAILED`, `REPO_FETCH_FAILED`, …
+**Common subcodes (lowercase post-#585):** `upstream_down`, `mirror_disabled`, `agentseal_disabled`, `pull_failed`, `repo_fetch_failed`, `refresh_failed`, `refresh_preview_failed`, `auth_service_error`, `audit_package_unavailable`, `package_download_failed`, …
 
 A dependency Ornn relies on (NyxID, OpenSandbox, LLM provider, mirror target, …) is unavailable or refused the request. Distinct from `internal_error` — Ornn itself is fine but couldn't complete the work.
 
@@ -158,47 +160,44 @@ A dependency Ornn relies on (NyxID, OpenSandbox, LLM provider, mirror target, �
 
 ---
 
-## Appendix: current implementation codes
+## Appendix: pre-#585 migration map
 
-The table below maps every `SCREAMING_SNAKE_CASE` code currently emitted by the server to its target lowercase code from `docs/CONVENTIONS.md` §1.4. Tracking renames lives in [#585](https://github.com/ChronoAIProject/Ornn/issues/585).
+Clients pinned to the old `SCREAMING_SNAKE_CASE` codes need to switch to the lowercase forms below. Every code is now a one-for-one lowercase translation — the §1.4 parent category is the same.
 
-| Current code | HTTP | Target |
-|---|---|---|
-| `AGENTSEAL_DISABLED` | 503 | `upstream_unavailable` |
-| `ANNOUNCEMENT_NOT_FOUND` | 404 | `resource_not_found` |
-| `AUDIT_NOT_FOUND` | 404 | `resource_not_found` |
-| `AUTH_INVALID` | 401 | `authentication_required` |
-| `AUTH_MISSING` | 401 | `authentication_required` |
-| `BROADCAST_NOT_FOUND` | 404 | `resource_not_found` |
-| `EMPTY_BODY` | 400 | `validation_error` |
-| `EMPTY_SOURCE` | 400 | `validation_error` |
-| `FORBIDDEN` | 403 | `permission_denied` |
-| `FRONTMATTER_VALIDATION_FAILED` | 400 | `validation_error` |
-| `INSUFFICIENT_PERMISSIONS` | 403 | `permission_denied` |
-| `INTERNAL` | 500 | `internal_error` |
-| `INTERNAL_ERROR` | 500 | `internal_error` |
-| `INVALID_*` (`_ANNOUNCEMENT_INPUT`, `_BODY`, `_CONTENT_TYPE`, `_GRANT_AMOUNT`, `_PERMISSIONS`, `_PROVIDER_INPUT`, `_RANGE`, `_REDEMPTION_CODE_BODY`, `_REDEMPTION_CODE_ID`, `_ROLE`, `_SCOPE`, `_SETTING`, `_SURFACE`, `_USER_ID`, `_VERSION`, `_PARAMS`, `_QUERY`) | 400 / 415 | `validation_error` / `unsupported_media_type` |
-| `MIRROR_DISABLED` | 503 | `upstream_unavailable` |
-| `MISSING_FRONTMATTER` | 400 | `validation_error` |
-| `MISSING_PROMPT` | 400 | `validation_error` |
-| `MISSING_SKILL_MD` | 400 | `validation_error` |
-| `MISSING_SPEC` | 400 | `validation_error` |
-| `NOTIFICATION_NOT_FOUND` | 404 | `resource_not_found` |
-| `NO_UPDATE` | 400 | `validation_error` |
-| `ORG_NOT_FOUND` | 404 | `resource_not_found` |
-| `PAYLOAD_TOO_LARGE` | 413 | `payload_too_large` |
-| `PROVIDER_NOT_FOUND` | 404 | `resource_not_found` |
-| `PULL_FAILED` | 502 | `upstream_unavailable` |
-| `QUOTA_EXCEEDED` | 429 | `rate_limited` |
-| `RECONCILE_ALREADY_RUNNING` | 409 | `resource_conflict` |
-| `REDEMPTION_CODE_EXPIRED` | 409 | `resource_conflict` |
-| `REDEMPTION_CODE_NOT_FOUND` | 404 | `resource_not_found` |
-| `REFRESH_FAILED` | 502 | `upstream_unavailable` |
-| `REFRESH_PREVIEW_FAILED` | 502 | `upstream_unavailable` |
-| `REPO_FETCH_FAILED` | 502 | `upstream_unavailable` |
-| `SKILL_NAME_EXISTS` | 409 | `resource_conflict` |
-| `SKILL_NOT_FOUND` | 404 | `resource_not_found` |
-| `SKILL_VERSION_NOT_FOUND` | 404 | `resource_not_found` |
-| `UPSTREAM_DOWN` | 502 | `upstream_unavailable` |
+| Pre-#585 code | HTTP | New code | §1.4 parent |
+|---|---|---|---|
+| `AGENTSEAL_DISABLED` | 503 | `agentseal_disabled` | `upstream_unavailable` |
+| `ANNOUNCEMENT_NOT_FOUND` | 404 | `announcement_not_found` | `resource_not_found` |
+| `AUDIT_NOT_FOUND` | 404 | `audit_not_found` | `resource_not_found` |
+| `AUTH_INVALID` | 401 | `auth_invalid` | `authentication_required` |
+| `AUTH_MISSING` | 401 | `auth_missing` | `authentication_required` |
+| `AUTH_SERVICE_ERROR` | 503 | `auth_service_error` | `upstream_unavailable` |
+| `BROADCAST_NOT_FOUND` | 404 | `broadcast_not_found` | `resource_not_found` |
+| `EMPTY_BODY` | 400 | `empty_body` | `validation_error` |
+| `EMPTY_SOURCE` | 400 | `empty_source` | `validation_error` |
+| `FORBIDDEN` | 403 | `forbidden` | `permission_denied` |
+| `FRONTMATTER_VALIDATION_FAILED` | 400 | `frontmatter_validation_failed` | `validation_error` |
+| `INTERNAL` / `INTERNAL_ERROR` | 500 | `internal_error` | `internal_error` |
+| `INVALID_*` (per-field) | 400 | `invalid_*` (per-field) | `validation_error` |
+| `INVALID_CONTENT_TYPE` | 415 | `invalid_content_type` | `unsupported_media_type` |
+| `MIRROR_DISABLED` | 503 | `mirror_disabled` | `upstream_unavailable` |
+| `MISSING_*` | 400 | `missing_*` | `validation_error` |
+| `NOTIFICATION_NOT_FOUND` | 404 | `notification_not_found` | `resource_not_found` |
+| `NO_UPDATE` | 400 | `no_update` | `validation_error` |
+| `OLD_REPO_NOT_CONFIRMED` | 409 | `old_repo_not_confirmed` | `resource_conflict` |
+| `ORG_NOT_FOUND` | 404 | `org_not_found` | `resource_not_found` |
+| `PACKAGE_DOWNLOAD_FAILED` | 500 | `package_download_failed` | `upstream_unavailable` |
+| `PAYLOAD_TOO_LARGE` | 413 | `payload_too_large` | `payload_too_large` |
+| `PROVIDER_NOT_FOUND` | 404 | `provider_not_found` | `resource_not_found` |
+| `PULL_FAILED` | 502 | `pull_failed` | `upstream_unavailable` |
+| `QUOTA_EXCEEDED` | 429 | `quota_exceeded` | `rate_limited` |
+| `RECONCILE_ALREADY_RUNNING` | 409 | `reconcile_already_running` | `resource_conflict` |
+| `REDEMPTION_CODE_*` | 404 / 409 / 410 | `redemption_code_*` | `resource_not_found` / `resource_conflict` |
+| `REFRESH_FAILED` / `REFRESH_PREVIEW_FAILED` | 502 | `refresh_failed` / `refresh_preview_failed` | `upstream_unavailable` |
+| `REPO_FETCH_FAILED` | 502 | `repo_fetch_failed` | `upstream_unavailable` |
+| `SKILL_NAME_EXISTS` | 409 | `skill_name_exists` | `resource_conflict` |
+| `SKILL_NOT_FOUND` | 404 | `skill_not_found` | `resource_not_found` |
+| `SKILL_VERSION_NOT_FOUND` | 404 | `skill_version_not_found` | `resource_not_found` |
+| `UPSTREAM_DOWN` | 502 | `upstream_down` | `upstream_unavailable` |
 
-This list is exhaustive at the time of writing — if you spot a code that's emitted in production but missing here, open a `[Docs]` issue.
+Format rule for future codes: lowercase ASCII, words joined by `_`, no leading/trailing `_`. Pick from the parent §1.4 vocabulary when generic; add a specific subcode only when the caller needs to branch on it.

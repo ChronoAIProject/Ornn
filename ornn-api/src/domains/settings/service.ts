@@ -266,5 +266,5 @@ function zodToAppError(err: ZodError): AppError {
   const first = err.issues[0];
   const path = first.path.join(".");
   const msg = path.length > 0 ? `${path}: ${first.message}` : first.message;
-  return AppError.badRequest("INVALID_SETTING", msg);
+  return AppError.badRequest("invalid_setting", msg);
 }

@@ -69,7 +69,7 @@ beforeAll(async () => {
       );
     }
     return c.json(
-      { data: null, error: { code: "INTERNAL", message: e.message } },
+      { data: null, error: { code: "internal_error", message: e.message } },
       500,
     );
   });

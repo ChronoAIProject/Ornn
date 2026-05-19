@@ -182,7 +182,7 @@ export function createMeRoutes(config: MeRoutesConfig): Hono<{ Variables: AuthVa
       // No caller token forwarded by the proxy — we can't act on their
       // behalf. Return 404-shaped response so the UI can show "unknown
       // org" without special-casing another error code.
-      throw AppError.notFound("ORG_NOT_FOUND", `Org '${orgId}' not found`);
+      throw AppError.notFound("org_not_found", `Org '${orgId}' not found`);
     }
 
     const baseUrl = await resolveBaseUrl();
@@ -190,7 +190,7 @@ export function createMeRoutes(config: MeRoutesConfig): Hono<{ Variables: AuthVa
       headers: { Authorization: `Bearer ${token}` },
     });
     if (resp.status === 404 || resp.status === 403) {
-      throw AppError.notFound("ORG_NOT_FOUND", `Org '${orgId}' not found`);
+      throw AppError.notFound("org_not_found", `Org '${orgId}' not found`);
     }
     if (!resp.ok) {
       const body = await resp.text().catch(() => "");

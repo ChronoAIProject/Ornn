@@ -26,7 +26,7 @@ import pino from "pino";
 function skillId(guid: string): never {
   if (typeof guid !== "string" || guid.length === 0) {
     throw AppError.badRequest(
-      "INVALID_SKILL_ID",
+      "invalid_skill_id",
       "Skill id must be a non-empty string",
     );
   }
@@ -38,7 +38,7 @@ function skillIdList(guids: readonly string[]): never {
   for (const g of guids) {
     if (typeof g !== "string" || g.length === 0) {
       throw AppError.badRequest(
-        "INVALID_SKILL_ID",
+        "invalid_skill_id",
         "Skill id must be a non-empty string",
       );
     }
@@ -203,7 +203,7 @@ export class SkillRepository {
       logger.info({ guid: data.guid, name: data.name }, "Skill created");
     } catch (err: any) {
       if (err?.code === 11000) {
-        throw AppError.conflict("SKILL_NAME_EXISTS", `Skill '${data.name}' already exists`);
+        throw AppError.conflict("skill_name_exists", `Skill '${data.name}' already exists`);
       }
       throw err;
     }

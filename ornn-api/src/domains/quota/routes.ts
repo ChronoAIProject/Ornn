@@ -50,5 +50,5 @@ export function throwQuotaError(decision: {
   surface: Surface;
   message: string;
 }): never {
-  throw new AppError(429, "QUOTA_EXCEEDED", decision.message);
+  throw new AppError(429, "quota_exceeded", decision.message);
 }

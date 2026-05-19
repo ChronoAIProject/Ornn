@@ -64,7 +64,7 @@ beforeAll(async () => {
       );
     }
     return c.json(
-      { data: null, error: { code: "INTERNAL", message: e.message } },
+      { data: null, error: { code: "internal_error", message: e.message } },
       500,
     );
   });
@@ -133,7 +133,7 @@ describe("POST /me/redemption-codes/redeem", () => {
     });
     expect(res.status).toBe(404);
     const json = (await res.json()) as { error: { code: string } };
-    expect(json.error.code).toBe("REDEMPTION_CODE_NOT_FOUND");
+    expect(json.error.code).toBe("redemption_code_not_found");
   });
 
   test("expired → 410 REDEMPTION_CODE_EXPIRED", async () => {
@@ -148,7 +148,7 @@ describe("POST /me/redemption-codes/redeem", () => {
     });
     expect(res.status).toBe(410);
     const json = (await res.json()) as { error: { code: string } };
-    expect(json.error.code).toBe("REDEMPTION_CODE_EXPIRED");
+    expect(json.error.code).toBe("redemption_code_expired");
   });
 
   test("invalidated → 410 REDEMPTION_CODE_INVALIDATED", async () => {
@@ -168,7 +168,7 @@ describe("POST /me/redemption-codes/redeem", () => {
     });
     expect(res.status).toBe(410);
     const json = (await res.json()) as { error: { code: string } };
-    expect(json.error.code).toBe("REDEMPTION_CODE_INVALIDATED");
+    expect(json.error.code).toBe("redemption_code_invalidated");
   });
 
   test("already-redeemed → 409 REDEMPTION_CODE_ALREADY_REDEEMED", async () => {
@@ -185,7 +185,7 @@ describe("POST /me/redemption-codes/redeem", () => {
     });
     expect(res.status).toBe(409);
     const json = (await res.json()) as { error: { code: string } };
-    expect(json.error.code).toBe("REDEMPTION_CODE_ALREADY_REDEEMED");
+    expect(json.error.code).toBe("redemption_code_already_redeemed");
   });
 });
 
