@@ -6,9 +6,9 @@ const LINES: Line[] = [
   { t: 500, html: '<span class="text-ember">$</span> <span class="text-parchment">ornn-search-and-run</span> <span class="text-molten">"extract text from PDFs"</span>' },
   { t: 300, html: '<span class="text-ash">  ↳ querying registry...</span>' },
   { t: 400, html: '<span class="text-ash">  ↳ matched 3 candidates</span>' },
-  { t: 400, html: '<span class="text-[#7dc97d]">  ✓ pdf-extract</span>   <span class="text-ash">@chrono · v 2.0.1 · audited</span>' },
+  { t: 400, html: '<span class="text-terminal-ok">  ✓ pdf-extract</span>   <span class="text-ash">@chrono · v 2.0.1 · audited</span>' },
   { t: 300, html: '<span class="text-ash">  ↳ loading SKILL.md into Claude Code...</span>' },
-  { t: 400, html: '<span class="text-[#7dc97d]">  ✓ ready</span>          <span class="text-ash">~/.claude/skills/pdf-extract/</span>' },
+  { t: 400, html: '<span class="text-terminal-ok">  ✓ ready</span>          <span class="text-ash">~/.claude/skills/pdf-extract/</span>' },
   { t: 400, html: "" },
   { t: 200, html: '<span class="text-bone">agent-ready in <span class="text-molten">1.2s</span></span>' },
   { t: 600, html: '<span class="text-ember">$</span> <span class="inline-block h-3.5 w-2 bg-ember align-middle animate-blink"></span>' },
@@ -70,9 +70,9 @@ export function AnimatedTerminal() {
   return (
     <div className="card-letterpress overflow-hidden rounded-[4px] border border-[color:var(--color-border-strong)] [background-color:var(--surface-code)] font-mono text-[13px]">
       <div className="flex items-center gap-2 border-b border-[color:var(--color-border-subtle)] bg-graphite px-3.5 py-2.5">
-        <span className="h-[9px] w-[9px] rounded-full bg-[#c94a4a]" />
-        <span className="h-[9px] w-[9px] rounded-full bg-[#c9a64a]" />
-        <span className="h-[9px] w-[9px] rounded-full bg-[#5a9b5a]" />
+        <span className="h-[9px] w-[9px] rounded-full bg-traffic-red" />
+        <span className="h-[9px] w-[9px] rounded-full bg-traffic-amber" />
+        <span className="h-[9px] w-[9px] rounded-full bg-traffic-green" />
         <span className="ml-auto font-mono text-[11px] tracking-[0.12em] text-meta">
           ~/projects · ornn cli
         </span>
