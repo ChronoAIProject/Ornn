@@ -1,0 +1,11 @@
+{
+  "name": "@ornn-examples/api-fetch-wrapper",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Minimal HTTP-API-wrapping skill — example for the Ornn skill format",
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "start": "bun run src/index.ts"
+  }
+}
