@@ -97,6 +97,7 @@ Full per-endpoint reference: [ornn.chrono-ai.fun/docs](https://ornn.chrono-ai.fu
 - **Product docs** — [ornn.chrono-ai.fun/docs](https://ornn.chrono-ai.fun/docs)
 - **Architecture** — [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
 - **Conventions** — [`docs/CONVENTIONS.md`](docs/CONVENTIONS.md)
+- **API stability & deprecation** — [`docs/API_STABILITY.md`](docs/API_STABILITY.md)
 - **Design system** — [`docs/DESIGN.md`](docs/DESIGN.md)
 
 ## Roadmap

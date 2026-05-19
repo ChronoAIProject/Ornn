@@ -340,6 +340,8 @@ Endpoints pick a subset and MAY add endpoint-specific events with the same prefi
 
 ## 7. Deprecation
 
+See [`docs/API_STABILITY.md`](API_STABILITY.md) for the public stability commitment, per-route tiers, and the full deprecation lead-time policy. This section codifies the header shape only.
+
 Per RFC 8594 on deprecated endpoints and representations:
 
 ```
