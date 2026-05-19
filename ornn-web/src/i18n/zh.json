@@ -378,6 +378,8 @@
   },
   "playground": {
     "selectSkill": "选择一个技能在试验场中使用。",
+    "notFoundTitle": "未找到技能",
+    "notFoundBody": "该技能不存在，或者你没有访问权限。",
     "browseSkills": "浏览技能",
     "clearChat": "清空对话",
     "fillEnvVars": "在右侧填入所需的环境变量后开始对话。",
