@@ -248,7 +248,12 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
       // mirror service log the "considered + skipped" decision.
       fireMirrorSync(result.guid);
 
-      return c.json({ data: skill, error: null });
+      // CONVENTIONS.md §3.2 (#458): POST that creates a resource MUST
+      // return 201 Created with a Location header pointing at the
+      // canonical URL. Existing 200 + envelope clients are unaffected
+      // — the response body is unchanged, only status code + header.
+      c.header("Location", `/api/v1/skills/${skill.guid}`);
+      return c.json({ data: skill, error: null }, 201);
     },
   );
 
@@ -335,7 +340,9 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
         // so the contract is uniform across both create flows.
         fireMirrorSync(guid);
 
-        return c.json({ data: skill, error: null });
+        // 201 + Location, parity with POST /skills (#458).
+        c.header("Location", `/api/v1/skills/${skill.guid}`);
+        return c.json({ data: skill, error: null }, 201);
       } catch (err) {
         if (err instanceof AppError) throw err;
         const message = err instanceof Error ? err.message : String(err);

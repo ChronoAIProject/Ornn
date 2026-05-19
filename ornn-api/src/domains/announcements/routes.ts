@@ -159,6 +159,8 @@ export function createAnnouncementRoutes(
       endsAt: parsed.data.endsAt ?? null,
       createdBy: authCtx.userId,
     });
+    // 201 already set; add Location to match CONVENTIONS.md §3.2 (#458).
+    c.header("Location", `/api/v1/admin/announcements/${created._id}`);
     return c.json({ data: toAdminDto(created), error: null }, 201);
   });
 
