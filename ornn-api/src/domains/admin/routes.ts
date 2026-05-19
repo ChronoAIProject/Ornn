@@ -101,13 +101,21 @@ export function createAdminRoutes(config: AdminRoutesConfig): Hono<{ Variables: 
         ];
       }
 
-      const total = await skillCollection.countDocuments(filter);
+      // 5-second server-side wall clock (#446) — even with regex
+      // escaping, an unanchored partial-match on a large collection
+      // could pin a Mongo node's CPU. Better to return 500 than to
+      // hold a connection indefinitely.
+      const MAX_QUERY_MS = 5_000;
+      const total = await skillCollection.countDocuments(filter, {
+        maxTimeMS: MAX_QUERY_MS,
+      });
       const offset = (page - 1) * pageSize;
       const docs = await skillCollection
         .find(filter)
         .sort({ createdOn: -1 })
         .skip(offset)
         .limit(pageSize)
+        .maxTimeMS(MAX_QUERY_MS)
         .toArray();
 
       const items = docs.map((d) => ({
