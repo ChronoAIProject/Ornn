@@ -32,6 +32,7 @@
   <a href="#sdk-quickstart">SDK quickstart</a> ·
   <a href="#quickstart">Quickstart</a> ·
   <a href="#how-ornn-compares">How Ornn compares</a> ·
+  <a href="#examples">Examples</a> ·
   <a href="#documentation">Docs</a> ·
   <a href="#roadmap">Roadmap</a> ·
   <a href="#community">Community</a> ·
@@ -160,6 +161,18 @@ The space of agent skill / tool registries is crowded. Quick orientation:
 - **vs npm registry** — npm versions and ships code; it doesn't know about models, sandboxes, or skill manifests. Ornn does.
 
 Treat the table as a working draft — corrections welcome via [Discussions → Ideas](https://github.com/ChronoAIProject/Ornn/discussions/categories/ideas).
+
+## Examples
+
+Three minimal starter skills under [`examples/`](examples) — fork as the starting point for your own. Each one is ~60 lines, runs locally, and demonstrates one of the failure-mode archetypes you'll hit in production:
+
+| Skill | What it shows |
+|---|---|
+| [`text-summarizer`](examples/text-summarizer) | LLM-backed work — model API call, structured I/O |
+| [`csv-processor`](examples/csv-processor) | Pure local computation — file in, JSON out, deterministic |
+| [`api-fetch-wrapper`](examples/api-fetch-wrapper) | External HTTP — secret handling, retries, no-leak errors |
+
+See [`examples/README.md`](examples/README.md) for the anatomy of an Ornn skill + how to adapt one.
 
 ## Documentation
 
