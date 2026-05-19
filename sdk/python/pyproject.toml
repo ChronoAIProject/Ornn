@@ -39,9 +39,11 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=8,<9",
+    # pytest 9.0.3+ closes CVE-2025-71176; widen the bound so 10.x
+    # still pins us inside a tested major.
+    "pytest>=9.0.3,<10",
     "respx>=0.21,<1.0",
-    "pytest-asyncio>=0.23,<1.0",
+    "pytest-asyncio>=0.23,<2.0",
 ]
 
 [project.urls]
