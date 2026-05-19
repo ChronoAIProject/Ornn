@@ -1,0 +1,57 @@
+# Codecov configuration for chrono-ornn (#471).
+#
+# Reports are uploaded from two CI jobs:
+#   - `test`            → flag `bun` (per-workspace lcov)
+#   - `python-sdk-test` → flag `python` (sdk/python coverage.xml)
+#
+# Target is realistic-not-aspirational: 70% project coverage as the
+# initial commitment. Files that are deliberately not covered today
+# (god-files, generation prompts, infra shims) are excluded so the
+# headline number reflects code that's reasonably testable.
+
+coverage:
+  status:
+    project:
+      default:
+        target: 70%
+        threshold: 1%
+        if_ci_failed: error
+    patch:
+      default:
+        target: 80%
+        threshold: 5%
+        if_ci_failed: error
+
+# Source-of-truth flags. Codecov sums across flags by default; both
+# are surfaced separately in the PR comment so a regression in one
+# language is obvious.
+flags:
+  bun:
+    paths:
+      - ornn-api/src/
+      - ornn-web/src/
+      - sdk/typescript/src/
+    carryforward: true
+  python:
+    paths:
+      - sdk/python/src/
+    carryforward: true
+
+ignore:
+  # God-files awaiting decomposition (#453, #580). Excluded from the
+  # headline number until they're broken up.
+  - "ornn-web/src/pages/skill/SkillDetailPage.tsx"
+  - "ornn-web/src/pages/DocsPage.tsx"
+  - "ornn-web/src/pages/PlaygroundPage.tsx"
+  - "ornn-api/src/bootstrap.ts"
+  # Prompt-template strings, scaffolding scripts, generated code.
+  - "**/*.test.ts"
+  - "**/*.test.py"
+  - "**/__pycache__/**"
+  - "ornn-api/scripts/**"
+  - "examples/**"
+
+comment:
+  layout: "reach,diff,flags,tree"
+  behavior: default
+  require_changes: false
