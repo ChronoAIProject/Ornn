@@ -15,8 +15,50 @@ import type { SandboxClient } from "../../clients/sandboxClient";
 import type { SkillService } from "../skills/crud/service";
 import type { PlaygroundChatEvent } from "../../shared/types/index";
 import pino from "pino";
+import { z } from "zod";
 
 const logger = pino({ level: "info" }).child({ module: "playgroundChatService" });
+
+/**
+ * Zod schemas for the four LLM Responses-API event shapes we
+ * consume on the playground stream (#449). `as any` previously
+ * propagated unchecked field renames upstream into `undefined`
+ * flowing through SSE; with a discriminated union we ignore
+ * malformed events explicitly and log them.
+ *
+ * Schemas are intentionally permissive — only fields we read are
+ * required; the upstream API may add fields freely without
+ * breaking us.
+ */
+const textDeltaEventSchema = z.object({
+  type: z.literal("response.output_text.delta"),
+  delta: z.string(),
+});
+
+const contentPartDeltaEventSchema = z.object({
+  type: z.literal("response.content_part.delta"),
+  delta: z.object({
+    type: z.string().optional(),
+    text: z.string().optional(),
+  }).optional(),
+});
+
+const outputItemDoneEventSchema = z.object({
+  type: z.literal("response.output_item.done"),
+  item: z.object({
+    type: z.string().optional(),
+    id: z.string().optional(),
+    call_id: z.string().optional(),
+    name: z.string().optional(),
+    arguments: z.string().optional(),
+  }).optional(),
+});
+
+const anyKnownEventSchema = z.union([
+  textDeltaEventSchema,
+  contentPartDeltaEventSchema,
+  outputItemDoneEventSchema,
+]);
 
 /** Guess MIME type from file extension. */
 function guessMimeType(path: string): string {
@@ -260,16 +302,27 @@ export class PlaygroundChatService {
             return;
           }
 
-          const eventType = (event as any).type;
-
-          // Stream text deltas to client
-          if (eventType === "response.output_text.delta") {
-            const delta = (event as any).delta;
-            if (typeof delta === "string") yield { type: "text-delta", delta };
+          // #449 — parse with a discriminated Zod union instead of
+          // `as any`. Unknown event types are ignored (forward-compat
+          // with new upstream events); shape-mismatch on a known event
+          // logs at debug and is dropped.
+          const parsed = anyKnownEventSchema.safeParse(event);
+          if (!parsed.success) {
+            logger.debug(
+              { issues: parsed.error.issues.slice(0, 2) },
+              "Unrecognized LLM event shape — dropping",
+            );
             continue;
           }
-          if (eventType === "response.content_part.delta") {
-            const delta = (event as any).delta;
+          const parsedEvent = parsed.data;
+
+          // Stream text deltas to client
+          if (parsedEvent.type === "response.output_text.delta") {
+            yield { type: "text-delta", delta: parsedEvent.delta };
+            continue;
+          }
+          if (parsedEvent.type === "response.content_part.delta") {
+            const delta = parsedEvent.delta;
             if (delta?.type === "output_text" && typeof delta.text === "string") {
               yield { type: "text-delta", delta: delta.text };
             }
@@ -278,8 +331,8 @@ export class PlaygroundChatService {
 
           // Capture complete function call from output_item.done
           // This event contains everything: item.id, item.name, item.arguments
-          if (eventType === "response.output_item.done") {
-            const item = (event as any).item;
+          if (parsedEvent.type === "response.output_item.done") {
+            const item = parsedEvent.item;
             if (item?.type === "function_call") {
               const toolName = item.name ?? "";
               const toolCallId = item.call_id ?? item.id ?? "";
