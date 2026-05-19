@@ -8,12 +8,9 @@
 import type { ApiResponse } from "@/types/api";
 import { useAuthStore } from "@/stores/authStore";
 import { config } from "@/config";
+import { createLogger } from "@/lib/logger";
 
-const logger = {
-  error: (msg: string, data?: Record<string, unknown>) =>
-    console.error(`[apiClient] ${msg}`, data ?? ""),
-};
-
+const logger = createLogger("apiClient");
 const API_BASE = config.apiBaseUrl;
 
 /**
