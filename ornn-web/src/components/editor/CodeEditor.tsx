@@ -195,6 +195,8 @@ function TextAreaEditor({ content, onChange, onSave, readOnly }: TextAreaEditorP
         className="shrink-0 w-12 py-4 pr-2 text-right border-r border-accent/10 bg-card/30 overflow-hidden select-none"
       >
         {Array.from({ length: lineCount }).map((_, i) => (
+          // Line numbers are positional (line N == row index N); never
+          // reorder, key={i} is intentional (#451).
           <div
             key={i}
             className="font-mono text-xs text-meta/50 leading-6 h-6"
