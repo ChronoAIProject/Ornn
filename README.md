@@ -29,6 +29,7 @@
 <p align="center">
   <a href="#what-is-ornn">What is Ornn</a> ·
   <a href="#how-it-works">How it works</a> ·
+  <a href="#sdk-quickstart">SDK quickstart</a> ·
   <a href="#quickstart">Quickstart</a> ·
   <a href="#documentation">Docs</a> ·
   <a href="#roadmap">Roadmap</a> ·
@@ -73,6 +74,49 @@ Closest analog: **npm registry + npm CLI fused, model-agnostic** — works for C
 The agent talks to `ornn-api` through `nyxid`, which brokers authentication and authorization on the agent's behalf. Skills are versioned artifacts that the agent pulls, runs in a sandbox, and (optionally) publishes back.
 
 For a deeper view, see [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+
+## SDK quickstart
+
+Call Ornn directly from code. The SDKs wrap `/api/v1/*` and handle auth header injection, response-envelope unwrapping, and structured errors.
+
+**TypeScript** ([`sdk/typescript`](sdk/typescript))
+
+```bash
+# Pre-publish — install from this monorepo via your package manager's
+# workspace / git subdirectory mechanism. See #473 for npm publish status.
+npm install @chronoai/ornn-sdk
+```
+
+```ts
+import { OrnnClient } from "@chronoai/ornn-sdk";
+
+const ornn = new OrnnClient({
+  baseUrl: "https://ornn.chrono-ai.fun",
+  token: process.env.ORNN_TOKEN,
+});
+const result = await ornn.search({ q: "pdf parsing" });
+console.log(result.items[0]);
+```
+
+**Python** ([`sdk/python`](sdk/python))
+
+```bash
+pip install ornn-sdk
+```
+
+```python
+import os
+from ornn_sdk import OrnnClient
+
+ornn = OrnnClient(
+    base_url="https://ornn.chrono-ai.fun",
+    token=os.environ["ORNN_TOKEN"],
+)
+result = ornn.search(q="pdf parsing")
+print(result.items[0])
+```
+
+Token sources are pluggable — for dynamic refresh flows, pass `getToken` (TS) / `token_resolver` (Python) instead of a static `token`. See [`sdk/typescript/README.md`](sdk/typescript/README.md) and [`sdk/python/README.md`](sdk/python/README.md) for the full reference.
 
 ## Quickstart
 
