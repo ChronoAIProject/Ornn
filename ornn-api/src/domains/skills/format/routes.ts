@@ -1,11 +1,13 @@
 /**
  * Skill format rules and validation routes.
- * GET  /api/skill-format/rules    — public, returns format rules markdown
- * POST /api/skill-format/validate — authenticated, validates ZIP against rules
+ * GET  /api/skill-format/rules           — public, returns format rules markdown
+ * POST /api/skill-format/validate        — authenticated, validates ZIP against rules
+ * GET  /api/skill-manifest-schema.json   — public, JSON Schema for SKILL.md frontmatter (#464)
  * @module domains/skills/format/routes
  */
 
 import { Hono } from "hono";
+import { z } from "zod";
 import type { SkillService } from "../crud/service";
 import {
   type AuthVariables,
@@ -13,6 +15,7 @@ import {
   requirePermission,
 } from "../../../middleware/nyxidAuth";
 import { AppError } from "../../../shared/types/index";
+import { skillFrontmatterSchema } from "../../../shared/schemas/skillFrontmatter";
 
 /** Canonical skill format rules per the ornn platform spec. Updated with output-type. */
 export const SKILL_FORMAT_RULES = `# Ornn Skill Package Format Rules
@@ -64,6 +67,28 @@ export const SKILL_FORMAT_RULES = `# Ornn Skill Package Format Rules
 - **compatibility** (string, optional): must be under 500 characters.
 `;
 
+/**
+ * Stable version identifier for the published JSON Schema (#464). Bump
+ * this when the frontmatter contract changes in a way external tooling
+ * cares about. Embedded in the schema's `$id` so consumers can pin a
+ * specific revision and so IDE / linter caches invalidate on bumps.
+ */
+export const SKILL_MANIFEST_SCHEMA_VERSION = "1";
+
+/**
+ * JSON Schema for SKILL.md frontmatter, derived from the canonical Zod
+ * schema via zod 4's built-in `z.toJSONSchema()`. Computed once at
+ * module load — the source schema is static, so re-running the
+ * conversion per request is wasted work.
+ *
+ * The legacy `zod-to-json-schema` package emits empty schemas against
+ * zod 4 (the AST shape changed); the in-tree converter is the only
+ * working option until that package catches up. Output is JSON Schema
+ * draft-2020-12 — what `z.toJSONSchema` produces and what current IDEs
+ * + schemastore.org consume.
+ */
+export const SKILL_MANIFEST_JSON_SCHEMA = z.toJSONSchema(skillFrontmatterSchema);
+
 export interface FormatRoutesConfig {
   skillService: SkillService;
 }
@@ -79,6 +104,24 @@ export function createFormatRoutes(config: FormatRoutesConfig): Hono<{ Variables
    */
   app.get("/skill-format/rules", async (c) => {
     return c.json({ data: { rules: SKILL_FORMAT_RULES }, error: null });
+  });
+
+  /**
+   * GET /skill-manifest-schema.json — Public, IDE-friendly JSON Schema
+   * for `SKILL.md` frontmatter (#464). No auth, long-cacheable: the
+   * schema is static for a given build, and IDEs / schemastore.org
+   * consumers re-fetch on cache expiry.
+   *
+   * Content-Type is `application/schema+json` per IANA registration —
+   * not the generic `application/json` — so VS Code / Cursor and
+   * schema-store tools that sniff the response type pick it up
+   * correctly.
+   */
+  app.get("/skill-manifest-schema.json", async (c) => {
+    return c.json(SKILL_MANIFEST_JSON_SCHEMA, 200, {
+      "Content-Type": "application/schema+json",
+      "Cache-Control": "public, max-age=3600",
+    });
   });
 
   /**
