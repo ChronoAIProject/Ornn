@@ -57,11 +57,6 @@ export interface CreateSkillData {
   metadata: SkillMetadata;
   skillHash: string;
   storageKey: string;
-  /**
-   * Legacy back-compat field. New skills copy `createdBy` here; visibility
-   * logic no longer consults it. Defaults to `createdBy` when omitted.
-   */
-  ownerId?: string;
   createdBy: string;
   createdByEmail?: string;
   createdByDisplayName?: string;
@@ -179,7 +174,6 @@ export class SkillRepository {
       metadata: data.metadata,
       skillHash: data.skillHash,
       storageKey: data.storageKey,
-      ownerId: data.ownerId ?? data.createdBy,
       createdBy: data.createdBy,
       createdByEmail: data.createdByEmail ?? null,
       createdByDisplayName: data.createdByDisplayName ?? null,
@@ -404,7 +398,7 @@ export class SkillRepository {
 
     const docs = await this.collection
       .find(matchStage)
-      .project({ _id: 1, name: 1, description: 1, metadata: 1, isPrivate: 1, ownerId: 1, sharedWithUsers: 1, sharedWithOrgs: 1, createdBy: 1, createdByEmail: 1, createdByDisplayName: 1, createdOn: 1, updatedOn: 1, storageKey: 1, skillHash: 1, license: 1, compatibility: 1, updatedBy: 1 })
+      .project({ _id: 1, name: 1, description: 1, metadata: 1, isPrivate: 1, sharedWithUsers: 1, sharedWithOrgs: 1, createdBy: 1, createdByEmail: 1, createdByDisplayName: 1, createdOn: 1, updatedOn: 1, storageKey: 1, skillHash: 1, license: 1, compatibility: 1, updatedBy: 1 })
       .sort({ createdOn: -1 })
       .toArray();
 
@@ -914,9 +908,6 @@ function mapDoc(doc: Document | null): SkillDocument | null {
     metadata: doc.metadata ?? { category: "plain" },
     skillHash: doc.skillHash ?? "",
     storageKey: doc.storageKey ?? doc.s3Url ?? "",
-    // `ownerId` is a legacy field — new skills copy `createdBy` into it.
-    // Fallback keeps pre-migration reads sane.
-    ownerId: doc.ownerId ?? doc.createdBy ?? "",
     createdBy: doc.createdBy ?? "",
     createdByEmail: doc.createdByEmail ?? undefined,
     createdByDisplayName: doc.createdByDisplayName ?? undefined,

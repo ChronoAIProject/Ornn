@@ -34,8 +34,6 @@ export interface SkillSearchResult {
   guid: string;
   name: string;
   description: string;
-  /** Owner entity — may be a person user_id or an org user_id. */
-  ownerId?: string;
   createdBy: string;
   createdByEmail?: string;
   createdByDisplayName?: string;

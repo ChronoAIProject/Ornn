@@ -158,10 +158,6 @@ export class SkillService {
       metadata,
       skillHash,
       storageKey,
-      // `ownerId` is retained as a no-op field for back-compat. New skills
-      // always record the author here; visibility is expressed via
-      // sharedWithUsers/sharedWithOrgs on the skill doc.
-      ownerId: userId,
       createdBy: userId,
       createdByEmail: options?.userEmail,
       createdByDisplayName: options?.userDisplayName,
@@ -315,9 +311,8 @@ export class SkillService {
    * route layer has already enforced the write gate (author/admin); the
    * service just validates the inputs and persists them.
    *
-   * Ownership (`createdBy`, `ownerId`) is left untouched — permissions
-   * don't change who wrote or "owns" the skill, they just widen who can
-   * read it.
+   * Ownership (`createdBy`) is left untouched — permissions don't
+   * change who wrote the skill, they just widen who can read it.
    */
   async setSkillPermissions(
     guid: string,
@@ -1271,7 +1266,6 @@ export class SkillService {
       skillHash,
       presignedPackageUrl,
       isPrivate: skill.isPrivate,
-      ownerId: skill.ownerId,
       createdBy: skill.createdBy,
       createdByEmail: skill.createdByEmail,
       createdByDisplayName: skill.createdByDisplayName,
