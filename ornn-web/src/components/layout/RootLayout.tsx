@@ -141,7 +141,11 @@ export function RootLayout() {
             {crumbs.map((crumb, i) => {
               const isLast = i === crumbs.length - 1;
               return (
-                <span key={i} className="flex items-center gap-2">
+                // Breadcrumbs can re-shape when the route changes — use
+                // the crumb destination as a stable key so reconciliation
+                // doesn't preserve hover/focus state on the wrong segment
+                // when the trail length changes (#451).
+                <span key={`${crumb.to ?? ""}-${crumb.label}`} className="flex items-center gap-2">
                   {i > 0 && (
                     <span className="text-meta opacity-50 select-none">/</span>
                   )}
