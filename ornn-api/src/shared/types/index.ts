@@ -164,6 +164,21 @@ export interface SkillDocument {
     syncedAt: Date;
     commitSha: string;
   };
+  /**
+   * Dist-tags per #463 — npm-style aliases that resolve to a concrete
+   * version. Lets callers pin to a stable channel without enumerating
+   * versions.
+   *
+   * - `latest` is **auto-managed**: every successful version publish
+   *   sets `distTags.latest` to the new version. Cannot be PUT/DELETEd
+   *   via the API (those return `dist_tag_immutable`).
+   * - Other tags (`stable`, `beta`, `rc1`, ...) are owner-managed via
+   *   `PUT /v1/skills/:id/dist-tags/:tag` and freely deletable.
+   *
+   * Absent on legacy skills published before #463 — readers treat
+   * absence as `{ latest: <skill.latestVersion> }`.
+   */
+  distTags?: Record<string, string>;
 }
 
 /**
@@ -354,6 +369,13 @@ export interface SkillDetailResponse {
     syncedAt: string;
     commitSha: string;
   };
+  /**
+   * Dist-tags for this skill (#463). Keys are tag names (`latest`,
+   * `stable`, `beta`, ...); values are the concrete version each tag
+   * currently points at. `latest` is always present and auto-managed
+   * server-side. Absent on legacy skills published before #463.
+   */
+  distTags?: Record<string, string>;
 }
 
 export interface SkillSearchItem {

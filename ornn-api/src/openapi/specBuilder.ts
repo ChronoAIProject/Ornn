@@ -260,6 +260,33 @@ function formatValidatePath(): PathItem {
   };
 }
 
+/**
+ * JSON Schema for SKILL.md frontmatter (#464). Unlike the other format
+ * endpoints this one returns a raw JSON Schema document — no envelope —
+ * so external tooling (IDEs, schemastore.org) consumes it directly.
+ */
+function formatSchemaPath(): PathItem {
+  return {
+    get: {
+      summary: "JSON Schema for SKILL.md frontmatter",
+      description:
+        "Canonical JSON Schema (draft-7) for `SKILL.md` YAML frontmatter, generated from the server's Zod schema. Public, long-cacheable. Returns the schema document at the body root with `Content-Type: application/schema+json` — not the standard `{ data, error }` envelope, since consumers (VS Code, Cursor, schemastore.org) expect a raw JSON Schema.",
+      operationId: "getFormatSchema",
+      tags: ["Format"],
+      responses: {
+        200: {
+          description: "JSON Schema document",
+          content: {
+            "application/schema+json": {
+              schema: { type: "object" },
+            },
+          },
+        },
+      },
+    },
+  };
+}
+
 function playgroundChatPath(): PathItem {
   return {
     post: {
@@ -414,6 +441,7 @@ export function buildSpec(): OpenApiSpec {
       // Format
       [`${prefix}/skill-format/rules`]: formatRulesPath(),
       [`${prefix}/skill-format/validate`]: formatValidatePath(),
+      [`${prefix}/skill-manifest-schema.json`]: formatSchemaPath(),
       // Playground
       [`${prefix}/playground/chat`]: playgroundChatPath(),
       // Admin
