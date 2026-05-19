@@ -31,6 +31,7 @@
   <a href="#how-it-works">How it works</a> ·
   <a href="#sdk-quickstart">SDK quickstart</a> ·
   <a href="#quickstart">Quickstart</a> ·
+  <a href="#how-ornn-compares">How Ornn compares</a> ·
   <a href="#documentation">Docs</a> ·
   <a href="#roadmap">Roadmap</a> ·
   <a href="#community">Community</a> ·
@@ -135,6 +136,30 @@ nyxid proxy request ornn-api GET /api/v1/skills?q=summarize
 ```
 
 Full per-endpoint reference: [ornn.chrono-ai.fun/docs](https://ornn.chrono-ai.fun/docs).
+
+## How Ornn compares
+
+The space of agent skill / tool registries is crowded. Quick orientation:
+
+|                                       | **Ornn** | MCP servers | Smithery | npm registry |
+|---------------------------------------|:--------:|:-----------:|:--------:|:------------:|
+| Agent-callable HTTP API               |    ✓     |   ✓ (RPC)   |    ✗     |      ✓       |
+| Model-agnostic (Claude / GPT / …)     |    ✓     |      ✓      |    ✓     |     n/a      |
+| Execution sandbox                     |    ✓     |      ✗      |    ✓     |      ✗       |
+| Searchable registry (semantic + tag)  |    ✓     |   partial   |    ✓     |    keyword   |
+| Versioning + immutable artifacts      |    ✓     |      ✗      |    ?     |      ✓       |
+| Skill build pipeline (lint + AgentSeal)| ✓       |      ✗      |    ✗     |      ✗       |
+| CLI                                   |   *      |      ✗      |    ✓     |      ✓       |
+
+\* CLI is on the roadmap (Phase 2); today the registry-side CLI is `nyxid proxy request ornn-api …`. The web UI at [ornn.chrono-ai.fun](https://ornn.chrono-ai.fun) covers human flows.
+
+**What this means in practice**
+
+- **vs MCP servers** — MCP is a protocol for calling tools the agent already has access to; Ornn is the registry + lifecycle around those tools (discover, version, sandbox, build, publish). The two compose: an Ornn-hosted skill can expose an MCP transport.
+- **vs Smithery** — Smithery is a curated UI registry for MCP servers; Ornn is an API-first registry callable directly by agents, with build/execute primitives included.
+- **vs npm registry** — npm versions and ships code; it doesn't know about models, sandboxes, or skill manifests. Ornn does.
+
+Treat the table as a working draft — corrections welcome via [Discussions → Ideas](https://github.com/ChronoAIProject/Ornn/discussions/categories/ideas).
 
 ## Documentation
 
