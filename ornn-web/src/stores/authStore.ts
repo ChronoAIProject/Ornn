@@ -8,13 +8,9 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { AuthUser, NyxIDTokenResponse, NyxIDJwtClaims, NyxIDIdTokenClaims } from "@/types/auth";
 import { config } from "@/config";
+import { createLogger } from "@/lib/logger";
 
-const logger = {
-  info: (msg: string, data?: Record<string, unknown>) =>
-    console.log(`[auth] ${msg}`, data ?? ""),
-  error: (msg: string, data?: Record<string, unknown>) =>
-    console.error(`[auth] ${msg}`, data ?? ""),
-};
+const logger = createLogger("auth");
 
 /** Refresh token 1 minute before expiry. */
 const TOKEN_REFRESH_BUFFER_MS = 60 * 1000;
