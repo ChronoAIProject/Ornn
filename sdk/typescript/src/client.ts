@@ -77,7 +77,8 @@ export class OrnnClient {
   /** Search skills. Returns paginated results with `items` + pagination meta. */
   async search(params: SkillSearchParams = {}): Promise<SkillSearchResult> {
     const query = new URLSearchParams();
-    if (params.q) query.set("query", params.q);
+    // Per CONVENTIONS.md §4.1 (#586) the canonical search param is `q`.
+    if (params.q) query.set("q", params.q);
     if (params.scope) query.set("scope", params.scope);
     if (params.category) query.set("category", params.category);
     if (params.tag) query.set("tag", params.tag);

@@ -22,7 +22,12 @@ import pino from "pino";
 const logger = pino({ level: "info" }).child({ module: "skillSearchRoutes" });
 
 const searchQuerySchema = z.object({
-  query: z.string().max(2000).optional().default(""),
+  // Canonical search param is `q` per CONVENTIONS.md §4.1 (#586).
+  // The legacy `query` is still parsed for the duration of the alpha
+  // grace window — clients on the old SDK keep working until they
+  // upgrade. `q` wins when both are present.
+  q: z.string().max(2000).optional(),
+  query: z.string().max(2000).optional(),
   mode: z.enum(["keyword", "semantic"]).optional().default("keyword"),
   scope: z.enum(["public", "private", "mixed", "shared-with-me", "mine"]).optional().default("private"),
   page: z.coerce.number().int().min(1).optional().default(1),
@@ -75,7 +80,9 @@ export function createSearchRoutes(config: SearchRoutesConfig): Hono<{ Variables
     validateQuery(searchQuerySchema, "invalid_query"),
     async (c) => {
       const parsed = getValidatedQuery<z.infer<typeof searchQuerySchema>>(c);
-      const { query, mode, page, pageSize, model, systemFilter } = parsed;
+      // q wins; legacy `query` is the fallback for un-upgraded clients (#586).
+      const query = parsed.q ?? parsed.query ?? "";
+      const { mode, page, pageSize, model, systemFilter } = parsed;
       const authCtx = c.get("auth");
       const isAnonymous = !authCtx;
 
