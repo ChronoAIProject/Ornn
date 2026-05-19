@@ -42,6 +42,15 @@ jobs:
       - name: Install ornn-sdk (python)
         working-directory: sdk/python
         run: pip install -e ".[dev]"
+      - name: Lint (ruff)
+        working-directory: sdk/python
+        run: ruff check .
+      - name: Format check (ruff)
+        working-directory: sdk/python
+        run: ruff format --check .
+      - name: Type check (mypy)
+        working-directory: sdk/python
+        run: mypy
       - name: Run pytest
         working-directory: sdk/python
         run: pytest -q
