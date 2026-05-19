@@ -97,6 +97,29 @@ export class SkillRepository {
     this.collection = db.collection("skills");
   }
 
+  /**
+   * Ensure indexes the skill collection relies on. Idempotent —
+   * MongoDB's createIndex is a no-op when the index already exists
+   * with the same key + options. Called from bootstrap on startup.
+   *
+   * The `name` + `description` indexes feed both the admin regex
+   * search (#446) and the keyword + skill-detail lookups in
+   * service.ts.
+   */
+  async ensureIndexes(): Promise<void> {
+    await Promise.all([
+      this.collection.createIndex({ name: 1 }, { unique: true }),
+      // Partial regex queries can't use a btree index on a long text
+      // field, but having the field indexed at all lets the query
+      // planner skip the COLLSCAN when the regex is anchored or when
+      // the secondary `createdBy` / `isPrivate` filter is present.
+      this.collection.createIndex({ description: 1 }),
+      this.collection.createIndex({ createdBy: 1, createdOn: -1 }),
+      this.collection.createIndex({ createdOn: -1 }),
+      this.collection.createIndex({ isPrivate: 1, createdOn: -1 }),
+    ]);
+  }
+
   async findByGuid(guid: string): Promise<SkillDocument | null> {
     const doc = await this.collection.findOne({ _id: guid as any });
     return mapDoc(doc);
