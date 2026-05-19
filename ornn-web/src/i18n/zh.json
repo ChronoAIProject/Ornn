@@ -1537,7 +1537,9 @@
       "unrecognizedDirs": "存在未识别目录：{{dirs}}。仅允许 scripts/、references/、assets/。",
       "frontmatterUnparseable": "无法从 SKILL.md frontmatter 解析元数据。请检查并修复 YAML frontmatter 块。",
       "onlyZipAccepted": "仅接受 .zip 文件。",
-      "fileTooLarge": "文件过大（{{size}}）。"
+      "fileTooLarge": "文件过大（{{size}}）。",
+      "unsafePath": "ZIP 条目路径不安全：'{{path}}'。路径不允许包含 '..'、前导斜杠、反斜杠或盘符前缀。",
+      "uncompressedTooLarge": "ZIP 解压后达到 {{actual}} 字节，超过限制 {{max}} 字节。"
     },
     "frontmatter": {
       "panelTitle": "Frontmatter 校验错误",
