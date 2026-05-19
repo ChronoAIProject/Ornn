@@ -503,6 +503,29 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
     async (c) => {
       const idOrName = c.req.param("idOrName");
       logger.info({ idOrName }, "Skill jsonize request");
+
+      // Visibility check (#567) — the package contents endpoint must
+      // not be more permissive than the metadata endpoint. Load the
+      // skill first and reject inaccessible private skills with the
+      // same `SKILL_NOT_FOUND` shape `/skills/:idOrName` uses.
+      const skill = await skillService.getSkill(idOrName);
+      if (skill.isPrivate) {
+        const authCtx = c.get("auth");
+        // `requirePermission` above guarantees authCtx is set.
+        if (!authCtx) {
+          throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${idOrName}' not found`);
+        }
+        const memberships = await readUserOrgMemberships(c);
+        const actor = {
+          userId: authCtx.userId,
+          memberships,
+          isPlatformAdmin: authCtx.permissions.includes("ornn:admin:skill"),
+        };
+        if (!canReadSkill(skill, actor)) {
+          throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${idOrName}' not found`);
+        }
+      }
+
       const result = await skillService.getSkillJson(idOrName);
       // Programmatic pull — closest signal to the north-star metric.
       // Fire-and-forget; the analytics service swallows its own errors.
