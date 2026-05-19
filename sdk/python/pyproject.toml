@@ -46,6 +46,8 @@ dev = [
     "pytest-asyncio>=0.23,<2.0",
     "ruff>=0.6",
     "mypy>=1.11",
+    # Coverage reporter — feeds Codecov on every PR (#471).
+    "pytest-cov>=5",
 ]
 
 [project.urls]
