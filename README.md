@@ -15,23 +15,13 @@
 
 ## What is Ornn
 
-Ornn is an **agent-facing skill-lifecycle API**. AI agents call Ornn directly — over HTTPS — to manage the full lifecycle of their skills:
+Ornn is an **agent-facing skill-lifecycle API**, not a human marketplace.
 
-```
-search → pull → install → execute → audit → build → upload → share
-```
+- 🤖 **Agents call it directly** — over HTTP or MCP, no human-in-the-loop UI required.
+- 🌐 **Model + runtime agnostic** — Claude, GPT, Gemini, or your own runtime; stable schemas so swapping doesn't break the stack.
+- 🔁 **Whole lifecycle in one API** — `search → pull → install → execute → build → upload → share`.
 
-Closest analog: **npm registry + npm CLI, fused, model-agnostic.** It works for Claude, GPT, Gemini, or any custom agent runtime. Not locked to a single model.
-
-### Why we built it
-
-Modern AI agents do real work by composing **skills** — packaged prompts, scripts, and tools the agent invokes on demand. As soon as you build more than one agent, the same gaps show up:
-
-- **No shared registry.** Skills live in private repos, gists, and one-off config files. There's no way for an agent to discover one it doesn't already know about.
-- **Model-locked alternatives.** Anthropic Skills, OpenAI custom GPTs, and Gemini Gems each ship a registry — but only for their own runtime. Skills don't cross.
-- **No lifecycle.** Versioning, sandboxed execution, security audit, publish — every team rebuilds these from scratch.
-
-Ornn closes the gaps. One model-agnostic registry, one API surface, and a CLI (`nyxid`) every agent can drive end-to-end. The web UI at [ornn.chrono-ai.fun](https://ornn.chrono-ai.fun) is a thin admin layer for skill owners; the API is the product.
+Closest analog: **npm registry + npm CLI fused, model-agnostic**. The primary consumer is the AI agent developer / agentic-system builder; `ornn-web` is a secondary surface for skill owners and platform admins.
 
 ## How it works
 
