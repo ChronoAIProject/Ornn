@@ -8,7 +8,35 @@
   <a href="https://github.com/ChronoAIProject/Ornn/actions/workflows/ci.yml"><img src="https://github.com/ChronoAIProject/Ornn/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <a href="https://github.com/ChronoAIProject/Ornn/releases"><img src="https://img.shields.io/github/v/release/ChronoAIProject/Ornn" alt="Latest release" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/github/license/ChronoAIProject/Ornn" alt="License" /></a>
-  &nbsp;<strong>The skill lifecycle API for AI agents, not another marketplace.</strong>
+  <a href="https://github.com/ChronoAIProject/Ornn/commits/develop"><img src="https://img.shields.io/github/last-commit/ChronoAIProject/Ornn/develop" alt="Last commit" /></a>
+  <a href="https://github.com/ChronoAIProject/Ornn/discussions"><img src="https://img.shields.io/github/discussions/ChronoAIProject/Ornn" alt="Discussions" /></a>
+  <a href="https://github.com/ChronoAIProject/Ornn/stargazers"><img src="https://img.shields.io/github/stars/ChronoAIProject/Ornn?style=flat" alt="Stars" /></a>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/status-alpha-orange" alt="Project status: alpha" />
+  <img src="https://img.shields.io/badge/model-agnostic-blue" alt="Model-agnostic" />
+  <img src="https://img.shields.io/badge/transport-HTTP%20%7C%20MCP-blueviolet" alt="HTTP and MCP" />
+</p>
+
+<p align="center"><strong>The agent-facing skill-lifecycle API for AI agents.</strong></p>
+
+<p align="center">
+  Ornn official website — <a href="https://ornn.chrono-ai.fun">ornn.chrono-ai.fun</a>
+</p>
+
+<p align="center">
+  <a href="#what-is-ornn">What is Ornn</a> ·
+  <a href="#how-it-works">How it works</a> ·
+  <a href="#sdk-quickstart">SDK quickstart</a> ·
+  <a href="#quickstart">Quickstart</a> ·
+  <a href="#try-ornn-free">Try Ornn free</a> ·
+  <a href="#how-ornn-compares">How Ornn compares</a> ·
+  <a href="#examples">Examples</a> ·
+  <a href="#documentation">Docs</a> ·
+  <a href="#roadmap">Roadmap</a> ·
+  <a href="#community">Community</a> ·
+  <a href="#contributing">Contributing</a>
 </p>
 
 ---
@@ -101,7 +129,17 @@ Open [**`ornn-agent-manual-cli`**](https://ornn.chrono-ai.fun/skills/ornn-agent-
 
 Partway through setup, your agent will prompt you to install [**`nyxid`**](https://github.com/ChronoAIProject/NyxID) — the CLI Ornn calls under the hood to broker authenticated requests. Approve the prompt; the agent finishes onboarding itself.
 
-### 3. Talk to your agent
+## Try Ornn free
+
+Early-user perk to test the full Playground + Skill Generation flow without a credit card:
+
+1. ⭐ Star this repo
+2. Sign in to [ornn.chrono-ai.fun](https://ornn.chrono-ai.fun) with the same GitHub account
+3. On first sign-in, enter NyxID invite code **`NYX-2XXJI08A`**
+
+Your redemption code lands in the Ornn notification inbox within 24h. **First 500 users · 400 free GPT-5.5 conversations** (200 Playground + 200 Skill Generation, no card, no expiry).
+
+## How Ornn compares
 
 That's it. Your agent now has the full Ornn lifecycle. Try any of these in plain language — no special syntax, no flags to memorise:
 
