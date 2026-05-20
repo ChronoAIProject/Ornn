@@ -138,6 +138,10 @@ For the full API contract (every endpoint, every error code), see [**ornn.chrono
 - **Support guide** → [SUPPORT.md](SUPPORT.md)
 - **Pull requests** → read [CONTRIBUTING.md](CONTRIBUTING.md) first — it covers the issue-first workflow, branching, commit decomposition, and the changeset rule (CI blocks PRs without one). By participating you agree to follow our [Code of Conduct](CODE_OF_CONDUCT.md).
 
+## Like what you see?
+
+⭐ If Ornn looks like the primitive your agent stack has been missing, a star helps a lot at this stage — it tells us we're solving a real problem, and it's the threshold most awesome-list maintainers check before accepting a project.
+
 ## License
 
 [Apache License 2.0](LICENSE)
