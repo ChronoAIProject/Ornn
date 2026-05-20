@@ -113,9 +113,7 @@ import { createMeRoutes } from "./domains/me/routes";
 import { createUserRoutes } from "./domains/users/routes";
 
 // Domain: Platform settings (legacy single-doc — still used by mirror, audit-waiver) ----
-import { PlatformSettingsRepository } from "./domains/platform/repository";
-import { PlatformSettingsService } from "./domains/platform/service";
-import { createPlatformSettingsRoutes } from "./domains/platform/routes";
+import { wirePlatformSettings } from "./domains/platform/bootstrap";
 
 // Domain: Settings (multi-section + LLM providers + export/import) — backend-engineer-2.
 import { SettingsRepository } from "./domains/settings/repository";
@@ -537,11 +535,10 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   // the existing single-doc `PlatformSettings` shape into the bridge
   // contract — every field a client/route asks for is satisfied here
   // (with sensible fallbacks for sections that don't exist yet).
-  const platformSettingsRepo = new PlatformSettingsRepository(db);
-  const platformSettingsService = new PlatformSettingsService(platformSettingsRepo, {
+  const { routes: platformSettingsRoutes } = wirePlatformSettings({
+    db,
     encryptionKey: config.encryptionKey,
   });
-  const platformSettingsRoutes = createPlatformSettingsRoutes({ platformSettingsService });
 
   // ---- Settings routes (engineer-2): per-section CRUD, LLM providers,
   //   export/import.
