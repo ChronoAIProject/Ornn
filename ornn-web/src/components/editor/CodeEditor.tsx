@@ -343,7 +343,10 @@ export function useEditorState(_initialFiles: { id: string; name: string; conten
     setTabs((prev) => {
       const newTabs = prev.filter((t) => t.id !== tabId);
       if (activeTabId === tabId && newTabs.length > 0) {
-        setActiveTabId(newTabs[newTabs.length - 1].id);
+        // Length-guarded above — newTabs.length > 0 means index
+        // length-1 is valid. `!` is safe under noUncheckedIndexedAccess
+        // (#450).
+        setActiveTabId(newTabs[newTabs.length - 1]!.id);
       } else if (newTabs.length === 0) {
         setActiveTabId("");
       }

@@ -56,13 +56,13 @@ const SETTINGS: ReadonlyArray<{
 
 export function AdvancedOptionsModal({ isOpen, onClose, skill }: AdvancedOptionsModalProps) {
   const { t } = useTranslation();
-  const [selected, setSelected] = useState<AdvancedSettingId>(SETTINGS[0].id);
+  const [selected, setSelected] = useState<AdvancedSettingId>(SETTINGS[0]!.id);
 
   // Reset to the first setting whenever the modal opens, so the user
   // always lands on a known starting point rather than wherever they
   // left off across different skills.
   useEffect(() => {
-    if (isOpen) setSelected(SETTINGS[0].id);
+    if (isOpen) setSelected(SETTINGS[0]!.id);
   }, [isOpen]);
 
   return (

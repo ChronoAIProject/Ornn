@@ -41,7 +41,7 @@ export function ToolsInput({ tools, onChange, error, className = "" }: ToolsInpu
       addTool(input);
     }
     if (e.key === "Backspace" && !input && tools.length > 0) {
-      removeTool(tools[tools.length - 1]);
+      removeTool(tools[tools.length - 1]!);
     }
   };
 

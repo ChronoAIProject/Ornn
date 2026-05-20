@@ -114,7 +114,10 @@ export function PermissionsModal({ isOpen, onClose, skill }: PermissionsModalPro
       return resolved
         .map(
           (entry, i) =>
-            entry ?? { userId: unknownOrgIds[i], displayName: unknownOrgIds[i], avatarUrl: null },
+            // `i` is bounded by `unknownOrgIds.length` (Promise.all
+            // preserves indexing). `!` is safe under
+            // noUncheckedIndexedAccess (#450).
+            entry ?? { userId: unknownOrgIds[i]!, displayName: unknownOrgIds[i]!, avatarUrl: null },
         )
         .filter((e) => !!e);
     },

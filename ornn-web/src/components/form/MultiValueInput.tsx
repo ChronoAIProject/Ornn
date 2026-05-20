@@ -90,7 +90,9 @@ export function MultiValueInput({
       addValue(input);
     }
     if (e.key === "Backspace" && !input && values.length > 0) {
-      removeValue(values[values.length - 1]);
+      // Length-guarded — `values.length > 0` makes index length-1 valid.
+      // `!` is safe under noUncheckedIndexedAccess (#450).
+      removeValue(values[values.length - 1]!);
     }
   };
 

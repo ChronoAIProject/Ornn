@@ -87,7 +87,12 @@ export function ExtrasSection() {
   ) => {
     if (!draft) return;
     const next = [...draft.extraNyxidServices];
-    next[idx] = { ...next[idx], ...patch };
+    // `idx` is a caller-provided index into the same draft array we
+    // just spread. Guard rather than `!` so a stale callback can't
+    // crash the page under noUncheckedIndexedAccess (#450).
+    const current = next[idx];
+    if (!current) return;
+    next[idx] = { ...current, ...patch };
     form.patchDraft({ extraNyxidServices: next });
   };
 

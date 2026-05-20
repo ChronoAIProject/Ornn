@@ -258,8 +258,8 @@ function TreeNode({
  */
 function computeInitialExpanded(files: FileNode[]): Set<string> {
   const ids = new Set<string>(["root"]);
-  if (files.length === 1 && files[0].type === "folder") {
-    ids.add(files[0].id);
+  if (files.length === 1 && files[0]!.type === "folder") {
+    ids.add(files[0]!.id);
   }
   return ids;
 }
@@ -281,8 +281,8 @@ export function FileTree({
     setExpandedIds((prev) => {
       const next = new Set(prev);
       next.add("root");
-      if (files.length === 1 && files[0].type === "folder") {
-        next.add(files[0].id);
+      if (files.length === 1 && files[0]!.type === "folder") {
+        next.add(files[0]!.id);
       }
       return next;
     });

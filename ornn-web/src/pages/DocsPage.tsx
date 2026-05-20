@@ -74,8 +74,10 @@ function extractToc(md: string): TocItem[] {
 
     const match = /^(#{1,4})\s+(.+)$/.exec(line);
     if (match) {
-      const level = match[1].length;
-      const text = match[2].replace(/\*\*(.+?)\*\*/g, "$1").replace(/`(.+?)`/g, "$1");
+      // Both capture groups are always present on match. `!` is safe
+      // under noUncheckedIndexedAccess (#450).
+      const level = match[1]!.length;
+      const text = match[2]!.replace(/\*\*(.+?)\*\*/g, "$1").replace(/`(.+?)`/g, "$1");
       items.push({ id: slugify(text), text, level });
     }
   }
@@ -691,11 +693,13 @@ export function DocsPage() {
       return { displayMarkdown: markdown, frontmatter: {} as Record<string, string> };
     }
     const fm: Record<string, string> = {};
-    for (const raw of m[1].split(/\r?\n/)) {
+    // Capture group 1 is always present on match. `!` is safe under
+    // noUncheckedIndexedAccess (#450).
+    for (const raw of m[1]!.split(/\r?\n/)) {
       const kv = /^\s*([A-Za-z][\w-]*)\s*:\s*(.+?)\s*$/.exec(raw);
-      if (kv) fm[kv[1]] = kv[2].replace(/^['"]|['"]$/g, "");
+      if (kv) fm[kv[1]!] = kv[2]!.replace(/^['"]|['"]$/g, "");
     }
-    return { displayMarkdown: markdown.slice(m[0].length), frontmatter: fm };
+    return { displayMarkdown: markdown.slice(m[0]!.length), frontmatter: fm };
   }, [markdown]);
 
   // Every doc is copyable; nothing on the docs site today is paste-

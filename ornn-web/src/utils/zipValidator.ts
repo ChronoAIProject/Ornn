@@ -117,7 +117,10 @@ export function isBinaryContent(content: Uint8Array): boolean {
  * Determines the skill folder for a given file path.
  */
 function getFolder(path: string): SkillFolder {
-  const firstSegment = path.split("/")[0];
+  // `split("/")[0]` is always present — it's the substring before the
+  // first `/`, or the whole string when there's no separator. `!` is
+  // safe under noUncheckedIndexedAccess (#450).
+  const firstSegment = path.split("/")[0]!;
   if (RECOGNIZED_DIRS.has(firstSegment)) {
     return firstSegment as SkillFolder;
   }
@@ -139,11 +142,13 @@ function normalizeEntries(
   // the ZIP wraps everything in a single root folder
   if (
     topLevelEntries.length === 1 &&
-    topLevelEntries[0].dir
+    topLevelEntries[0]!.dir
   ) {
-    const prefix = topLevelEntries[0].path.endsWith("/")
-      ? topLevelEntries[0].path
-      : topLevelEntries[0].path + "/";
+    // Length-guarded above (`topLevelEntries.length === 1`) — index 0
+    // is guaranteed defined. `!` is safe under
+    // noUncheckedIndexedAccess (#450).
+    const entry = topLevelEntries[0]!;
+    const prefix = entry.path.endsWith("/") ? entry.path : entry.path + "/";
 
     const normalized = entries
       .filter((e) => e.path !== prefix && e.path.startsWith(prefix))
@@ -263,7 +268,9 @@ export async function validateSkillZip(
     if (entry.dir && !entry.path.includes("/")) {
       topDirs.add(entry.path.replace("/", ""));
     } else if (!entry.dir && entry.path.includes("/")) {
-      const firstDir = entry.path.split("/")[0];
+      // `split("/")[0]` is always present when the string contains
+      // "/". `!` is safe under noUncheckedIndexedAccess (#450).
+      const firstDir = entry.path.split("/")[0]!;
       topDirs.add(firstDir);
     }
   }

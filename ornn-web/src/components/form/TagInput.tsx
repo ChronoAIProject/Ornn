@@ -42,7 +42,7 @@ export function TagInput({ tags, onChange, error, className = "" }: TagInputProp
       addTag(input);
     }
     if (e.key === "Backspace" && !input && tags.length > 0) {
-      removeTag(tags[tags.length - 1]);
+      removeTag(tags[tags.length - 1]!);
     }
   };
 
