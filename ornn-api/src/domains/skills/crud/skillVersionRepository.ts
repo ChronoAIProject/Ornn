@@ -11,9 +11,8 @@
 import type { Collection, Db, Document } from "mongodb";
 import type { SkillVersionDocument, SkillMetadata } from "../../../shared/types/index";
 import { AppError } from "../../../shared/types/index";
-import pino from "pino";
-
-const logger = pino({ level: "info" }).child({ module: "skillVersionRepository" });
+import { createLogger } from "../../../shared/logger";
+const logger = createLogger("skillVersionRepository");
 
 export interface CreateSkillVersionData {
   skillGuid: string;

@@ -15,10 +15,10 @@
 
 import type { Context, Next } from "hono";
 import { createMiddleware } from "hono/factory";
-import pino from "pino";
+import { createLogger } from "../shared/logger";
 import { AppError } from "../shared/types/index";
 
-const logger = pino({ level: "info" }).child({ module: "nyxidAuth" });
+const logger = createLogger("nyxidAuth");
 
 // ---------------------------------------------------------------------------
 // Types

@@ -4,9 +4,8 @@
  * @module clients/storageClient
  */
 
-import pino from "pino";
-
-const logger = pino({ level: "info" }).child({ module: "storageClient" });
+import { createLogger } from "../shared/logger";
+const logger = createLogger("storageClient");
 
 export interface IStorageClient {
   upload(bucket: string, key: string, data: Uint8Array, contentType: string): Promise<{ url: string }>;

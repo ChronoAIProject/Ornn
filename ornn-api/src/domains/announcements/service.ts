@@ -14,7 +14,7 @@
  * @module domains/announcements/service
  */
 
-import pino from "pino";
+import { createLogger } from "../../shared/logger";
 import { AppError } from "../../shared/types/index";
 import type {
   AnnouncementRepository,
@@ -27,7 +27,7 @@ import type {
   PublicAnnouncementListItem,
 } from "./types";
 
-const logger = pino({ level: "info" }).child({ module: "announcementService" });
+const logger = createLogger("announcementService");
 
 export interface AnnouncementServiceDeps {
   readonly repo: AnnouncementRepository;

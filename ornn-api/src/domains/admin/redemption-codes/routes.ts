@@ -13,7 +13,7 @@
  */
 
 import { Hono } from "hono";
-import pino from "pino";
+import { createLogger } from "../../../shared/logger";
 import {
   type AuthVariables,
   getAuth,
@@ -32,7 +32,7 @@ import {
   type RedemptionCodeStatus,
 } from "../../redemption-codes/types";
 
-const logger = pino({ level: "info" }).child({ module: "adminRedemptionCodeRoutes" });
+const logger = createLogger("adminRedemptionCodeRoutes");
 
 const PAGE_SIZE_MAX = 100;
 const PAGE_SIZE_DEFAULT = 20;

@@ -23,7 +23,7 @@
  */
 
 import { createHash } from "node:crypto";
-import pino from "pino";
+import { createLogger } from "../../../shared/logger";
 import { GitHubAppAuth } from "./githubAppAuth";
 import { GitHubMirrorClient, type TreeEntry } from "./githubMirrorClient";
 import type { SkillRepository } from "../crud/repository";
@@ -31,7 +31,7 @@ import type { SkillService } from "../crud/service";
 import type { SkillDocument } from "../../../shared/types/index";
 import type { MirrorSection } from "../../settings/sections/mirror";
 
-const logger = pino({ level: "info" }).child({ module: "mirrorService" });
+const logger = createLogger("mirrorService");
 
 /**
  * Narrow surface MirrorService needs from SettingsService. Decouples

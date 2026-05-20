@@ -6,8 +6,7 @@
 import type { Collection, Db, Document } from "mongodb";
 import type { SkillDocument, SkillMetadata } from "../../../shared/types/index";
 import { AppError } from "../../../shared/types/index";
-import pino from "pino";
-
+import { createLogger } from "../../../shared/logger";
 /**
  * Coerce a string GUID into the shape MongoDB's driver expects for
  * `_id` queries on the skills collection (#448). The collection uses
@@ -46,7 +45,7 @@ function skillIdList(guids: readonly string[]): never {
   return guids as never;
 }
 
-const logger = pino({ level: "info" }).child({ module: "skillCrudRepository" });
+const logger = createLogger("skillCrudRepository");
 
 export interface CreateSkillData {
   guid: string;

@@ -8,7 +8,7 @@
 import type { SkillRepository } from "../crud/repository";
 import type { NyxLlmClient } from "../../../clients/nyxid/llm";
 import type { SkillDocument, SkillSearchItem, SkillSearchResponse } from "../../../shared/types/index";
-import pino from "pino";
+import { createLogger } from "../../../shared/logger";
 import { z } from "zod";
 
 /**
@@ -42,7 +42,7 @@ export interface SearchEnrichmentContext {
 
 export type SystemFilter = "any" | "only" | "exclude";
 
-const logger = pino({ level: "info" }).child({ module: "skillSearchService" });
+const logger = createLogger("skillSearchService");
 
 const BATCH_SIZE = 50;
 

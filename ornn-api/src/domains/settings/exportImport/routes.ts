@@ -15,7 +15,7 @@
 
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
-import pino from "pino";
+import { createLogger } from "../../../shared/logger";
 import { z } from "zod";
 import { validateBody, getValidatedBody } from "../../../middleware/validate";
 import {
@@ -27,7 +27,7 @@ import type { SettingsActor } from "../types";
 import type { SettingsExporter } from "./exporter";
 import type { ImportResult, SettingsImporter } from "./importer";
 
-const logger = pino({ level: "info" }).child({ module: "settingsExportImportRoutes" });
+const logger = createLogger("settingsExportImportRoutes");
 
 /**
  * Settings audit hook. Bootstrap binds this to

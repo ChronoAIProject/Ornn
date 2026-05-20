@@ -15,7 +15,7 @@
  *
  * @module domains/platform/service
  */
-import pino from "pino";
+import { createLogger } from "../../shared/logger";
 import { decryptSecret, encryptSecret } from "../../infra/crypto";
 import type { PlatformSettingsRepository } from "./repository";
 import {
@@ -24,7 +24,7 @@ import {
   type PlatformSettings,
 } from "./types";
 
-const logger = pino({ level: "info" }).child({ module: "platformSettingsService" });
+const logger = createLogger("platformSettingsService");
 
 export interface PlatformSettingsDefaults {
   /**

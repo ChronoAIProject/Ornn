@@ -19,7 +19,7 @@
  * @module domains/settings/service
  */
 
-import pino from "pino";
+import { createLogger } from "../../shared/logger";
 import { ZodError } from "zod";
 import {
   decryptSecret,
@@ -46,7 +46,7 @@ import type {
   SettingsService,
 } from "./types";
 
-const logger = pino({ level: "info" }).child({ module: "settingsService" });
+const logger = createLogger("settingsService");
 
 export interface SettingsServiceDeps {
   readonly repo: SettingsRepository;

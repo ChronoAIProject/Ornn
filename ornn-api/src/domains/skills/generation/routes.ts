@@ -24,10 +24,10 @@ import { resolveZipRoot } from "../../../shared/utils/zip";
 import { validateBody, getValidatedBody } from "../../../middleware/validate";
 import { fetchGithubSourceBundle } from "./githubFetcher";
 import JSZip from "jszip";
-import pino from "pino";
+import { createLogger } from "../../../shared/logger";
 import { z } from "zod";
 
-const logger = pino({ level: "info" }).child({ module: "skillGenerationRoutes" });
+const logger = createLogger("skillGenerationRoutes");
 
 export interface GenerationRoutesConfig {
   generationService: SkillGenerationService;

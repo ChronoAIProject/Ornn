@@ -13,14 +13,14 @@
  * @module domains/notifications/service
  */
 
-import pino from "pino";
+import { createLogger } from "../../shared/logger";
 import { AppError } from "../../shared/types/index";
 import type { BroadcastRepository } from "../broadcasts/repository";
 import type { BroadcastDocument } from "../broadcasts/types";
 import type { NotificationRepository } from "./repository";
 import type { FeedItem, NotificationDocument } from "./types";
 
-const logger = pino({ level: "info" }).child({ module: "notificationService" });
+const logger = createLogger("notificationService");
 
 /**
  * Recipient predicate for broadcasts (#502). `null` recipientUserIds

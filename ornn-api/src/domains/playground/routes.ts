@@ -21,9 +21,8 @@ import {
   getAuth,
 } from "../../middleware/nyxidAuth";
 import { validateBody, getValidatedBody } from "../../middleware/validate";
-import pino from "pino";
-
-const logger = pino({ level: "info" }).child({ module: "playgroundRoutes" });
+import { createLogger } from "../../shared/logger";
+const logger = createLogger("playgroundRoutes");
 
 // Zod schemas
 const playgroundMessageSchema = z.object({

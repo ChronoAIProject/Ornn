@@ -13,10 +13,10 @@
  * @module clients/nyxid/service
  */
 
-import pino from "pino";
+import { createLogger } from "../../shared/logger";
 import type { NyxidConfigResolver } from "./base";
 
-const logger = pino({ level: "info" }).child({ module: "nyxidServiceClient" });
+const logger = createLogger("nyxidServiceClient");
 
 /**
  * Catalog service shape Ornn cares about. Mirrors a small subset of

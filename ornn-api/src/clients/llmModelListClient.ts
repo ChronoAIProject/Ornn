@@ -32,7 +32,7 @@
  * @module clients/llmModelListClient
  */
 
-import pino from "pino";
+import { createLogger } from "../shared/logger";
 import type {
   ApiFormat,
   LlmProviderAuth,
@@ -43,7 +43,7 @@ import {
   SsrfRefusalError,
 } from "../infra/url";
 
-const logger = pino({ level: "info" }).child({ module: "llmModelListClient" });
+const logger = createLogger("llmModelListClient");
 
 /** Max wall-clock for a single upstream request (model-list or token-exchange). */
 const FETCH_TIMEOUT_MS = 15_000;

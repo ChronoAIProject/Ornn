@@ -12,14 +12,14 @@
  */
 
 import type { Collection, Db } from "mongodb";
-import pino from "pino";
+import { createLogger } from "../../shared/logger";
 import {
   type ActorMeta,
   type RedemptionCodeDoc,
   type RedemptionCodeStatus,
 } from "./types";
 
-const logger = pino({ level: "info" }).child({ module: "redemptionCodeRepository" });
+const logger = createLogger("redemptionCodeRepository");
 
 /**
  * Escape a user-supplied string before embedding in a `$regex`. Same

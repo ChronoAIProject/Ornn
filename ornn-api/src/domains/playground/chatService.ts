@@ -14,10 +14,10 @@ import type {
 import type { SandboxClient } from "../../clients/sandboxClient";
 import type { SkillService } from "../skills/crud/service";
 import type { PlaygroundChatEvent } from "../../shared/types/index";
-import pino from "pino";
+import { createLogger } from "../../shared/logger";
 import { z } from "zod";
 
-const logger = pino({ level: "info" }).child({ module: "playgroundChatService" });
+const logger = createLogger("playgroundChatService");
 
 /**
  * Zod schemas for the four LLM Responses-API event shapes we

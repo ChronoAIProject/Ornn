@@ -29,11 +29,11 @@
  */
 
 import type { Context, Next, MiddlewareHandler } from "hono";
-import pino from "pino";
+import { createLogger } from "../shared/logger";
 import type { AnalyticsEmitter, CallerType } from "../infra/analytics";
 import { getRequestId } from "./requestId";
 
-const logger = pino({ level: "info" }).child({ module: "apiRequestTracking" });
+const logger = createLogger("apiRequestTracking");
 
 export interface ApiRequestTrackingConfig {
   emitter: AnalyticsEmitter;

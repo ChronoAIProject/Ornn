@@ -16,7 +16,7 @@
  */
 
 import { Hono } from "hono";
-import pino from "pino";
+import { createLogger } from "../../../shared/logger";
 import { z } from "zod";
 import type { AuditService } from "./service";
 import type { SkillService } from "../crud/service";
@@ -37,7 +37,7 @@ const auditTriggerSchema = z.object({
   force: z.boolean().optional(),
 });
 
-const logger = pino({ level: "info" }).child({ module: "auditRoutes" });
+const logger = createLogger("auditRoutes");
 
 export interface AuditRoutesConfig {
   auditService: AuditService;

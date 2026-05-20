@@ -37,9 +37,8 @@ import type { AnalyticsEmitter } from "../../../infra/analytics";
 import type { IAgentSealScanner } from "../../../infra/agentseal";
 import { parse as parseYaml } from "yaml";
 import JSZip from "jszip";
-import pino from "pino";
-
-const logger = pino({ level: "info" }).child({ module: "skillCrudService" });
+import { createLogger } from "../../../shared/logger";
+const logger = createLogger("skillCrudService");
 
 const FRONTMATTER_REGEX = /^---\s*\n([\s\S]*?)\n---/;
 

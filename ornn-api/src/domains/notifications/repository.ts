@@ -9,10 +9,10 @@
 
 import { randomUUID } from "node:crypto";
 import type { Collection, Db, Document, Filter } from "mongodb";
-import pino from "pino";
+import { createLogger } from "../../shared/logger";
 import type { NotificationCategory, NotificationDocument } from "./types";
 
-const logger = pino({ level: "info" }).child({ module: "notificationRepository" });
+const logger = createLogger("notificationRepository");
 
 export interface CreateNotificationInput {
   userId: string;

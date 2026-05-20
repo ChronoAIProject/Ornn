@@ -9,7 +9,7 @@
 
 import { randomUUID } from "node:crypto";
 import type { Db, Collection, Document } from "mongodb";
-import pino from "pino";
+import { createLogger } from "../../../shared/logger";
 import type {
   AuditFinding,
   AuditRecord,
@@ -18,7 +18,7 @@ import type {
   AuditVerdict,
 } from "./types";
 
-const logger = pino({ level: "info" }).child({ module: "auditRepository" });
+const logger = createLogger("auditRepository");
 
 export interface CreateRunningInput {
   skillGuid: string;

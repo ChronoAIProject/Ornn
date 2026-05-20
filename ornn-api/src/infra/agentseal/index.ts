@@ -33,9 +33,8 @@ import { existsSync, statSync } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { isAbsolute, join } from "node:path";
-import pino, { type Logger } from "pino";
-
-const moduleLogger = pino({ level: "info" }).child({ module: "agentseal" });
+import { createLogger, type Logger } from "../../shared/logger";
+const moduleLogger = createLogger("agentseal");
 
 export interface ScanInput {
   /** Skill identity for log correlation. */

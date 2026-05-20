@@ -27,9 +27,8 @@
 
 import type { MiddlewareHandler } from "hono";
 import type { Collection, Db } from "mongodb";
-import pino from "pino";
-
-const logger = pino({ level: "info" }).child({ module: "idempotency" });
+import { createLogger } from "../shared/logger";
+const logger = createLogger("idempotency");
 
 /** 24-hour TTL, per CONVENTIONS.md §3.4 — matches Stripe / GitHub. */
 export const IDEMPOTENCY_TTL_SECONDS = 24 * 60 * 60;

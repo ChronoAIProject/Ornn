@@ -16,10 +16,10 @@
  * @module clients/nyxid/llmCatalog
  */
 
-import pino from "pino";
+import { createLogger } from "../../shared/logger";
 import type { NyxidConfigResolver, NyxidSaTokenProvider } from "./base";
 
-const logger = pino({ level: "info" }).child({ module: "nyxLlmCatalogClient" });
+const logger = createLogger("nyxLlmCatalogClient");
 
 export interface UpstreamModel {
   /** Upstream `id`, e.g. `gpt-5-mini`. */

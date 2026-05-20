@@ -11,10 +11,10 @@
  * @module clients/nyxid/orgs
  */
 
-import pino from "pino";
+import { createLogger } from "../../shared/logger";
 import type { NyxidConfigResolver, NyxidSaTokenProvider } from "./base";
 
-const logger = pino({ level: "info" }).child({ module: "nyxidOrgsClient" });
+const logger = createLogger("nyxidOrgsClient");
 
 /**
  * Membership record Ornn cares about. Mirrors the subset of NyxID's

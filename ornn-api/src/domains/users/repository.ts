@@ -30,9 +30,8 @@
  */
 
 import type { Collection, Db } from "mongodb";
-import pino from "pino";
-
-const logger = pino({ level: "info" }).child({ module: "userDirectoryRepository" });
+import { createLogger } from "../../shared/logger";
+const logger = createLogger("userDirectoryRepository");
 
 const COLLECTION = "users";
 
