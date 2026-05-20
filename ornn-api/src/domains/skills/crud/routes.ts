@@ -27,6 +27,7 @@ import { validateBody, getValidatedBody } from "../../../middleware/validate";
 import { AppError } from "../../../shared/types/index";
 import { canReadSkill, canManageSkill } from "./authorize";
 import { parseGithubUrl } from "./utils/githubPull";
+import { enforceZipLimits } from "../../../shared/utils/zipLimits";
 import pino from "pino";
 
 const deprecationPatchSchema = z.object({
@@ -233,6 +234,14 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
       }
 
       const zipBuffer = new Uint8Array(body);
+
+      // Zip-bomb defense (#633). Walks the central directory without
+      // extracting; throws 413 (`uncompressed_too_large` / `too_many_files`
+      // / `invalid_zip`) before validateZipFormat / storage upload /
+      // AgentSeal subprocess. Cheap, runs ahead of every expensive
+      // side-effect.
+      await enforceZipLimits(zipBuffer);
+
       const userEmail = authCtx.email || undefined;
       const userDisplayName = authCtx.displayName || undefined;
 
@@ -977,6 +986,13 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
 
       if (zipBuffer === undefined && isPrivate === undefined) {
         throw AppError.badRequest("no_update", "No update data provided. Send a ZIP file and/or isPrivate field.");
+      }
+
+      // Zip-bomb defense (#633) — same gate as the create path. Only
+      // when a ZIP is actually being replaced; a privacy-only PUT
+      // doesn't hit this.
+      if (zipBuffer !== undefined) {
+        await enforceZipLimits(zipBuffer);
       }
 
       logger.info({ guid, userId: authCtx.userId }, "Skill update via API");
