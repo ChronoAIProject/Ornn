@@ -81,8 +81,7 @@ import {
 import { wireAnalytics } from "./domains/analytics/bootstrap";
 
 // Domain: Skill Search
-import { SearchService } from "./domains/skills/search/service";
-import { createSearchRoutes } from "./domains/skills/search/routes";
+import { wireSkillSearch } from "./domains/skills/search/bootstrap";
 
 // Domain: Skill Generation
 import { SkillGenerationService } from "./domains/skills/generation/service";
@@ -682,19 +681,14 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   });
 
   // ---- Domain: Skill Search ----
-  const searchService = new SearchService({
+  // Search shares the playground surface for default-model resolution
+  // (it's a playground-flavoured LLM call). Backend-eng-2 may add a
+  // dedicated `search` section later; until then, share with playground.
+  const { routes: searchRoutes } = wireSkillSearch({
     skillRepo,
     llmClient: nyxLlmClient,
-    // Default model resolves through the playground surface (search is
-    // a playground-flavoured LLM call). Backend-eng-2 may add a
-    // dedicated `search` section later; until then, share with playground.
     defaultModelResolver: async () =>
       (await resolveSurfaceDefaults("playground")).model,
-  });
-
-  const searchRoutes = createSearchRoutes({
-    searchService,
-    skillRepo,
   });
 
   // ---- Domain: Skill Generation ----
