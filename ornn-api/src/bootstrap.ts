@@ -66,39 +66,28 @@ import { createAuditRoutes } from "./domains/skills/audit/routes";
 
 
 // Domain: Notifications
-import { NotificationRepository } from "./domains/notifications/repository";
-import { NotificationService } from "./domains/notifications/service";
-import { createNotificationRoutes } from "./domains/notifications/routes";
-import { dropLegacyNotificationCategories } from "./domains/notifications/migration";
+import { wireNotifications } from "./domains/notifications/bootstrap";
 
 // Domain: Announcements (landing-page popup)
-import { AnnouncementRepository } from "./domains/announcements/repository";
-import { AnnouncementService } from "./domains/announcements/service";
-import { createAnnouncementRoutes } from "./domains/announcements/routes";
-import { migrateAnnouncementsToBilingual } from "./domains/announcements/migration";
+import { wireAnnouncements } from "./domains/announcements/bootstrap";
 
 // Domain: Broadcasts (admin-authored notifications, #500)
-import { BroadcastRepository } from "./domains/broadcasts/repository";
-import { BroadcastService } from "./domains/broadcasts/service";
-import { createBroadcastRoutes } from "./domains/broadcasts/routes";
-import { backfillBroadcastRecipientUserIds } from "./domains/broadcasts/migration";
+import {
+  wireBroadcasts,
+  wireBroadcastsRepo,
+} from "./domains/broadcasts/bootstrap";
 
 // Domain: Analytics
-import { AnalyticsRepository } from "./domains/analytics/repository";
-import { AnalyticsService } from "./domains/analytics/service";
-import { createAnalyticsRoutes } from "./domains/analytics/routes";
+import { wireAnalytics } from "./domains/analytics/bootstrap";
 
 // Domain: Skill Search
-import { SearchService } from "./domains/skills/search/service";
-import { createSearchRoutes } from "./domains/skills/search/routes";
+import { wireSkillSearch } from "./domains/skills/search/bootstrap";
 
 // Domain: Skill Generation
-import { SkillGenerationService } from "./domains/skills/generation/service";
-import { createGenerationRoutes } from "./domains/skills/generation/routes";
+import { wireSkillGeneration } from "./domains/skills/generation/bootstrap";
 
 // Domain: Playground
-import { PlaygroundChatService } from "./domains/playground/chatService";
-import { createPlaygroundRoutes } from "./domains/playground/routes";
+import { wirePlayground } from "./domains/playground/bootstrap";
 
 // Domain: Admin
 import { createAdminRoutes } from "./domains/admin/routes";
@@ -121,9 +110,7 @@ import { createMeRoutes } from "./domains/me/routes";
 import { createUserRoutes } from "./domains/users/routes";
 
 // Domain: Platform settings (legacy single-doc — still used by mirror, audit-waiver) ----
-import { PlatformSettingsRepository } from "./domains/platform/repository";
-import { PlatformSettingsService } from "./domains/platform/service";
-import { createPlatformSettingsRoutes } from "./domains/platform/routes";
+import { wirePlatformSettings } from "./domains/platform/bootstrap";
 
 // Domain: Settings (multi-section + LLM providers + export/import) — backend-engineer-2.
 import { SettingsRepository } from "./domains/settings/repository";
@@ -139,22 +126,13 @@ import { createSettingsExportImportRoutes } from "./domains/settings/exportImpor
 import { LlmModelListClient } from "./clients/llmModelListClient";
 
 // Domain: Quota (per-user playground / skill-gen counters + admin grants)
-import { QuotaRepository } from "./domains/quota/repository";
-import { QuotaService } from "./domains/quota/service";
-import { createQuotaRoutes } from "./domains/quota/routes";
+import { wireQuota } from "./domains/quota/bootstrap";
 
 // Domain: Redemption codes (admin-issued single-use quota grants)
-import { RedemptionCodeRepository } from "./domains/redemption-codes/repository";
-import { RedemptionCodeService } from "./domains/redemption-codes/service";
-import { createAdminRedemptionCodesRoutes } from "./domains/admin/redemption-codes/routes";
-import { createMeRedemptionCodesRoutes } from "./domains/redemption-codes/me-routes";
+import { wireRedemptionCodes } from "./domains/redemption-codes/bootstrap";
 
 // Domain: Admin (engineer-1): dashboard, users, quota admin.
-import { AdminDashboardService } from "./domains/admin/dashboard/service";
-import { createAdminDashboardRoutes } from "./domains/admin/dashboard/routes";
-import { createAdminQuotaRoutes } from "./domains/admin/quota/routes";
-import { AdminUsersService } from "./domains/admin-users/service";
-import { createAdminUsersRoutes } from "./domains/admin-users/routes";
+import { wireAdmin } from "./domains/admin/bootstrap";
 
 // LLM provider migration (#270 — fold legacy global model catalog into
 // per-provider arrays). One-time, idempotent, runs before any
@@ -469,75 +447,32 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
     agentsealScanner,
   });
 
-  // ---- Domain: Notifications (built before AuditService so the audit
-  //   pipeline can fan out completion notifications) ----
-  const notificationRepo = new NotificationRepository(db);
-  void notificationRepo.ensureIndexes().catch((err) =>
-    logger.warn({ err }, "notifications indexes ensureIndexes failed — proceeding anyway"),
-  );
-  // One-time boot migration (#218) — drop legacy `share.*` rows left over
-  // from the pre-#198 share/audit-gate workflow. Idempotent; no-op after
-  // first run. Failure is non-fatal — old rows surface as ugly UI but
-  // never block the boot.
-  await dropLegacyNotificationCategories(db).catch((err) =>
-    logger.error(
-      { err: err instanceof Error ? err.message : String(err) },
-      "dropLegacyNotificationCategories failed — legacy notification rows may still surface in /notifications until the next deploy",
-    ),
-  );
-  // `broadcastRepo` is constructed in the broadcasts block below; we
-  // need a reference at NotificationService-build time so the merged
-  // feed (#500) can left-join read receipts. Reordered so broadcasts
-  // build first.
-  const broadcastRepoForNotifications = new BroadcastRepository(db);
-  void broadcastRepoForNotifications.ensureIndexes().catch((err) =>
-    logger.warn({ err }, "broadcasts indexes ensureIndexes failed — proceeding anyway"),
-  );
-  // One-shot bilingual + targeting backfill for broadcasts. Pre-#502
-  // docs don't carry `recipientUserIds`; this migration writes an
-  // explicit `null` on every absent doc so the merged feed can rely
-  // on a stable `string[] | null` shape. Idempotent; failure is
-  // non-fatal — the repo mapper's `Array.isArray` guard already
-  // normalises absent fields to `null` on the read path.
-  await backfillBroadcastRecipientUserIds(db, logger).catch((err) =>
-    logger.error(
-      { err: err instanceof Error ? err.message : String(err) },
-      "broadcasts recipientUserIds backfill crashed — mapper fallback will cover reads, retry on next boot",
-    ),
-  );
-  const notificationService = new NotificationService({
-    notificationRepo,
-    broadcastRepo: broadcastRepoForNotifications,
+  // ---- Domain: Notifications + Broadcasts ----
+  // The two share a single BroadcastRepository instance: notifications
+  // reads it on the merged-feed path (#500 left-join), broadcasts
+  // writes through its own service on admin CRUD. Build the repo
+  // first so notifications can take its reference, then wire each
+  // surface's service + routes. Notifications is built before the
+  // audit service so the audit pipeline can fan out completion
+  // notifications.
+  const { repo: broadcastRepoForNotifications } = await wireBroadcastsRepo({
+    db,
+    logger,
   });
-  const notificationRoutes = createNotificationRoutes({ notificationService });
+  const { service: notificationService, routes: notificationRoutes } =
+    await wireNotifications({
+      db,
+      logger,
+      broadcastRepo: broadcastRepoForNotifications,
+    });
 
   // ---- Domain: Announcements (landing-page popup, issue #307) ----
-  const announcementRepo = new AnnouncementRepository(db);
-  void announcementRepo.ensureIndexes().catch((err) =>
-    logger.warn({ err }, "announcements indexes ensureIndexes failed — proceeding anyway"),
-  );
-  // One-shot bilingual backfill: copies legacy single-locale columns
-  // (title / bodyMarkdown / ctaLabel) into the new per-locale slots
-  // (`*En` + `*Zh`) on existing docs. Idempotent — second boot is a
-  // no-op. Failure is logged + non-fatal; the repo's mapper falls
-  // back to legacy fields if the migration hasn't run yet.
-  await migrateAnnouncementsToBilingual(db, logger).catch((err) =>
-    logger.error(
-      { err: err instanceof Error ? err.message : String(err) },
-      "announcements bilingual migration crashed — repo fallback will cover reads, retry on next boot",
-    ),
-  );
-  const announcementService = new AnnouncementService({ repo: announcementRepo });
-  const announcementRoutes = createAnnouncementRoutes({ announcementService });
+  const { routes: announcementRoutes } = await wireAnnouncements({ db, logger });
 
   // ---- Domain: Broadcasts (admin-authored, fan-out via notifications, #500) ----
-  // Reuse the same `BroadcastRepository` instance the notifications
-  // service got — both surfaces share state (admin CRUD + per-user
-  // feed merge), and a single instance keeps the wiring legible.
-  const broadcastService = new BroadcastService({
+  const { routes: broadcastRoutes } = wireBroadcasts({
     repo: broadcastRepoForNotifications,
   });
-  const broadcastRoutes = createBroadcastRoutes({ broadcastService });
 
   // ---- NyxID Orgs Client — built early so the audit fan-out can expand
   //   sharedWithOrgs into member rosters when sending consumer notifications.
@@ -580,12 +515,11 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   const auditRoutes = createAuditRoutes({ auditService, skillService });
 
   // ---- Domain: Analytics ----
-  const analyticsRepo = new AnalyticsRepository(db);
-  void analyticsRepo.ensureIndexes().catch((err) =>
-    logger.warn({ err }, "skill_executions indexes ensureIndexes failed — proceeding anyway"),
-  );
-  const analyticsService = new AnalyticsService({ analyticsRepo });
-  const analyticsRoutes = createAnalyticsRoutes({ analyticsService, skillService });
+  const { service: analyticsService, routes: analyticsRoutes } = wireAnalytics({
+    db,
+    logger,
+    skillService,
+  });
 
   // ---- Domain: Platform settings (admin-editable: audit threshold, mirror config, LLM override) ----
   // Backend-engineer-2 is replacing this with a multi-section
@@ -594,11 +528,10 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   // the existing single-doc `PlatformSettings` shape into the bridge
   // contract — every field a client/route asks for is satisfied here
   // (with sensible fallbacks for sections that don't exist yet).
-  const platformSettingsRepo = new PlatformSettingsRepository(db);
-  const platformSettingsService = new PlatformSettingsService(platformSettingsRepo, {
+  const { routes: platformSettingsRoutes } = wirePlatformSettings({
+    db,
     encryptionKey: config.encryptionKey,
   });
-  const platformSettingsRoutes = createPlatformSettingsRoutes({ platformSettingsService });
 
   // ---- Settings routes (engineer-2): per-section CRUD, LLM providers,
   //   export/import.
@@ -654,35 +587,18 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   });
 
   // ---- Domain: Quota (per-user playground / skill-gen counters + admin grants) ----
-  const quotaRepo = new QuotaRepository(db);
-  void quotaRepo.ensureIndexes().catch((err) =>
-    logger.warn({ err }, "quota indexes ensureIndexes failed — proceeding anyway"),
-  );
-
-  // ---- Domain: Redemption codes (single-use admin-issued quota grants) ----
-  const redemptionCodeRepo = new RedemptionCodeRepository(db);
-  void redemptionCodeRepo.ensureIndexes().catch((err) =>
-    logger.warn({ err }, "redemption_codes indexes ensureIndexes failed — proceeding anyway"),
-  );
-  const quotaService = new QuotaService({
-    repo: quotaRepo,
-    defaults: {
-      getQuotaDefaults: async () => {
-        const [pg, sg] = await Promise.all([
-          settingsService.getPlayground(),
-          settingsService.getSkillGen(),
-        ]);
-        return {
-          defaultPlaygroundMonthly: pg.defaultMonthlyQuota,
-          defaultSkillGenMonthly: sg.defaultMonthlyQuota,
-        };
-      },
-    },
+  const { service: quotaService, routes: quotaRoutes } = wireQuota({
+    db,
+    logger,
+    settingsService,
     notificationService,
   });
-  const quotaRoutes = createQuotaRoutes({
-    quotaService,
-  });
+
+  // ---- Domain: Redemption codes (single-use admin-issued quota grants) ----
+  const {
+    adminRoutes: adminRedemptionCodesRoutes,
+    meRoutes: meRedemptionCodesRoutes,
+  } = wireRedemptionCodes({ db, logger, quotaService });
 
   // ---- Per-provider model catalog migration (#270) ----
   // Fold the standalone `models` collection into `llm_providers.models[]`
@@ -763,49 +679,36 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   });
 
   // ---- Domain: Skill Search ----
-  const searchService = new SearchService({
+  // Search shares the playground surface for default-model resolution
+  // (it's a playground-flavoured LLM call). Backend-eng-2 may add a
+  // dedicated `search` section later; until then, share with playground.
+  const { routes: searchRoutes } = wireSkillSearch({
     skillRepo,
     llmClient: nyxLlmClient,
-    // Default model resolves through the playground surface (search is
-    // a playground-flavoured LLM call). Backend-eng-2 may add a
-    // dedicated `search` section later; until then, share with playground.
     defaultModelResolver: async () =>
       (await resolveSurfaceDefaults("playground")).model,
   });
 
-  const searchRoutes = createSearchRoutes({
-    searchService,
-    skillRepo,
-  });
-
   // ---- Domain: Skill Generation ----
-  const generationService = new SkillGenerationService({
-    llmClient: nyxLlmClient,
-    defaultsResolver: async () => resolveSurfaceDefaults("skillGen"),
-  });
-
-  const generationRoutes = createGenerationRoutes({
-    generationService,
-    keepAliveIntervalMsResolver: async () =>
-      (await settingsService.getSkillGen()).sseKeepAliveMs,
-    quotaService,
-    llmProvidersService,
-  });
+  const { service: generationService, routes: generationRoutes } =
+    wireSkillGeneration({
+      llmClient: nyxLlmClient,
+      defaultsResolver: async () => resolveSurfaceDefaults("skillGen"),
+      keepAliveIntervalMsResolver: async () =>
+        (await settingsService.getSkillGen()).sseKeepAliveMs,
+      quotaService,
+      llmProvidersService,
+    });
 
   // ---- Domain: Playground ----
-  const chatService = new PlaygroundChatService({
+  const { routes: playgroundRoutes } = wirePlayground({
     llmClient: nyxLlmClient,
     sandboxClient,
     skillService,
     defaultsResolver: async () => resolveSurfaceDefaults("playground"),
-  });
-
-  const playgroundRoutes = createPlaygroundRoutes({
-    chatService,
     keepAliveIntervalMsResolver: async () =>
       (await settingsService.getPlayground()).sseKeepAliveMs,
     analyticsService,
-    skillService,
     quotaService,
     llmProvidersService,
   });
@@ -949,33 +852,11 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   apiApp.use("*", idempotencyMiddleware({ repo: idempotencyKeyRepo }));
 
   // ---- Admin routes (engineer-1): dashboard, users, quota admin ----
-  const adminDashboardService = new AdminDashboardService({
-    db,
-    userDirectoryRepo,
-  });
-  const adminDashboardRoutes = createAdminDashboardRoutes({
-    dashboardService: adminDashboardService,
-  });
-  const adminUsersService = new AdminUsersService({
-    db,
-    userDirectoryRepo,
-  });
-  const adminUsersRoutes = createAdminUsersRoutes({ adminUsersService });
-  const adminQuotaRoutes = createAdminQuotaRoutes({
-    quotaService,
-    userDirectoryRepo,
-  });
-  const redemptionCodeService = new RedemptionCodeService({
-    repo: redemptionCodeRepo,
-    quotaService,
-  });
-  const adminRedemptionCodesRoutes = createAdminRedemptionCodesRoutes({
-    redemptionCodeService,
-  });
-  const meRedemptionCodesRoutes = createMeRedemptionCodesRoutes({
-    redemptionCodeService,
-  });
-
+  const {
+    dashboardRoutes: adminDashboardRoutes,
+    usersRoutes: adminUsersRoutes,
+    quotaRoutes: adminQuotaRoutes,
+  } = wireAdmin({ db, userDirectoryRepo, quotaService });
   apiApp.route("/", skillRoutes);
   apiApp.route("/", mirrorRoutes);
   apiApp.route("/", auditRoutes);
