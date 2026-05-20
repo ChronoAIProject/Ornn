@@ -11,7 +11,7 @@
  * @module domains/skills/audit/service
  */
 
-import pino from "pino";
+import { createLogger } from "../../../shared/logger";
 import type { NyxLlmClient, ResponsesApiInputMessage } from "../../../clients/nyxid/llm";
 import type { IStorageClient } from "../../../clients/storageClient";
 import type { NyxidOrgsClient } from "../../../clients/nyxid/orgs";
@@ -32,7 +32,7 @@ import { AUDIT_SYSTEM_PROMPT, buildAuditUserPrompt } from "./prompts";
 import JSZip from "jszip";
 import { resolveZipRoot } from "../../../shared/utils/zip";
 
-const logger = pino({ level: "info" }).child({ module: "auditService" });
+const logger = createLogger("auditService");
 
 /**
  * Per-call resolution of the audit pipeline's LLM defaults. Sourced

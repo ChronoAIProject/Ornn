@@ -5,10 +5,10 @@
  * @module clients/nyxid/llm
  */
 
-import pino from "pino";
+import { createLogger } from "../../shared/logger";
 import type { NyxidSaTokenProvider } from "./base";
 
-const logger = pino({ level: "info" }).child({ module: "nyxLlmClient" });
+const logger = createLogger("nyxLlmClient");
 
 // ---------------------------------------------------------------------------
 // Types

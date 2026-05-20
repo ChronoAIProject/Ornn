@@ -17,9 +17,8 @@
  */
 
 import { createSign, createPrivateKey } from "node:crypto";
-import pino from "pino";
-
-const logger = pino({ level: "info" }).child({ module: "githubAppAuth" });
+import { createLogger } from "../../../shared/logger";
+const logger = createLogger("githubAppAuth");
 
 export interface GitHubAppCredentials {
   appId: string;

@@ -26,9 +26,8 @@ import {
   requirePermission,
   getAuth,
 } from "../../middleware/nyxidAuth";
-import pino from "pino";
-
-const logger = pino({ level: "info" }).child({ module: "adminRoutes" });
+import { createLogger } from "../../shared/logger";
+const logger = createLogger("adminRoutes");
 
 export interface AdminRoutesConfig {
   /** PostHog emitter for skill-delete + agentseal-rescan activity events. */

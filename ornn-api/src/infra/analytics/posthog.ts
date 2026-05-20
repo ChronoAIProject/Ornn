@@ -22,9 +22,8 @@
  */
 
 import { PostHog } from "posthog-node";
-import pino, { type Logger } from "pino";
-
-const moduleLogger = pino({ level: "info" }).child({ module: "posthogTracker" });
+import { createLogger, type Logger } from "../../shared/logger";
+const moduleLogger = createLogger("posthogTracker");
 
 export interface AnalyticsTracker {
   /**

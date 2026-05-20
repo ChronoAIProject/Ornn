@@ -24,7 +24,7 @@
  * @module domains/broadcasts/service
  */
 
-import pino from "pino";
+import { createLogger } from "../../shared/logger";
 import { AppError } from "../../shared/types/index";
 import type {
   BroadcastRepository,
@@ -37,7 +37,7 @@ import type {
   BroadcastI18nString,
 } from "./types";
 
-const logger = pino({ level: "info" }).child({ module: "broadcastService" });
+const logger = createLogger("broadcastService");
 
 export interface BroadcastServiceDeps {
   readonly repo: BroadcastRepository;

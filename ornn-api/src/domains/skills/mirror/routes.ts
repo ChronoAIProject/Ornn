@@ -30,7 +30,7 @@
  */
 
 import { Hono } from "hono";
-import pino from "pino";
+import { createLogger } from "../../../shared/logger";
 import { z } from "zod";
 import { validateBody, getValidatedBody } from "../../../middleware/validate";
 import {
@@ -47,7 +47,7 @@ import type { MirrorSection } from "../../settings/sections/mirror";
 import type { SkillRepository } from "../crud/repository";
 import { validateGitHubAppPrivateKey } from "./privateKeyValidation";
 
-const logger = pino({ level: "info" }).child({ module: "mirrorRoutes" });
+const logger = createLogger("mirrorRoutes");
 
 /**
  * GitHub naming validation.

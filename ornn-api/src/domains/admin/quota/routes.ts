@@ -15,7 +15,7 @@
 
 import { Hono } from "hono";
 import { z } from "zod";
-import pino from "pino";
+import { createLogger } from "../../../shared/logger";
 import {
   type AuthVariables,
   getAuth,
@@ -32,7 +32,7 @@ import {
   monthBounds,
 } from "../../quota/types";
 
-const logger = pino({ level: "info" }).child({ module: "adminQuotaRoutes" });
+const logger = createLogger("adminQuotaRoutes");
 
 const surfaceSchema = z.enum(SURFACES);
 

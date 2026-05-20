@@ -14,7 +14,7 @@
  */
 
 import { Hono } from "hono";
-import pino from "pino";
+import { createLogger } from "../../shared/logger";
 import {
   type AuthVariables,
   getAuth,
@@ -25,7 +25,7 @@ import { AppError } from "../../shared/types/index";
 import type { RedemptionCodeService } from "./service";
 import { redeemSchema, type RedeemInput, type RedemptionCodeDoc } from "./types";
 
-const logger = pino({ level: "info" }).child({ module: "meRedemptionCodeRoutes" });
+const logger = createLogger("meRedemptionCodeRoutes");
 
 const HISTORY_PAGE_SIZE_MAX = 100;
 const HISTORY_PAGE_SIZE_DEFAULT = 20;

@@ -16,9 +16,8 @@ import {
   OPENAPI_GENERATION_SYSTEM_PROMPT,
   SOURCE_CODE_GENERATION_SYSTEM_PROMPT,
 } from "./prompts";
-import pino from "pino";
-
-const logger = pino({ level: "info" }).child({ module: "skillGenerationService" });
+import { createLogger } from "../../../shared/logger";
+const logger = createLogger("skillGenerationService");
 
 const generatedSkillSchema = z.object({
   name: z.string().min(1).max(100).regex(/^[a-z0-9-]+$/),

@@ -5,10 +5,10 @@
  * @module utils/skillPackageBuilder
  */
 
-import pino from "pino";
+import { createLogger } from "../../../../shared/logger";
 import { createTarBuffer } from "../../../../shared/utils/tarBuilder";
 
-const logger = pino({ level: "info" }).child({ module: "skillPackageBuilder" });
+const logger = createLogger("skillPackageBuilder");
 
 /** Uploaded file entry with folder path metadata. */
 export interface UploadedFileEntry {

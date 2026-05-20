@@ -35,7 +35,7 @@
  */
 
 import { randomUUID } from "node:crypto";
-import pino from "pino";
+import { createLogger } from "../../../shared/logger";
 import { z, ZodError } from "zod";
 import {
   decryptSecret,
@@ -59,7 +59,7 @@ import type {
   LlmProviderModel,
 } from "./types";
 
-const logger = pino({ level: "info" }).child({ module: "llmProvidersService" });
+const logger = createLogger("llmProvidersService");
 
 /** Surfaces the picker / resolver care about. Mirror of `quota/types.ts:Surface`. */
 export type Surface = "playground" | "skillGen";

@@ -17,10 +17,10 @@
  * @module domains/skills/mirror/githubMirrorClient
  */
 
-import pino from "pino";
+import { createLogger } from "../../../shared/logger";
 import { GitHubAppAuth } from "./githubAppAuth";
 
-const logger = pino({ level: "info" }).child({ module: "githubMirrorClient" });
+const logger = createLogger("githubMirrorClient");
 
 export interface GitHubMirrorTarget {
   owner: string;

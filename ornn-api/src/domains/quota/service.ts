@@ -14,7 +14,7 @@
  * @module domains/quota/service
  */
 
-import pino from "pino";
+import { createLogger } from "../../shared/logger";
 import type { NotificationService } from "../notifications/service";
 import type { QuotaRepository } from "./repository";
 import {
@@ -29,7 +29,7 @@ import {
   nextMonthlyResetAt,
 } from "./types";
 
-const logger = pino({ level: "info" }).child({ module: "quotaService" });
+const logger = createLogger("quotaService");
 
 export interface QuotaDefaults {
   defaultPlaygroundMonthly: number;

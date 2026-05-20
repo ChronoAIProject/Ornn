@@ -16,9 +16,8 @@
  * @module clients/nyxid/base
  */
 
-import pino from "pino";
-
-const logger = pino({ level: "info" }).child({ module: "nyxidSaTokenProvider" });
+import { createLogger } from "../../shared/logger";
+const logger = createLogger("nyxidSaTokenProvider");
 
 /**
  * Runtime-resolvable NyxID config. Sourced from admin settings on every

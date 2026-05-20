@@ -16,10 +16,10 @@
  */
 
 import type { Collection, Db } from "mongodb";
-import pino from "pino";
+import { createLogger } from "../../../shared/logger";
 import type { UserDirectoryRepository } from "../../users/repository";
 
-const logger = pino({ level: "info" }).child({ module: "adminDashboardService" });
+const logger = createLogger("adminDashboardService");
 
 export interface DashboardStats {
   users: { total: number; admin: number; normal: number };

@@ -15,9 +15,8 @@
  */
 
 import JSZip from "jszip";
-import pino from "pino";
-
-const logger = pino({ level: "info" }).child({ module: "githubSkillPull" });
+import { createLogger } from "../../../../shared/logger";
+const logger = createLogger("githubSkillPull");
 
 export interface GitHubPullInput {
   /** `owner/name`. */

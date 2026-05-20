@@ -17,9 +17,8 @@ import {
 } from "../../../middleware/nyxidAuth";
 import { validateQuery, getValidatedQuery } from "../../../middleware/validate";
 import { AppError } from "../../../shared/types/index";
-import pino from "pino";
-
-const logger = pino({ level: "info" }).child({ module: "skillSearchRoutes" });
+import { createLogger } from "../../../shared/logger";
+const logger = createLogger("skillSearchRoutes");
 
 const searchQuerySchema = z.object({
   // Canonical search param is `q` per CONVENTIONS.md §4.1 (#586).

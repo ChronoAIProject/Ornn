@@ -22,14 +22,14 @@
 
 import { randomUUID } from "node:crypto";
 import type { Collection, Db, Document } from "mongodb";
-import pino from "pino";
+import { createLogger } from "../../shared/logger";
 import type {
   BroadcastDocument,
   BroadcastI18nString,
   BroadcastReadReceiptDocument,
 } from "./types";
 
-const logger = pino({ level: "info" }).child({ module: "broadcastRepository" });
+const logger = createLogger("broadcastRepository");
 
 export interface CreateBroadcastDocInput {
   titleI18n: BroadcastI18nString;

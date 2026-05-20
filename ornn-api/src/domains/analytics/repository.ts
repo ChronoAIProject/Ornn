@@ -9,7 +9,7 @@
 
 import { randomUUID } from "node:crypto";
 import type { Collection, Db, Document } from "mongodb";
-import pino from "pino";
+import { createLogger } from "../../shared/logger";
 import type {
   ExecutionOutcome,
   PullBucket,
@@ -19,7 +19,7 @@ import type {
   SkillExecutionEvent,
 } from "./types";
 
-const logger = pino({ level: "info" }).child({ module: "analyticsRepository" });
+const logger = createLogger("analyticsRepository");
 
 export interface RecordEventInput {
   skillGuid: string;

@@ -28,8 +28,7 @@ import { AppError } from "../../../shared/types/index";
 import { canReadSkill, canManageSkill } from "./authorize";
 import { parseGithubUrl } from "./utils/githubPull";
 import { enforceZipLimits } from "../../../shared/utils/zipLimits";
-import pino from "pino";
-
+import { createLogger } from "../../../shared/logger";
 const deprecationPatchSchema = z.object({
   isDeprecated: z.boolean(),
   deprecationNote: z.string().max(1024).optional(),
@@ -113,7 +112,7 @@ const skillUpdateJsonSchema = z.object({
   isPrivate: z.boolean().optional(),
 });
 
-const logger = pino({ level: "info" }).child({ module: "skillCrudRoutes" });
+const logger = createLogger("skillCrudRoutes");
 
 export interface SkillRoutesConfig {
   skillService: SkillService;

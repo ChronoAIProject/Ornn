@@ -10,9 +10,8 @@
  * @module domains/skills/generation/githubFetcher
  */
 
-import pino from "pino";
-
-const logger = pino({ level: "info" }).child({ module: "githubFetcher" });
+import { createLogger } from "../../../shared/logger";
+const logger = createLogger("githubFetcher");
 
 export interface FetchOptions {
   /** Default: tries common route-folder names. */

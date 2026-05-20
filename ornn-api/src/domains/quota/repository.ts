@@ -12,7 +12,7 @@
 
 import type { Collection, Db } from "mongodb";
 import { randomUUID } from "node:crypto";
-import pino from "pino";
+import { createLogger } from "../../shared/logger";
 import {
   type QuotaBucketDoc,
   type QuotaGrantAuditDoc,
@@ -22,7 +22,7 @@ import {
   monthBounds,
 } from "./types";
 
-const logger = pino({ level: "info" }).child({ module: "quotaRepository" });
+const logger = createLogger("quotaRepository");
 
 export interface UpsertChargeParams {
   userId: string;

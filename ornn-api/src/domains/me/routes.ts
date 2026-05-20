@@ -8,7 +8,7 @@
  */
 
 import { Hono } from "hono";
-import pino from "pino";
+import { createLogger } from "../../shared/logger";
 import {
   type AuthVariables,
   nyxidAuthMiddleware,
@@ -22,7 +22,7 @@ import type { UserDirectoryRepository } from "../users/repository";
 import type { AnalyticsEmitter } from "../../infra/analytics";
 import { AppError } from "../../shared/types/index";
 
-const logger = pino({ level: "info" }).child({ module: "meRoutes" });
+const logger = createLogger("meRoutes");
 
 export interface MeRoutesConfig {
   /**

@@ -4,9 +4,8 @@
  * @module clients/sandboxClient
  */
 
-import pino from "pino";
-
-const logger = pino({ level: "info" }).child({ module: "sandboxClient" });
+import { createLogger } from "../shared/logger";
+const logger = createLogger("sandboxClient");
 
 // ── Shared types ──────────────────────────────────────────────────────
 

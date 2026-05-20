@@ -28,10 +28,10 @@
 
 import { randomUUID } from "node:crypto";
 import type { Collection, Db, Document } from "mongodb";
-import pino from "pino";
+import { createLogger } from "../../shared/logger";
 import type { AnnouncementDocument } from "./types";
 
-const logger = pino({ level: "info" }).child({ module: "announcementRepository" });
+const logger = createLogger("announcementRepository");
 
 export interface CreateAnnouncementInput {
   titleEn: string;
