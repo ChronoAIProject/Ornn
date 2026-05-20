@@ -101,6 +101,10 @@ export async function startHarness(): Promise<Harness> {
     posthogErrorSampleRate: 0,
     agentsealPython: "/opt/agentseal/bin/python",
     agentsealScript: "/opt/agentseal/scan_skill.py",
+    // #442: integration tests don't exercise AgentSeal, and the
+    // configured paths don't exist on test machines. Disable the
+    // scanner so the new boot-time path validator doesn't fail.
+    agentsealEnabled: false,
   };
 
   const { app, shutdown } = await bootstrap(config);

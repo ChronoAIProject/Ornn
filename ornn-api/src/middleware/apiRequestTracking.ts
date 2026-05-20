@@ -29,8 +29,11 @@
  */
 
 import type { Context, Next, MiddlewareHandler } from "hono";
+import pino from "pino";
 import type { AnalyticsEmitter, CallerType } from "../infra/analytics";
 import { getRequestId } from "./requestId";
+
+const logger = pino({ level: "info" }).child({ module: "apiRequestTracking" });
 
 export interface ApiRequestTrackingConfig {
   emitter: AnalyticsEmitter;
@@ -77,8 +80,11 @@ export function apiRequestTrackingMiddleware(
             c.res.headers.get("content-length"),
           ),
         });
-      } catch {
-        /* never fail the request because tracking blew up */
+      } catch (err) {
+        // Never fail the request because tracking blew up (#579) — but
+        // do log so a misconfigured emitter doesn't silently drop every
+        // analytics event for hours.
+        logger.debug({ err }, "api.request tracking emit failed");
       }
     }
   };
@@ -183,7 +189,11 @@ function extractQueryParamKeys(c: Context): string | undefined {
   let queries: Record<string, string>;
   try {
     queries = c.req.query() as Record<string, string>;
-  } catch {
+  } catch (err) {
+    // c.req.query() throws on malformed query strings; analytics
+    // shouldn't fail the request, but record it so a regression in
+    // hono's parser doesn't silently drop every event.
+    logger.debug({ err }, "query-string parse failed in extractQueryParamKeys");
     return undefined;
   }
   const keys = Object.keys(queries);

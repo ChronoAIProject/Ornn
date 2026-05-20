@@ -447,7 +447,12 @@ export class SkillGenerationService {
       }
 
       return result.data;
-    } catch {
+    } catch (err) {
+      // Generated-skill JSON parse failed. Caller treats null as
+      // "regenerate" or "give up" depending on retry budget. Logging
+      // so we can spot a model that's consistently producing
+      // unparseable output (#579).
+      logger.debug({ err }, "generated skill JSON parse failed");
       return null;
     }
   }
