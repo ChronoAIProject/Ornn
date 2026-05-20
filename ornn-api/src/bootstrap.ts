@@ -84,8 +84,7 @@ import { wireAnalytics } from "./domains/analytics/bootstrap";
 import { wireSkillSearch } from "./domains/skills/search/bootstrap";
 
 // Domain: Skill Generation
-import { SkillGenerationService } from "./domains/skills/generation/service";
-import { createGenerationRoutes } from "./domains/skills/generation/routes";
+import { wireSkillGeneration } from "./domains/skills/generation/bootstrap";
 
 // Domain: Playground
 import { PlaygroundChatService } from "./domains/playground/chatService";
@@ -692,18 +691,15 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   });
 
   // ---- Domain: Skill Generation ----
-  const generationService = new SkillGenerationService({
-    llmClient: nyxLlmClient,
-    defaultsResolver: async () => resolveSurfaceDefaults("skillGen"),
-  });
-
-  const generationRoutes = createGenerationRoutes({
-    generationService,
-    keepAliveIntervalMsResolver: async () =>
-      (await settingsService.getSkillGen()).sseKeepAliveMs,
-    quotaService,
-    llmProvidersService,
-  });
+  const { service: generationService, routes: generationRoutes } =
+    wireSkillGeneration({
+      llmClient: nyxLlmClient,
+      defaultsResolver: async () => resolveSurfaceDefaults("skillGen"),
+      keepAliveIntervalMsResolver: async () =>
+        (await settingsService.getSkillGen()).sseKeepAliveMs,
+      quotaService,
+      llmProvidersService,
+    });
 
   // ---- Domain: Playground ----
   const chatService = new PlaygroundChatService({
