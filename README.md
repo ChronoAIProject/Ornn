@@ -139,6 +139,23 @@ nyxid proxy request ornn-api GET /api/v1/skills?q=summarize
 
 Full per-endpoint reference: [ornn.chrono-ai.fun/docs](https://ornn.chrono-ai.fun/docs).
 
+## Run Ornn locally (5 minutes)
+
+```bash
+git clone https://github.com/ChronoAIProject/Ornn.git
+cd Ornn
+cp .env.compose.sample .env
+docker compose up --build
+```
+
+- `ornn-api` on `http://localhost:3802`
+- `ornn-web` on `http://localhost:5173`
+- MongoDB on `27017`, MinIO console on `9001`
+
+This brings up the data + service layer (Mongo, MinIO, `ornn-api`, `ornn-web`). The auth layer (NyxID) stays external — for end-to-end use against authenticated endpoints, point the API at your own NyxID instance (or the staging instance via the team) by setting `NYXID_BASE_URL`. Public endpoints (`/livez`, `/api/v1/skill-format/rules`, `/api/v1/skill-manifest-schema.json`) work without auth out of the box.
+
+For full production parity (incl. NyxID, chrono-storage, chrono-sandbox, opensandbox), use the Kubernetes manifests under `deployment/` — see [`CONTRIBUTING.md`](CONTRIBUTING.md) for the long-form setup.
+
 ## How Ornn compares
 
 The space of agent skill / tool registries is crowded. Quick orientation:
