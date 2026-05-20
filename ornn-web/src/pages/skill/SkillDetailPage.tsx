@@ -43,6 +43,8 @@ import {
   SkillDetailLoading,
   SkillDetailNotFound,
 } from "@/components/skill/SkillDetailStates";
+import { SkillVersionsCard } from "@/components/skill/SkillVersionsCard";
+import { SkillVisibilityCard } from "@/components/skill/SkillVisibilityCard";
 import {
   useSkill,
   useDeleteSkill,
@@ -603,131 +605,23 @@ export function SkillDetailPage() {
 
             {/* ── Versions card ── */}
             {versionList.length > 0 && (
-              <section className="rounded-md border border-subtle bg-card p-5 card-impression">
-                <h3 className="mb-3.5 flex items-center gap-2 border-b border-dashed border-subtle pb-3 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-meta">
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
-                    <path d="M21 16V8a2 2 0 0 0-1-1.7l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.7l7 4a2 2 0 0 0 2 0l7-4a2 2 0 0 0 1-1.7z" />
-                    <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
-                    <line x1="12" y1="22.08" x2="12" y2="12" />
-                  </svg>
-                  {t("skillDetail.cardVersions", "Versions")}
-                </h3>
-                <div className="mb-1.5 flex items-baseline gap-2">
-                  <span className="font-display text-2xl font-semibold tracking-tight text-strong">
-                    {skill.version}
-                  </span>
-                  {viewingLatest && (
-                    <span className="rounded-sm border border-accent/40 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.16em] text-accent">
-                      {t("skillDetail.latest", "latest")}
-                    </span>
-                  )}
-                </div>
-                <p className="font-mono text-[11px] leading-relaxed tracking-wide text-meta">
-                  {t("skillDetail.heroPublishedOn", "Published {{date}}", { date: formatDateSGT(skill.createdOn) })}
-                  {versionList.length > 1 && (
-                    <>
-                      {" · "}
-                      {t("skillDetail.versionsTotal", "{{n}} versions total", { n: versionList.length })}
-                    </>
-                  )}
-                </p>
-                <div className="mt-3.5 flex flex-col gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setShowVersions(true)}
-                    className="inline-flex items-center gap-1 self-start py-1 font-mono text-[10px] uppercase tracking-widest text-accent transition-all hover:text-accent-muted hover:gap-2"
-                  >
-                    {t("skillDetail.browseVersions", "Browse all versions")} →
-                  </button>
-                </div>
-              </section>
+              <SkillVersionsCard
+                currentVersion={skill.version}
+                publishedOnSGT={formatDateSGT(skill.createdOn)}
+                totalVersions={versionList.length}
+                viewingLatest={Boolean(viewingLatest)}
+                onBrowseAll={() => setShowVersions(true)}
+              />
             )}
 
             {/* ── Visibility card ── */}
-            <section className="rounded-md border border-subtle bg-card p-5 card-impression">
-              <h3 className="mb-3.5 flex items-center gap-2 border-b border-dashed border-subtle pb-3 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-meta">
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
-                  <circle cx="12" cy="12" r="9" /><line x1="3" y1="12" x2="21" y2="12" />
-                  <path d="M12 3a14 14 0 0 1 4 9 14 14 0 0 1-4 9 14 14 0 0 1-4-9 14 14 0 0 1 4-9z" />
-                </svg>
-                {t("skillDetail.cardVisibility", "Visibility")}
-              </h3>
-              {(() => {
-                // Visibility ladder:
-                //   public  — `isPrivate: false`
-                //   limited — `isPrivate: true` AND at least one explicit
-                //             grant (user or org)
-                //   private — `isPrivate: true` AND no grants — only the
-                //             author + platform admins can see it.
-                const hasGrants =
-                  skill.sharedWithUsers.length > 0 || skill.sharedWithOrgs.length > 0;
-                const tier: "public" | "limited" | "private" = !skill.isPrivate
-                  ? "public"
-                  : hasGrants
-                    ? "limited"
-                    : "private";
-                const tierClass: Record<typeof tier, string> = {
-                  public: "border-success/40 bg-success-soft text-success",
-                  limited: "border-warning/40 bg-warning-soft text-warning",
-                  private: "border-info/40 bg-info-soft text-info",
-                };
-                const tierLabel: Record<typeof tier, string> = {
-                  public: t("common.public", "Public"),
-                  limited: t("common.limited", "Limited access"),
-                  private: t("common.private", "Private"),
-                };
-                return (
-                  <span
-                    className={`mb-3 inline-flex items-center gap-1.5 rounded-sm border px-2.5 py-1 font-mono text-[11px] uppercase tracking-wider ${tierClass[tier]}`}
-                  >
-                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      {tier === "public" ? (
-                        <>
-                          <circle cx="12" cy="12" r="9" />
-                          <line x1="3" y1="12" x2="21" y2="12" />
-                        </>
-                      ) : tier === "limited" ? (
-                        <>
-                          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-                          <circle cx="9" cy="7" r="4" />
-                          <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-                          <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-                        </>
-                      ) : (
-                        <path d="M12 2a5 5 0 0 0-5 5v3H5a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2h-2V7a5 5 0 0 0-5-5z" />
-                      )}
-                    </svg>
-                    {tierLabel[tier]}
-                  </span>
-                );
-              })()}
-              <ul className="space-y-1.5 font-text text-sm text-body">
-                <li className="flex items-baseline gap-2.5">
-                  <span className="min-w-[18px] text-right font-mono text-sm font-semibold text-strong">
-                    {skill.sharedWithUsers.length}
-                  </span>
-                  <span className="text-xs text-meta">{t("skillDetail.shareUsers", "users")}</span>
-                </li>
-                <li className="flex items-baseline gap-2.5">
-                  <span className="min-w-[18px] text-right font-mono text-sm font-semibold text-strong">
-                    {skill.sharedWithOrgs.length}
-                  </span>
-                  <span className="text-xs text-meta">{t("skillDetail.shareOrgs", "organizations")}</span>
-                </li>
-              </ul>
-              {isOwner && (
-                <div className="mt-3.5">
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    className="w-full"
-                    onClick={() => setShowPermissionsModal(true)}
-                  >
-                    {t("skillDetail.managePermissions", "Manage permissions")}
-                  </Button>
-                </div>
-              )}
-            </section>
+            <SkillVisibilityCard
+              isPrivate={skill.isPrivate}
+              sharedWithUsersCount={skill.sharedWithUsers.length}
+              sharedWithOrgsCount={skill.sharedWithOrgs.length}
+              isOwner={isOwner}
+              onManagePermissions={() => setShowPermissionsModal(true)}
+            />
 
             {/* ── Advanced options ── click-to-open card. Settings UI
                 lives in `AdvancedOptionsModal` (settings-page-style:
