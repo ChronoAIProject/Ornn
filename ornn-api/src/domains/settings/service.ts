@@ -258,6 +258,11 @@ function shallowEqual(a: unknown, b: unknown): boolean {
   try {
     return JSON.stringify(a) === JSON.stringify(b);
   } catch {
+    // Intentional silent (#579): JSON.stringify throws only on circular
+    // refs — section payloads in this collection are plain Mongo
+    // documents and have never been circular. If they ever become so,
+    // we want change-detection to fail-safe (treat as changed) without
+    // crashing the settings save path. No log spam needed.
     return false;
   }
 }
