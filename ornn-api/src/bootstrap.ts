@@ -137,10 +137,7 @@ import { LlmModelListClient } from "./clients/llmModelListClient";
 import { wireQuota } from "./domains/quota/bootstrap";
 
 // Domain: Redemption codes (admin-issued single-use quota grants)
-import { RedemptionCodeRepository } from "./domains/redemption-codes/repository";
-import { RedemptionCodeService } from "./domains/redemption-codes/service";
-import { createAdminRedemptionCodesRoutes } from "./domains/admin/redemption-codes/routes";
-import { createMeRedemptionCodesRoutes } from "./domains/redemption-codes/me-routes";
+import { wireRedemptionCodes } from "./domains/redemption-codes/bootstrap";
 
 // Domain: Admin (engineer-1): dashboard, users, quota admin.
 import { AdminDashboardService } from "./domains/admin/dashboard/service";
@@ -638,11 +635,10 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   });
 
   // ---- Domain: Redemption codes (single-use admin-issued quota grants) ----
-  // Repo built here, service constructed below (consumes `quotaService`).
-  const redemptionCodeRepo = new RedemptionCodeRepository(db);
-  void redemptionCodeRepo.ensureIndexes().catch((err) =>
-    logger.warn({ err }, "redemption_codes indexes ensureIndexes failed — proceeding anyway"),
-  );
+  const {
+    adminRoutes: adminRedemptionCodesRoutes,
+    meRoutes: meRedemptionCodesRoutes,
+  } = wireRedemptionCodes({ db, logger, quotaService });
 
   // ---- Per-provider model catalog migration (#270) ----
   // Fold the standalone `models` collection into `llm_providers.models[]`
@@ -925,17 +921,6 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
     quotaService,
     userDirectoryRepo,
   });
-  const redemptionCodeService = new RedemptionCodeService({
-    repo: redemptionCodeRepo,
-    quotaService,
-  });
-  const adminRedemptionCodesRoutes = createAdminRedemptionCodesRoutes({
-    redemptionCodeService,
-  });
-  const meRedemptionCodesRoutes = createMeRedemptionCodesRoutes({
-    redemptionCodeService,
-  });
-
   apiApp.route("/", skillRoutes);
   apiApp.route("/", mirrorRoutes);
   apiApp.route("/", auditRoutes);
