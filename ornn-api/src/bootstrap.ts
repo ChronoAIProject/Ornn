@@ -135,11 +135,7 @@ import { wireQuota } from "./domains/quota/bootstrap";
 import { wireRedemptionCodes } from "./domains/redemption-codes/bootstrap";
 
 // Domain: Admin (engineer-1): dashboard, users, quota admin.
-import { AdminDashboardService } from "./domains/admin/dashboard/service";
-import { createAdminDashboardRoutes } from "./domains/admin/dashboard/routes";
-import { createAdminQuotaRoutes } from "./domains/admin/quota/routes";
-import { AdminUsersService } from "./domains/admin-users/service";
-import { createAdminUsersRoutes } from "./domains/admin-users/routes";
+import { wireAdmin } from "./domains/admin/bootstrap";
 
 // LLM provider migration (#270 — fold legacy global model catalog into
 // per-provider arrays). One-time, idempotent, runs before any
@@ -872,22 +868,11 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   apiApp.use("*", idempotencyMiddleware({ repo: idempotencyKeyRepo }));
 
   // ---- Admin routes (engineer-1): dashboard, users, quota admin ----
-  const adminDashboardService = new AdminDashboardService({
-    db,
-    userDirectoryRepo,
-  });
-  const adminDashboardRoutes = createAdminDashboardRoutes({
-    dashboardService: adminDashboardService,
-  });
-  const adminUsersService = new AdminUsersService({
-    db,
-    userDirectoryRepo,
-  });
-  const adminUsersRoutes = createAdminUsersRoutes({ adminUsersService });
-  const adminQuotaRoutes = createAdminQuotaRoutes({
-    quotaService,
-    userDirectoryRepo,
-  });
+  const {
+    dashboardRoutes: adminDashboardRoutes,
+    usersRoutes: adminUsersRoutes,
+    quotaRoutes: adminQuotaRoutes,
+  } = wireAdmin({ db, userDirectoryRepo, quotaService });
   apiApp.route("/", skillRoutes);
   apiApp.route("/", mirrorRoutes);
   apiApp.route("/", auditRoutes);
