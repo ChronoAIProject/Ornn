@@ -1,0 +1,127 @@
+# docker-compose.yml — one-command local dev (#466).
+#
+# Brings up the data layer (MongoDB + MinIO) plus the two ornn services
+# (`ornn-api` + `ornn-web`). The auth layer (NyxID) stays external — you
+# either run it separately via the existing `deployment/dependencies/`
+# Kubernetes manifests OR point at a hosted NyxID staging via env.
+#
+# Usage:
+#   cp .env.compose.sample .env
+#   docker compose up --build
+#   open https://localhost:5173    # ornn-web (proxies /api/v1/* → ornn-api)
+#
+# To stop:
+#   docker compose down
+#   docker compose down -v          # also removes persistent volumes
+#
+# Production parity is intentionally NOT a goal — that's what the K8s
+# manifests under `deployment/` are for. This compose is a fast,
+# zero-cluster path for contributors who want to run unit + integration
+# tests + a working ornn-api locally.
+
+services:
+  mongodb:
+    image: mongo:7
+    container_name: ornn-dev-mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ornn
+      MONGO_INITDB_ROOT_PASSWORD: ornn_dev_password
+    volumes:
+      - mongodb-data:/data/db
+    # Health check so dependents wait until Mongo is actually ready.
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  minio:
+    image: minio/minio:latest
+    container_name: ornn-dev-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000" # S3 API
+      - "9001:9001" # Web console
+    environment:
+      MINIO_ROOT_USER: ornn
+      MINIO_ROOT_PASSWORD: ornn_dev_password
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  # ornn-api boots without an external NyxID. Auth-required endpoints
+  # return 401 — fine for running the test suite or hitting public
+  # /livez. For end-to-end use, set NYXID_BASE_URL via your local .env.
+  ornn-api:
+    build:
+      context: .
+      dockerfile: ornn-api/Dockerfile
+    image: ornn-api:dev
+    container_name: ornn-dev-api
+    restart: unless-stopped
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    ports:
+      - "3802:3802"
+    environment:
+      PORT: "3802"
+      LOG_LEVEL: "info"
+      LOG_PRETTY: "true"
+      MONGODB_URI: "mongodb://ornn:ornn_dev_password@mongodb:27017/ornn?authSource=admin"
+      MONGODB_DB: "ornn"
+      ALLOWED_ORIGINS: "http://localhost:5173,http://ornn-web:80"
+      # 32+ chars required (Zod gate at boot). Dev-only fixed value.
+      ENCRYPTION_KEY: "${ENCRYPTION_KEY:-dev-encryption-key-32-chars-min-12345}"
+      ORNN_PUBLIC_ORIGIN: "http://localhost:3802"
+      # No agentseal binary in this image — disable the scanner so the
+      # boot-time path validator from #442 doesn't fail.
+      AGENTSEAL_ENABLED: "false"
+      AGENTSEAL_PYTHON: "/usr/bin/env"
+      AGENTSEAL_SCRIPT: "/usr/bin/env"
+      # PostHog telemetry off by default in compose.
+      POSTHOG_ENABLED: "false"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3802/livez || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+
+  ornn-web:
+    build:
+      context: .
+      dockerfile: ornn-web/Dockerfile
+      args:
+        GIT_COMMIT: "${GIT_COMMIT:-compose-dev}"
+    image: ornn-web:dev
+    container_name: ornn-dev-web
+    restart: unless-stopped
+    depends_on:
+      ornn-api:
+        condition: service_healthy
+    ports:
+      - "5173:80"
+    environment:
+      # The web container's nginx serves the SPA + injects runtime
+      # config from this env at startup. ORNN_API_BASE_URL is what
+      # the SPA fetches from — point it at the host-side port.
+      ORNN_API_BASE_URL: "http://localhost:3802/api/v1"
+
+volumes:
+  mongodb-data:
+    name: ornn-dev-mongodb-data
+  minio-data:
+    name: ornn-dev-minio-data
