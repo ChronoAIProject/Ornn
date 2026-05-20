@@ -56,11 +56,23 @@ export function validateBody<T extends z.ZodTypeAny>(
   errorCode: string = "invalid_body",
 ): MiddlewareHandler {
   return async (c, next) => {
+    // Read as text first so we can disambiguate "empty body" (a
+    // common pattern for endpoints with all-optional fields) from
+    // "syntactically broken JSON" — once `.json()` errors, the body
+    // stream is consumed, so we can't peek for emptiness after.
+    // Per #438 — the bypass pattern this replaces (`c.req.json().catch(() => ({}))`)
+    // had the same empty-body tolerance, but skipped the schema check.
+    // We now keep the tolerance AND validate.
+    const text = await c.req.text().catch(() => "");
     let raw: unknown;
-    try {
-      raw = await c.req.json();
-    } catch {
-      throw AppError.badRequest(errorCode, "Request body must be valid JSON");
+    if (text.trim().length === 0) {
+      raw = {};
+    } else {
+      try {
+        raw = JSON.parse(text);
+      } catch {
+        throw AppError.badRequest(errorCode, "Request body must be valid JSON");
+      }
     }
     const result = schema.safeParse(raw);
     if (!result.success) {

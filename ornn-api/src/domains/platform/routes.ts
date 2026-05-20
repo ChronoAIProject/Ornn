@@ -13,8 +13,10 @@ import {
   nyxidAuthMiddleware,
   requirePermission,
 } from "../../middleware/nyxidAuth";
+import { z } from "zod";
 import { AppError } from "../../shared/types/index";
 import { isMidMaskSentinel, midMaskSecret } from "../../infra/crypto";
+import { validateBody, getValidatedBody } from "../../middleware/validate";
 import type { PlatformSettingsService } from "./service";
 import type { PlatformSettings } from "./types";
 
@@ -50,10 +52,16 @@ export function createPlatformSettingsRoutes(
     return c.json({ data: maskSensitiveSettings(settings), error: null });
   });
 
-  app.patch("/admin/settings", auth, requirePermission("ornn:admin:skill"), async (c) => {
-    const body = (await c.req.json().catch(() => ({}))) as Partial<
-      Record<keyof PlatformSettings, unknown>
-    >;
+  app.patch(
+    "/admin/settings",
+    auth,
+    requirePermission("ornn:admin:skill"),
+    // The downstream field-by-field checks below enforce the proper
+    // shape per key; this gate just turns a SyntaxError into a clean
+    // 400 invalid_body (#438).
+    validateBody(z.record(z.string(), z.unknown()), "invalid_body"),
+    async (c) => {
+      const body = getValidatedBody<Partial<Record<keyof PlatformSettings, unknown>>>(c);
     type MutablePatch = { -readonly [K in keyof PlatformSettings]?: PlatformSettings[K] };
     const patch: MutablePatch = {};
 
@@ -134,9 +142,10 @@ export function createPlatformSettingsRoutes(
       throw AppError.badRequest("invalid_setting", "No valid setting fields in body");
     }
 
-    const updated = await platformSettingsService.patch(patch);
-    return c.json({ data: maskSensitiveSettings(updated), error: null });
-  });
+      const updated = await platformSettingsService.patch(patch);
+      return c.json({ data: maskSensitiveSettings(updated), error: null });
+    },
+  );
 
   return app;
 }
