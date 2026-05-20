@@ -74,6 +74,18 @@ export interface SkillSearchResult {
   readonly pageSize: number;
   readonly totalPages: number;
   readonly mode?: string;
+  /**
+   * Cursor pagination envelope per CONVENTIONS.md §4.3 (#457). Use
+   * `client.searchAll({ q })` to iterate transparently — the iterator
+   * threads `meta.nextCursor` through subsequent requests.
+   *
+   * When `hasMore === false`, `nextCursor` MAY be omitted.
+   */
+  readonly meta?: {
+    readonly limit: number;
+    readonly hasMore: boolean;
+    readonly nextCursor?: string;
+  };
 }
 
 export interface UpdateSkillMetadata {

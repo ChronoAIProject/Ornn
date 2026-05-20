@@ -18,6 +18,7 @@ import {
 import { validateQuery, getValidatedQuery } from "../../../middleware/validate";
 import { AppError } from "../../../shared/types/index";
 import { createLogger } from "../../../shared/logger";
+import { decodeCursor, buildNextCursor } from "../../../shared/cursor";
 const logger = createLogger("skillSearchRoutes");
 
 const searchQuerySchema = z.object({
@@ -31,6 +32,15 @@ const searchQuerySchema = z.object({
   scope: z.enum(["public", "private", "mixed", "shared-with-me", "mine"]).optional().default("private"),
   page: z.coerce.number().int().min(1).optional().default(1),
   pageSize: z.coerce.number().int().min(1).max(100).optional().default(9),
+  /**
+   * Cursor-based pagination per CONVENTIONS.md §4.3 (#457). Opaque
+   * base64-JSON token returned by previous response's `meta.nextCursor`.
+   * When set, takes precedence over `page` (same `pageSize` still
+   * applies). Backward-compat: callers may still send `page=N` until
+   * the offset shape is sunset.
+   */
+  cursor: z.string().max(2048).optional(),
+  limit: z.coerce.number().int().min(1).max(100).optional(),
   model: z.string().optional(),
   /** System-skill tri-state filter. `any` (default) keeps all; `only`
    *  restricts to skills tied to an admin/platform NyxID service
@@ -81,7 +91,21 @@ export function createSearchRoutes(config: SearchRoutesConfig): Hono<{ Variables
       const parsed = getValidatedQuery<z.infer<typeof searchQuerySchema>>(c);
       // q wins; legacy `query` is the fallback for un-upgraded clients (#586).
       const query = parsed.q ?? parsed.query ?? "";
-      const { mode, page, pageSize, model, systemFilter } = parsed;
+      const { mode, model, systemFilter } = parsed;
+      // Cursor pagination (#457). `cursor` wins over `page` when both
+      // are sent. `limit` aliases `pageSize` per CONVENTIONS.md §4.3.
+      const pageSize = parsed.limit ?? parsed.pageSize;
+      let page = parsed.page;
+      if (parsed.cursor !== undefined) {
+        const decoded = decodeCursor(parsed.cursor);
+        if (!decoded) {
+          throw AppError.badRequest(
+            "invalid_cursor",
+            "The provided cursor is malformed or from a previous API version.",
+          );
+        }
+        page = decoded.page;
+      }
       const authCtx = c.get("auth");
       const isAnonymous = !authCtx;
 
@@ -126,7 +150,28 @@ export function createSearchRoutes(config: SearchRoutesConfig): Hono<{ Variables
         tagsAll: parseCsv(parsed.tags),
       });
 
-      return c.json({ data: response, error: null });
+      // Augment the legacy response shape with the cursor envelope
+      // per CONVENTIONS.md §4.3 (#457). `data.items` + `data.meta`
+      // are the canonical fields going forward; the existing
+      // `total/totalPages/page/pageSize/items` keys stay alongside
+      // for backward compat until they're sunset.
+      const itemsReturned = response.items.length;
+      const meta = {
+        limit: pageSize,
+        hasMore: itemsReturned >= pageSize && response.page * pageSize < response.total,
+        nextCursor: buildNextCursor({
+          currentPage: response.page,
+          pageSize,
+          itemsReturned,
+        }),
+      };
+      return c.json({
+        data: {
+          ...response,
+          meta,
+        },
+        error: null,
+      });
     },
   );
 
