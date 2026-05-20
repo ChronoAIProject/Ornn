@@ -21,9 +21,11 @@ import {
 } from "../../../middleware/nyxidAuth";
 import { AppError } from "../../../shared/types/index";
 import { resolveZipRoot } from "../../../shared/utils/zip";
+import { validateBody, getValidatedBody } from "../../../middleware/validate";
 import { fetchGithubSourceBundle } from "./githubFetcher";
 import JSZip from "jszip";
 import pino from "pino";
+import { z } from "zod";
 
 const logger = pino({ level: "info" }).child({ module: "skillGenerationRoutes" });
 
@@ -183,8 +185,11 @@ async function analyzePackageContent(zipBuffer: Uint8Array): Promise<string> {
       try {
         const content = await file.async("string");
         parts.push(`--- ${relativePath} ---\n${content}`);
-      } catch {
-        // Skip binary or unreadable files
+      } catch (err) {
+        // Skip binary or unreadable files. Log so an upload that's
+        // 100% binary doesn't silently produce an empty generation
+        // context (#579).
+        logger.debug({ err, relativePath }, "generation: skipping unreadable file");
       }
     }
   }
@@ -233,7 +238,21 @@ export function createGenerationRoutes(config: GenerationRoutesConfig): Hono<{ V
           packageContent = await analyzePackageContent(new Uint8Array(buf));
         }
       } else if (contentType.includes("application/json")) {
-        const body = await c.req.json();
+        // Hybrid endpoint — multipart-or-JSON. Inline Zod parse so
+        // malformed JSON returns 400 invalid_body via the global RFC
+        // 7807 handler instead of a raw SyntaxError 500 (#438).
+        let body: { modelId?: string; messages?: unknown[]; prompt?: string };
+        try {
+          const text = await c.req.text();
+          const raw = text.trim().length === 0 ? {} : JSON.parse(text);
+          if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+            throw AppError.badRequest("invalid_body", "Request body must be a JSON object");
+          }
+          body = raw as typeof body;
+        } catch (err) {
+          if (err instanceof AppError) throw err;
+          throw AppError.badRequest("invalid_body", "Request body must be valid JSON");
+        }
         if (typeof body.modelId === "string" && body.modelId) {
           requestedModelId = body.modelId;
         }
@@ -245,7 +264,11 @@ export function createGenerationRoutes(config: GenerationRoutesConfig): Hono<{ V
           const keepAliveMs = await resolveKeepAliveMs(keepAliveIntervalMsResolver);
           return streamGenerationEvents(
             c,
-            generationService.generateStreamWithHistory(body.messages, c.req.raw.signal, pf.modelId),
+            generationService.generateStreamWithHistory(
+              body.messages as Array<{ role: "user" | "assistant"; content: string }>,
+              c.req.raw.signal,
+              pf.modelId,
+            ),
             keepAliveMs,
             { quotaService, userId: pf.userId, permissions: pf.permissions, modelId: pf.modelId },
           );
@@ -295,23 +318,34 @@ export function createGenerationRoutes(config: GenerationRoutesConfig): Hono<{ V
     "/skills/generate/from-source",
     auth,
     requirePermission("ornn:skill:build"),
+    validateBody(
+      z.object({
+        code: z.string().optional(),
+        repoUrl: z.string().optional(),
+        path: z.string().optional(),
+        framework: z.string().optional(),
+        description: z.string().optional(),
+        modelId: z.string().optional(),
+      }),
+      "invalid_from_source_body",
+    ),
     async (c) => {
       const authCtx = getAuth(c);
-      const body = (await c.req.json().catch(() => ({}))) as {
-        code?: unknown;
-        repoUrl?: unknown;
-        path?: unknown;
-        framework?: unknown;
-        description?: unknown;
-        modelId?: unknown;
-      };
+      const body = getValidatedBody<{
+        code?: string;
+        repoUrl?: string;
+        path?: string;
+        framework?: string;
+        description?: string;
+        modelId?: string;
+      }>(c);
 
-      const inlineCode = typeof body.code === "string" ? body.code : undefined;
-      const repoUrl = typeof body.repoUrl === "string" ? body.repoUrl : undefined;
-      const path = typeof body.path === "string" ? body.path : undefined;
-      const framework = typeof body.framework === "string" ? body.framework : undefined;
-      const description = typeof body.description === "string" ? body.description : undefined;
-      const requestedModelId = typeof body.modelId === "string" ? body.modelId : undefined;
+      const inlineCode = body.code;
+      const repoUrl = body.repoUrl;
+      const path = body.path;
+      const framework = body.framework;
+      const description = body.description;
+      const requestedModelId = body.modelId;
 
       if (!inlineCode && !repoUrl) {
         throw AppError.badRequest(
@@ -394,17 +428,27 @@ export function createGenerationRoutes(config: GenerationRoutesConfig): Hono<{ V
     "/skills/generate/from-openapi",
     auth,
     requirePermission("ornn:skill:build"),
+    validateBody(
+      z.object({
+        spec: z.string().min(1),
+        endpoints: z.array(z.unknown()).optional(),
+        description: z.string().optional(),
+        modelId: z.string().optional(),
+      }),
+      "invalid_from_openapi_body",
+    ),
     async (c) => {
       const authCtx = getAuth(c);
-      const body = await c.req.json();
+      const body = getValidatedBody<{
+        spec: string;
+        endpoints?: unknown[];
+        description?: string;
+        modelId?: string;
+      }>(c);
 
-      if (!body.spec || typeof body.spec !== "string") {
-        throw AppError.badRequest("missing_spec", "An OpenAPI 'spec' field (JSON or YAML string) is required");
-      }
-
-      const endpoints = Array.isArray(body.endpoints) ? body.endpoints : undefined;
-      const description = typeof body.description === "string" ? body.description : undefined;
-      const requestedModelId = typeof body.modelId === "string" ? body.modelId : undefined;
+      const endpoints = body.endpoints;
+      const description = body.description;
+      const requestedModelId = body.modelId;
 
       logger.info(
         { userId: authCtx.userId, specLength: body.spec.length, endpoints, hasDescription: !!description },
@@ -417,7 +461,12 @@ export function createGenerationRoutes(config: GenerationRoutesConfig): Hono<{ V
       const keepAliveMs = await resolveKeepAliveMs(keepAliveIntervalMsResolver);
       return streamGenerationEvents(
         c,
-        generationService.generateFromOpenApi(body.spec, { endpoints, description }, signal, pf.modelId),
+        generationService.generateFromOpenApi(
+          body.spec,
+          { endpoints: endpoints as string[] | undefined, description },
+          signal,
+          pf.modelId,
+        ),
         keepAliveMs,
         { quotaService, userId: pf.userId, permissions: pf.permissions, modelId: pf.modelId },
       );

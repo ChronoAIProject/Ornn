@@ -391,8 +391,11 @@ export class AuditService {
         }
         chunks.push(`// FILE: ${relative}\n${text}`);
         bundledBytes += text.length;
-      } catch {
-        // skip unreadable files
+      } catch (err) {
+        // Skip unreadable files — binary blobs and zip-entry decode
+        // errors land here. Logging so an audit that quietly drops
+        // every file (e.g. a JSZip regression) becomes visible.
+        logger.debug({ err, relative }, "audit: skipping unreadable file");
       }
     }
 
@@ -429,7 +432,15 @@ export function parseAuditJson(raw: string): ParsedAudit | null {
   let obj: unknown;
   try {
     obj = JSON.parse(slice);
-  } catch {
+  } catch (err) {
+    // Audit LLM produced malformed JSON — parseAuditJson returns null
+    // and the caller (Service.scan) treats it as "no audit produced"
+    // and falls back gracefully. Log the head of the slice so we can
+    // catch a pattern of the LLM repeatedly mis-formatting output.
+    logger.debug(
+      { err, sliceHead: slice.slice(0, 120) },
+      "parseAuditJson: malformed JSON slice",
+    );
     return null;
   }
   if (!obj || typeof obj !== "object") return null;

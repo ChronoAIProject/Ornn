@@ -210,7 +210,7 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
     python: config.agentsealPython,
     script: config.agentsealScript,
     timeoutMs: 60_000,
-    enabled: true,
+    enabled: config.agentsealEnabled,
     logger,
   });
 

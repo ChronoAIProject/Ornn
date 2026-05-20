@@ -8,6 +8,7 @@
  */
 
 import { Hono } from "hono";
+import pino from "pino";
 import {
   type AuthVariables,
   nyxidAuthMiddleware,
@@ -20,6 +21,8 @@ import type { SkillRepository } from "../skills/crud/repository";
 import type { UserDirectoryRepository } from "../users/repository";
 import type { AnalyticsEmitter } from "../../infra/analytics";
 import { AppError } from "../../shared/types/index";
+
+const logger = pino({ level: "info" }).child({ module: "meRoutes" });
 
 export interface MeRoutesConfig {
   /**
@@ -334,7 +337,11 @@ async function resolveOrgDisplayNames(
         if (!resp.ok) return { ...r, displayName: r.id };
         const body = (await resp.json()) as { display_name?: string | null };
         return { ...r, displayName: body.display_name ?? r.id };
-      } catch {
+      } catch (err) {
+        // Fall back to org id as display name; surfaced from a NyxID
+        // hiccup, not a logic bug. Log so we can spot persistent issues
+        // without alerting on every single transient failure.
+        logger.debug({ err, orgId: r.id }, "org display-name lookup failed");
         return { ...r, displayName: r.id };
       }
     }),

@@ -36,6 +36,11 @@ export function extractFrontmatter(
     const camelized = yamlKeysToCamel(raw);
     return adaptOldFrontmatter(camelized);
   } catch {
+    // Intentional silent (#579): YAML parse errors here surface as a
+    // user-facing "frontmatter is invalid" message from the upstream
+    // validator (`validateSkillFrontmatter`). Logging the raw YAML
+    // would be noisy on every malformed-SKILL.md upload and leaks the
+    // user's frontmatter into logs.
     return null;
   }
 }
