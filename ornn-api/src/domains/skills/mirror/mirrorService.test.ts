@@ -278,7 +278,7 @@ describe("MirrorService privacy regression", () => {
     await svc.syncSkill("g-flip");
     // Expect one tree create with a sha:null entry for flip/SKILL.md.
     expect(calls.trees.length).toBe(1);
-    const entries = calls.trees[0].entries;
+    const entries = calls.trees[0]!.entries;
     const removalEntry = entries.find((e) => e.path === "flip/SKILL.md");
     expect(removalEntry).toBeDefined();
     expect(removalEntry?.sha).toBeNull();

@@ -129,7 +129,7 @@ describe("SettingsExporter", () => {
     const telemetry = env.sections.telemetry as Record<string, unknown>;
     expect(isRedactionSentinel(telemetry.postHogApiKey)).toBe(true);
     const providers = env.sections.llmProviders as Array<Record<string, unknown>>;
-    const auth = providers[0].auth as Record<string, unknown>;
+    const auth = providers[0]!.auth as Record<string, unknown>;
     expect(isRedactionSentinel(auth.apiKey)).toBe(true);
   });
 

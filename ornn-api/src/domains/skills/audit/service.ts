@@ -375,7 +375,11 @@ export class AuditService {
 
     for (const path of allPaths) {
       const entry = zip.files[path];
-      if (entry.dir) continue;
+      // `allPaths` is built from `Object.keys(zip.files)` upstream, so
+      // every path resolves. Defensive null-check under
+      // noUncheckedIndexedAccess (#450) — drop the file rather than
+      // crash if a future refactor introduces a mismatch.
+      if (!entry || entry.dir) continue;
       const parts = path.split("/");
       let relative = path;
       if (parts.length > 1 && zip.files[`${parts[0]}/`]?.dir) {

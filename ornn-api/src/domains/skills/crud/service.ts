@@ -1132,7 +1132,10 @@ export class SkillService {
     // Walk all entries and extract text content
     for (const path of allPaths) {
       const entry = zip.files[path];
-      if (entry.dir) continue;
+      // allPaths is sourced from `Object.keys(zip.files)`, but
+      // noUncheckedIndexedAccess (#450) widens the lookup to `T |
+      // undefined`. Defensive skip rather than crash.
+      if (!entry || entry.dir) continue;
 
       // Get the relative path (strip root folder prefix if present)
       let relativePath = path;
@@ -1283,7 +1286,10 @@ export class SkillService {
 
     let rawFrontmatter: Record<string, unknown>;
     try {
-      const parsed = parseYaml(fmMatch[1]);
+      // FRONTMATTER_REGEX always has a capture group 1 (the YAML body)
+      // when it matches. `!` is safe under noUncheckedIndexedAccess
+      // (#450).
+      const parsed = parseYaml(fmMatch[1]!);
       if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
         throw new Error("Frontmatter must be a YAML object");
       }
@@ -1539,7 +1545,10 @@ export class SkillService {
       return violations;
     }
 
-    const yamlBlock = fmMatch[1];
+    // FRONTMATTER_REGEX always has capture group 1 (the YAML body)
+    // when it matches. `!` is safe under noUncheckedIndexedAccess
+    // (#450).
+    const yamlBlock = fmMatch[1]!;
     if (yamlBlock.includes("<") || yamlBlock.includes(">")) {
       violations.push({
         rule: "no-xml-brackets",

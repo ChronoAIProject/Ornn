@@ -111,8 +111,8 @@ describe("POST /me/redemption-codes/redeem", () => {
       data: { codeId: string; grants: Array<{ surface: string; amount: number }> };
     };
     expect(json.data.grants.length).toBe(1);
-    expect(json.data.grants[0].surface).toBe("playground");
-    expect(json.data.grants[0].amount).toBe(5);
+    expect(json.data.grants[0]!.surface).toBe("playground");
+    expect(json.data.grants[0]!.amount).toBe(5);
 
     const audits = await db.collection("quota_grants_audit").countDocuments();
     expect(audits).toBe(1);

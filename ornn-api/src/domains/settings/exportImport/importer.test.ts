@@ -156,8 +156,8 @@ describe("SettingsImporter", () => {
     );
     const q = r.sections.find((s) => s.id === "playground")!;
     expect(q.status).toBe("failed");
-    expect(q.errors?.[0].field).toBe("defaultMonthlyQuota");
-    expect(q.errors?.[0].message).toBeDefined();
+    expect(q.errors?.[0]!.field).toBe("defaultMonthlyQuota");
+    expect(q.errors?.[0]!.message).toBeDefined();
   });
 
   it("UT-IMPORT-008: dry-run preview produces no writes", async () => {

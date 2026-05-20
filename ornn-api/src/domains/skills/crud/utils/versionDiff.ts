@@ -100,7 +100,9 @@ async function extractFiles(zipBuffer: Uint8Array): Promise<Map<string, Uint8Arr
   const out = new Map<string, Uint8Array>();
   for (const path of allPaths) {
     const entry = zip.files[path];
-    if (entry.dir) continue;
+    // allPaths is `Object.keys(zip.files)`, but noUncheckedIndexedAccess
+    // (#450) widens the lookup to `T | undefined`. Defensive skip.
+    if (!entry || entry.dir) continue;
     const parts = path.split("/");
     let relative = path;
     if (parts.length > 1) {

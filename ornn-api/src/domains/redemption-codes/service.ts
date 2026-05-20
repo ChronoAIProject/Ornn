@@ -121,7 +121,10 @@ export class RedemptionCodeService {
     const bytes = randomBytes(REDEMPTION_CODE_LENGTH);
     let out = "";
     for (let i = 0; i < REDEMPTION_CODE_LENGTH; i++) {
-      out += REDEMPTION_CODE_ALPHABET[bytes[i] % REDEMPTION_CODE_ALPHABET.length];
+      // `randomBytes(N)` returns exactly N bytes — loop bound is N, so
+      // `bytes[i]` is always defined. `!` is safe under
+      // noUncheckedIndexedAccess (#450).
+      out += REDEMPTION_CODE_ALPHABET[bytes[i]! % REDEMPTION_CODE_ALPHABET.length];
     }
     return out;
   }
