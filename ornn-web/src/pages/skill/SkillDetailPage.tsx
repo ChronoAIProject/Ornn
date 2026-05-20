@@ -40,6 +40,10 @@ import { SkillAuditStartedModal } from "@/components/skill/SkillAuditStartedModa
 import { SkillVersionsBrowserModal } from "@/components/skill/SkillVersionsBrowserModal";
 import { AuditVerdictPill } from "@/components/skill/AuditVerdictPill";
 import {
+  SkillDetailLoading,
+  SkillDetailNotFound,
+} from "@/components/skill/SkillDetailStates";
+import {
   useSkill,
   useDeleteSkill,
   useDeleteSkillVersion,
@@ -356,31 +360,8 @@ export function SkillDetailPage() {
     );
   }, [skill, startAuditMutation, addToast, t]);
 
-  if (isLoading) {
-    return (
-      <PageTransition>
-        <div className="flex h-full items-center justify-center">
-          <Skeleton lines={10} />
-        </div>
-      </PageTransition>
-    );
-  }
-
-  if (error || !skill) {
-    return (
-      <PageTransition>
-        <div className="flex h-full items-center justify-center">
-          <div className="text-center">
-            <h2 className="mb-2 font-display text-2xl text-danger">{t("skillDetail.notFound")}</h2>
-            <p className="text-meta">{t("skillDetail.notFoundDesc")}</p>
-            <Button onClick={() => navigate("/registry")} className="mt-6">
-              {t("skillDetail.backToExplore")}
-            </Button>
-          </div>
-        </div>
-      </PageTransition>
-    );
-  }
+  if (isLoading) return <SkillDetailLoading />;
+  if (error || !skill) return <SkillDetailNotFound />;
 
   const versionAudit = auditSummaryByVersion?.[skill.version];
   // Detect an in-flight audit on the current version so the right-rail
