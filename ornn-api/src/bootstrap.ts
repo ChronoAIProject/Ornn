@@ -134,9 +134,7 @@ import { createSettingsExportImportRoutes } from "./domains/settings/exportImpor
 import { LlmModelListClient } from "./clients/llmModelListClient";
 
 // Domain: Quota (per-user playground / skill-gen counters + admin grants)
-import { QuotaRepository } from "./domains/quota/repository";
-import { QuotaService } from "./domains/quota/service";
-import { createQuotaRoutes } from "./domains/quota/routes";
+import { wireQuota } from "./domains/quota/bootstrap";
 
 // Domain: Redemption codes (admin-issued single-use quota grants)
 import { RedemptionCodeRepository } from "./domains/redemption-codes/repository";
@@ -632,35 +630,19 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   });
 
   // ---- Domain: Quota (per-user playground / skill-gen counters + admin grants) ----
-  const quotaRepo = new QuotaRepository(db);
-  void quotaRepo.ensureIndexes().catch((err) =>
-    logger.warn({ err }, "quota indexes ensureIndexes failed — proceeding anyway"),
-  );
+  const { service: quotaService, routes: quotaRoutes } = wireQuota({
+    db,
+    logger,
+    settingsService,
+    notificationService,
+  });
 
   // ---- Domain: Redemption codes (single-use admin-issued quota grants) ----
+  // Repo built here, service constructed below (consumes `quotaService`).
   const redemptionCodeRepo = new RedemptionCodeRepository(db);
   void redemptionCodeRepo.ensureIndexes().catch((err) =>
     logger.warn({ err }, "redemption_codes indexes ensureIndexes failed — proceeding anyway"),
   );
-  const quotaService = new QuotaService({
-    repo: quotaRepo,
-    defaults: {
-      getQuotaDefaults: async () => {
-        const [pg, sg] = await Promise.all([
-          settingsService.getPlayground(),
-          settingsService.getSkillGen(),
-        ]);
-        return {
-          defaultPlaygroundMonthly: pg.defaultMonthlyQuota,
-          defaultSkillGenMonthly: sg.defaultMonthlyQuota,
-        };
-      },
-    },
-    notificationService,
-  });
-  const quotaRoutes = createQuotaRoutes({
-    quotaService,
-  });
 
   // ---- Per-provider model catalog migration (#270) ----
   // Fold the standalone `models` collection into `llm_providers.models[]`
