@@ -81,9 +81,7 @@ import { createBroadcastRoutes } from "./domains/broadcasts/routes";
 import { backfillBroadcastRecipientUserIds } from "./domains/broadcasts/migration";
 
 // Domain: Analytics
-import { AnalyticsRepository } from "./domains/analytics/repository";
-import { AnalyticsService } from "./domains/analytics/service";
-import { createAnalyticsRoutes } from "./domains/analytics/routes";
+import { wireAnalytics } from "./domains/analytics/bootstrap";
 
 // Domain: Skill Search
 import { SearchService } from "./domains/skills/search/service";
@@ -561,12 +559,11 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   const auditRoutes = createAuditRoutes({ auditService, skillService });
 
   // ---- Domain: Analytics ----
-  const analyticsRepo = new AnalyticsRepository(db);
-  void analyticsRepo.ensureIndexes().catch((err) =>
-    logger.warn({ err }, "skill_executions indexes ensureIndexes failed — proceeding anyway"),
-  );
-  const analyticsService = new AnalyticsService({ analyticsRepo });
-  const analyticsRoutes = createAnalyticsRoutes({ analyticsService, skillService });
+  const { service: analyticsService, routes: analyticsRoutes } = wireAnalytics({
+    db,
+    logger,
+    skillService,
+  });
 
   // ---- Domain: Platform settings (admin-editable: audit threshold, mirror config, LLM override) ----
   // Backend-engineer-2 is replacing this with a multi-section
