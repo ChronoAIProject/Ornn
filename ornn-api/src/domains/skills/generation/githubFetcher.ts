@@ -47,6 +47,10 @@ export function parseRepoUrl(url: string): ParsedRepoUrl | null {
   try {
     u = new URL(url);
   } catch {
+    // Intentional silent (#579): caller treats null as "not a GitHub
+    // URL" and shows the user a validation error. Logging here would
+    // be noisy on every form-validation typo. The malformed URL is
+    // returned to the caller via the function signature.
     return null;
   }
   if (u.hostname !== "github.com") return null;

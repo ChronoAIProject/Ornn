@@ -274,6 +274,10 @@ export function parseSkillScanOutput(raw: string): ParsedScan | null {
   try {
     json = JSON.parse(stripped);
   } catch {
+    // Intentional silent (#579): a malformed scan output already gets
+    // logged at the call site (`scan()` calls `parseSkillScanOutput`
+    // and logs a warn with `rawSnippet` when this returns null). No
+    // value in logging twice.
     return null;
   }
   if (!json || typeof json !== "object" || Array.isArray(json)) return null;

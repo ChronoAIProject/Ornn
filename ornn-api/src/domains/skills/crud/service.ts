@@ -810,10 +810,15 @@ export class SkillService {
     try {
       const info = await this.extractSkillInfo(pulled.zipBuffer);
       pendingVersion = info.version;
-    } catch {
+    } catch (err) {
       // If the package can't be parsed (e.g. malformed frontmatter),
       // fall back to the existing latest. The actual sync will surface
-      // the validation error properly.
+      // the validation error properly. Log so we can spot a pulled
+      // source repo that's been broken for a while (#579).
+      logger.debug(
+        { err, skillGuid: existing.guid },
+        "preview-refresh: pulled ZIP parse failed, falling back to existing version",
+      );
     }
 
     return {

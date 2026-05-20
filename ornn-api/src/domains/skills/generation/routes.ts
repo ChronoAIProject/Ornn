@@ -183,8 +183,11 @@ async function analyzePackageContent(zipBuffer: Uint8Array): Promise<string> {
       try {
         const content = await file.async("string");
         parts.push(`--- ${relativePath} ---\n${content}`);
-      } catch {
-        // Skip binary or unreadable files
+      } catch (err) {
+        // Skip binary or unreadable files. Log so an upload that's
+        // 100% binary doesn't silently produce an empty generation
+        // context (#579).
+        logger.debug({ err, relativePath }, "generation: skipping unreadable file");
       }
     }
   }
