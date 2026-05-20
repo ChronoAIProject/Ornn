@@ -16,12 +16,13 @@
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import pino from "pino";
+import { z } from "zod";
+import { validateBody, getValidatedBody } from "../../../middleware/validate";
 import {
   type AuthVariables,
   nyxidAuthMiddleware,
   requirePermission,
 } from "../../../middleware/nyxidAuth";
-import { AppError } from "../../../shared/types/index";
 import type { SettingsActor } from "../types";
 import type { SettingsExporter } from "./exporter";
 import type { ImportResult, SettingsImporter } from "./importer";
@@ -121,11 +122,12 @@ export function createSettingsExportImportRoutes(
           413,
         ),
     }),
+    // The importer (`importer.import`) validates the full structured
+    // payload internally. The middleware here just gates JSON-shape
+    // so a SyntaxError becomes 400 invalid_body per #438.
+    validateBody(z.record(z.string(), z.unknown()), "invalid_body"),
     async (c) => {
-      const body = await c.req.json().catch(() => null);
-      if (!body || typeof body !== "object") {
-        throw AppError.badRequest("invalid_body", "JSON body required");
-      }
+      const body = getValidatedBody<Record<string, unknown>>(c);
       // Accept dryRun from either the body (the SPA path) OR the
       // query string (curl / scripts). Body takes precedence. Was
       // query-only before — that silently mutated on the SPA's

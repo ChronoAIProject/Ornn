@@ -68,6 +68,50 @@ const distTagSetSchema = z.object({
     .regex(/^(0|[1-9]\d*)\.(0|[1-9]\d*)$/, "version must be <major>.<minor>"),
 });
 
+/**
+ * Body for `POST /api/v1/skills/pull` (#438). Either `githubUrl` (a
+ * single browser-bar URL the server parses into repo/ref/path) OR an
+ * explicit `repo` (with optional `ref`/`path`). A cross-field refine
+ * checks that at least one is provided so we don't reach the handler
+ * with an empty body.
+ */
+const skillPullSchema = z
+  .object({
+    githubUrl: z.string().min(1).optional(),
+    repo: z.string().min(1).optional(),
+    ref: z.string().optional(),
+    path: z.string().optional(),
+    skip_validation: z.boolean().optional(),
+  })
+  .refine((b) => Boolean(b.githubUrl) || Boolean(b.repo), {
+    message: "Provide either 'githubUrl' (preferred) or 'repo' (with optional 'ref'/'path').",
+  });
+
+/**
+ * Body for `POST /api/v1/skills/:id/refresh` (#438). All fields optional.
+ * `skipValidation` and `skip_validation` are both accepted for
+ * backward compatibility with the original ad-hoc handler.
+ */
+const skillRefreshSchema = z.object({
+  dryRun: z.boolean().optional(),
+  skipValidation: z.boolean().optional(),
+  skip_validation: z.boolean().optional(),
+});
+
+/**
+ * Body for `PUT /api/v1/skills/:id/source` (#438). The url field is
+ * a discriminated union: `string` to link, `null` to clear. Anything
+ * else is rejected with a clear ZodIssue.
+ */
+const skillSourceSchema = z.object({
+  githubUrl: z.union([z.string().min(1), z.null()]),
+});
+
+/** Body for `PUT /api/v1/skills/:id` JSON-only branch (#438). ZIP branch handled separately. */
+const skillUpdateJsonSchema = z.object({
+  isPrivate: z.boolean().optional(),
+});
+
 const logger = pino({ level: "info" }).child({ module: "skillCrudRoutes" });
 
 export interface SkillRoutesConfig {
@@ -283,24 +327,16 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
     "/skills/pull",
     auth,
     requirePermission("ornn:skill:create"),
+    validateBody(skillPullSchema, "invalid_pull_body"),
     async (c) => {
       const authCtx = getAuth(c);
-      const body = (await c.req.json().catch(() => ({}))) as {
-        // Preferred: a single GitHub folder URL the user copied from the
-        // browser address bar. Server parses out repo / ref / path.
-        githubUrl?: unknown;
-        // Legacy / explicit form: caller already split the source apart.
-        repo?: unknown;
-        ref?: unknown;
-        path?: unknown;
-        skip_validation?: unknown;
-      };
+      const body = getValidatedBody<z.infer<typeof skillPullSchema>>(c);
 
       let repo: string;
       let ref: string | undefined;
       let path: string | undefined;
 
-      if (typeof body.githubUrl === "string" && body.githubUrl) {
+      if (body.githubUrl) {
         try {
           const parsed = parseGithubUrl(body.githubUrl);
           repo = parsed.repo;
@@ -312,15 +348,12 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
             err instanceof Error ? err.message : String(err),
           );
         }
-      } else if (typeof body.repo === "string" && body.repo) {
-        repo = body.repo;
-        ref = typeof body.ref === "string" && body.ref ? body.ref : undefined;
-        path = typeof body.path === "string" ? body.path : undefined;
       } else {
-        throw AppError.badRequest(
-          "missing_source",
-          "Provide either 'githubUrl' (preferred) or 'repo' (with optional 'ref'/'path').",
-        );
+        // .refine() in the schema guarantees we have at least one of
+        // githubUrl/repo, so this branch is the explicit-repo form.
+        repo = body.repo!;
+        ref = body.ref;
+        path = body.path;
       }
 
       const skipValidation = body.skip_validation === true;
@@ -374,14 +407,11 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
     "/skills/:id/refresh",
     auth,
     requirePermission("ornn:skill:update"),
+    validateBody(skillRefreshSchema, "invalid_refresh_body"),
     async (c) => {
       const authCtx = getAuth(c);
       const guid = c.req.param("id");
-      const body = (await c.req.json().catch(() => ({}))) as {
-        dryRun?: unknown;
-        skipValidation?: unknown;
-        skip_validation?: unknown;
-      };
+      const body = getValidatedBody<z.infer<typeof skillRefreshSchema>>(c);
       const dryRun = body.dryRun === true;
       const skipValidation = body.skipValidation === true || body.skip_validation === true;
 
@@ -461,10 +491,11 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
     "/skills/:id/source",
     auth,
     requirePermission("ornn:skill:update"),
+    validateBody(skillSourceSchema, "invalid_source_body"),
     async (c) => {
       const authCtx = getAuth(c);
       const guid = c.req.param("id");
-      const body = (await c.req.json().catch(() => ({}))) as { githubUrl?: unknown };
+      const { githubUrl } = getValidatedBody<z.infer<typeof skillSourceSchema>>(c);
 
       const existing = await skillService.getSkill(guid);
       const isPlatformAdmin = authCtx.permissions.includes("ornn:admin:skill");
@@ -472,18 +503,6 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
         throw AppError.forbidden(
           "not_skill_owner",
           "Only the skill's author or a platform admin may set its source",
-        );
-      }
-
-      let githubUrl: string | null;
-      if (body.githubUrl === null) {
-        githubUrl = null;
-      } else if (typeof body.githubUrl === "string") {
-        githubUrl = body.githubUrl;
-      } else {
-        throw AppError.badRequest(
-          "invalid_body",
-          "Body must include 'githubUrl' as a string (to link) or null (to unlink).",
         );
       }
 
@@ -969,9 +988,30 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
           isPrivate = String(formData["isPrivate"]) === "true";
         }
       } else if (contentType.includes("application/json")) {
-        const body = await c.req.json();
+        // Inline Zod parse — the route is hybrid content-type, so the
+        // `validateBody` middleware doesn't fit. Same #438 intent:
+        // malformed JSON returns 400 with the documented RFC 7807
+        // shape instead of bubbling a raw `SyntaxError`.
+        let body: z.infer<typeof skillUpdateJsonSchema>;
+        try {
+          const text = await c.req.text();
+          const raw = text.trim().length === 0 ? {} : JSON.parse(text);
+          const result = skillUpdateJsonSchema.safeParse(raw);
+          if (!result.success) {
+            throw AppError.badRequest(
+              "invalid_body",
+              result.error.issues
+                .map((i) => `${i.path.join(".") || "<root>"}: ${i.message}`)
+                .join("; "),
+            );
+          }
+          body = result.data;
+        } catch (err) {
+          if (err instanceof AppError) throw err;
+          throw AppError.badRequest("invalid_body", "Request body must be valid JSON");
+        }
         if (body.isPrivate !== undefined) {
-          isPrivate = Boolean(body.isPrivate);
+          isPrivate = body.isPrivate;
         }
       }
 

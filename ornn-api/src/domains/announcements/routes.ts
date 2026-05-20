@@ -30,6 +30,7 @@ import {
   requirePermission,
 } from "../../middleware/nyxidAuth";
 import { AppError } from "../../shared/types/index";
+import { validateBody, getValidatedBody } from "../../middleware/validate";
 import type { AnnouncementService } from "./service";
 import type { AnnouncementDocument } from "./types";
 
@@ -136,50 +137,47 @@ export function createAnnouncementRoutes(
     return c.json({ data: { items: items.map(toAdminDto) }, error: null });
   });
 
-  app.post("/admin/announcements", auth, adminGuard, async (c) => {
-    const authCtx = getAuth(c);
-    const body = await c.req.json().catch(() => ({}));
-    const parsed = createSchema.safeParse(body);
-    if (!parsed.success) {
-      throw AppError.badRequest(
-        "invalid_announcement_input",
-        parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; "),
-      );
-    }
-    const created = await announcementService.create({
-      titleEn: parsed.data.titleEn,
-      titleZh: parsed.data.titleZh,
-      bodyMarkdownEn: parsed.data.bodyMarkdownEn,
-      bodyMarkdownZh: parsed.data.bodyMarkdownZh,
-      ctaLabelEn: parsed.data.ctaLabelEn ?? null,
-      ctaLabelZh: parsed.data.ctaLabelZh ?? null,
-      ctaUrl: parsed.data.ctaUrl ?? null,
-      enabled: parsed.data.enabled,
-      startsAt: parsed.data.startsAt ?? null,
-      endsAt: parsed.data.endsAt ?? null,
-      createdBy: authCtx.userId,
-    });
+  app.post(
+    "/admin/announcements",
+    auth,
+    adminGuard,
+    validateBody(createSchema, "invalid_announcement_input"),
+    async (c) => {
+      const authCtx = getAuth(c);
+      const data = getValidatedBody<z.infer<typeof createSchema>>(c);
+      const created = await announcementService.create({
+        titleEn: data.titleEn,
+        titleZh: data.titleZh,
+        bodyMarkdownEn: data.bodyMarkdownEn,
+        bodyMarkdownZh: data.bodyMarkdownZh,
+        ctaLabelEn: data.ctaLabelEn ?? null,
+        ctaLabelZh: data.ctaLabelZh ?? null,
+        ctaUrl: data.ctaUrl ?? null,
+        enabled: data.enabled,
+        startsAt: data.startsAt ?? null,
+        endsAt: data.endsAt ?? null,
+        createdBy: authCtx.userId,
+      });
     // 201 already set; add Location to match CONVENTIONS.md §3.2 (#458).
     c.header("Location", `/api/v1/admin/announcements/${created._id}`);
     return c.json({ data: toAdminDto(created), error: null }, 201);
   });
 
-  app.patch("/admin/announcements/:id", auth, adminGuard, async (c) => {
-    const id = c.req.param("id");
-    const body = await c.req.json().catch(() => ({}));
-    const parsed = updateSchema.safeParse(body);
-    if (!parsed.success) {
-      throw AppError.badRequest(
-        "invalid_announcement_input",
-        parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; "),
-      );
-    }
-    if (Object.keys(parsed.data).length === 0) {
-      throw AppError.badRequest("invalid_announcement_input", "No fields to update");
-    }
-    const updated = await announcementService.update(id, parsed.data);
-    return c.json({ data: toAdminDto(updated), error: null });
-  });
+  app.patch(
+    "/admin/announcements/:id",
+    auth,
+    adminGuard,
+    validateBody(updateSchema, "invalid_announcement_input"),
+    async (c) => {
+      const id = c.req.param("id");
+      const data = getValidatedBody<z.infer<typeof updateSchema>>(c);
+      if (Object.keys(data).length === 0) {
+        throw AppError.badRequest("invalid_announcement_input", "No fields to update");
+      }
+      const updated = await announcementService.update(id, data);
+      return c.json({ data: toAdminDto(updated), error: null });
+    },
+  );
 
   app.delete("/admin/announcements/:id", auth, adminGuard, async (c) => {
     const id = c.req.param("id");

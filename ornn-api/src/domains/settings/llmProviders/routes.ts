@@ -33,6 +33,7 @@ import {
   requirePermission,
 } from "../../../middleware/nyxidAuth";
 import { AppError } from "../../../shared/types/index";
+import { validateBody, getValidatedBody } from "../../../middleware/validate";
 import type { SettingsActor } from "../types";
 import type { LlmProvidersService, ModelResolution, Surface } from "./service";
 
@@ -85,16 +86,24 @@ export function createLlmProvidersRoutes(
     return c.json({ data: { items }, error: null });
   });
 
-  app.post(base, auth, adminGuard, async (c) => {
-    const body = await c.req.json().catch(() => null);
-    if (!body) throw AppError.badRequest("invalid_body", "JSON body required");
-    const actor = currentActor(c);
-    const created = await llmProvidersService.create(body, actor);
-    // Re-fetch through the admin path so the 201 body never carries
-    // the plaintext secret the caller just submitted.
-    const masked = await llmProvidersService.getForAdmin(created._id);
-    return c.json({ data: masked, error: null }, 201);
-  });
+  app.post(
+    base,
+    auth,
+    adminGuard,
+    // Service-internal Zod schemas (`providerCreateSchema`) enforce
+    // the full shape. The middleware here just gates JSON-shape so a
+    // SyntaxError becomes 400 with RFC 7807 envelope (#438).
+    validateBody(z.record(z.string(), z.unknown()), "invalid_body"),
+    async (c) => {
+      const body = getValidatedBody<Record<string, unknown>>(c);
+      const actor = currentActor(c);
+      const created = await llmProvidersService.create(body, actor);
+      // Re-fetch through the admin path so the 201 body never carries
+      // the plaintext secret the caller just submitted.
+      const masked = await llmProvidersService.getForAdmin(created._id);
+      return c.json({ data: masked, error: null }, 201);
+    },
+  );
 
   app.get(`${base}/:id`, auth, adminGuard, async (c) => {
     const id = c.req.param("id");
@@ -105,15 +114,20 @@ export function createLlmProvidersRoutes(
     return c.json({ data: item, error: null });
   });
 
-  app.put(`${base}/:id`, auth, adminGuard, async (c) => {
-    const id = c.req.param("id");
-    const body = await c.req.json().catch(() => null);
-    if (!body) throw AppError.badRequest("invalid_body", "JSON body required");
-    const actor = currentActor(c);
-    await llmProvidersService.update(id, body, actor);
-    const masked = await llmProvidersService.getForAdmin(id);
-    return c.json({ data: masked, error: null });
-  });
+  app.put(
+    `${base}/:id`,
+    auth,
+    adminGuard,
+    validateBody(z.record(z.string(), z.unknown()), "invalid_body"),
+    async (c) => {
+      const id = c.req.param("id");
+      const body = getValidatedBody<Record<string, unknown>>(c);
+      const actor = currentActor(c);
+      await llmProvidersService.update(id, body, actor);
+      const masked = await llmProvidersService.getForAdmin(id);
+      return c.json({ data: masked, error: null });
+    },
+  );
 
   app.delete(`${base}/:id`, auth, adminGuard, async (c) => {
     const id = c.req.param("id");
@@ -142,11 +156,11 @@ export function createLlmProvidersRoutes(
     `${base}/:id/models/:modelId`,
     auth,
     adminGuard,
+    validateBody(z.record(z.string(), z.unknown()), "invalid_body"),
     async (c) => {
       const providerId = c.req.param("id");
       const modelId = c.req.param("modelId");
-      const body = await c.req.json().catch(() => null);
-      if (!body) throw AppError.badRequest("invalid_body", "JSON body required");
+      const body = getValidatedBody<Record<string, unknown>>(c);
       const actor = currentActor(c);
       await llmProvidersService.patchModel(providerId, modelId, body, actor);
       const masked = await llmProvidersService.getForAdmin(providerId);

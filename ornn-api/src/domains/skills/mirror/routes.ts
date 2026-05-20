@@ -31,6 +31,8 @@
 
 import { Hono } from "hono";
 import pino from "pino";
+import { z } from "zod";
+import { validateBody, getValidatedBody } from "../../../middleware/validate";
 import {
   type AuthVariables,
   nyxidAuthMiddleware,
@@ -159,8 +161,13 @@ export function createMirrorRoutes(
     "/github/repo",
     auth,
     requirePermission("ornn:admin:skill"),
+    // The per-field type / regex checks below are intricate (owner /
+    // repo name regex, app-id digits, PEM shape, branch protection).
+    // The middleware here just gates the JSON-object shape so a
+    // SyntaxError becomes 400 invalid_body (#438).
+    validateBody(z.record(z.string(), z.unknown()), "invalid_body"),
     async (c) => {
-      const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+      const body = getValidatedBody<Record<string, unknown>>(c);
       const current = await settingsService.getMirror();
       const confirmAbandonOldRepo = body.confirmAbandonOldRepo === true;
 
