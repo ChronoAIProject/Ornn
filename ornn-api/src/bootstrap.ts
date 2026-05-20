@@ -66,19 +66,16 @@ import { createAuditRoutes } from "./domains/skills/audit/routes";
 
 
 // Domain: Notifications
-import { NotificationRepository } from "./domains/notifications/repository";
-import { NotificationService } from "./domains/notifications/service";
-import { createNotificationRoutes } from "./domains/notifications/routes";
-import { dropLegacyNotificationCategories } from "./domains/notifications/migration";
+import { wireNotifications } from "./domains/notifications/bootstrap";
 
 // Domain: Announcements (landing-page popup)
 import { wireAnnouncements } from "./domains/announcements/bootstrap";
 
 // Domain: Broadcasts (admin-authored notifications, #500)
-import { BroadcastRepository } from "./domains/broadcasts/repository";
-import { BroadcastService } from "./domains/broadcasts/service";
-import { createBroadcastRoutes } from "./domains/broadcasts/routes";
-import { backfillBroadcastRecipientUserIds } from "./domains/broadcasts/migration";
+import {
+  wireBroadcasts,
+  wireBroadcastsRepo,
+} from "./domains/broadcasts/bootstrap";
 
 // Domain: Analytics
 import { wireAnalytics } from "./domains/analytics/bootstrap";
@@ -459,59 +456,32 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
     agentsealScanner,
   });
 
-  // ---- Domain: Notifications (built before AuditService so the audit
-  //   pipeline can fan out completion notifications) ----
-  const notificationRepo = new NotificationRepository(db);
-  void notificationRepo.ensureIndexes().catch((err) =>
-    logger.warn({ err }, "notifications indexes ensureIndexes failed — proceeding anyway"),
-  );
-  // One-time boot migration (#218) — drop legacy `share.*` rows left over
-  // from the pre-#198 share/audit-gate workflow. Idempotent; no-op after
-  // first run. Failure is non-fatal — old rows surface as ugly UI but
-  // never block the boot.
-  await dropLegacyNotificationCategories(db).catch((err) =>
-    logger.error(
-      { err: err instanceof Error ? err.message : String(err) },
-      "dropLegacyNotificationCategories failed — legacy notification rows may still surface in /notifications until the next deploy",
-    ),
-  );
-  // `broadcastRepo` is constructed in the broadcasts block below; we
-  // need a reference at NotificationService-build time so the merged
-  // feed (#500) can left-join read receipts. Reordered so broadcasts
-  // build first.
-  const broadcastRepoForNotifications = new BroadcastRepository(db);
-  void broadcastRepoForNotifications.ensureIndexes().catch((err) =>
-    logger.warn({ err }, "broadcasts indexes ensureIndexes failed — proceeding anyway"),
-  );
-  // One-shot bilingual + targeting backfill for broadcasts. Pre-#502
-  // docs don't carry `recipientUserIds`; this migration writes an
-  // explicit `null` on every absent doc so the merged feed can rely
-  // on a stable `string[] | null` shape. Idempotent; failure is
-  // non-fatal — the repo mapper's `Array.isArray` guard already
-  // normalises absent fields to `null` on the read path.
-  await backfillBroadcastRecipientUserIds(db, logger).catch((err) =>
-    logger.error(
-      { err: err instanceof Error ? err.message : String(err) },
-      "broadcasts recipientUserIds backfill crashed — mapper fallback will cover reads, retry on next boot",
-    ),
-  );
-  const notificationService = new NotificationService({
-    notificationRepo,
-    broadcastRepo: broadcastRepoForNotifications,
+  // ---- Domain: Notifications + Broadcasts ----
+  // The two share a single BroadcastRepository instance: notifications
+  // reads it on the merged-feed path (#500 left-join), broadcasts
+  // writes through its own service on admin CRUD. Build the repo
+  // first so notifications can take its reference, then wire each
+  // surface's service + routes. Notifications is built before the
+  // audit service so the audit pipeline can fan out completion
+  // notifications.
+  const { repo: broadcastRepoForNotifications } = await wireBroadcastsRepo({
+    db,
+    logger,
   });
-  const notificationRoutes = createNotificationRoutes({ notificationService });
+  const { service: notificationService, routes: notificationRoutes } =
+    await wireNotifications({
+      db,
+      logger,
+      broadcastRepo: broadcastRepoForNotifications,
+    });
 
   // ---- Domain: Announcements (landing-page popup, issue #307) ----
   const { routes: announcementRoutes } = await wireAnnouncements({ db, logger });
 
   // ---- Domain: Broadcasts (admin-authored, fan-out via notifications, #500) ----
-  // Reuse the same `BroadcastRepository` instance the notifications
-  // service got — both surfaces share state (admin CRUD + per-user
-  // feed merge), and a single instance keeps the wiring legible.
-  const broadcastService = new BroadcastService({
+  const { routes: broadcastRoutes } = wireBroadcasts({
     repo: broadcastRepoForNotifications,
   });
-  const broadcastRoutes = createBroadcastRoutes({ broadcastService });
 
   // ---- NyxID Orgs Client — built early so the audit fan-out can expand
   //   sharedWithOrgs into member rosters when sending consumer notifications.
