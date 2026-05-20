@@ -7,8 +7,18 @@
  *   the test machine.
  */
 
-import { describe, expect, test } from "bun:test";
-import { AgentSealScanner, parseSkillScanOutput } from "./index";
+import { beforeAll, describe, expect, test } from "bun:test";
+import { AgentSealScanner, assertAbsoluteExistingFile, parseSkillScanOutput } from "./index";
+
+// #442 added boot-time path validation that requires `script` to be
+// an absolute path to an existing file. The subprocess tests below
+// pass a shell shim as `python` (it ignores the script arg), so we
+// need a real-on-disk dummy script file the validator can stat.
+const DUMMY_SCRIPT = "/tmp/agentseal-test-dummy.py";
+
+beforeAll(async () => {
+  await Bun.write(DUMMY_SCRIPT, "# dummy — never actually executed; shim shells ignore script arg\n");
+});
 
 describe("parseSkillScanOutput", () => {
   test("parses canonical wrapper output with score + findings", () => {
@@ -89,7 +99,7 @@ describe("AgentSealScanner.scan", () => {
 
     const scanner = new AgentSealScanner({
       python: script,
-      script: "/tmp/agentseal-shim-success.dummy.py",
+      script: DUMMY_SCRIPT,
       timeoutMs: 5000,
       enabled: true,
     });
@@ -120,7 +130,7 @@ describe("AgentSealScanner.scan", () => {
 
     const scanner = new AgentSealScanner({
       python: script,
-      script: "/tmp/dummy.py",
+      script: DUMMY_SCRIPT,
       timeoutMs: 5000,
       enabled: true,
     });
@@ -146,7 +156,7 @@ describe("AgentSealScanner.scan", () => {
 
     const scanner = new AgentSealScanner({
       python: script,
-      script: "/tmp/dummy.py",
+      script: DUMMY_SCRIPT,
       timeoutMs: 5000,
       enabled: true,
     });
@@ -168,7 +178,7 @@ describe("AgentSealScanner.scan", () => {
 
     const scanner = new AgentSealScanner({
       python: script,
-      script: "/tmp/dummy.py",
+      script: DUMMY_SCRIPT,
       timeoutMs: 5000,
       enabled: true,
     });
@@ -195,7 +205,7 @@ describe("AgentSealScanner.scan", () => {
 
     const scanner = new AgentSealScanner({
       python: script,
-      script: "/tmp/dummy.py",
+      script: DUMMY_SCRIPT,
       timeoutMs: 200,
       enabled: true,
     });
@@ -207,18 +217,92 @@ describe("AgentSealScanner.scan", () => {
     expect(result).toBeNull();
   }, 10_000);
 
-  test("returns null when interpreter does not exist", async () => {
-    const scanner = new AgentSealScanner({
-      python: "/nonexistent/path/python-fake-binary",
-      script: "/tmp/dummy.py",
-      timeoutMs: 1000,
-      enabled: true,
-    });
-    const result = await scanner.scan({
-      skillGuid: "g6",
-      version: "1.0",
-      zipBuffer: new Uint8Array([1]),
-    });
-    expect(result).toBeNull();
+  // The "interpreter does not exist" runtime path (the test previously
+  // here) is now covered earlier — at construct time — by the path
+  // validator added in #442. The constructor throws before `scan()`
+  // can be called. See the `assertAbsoluteExistingFile` block below.
+});
+
+describe("AgentSealScanner — boot-time path validation (#442)", () => {
+  test("throws when python path is relative", () => {
+    expect(
+      () =>
+        new AgentSealScanner({
+          python: "bin/python", // relative — would resolve against $PATH / cwd
+          script: DUMMY_SCRIPT,
+          timeoutMs: 1000,
+          enabled: true,
+        }),
+    ).toThrow(/must be an absolute path/);
+  });
+
+  test("throws when python path does not exist", () => {
+    expect(
+      () =>
+        new AgentSealScanner({
+          python: "/nonexistent/path/to/python",
+          script: DUMMY_SCRIPT,
+          timeoutMs: 1000,
+          enabled: true,
+        }),
+    ).toThrow(/does not exist/);
+  });
+
+  test("throws when script path does not exist", () => {
+    expect(
+      () =>
+        new AgentSealScanner({
+          python: "/bin/sh",
+          script: "/nonexistent/script.py",
+          timeoutMs: 1000,
+          enabled: true,
+        }),
+    ).toThrow(/does not exist/);
+  });
+
+  test("throws when script path points at a directory, not a file", () => {
+    expect(
+      () =>
+        new AgentSealScanner({
+          python: "/bin/sh",
+          script: "/tmp",
+          timeoutMs: 1000,
+          enabled: true,
+        }),
+    ).toThrow(/not a regular file/);
+  });
+
+  test("disabled scanner skips validation (so dev/test envs don't need real paths)", () => {
+    expect(
+      () =>
+        new AgentSealScanner({
+          python: "bin/python", // would normally fail validation
+          script: "/nonexistent",
+          timeoutMs: 1000,
+          enabled: false,
+        }),
+    ).not.toThrow();
+  });
+
+  test("happy path: absolute existing files, scanner constructs cleanly", () => {
+    expect(
+      () =>
+        new AgentSealScanner({
+          python: "/bin/sh",
+          script: DUMMY_SCRIPT,
+          timeoutMs: 1000,
+          enabled: true,
+        }),
+    ).not.toThrow();
+  });
+});
+
+describe("assertAbsoluteExistingFile (#442 — direct unit test)", () => {
+  test("empty string rejected", () => {
+    expect(() => assertAbsoluteExistingFile("x", "")).toThrow(/required/);
+  });
+
+  test("absolute existing file accepted", () => {
+    expect(() => assertAbsoluteExistingFile("x", DUMMY_SCRIPT)).not.toThrow();
   });
 });
