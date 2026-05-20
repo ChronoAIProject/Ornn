@@ -19,6 +19,7 @@ import { validateQuery, getValidatedQuery } from "../../../middleware/validate";
 import { AppError } from "../../../shared/types/index";
 import { createLogger } from "../../../shared/logger";
 import { decodeCursor, buildNextCursor } from "../../../shared/cursor";
+import { rateLimit } from "../../../middleware/rateLimit";
 const logger = createLogger("skillSearchRoutes");
 
 const searchQuerySchema = z.object({
@@ -86,6 +87,12 @@ export function createSearchRoutes(config: SearchRoutesConfig): Hono<{ Variables
   app.get(
     "/skill-search",
     optionalAuth,
+    // Rate limit (#439): keyword search hits Mongo (cheap), semantic
+    // hits an LLM (paid). One generous cap covers both — the hot path
+    // is the keyword scope, and the semantic gate inside `searchService`
+    // already requires auth so the per-user key matters. RFC 9239
+    // headers go out on every response (#460).
+    rateLimit({ windowMs: 60_000, max: 60, label: "skill-search" }),
     validateQuery(searchQuerySchema, "invalid_query"),
     async (c) => {
       const parsed = getValidatedQuery<z.infer<typeof searchQuerySchema>>(c);

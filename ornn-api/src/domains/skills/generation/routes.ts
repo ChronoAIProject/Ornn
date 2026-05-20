@@ -22,6 +22,7 @@ import {
 import { AppError } from "../../../shared/types/index";
 import { resolveZipRoot } from "../../../shared/utils/zip";
 import { validateBody, getValidatedBody } from "../../../middleware/validate";
+import { rateLimit } from "../../../middleware/rateLimit";
 import { fetchGithubSourceBundle } from "./githubFetcher";
 import JSZip from "jszip";
 import { createLogger } from "../../../shared/logger";
@@ -213,6 +214,11 @@ export function createGenerationRoutes(config: GenerationRoutesConfig): Hono<{ V
     "/skills/generate",
     auth,
     requirePermission("ornn:skill:build"),
+    // Rate limit (#439): every generation runs an LLM call —
+    // most expensive endpoint in the API. Per-user 20/min is
+    // ~3s minimum between requests, which still feels instant for
+    // legitimate flows while stopping a script from burning budget.
+    rateLimit({ windowMs: 60_000, max: 20, label: "skills-generate" }),
     async (c) => {
       const contentType = c.req.header("content-type") ?? "";
       const authCtx = getAuth(c);

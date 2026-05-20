@@ -28,6 +28,7 @@ import { AppError } from "../../../shared/types/index";
 import { canReadSkill, canManageSkill } from "./authorize";
 import { parseGithubUrl } from "./utils/githubPull";
 import { enforceZipLimits } from "../../../shared/utils/zipLimits";
+import { rateLimit } from "../../../middleware/rateLimit";
 import { createLogger } from "../../../shared/logger";
 const deprecationPatchSchema = z.object({
   isDeprecated: z.boolean(),
@@ -258,6 +259,10 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
     "/skills",
     auth,
     requirePermission("ornn:skill:create"),
+    // Rate limit (#439): upload runs the ZIP validator + storage write
+    // + AgentSeal scan. Per-user 10/min is generous for legitimate
+    // publishing flow and stops a runaway script from filling storage.
+    rateLimit({ windowMs: 60_000, max: 10, label: "skills-create" }),
     async (c) => {
       const authCtx = getAuth(c);
       const skipValidation = c.req.query("skip_validation") === "true";
