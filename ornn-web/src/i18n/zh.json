@@ -76,13 +76,30 @@
     "publicSkills": "公共技能",
     "mySkills": "我的技能",
     "sharedWithMe": "分享给我的",
-    "noSkillsFound": "未找到技能",
+    "noSkillsFound": "没有匹配的公共技能。",
     "noSharedSkills": "还没有人把技能分享给你。",
-    "tryAdjusting": "尝试调整搜索条件，或上传第一个技能。",
-    "noSkillsYet": "暂无技能",
-    "createFirst": "创建你的第一个技能开始吧",
+    "tryAdjusting": "尝试调整搜索条件或筛选项。",
+    "noSkillsYet": "你还没有创建任何技能。",
+    "noSystemSkills": "暂无系统技能。",
+    "createFirst": "创建你的第一个技能开始吧。",
     "uploadSkill": "上传技能",
-    "createSkill": "创建技能"
+    "createSkill": "创建技能",
+    "filterService": "NyxID 服务",
+    "filterTags": "标签",
+    "filterAuthors": "作者",
+    "filterSharedWithUsers": "分享给的用户",
+    "filterSharedWithOrgs": "分享给的组织",
+    "filterSharedByUsers": "用户分享给我",
+    "filterSharedByOrgs": "通过组织分享",
+    "noServices": "暂无系统服务。",
+    "noTags": "暂无标签。",
+    "noAuthors": "暂无作者。",
+    "notSharedWithUsers": "你还没有把任何技能分享给特定用户。",
+    "notSharedWithOrgs": "你还没有把任何技能分享给组织。",
+    "notSharedByUsers": "暂时没有人直接分享技能给你。",
+    "notSharedByOrgs": "暂时没有组织分享技能给你。",
+    "systemSkillsIntro": "系统技能是绑定到 NyxID 管理员服务的技能。平台管理员可以将任意技能绑定到管理员服务，将其发布为系统技能。",
+    "sharedWithMeIntro": "当其他人或组织向你授予某个私有技能的访问权限时，它会出现在这里。"
   },
   "mySkills": {
     "searchPlaceholder": "搜索你的技能…",
@@ -970,6 +987,14 @@
     "adminUnlimitedUsageTitle": "管理员 · 无限用量",
     "quotaUsageDetails": "配额使用详情"
   },
+  "search": {
+    "placeholderKeyword": "按名称、描述或标签搜索技能…",
+    "placeholderSemantic": "描述你想找什么…",
+    "toggleToKeyword": "切换到关键词搜索",
+    "toggleToSemantic": "切换到语义搜索",
+    "modeKeyword": "关键词",
+    "modeSemantic": "语义"
+  },
   "skillComponents": {
     "generateModal": {
       "title": "生成技能",
@@ -977,7 +1002,9 @@
       "add": "添加"
     },
     "card": {
-      "linkedToGithub": "已关联到 GitHub"
+      "linkedToGithub": "已关联到 GitHub",
+      "viaOrganization": "通过组织共享",
+      "sharedBy": "由 {{name}} 共享"
     },
     "grid": {
       "emptyTitle": "未找到技能",

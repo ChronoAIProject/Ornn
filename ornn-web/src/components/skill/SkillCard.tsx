@@ -50,8 +50,11 @@ export interface SkillCardProps {
  * `permissionSummary` which the backend computes per-request.
  */
 function PermissionBadges({ skill }: { skill: SkillSearchResult }) {
+  // Reach `t` via the parent's hook context — the badge labels are
+  // short visible UI strings (#682) and must localize.
+  const { t } = useTranslation();
   if (!skill.isPrivate) {
-    return <Badge color="green">🌐 Public</Badge>;
+    return <Badge color="green">🌐 {t("common.public")}</Badge>;
   }
   const ps = skill.permissionSummary;
   const userCount = ps?.sharedUserCount ?? 0;
@@ -59,7 +62,7 @@ function PermissionBadges({ skill }: { skill: SkillSearchResult }) {
   const hasGrants = userCount > 0 || orgCount > 0;
   return (
     <>
-      {!hasGrants && <Badge color="cyan">🔒 Private</Badge>}
+      {!hasGrants && <Badge color="cyan">🔒 {t("common.private")}</Badge>}
       {userCount > 0 && <Badge color="magenta">👥 {userCount}</Badge>}
       {orgCount > 0 && <Badge color="cyan">🏢 {orgCount}</Badge>}
     </>
@@ -135,12 +138,12 @@ export function SkillCard({
           `myAccessReason` with a grant-based value. */}
       {skill.myAccessReason === "shared-via-org" && (
         <p className="mb-2 font-text text-[11px] uppercase tracking-wider text-meta">
-          Via organization
+          {t("skillComponents.card.viaOrganization", "Via organization")}
         </p>
       )}
       {skill.myAccessReason === "shared-direct" && (
         <p className="mb-2 font-text text-[11px] uppercase tracking-wider text-meta">
-          Shared by {displayName}
+          {t("skillComponents.card.sharedBy", "Shared by {{name}}", { name: displayName })}
         </p>
       )}
 
