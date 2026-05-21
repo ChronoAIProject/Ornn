@@ -14,11 +14,61 @@ export const OUTPUT_TYPES = ["text", "file"] as const;
 export type OutputType = (typeof OUTPUT_TYPES)[number];
 
 // Item-level schemas
-const tagItemSchema = z.string().min(1).max(30).regex(/^[a-z0-9-]+$/, "Tags must be lowercase alphanumeric with hyphens");
-const envVarItemSchema = z.string().min(1).max(100).regex(/^[A-Z_][A-Z0-9_]*$/, "Environment variable names must be UPPER_SNAKE_CASE");
-const toolItemSchema = z.string().min(1).max(100);
-const runtimeItemSchema = z.string().min(1).max(50);
-const dependencyItemSchema = z.string().min(1).max(200);
+//
+// #649 — YAML allows empty list items (`- ` on a line by itself parses
+// as `null`) and lets authors put non-string values where a string is
+// expected. Default Zod messages on those cases come back as bare
+// "Invalid input: expected string, received null" which doesn't tell
+// the author *what to write instead*. Each item schema below carries a
+// custom `error` callback for `invalid_type`; the existing
+// `min`/`max`/`regex` messages still fire for non-null shape problems.
+const tagItemSchema = z
+  .string({
+    error: (issue) =>
+      issue.code === "invalid_type"
+        ? 'tags must be non-empty lowercase strings with optional hyphens, e.g. `tag: [my-tag]` — an empty `- ` line in YAML parses as `null` and is not a valid tag.'
+        : undefined,
+  })
+  .min(1, "tags must not be empty")
+  .max(30, "tags must be at most 30 characters")
+  .regex(/^[a-z0-9-]+$/, "Tags must be lowercase alphanumeric with hyphens");
+const envVarItemSchema = z
+  .string({
+    error: (issue) =>
+      issue.code === "invalid_type"
+        ? 'runtime-env-var entries must be non-empty UPPER_SNAKE_CASE strings, e.g. `runtime-env-var: [OPENAI_API_KEY]` — an empty `- ` line in YAML parses as `null`.'
+        : undefined,
+  })
+  .min(1, "runtime-env-var entries must not be empty")
+  .max(100, "runtime-env-var entries must be at most 100 characters")
+  .regex(/^[A-Z_][A-Z0-9_]*$/, "Environment variable names must be UPPER_SNAKE_CASE");
+const toolItemSchema = z
+  .string({
+    error: (issue) =>
+      issue.code === "invalid_type"
+        ? 'tool-list entries must be non-empty strings, e.g. `tool-list: [Bash, Read]` — an empty `- ` line in YAML parses as `null`.'
+        : undefined,
+  })
+  .min(1, "tool-list entries must not be empty")
+  .max(100, "tool-list entries must be at most 100 characters");
+const runtimeItemSchema = z
+  .string({
+    error: (issue) =>
+      issue.code === "invalid_type"
+        ? 'runtime entries must be non-empty strings, e.g. `runtime: [python]` — an empty `- ` line in YAML parses as `null`.'
+        : undefined,
+  })
+  .min(1, "runtime entries must not be empty")
+  .max(50, "runtime entries must be at most 50 characters");
+const dependencyItemSchema = z
+  .string({
+    error: (issue) =>
+      issue.code === "invalid_type"
+        ? 'runtime-dependency entries must be non-empty strings, e.g. `runtime-dependency: [requests==2.31]` — an empty `- ` line in YAML parses as `null`.'
+        : undefined,
+  })
+  .min(1, "runtime-dependency entries must not be empty")
+  .max(200, "runtime-dependency entries must be at most 200 characters");
 
 // Metadata sub-schema (base, before refinement)
 export const metadataSchema = z.object({
