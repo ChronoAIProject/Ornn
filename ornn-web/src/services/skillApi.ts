@@ -86,20 +86,24 @@ export async function setSkillVersionDeprecation(
  * Create a new skill from a ZIP file. Sends the ZIP as a raw
  * application/zip body. New skills are always private — visibility is
  * managed afterward via the permissions panel on the skill detail page.
+ *
+ * #528 — `X-User-Email` / `X-User-Display-Name` headers used to ride
+ * along here. They were stripped by the NyxID proxy and never read by
+ * the backend (identity is sourced from the proxy-forwarded identity
+ * token), but the backend CORS allowlist is `["Content-Type",
+ * "Authorization"]`, so the preflight allowed-headers response didn't
+ * include them — the browser then blocked the actual POST with a
+ * CORS error. Same dead code as the `apiClient.createHeaders`
+ * cleanup; this was the last unmigrated caller of the ZIP-upload
+ * flow.
  */
 export async function createSkill(zipFile: File, skipValidation = false): Promise<SkillDetail> {
-  const { accessToken: token, user } = useAuthStore.getState();
+  const token = useAuthStore.getState().accessToken;
   const headers: HeadersInit = {
     "Content-Type": "application/zip",
   };
   if (token) {
     headers["Authorization"] = `Bearer ${token}`;
-  }
-  if (user?.email) {
-    headers["X-User-Email"] = user.email;
-  }
-  if (user?.displayName) {
-    headers["X-User-Display-Name"] = user.displayName;
   }
 
   const params = skipValidation ? "?skip_validation=true" : "";
