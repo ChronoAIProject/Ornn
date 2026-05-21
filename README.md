@@ -7,22 +7,12 @@
 
 <p align="center">
   <a href="https://github.com/ChronoAIProject/Ornn/actions/workflows/ci.yml"><img src="https://github.com/ChronoAIProject/Ornn/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
-  <a href="https://codecov.io/gh/ChronoAIProject/Ornn"><img src="https://codecov.io/gh/ChronoAIProject/Ornn/branch/develop/graph/badge.svg" alt="Coverage" /></a>
   <a href="https://github.com/ChronoAIProject/Ornn/releases"><img src="https://img.shields.io/github/v/release/ChronoAIProject/Ornn" alt="Latest release" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/github/license/ChronoAIProject/Ornn" alt="License" /></a>
-  <a href="https://github.com/ChronoAIProject/Ornn/commits/develop"><img src="https://img.shields.io/github/last-commit/ChronoAIProject/Ornn/develop" alt="Last commit" /></a>
-  <a href="https://github.com/ChronoAIProject/Ornn/discussions"><img src="https://img.shields.io/github/discussions/ChronoAIProject/Ornn" alt="Discussions" /></a>
-  <a href="https://github.com/ChronoAIProject/Ornn/stargazers"><img src="https://img.shields.io/github/stars/ChronoAIProject/Ornn?style=flat" alt="Stars" /></a>
 </p>
 
 <p align="center">
   <img src="ornn-web/public/hero-brand.svg" alt="Ornn — agent-facing skill-lifecycle API" width="100%" />
-</p>
-
-<p align="center">
-  <img src="https://img.shields.io/badge/status-alpha-orange" alt="Project status: alpha" />
-  <img src="https://img.shields.io/badge/model-agnostic-blue" alt="Model-agnostic" />
-  <img src="https://img.shields.io/badge/transport-HTTP%20%7C%20MCP-blueviolet" alt="HTTP and MCP" />
 </p>
 
 <p align="center"><strong>The agent-facing skill-lifecycle API for AI agents.</strong></p>
