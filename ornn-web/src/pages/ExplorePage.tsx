@@ -712,15 +712,20 @@ function emptyTitle(tab: ExploreTab, t: (key: string, fallback?: string) => stri
 }
 
 function emptyDescription(tab: ExploreTab, t: (key: string, fallback?: string) => string): string {
+  // #682 — point at the canonical i18n keys (`systemSkillsIntro` /
+  // `sharedWithMeIntro`) so both EN + ZH locales pick up the right
+  // copy. The old `systemSkillsHint` / `sharedHint` keys never
+  // existed in either locale file, so i18n was always falling back
+  // to the English literal for both languages.
   if (tab === "system")
     return t(
-      "explore.systemSkillsHint",
+      "explore.systemSkillsIntro",
       "System skills are skills tied to a NyxID admin service. Platform admins tie any skill to any admin service to publish it as a system skill.",
     );
   if (tab === "public") return t("explore.tryAdjusting", "Try adjusting your search or filters.");
   if (tab === "my-skills") return t("explore.createFirst", "Create your first skill to get started.");
   return t(
-    "explore.sharedHint",
+    "explore.sharedWithMeIntro",
     "When someone grants you access to a private skill — either directly or via an org — it shows up here.",
   );
 }

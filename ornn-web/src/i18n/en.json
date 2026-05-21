@@ -75,14 +75,31 @@
     "systemSkills": "System Skills",
     "publicSkills": "Public Skills",
     "mySkills": "My Skills",
-    "sharedWithMe": "Shared With Me",
-    "noSkillsFound": "No skills found",
-    "noSharedSkills": "No one has shared a skill with you yet.",
-    "tryAdjusting": "Try adjusting your search, or upload the first skill.",
-    "noSkillsYet": "No skills yet",
-    "createFirst": "Create your first skill to get started",
+    "sharedWithMe": "Shared with me",
+    "noSkillsFound": "No public skills match",
+    "noSharedSkills": "Nothing has been shared with you yet",
+    "tryAdjusting": "Try adjusting your search or filters.",
+    "noSkillsYet": "You haven't created any skills yet",
+    "noSystemSkills": "No system skills yet",
+    "createFirst": "Create your first skill to get started.",
     "uploadSkill": "Upload Skill",
-    "createSkill": "Create Skill"
+    "createSkill": "Create Skill",
+    "filterService": "NyxID service",
+    "filterTags": "Tag",
+    "filterAuthors": "Author",
+    "filterSharedWithUsers": "Shared with users",
+    "filterSharedWithOrgs": "Shared with orgs",
+    "filterSharedByUsers": "Shared by users",
+    "filterSharedByOrgs": "Shared via orgs",
+    "noServices": "No system services yet.",
+    "noTags": "No tags yet.",
+    "noAuthors": "No authors yet.",
+    "notSharedWithUsers": "You haven't shared any skills with specific users.",
+    "notSharedWithOrgs": "You haven't shared any skills with orgs.",
+    "notSharedByUsers": "Nobody has shared with you directly.",
+    "notSharedByOrgs": "No orgs have shared anything with you.",
+    "systemSkillsIntro": "System skills are skills tied to a NyxID admin service. Platform admins tie any skill to any admin service to publish it as a system skill.",
+    "sharedWithMeIntro": "When someone grants you access to a private skill — either directly or via an org — it shows up here."
   },
   "mySkills": {
     "searchPlaceholder": "Search your skills...",
@@ -970,6 +987,14 @@
     "adminUnlimitedUsageTitle": "Admin · Unlimited usage",
     "quotaUsageDetails": "Quota usage details"
   },
+  "search": {
+    "placeholderKeyword": "Search skills by name, description, or tags...",
+    "placeholderSemantic": "Describe what you're looking for...",
+    "toggleToKeyword": "Switch to keyword search",
+    "toggleToSemantic": "Switch to semantic search",
+    "modeKeyword": "Keyword",
+    "modeSemantic": "Semantic"
+  },
   "skillComponents": {
     "generateModal": {
       "title": "Generate Skill",
@@ -977,7 +1002,9 @@
       "add": "Add"
     },
     "card": {
-      "linkedToGithub": "Linked to GitHub"
+      "linkedToGithub": "Linked to GitHub",
+      "viaOrganization": "Via organization",
+      "sharedBy": "Shared by {{name}}"
     },
     "grid": {
       "emptyTitle": "No skills found",

@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { Button } from "./Button";
 
 export interface PaginationProps {
@@ -8,6 +9,12 @@ export interface PaginationProps {
 }
 
 export function Pagination({ page, totalPages, onPageChange, className = "" }: PaginationProps) {
+  // #682 — `Prev` / `Next` labels are visible UI strings on every
+  // paginated list (Registry, admin tables, lifetime drawer). They
+  // were hardcoded, so ZH mode kept showing the English words. Pull
+  // from `common.prev` / `common.next` which already exist in both
+  // locale files.
+  const { t } = useTranslation();
   if (totalPages <= 1) return null;
 
   const pages = buildPageNumbers(page, totalPages);
@@ -20,7 +27,7 @@ export function Pagination({ page, totalPages, onPageChange, className = "" }: P
         disabled={page <= 1}
         onClick={() => onPageChange(page - 1)}
       >
-        Prev
+        {t("common.prev")}
       </Button>
 
       {pages.map((p, i) =>
@@ -46,7 +53,7 @@ export function Pagination({ page, totalPages, onPageChange, className = "" }: P
         disabled={page >= totalPages}
         onClick={() => onPageChange(page + 1)}
       >
-        Next
+        {t("common.next")}
       </Button>
     </nav>
   );
