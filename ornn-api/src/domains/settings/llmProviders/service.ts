@@ -131,7 +131,14 @@ export const providerCreateSchema = z.object({
 
 export type ProviderCreateInput = z.infer<typeof providerCreateSchema>;
 
-export const providerUpdateSchema = providerCreateSchema.partial();
+// #588 — `.partial()` keeps every field's `.default(...)`, so a PATCH
+// that omits `models` was parsed back as `models: []` and silently
+// wiped the persisted model list. Override `models` here so the
+// update path can distinguish "caller didn't send it" (undefined →
+// preserve) from "caller sent empty" (`[]` → wipe explicitly).
+export const providerUpdateSchema = providerCreateSchema
+  .partial()
+  .extend({ models: z.array(modelInputSchema).optional() });
 export type ProviderUpdateInput = z.infer<typeof providerUpdateSchema>;
 
 /**
@@ -238,8 +245,19 @@ export class LlmProvidersService {
    * across all providers, sorted with the surface default first then
    * by display name. The first row's `modelId` is also exposed via
    * `default` for easy "what's the fallback?" UI.
+   *
+   * #607 — `sectionDefaultModelId` is the per-section setting (e.g.
+   * `playground.defaultModelId`) that admins can pin to override the
+   * per-model `defaultForX` flag. When provided AND that model is in
+   * the enabled set, it wins the `default` slot and is sorted first
+   * — same precedence as the execute path's `resolveSurfaceDefaults`
+   * helper in `bootstrap.ts`, so the picker pre-selection and the
+   * execute fallback agree on what "default" means.
    */
-  async listPickerModels(surface: Surface): Promise<{
+  async listPickerModels(
+    surface: Surface,
+    sectionDefaultModelId?: string,
+  ): Promise<{
     items: PickerModelRow[];
     default: string | null;
   }> {
@@ -251,12 +269,18 @@ export class LlmProvidersService {
       for (const m of provider.models) {
         if (m.removed) continue;
         if (m[enabledField] !== true) continue;
+        // Mark the section-pinned model as `isDefault` so the
+        // frontend ModelPicker's "default" badge agrees with the
+        // backend's resolution. Falls back to the per-model
+        // `defaultForX` flag when no section override exists.
+        const isPinned =
+          !!sectionDefaultModelId && m.id === sectionDefaultModelId;
         items.push({
           modelId: m.id,
           displayName: m.displayName,
           providerId: provider._id,
           providerName: provider.name,
-          isDefault: m[defaultField] === true,
+          isDefault: isPinned || (!sectionDefaultModelId && m[defaultField] === true),
         });
       }
     }
@@ -408,9 +432,12 @@ export class LlmProvidersService {
 
     // Models update: if the caller passed `models`, replace the list
     // wholesale BUT preserve `firstSeenAt` for any incoming model that
-    // already exists — only sync changes lifecycle dates.
+    // already exists — only sync changes lifecycle dates. #588: an
+    // explicit `[]` from the caller IS a valid "wipe all" intent (e.g.
+    // the model-list refresh found zero models); only `undefined`
+    // (field absent in the PATCH) means "don't touch".
     let models = existing.models;
-    if (patch.models) {
+    if (patch.models !== undefined) {
       const now = this.clock();
       const previousMap = new Map(existing.models.map((m) => [m.id, m]));
       models = patch.models.map((m) => {

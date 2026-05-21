@@ -615,8 +615,22 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
 
   // The picker route — `GET /me/models?surface=...` — reads from the
   // per-provider arrays via `LlmProvidersService` (already constructed
-  // upstream as part of `domains/settings/...`).
-  const llmPickerRoutes = createLlmPickerRoutes({ llmProvidersService });
+  // upstream as part of `domains/settings/...`). The section-default
+  // resolver (#607) lets the picker honour the per-surface
+  // `defaultModelId` pin set in admin Playground / Skill-Gen settings,
+  // so the picker pre-selection agrees with what the chat execute
+  // path falls back to. Falls through to the per-model
+  // `defaultForX` flag when no pin is configured.
+  const llmPickerRoutes = createLlmPickerRoutes({
+    llmProvidersService,
+    sectionDefaultResolver: async (surface) => {
+      const sec =
+        surface === "playground"
+          ? await settingsService.getPlayground()
+          : await settingsService.getSkillGen();
+      return sec.defaultModelId ?? null;
+    },
+  });
 
   // ---- Domain: GitHub Mirror ----
   // Single MirrorService instance — runtime-aware. Reads enabled +
