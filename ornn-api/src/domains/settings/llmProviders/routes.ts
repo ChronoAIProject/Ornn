@@ -70,6 +70,16 @@ export function throwModelResolutionError(resolution: ModelResolution): never {
 
 export interface LlmProvidersRoutesConfig {
   readonly llmProvidersService: LlmProvidersService;
+  /**
+   * Resolve the per-surface section default model id (#607). When set,
+   * `GET /me/models?surface=…` uses it as the picker's `default` slot
+   * so the frontend pre-selection agrees with the execute path's
+   * `resolveSurfaceDefaults` precedence. Optional so legacy callers
+   * (route-only tests, the admin route bundle) can skip wiring it.
+   */
+  readonly sectionDefaultResolver?: (
+    surface: Surface,
+  ) => Promise<string | null>;
 }
 
 export function createLlmProvidersRoutes(
@@ -181,7 +191,7 @@ export function createLlmProvidersRoutes(
 export function createLlmPickerRoutes(
   config: LlmProvidersRoutesConfig,
 ): Hono<{ Variables: AuthVariables }> {
-  const { llmProvidersService } = config;
+  const { llmProvidersService, sectionDefaultResolver } = config;
   const app = new Hono<{ Variables: AuthVariables }>();
   const auth = nyxidAuthMiddleware();
 
@@ -195,7 +205,16 @@ export function createLlmPickerRoutes(
       );
     }
     const surface: Surface = parsed.data;
-    const result = await llmProvidersService.listPickerModels(surface);
+    // #607 — pass the section-level pin through so the picker's
+    // default agrees with the execute path. Resolver is optional;
+    // tests that don't wire it fall back to the per-model flag.
+    const sectionDefault = sectionDefaultResolver
+      ? (await sectionDefaultResolver(surface)) ?? undefined
+      : undefined;
+    const result = await llmProvidersService.listPickerModels(
+      surface,
+      sectionDefault,
+    );
     return c.json({
       data: {
         items: result.items.map((r) => ({
