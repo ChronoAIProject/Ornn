@@ -167,7 +167,12 @@ export class SkillService {
     }
 
     // 2. Parse SKILL.md from ZIP
-    const { name, description, version, license, compatibility, metadata, releaseNotes } = await this.extractSkillInfo(zipBuffer);
+    // #529 — `skipValidation` extends to the frontmatter Zod check so
+    // third-party packages that don't conform to Ornn's schema (e.g.
+    // imported from outside the platform via "Import from GitHub"
+    // with skip-validation toggled) can still land. YAML syntax
+    // errors still fail loudly — we can't import what we can't parse.
+    const { name, description, version, license, compatibility, metadata, releaseNotes } = await this.extractSkillInfo(zipBuffer, !!options?.skipValidation);
     const parsedVersion = parseVersion(version);
 
     // 3a. Reject reserved-verb names — would collide with `/v1/skills/{verb}`
@@ -544,7 +549,10 @@ export class SkillService {
         }
       }
 
-      const { name, description, version, license, compatibility, metadata, releaseNotes } = await this.extractSkillInfo(options.zipBuffer);
+      // #529 — same skipValidation extension as createSkill above so
+      // `PUT /skills/:id` (replace-package on an existing skill, used by
+      // GitHub refresh + admin re-upload) honours the flag too.
+      const { name, description, version, license, compatibility, metadata, releaseNotes } = await this.extractSkillInfo(options.zipBuffer, !!options.skipValidation);
       const parsedNewVersion = parseVersion(version);
 
       // Enforce strictly-incrementing version on every package update.
@@ -823,7 +831,11 @@ export class SkillService {
     // out of the pulled ZIP so the UI can show "you'll create v1.2".
     let pendingVersion = existing.latestVersion;
     try {
-      const info = await this.extractSkillInfo(pulled.zipBuffer);
+      // Preview is dry-run — we just want the predicted version label.
+      // Pass skipValidation=true so a third-party-shaped SKILL.md
+      // doesn't kill the preview; the real refresh path enforces the
+      // caller's flag separately.
+      const info = await this.extractSkillInfo(pulled.zipBuffer, true);
       pendingVersion = info.version;
     } catch (err) {
       // If the package can't be parsed (e.g. malformed frontmatter),
@@ -1328,7 +1340,18 @@ export class SkillService {
   // Private helpers
   // ==========================================================================
 
-  private async extractSkillInfo(zipBuffer: Uint8Array): Promise<{
+  private async extractSkillInfo(
+    zipBuffer: Uint8Array,
+    // #529 — when the caller passes `skipValidation: true` (Import from
+    // GitHub → "Skip Ornn package format validation"), the strict Zod
+    // frontmatter check is downgraded to a best-effort extract. The
+    // directory-structure validator was already skipped one layer up
+    // in `createSkill`; this brings the frontmatter validator under
+    // the same flag so a third-party skill (e.g. Anthropic's official
+    // skills repo) that doesn't conform to Ornn's frontmatter schema
+    // still imports.
+    skipValidation: boolean = false,
+  ): Promise<{
     name: string;
     description: string;
     version: string;
@@ -1364,17 +1387,29 @@ export class SkillService {
       }
       rawFrontmatter = parsed as Record<string, unknown>;
     } catch (err) {
+      // YAML SYNTAX errors (vs. schema mismatches) still fail loudly
+      // even under skipValidation — we can't import a skill we can't
+      // parse at all, no matter how lenient we want to be.
       throw AppError.badRequest(
         "INVALID_FRONTMATTER",
         `Invalid frontmatter YAML: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
 
-    // Validate with Zod schema (no backward compat adapter)
+    // Strict Zod validation (#529 — bypassable when skipValidation).
     const validation = validateSkillFrontmatter(rawFrontmatter);
     if (!validation.success) {
-      const errorMsg = validation.errors.map((e) => `${e.field}: ${e.message}`).join("; ");
-      throw AppError.badRequest("frontmatter_validation_failed", errorMsg);
+      if (!skipValidation) {
+        const errorMsg = validation.errors.map((e) => `${e.field}: ${e.message}`).join("; ");
+        throw AppError.badRequest("frontmatter_validation_failed", errorMsg);
+      }
+      // skipValidation path — fall through to best-effort field
+      // extraction below.
+      logger.info(
+        { errors: validation.errors.length },
+        "Frontmatter validation failed but skipValidation=true; falling back to best-effort extract",
+      );
+      return this.extractSkillInfoLenient(rawFrontmatter);
     }
 
     const fm = validation.data;
@@ -1434,6 +1469,93 @@ export class SkillService {
       version: fm.version,
       license: fm.license ?? null,
       compatibility: fm.compatibility ?? null,
+      metadata,
+      releaseNotes,
+    };
+  }
+
+  /**
+   * Best-effort extract from a raw frontmatter object when the strict
+   * Zod schema rejected it (#529). Used by `extractSkillInfo` under
+   * `skipValidation: true` so a third-party-shaped SKILL.md still
+   * imports.
+   *
+   * Strategy:
+   *   - Pull the canonical Ornn fields by name when present and the
+   *     right type; otherwise synthesise a safe default.
+   *   - `name` MUST be present (we have no fallback that would be
+   *     unique). Reject with the same `frontmatter_validation_failed`
+   *     code that the strict path uses.
+   *   - `version` defaults to "0.1" if missing — the import has to
+   *     start somewhere. Format-validation downstream
+   *     (`parseVersion`) still kicks in so genuinely malformed
+   *     versions hard-fail.
+   *   - `metadata.category` defaults to "plain" — the safest category
+   *     (no runtime / tool execution expected). The user can edit
+   *     post-import.
+   *   - `tags` / `runtime` / `tools` are extracted when they look
+   *     plausibly correct, dropped silently otherwise.
+   */
+  private extractSkillInfoLenient(
+    raw: Record<string, unknown>,
+  ): {
+    name: string;
+    description: string;
+    version: string;
+    license: string | null;
+    compatibility: string | null;
+    metadata: SkillMetadata;
+    releaseNotes: string | null;
+  } {
+    const name =
+      typeof raw.name === "string" && raw.name.trim().length > 0
+        ? raw.name.trim()
+        : null;
+    if (!name) {
+      throw AppError.badRequest(
+        "frontmatter_validation_failed",
+        "name: required (cannot be derived under skipValidation either)",
+      );
+    }
+    const description =
+      typeof raw.description === "string" ? raw.description : "";
+    const version =
+      typeof raw.version === "string" && raw.version.trim().length > 0
+        ? raw.version.trim()
+        : "0.1";
+    const license = typeof raw.license === "string" ? raw.license : null;
+    const compatibility =
+      typeof raw.compatibility === "string" ? raw.compatibility : null;
+
+    const rawMeta =
+      raw.metadata && typeof raw.metadata === "object" && !Array.isArray(raw.metadata)
+        ? (raw.metadata as Record<string, unknown>)
+        : {};
+    const category =
+      typeof rawMeta.category === "string" ? rawMeta.category : "plain";
+
+    const tags =
+      Array.isArray(rawMeta.tag) &&
+      rawMeta.tag.every((t): t is string => typeof t === "string")
+        ? (rawMeta.tag as string[])
+        : undefined;
+
+    const metadata: SkillMetadata = { category };
+    if (tags && tags.length > 0) metadata.tags = tags;
+
+    const rawReleaseNotes = raw["release-notes"] ?? raw["releaseNotes"];
+    let releaseNotes: string | null = null;
+    if (typeof rawReleaseNotes === "string" && rawReleaseNotes.trim().length > 0) {
+      const trimmed = rawReleaseNotes.trim();
+      releaseNotes = trimmed.length > 2000 ? trimmed.slice(0, 2000) : trimmed;
+    }
+
+    return {
+      name,
+      description,
+      version,
+      license,
+      compatibility,
       metadata,
       releaseNotes,
     };
