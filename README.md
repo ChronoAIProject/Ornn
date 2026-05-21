@@ -16,6 +16,10 @@
 </p>
 
 <p align="center">
+  <img src="ornn-web/public/hero-brand.svg" alt="Ornn — agent-facing skill-lifecycle API" width="100%" />
+</p>
+
+<p align="center">
   <img src="https://img.shields.io/badge/status-alpha-orange" alt="Project status: alpha" />
   <img src="https://img.shields.io/badge/model-agnostic-blue" alt="Model-agnostic" />
   <img src="https://img.shields.io/badge/transport-HTTP%20%7C%20MCP-blueviolet" alt="HTTP and MCP" />
