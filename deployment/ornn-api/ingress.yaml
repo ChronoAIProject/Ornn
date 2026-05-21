@@ -1,0 +1,43 @@
+# Direct ornn-api ingress — bypasses NyxID proxy (#661).
+#
+# The web SPA today calls `nyx-api.chrono-ai.fun/api/v1/proxy/s/ornn-api/*`,
+# which gates every request behind NyxID's auth — even for endpoints that
+# ornn-api itself codes as anonymous-friendly (announcements, skill-search,
+# public skill reads). That's the gap audited in #467: a visitor landing
+# on ornn.chrono-ai.fun without login can see the SPA shell but every
+# API call 401s, so News / Registry / Docs pages stay empty.
+#
+# This ingress exposes ornn-api directly on its own host so anonymous
+# traffic on allowlisted paths can reach the public-read endpoints without
+# the NyxID auth gate. Authenticated routes (admin/*, /me/*, all mutations)
+# still go through NyxID — ornn-api's per-route nyxidAuthMiddleware enforces
+# them when reached this way too, so private state can't be exposed by
+# accident.
+#
+# Local: hits `api.ornn-cluster.local` (add to /etc/hosts).
+# Prod: needs DNS + TLS cert for `ornn-api.chrono-ai.fun` (or sibling host),
+#       handled out of repo by the cluster admin.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ornn-api-ingress
+  namespace: ${NAMESPACE}
+  annotations:
+    # Match ornn-web's body-size + timeout knobs so big skill ZIPs flow
+    # through this surface too when an authenticated client hits it.
+    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: api.ornn-cluster.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: ornn-api
+                port:
+                  number: 3802
