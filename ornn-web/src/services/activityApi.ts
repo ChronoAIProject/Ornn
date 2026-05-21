@@ -17,22 +17,23 @@ const logger = createLogger("activityApi");
  */
 export async function logActivity(action: "login" | "logout"): Promise<void> {
   try {
-    const { accessToken, user } = useAuthStore.getState();
+    const { accessToken } = useAuthStore.getState();
     if (!accessToken) {
       logger.warn("No access token, skipping activity log", { action });
       return;
     }
 
+    // #528 — `X-User-Email` / `X-User-Display-Name` used to ride along
+    // here. They were stripped by the NyxID proxy and never read by
+    // the backend (identity is sourced from the proxy-forwarded
+    // identity token), but the backend CORS allowlist doesn't include
+    // them — sending them tripped a preflight-blocked-by-CORS failure
+    // on every login. Same dead code as the `apiClient.createHeaders`
+    // cleanup; this caller was missed in the original sweep.
     const headers: HeadersInit = {
       "Content-Type": "application/json",
       Authorization: `Bearer ${accessToken}`,
     };
-    if (user?.email) {
-      headers["X-User-Email"] = user.email;
-    }
-    if (user?.displayName) {
-      headers["X-User-Display-Name"] = user.displayName;
-    }
 
     const res = await fetch(`${API_BASE}/api/v1/activity/${action}`, {
       method: "POST",
