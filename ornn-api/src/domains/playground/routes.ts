@@ -25,9 +25,23 @@ import { createLogger } from "../../shared/logger";
 const logger = createLogger("playgroundRoutes");
 
 // Zod schemas
+
+/**
+ * Per-message content cap (#654). Mirrors the frontend `MAX_INPUT_CHARS`
+ * in `ornn-web/src/components/playground/ChatInput.tsx`. ~8k tokens at
+ * 4 chars/token — generous for interactive prompts without enabling
+ * whole-novel pastes. The textarea hard-caps at this value via its
+ * `maxLength`, but the backend duplicates the check so a malicious /
+ * non-browser client can't slip past.
+ */
+const MAX_CHAT_MESSAGE_CHARS = 32_000;
+
 const playgroundMessageSchema = z.object({
   role: z.enum(["user", "assistant", "tool", "system"]),
-  content: z.string(),
+  content: z.string().max(
+    MAX_CHAT_MESSAGE_CHARS,
+    `Message content exceeds ${MAX_CHAT_MESSAGE_CHARS} character limit`,
+  ),
   toolCalls: z.array(z.object({
     id: z.string(),
     name: z.string(),

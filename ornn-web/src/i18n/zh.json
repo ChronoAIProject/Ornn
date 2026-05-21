@@ -621,7 +621,9 @@
     "awaitingTool": "等待工具授权…",
     "placeholder": "输入消息…（Enter 发送，Shift+Enter 换行）",
     "stopGeneration": "停止生成",
-    "sendMessage": "发送消息"
+    "sendMessage": "发送消息",
+    "charCount": "{{count}} / {{max}}",
+    "overLimit": "消息过长。最多 {{max}} 个字符。"
   },
   "quota": {
     "surfacePlayground": "试验场",

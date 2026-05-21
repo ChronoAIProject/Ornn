@@ -621,7 +621,9 @@
     "awaitingTool": "Awaiting tool approval...",
     "placeholder": "Type a message... (Enter to send, Shift+Enter for newline)",
     "stopGeneration": "Stop generation",
-    "sendMessage": "Send message"
+    "sendMessage": "Send message",
+    "charCount": "{{count}} / {{max}}",
+    "overLimit": "Message too long. Maximum {{max}} characters."
   },
   "quota": {
     "surfacePlayground": "Playground",

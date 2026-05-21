@@ -3,6 +3,26 @@
  * Auto-resizing textarea with Enter=send, Shift+Enter=newline.
  * Shows stop button during streaming. Model selection lives in the
  * page-level ModelPicker (top-right surface header).
+ *
+ * #654 — adds a length cap + visible counter. Previously the textarea
+ * accepted unbounded content (24k chars was the live reproducer) and
+ * the send button stayed enabled regardless of length, so users could
+ * fire requests the backend would reject (or worse, accept + crash on
+ * downstream LLM token-limit). Now:
+ *
+ *   - `maxLength` on the textarea hard-caps at MAX_INPUT_CHARS — the
+ *     browser refuses typing/paste beyond that, no extra JS needed.
+ *   - A counter appears once the input crosses WARN_AT_CHARS so users
+ *     get warning room rather than a surprise wall.
+ *   - Counter goes danger-tone + send disables once the trimmed
+ *     content is over the limit (defensive — `maxLength` should make
+ *     this unreachable, but the explicit guard catches any IME / paste
+ *     edge case that slips past).
+ *
+ * The backend (`domains/playground/routes.ts` + `skills/generation/
+ * routes.ts`) caps content at the same 32 000-char ceiling — frontend
+ * is UX, backend is the hard line.
+ *
  * @module components/playground/ChatInput
  */
 
@@ -27,6 +47,17 @@ export interface ChatInputHandle {
 
 /** Maximum textarea height before scrolling. */
 const MAX_HEIGHT_PX = 200;
+
+/**
+ * Maximum input length. ~8k tokens at 4 chars/token — generous for
+ * interactive prompts without enabling whole-novel pastes. Mirrors the
+ * `.max()` cap on `playgroundMessageSchema.content` /
+ * `skills/generation` route bodies; if you change one, change both.
+ */
+const MAX_INPUT_CHARS = 32_000;
+
+/** Threshold above which the live counter becomes visible (~75%). */
+const WARN_AT_CHARS = 24_000;
 
 export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput({
   onSend,
@@ -55,7 +86,10 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
     ref,
     () => ({
       setValue: (text: string) => {
-        setValue(text);
+        // Truncate suggestion-prompt clicks defensively — the suggestion
+        // catalogue is curated short copy today, but a future longer
+        // prompt shouldn't bypass the cap silently.
+        setValue(text.slice(0, MAX_INPUT_CHARS));
         // Defer focus so the new value's height calculation lands first.
         requestAnimationFrame(() => textareaRef.current?.focus());
       },
@@ -64,12 +98,16 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
     [],
   );
 
+  const trimmedLength = value.trim().length;
+  const isOverLimit = trimmedLength > MAX_INPUT_CHARS;
+  const shouldShowCounter = value.length >= WARN_AT_CHARS;
+
   const handleSend = useCallback(() => {
     const trimmed = value.trim();
-    if (!trimmed || disabled) return;
+    if (!trimmed || disabled || trimmed.length > MAX_INPUT_CHARS) return;
     onSend(trimmed);
     setValue("");
-  }, [value, disabled, onSend]);
+  }, [value, disabled]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -81,7 +119,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
     [handleSend],
   );
 
-  const canSend = value.trim().length > 0 && !disabled;
+  const canSend = trimmedLength > 0 && !disabled && !isOverLimit;
 
   return (
     <div className="px-1 pb-2 pt-2">
@@ -92,7 +130,9 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
         className={`relative flex items-end gap-2 rounded-2xl border bg-card px-3 py-2 transition-colors ${
           disabled
             ? "border-subtle/60"
-            : "border-subtle focus-within:border-accent/60 focus-within:ring-1 focus-within:ring-accent/30"
+            : isOverLimit
+              ? "border-danger/60 focus-within:border-danger/80 focus-within:ring-1 focus-within:ring-danger/30"
+              : "border-subtle focus-within:border-accent/60 focus-within:ring-1 focus-within:ring-accent/30"
         }`}
       >
         <textarea
@@ -101,6 +141,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={handleKeyDown}
           disabled={disabled}
+          maxLength={MAX_INPUT_CHARS}
           placeholder={
             customPlaceholder
               ?? (disabled
@@ -140,6 +181,21 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
           </button>
         )}
       </div>
+      {/* Counter row — appears only past WARN_AT_CHARS so it doesn't
+          chrome the composer for normal use. Goes danger-tone past the
+          cap. */}
+      {shouldShowCounter && (
+        <p
+          className={`mt-1 text-right text-[11px] tabular-nums ${
+            isOverLimit ? "text-danger" : "text-meta/70"
+          }`}
+          aria-live="polite"
+        >
+          {isOverLimit
+            ? t("chatInput.overLimit", { max: MAX_INPUT_CHARS })
+            : t("chatInput.charCount", { count: value.length, max: MAX_INPUT_CHARS })}
+        </p>
+      )}
     </div>
   );
 });
