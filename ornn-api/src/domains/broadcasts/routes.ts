@@ -63,7 +63,10 @@ export function createBroadcastRoutes(
         titleI18n: data.titleI18n,
         bodyMarkdownI18n: data.bodyMarkdownI18n,
         createdBy: authCtx.userId,
-        recipientUserIds: data.recipientUserIds,
+        // exactOptionalPropertyTypes (#657)
+        ...(data.recipientUserIds !== undefined
+          ? { recipientUserIds: data.recipientUserIds }
+          : {}),
       });
       // 201 + Location per CONVENTIONS.md §3.2 (#458).
       c.header("Location", `/api/v1/admin/broadcasts/${created.id}`);
@@ -81,8 +84,11 @@ export function createBroadcastRoutes(
       const id = c.req.param("id");
       const data = getValidatedBody<z.infer<typeof patchBroadcastSchema>>(c);
       const updated = await broadcastService.update(id, {
-        titleI18n: data.titleI18n,
-        bodyMarkdownI18n: data.bodyMarkdownI18n,
+        // exactOptionalPropertyTypes (#657)
+        ...(data.titleI18n !== undefined ? { titleI18n: data.titleI18n } : {}),
+        ...(data.bodyMarkdownI18n !== undefined
+          ? { bodyMarkdownI18n: data.bodyMarkdownI18n }
+          : {}),
         updatedBy: authCtx.userId,
       });
       return c.json({ data: updated, error: null });

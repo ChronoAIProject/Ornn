@@ -62,8 +62,10 @@ export interface CreateBroadcastParams {
  * path is a compile error, matching the repository's enforcement.
  */
 export interface UpdateBroadcastParams {
-  titleI18n?: Partial<BroadcastI18nString>;
-  bodyMarkdownI18n?: Partial<BroadcastI18nString>;
+  // Inner Partial accepts `string | undefined` so Zod-inferred patch
+  // shapes fit under exactOptionalPropertyTypes (#657).
+  titleI18n?: { en?: string | undefined; zh?: string | undefined };
+  bodyMarkdownI18n?: { en?: string | undefined; zh?: string | undefined };
   updatedBy: string;
 }
 
@@ -101,7 +103,10 @@ export class BroadcastService {
       titleI18n: params.titleI18n,
       bodyMarkdownI18n: params.bodyMarkdownI18n,
       createdBy: params.createdBy,
-      recipientUserIds: params.recipientUserIds,
+      // exactOptionalPropertyTypes (#657)
+      ...(params.recipientUserIds !== undefined
+        ? { recipientUserIds: params.recipientUserIds }
+        : {}),
     };
     const doc = await this.repo.create(input);
     logger.info(
@@ -125,8 +130,11 @@ export class BroadcastService {
     params: UpdateBroadcastParams,
   ): Promise<AdminBroadcastResponse> {
     const patch: UpdateBroadcastDocInput = {
-      titleI18n: params.titleI18n,
-      bodyMarkdownI18n: params.bodyMarkdownI18n,
+      // exactOptionalPropertyTypes (#657)
+      ...(params.titleI18n !== undefined ? { titleI18n: params.titleI18n } : {}),
+      ...(params.bodyMarkdownI18n !== undefined
+        ? { bodyMarkdownI18n: params.bodyMarkdownI18n }
+        : {}),
       updatedBy: params.updatedBy,
     };
     const updated = await this.repo.update(id, patch);

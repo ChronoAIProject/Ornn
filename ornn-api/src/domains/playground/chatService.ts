@@ -104,14 +104,19 @@ Be concise. Act, don't explain.`;
 export interface PlaygroundMessage {
   role: "user" | "assistant" | "tool" | "system";
   content: string;
-  toolCalls?: Array<{ id: string; name: string; args: Record<string, unknown> }>;
-  toolCallId?: string;
+  toolCalls?: Array<{ id: string; name: string; args: Record<string, unknown> }> | undefined;
+  toolCallId?: string | undefined;
 }
 
+// Optionals widen to `T | undefined` so the Zod-inferred shape from the
+// validated request body assigns cleanly under exactOptionalPropertyTypes
+// (#657). The fields are still semantically optional; only the type
+// boundary widens.
 export interface PlaygroundChatRequest {
   messages: PlaygroundMessage[];
-  skillId?: string;
-  envVars?: Record<string, string>;
+  skillId?: string | undefined;
+  envVars?: Record<string, string> | undefined;
+  modelId?: string | undefined;
 }
 
 /** Tools for the playground agent. */

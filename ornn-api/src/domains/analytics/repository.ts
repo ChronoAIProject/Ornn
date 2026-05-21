@@ -200,7 +200,8 @@ export class AnalyticsRepository {
     return {
       skillGuid,
       window,
-      version,
+      // exactOptionalPropertyTypes (#657)
+      ...(version !== undefined ? { version } : {}),
       executionCount: counts.executionCount,
       successCount: counts.successCount,
       failureCount: counts.failureCount,

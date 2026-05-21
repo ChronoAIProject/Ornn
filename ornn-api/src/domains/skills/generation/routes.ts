@@ -82,7 +82,8 @@ async function preflight(
 
   const resolution = await llmProvidersService.resolveModel({
     surface: "skillGen",
-    requested: requestedModelId,
+    // exactOptionalPropertyTypes (#657)
+    ...(requestedModelId !== undefined ? { requested: requestedModelId } : {}),
   });
   if (resolution.kind !== "ok") throwModelResolutionError(resolution);
   return { modelId: resolution.modelId, userId: authCtx.userId, permissions: authCtx.permissions };

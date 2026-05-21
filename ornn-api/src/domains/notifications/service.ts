@@ -106,7 +106,8 @@ export class NotificationService {
     // because the other source had `limit` older items.
     const perUser = await this.repo.list(userId, {
       limit,
-      unreadOnly: options.unreadOnly,
+      // exactOptionalPropertyTypes (#657)
+      ...(options.unreadOnly !== undefined ? { unreadOnly: options.unreadOnly } : {}),
     });
     const userItems: FeedItem[] = perUser.map((n) => ({ ...n, source: "user" }));
 

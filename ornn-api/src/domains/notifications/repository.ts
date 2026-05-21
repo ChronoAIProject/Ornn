@@ -111,8 +111,10 @@ function mapDoc(doc: Document | null): NotificationDocument | null {
     userId: String(doc.userId),
     category: doc.category as NotificationCategory,
     title: String(doc.title ?? ""),
-    body: doc.body ? String(doc.body) : undefined,
-    link: doc.link ? String(doc.link) : undefined,
+    // exactOptionalPropertyTypes (#657): only stamp body/link when set
+    // so we don't materialise undefined-valued keys.
+    ...(doc.body ? { body: String(doc.body) } : {}),
+    ...(doc.link ? { link: String(doc.link) } : {}),
     data: (doc.data as Record<string, unknown>) ?? {},
     readAt: doc.readAt ? (doc.readAt instanceof Date ? doc.readAt : new Date(doc.readAt)) : null,
     createdAt: doc.createdAt instanceof Date ? doc.createdAt : new Date(doc.createdAt),

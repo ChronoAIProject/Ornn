@@ -104,7 +104,8 @@ export function createPlaygroundRoutes(config: PlaygroundRoutesConfig): Hono<{ V
       // models are enabled for the playground surface.
       const resolution = await llmProvidersService.resolveModel({
         surface: "playground",
-        requested: parsed.modelId,
+        // exactOptionalPropertyTypes (#657)
+        ...(parsed.modelId !== undefined ? { requested: parsed.modelId } : {}),
       });
       if (resolution.kind !== "ok") throwModelResolutionError(resolution);
       const resolvedModelId = resolution.modelId;

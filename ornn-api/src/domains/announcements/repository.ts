@@ -47,17 +47,21 @@ export interface CreateAnnouncementInput {
   createdBy: string;
 }
 
+// Fields are `| undefined` (not just `?`) because callers pass
+// Zod-inferred `.optional()` shapes where absent keys arrive as
+// explicit `undefined`. Under exactOptionalPropertyTypes (#657), `?`
+// alone rejects that. The `update()` impl ignores undefined values.
 export interface UpdateAnnouncementInput {
-  titleEn?: string;
-  titleZh?: string;
-  bodyMarkdownEn?: string;
-  bodyMarkdownZh?: string;
-  ctaLabelEn?: string | null;
-  ctaLabelZh?: string | null;
-  ctaUrl?: string | null;
-  enabled?: boolean;
-  startsAt?: Date | null;
-  endsAt?: Date | null;
+  titleEn?: string | undefined;
+  titleZh?: string | undefined;
+  bodyMarkdownEn?: string | undefined;
+  bodyMarkdownZh?: string | undefined;
+  ctaLabelEn?: string | null | undefined;
+  ctaLabelZh?: string | null | undefined;
+  ctaUrl?: string | null | undefined;
+  enabled?: boolean | undefined;
+  startsAt?: Date | null | undefined;
+  endsAt?: Date | null | undefined;
 }
 
 export class AnnouncementRepository {

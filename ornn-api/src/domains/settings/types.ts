@@ -27,7 +27,9 @@ import type { LlmProvider } from "./llmProviders/types";
 export interface SettingsActor {
   readonly userId: string;
   readonly email: string;
-  readonly displayName?: string;
+  // exactOptionalPropertyTypes (#657): widen to allow `undefined` so
+  // callers passing nyxidAuth's `string | undefined` displayName fit.
+  readonly displayName?: string | undefined;
 }
 
 /**

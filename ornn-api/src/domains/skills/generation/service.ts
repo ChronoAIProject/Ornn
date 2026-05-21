@@ -282,7 +282,8 @@ export class SkillGenerationService {
    */
   async *generateFromOpenApi(
     specContent: string,
-    options?: { endpoints?: string[]; description?: string },
+    // exactOptionalPropertyTypes (#657)
+    options?: { endpoints?: string[] | undefined; description?: string | undefined },
     signal?: AbortSignal,
     modelOverride?: string,
   ): AsyncIterable<SkillStreamEvent> {
@@ -356,7 +357,12 @@ export class SkillGenerationService {
    */
   async *generateFromSource(
     code: string,
-    options?: { framework?: string; description?: string; sourceUrl?: string },
+    // exactOptionalPropertyTypes (#657)
+    options?: {
+      framework?: string | undefined;
+      description?: string | undefined;
+      sourceUrl?: string | undefined;
+    },
     signal?: AbortSignal,
     modelOverride?: string,
   ): AsyncIterable<SkillStreamEvent> {
@@ -445,7 +451,12 @@ export class SkillGenerationService {
         return null;
       }
 
-      return result.data;
+      // The Zod-inferred shape and GeneratedSkill match in spirit but
+      // Zod surfaces `outputType` as `"text" | "file" | undefined`
+      // (explicit undefined, not optional) which exactOptionalPropertyTypes
+      // (#657) treats as different from the interface's `outputType?:`.
+      // Same runtime shape; cast is safe.
+      return result.data as GeneratedSkill;
     } catch (err) {
       // Generated-skill JSON parse failed. Caller treats null as
       // "regenerate" or "give up" depending on retry budget. Logging

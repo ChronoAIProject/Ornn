@@ -50,7 +50,7 @@ export interface SettingsAuditLogger {
     sections: ReadonlyArray<{
       id: string;
       status: string;
-      changedFields?: ReadonlyArray<string>;
+      changedFields?: ReadonlyArray<string> | undefined;
     }>;
     dryRun: boolean;
   }): Promise<void>;
@@ -64,12 +64,13 @@ const noopAuditLogger: SettingsAuditLogger = {
 export interface ExportImportRoutesConfig {
   readonly exporter: SettingsExporter;
   readonly importer: SettingsImporter;
+  // Optionals widen to `T | undefined` for exactOptionalPropertyTypes (#657).
   /** Used in the export filename. Default: `prod`. */
-  readonly envName?: string;
+  readonly envName?: string | undefined;
   /** Audit hook. When omitted, exports/imports go un-audited (test mode). */
-  readonly auditLogger?: SettingsAuditLogger;
+  readonly auditLogger?: SettingsAuditLogger | undefined;
   /** Body-size cap on `POST /import`. Default 1 MiB. */
-  readonly importMaxBytes?: number;
+  readonly importMaxBytes?: number | undefined;
 }
 
 export function createSettingsExportImportRoutes(

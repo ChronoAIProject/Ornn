@@ -21,14 +21,16 @@ const logger = createLogger("githubSkillPull");
 export interface GitHubPullInput {
   /** `owner/name`. */
   readonly repo: string;
+  // Optional fields widen to `T | undefined` so callers with optional
+  // input values fit under exactOptionalPropertyTypes (#657).
   /** Branch, tag, or commit SHA. Defaults to the repo's default branch. */
-  readonly ref?: string;
+  readonly ref?: string | undefined;
   /** Directory inside the repo containing SKILL.md. `""` = repo root. */
-  readonly path?: string;
+  readonly path?: string | undefined;
   /** Max files to pull. Safety cap. Default 200. */
-  readonly maxFiles?: number;
+  readonly maxFiles?: number | undefined;
   /** Max total bytes. Safety cap. Default 10 MiB. */
-  readonly maxTotalBytes?: number;
+  readonly maxTotalBytes?: number | undefined;
 }
 
 export interface GitHubPullResult {
@@ -93,7 +95,9 @@ export function normalizePath(path: string | undefined): string {
  * path=skills/x OR ref=feature path=foo-bar/skills/x. The user can fall
  * back to the explicit `{ repo, ref, path }` form for those.
  */
-export function parseGithubUrl(rawUrl: string): { repo: string; ref?: string; path?: string } {
+export function parseGithubUrl(
+  rawUrl: string,
+): { repo: string; ref?: string | undefined; path?: string | undefined } {
   const url = rawUrl.trim();
   if (!url) throw new Error("GitHub URL is empty");
 

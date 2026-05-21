@@ -15,11 +15,11 @@ const logger = createLogger("githubFetcher");
 
 export interface FetchOptions {
   /** Default: tries common route-folder names. */
-  readonly path?: string;
+  readonly path?: string | undefined;
   /** Max files to pull. Default 8. LLM context budget keeps this low. */
-  readonly maxFiles?: number;
+  readonly maxFiles?: number | undefined;
   /** Max bytes per file. Default 16 KiB. Prevents one giant file blowing context. */
-  readonly maxBytesPerFile?: number;
+  readonly maxBytesPerFile?: number | undefined;
 }
 
 export interface FetchedBundle {
@@ -28,7 +28,7 @@ export interface FetchedBundle {
   /** Files that were included in the bundle. */
   readonly files: ReadonlyArray<{ readonly path: string; readonly bytes: number }>;
   /** Detected framework hint ("express" / "fastapi" / ...), or undefined. */
-  readonly frameworkHint?: string;
+  readonly frameworkHint?: string | undefined;
   /** Original owner/repo/ref for audit. */
   readonly source: { readonly owner: string; readonly repo: string; readonly ref: string };
 }

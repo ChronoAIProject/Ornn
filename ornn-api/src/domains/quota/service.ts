@@ -53,7 +53,8 @@ export class QuotaService {
   private readonly repo: QuotaRepository;
   private readonly defaults: QuotaDefaultsResolver;
   private readonly adminPermission: string;
-  private readonly notificationService?: NotificationService;
+  // exactOptionalPropertyTypes (#657): widen to `T | undefined`.
+  private readonly notificationService: NotificationService | undefined;
   private readonly warningThreshold: number;
 
   constructor(config: QuotaServiceConfig) {
@@ -167,7 +168,8 @@ export class QuotaService {
       targetUserId: params.targetUserId,
       surface: params.surface,
       amount: params.amount,
-      note: params.note,
+      // exactOptionalPropertyTypes (#657)
+      ...(params.note !== undefined ? { note: params.note } : {}),
       monthMarker,
       createdAt: now,
     });
@@ -190,7 +192,8 @@ export class QuotaService {
           targetUserId: params.targetUserId,
           surface: params.surface,
           amount: params.amount,
-          note: params.note,
+          // exactOptionalPropertyTypes (#657)
+          ...(params.note !== undefined ? { note: params.note } : {}),
           adminDisplayName: params.admin.displayName,
         })
         .catch((err: unknown) => {
@@ -221,7 +224,8 @@ export class QuotaService {
           targetUserId: userId,
           surface: params.surface,
           amount: params.amount,
-          note: params.note,
+          // exactOptionalPropertyTypes (#657)
+          ...(params.note !== undefined ? { note: params.note } : {}),
           now,
         });
         out.push({ userId, ok: true, auditId });

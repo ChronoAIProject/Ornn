@@ -50,8 +50,11 @@ export interface CreateBroadcastDocInput {
  * guard against a future caller forgetting the invariant.
  */
 export interface UpdateBroadcastDocInput {
-  titleI18n?: Partial<BroadcastI18nString>;
-  bodyMarkdownI18n?: Partial<BroadcastI18nString>;
+  // Inner Partial accepts `string | undefined` to match the Zod-
+  // inferred patch shape callers pass through the service. The repo
+  // skips `undefined` keys when building the `$set` patch.
+  titleI18n?: { en?: string | undefined; zh?: string | undefined };
+  bodyMarkdownI18n?: { en?: string | undefined; zh?: string | undefined };
   updatedBy: string;
 }
 

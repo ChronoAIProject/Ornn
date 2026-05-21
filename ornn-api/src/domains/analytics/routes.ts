@@ -115,9 +115,10 @@ export function createAnalyticsRoutes(
       const buckets = await analyticsService.getPullsTimeSeries({
         skillGuid,
         bucket: bucketParam as PullBucket,
-        from,
-        to,
-        version: versionParam,
+        // exactOptionalPropertyTypes (#657)
+        ...(from !== undefined ? { from } : {}),
+        ...(to !== undefined ? { to } : {}),
+        ...(versionParam !== undefined ? { version: versionParam } : {}),
       });
       return c.json({ data: { items: buckets }, error: null });
     },

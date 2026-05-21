@@ -47,7 +47,9 @@ interface RawResponse {
 
 export class NyxidOrgsClient {
   private readonly resolver: NyxidConfigResolver;
-  private readonly saTokenProvider?: NyxidSaTokenProvider;
+  // exactOptionalPropertyTypes (#657): widen to `T | undefined` so the
+  // optional-from-deps assignment lands cleanly. Same runtime shape.
+  private readonly saTokenProvider: NyxidSaTokenProvider | undefined;
 
   constructor(opts: {
     resolver: NyxidConfigResolver;

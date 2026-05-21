@@ -168,7 +168,8 @@ export function createAdminQuotaRoutes(
           targetUserId: body.userId,
           surface: body.surface,
           amount: body.amount,
-          note: body.note,
+          // exactOptionalPropertyTypes (#657)
+          ...(body.note !== undefined ? { note: body.note } : {}),
         });
         logger.info(
           {
@@ -210,7 +211,8 @@ export function createAdminQuotaRoutes(
         targetUserIds: unique,
         surface: body.surface,
         amount: body.amount,
-        note: body.note,
+        // exactOptionalPropertyTypes (#657)
+        ...(body.note !== undefined ? { note: body.note } : {}),
       });
       const applied = results.filter((r) => r.ok).length;
       const { monthMarker } = monthBounds(new Date());
@@ -244,8 +246,9 @@ export function createAdminQuotaRoutes(
       const result = await quotaService.listGrantAudit({
         page,
         pageSize,
-        targetUserId,
-        adminUserId,
+        // exactOptionalPropertyTypes (#657)
+        ...(targetUserId !== undefined ? { targetUserId } : {}),
+        ...(adminUserId !== undefined ? { adminUserId } : {}),
       });
       return c.json({
         data: {

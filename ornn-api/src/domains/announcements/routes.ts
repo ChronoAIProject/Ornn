@@ -89,11 +89,12 @@ const updateSchema = z
  * `ctaLabelZh` is independent (optional translation of the label —
  * frontend falls back to `ctaLabelEn` when empty).
  */
+// Use `Record<string, unknown>` (rather than a narrow Pick) so we can
+// share this refinement between createSchema (full required) and
+// updateSchema (every field optional) without the inferred input
+// type clashing under exactOptionalPropertyTypes (#657).
 function assertCtaPairing(
-  value: {
-    ctaUrl?: string | null;
-    ctaLabelEn?: string | null;
-  },
+  value: Record<string, unknown>,
   ctx: z.RefinementCtx,
 ): void {
   const hasUrl = typeof value.ctaUrl === "string" && value.ctaUrl.length > 0;
