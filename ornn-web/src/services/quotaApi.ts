@@ -68,11 +68,12 @@ export interface AdminQuotaPage {
   totalPages: number;
 }
 
+// exactOptionalPropertyTypes (#657)
 export async function fetchAdminQuotaUsers(params: {
   surface: Surface;
-  page?: number;
-  pageSize?: number;
-  q?: string;
+  page?: number | undefined;
+  pageSize?: number | undefined;
+  q?: string | undefined;
 }): Promise<AdminQuotaPage> {
   const res = await apiGet<AdminQuotaPage>("/api/v1/admin/quota/users", {
     surface: params.surface,
@@ -122,7 +123,8 @@ export interface GrantInput {
   surface: Surface;
   /** Positive integer ≤ 100_000. Validated client-side too for fast feedback. */
   amount: number;
-  note?: string;
+  // exactOptionalPropertyTypes (#657)
+  note?: string | undefined;
 }
 
 export interface GrantResult {
@@ -144,7 +146,8 @@ export interface BulkGrantInput {
   userIds: string[];
   surface: Surface;
   amount: number;
-  note?: string;
+  // exactOptionalPropertyTypes (#657)
+  note?: string | undefined;
 }
 
 export interface BulkGrantOutcome {

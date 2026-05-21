@@ -23,30 +23,19 @@ function formatDateSGT(dateStr: string): string {
 export interface SkillVersionListProps {
   versions: SkillVersionEntry[];
   currentVersion: string;
-  /** Fire when the user clicks a version row to switch to it. */
   onSelect: (version: string) => void;
-  /** Show owner-only controls (deprecation toggle, delete). */
   canManage: boolean;
-  /** Fire when the deprecation flag changes; receives the target version. */
-  onToggleDeprecation?: (args: {
+  // Optionals widen to `T | undefined` for exactOptionalPropertyTypes (#657).
+  onToggleDeprecation?: ((args: {
     version: string;
     isDeprecated: boolean;
-    deprecationNote?: string;
-  }) => Promise<void> | void;
-  /** Whether a deprecation mutation is currently in flight (for loading state). */
-  isMutating?: boolean;
-  /** Fire when the user confirms a non-latest version delete. */
-  onDeleteVersion?: (version: string) => Promise<void> | void;
-  /** Whether a delete mutation is currently in flight (for loading state). */
-  isDeleting?: boolean;
-  /**
-   * Optional per-version audit summary. Versions present render their
-   * verdict pill (green / yellow / red); versions absent render a
-   * neutral "not audited" pill. Pass `undefined` to suppress audit
-   * pills entirely (e.g. on the explore page).
-   */
-  auditSummary?: Record<string, AuditRecord>;
-  className?: string;
+    deprecationNote?: string | undefined;
+  }) => Promise<void> | void) | undefined;
+  isMutating?: boolean | undefined;
+  onDeleteVersion?: ((version: string) => Promise<void> | void) | undefined;
+  isDeleting?: boolean | undefined;
+  auditSummary?: Record<string, AuditRecord> | undefined;
+  className?: string | undefined;
 }
 
 /**
@@ -59,7 +48,8 @@ function AuditPill({
   audit,
   notAuditedLabel,
 }: {
-  audit?: AuditRecord;
+  // exactOptionalPropertyTypes (#657)
+  audit?: AuditRecord | undefined;
   notAuditedLabel: string;
 }) {
   if (!audit) {

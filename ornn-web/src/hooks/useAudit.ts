@@ -34,7 +34,8 @@ export function useSkillAudit(idOrName: string | undefined, opts: FetchAuditOpti
 
 export function useSkillAuditHistory(
   idOrName: string | undefined,
-  options: { version?: string } = {},
+  // exactOptionalPropertyTypes (#657)
+  options: { version?: string | undefined } = {},
 ) {
   return useQuery<AuditRecord[]>({
     queryKey: auditHistoryKey(idOrName ?? "", options.version),

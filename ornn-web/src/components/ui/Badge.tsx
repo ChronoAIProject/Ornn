@@ -17,8 +17,9 @@ import type { ReactNode } from "react";
 
 export interface BadgeProps {
   children: ReactNode;
-  color?: "cyan" | "magenta" | "yellow" | "green" | "red" | "muted";
-  className?: string;
+  // exactOptionalPropertyTypes (#657)
+  color?: "cyan" | "magenta" | "yellow" | "green" | "red" | "muted" | undefined;
+  className?: string | undefined;
 }
 
 const COLOR_MAP = {

@@ -3,12 +3,11 @@ import { useTranslation } from "react-i18next";
 export interface DeprecationBannerProps {
   version: string;
   note: string | null | undefined;
-  /** True when the currently-viewed version is an older one, not the latest. */
   hasNewerVersion: boolean;
-  /** Label of the latest version, shown when offering to jump to it. */
-  latestVersion?: string;
-  onViewLatest?: () => void;
-  className?: string;
+  // exactOptionalPropertyTypes (#657)
+  latestVersion?: string | undefined;
+  onViewLatest?: (() => void) | undefined;
+  className?: string | undefined;
 }
 
 /**

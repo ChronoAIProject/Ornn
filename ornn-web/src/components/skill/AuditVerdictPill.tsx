@@ -18,8 +18,9 @@ import { useTranslation } from "react-i18next";
 import type { AuditRecord } from "@/types/audit";
 
 export interface AuditVerdictPillProps {
-  audit?: AuditRecord;
-  running?: boolean;
+  // exactOptionalPropertyTypes (#657)
+  audit?: AuditRecord | undefined;
+  running?: boolean | undefined;
 }
 
 export function AuditVerdictPill({ audit, running }: AuditVerdictPillProps) {

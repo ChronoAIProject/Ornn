@@ -36,14 +36,16 @@ export interface SkillVersionsBrowserModalProps {
    * render a "not audited" pill in the list. `undefined` suppresses
    * audit pills entirely.
    */
-  auditSummary?: Record<string, AuditRecord>;
+  // exactOptionalPropertyTypes (#657)
+  auditSummary?: Record<string, AuditRecord> | undefined;
   /** Fire when the user picks a version. Null = jump back to latest. */
   onSelectVersion: (versionOrNull: string | null) => void;
-  onToggleDeprecation?: (args: {
+  // exactOptionalPropertyTypes (#657)
+  onToggleDeprecation?: ((args: {
     version: string;
     isDeprecated: boolean;
-    deprecationNote?: string;
-  }) => Promise<void> | void;
+    deprecationNote?: string | undefined;
+  }) => Promise<void> | void) | undefined;
   deprecationPending: boolean;
   deleteVersionPending: boolean;
   deleteVersionAsync: (version: string) => Promise<unknown>;

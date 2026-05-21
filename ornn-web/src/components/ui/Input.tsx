@@ -9,8 +9,11 @@
 import { forwardRef } from "react";
 
 export interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
-  label?: string;
-  error?: string;
+  // Optionals widen to `T | undefined` so form-state callsites passing
+  // `error: errors.field` (which is `string | undefined`) fit under
+  // exactOptionalPropertyTypes (#657).
+  label?: string | undefined;
+  error?: string | undefined;
 }
 
 export const Input = forwardRef<HTMLInputElement, InputProps>(

@@ -57,10 +57,11 @@ export interface IdentifyTraits {
 
 interface BufferedCall {
   kind: "track" | "identify" | "reset";
-  event?: AnalyticsEvent;
-  properties?: Record<string, unknown>;
-  userId?: string;
-  traits?: IdentifyTraits;
+  // exactOptionalPropertyTypes (#657)
+  event?: AnalyticsEvent | undefined;
+  properties?: Record<string, unknown> | undefined;
+  userId?: string | undefined;
+  traits?: IdentifyTraits | undefined;
 }
 
 let initialized = false;

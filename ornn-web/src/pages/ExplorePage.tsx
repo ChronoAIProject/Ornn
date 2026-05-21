@@ -326,7 +326,8 @@ export function ExplorePage() {
 
 interface TabButtonProps {
   label: string;
-  count?: number;
+  // exactOptionalPropertyTypes (#657)
+  count?: number | undefined;
   active: boolean;
   onClick: () => void;
 }
@@ -365,7 +366,8 @@ function TabButton({ label, count, active, onClick }: TabButtonProps) {
 
 interface FilterSidebarProps {
   tab: ExploreTab;
-  selectedServiceId?: string;
+  // exactOptionalPropertyTypes (#657)
+  selectedServiceId?: string | undefined;
   selectedTags: string[];
   selectedAuthors: string[];
   selectedGrantOrgs: string[];
@@ -428,7 +430,8 @@ function SystemFilters({
   selectedServiceId,
   onSetService,
 }: {
-  selectedServiceId?: string;
+  // exactOptionalPropertyTypes (#657)
+  selectedServiceId?: string | undefined;
   onSetService: (id: string | undefined) => void;
 }) {
   const { t } = useTranslation();

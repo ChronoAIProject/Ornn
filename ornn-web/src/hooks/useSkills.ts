@@ -34,13 +34,13 @@ const SKILL_VERSION_DIFF_KEY = "skill-version-diff";
  * Visible to anonymous + authed callers; the System tab itself is the
  * primary consumer.
  */
+// Optionals widen to `T | undefined` for exactOptionalPropertyTypes (#657).
 export function useSystemSkills(params: {
-  query?: string;
+  query?: string | undefined;
   mode?: SkillSearchParams["mode"];
-  page?: number;
-  pageSize?: number;
-  /** Filter to skills tied to a specific NyxID service id. */
-  nyxidServiceId?: string;
+  page?: number | undefined;
+  pageSize?: number | undefined;
+  nyxidServiceId?: string | undefined;
 }) {
   const searchParams: SkillSearchParams = {
     query: params.query,
@@ -58,16 +58,15 @@ export function useSystemSkills(params: {
 }
 
 /** Search public skills */
+// exactOptionalPropertyTypes (#657)
 export function useSkills(params: {
-  query?: string;
+  query?: string | undefined;
   mode?: SkillSearchParams["mode"];
-  page?: number;
-  pageSize?: number;
-  systemFilter?: SystemFilter;
-  /** Tag filter (AND match). */
-  tags?: string[];
-  /** Author user_ids — filter to skills authored by these users. */
-  createdByAny?: string[];
+  page?: number | undefined;
+  pageSize?: number | undefined;
+  systemFilter?: SystemFilter | undefined;
+  tags?: string[] | undefined;
+  createdByAny?: string[] | undefined;
 }) {
   const searchParams: SkillSearchParams = {
     query: params.query,
@@ -91,16 +90,16 @@ export function useSkills(params: {
  * NOT include skills shared with me (those live in the dedicated
  * Shared-with-me tab). Public + private skills I created both appear.
  */
+// exactOptionalPropertyTypes (#657)
 export function useMySkills(params: {
-  query?: string;
+  query?: string | undefined;
   mode?: SkillSearchParams["mode"];
-  page?: number;
-  pageSize?: number;
-  systemFilter?: SystemFilter;
-  sharedWithOrgs?: string[];
-  sharedWithUsers?: string[];
-  /** Tag filter (AND match). */
-  tags?: string[];
+  page?: number | undefined;
+  pageSize?: number | undefined;
+  systemFilter?: SystemFilter | undefined;
+  sharedWithOrgs?: string[] | undefined;
+  sharedWithUsers?: string[] | undefined;
+  tags?: string[] | undefined;
 }) {
   const searchParams: SkillSearchParams = {
     query: params.query,
@@ -125,15 +124,16 @@ export function useMySkills(params: {
  * Excludes own-authored skills and public skills; those live in their
  * dedicated tabs. Gated on auth — anonymous callers get an empty set.
  */
+// exactOptionalPropertyTypes (#657)
 export function useSharedWithMeSkills(params: {
-  query?: string;
+  query?: string | undefined;
   mode?: SkillSearchParams["mode"];
-  page?: number;
-  pageSize?: number;
-  systemFilter?: SystemFilter;
-  sharedWithOrgs?: string[];
-  createdByAny?: string[];
-  enabled?: boolean;
+  page?: number | undefined;
+  pageSize?: number | undefined;
+  systemFilter?: SystemFilter | undefined;
+  sharedWithOrgs?: string[] | undefined;
+  createdByAny?: string[] | undefined;
+  enabled?: boolean | undefined;
 }) {
   const searchParams: SkillSearchParams = {
     query: params.query,
@@ -218,7 +218,8 @@ export function useSetVersionDeprecation(idOrName: string) {
     }: {
       version: string;
       isDeprecated: boolean;
-      deprecationNote?: string;
+      // exactOptionalPropertyTypes (#657)
+      deprecationNote?: string | undefined;
     }) => setSkillVersionDeprecation(idOrName, version, { isDeprecated, deprecationNote }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [SKILLS_KEY, idOrName] });
@@ -261,7 +262,8 @@ export function useRefreshSkillFromSource(idOrName: string) {
       skipValidation,
     }: {
       guid: string;
-      skipValidation?: boolean;
+      // exactOptionalPropertyTypes (#657)
+      skipValidation?: boolean | undefined;
     }) => refreshSkillFromSource(guid, { skipValidation }),
     onSuccess: (updated) => {
       // Prime the detail cache with the refreshed payload so the chip
