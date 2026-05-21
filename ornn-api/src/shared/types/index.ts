@@ -87,8 +87,10 @@ export interface SkillDocument {
    * delete). #581 removed the legacy `ownerId` mirror of this field.
    */
   createdBy: string;
-  createdByEmail?: string;
-  createdByDisplayName?: string;
+  // Optionals widen to `T | undefined` so partial-update / Zod-inferred
+  // shapes assign cleanly under exactOptionalPropertyTypes (#657).
+  createdByEmail?: string | undefined;
+  createdByDisplayName?: string | undefined;
   createdOn: Date;
   updatedBy: string;
   updatedOn: Date;
@@ -125,7 +127,7 @@ export interface SkillDocument {
    *
    * Absent for hand-uploaded skills.
    */
-  source?: SkillSource;
+  source?: SkillSource | undefined;
   /**
    * NyxID service this skill is tied to. Null/undefined when untied.
    * The tied service determines whether the skill is a "system" skill:
@@ -133,18 +135,18 @@ export interface SkillDocument {
    * sets `isSystemSkill: true` and forces `isPrivate: false`; tying to a
    * private service the caller owns leaves privacy alone.
    */
-  nyxidServiceId?: string | null;
+  nyxidServiceId?: string | null | undefined;
   /** Cached service slug for cheap card/list rendering. */
-  nyxidServiceSlug?: string | null;
+  nyxidServiceSlug?: string | null | undefined;
   /** Cached service label for cheap card/list rendering. */
-  nyxidServiceLabel?: string | null;
+  nyxidServiceLabel?: string | null | undefined;
   /**
    * Cached: true iff `nyxidServiceId` points at an admin/platform-wide
    * service (NyxID `visibility: "public"`). System skills are always
    * `isPrivate: false`. Maintained at tie-time; slight staleness is
    * accepted if NyxID flips a service's visibility — re-tie refreshes.
    */
-  isSystemSkill?: boolean;
+  isSystemSkill?: boolean | undefined;
   /**
    * Per-skill GitHub mirror state. Set by `MirrorService` after a
    * successful publish/reconcile commit lands; unset (`$unset`) when
@@ -159,11 +161,13 @@ export interface SkillDocument {
    * and the next mirror sync — the frontend uses that gap to render a
    * "lagging" chip.
    */
-  mirrorSync?: {
-    version: string;
-    syncedAt: Date;
-    commitSha: string;
-  };
+  mirrorSync?:
+    | {
+        version: string;
+        syncedAt: Date;
+        commitSha: string;
+      }
+    | undefined;
   /**
    * Dist-tags per #463 — npm-style aliases that resolve to a concrete
    * version. Lets callers pin to a stable channel without enumerating
@@ -178,7 +182,7 @@ export interface SkillDocument {
    * Absent on legacy skills published before #463 — readers treat
    * absence as `{ latest: <skill.latestVersion> }`.
    */
-  distTags?: Record<string, string>;
+  distTags?: Record<string, string> | undefined;
 }
 
 /**
@@ -201,12 +205,12 @@ export type SkillSource =
        * sync (the user can save a GitHub link first and trigger the sync
        * later from the detail-page advanced options).
        */
-      lastSyncedAt?: Date;
+      lastSyncedAt?: Date | undefined;
       /**
        * Commit SHA that was fetched at `lastSyncedAt`. Allows drift
        * detection. Absent in the same "linked but not yet synced" state.
        */
-      lastSyncedCommit?: string;
+      lastSyncedCommit?: string | undefined;
     };
 
 /**
@@ -231,8 +235,10 @@ export interface SkillVersionDocument {
   license: string | null;
   compatibility: string | null;
   createdBy: string;
-  createdByEmail?: string;
-  createdByDisplayName?: string;
+  // Optionals widen to `T | undefined` so partial-update / Zod-inferred
+  // shapes assign cleanly under exactOptionalPropertyTypes (#657).
+  createdByEmail?: string | undefined;
+  createdByDisplayName?: string | undefined;
   createdOn: Date;
   /**
    * Mutable deprecation flag (phase 2). Absent/undefined means "not deprecated".
@@ -302,8 +308,9 @@ export interface SkillDetailResponse {
   presignedPackageUrl: string;
   isPrivate: boolean;
   createdBy: string;
-  createdByEmail?: string;
-  createdByDisplayName?: string;
+  // Optionals widen to `T | undefined` for exactOptionalPropertyTypes (#657).
+  createdByEmail?: string | undefined;
+  createdByDisplayName?: string | undefined;
   createdOn: string;
   updatedOn: string;
   /** Person user_ids granted explicit access. Same semantics as on `SkillDocument`. */
@@ -316,41 +323,41 @@ export interface SkillDetailResponse {
    */
   version: string;
   /** True when the resolved version is marked deprecated by the author. */
-  isDeprecated?: boolean;
+  isDeprecated?: boolean | undefined;
   /** Optional note the author left when deprecating this version. */
-  deprecationNote?: string | null;
+  deprecationNote?: string | null | undefined;
   /**
    * Present when the skill was created or refreshed by pulling from an
    * external source (e.g. a public GitHub repo). Clients use this to
    * render a "source" link on the detail page and to power "Refresh from
    * source" actions. Serialized form — `lastSyncedAt` is an ISO string.
    */
-  source?: {
-    type: "github";
-    repo: string;
-    ref: string;
-    path: string;
-    /**
-     * Absent when the skill was linked but not yet synced (the user can
-     * attach a GitHub URL via PUT /skills/:id/source first and trigger
-     * the sync separately via POST /skills/:id/refresh).
-     */
-    lastSyncedAt?: string;
-    /** Absent in the same "linked but never synced" state. */
-    lastSyncedCommit?: string;
-  };
+  source?:
+    | {
+        type: "github";
+        repo: string;
+        ref: string;
+        path: string;
+        /**
+         * Absent when the skill was linked but not yet synced.
+         */
+        lastSyncedAt?: string | undefined;
+        /** Absent in the same "linked but never synced" state. */
+        lastSyncedCommit?: string | undefined;
+      }
+    | undefined;
   /** NyxID service tie (null when untied). See `SkillDocument.nyxidServiceId`. */
-  nyxidServiceId?: string | null;
-  nyxidServiceSlug?: string | null;
-  nyxidServiceLabel?: string | null;
+  nyxidServiceId?: string | null | undefined;
+  nyxidServiceSlug?: string | null | undefined;
+  nyxidServiceLabel?: string | null | undefined;
   /** Cached: true iff tied to an admin/platform-wide NyxID service. */
-  isSystemSkill?: boolean;
+  isSystemSkill?: boolean | undefined;
   /**
    * AgentSeal trust score for the resolved version (#253). Null when
    * the version hasn't been scanned (legacy / disabled). Frontend
    * renders a color-coded badge from this — see DESIGN.md.
    */
-  agentsealScan?: AgentsealScanSnapshot | null;
+  agentsealScan?: AgentsealScanSnapshot | null | undefined;
   /**
    * Per-skill GitHub mirror state. Absent ⇒ never mirrored (or
    * un-mirrored after a privacy flip / explicit reset). Present ⇒ the
@@ -364,18 +371,20 @@ export interface SkillDetailResponse {
    *   - `mirrorSync.version === SkillDetailResponse.version` ⇒ "Synced"
    *   - `mirrorSync.version !== version` ⇒ "Lagging" (mirror push pending)
    */
-  mirrorSync?: {
-    version: string;
-    syncedAt: string;
-    commitSha: string;
-  };
+  mirrorSync?:
+    | {
+        version: string;
+        syncedAt: string;
+        commitSha: string;
+      }
+    | undefined;
   /**
    * Dist-tags for this skill (#463). Keys are tag names (`latest`,
    * `stable`, `beta`, ...); values are the concrete version each tag
    * currently points at. `latest` is always present and auto-managed
    * server-side. Absent on legacy skills published before #463.
    */
-  distTags?: Record<string, string>;
+  distTags?: Record<string, string> | undefined;
 }
 
 export interface SkillSearchItem {
@@ -383,63 +392,41 @@ export interface SkillSearchItem {
   name: string;
   description: string;
   createdBy: string;
-  createdByEmail?: string;
-  createdByDisplayName?: string;
+  // Optionals widen to `T | undefined` for exactOptionalPropertyTypes (#657).
+  createdByEmail?: string | undefined;
+  createdByDisplayName?: string | undefined;
   createdOn: string;
   updatedOn: string;
   isPrivate: boolean;
   tags: string[];
-  /**
-   * Why the current caller can see this skill. Populated on search responses
-   * where the caller is authenticated; omitted for anonymous callers.
-   *   - "owner"          — caller authored it (or is platform admin).
-   *   - "public"         — visible to everyone; caller has no special grant.
-   *   - "shared-direct"  — private skill, caller is in `sharedWithUsers`.
-   *   - "shared-via-org" — private skill, one of caller's orgs is in
-   *                        `sharedWithOrgs`; `sharedViaOrgId` names the org.
-   */
-  myAccessReason?: "owner" | "public" | "shared-direct" | "shared-via-org";
-  /** Present when `myAccessReason === "shared-via-org"`. */
-  sharedViaOrgId?: string;
+  myAccessReason?: "owner" | "public" | "shared-direct" | "shared-via-org" | undefined;
+  sharedViaOrgId?: string | undefined;
   /**
    * True when any of this skill's tags matches the slug of a NyxID service
    * the caller can manage (personal or org-inherited). Derived per-request
    * against `/api/me/nyxid-services`.
    */
-  isSystemForMe?: boolean;
-  /**
-   * When `isSystemForMe`, the first matching service. Used by the UI to
-   * render a "⚙️ <label>" chip without a second round-trip. Multiple
-   * matches are possible; the first one wins.
-   */
-  systemForService?: { id: string; slug: string; label: string };
-  /**
-   * Compact view of the skill's ACL state. Cheap to compute (lengths
-   * already on the doc) and lets card UIs render permission chips without
-   * re-fetching the full skill.
-   */
-  permissionSummary?: {
-    isPrivate: boolean;
-    sharedUserCount: number;
-    sharedOrgCount: number;
-  };
-  /**
-   * NyxID service tie surfaced on the search row so cards can render the
-   * "⚙ <serviceLabel>" chip without a second round-trip. `null` when
-   * untied.
-   */
-  nyxidServiceId?: string | null;
-  nyxidServiceSlug?: string | null;
-  nyxidServiceLabel?: string | null;
+  isSystemForMe?: boolean | undefined;
+  systemForService?: { id: string; slug: string; label: string } | undefined;
+  permissionSummary?:
+    | {
+        isPrivate: boolean;
+        sharedUserCount: number;
+        sharedOrgCount: number;
+      }
+    | undefined;
+  nyxidServiceId?: string | null | undefined;
+  nyxidServiceSlug?: string | null | undefined;
+  nyxidServiceLabel?: string | null | undefined;
   /** Cached: true iff tied to an admin/platform-wide NyxID service. */
-  isSystemSkill?: boolean;
+  isSystemSkill?: boolean | undefined;
   /**
    * True when the skill has a `source` pointer of type "github". The
    * card UI uses this to render a small non-clickable GitHub mark; the
    * actual repo URL is not exposed in search results — callers drill
    * into the detail page if they want to follow the link.
    */
-  hasGithubSource?: boolean;
+  hasGithubSource?: boolean | undefined;
 }
 
 export interface SkillSearchResponse {

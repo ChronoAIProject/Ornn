@@ -14,6 +14,8 @@ import { AppError } from "../../../shared/types/index";
 import { createLogger } from "../../../shared/logger";
 const logger = createLogger("skillVersionRepository");
 
+// Optionals widen to `T | undefined` so call sites passing
+// optionally-present strings fit under exactOptionalPropertyTypes (#657).
 export interface CreateSkillVersionData {
   skillGuid: string;
   version: string;
@@ -22,14 +24,14 @@ export interface CreateSkillVersionData {
   storageKey: string;
   skillHash: string;
   metadata: SkillMetadata;
-  license?: string | null;
-  compatibility?: string | null;
+  license?: string | null | undefined;
+  compatibility?: string | null | undefined;
   createdBy: string;
-  createdByEmail?: string;
-  createdByDisplayName?: string;
-  createdOn?: Date;
+  createdByEmail?: string | undefined;
+  createdByDisplayName?: string | undefined;
+  createdOn?: Date | undefined;
   /** Author-supplied release notes pulled from SKILL.md frontmatter. */
-  releaseNotes?: string | null;
+  releaseNotes?: string | null | undefined;
 }
 
 /**

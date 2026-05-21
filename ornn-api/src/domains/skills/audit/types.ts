@@ -74,9 +74,9 @@ export interface AuditRecord {
   readonly model: string;
   readonly createdAt: Date;
   /** When the record moved from `running` to a terminal state. */
-  readonly completedAt?: Date;
+  readonly completedAt?: Date | undefined;
   /** Populated when status === "failed". */
-  readonly errorMessage?: string;
+  readonly errorMessage?: string | undefined;
   /**
    * User who triggered the audit. `system` when the audit-on-share
    * pipeline kicked it off automatically (to be wired in a later PR).

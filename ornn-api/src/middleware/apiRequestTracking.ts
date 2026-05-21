@@ -63,22 +63,28 @@ export function apiRequestTrackingMiddleware(
         const sourceIp = redactIp(extractSourceIp(c));
         const requestId = getRequestId(c) ?? null;
 
+        // exactOptionalPropertyTypes (#657): conditional spread on
+        // every optional field so we never pass an explicit `undefined`
+        // to a contract that wants `key?: T`.
+        const routePattern = extractRoutePattern(c);
+        const userAgent = capUserAgent(c.req.header("user-agent"));
+        const queryParamKeys = extractQueryParamKeys(c);
+        const requestBytes = parseContentLength(c.req.header("content-length"));
+        const responseBytes = parseContentLength(c.res.headers.get("content-length"));
         config.emitter.trackApiRequest({
           userId,
           callerType,
           method: c.req.method,
           path: c.req.path,
-          routePattern: extractRoutePattern(c),
+          ...(routePattern !== undefined ? { routePattern } : {}),
           status,
           durationMs,
           sourceIp,
           requestId,
-          userAgent: capUserAgent(c.req.header("user-agent")),
-          queryParamKeys: extractQueryParamKeys(c),
-          requestBytes: parseContentLength(c.req.header("content-length")),
-          responseBytes: parseContentLength(
-            c.res.headers.get("content-length"),
-          ),
+          ...(userAgent !== undefined ? { userAgent } : {}),
+          ...(queryParamKeys !== undefined ? { queryParamKeys } : {}),
+          ...(requestBytes !== undefined ? { requestBytes } : {}),
+          ...(responseBytes !== undefined ? { responseBytes } : {}),
         });
       } catch (err) {
         // Never fail the request because tracking blew up (#579) — but

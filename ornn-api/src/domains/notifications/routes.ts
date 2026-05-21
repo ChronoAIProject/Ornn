@@ -69,8 +69,10 @@ function toFeedDto(item: FeedItem): FeedItemDto {
     userId: item.userId,
     category: item.category,
     title: item.title,
-    body: item.body,
-    link: item.link,
+    // exactOptionalPropertyTypes (#657): conditional spread on
+    // optional body/link.
+    ...(item.body !== undefined ? { body: item.body } : {}),
+    ...(item.link !== undefined ? { link: item.link } : {}),
     data: item.data,
     readAt: item.readAt ? item.readAt.toISOString() : null,
     createdAt: item.createdAt.toISOString(),
@@ -91,7 +93,8 @@ export function createNotificationRoutes(
     const limit = limitParam ? Math.max(1, Math.min(200, Number.parseInt(limitParam, 10))) : undefined;
     const items = await notificationService.listFeedForUser(authCtx.userId, {
       unreadOnly,
-      limit,
+      // exactOptionalPropertyTypes (#657)
+      ...(limit !== undefined ? { limit } : {}),
     });
     return c.json({ data: { items: items.map(toFeedDto) }, error: null });
   });

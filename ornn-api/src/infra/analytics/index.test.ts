@@ -17,7 +17,8 @@ class FakeTracker implements AnalyticsTracker {
     event: string,
     properties?: Readonly<Record<string, unknown>>,
   ): void {
-    this.calls.push({ userId, event, properties });
+    // exactOptionalPropertyTypes (#657)
+    this.calls.push({ userId, event, ...(properties !== undefined ? { properties } : {}) });
   }
   async shutdown(): Promise<void> {
     /* no-op */

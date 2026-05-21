@@ -356,5 +356,12 @@ export function parseSkillScanOutput(raw: string): ParsedScan | null {
       ? Math.max(0, Math.round(obj.scannedFiles))
       : 0;
 
-  return { score, findings, agentsealVersion, scannedAt, scannedFiles };
+  // exactOptionalPropertyTypes (#657)
+  return {
+    score,
+    findings,
+    agentsealVersion,
+    ...(scannedAt !== undefined ? { scannedAt } : {}),
+    scannedFiles,
+  };
 }

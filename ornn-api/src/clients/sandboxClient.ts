@@ -128,7 +128,8 @@ export type SandboxClientConfigResolver = () => Promise<SandboxClientConfig>;
 
 export class SandboxClient {
   private readonly resolver: SandboxClientConfigResolver;
-  private readonly getAccessToken?: () => Promise<string>;
+  // exactOptionalPropertyTypes (#657): widen to `T | undefined`.
+  private readonly getAccessToken: (() => Promise<string>) | undefined;
 
   constructor(opts: {
     resolver: SandboxClientConfigResolver;

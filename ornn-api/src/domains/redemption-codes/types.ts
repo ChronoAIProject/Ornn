@@ -55,21 +55,24 @@ export interface ActorMeta {
   displayName: string;
 }
 
+// Optional fields widen to `| undefined` so callers passing Zod-
+// inferred shapes or building docs incrementally fit under
+// exactOptionalPropertyTypes (#657).
 export interface RedemptionCodeDoc {
   /** ObjectId hex string. */
   _id: string;
   /** Canonical uppercase code, unique. */
   code: string;
   grants: RedemptionGrantEntry[];
-  note?: string;
+  note?: string | undefined;
   createdAt: Date;
   createdBy: ActorMeta;
   expiresAt: Date;
   status: RedemptionCodeStatus;
-  redeemedAt?: Date;
-  redeemedBy?: ActorMeta;
-  invalidatedAt?: Date;
-  invalidatedBy?: ActorMeta;
+  redeemedAt?: Date | undefined;
+  redeemedBy?: ActorMeta | undefined;
+  invalidatedAt?: Date | undefined;
+  invalidatedBy?: ActorMeta | undefined;
 }
 
 // ---------------------------------------------------------------------------

@@ -47,23 +47,26 @@ function skillIdList(guids: readonly string[]): never {
 
 const logger = createLogger("skillCrudRepository");
 
+// Optionals widen to `T | undefined` so route layers passing Zod-
+// inferred or other optional inputs fit under
+// exactOptionalPropertyTypes (#657). Repo writes ignore undefined keys.
 export interface CreateSkillData {
   guid: string;
   name: string;
   description: string;
-  license?: string;
-  compatibility?: string;
+  license?: string | undefined;
+  compatibility?: string | undefined;
   metadata: SkillMetadata;
   skillHash: string;
   storageKey: string;
   createdBy: string;
-  createdByEmail?: string;
-  createdByDisplayName?: string;
-  isPrivate?: boolean;
+  createdByEmail?: string | undefined;
+  createdByDisplayName?: string | undefined;
+  isPrivate?: boolean | undefined;
   /** Initial version, e.g. "1.0". Required. */
   latestVersion: string;
   /** Origin metadata when the skill was created via a pull from an external source. */
-  source?: import("../../../shared/types/index").SkillSource;
+  source?: import("../../../shared/types/index").SkillSource | undefined;
 }
 
 export interface UpdateSkillData {
@@ -106,20 +109,21 @@ export interface SkillFilters {
  * user" chip row).
  */
 export interface ExtraFilters {
-  sharedWithOrgsAny?: string[];
-  sharedWithUsersAny?: string[];
-  createdByAny?: string[];
+  // Optionals widen to `T | undefined` for exactOptionalPropertyTypes (#657).
+  sharedWithOrgsAny?: string[] | undefined;
+  sharedWithUsersAny?: string[] | undefined;
+  createdByAny?: string[] | undefined;
   /**
    * Tri-state system-skill filter applied at the DB match level.
    * `"only"`    → `isSystemSkill: true`.
    * `"exclude"` → `isSystemSkill !== true` (covers absent / false / null).
    * `"any"` / undefined → no constraint.
    */
-  systemFilter?: "any" | "only" | "exclude";
+  systemFilter?: "any" | "only" | "exclude" | undefined;
   /** Restrict to skills tied to this exact NyxID service id. */
-  nyxidServiceId?: string;
+  nyxidServiceId?: string | undefined;
   /** Skills must have ALL listed tags (AND match against `metadata.tags`). */
-  tagsAll?: string[];
+  tagsAll?: string[] | undefined;
 }
 
 export class SkillRepository {

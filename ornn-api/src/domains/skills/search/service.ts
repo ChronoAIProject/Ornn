@@ -77,21 +77,14 @@ export class SearchService {
     currentUserId: string;
     /** Org user_ids the caller is admin or member of (viewer-role filtered out). */
     userOrgIds: string[];
-    model?: string;
-    /**
-     * Tri-state toggle for the System-skill filter. Pushed down to the
-     * DB match stage — `isSystemSkill: true` (cached on the skill doc
-     * at tie-time) is the source of truth.
-     */
-    systemFilter?: SystemFilter;
-    /** Registry filter-chip constraints. Applied at the DB match level. */
-    sharedWithOrgsAny?: string[];
-    sharedWithUsersAny?: string[];
-    createdByAny?: string[];
-    /** Restrict to skills tied to a specific NyxID service. */
-    nyxidServiceId?: string;
-    /** Skills must have ALL listed tags (AND match). */
-    tagsAll?: string[];
+    // Optionals widen to `T | undefined` for exactOptionalPropertyTypes (#657).
+    model?: string | undefined;
+    systemFilter?: SystemFilter | undefined;
+    sharedWithOrgsAny?: string[] | undefined;
+    sharedWithUsersAny?: string[] | undefined;
+    createdByAny?: string[] | undefined;
+    nyxidServiceId?: string | undefined;
+    tagsAll?: string[] | undefined;
   }): Promise<SkillSearchResponse> {
     const { query, mode, scope, page, pageSize, currentUserId, userOrgIds } = params;
     const systemFilter = params.systemFilter ?? "any";
@@ -173,8 +166,9 @@ export class SearchService {
     page: number;
     pageSize: number;
     systemFilter: SystemFilter;
-    nyxidServiceId?: string;
-    tagsAll?: string[];
+    // exactOptionalPropertyTypes (#657)
+    nyxidServiceId?: string | undefined;
+    tagsAll?: string[] | undefined;
   }): Promise<{ skills: SkillDocument[]; total: number }> {
     const { query, scope, currentUserId, userOrgIds, model, page, pageSize, systemFilter, nyxidServiceId, tagsAll } = params;
 

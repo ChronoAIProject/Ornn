@@ -61,13 +61,16 @@ export function createAdminUsersRoutes(
       const dirRaw = c.req.query("dir");
       const dir: SortDir | undefined = dirRaw ? dirSchema.parse(dirRaw) : undefined;
 
+      // exactOptionalPropertyTypes (#657): conditional spread on the
+      // optional inputs so we don't pass `{ q: undefined }` to a
+      // contract that wants `q?: string`.
       const result = await adminUsersService.listUsers({
         role,
         page,
         pageSize,
-        q,
-        sort: sortKey,
-        dir,
+        ...(q !== undefined ? { q } : {}),
+        ...(sortKey !== undefined ? { sort: sortKey } : {}),
+        ...(dir !== undefined ? { dir } : {}),
       });
       return c.json({ data: result, error: null });
     },

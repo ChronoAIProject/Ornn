@@ -129,8 +129,9 @@ export class SkillService {
   private readonly skillVersionRepo: SkillVersionRepository;
   private readonly storageClient: IStorageClient;
   private readonly storageBucketResolver: () => Promise<string>;
-  private readonly analyticsEmitter?: AnalyticsEmitter;
-  private readonly agentsealScanner?: IAgentSealScanner;
+  // exactOptionalPropertyTypes (#657): widen to `T | undefined`.
+  private readonly analyticsEmitter: AnalyticsEmitter | undefined;
+  private readonly agentsealScanner: IAgentSealScanner | undefined;
 
   constructor(deps: SkillServiceDeps) {
     this.skillRepo = deps.skillRepo;
@@ -144,12 +145,14 @@ export class SkillService {
   async createSkill(
     zipBuffer: Uint8Array,
     userId: string,
+    // Optionals accept `| undefined` so route layers passing
+    // Zod-inferred values fit under exactOptionalPropertyTypes (#657).
     options?: {
-      skipValidation?: boolean;
-      userEmail?: string;
-      userDisplayName?: string;
+      skipValidation?: boolean | undefined;
+      userEmail?: string | undefined;
+      userDisplayName?: string | undefined;
       /** Origin metadata stamped on the skill doc when created from an external pull. */
-      source?: import("../../../shared/types/index").SkillSource;
+      source?: import("../../../shared/types/index").SkillSource | undefined;
     },
   ): Promise<{ guid: string }> {
     // 1. Validate ZIP format rules
@@ -372,8 +375,9 @@ export class SkillService {
      */
     integrity: string;
     createdBy: string;
-    createdByEmail?: string;
-    createdByDisplayName?: string;
+    // exactOptionalPropertyTypes (#657)
+    createdByEmail?: string | undefined;
+    createdByDisplayName?: string | undefined;
     createdOn: string;
     isDeprecated: boolean;
     deprecationNote: string | null;
@@ -498,14 +502,16 @@ export class SkillService {
   async updateSkill(
     guid: string,
     userId: string,
+    // exactOptionalPropertyTypes (#657): allow `T | undefined` on all
+    // optionals so route layers can pass Zod-inferred values directly.
     options: {
-      zipBuffer?: Uint8Array;
-      isPrivate?: boolean;
-      skipValidation?: boolean;
-      userEmail?: string;
-      userDisplayName?: string;
+      zipBuffer?: Uint8Array | undefined;
+      isPrivate?: boolean | undefined;
+      skipValidation?: boolean | undefined;
+      userEmail?: string | undefined;
+      userDisplayName?: string | undefined;
       /** Refresh-from-source path stamps this so lastSyncedAt/Commit move forward. */
-      source?: import("../../../shared/types/index").SkillSource;
+      source?: import("../../../shared/types/index").SkillSource | undefined;
     },
   ): Promise<SkillDetailResponse> {
     const existing = await this.skillRepo.findByGuid(guid);
@@ -641,7 +647,12 @@ export class SkillService {
   async createSkillFromGitHub(
     input: GitHubPullInput,
     userId: string,
-    options?: { userEmail?: string; userDisplayName?: string; skipValidation?: boolean },
+    // exactOptionalPropertyTypes (#657)
+    options?: {
+      userEmail?: string | undefined;
+      userDisplayName?: string | undefined;
+      skipValidation?: boolean | undefined;
+    },
   ): Promise<{ guid: string; source: SkillSource }> {
     const pulled = await fetchSkillFromGitHub(input);
     const source: SkillSource = {
@@ -669,7 +680,12 @@ export class SkillService {
   async refreshSkillFromSource(
     guid: string,
     userId: string,
-    options?: { userEmail?: string; userDisplayName?: string; skipValidation?: boolean },
+    // exactOptionalPropertyTypes (#657)
+    options?: {
+      userEmail?: string | undefined;
+      userDisplayName?: string | undefined;
+      skipValidation?: boolean | undefined;
+    },
   ): Promise<SkillDetailResponse> {
     const existing = await this.skillRepo.findByGuid(guid);
     if (!existing) {
@@ -729,7 +745,7 @@ export class SkillService {
       return this.getSkill(guid);
     }
 
-    let parsed: { repo: string; ref?: string; path?: string };
+    let parsed: { repo: string; ref?: string | undefined; path?: string | undefined };
     try {
       parsed = parseGithubUrl(githubUrl);
     } catch (err) {
@@ -1059,7 +1075,10 @@ export class SkillService {
       nyxidServiceLabel: service.label,
       isSystemSkill: isAdminService,
       // Admin tie forces public; personal tie leaves privacy alone.
-      isPrivate: isAdminService ? false : undefined,
+      // exactOptionalPropertyTypes (#657): conditional spread so we
+      // never pass `{ isPrivate: undefined }` to a contract that wants
+      // `isPrivate?: boolean`.
+      ...(isAdminService ? { isPrivate: false } : {}),
       updatedBy: actor.userId,
     });
     return this.buildDetailResponse(updated);

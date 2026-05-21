@@ -107,7 +107,8 @@ export function createAdminRedemptionCodesRoutes(
             displayName: authCtx.displayName,
           },
           grants: body.grants,
-          note: body.note,
+          // exactOptionalPropertyTypes (#657)
+          ...(body.note !== undefined ? { note: body.note } : {}),
           expiresAt: new Date(body.expiresAt),
         });
         logger.info(
@@ -153,7 +154,13 @@ export function createAdminRedemptionCodesRoutes(
         PAGE_SIZE_MAX,
         Math.max(1, Number(c.req.query("pageSize")) || PAGE_SIZE_DEFAULT),
       );
-      const result = await redemptionCodeService.list({ page, pageSize, status, search });
+      const result = await redemptionCodeService.list({
+        page,
+        pageSize,
+        // exactOptionalPropertyTypes (#657)
+        ...(status !== undefined ? { status } : {}),
+        ...(search !== undefined ? { search } : {}),
+      });
       return c.json({
         data: {
           items: result.items.map(serializeCode),

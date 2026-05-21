@@ -92,8 +92,9 @@ export class AuditService {
   private readonly llmClient: NyxLlmClient;
   private readonly defaultsResolver: AuditDefaultsResolver;
   private readonly cacheTtlMs: number;
-  private readonly notificationService?: NotificationService;
-  private readonly nyxidOrgsClient?: NyxidOrgsClient;
+  // exactOptionalPropertyTypes (#657): widen to `T | undefined`.
+  private readonly notificationService: NotificationService | undefined;
+  private readonly nyxidOrgsClient: NyxidOrgsClient | undefined;
 
   constructor(deps: AuditServiceDeps) {
     this.auditRepo = deps.auditRepo;

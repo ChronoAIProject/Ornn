@@ -163,13 +163,14 @@ export function proxyAuthSetup(options: ProxyAuthSetupOptions = {}) {
       const payload = decodeJwtPayload(identityToken);
       if (payload?.sub) {
         const email = payload.email ?? "";
+        // exactOptionalPropertyTypes (#657)
         const auth: AuthContext = {
           userId: payload.sub,
           email,
           displayName: payload.name ?? email ?? payload.sub,
           roles: payload.roles ?? [],
           permissions: payload.permissions ?? [],
-          userAccessToken,
+          ...(userAccessToken !== undefined ? { userAccessToken } : {}),
         };
         c.set("auth", auth);
         try {
@@ -187,13 +188,14 @@ export function proxyAuthSetup(options: ProxyAuthSetupOptions = {}) {
     const userId = c.req.header("X-NyxID-User-Id");
     if (userId) {
       const email = c.req.header("X-NyxID-User-Email") ?? "";
+      // exactOptionalPropertyTypes (#657)
       const auth: AuthContext = {
         userId,
         email,
         displayName: c.req.header("X-NyxID-User-Name") ?? email ?? userId,
         roles: [],
         permissions: [],
-        userAccessToken,
+        ...(userAccessToken !== undefined ? { userAccessToken } : {}),
       };
       c.set("auth", auth);
       try {

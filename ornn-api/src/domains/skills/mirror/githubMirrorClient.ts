@@ -231,6 +231,9 @@ export class GitHubMirrorClient {
   ): Promise<Response> {
     const token = await this.auth.getInstallationToken();
     const url = `${GitHubMirrorClient.BASE}${path}`;
+    // exactOptionalPropertyTypes (#657): only stamp `body` when set so
+    // RequestInit doesn't receive a `body: undefined` (its body field
+    // is `BodyInit | null`, not optional-undefined).
     const init: RequestInit = {
       method,
       headers: {
@@ -240,7 +243,7 @@ export class GitHubMirrorClient {
         "User-Agent": "ornn-api-mirror",
         ...(body ? { "Content-Type": "application/json" } : {}),
       },
-      body: body ? JSON.stringify(body) : undefined,
+      ...(body ? { body: JSON.stringify(body) } : {}),
     };
     const resp = await fetch(url, init);
     logger.debug({ method, path, status: resp.status }, "github api call");
