@@ -30,6 +30,13 @@ import { z } from "zod";
 
 const logger = createLogger("skillGenerationRoutes");
 
+/**
+ * Per-message + per-prompt content cap (#654). Mirrors the playground
+ * chat schema's `MAX_CHAT_MESSAGE_CHARS` and the frontend
+ * `MAX_INPUT_CHARS` in `ChatInput.tsx`. Keep all three in sync.
+ */
+const MAX_GENERATION_CHARS = 32_000;
+
 export interface GenerationRoutesConfig {
   generationService: SkillGenerationService;
   /**
@@ -268,6 +275,21 @@ export function createGenerationRoutes(config: GenerationRoutesConfig): Hono<{ V
 
         // Multi-turn format: messages array
         if (body.messages && Array.isArray(body.messages)) {
+          // #654 — per-message content cap. Mirrors the playground
+          // chat schema's `.max(MAX_CHAT_MESSAGE_CHARS)` so both
+          // surfaces enforce the same ceiling.
+          for (const m of body.messages) {
+            if (
+              m && typeof m === "object" && "content" in m &&
+              typeof (m as { content: unknown }).content === "string" &&
+              (m as { content: string }).content.length > MAX_GENERATION_CHARS
+            ) {
+              throw AppError.badRequest(
+                "content_too_long",
+                `Message content exceeds ${MAX_GENERATION_CHARS} character limit`,
+              );
+            }
+          }
           logger.info({ userId: authCtx.userId, messageCount: body.messages.length }, "Multi-turn generation request");
           const pf = await preflight(c, quotaService, llmProvidersService, requestedModelId);
           const keepAliveMs = await resolveKeepAliveMs(keepAliveIntervalMsResolver);
@@ -285,6 +307,13 @@ export function createGenerationRoutes(config: GenerationRoutesConfig): Hono<{ V
 
         if (!body.prompt || typeof body.prompt !== "string") {
           throw AppError.badRequest("missing_prompt", "A 'prompt' field is required");
+        }
+        if (body.prompt.length > MAX_GENERATION_CHARS) {
+          // #654 — symmetric with the multi-turn branch above.
+          throw AppError.badRequest(
+            "prompt_too_long",
+            `Prompt exceeds ${MAX_GENERATION_CHARS} character limit`,
+          );
         }
         prompt = body.prompt;
       } else {
