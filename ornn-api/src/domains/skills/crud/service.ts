@@ -1116,11 +1116,26 @@ export class SkillService {
 
   /**
    * Return the full skill package as a JSON object with all file contents.
-   * Used by playground to inject skill context.
+   * Used by playground to inject skill context, and by the SkillInstallCard
+   * prompt's pull commands.
+   *
+   * #639 — accepts an optional `version` that may be a literal `<major>.
+   * <minor>` or a dist-tag (#463). When provided, the response uses that
+   * version's package (`storageKey` + `metadata` from `skill_versions`)
+   * instead of the skill doc's "latest" storage key. Identity fields
+   * (`name`) still come from the skill doc; `description` falls through
+   * to the skill doc too because version docs don't carry one.
+   *
+   * When `version` is omitted the response is the latest package — same
+   * as before.
    */
-  async getSkillJson(idOrName: string): Promise<{
+  async getSkillJson(
+    idOrName: string,
+    version?: string,
+  ): Promise<{
     name: string;
     description: string;
+    version: string;
     metadata: Record<string, unknown>;
     files: Record<string, string>;
   }> {
@@ -1133,8 +1148,39 @@ export class SkillService {
       throw AppError.notFound("skill_not_found", `Skill '${idOrName}' not found`);
     }
 
+    // 1a. Resolve the requested version (literal or dist-tag, #463).
+    //     When unset OR empty-string, fall through to the skill doc's
+    //     latest storage. `resolveDistTag` returns `undefined` for
+    //     empty input, which we treat as "no pin requested".
+    let resolvedVersion = skill.latestVersion;
+    let storageKey = skill.storageKey;
+    let metadata: SkillMetadata = skill.metadata;
+    if (version !== undefined && version.length > 0) {
+      const literal = resolveDistTag(skill, version);
+      if (!literal) {
+        // Defensive — resolveDistTag's contract returns string for any
+        // non-empty input, but the type system widens to `| undefined`.
+        // Treat as malformed rather than crash.
+        throw AppError.badRequest(
+          "invalid_version",
+          `Could not resolve version '${version}'`,
+        );
+      }
+      parseVersion(literal); // 400 if malformed, before Mongo lookup
+      const versionDoc = await this.skillVersionRepo.findBySkillAndVersion(skill.guid, literal);
+      if (!versionDoc) {
+        throw AppError.notFound(
+          "skill_version_not_found",
+          `Version '${literal}' not found for skill '${skill.name}'`,
+        );
+      }
+      resolvedVersion = versionDoc.version;
+      storageKey = versionDoc.storageKey;
+      metadata = versionDoc.metadata;
+    }
+
     // 2. Download ZIP from storage
-    const presigned = await this.storageClient.getPresignedUrl((await this.storageBucketResolver()), skill.storageKey);
+    const presigned = await this.storageClient.getPresignedUrl((await this.storageBucketResolver()), storageKey);
     const response = await fetch(presigned.presignedUrl);
     if (!response.ok) {
       throw AppError.internalError("package_download_failed", "Failed to download skill package from storage");
@@ -1177,12 +1223,16 @@ export class SkillService {
       }
     }
 
-    logger.info({ skillName: skill.name, fileCount: Object.keys(files).length }, "Skill jsonized");
+    logger.info(
+      { skillName: skill.name, version: resolvedVersion, fileCount: Object.keys(files).length },
+      "Skill jsonized",
+    );
 
     return {
       name: skill.name,
       description: skill.description,
-      metadata: skill.metadata as unknown as Record<string, unknown>,
+      version: resolvedVersion,
+      metadata: metadata as unknown as Record<string, unknown>,
       files,
     };
   }
