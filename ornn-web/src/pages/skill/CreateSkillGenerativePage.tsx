@@ -257,7 +257,21 @@ export function CreateSkillGenerativePage() {
         "Describe the skill you want to create…",
       );
 
-  if (isOverLimit && skillGenSnap && quotaSnapshot) {
+  // #624 — only redirect to the over-limit page on a *fresh* arrival
+  // (no messages exchanged AND no generated preview). Once the user
+  // has produced a result this session, the quota poll dropping their
+  // remaining to 0 should NOT yank the result off-screen; the Send
+  // button is already disabled below via `isOverLimit`, which is the
+  // right gate (no new generations) without losing what's already on
+  // the page. Without this guard, the final allowed generation
+  // succeeds → quota refetch → page replaced → user can't save.
+  if (
+    isOverLimit &&
+    skillGenSnap &&
+    quotaSnapshot &&
+    !hasMessages &&
+    !hasPreview
+  ) {
     return (
       <PageTransition>
         <OverLimitPage
