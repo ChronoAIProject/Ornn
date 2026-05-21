@@ -515,7 +515,10 @@
     "previewTitle": "Review & Create",
     "dropHint": "Drop file here or click to browse",
     "noFiles": "(no files)",
-    "remove": "Remove"
+    "remove": "Remove",
+    "fileSizeHint": "Per-file limit: {{max}}",
+    "fileTooLarge": "{{name}} is {{size}} — over the {{max}} per-file limit.",
+    "fileDuplicate": "{{name}} already exists in {{folder}}. Remove it first to replace."
   },
   "generative": {
     "backToModes": "Back to mode selection",
