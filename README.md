@@ -12,7 +12,10 @@
 </p>
 
 <p align="center">
-  <img src="ornn-web/public/hero-brand.svg" alt="Ornn — agent-facing skill-lifecycle API" width="100%" />
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="ornn-web/public/hero-brand-dark.svg">
+    <img src="ornn-web/public/hero-brand.svg" alt="Ornn — agent-facing skill-lifecycle API" width="100%" />
+  </picture>
 </p>
 
 <p align="center"><strong>The agent-facing skill-lifecycle API for AI agents.</strong></p>
