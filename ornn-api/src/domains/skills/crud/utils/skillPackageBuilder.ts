@@ -65,7 +65,10 @@ export function collectUploadedFiles(
 
     // If filename already has a folder prefix (e.g., "scripts/deploy.ts"), use it
     if (file.name.includes("/")) {
-      folder = file.name.split("/")[0];
+      // `split("/")[0]` is always present when the string contains "/"
+      // (the substring before the first separator). `!` is safe under
+      // noUncheckedIndexedAccess (#450).
+      folder = file.name.split("/")[0]!;
     }
 
     files.push({ file, folder });

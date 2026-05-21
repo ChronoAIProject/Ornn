@@ -58,7 +58,10 @@ function buildTreeFromValidation(
         type: "file",
       });
     } else {
-      const folder = parts[0];
+      // The else branch only fires when `parts.length > 1`, so
+      // `parts[0]` is guaranteed defined. `!` is safe under
+      // noUncheckedIndexedAccess (#450).
+      const folder = parts[0]!;
       const existing = folderMap.get(folder) ?? [];
       existing.push({
         id: file.id,

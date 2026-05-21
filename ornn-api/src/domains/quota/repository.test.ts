@@ -82,8 +82,8 @@ describe("UT-QUOTAREPO-002 upsert is idempotent on _id", () => {
       .find({ userId: "u1", surface: "playground" })
       .toArray();
     expect(docs.length).toBe(1);
-    expect(docs[0]._id as unknown as string).toBe(id);
-    expect((docs[0] as unknown as { used: number }).used).toBe(2);
+    expect(docs[0]!._id as unknown as string).toBe(id);
+    expect((docs[0]! as unknown as { used: number }).used).toBe(2);
   });
 });
 
@@ -252,6 +252,6 @@ describe("listGrantAudit pagination + filter", () => {
     });
     const res = await repo.listGrantAudit({ page: 1, pageSize: 50, targetUserId: "uA" });
     expect(res.total).toBe(1);
-    expect(res.items[0].targetUserId).toBe("uA");
+    expect(res.items[0]!.targetUserId).toBe("uA");
   });
 });

@@ -21,14 +21,18 @@ export function resolveZipRoot(zip: JSZip, allPaths: string[]): ZipRoot {
   for (const path of cleanPaths) {
     const parts = path.split("/").filter(Boolean);
     if (parts.length > 0) {
-      topLevel.add(parts[0]);
+      // Length-guarded above — `parts[0]` is guaranteed defined. `!`
+      // is safe under noUncheckedIndexedAccess (#450).
+      topLevel.add(parts[0]!);
     }
   }
 
   const topLevelEntries = Array.from(topLevel);
 
   if (topLevelEntries.length === 1) {
-    const candidate = topLevelEntries[0];
+    // Same length guard: the if-branch only fires when topLevelEntries
+    // has exactly one element.
+    const candidate = topLevelEntries[0]!;
     const candidateFolder = zip.files[candidate + "/"];
     const hasNestedFiles = cleanPaths.some((p) => p.startsWith(candidate + "/") && p !== candidate + "/");
     if ((candidateFolder && candidateFolder.dir) || hasNestedFiles) {
@@ -39,7 +43,7 @@ export function resolveZipRoot(zip: JSZip, allPaths: string[]): ZipRoot {
           const relative = path.slice(prefix.length);
           const parts = relative.split("/").filter(Boolean);
           if (parts.length > 0) {
-            innerEntries.add(parts[0]);
+            innerEntries.add(parts[0]!);
           }
         }
       }

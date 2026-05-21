@@ -85,10 +85,10 @@ export function useSkillGeneration(): UseSkillGenerationReturn {
     setState((prev) => {
       const messages = [...prev.chatMessages];
       const lastIdx = messages.length - 1;
-      if (lastIdx >= 0 && messages[lastIdx].role === "assistant" && messages[lastIdx].isStreaming) {
+      if (lastIdx >= 0 && messages[lastIdx]!.role === "assistant" && messages[lastIdx]!.isStreaming) {
         messages[lastIdx] = {
-          ...messages[lastIdx],
-          content: messages[lastIdx].content + buffered,
+          ...messages[lastIdx]!,
+          content: messages[lastIdx]!.content + buffered,
         };
       }
       return {
@@ -129,10 +129,10 @@ export function useSkillGeneration(): UseSkillGenerationReturn {
           setState((prev) => {
             const messages = [...prev.chatMessages];
             const lastIdx = messages.length - 1;
-            if (lastIdx >= 0 && messages[lastIdx].role === "assistant" && messages[lastIdx].isStreaming) {
+            if (lastIdx >= 0 && messages[lastIdx]!.role === "assistant" && messages[lastIdx]!.isStreaming) {
               messages[lastIdx] = {
-                ...messages[lastIdx],
-                content: messages[lastIdx].content + buffered,
+                ...messages[lastIdx]!,
+                content: messages[lastIdx]!.content + buffered,
               };
             }
             return {
@@ -189,10 +189,10 @@ export function useSkillGeneration(): UseSkillGenerationReturn {
           setState((prev) => {
             const messages = [...prev.chatMessages];
             const lastIdx = messages.length - 1;
-            if (lastIdx >= 0 && messages[lastIdx].role === "assistant" && messages[lastIdx].isStreaming) {
+            if (lastIdx >= 0 && messages[lastIdx]!.role === "assistant" && messages[lastIdx]!.isStreaming) {
               messages[lastIdx] = {
-                ...messages[lastIdx],
-                content: messages[lastIdx].content + buffered,
+                ...messages[lastIdx]!,
+                content: messages[lastIdx]!.content + buffered,
               };
             }
             return {

@@ -254,10 +254,14 @@ export class OrnnClient {
     if (token) {
       headers.Authorization = `Bearer ${token}`;
     }
+    // exactOptionalPropertyTypes (#450): `RequestInit.body` is
+    // `BodyInit | null`, not optional-`undefined`. Only set the key
+    // when we actually have a body so we don't pass `body: undefined`
+    // (rejected under the stricter contract).
     return this.fetchImpl(`${this.baseUrl}/api/v1${path}`, {
       method,
-      body: init.body,
       headers,
+      ...(init.body !== undefined ? { body: init.body } : {}),
     });
   }
 }
@@ -274,12 +278,17 @@ async function parseError(res: Response): Promise<OrnnError> {
 
 function buildError(status: number, body: ProblemJson | null): OrnnError {
   if (body && (body.code || body.detail || body.title)) {
+    // exactOptionalPropertyTypes (#450): only stamp `requestId` /
+    // `errors` keys when the upstream actually provided them — the
+    // payload type is `requestId?: string`, not `string | undefined`,
+    // so `{ requestId: undefined }` is a type error under the
+    // stricter contract.
     const payload: OrnnErrorPayload = {
       status: body.status ?? status,
       code: body.code ?? "unknown_error",
       message: body.detail ?? body.title ?? `Ornn API returned ${status}`,
-      requestId: body.requestId,
-      errors: body.errors,
+      ...(body.requestId !== undefined ? { requestId: body.requestId } : {}),
+      ...(body.errors !== undefined ? { errors: body.errors } : {}),
     };
     return new OrnnError(payload);
   }

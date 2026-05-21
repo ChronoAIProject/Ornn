@@ -10,7 +10,9 @@ const TAG_COLORS: NonNullable<BadgeProps["color"]>[] = ["cyan", "magenta", "yell
 
 function getTagColor(tag: string): NonNullable<BadgeProps["color"]> {
   const hash = tag.split("").reduce((a, c) => a + c.charCodeAt(0), 0);
-  return TAG_COLORS[hash % TAG_COLORS.length];
+  // `hash % TAG_COLORS.length` is always in-range for a non-empty
+  // array. `!` is safe under noUncheckedIndexedAccess (#450).
+  return TAG_COLORS[hash % TAG_COLORS.length]!;
 }
 
 /** Format a date string to exact SGT (Asia/Singapore) timestamp */

@@ -193,7 +193,7 @@ describe("UT-ADMQROUTE-001 GET /admin/quota/users surface=playground", () => {
       };
     };
     expect(json.data.items.length).toBe(1);
-    expect(json.data.items[0].userId).toBe("u1");
+    expect(json.data.items[0]!.userId).toBe("u1");
     expect(json.data.monthMarker).toMatch(/^\d{4}-\d{2}$/);
   });
 });
@@ -206,7 +206,7 @@ describe("UT-ADMQROUTE-002 surface=skillGen filter", () => {
     });
     expect(res.status).toBe(200);
     const json = (await res.json()) as { data: { items: Array<{ defaultAllotment: number }> } };
-    expect(json.data.items[0].defaultAllotment).toBe(10);
+    expect(json.data.items[0]!.defaultAllotment).toBe(10);
   });
 });
 
@@ -244,7 +244,7 @@ describe("UT-ADMQROUTE-006 remaining floors at 0", () => {
       headers: authHeaders(),
     });
     const json = (await res.json()) as { data: { items: Array<{ remaining: number }> } };
-    expect(json.data.items[0].remaining).toBe(0);
+    expect(json.data.items[0]!.remaining).toBe(0);
   });
 });
 

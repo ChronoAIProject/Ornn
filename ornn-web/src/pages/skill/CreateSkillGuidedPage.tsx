@@ -354,7 +354,10 @@ export function CreateSkillGuidedPage() {
           <CompactStepIndicator
             currentStep={currentStep}
             totalSteps={translatedSteps.length}
-            currentLabel={translatedSteps[currentStep].label}
+            // `currentStep` is bounded by `translatedSteps.length`
+            // (`setCurrentStep` clamps in handlers above). `!` is safe
+            // under noUncheckedIndexedAccess (#450).
+            currentLabel={translatedSteps[currentStep]!.label}
           />
         </div>
 

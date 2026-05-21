@@ -37,14 +37,17 @@ interface GenerateSkillModalProps {
 
 type GenerationStep = "select" | "generating" | "done" | "error";
 
-const STEP_MESSAGES: Record<string, string> = {
+// Concrete keyed type rather than `Record<string, string>` so member
+// access under noUncheckedIndexedAccess (#450) returns `string` (not
+// `string | undefined`) — these keys are compile-time-known.
+const STEP_MESSAGES = {
   fetching_spec: "Fetching OpenAPI spec...",
   fetching_refs: "Fetching reference content...",
   generating: "Generating skill package with AI...",
   validating: "Validating skill format...",
   packaging: "Packaging and uploading skill...",
   done: "Skill generated successfully!",
-};
+} as const;
 
 function isValidUrl(str: string): boolean {
   try {

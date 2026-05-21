@@ -32,7 +32,11 @@ export class OrnnError extends Error implements OrnnErrorPayload {
     this.name = "OrnnError";
     this.status = payload.status;
     this.code = payload.code;
-    this.requestId = payload.requestId;
-    this.errors = payload.errors;
+    // exactOptionalPropertyTypes (#450): `{ foo?: string }` no longer
+    // accepts an assignment of `string | undefined`. Only assign when
+    // the upstream value is actually set so we don't materialise an
+    // `undefined`-valued key.
+    if (payload.requestId !== undefined) this.requestId = payload.requestId;
+    if (payload.errors !== undefined) this.errors = payload.errors;
   }
 }

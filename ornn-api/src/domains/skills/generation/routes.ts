@@ -166,13 +166,15 @@ async function analyzePackageContent(zipBuffer: Uint8Array): Promise<string> {
 
   for (const path of allPaths) {
     const file = zip.files[path];
-    if (file.dir) continue;
+    // allPaths is `Object.keys(zip.files)`, but noUncheckedIndexedAccess
+    // (#450) widens the lookup to `T | undefined`. Defensive skip.
+    if (!file || file.dir) continue;
 
     // Check if this is a relevant file
     const segments = path.split("/").filter(Boolean);
     let relativePath = path;
     if (segments.length > 1) {
-      const firstEntry = segments[0];
+      const firstEntry = segments[0]!;
       const folderEntry = zip.files[firstEntry + "/"];
       if (folderEntry && folderEntry.dir) {
         relativePath = segments.slice(1).join("/");

@@ -268,7 +268,9 @@ function shallowEqual(a: unknown, b: unknown): boolean {
 }
 
 function zodToAppError(err: ZodError): AppError {
-  const first = err.issues[0];
+  // ZodError always carries at least one issue when `safeParse` returns
+  // success: false. `!` is safe under noUncheckedIndexedAccess (#450).
+  const first = err.issues[0]!;
   const path = first.path.join(".");
   const msg = path.length > 0 ? `${path}: ${first.message}` : first.message;
   return AppError.badRequest("invalid_setting", msg);

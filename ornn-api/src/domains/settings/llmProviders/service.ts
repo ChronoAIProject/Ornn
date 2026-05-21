@@ -334,7 +334,10 @@ export class LlmProvidersService {
       return { kind: "no-models-enabled", surface };
     }
     enabledList.sort((a, b) => a.displayName.localeCompare(b.displayName));
-    const winner = defaultMatch ?? enabledList[0];
+    // Length-guarded above (`enabledList.length === 0` returns), so
+    // index 0 is guaranteed defined — `!` is safe under
+    // `noUncheckedIndexedAccess` (#450).
+    const winner = defaultMatch ?? enabledList[0]!;
     return {
       kind: "ok",
       modelId: winner.modelId,
@@ -489,7 +492,9 @@ export class LlmProvidersService {
         `Model "${modelId}" not on provider "${existing.name}"`,
       );
     }
-    const current = existing.models[idx];
+    // idx is guaranteed in-range — we just confirmed via findIndex
+    // above. `!` is safe under noUncheckedIndexedAccess (#450).
+    const current = existing.models[idx]!;
     if (current.removed) {
       throw AppError.badRequest(
         "MODEL_REMOVED",
@@ -805,7 +810,9 @@ function parse<T extends z.ZodTypeAny>(
 }
 
 function zodToAppError(err: ZodError): AppError {
-  const first = err.issues[0];
+  // ZodError always carries at least one issue when `safeParse` returns
+  // success: false. `!` is safe under noUncheckedIndexedAccess (#450).
+  const first = err.issues[0]!;
   const path = first.path.join(".");
   const msg = path.length > 0 ? `${path}: ${first.message}` : first.message;
   return AppError.badRequest("invalid_provider_input", msg);

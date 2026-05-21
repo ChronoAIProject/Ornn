@@ -809,7 +809,11 @@ export function SkillDetailPage() {
         onClose={() => setShowVersions(false)}
         versions={versionList}
         currentVersion={skill.version}
-        latestVersion={latestVersion}
+        // `latestVersion` is `versionList[0]?.version`; modal only
+        // opens when versionList is non-empty so the value is set,
+        // but `?? ""` keeps the prop signature simple under
+        // noUncheckedIndexedAccess (#450).
+        latestVersion={latestVersion ?? ""}
         canManage={canManageVersions}
         auditSummary={auditSummaryByVersion}
         onSelectVersion={handleVersionChange}

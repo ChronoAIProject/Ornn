@@ -111,7 +111,10 @@ export class LlmProvidersRepository {
     const filterField = `m.defaultFor${surface}` as const;
     const arrayFilters: Document[] = [{ [filterField]: true }];
     if (keep) {
-      arrayFilters[0]["m.id"] = { $ne: keep.modelId };
+      // arrayFilters[0] is the single-element object we just pushed
+      // above — guaranteed defined. `!` is safe under
+      // noUncheckedIndexedAccess (#450).
+      arrayFilters[0]!["m.id"] = { $ne: keep.modelId };
     }
     const filter: Document = keep
       ? { _id: { $ne: keep.providerId as unknown as Document["_id"] } }

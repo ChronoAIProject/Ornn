@@ -62,7 +62,10 @@ export function buildTarHeader(path: string, fileSize: number): Uint8Array {
   // Calculate and set checksum
   let checksum = 0;
   for (let i = 0; i < BLOCK_SIZE; i++) {
-    checksum += header[i];
+    // `header` is a `BLOCK_SIZE`-byte Uint8Array — i is bounded by
+    // BLOCK_SIZE, so `header[i]` is always defined. `!` is safe under
+    // noUncheckedIndexedAccess (#450).
+    checksum += header[i]!;
   }
   const checksumOctal = checksum.toString(8).padStart(6, "0") + "\0 ";
   header.set(encoder.encode(checksumOctal), 148);
