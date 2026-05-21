@@ -11,9 +11,9 @@
  * @module pages/admin/BroadcastsPage
  */
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -149,8 +149,12 @@ export function BroadcastsPage() {
     return map;
   }, [emailLookupQuery.data]);
 
-  const recipientsTooltip = (ids: string[]): string =>
-    ids.map((id) => emailById.get(id) ?? id).join("\n");
+  // #507 — the old `\n`-joined native `title` tooltip was unreadable in
+  // Safari (collapses `\n` to a single space) and unusable for many
+  // recipients on any browser. Resolve to emails once here; the popover
+  // renders the list scrollably so long counts no longer truncate.
+  const resolveEmails = (ids: string[]): string[] =>
+    ids.map((id) => emailById.get(id) ?? id);
 
   const pendingDeleteTitle = pendingDelete
     ? pickLocalized(
@@ -269,14 +273,10 @@ export function BroadcastsPage() {
                             {t("adminPages.broadcasts.recipients.summaryAll")}
                           </span>
                         ) : (
-                          <span
-                            title={recipientsTooltip(b.recipientUserIds)}
-                            className="inline-flex items-center gap-1 rounded-sm border border-subtle bg-elevated/40 px-2 py-0.5 font-mono text-[11px] text-strong"
-                          >
-                            {t("adminPages.broadcasts.recipients.summaryCount", {
-                              count: b.recipientUserIds.length,
-                            })}
-                          </span>
+                          <RecipientsPopover
+                            count={b.recipientUserIds.length}
+                            emails={resolveEmails(b.recipientUserIds)}
+                          />
                         )}
                       </td>
                       <td className="px-4 py-3 align-top font-mono text-[11px] text-meta">
@@ -341,5 +341,92 @@ export function BroadcastsPage() {
         isLoading={deleteMut.isPending}
       />
     </motion.div>
+  );
+}
+
+/**
+ * Click/hover popover that lists broadcast recipients (#507). Replaces
+ * the prior native `title` tooltip whose `\n`-joined string rendered as
+ * one run-on line in Safari and truncated off-screen for many
+ * recipients on every browser.
+ *
+ * Behaviour mirrors `CategoryTooltip`:
+ *   - hover OR click opens; click-outside / second-click closes
+ *   - `aria-expanded` reflects state for screen readers
+ *   - the list is `max-h-64 overflow-y-auto` so 20+ recipients stay
+ *     readable instead of overflowing the viewport
+ *
+ * Kept inline because BroadcastsPage is the only consumer; promoting
+ * it to `components/ui/` would be premature.
+ */
+function RecipientsPopover({ count, emails }: { count: number; emails: string[] }) {
+  const { t } = useTranslation();
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setIsOpen(false);
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleEsc);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleEsc);
+    };
+  }, [isOpen]);
+
+  return (
+    <div ref={containerRef} className="relative inline-flex">
+      <button
+        type="button"
+        aria-expanded={isOpen}
+        onClick={() => setIsOpen((prev) => !prev)}
+        onMouseEnter={() => setIsOpen(true)}
+        onFocus={() => setIsOpen(true)}
+        className="inline-flex items-center gap-1 rounded-sm border border-subtle bg-elevated/40 px-2 py-0.5 font-mono text-[11px] text-strong hover:border-accent/40 hover:text-accent transition-colors"
+      >
+        {t("adminPages.broadcasts.recipients.summaryCount", { count })}
+      </button>
+
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.96 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.96 }}
+            transition={{ duration: 0.12 }}
+            role="dialog"
+            aria-label={t("adminPages.broadcasts.recipients.popoverAria", {
+              defaultValue: "Recipient list",
+            })}
+            className="absolute left-0 top-7 z-50 w-72 rounded-md border border-strong-edge bg-card p-3 card-impression"
+          >
+            <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-meta mb-2">
+              {t("adminPages.broadcasts.recipients.popoverHeader", {
+                defaultValue: "Recipients ({{count}})",
+                count,
+              })}
+            </p>
+            <ul className="max-h-64 overflow-y-auto space-y-1 pr-1">
+              {emails.map((email, i) => (
+                <li
+                  key={`${email}-${i}`}
+                  className="font-mono text-[11px] text-strong break-all"
+                >
+                  {email}
+                </li>
+              ))}
+            </ul>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   );
 }
