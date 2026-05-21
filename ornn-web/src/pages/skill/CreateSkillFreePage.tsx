@@ -280,9 +280,14 @@ export function CreateSkillFreePage() {
     } catch (err) {
       const message = translateError(err, t("free.uploadFailed"));
       addToast({ type: "error", message });
-      setPageState(
-        validationResult?.status === "warning" ? "warning" : "valid",
-      );
+      // #652 — restore the page to whatever pre-submit state the
+      // frontend originally derived. The previous code unconditionally
+      // forced "valid" / "warning", which made the success banner
+      // ("Skill package structure is valid.") render on top of the
+      // backend's rejection toast — contradictory and confusing,
+      // especially when the user had skip-validation toggled past an
+      // "invalid" structure.
+      setPageState(validationResult?.status ?? "valid");
     }
   };
 
