@@ -182,7 +182,13 @@ export function PlaygroundPage() {
     );
   }
 
-  if (isOverLimit && playgroundSnap && quotaSnapshot) {
+  // #624 (sibling) — only kick to OverLimitPage on a *fresh* arrival.
+  // Once the user has messages on screen, their conversation
+  // (including a just-completed final allowed run) must not be
+  // replaced by the quota gate when the post-charge quota poll
+  // arrives. The Send button is already disabled via `isOverLimit`
+  // inside the composer, so no new runs slip through.
+  if (isOverLimit && playgroundSnap && quotaSnapshot && !conversationActive) {
     return (
       <PageTransition>
         <OverLimitPage
