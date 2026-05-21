@@ -214,6 +214,16 @@ export function StepBasicInfo({
                 placeholder={t("guided.envVarsPlaceholder")}
                 helperText={t("guided.envVarsHelper")}
                 badgeColor="yellow"
+                // #683 — frontend + backend frontmatter schemas both
+                // cap `runtime-env-var` at 30. Without `max={30}` the
+                // component defaulted to 50, so the input happily
+                // accepted up to 50 chips and only the Zod submit-time
+                // validator caught the overage — NEXT just appeared to
+                // not work. Passing the explicit cap surfaces the
+                // limit in the field header (`N/30`), disables the
+                // input at the cap, and rejects pasted-past-cap input
+                // inline with "Maximum 30 values".
+                max={30}
                 validate={(v) =>
                   /^[A-Z_][A-Z0-9_]*$/.test(v)
                     ? null
