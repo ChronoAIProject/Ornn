@@ -547,6 +547,14 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
   /**
    * GET /skills/:idOrName/json — Return skill package as JSON with all file contents.
    * Requires: ornn:skill:read
+   *
+   * Query params:
+   *   - `version` (optional, #639) — literal `<major>.<minor>` or a
+   *     dist-tag (#463). When provided, the response carries that
+   *     version's package; otherwise latest is returned. Lets the
+   *     install-prompt `curl` / `nyxid proxy request` commands pin
+   *     to the version the user was viewing instead of silently
+   *     pulling whatever's `latest` at install time.
    */
   app.get(
     "/skills/:idOrName/json",
@@ -554,7 +562,8 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
     requirePermission("ornn:skill:read"),
     async (c) => {
       const idOrName = c.req.param("idOrName");
-      logger.info({ idOrName }, "Skill jsonize request");
+      const version = c.req.query("version");
+      logger.info({ idOrName, version: version ?? null }, "Skill jsonize request");
 
       // Visibility check (#567) — the package contents endpoint must
       // not be more permissive than the metadata endpoint. Load the
@@ -578,7 +587,7 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
         }
       }
 
-      const result = await skillService.getSkillJson(idOrName);
+      const result = await skillService.getSkillJson(idOrName, version);
       // Programmatic pull — closest signal to the north-star metric.
       // Fire-and-forget; the analytics service swallows its own errors.
       const authCtx = c.get("auth");
