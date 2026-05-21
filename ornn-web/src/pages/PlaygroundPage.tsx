@@ -18,217 +18,112 @@
  * @module pages/PlaygroundPage
  */
 
-import { useState, useRef, useEffect, useMemo, useCallback } from "react";
+import { useMemo } from "react";
 import { useSearchParams, Link } from "react-router-dom";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { motion, AnimatePresence } from "framer-motion";
 import { PageTransition } from "@/components/layout/PageTransition";
-import { ChatInput, type ChatInputHandle } from "@/components/playground/ChatInput";
+import { ChatInput } from "@/components/playground/ChatInput";
 import { ModelPicker } from "@/components/models/ModelPicker";
 import { OverLimitPage } from "@/components/quota/OverLimitPage";
 import { QuotaInline } from "@/components/quota/QuotaInline";
 import { EnvIcon, PackageIcon } from "@/components/icons";
-import {
-  createDefaultSkillMetadata,
-  type SkillMetadata,
-} from "@/types/skillPackage";
-import type { SkillCategory } from "@/utils/constants";
-import { useSkill } from "@/hooks/useSkills";
-import { useSkillPackage } from "@/hooks/useSkillPackage";
-import { usePlaygroundChat } from "@/hooks/usePlaygroundChat";
-import { useMyQuota } from "@/hooks/useQuota";
 import { useTranslation } from "react-i18next";
-import {
-  extractEnvVarKeys,
-  isRuntimeBased,
-  defaultPromptStarters,
-} from "@/components/playground/PlaygroundHelpers";
+import { defaultPromptStarters } from "@/components/playground/PlaygroundHelpers";
 import { PlaygroundEmptyHero } from "@/components/playground/PlaygroundEmptyHero";
 import { PlaygroundEnvDrawerBody } from "@/components/playground/PlaygroundEnvDrawerBody";
 import { PlaygroundPackageDrawerBody } from "@/components/playground/PlaygroundPackageDrawerBody";
 import {
   PlaygroundRail,
-  type DrawerKey,
   type PlaygroundRailTab,
 } from "@/components/playground/PlaygroundRail";
 import { PlaygroundConversation } from "@/components/playground/PlaygroundConversation";
+import { usePlaygroundSession } from "@/hooks/usePlaygroundSession";
 
 
 export function PlaygroundPage() {
   const { t } = useTranslation();
   const [searchParams] = useSearchParams();
   const skillName = searchParams.get("skill");
+  const session = usePlaygroundSession(skillName);
 
-  const { data: skill, isLoading: skillLoading, error: skillError } = useSkill(skillName ?? "");
+  // Destructure for JSX readability — every name below came out of
+  // `usePlaygroundSession`; the hook is the single source of truth
+  // for queries / refs / state / handlers.
   const {
-    files: packageFiles,
-    fileContents: packageContents,
-    isLoading: packageLoading,
-  } = useSkillPackage(skill?.presignedPackageUrl);
-
-  const envVarKeys = useMemo(() => extractEnvVarKeys(skill?.metadata as Record<string, unknown> ?? null), [skill?.metadata]);
-  const needsEnvVars = useMemo(() => isRuntimeBased(skill?.metadata as Record<string, unknown> ?? null) && envVarKeys.length > 0, [skill?.metadata, envVarKeys]);
-  const [envVars, setEnvVars] = useState<Record<string, string>>({});
-
-  const allEnvVarsFilled = useMemo(() => {
-    if (!needsEnvVars) return true;
-    return envVarKeys.every((key) => envVars[key]?.trim());
-  }, [needsEnvVars, envVarKeys, envVars]);
-
-  const handleEnvVarChange = useCallback((key: string, value: string) => {
-    setEnvVars((prev) => ({ ...prev, [key]: value }));
-  }, []);
-
-  const [pickedModelId, setPickedModelId] = useState<string | null>(null);
-
-  const { data: quotaSnapshot } = useMyQuota();
-  const playgroundSnap = quotaSnapshot?.playground;
-  const isOverLimit =
-    Boolean(playgroundSnap) &&
-    !quotaSnapshot?.isAdmin &&
-    playgroundSnap!.remaining <= 0;
-
-  const {
+    skill,
+    skillLoading,
+    skillError,
+    packageFiles,
+    packageContents,
+    packageLoading,
+    quotaSnapshot,
+    playgroundSnap,
+    isOverLimit,
     messages,
     isStreaming,
     toolCallStatuses,
     fileOutputs,
     error,
     currentAssistantContent,
-    sendMessage,
     abort,
     clearChat,
-  } = usePlaygroundChat();
+    messagesEndRef,
+    messagesScrollRef,
+    chatInputRef,
+    envVarKeys,
+    needsEnvVars,
+    envVars,
+    allEnvVarsFilled,
+    envIncomplete,
+    handleEnvVarChange,
+    handleSend,
+    handleStarterClick,
+    setPickedModelId,
+    pinnedDrawer,
+    setPinnedDrawer,
+    setHoverDrawer,
+    activeDrawer,
+    openHover,
+    scheduleHoverClose,
+    togglePin,
+    previewMetadata,
+  } = session;
 
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const messagesScrollRef = useRef<HTMLDivElement>(null);
-  const chatInputRef = useRef<ChatInputHandle>(null);
-  // Tracks whether the user has manually scrolled away from the bottom.
-  // While true, we do NOT yank them back on each token flush.
-  const stickToBottomRef = useRef(true);
+  // Memoized: the suggestion-chip set depends only on the skill name
+  // (i18n-substituted into the prompt body). Recomputing on every render
+  // works fine but caching is cheap and lets PlaygroundEmptyHero's
+  // reference-equality short-circuit do its job.
+  const starters = useMemo(
+    () => (skillName ? defaultPromptStarters(skillName, t) : []),
+    [skillName, t],
+  );
 
-  // Detect manual scroll-away: if the scrollbar is more than ~80px from
-  // the bottom we stop auto-scrolling. The user can return to live
-  // tailing by scrolling back to the bottom.
-  useEffect(() => {
-    const el = messagesScrollRef.current;
-    if (!el) return;
-    const onScroll = () => {
-      const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-      stickToBottomRef.current = distFromBottom < 80;
-    };
-    el.addEventListener("scroll", onScroll, { passive: true });
-    return () => el.removeEventListener("scroll", onScroll);
-  }, []);
+  const conversationActive = messages.length > 0 || isStreaming || !!currentAssistantContent;
 
-  // Auto-scroll only when stick-to-bottom is on (i.e. user hasn't
-  // scrolled up). Uses `auto` (instant) instead of `smooth` during
-  // streaming because `smooth` queues animations and gets choppy with
-  // 50ms-batched token flushes.
-  useEffect(() => {
-    if (!stickToBottomRef.current) return;
-    messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
-  }, [messages, currentAssistantContent]);
-
-  const handleSend = useCallback((content: string) => {
-    sendMessage(
-      content,
-      skillName ?? undefined,
-      needsEnvVars ? envVars : undefined,
-      pickedModelId ?? undefined,
-    );
-  }, [sendMessage, skillName, envVars, needsEnvVars, pickedModelId]);
-
-  const handleStarterClick = useCallback((body: string) => {
-    chatInputRef.current?.setValue(body);
-  }, []);
-
-  // ── Drawer state ──
-  // `hover` = mouse is on a rail tab or inside the drawer (auto-close
-  // when it leaves). `pinned` = clicked open; stays until clicked
-  // again, click outside, or Esc.
-  const [hoverDrawer, setHoverDrawer] = useState<DrawerKey | null>(null);
-  const [pinnedDrawer, setPinnedDrawer] = useState<DrawerKey | null>(null);
-  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const openHover = useCallback((key: DrawerKey) => {
-    if (closeTimerRef.current) {
-      clearTimeout(closeTimerRef.current);
-      closeTimerRef.current = null;
-    }
-    setHoverDrawer(key);
-  }, []);
-  const scheduleHoverClose = useCallback(() => {
-    if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
-    closeTimerRef.current = setTimeout(() => {
-      setHoverDrawer(null);
-      closeTimerRef.current = null;
-    }, 220);
-  }, []);
-  const togglePin = useCallback((key: DrawerKey) => {
-    setPinnedDrawer((cur) => (cur === key ? null : key));
-    setHoverDrawer(null);
-  }, []);
-
-  // Close pinned drawer on Esc
-  useEffect(() => {
-    if (!pinnedDrawer) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setPinnedDrawer(null);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [pinnedDrawer]);
-
-  // Auto-pin Env when env vars are missing — the user MUST fill them
-  // before chatting, so make it obvious without forcing them to discover
-  // the drawer hint.
-  const envIncomplete = needsEnvVars && !allEnvVarsFilled;
-  useEffect(() => {
-    if (envIncomplete) setPinnedDrawer("env");
-  }, [envIncomplete]);
-
-  // ── Per-skill session lifecycle ──
-  // Each Playground visit (and each switch between skills) starts a
-  // fresh chat. Without this, the Zustand store carries stale messages
-  // across navigation — confusing UX and breaking any per-session
-  // analytics that assume a session begins on mount.
-  useEffect(() => {
-    clearChat();
-    setEnvVars({});
-    stickToBottomRef.current = true;
-    return () => {
-      clearChat();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [skillName]);
-
-  const activeDrawer = pinnedDrawer ?? hoverDrawer;
-
-  const skillCategory = (skill?.metadata as Record<string, unknown> | null)?.category as string | undefined;
-
-  // Synthesise a SkillMetadata-shaped object from the registry skill record
-  // so SkillPackagePreview can render the same flat identity strip as the
-  // generative page. The preview only reads name / description / category /
-  // tag, so we don't need to faithfully reproduce the rest of the shape —
-  // `createDefaultSkillMetadata` fills the unused fields with safe defaults.
-  // Declared above the early-return guards so the hook order is stable.
-  const previewMetadata = useMemo<SkillMetadata | null>(() => {
-    if (!skill) return null;
-    return createDefaultSkillMetadata({
-      name: skill.name,
-      description: skill.description ?? "",
-      version: skill.version,
-      metadata: {
-        category: (skillCategory as SkillCategory) ?? "plain",
-        runtime: [],
-        runtimeDependency: [],
-        runtimeEnvVar: [],
-        toolList: [],
-        tag: skill.tags ?? [],
-      },
-    });
-  }, [skill, skillCategory]);
+  // ── Rail tabs ───────────────────────────────────────────────────────
+  // Inline because the tab list flips with `needsEnvVars` — pulling it
+  // into the hook would force a re-build of PlaygroundRailTab[] in every
+  // hook consumer that didn't care.
+  const railTabs: PlaygroundRailTab[] = [
+    ...(needsEnvVars
+      ? [
+          {
+            key: "env" as const,
+            ariaLabel: t("aria.playgroundEnvDrawer"),
+            tip: "ENV",
+            Icon: EnvIcon,
+            warn: envIncomplete,
+          },
+        ]
+      : []),
+    {
+      key: "package" as const,
+      ariaLabel: t("aria.skillPackageDrawer"),
+      tip: "PACKAGE",
+      Icon: PackageIcon,
+    },
+  ];
 
   // No skill specified
   if (!skillName) {
@@ -299,33 +194,6 @@ export function PlaygroundPage() {
     );
   }
 
-  const starters = defaultPromptStarters(skillName, t);
-  const conversationActive = messages.length > 0 || !!currentAssistantContent || isStreaming;
-
-  // Right-edge rail tabs. Each tab renders as a compact icon handle —
-  // the `tip` is a horizontal mono-uppercase label shown on hover (matches
-  // the drawer header `[§ NAME]` voice). The Package drawer now hosts the
-  // skill identity (name + category + tags + description) at the top of
-  // `SkillPackagePreview`, so a separate Skill tab would be redundant.
-  const railTabs: PlaygroundRailTab[] = [
-    ...(needsEnvVars
-      ? [
-          {
-            key: "env" as const,
-            ariaLabel: t("aria.playgroundEnvDrawer"),
-            tip: "ENV",
-            Icon: EnvIcon,
-            warn: envIncomplete,
-          },
-        ]
-      : []),
-    {
-      key: "package",
-      ariaLabel: t("aria.skillPackageDrawer"),
-      tip: "PACKAGE",
-      Icon: PackageIcon,
-    },
-  ];
 
   return (
     <PageTransition>
