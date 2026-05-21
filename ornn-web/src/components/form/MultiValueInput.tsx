@@ -15,20 +15,14 @@ export interface MultiValueInputProps {
   values: string[];
   /** Callback when values change */
   onChange: (values: string[]) => void;
-  /** Input placeholder text */
-  placeholder?: string;
-  /** Helper text shown below the input */
-  helperText?: string;
-  /** Badge color for value chips */
+  // Optionals widen to `T | undefined` for exactOptionalPropertyTypes (#657).
+  placeholder?: string | undefined;
+  helperText?: string | undefined;
   badgeColor?: BadgeProps["color"];
-  /** Per-value validation function. Return null if valid, or an error message string. */
-  validate?: (value: string) => string | null;
-  /** Error message from form validation */
-  error?: string;
-  /** Maximum number of values */
-  max?: number;
-  /** Additional CSS classes */
-  className?: string;
+  validate?: ((value: string) => string | null) | undefined;
+  error?: string | undefined;
+  max?: number | undefined;
+  className?: string | undefined;
 }
 
 export function MultiValueInput({

@@ -13,21 +13,18 @@ export type SystemFilter = "any" | "only" | "exclude";
 export type SkillScope = "public" | "private" | "mixed" | "shared-with-me" | "mine";
 
 export interface SkillSearchParams {
-  query?: string;
-  mode?: "keyword" | "semantic";
-  scope?: SkillScope;
-  page?: number;
-  pageSize?: number;
-  /** System-skill tri-state; default "any". */
-  systemFilter?: SystemFilter;
-  /** Registry chip filters. Comma-joined client-side, parsed back on the server. */
-  sharedWithOrgs?: string[];
-  sharedWithUsers?: string[];
-  createdByAny?: string[];
-  /** Restrict to skills tied to this NyxID service (system-tab filter). */
-  nyxidServiceId?: string;
-  /** Skill must have ALL listed tags (AND match). */
-  tags?: string[];
+  // Optionals widen to `T | undefined` for exactOptionalPropertyTypes (#657).
+  query?: string | undefined;
+  mode?: "keyword" | "semantic" | undefined;
+  scope?: SkillScope | undefined;
+  page?: number | undefined;
+  pageSize?: number | undefined;
+  systemFilter?: SystemFilter | undefined;
+  sharedWithOrgs?: string[] | undefined;
+  sharedWithUsers?: string[] | undefined;
+  createdByAny?: string[] | undefined;
+  nyxidServiceId?: string | undefined;
+  tags?: string[] | undefined;
 }
 
 export interface SkillSearchResult {
@@ -35,41 +32,31 @@ export interface SkillSearchResult {
   name: string;
   description: string;
   createdBy: string;
-  createdByEmail?: string;
-  createdByDisplayName?: string;
+  // Optionals widen to `T | undefined` for exactOptionalPropertyTypes (#657).
+  createdByEmail?: string | undefined;
+  createdByDisplayName?: string | undefined;
   createdOn: string;
   updatedOn: string;
   isPrivate: boolean;
   tags: string[];
-  /** Why the caller can see this skill; omitted for anonymous callers. */
-  myAccessReason?: AccessReason;
-  /** Present when myAccessReason === "shared-via-org". */
-  sharedViaOrgId?: string;
-  /** True when any of the skill's tags matches a slug of a NyxID service
-   *  the caller can manage. */
-  isSystemForMe?: boolean;
-  /** The first NyxID service that matched, used to render the system chip. */
-  systemForService?: { id: string; slug: string; label: string };
-  /** Compact ACL view for card-level badges. */
-  permissionSummary?: {
-    isPrivate: boolean;
-    sharedUserCount: number;
-    sharedOrgCount: number;
-  };
+  myAccessReason?: AccessReason | undefined;
+  sharedViaOrgId?: string | undefined;
+  isSystemForMe?: boolean | undefined;
+  systemForService?: { id: string; slug: string; label: string } | undefined;
+  permissionSummary?:
+    | {
+        isPrivate: boolean;
+        sharedUserCount: number;
+        sharedOrgCount: number;
+      }
+    | undefined;
   /** NyxID service tie surfaced on cards. `null` when untied. */
-  nyxidServiceId?: string | null;
-  nyxidServiceSlug?: string | null;
-  nyxidServiceLabel?: string | null;
+  nyxidServiceId?: string | null | undefined;
+  nyxidServiceSlug?: string | null | undefined;
+  nyxidServiceLabel?: string | null | undefined;
   /** True iff tied to an admin/platform NyxID service. */
-  isSystemSkill?: boolean;
-  /**
-   * True when the skill has a `source` pointer of type "github" — i.e.
-   * the owner has linked it to a folder in a public GitHub repo. The
-   * card uses this to render a small non-clickable GitHub mark in the
-   * badge row. The actual repo URL is not exposed in search results —
-   * users open the detail page to follow it.
-   */
-  hasGithubSource?: boolean;
+  isSystemSkill?: boolean | undefined;
+  hasGithubSource?: boolean | undefined;
 }
 
 export interface SkillSearchResponse {

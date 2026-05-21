@@ -14,8 +14,9 @@ function getTagColor(tag: string): BadgeProps["color"] {
 export interface TagInputProps {
   tags: string[];
   onChange: (tags: string[]) => void;
-  error?: string;
-  className?: string;
+  // exactOptionalPropertyTypes (#657)
+  error?: string | undefined;
+  className?: string | undefined;
 }
 
 export function TagInput({ tags, onChange, error, className = "" }: TagInputProps) {

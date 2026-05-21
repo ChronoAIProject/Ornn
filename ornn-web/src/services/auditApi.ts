@@ -60,7 +60,8 @@ export async function fetchAuditSummaryByVersion(
  */
 export async function fetchAuditHistory(
   idOrName: string,
-  options: { version?: string } = {},
+  // exactOptionalPropertyTypes (#657)
+  options: { version?: string | undefined } = {},
 ): Promise<AuditRecord[]> {
   const params: Record<string, string | undefined> = {};
   if (options.version) params.version = options.version;
@@ -73,8 +74,9 @@ export async function fetchAuditHistory(
 
 export interface StartAuditInput {
   idOrName: string;
+  // exactOptionalPropertyTypes (#657)
   /** Bypass the 30-day audit cache. Default false — most callers want the cache. */
-  force?: boolean;
+  force?: boolean | undefined;
 }
 
 /**

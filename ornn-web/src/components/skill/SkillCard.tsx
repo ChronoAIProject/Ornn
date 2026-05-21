@@ -32,19 +32,14 @@ function formatDateSGT(dateStr: string): string {
 
 export interface SkillCardProps {
   skill: SkillSearchResult;
-  /** Show status badge and toggle (for My Skills page) */
-  showOwnerControls?: boolean;
-  /** Current user ID to check ownership */
-  currentUserId?: string;
-  /** Display name to show instead of user ID */
-  ownerDisplayName?: string;
-  /** Avatar URL */
-  ownerAvatarUrl?: string | null;
-  /** Callback when edit is clicked */
-  onEdit?: (skill: SkillSearchResult) => void;
-  /** Callback when delete is clicked */
-  onDelete?: (skill: SkillSearchResult) => void;
-  className?: string;
+  // Optionals widen to `T | undefined` for exactOptionalPropertyTypes (#657).
+  showOwnerControls?: boolean | undefined;
+  currentUserId?: string | undefined;
+  ownerDisplayName?: string | undefined;
+  ownerAvatarUrl?: string | null | undefined;
+  onEdit?: ((skill: SkillSearchResult) => void) | undefined;
+  onDelete?: ((skill: SkillSearchResult) => void) | undefined;
+  className?: string | undefined;
 }
 
 /**

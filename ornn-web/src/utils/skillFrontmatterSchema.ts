@@ -239,7 +239,8 @@ export type MetadataOutput = z.output<typeof metadataSchema>;
 export interface FrontmatterValidationError {
   field: string;
   messageKey: string;
-  params?: Record<string, string | number>;
+  // exactOptionalPropertyTypes (#657)
+  params?: Record<string, string | number> | undefined;
   received?: unknown;
 }
 

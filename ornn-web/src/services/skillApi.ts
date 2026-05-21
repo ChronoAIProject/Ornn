@@ -46,7 +46,8 @@ export async function fetchSkillVersionDiff(
 export async function setSkillVersionDeprecation(
   idOrName: string,
   version: string,
-  body: { isDeprecated: boolean; deprecationNote?: string },
+  // exactOptionalPropertyTypes (#657)
+  body: { isDeprecated: boolean; deprecationNote?: string | undefined },
 ): Promise<{
   skillGuid: string;
   skillName: string;
@@ -216,7 +217,8 @@ export async function pullSkillFromGitHub(input: PullFromGitHubInput): Promise<S
  */
 export async function refreshSkillFromSource(
   id: string,
-  options?: { skipValidation?: boolean },
+  // exactOptionalPropertyTypes (#657)
+  options?: { skipValidation?: boolean | undefined },
 ): Promise<SkillDetail> {
   const res = await apiPost<SkillDetail>(`/api/v1/skills/${id}/refresh`, {
     skipValidation: options?.skipValidation ?? false,

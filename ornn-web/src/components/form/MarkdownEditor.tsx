@@ -16,17 +16,14 @@ import rehypeHighlight from "rehype-highlight";
 export interface MarkdownEditorProps {
   value: string;
   onChange: (value: string) => void;
-  placeholder?: string;
-  label?: string;
-  error?: string;
-  /** Minimum rows for textarea */
-  minRows?: number;
-  /** Maximum rows for textarea */
-  maxRows?: number;
-  /** Whether to show preview toggle */
-  showPreview?: boolean;
-  /** Additional CSS classes */
-  className?: string;
+  // Optionals widen to `T | undefined` for exactOptionalPropertyTypes (#657).
+  placeholder?: string | undefined;
+  label?: string | undefined;
+  error?: string | undefined;
+  minRows?: number | undefined;
+  maxRows?: number | undefined;
+  showPreview?: boolean | undefined;
+  className?: string | undefined;
 }
 
 /** Bold icon */

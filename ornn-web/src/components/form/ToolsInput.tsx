@@ -12,8 +12,9 @@ import { SUGGESTED_TOOLS } from "@/utils/constants";
 export interface ToolsInputProps {
   tools: string[];
   onChange: (tools: string[]) => void;
-  error?: string;
-  className?: string;
+  // exactOptionalPropertyTypes (#657)
+  error?: string | undefined;
+  className?: string | undefined;
 }
 
 export function ToolsInput({ tools, onChange, error, className = "" }: ToolsInputProps) {

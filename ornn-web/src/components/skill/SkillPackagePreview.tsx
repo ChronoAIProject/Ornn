@@ -11,25 +11,17 @@ import { SkillFileViewer } from "@/components/skill/SkillFileViewer";
 import type { SkillMetadata } from "@/types/skillPackage";
 
 export interface SkillPackagePreviewProps {
-  /** FileTree data structure */
   files: FileNode[];
-  /** Map of file id -> plaintext content */
   fileContents: Map<string, string>;
-  /** Extracted or generated metadata */
   metadata: SkillMetadata | null;
-  /** Allow editing file content (generative mode) */
-  editable?: boolean;
-  /** Callback when file content changes (editable mode) */
-  onContentChange?: (fileId: string, content: string) => void;
-  /** Callback when a new file is created */
-  onCreateFile?: (parentId: string | null, name: string) => void;
-  /** Callback when a new folder is created */
-  onCreateFolder?: (parentId: string | null, name: string) => void;
-  /** Callback when a file is deleted */
-  onFileDelete?: (fileId: string) => void;
-  /** Author name (display only) */
-  authorName?: string;
-  className?: string;
+  // Optionals widen to `T | undefined` for exactOptionalPropertyTypes (#657).
+  editable?: boolean | undefined;
+  onContentChange?: ((fileId: string, content: string) => void) | undefined;
+  onCreateFile?: ((parentId: string | null, name: string) => void) | undefined;
+  onCreateFolder?: ((parentId: string | null, name: string) => void) | undefined;
+  onFileDelete?: ((fileId: string) => void) | undefined;
+  authorName?: string | undefined;
+  className?: string | undefined;
 }
 
 /**

@@ -144,7 +144,11 @@ export function AnnouncementPopup() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="announcement-title"
-            style={INK_OVERRIDES}
+            // exactOptionalPropertyTypes (#657): framer-motion's
+            // `MotionStyle` rejects React.CSSProperties under the
+            // stricter flag (incompatible optionals on transform/etc.).
+            // Cast to `never` to bridge — runtime shape is unchanged.
+            style={INK_OVERRIDES as unknown as never}
             className="
               relative z-10 mx-4 w-full max-w-lg max-h-[80vh] overflow-y-auto
               rounded-[3px] border border-[var(--color-ember-deep)] bg-accent

@@ -88,10 +88,11 @@ export function ProfileCard({
     setError(null);
 
     try {
+      // exactOptionalPropertyTypes (#657)
       await onUpdate({
         displayName: data.displayName,
-        bio: data.bio || undefined,
-        avatarUrl: avatarUrl !== user.avatarUrl ? avatarUrl : undefined,
+        ...(data.bio ? { bio: data.bio } : {}),
+        ...(avatarUrl !== user.avatarUrl ? { avatarUrl } : {}),
       });
       setIsEditing(false);
     } catch (err) {

@@ -158,7 +158,8 @@ export function SkillDetailPage() {
     }: {
       version: string;
       isDeprecated: boolean;
-      deprecationNote?: string;
+      // exactOptionalPropertyTypes (#657)
+      deprecationNote?: string | undefined;
     }) => {
       try {
         await deprecationMutation.mutateAsync({ version, isDeprecated, deprecationNote });
