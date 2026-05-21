@@ -180,6 +180,71 @@ describe("listUsers", () => {
     expect(result.items.map((u) => u.userId)).toEqual(["n1"]);
   });
 
+  // #587 — placeholder said "email or display name" but only email
+  // matched. These pin the OR'd display-name path so a regression is
+  // caught loudly.
+  test("q= also matches display name (#587) — exact match", async () => {
+    const result = await repo.listUsers({
+      role: "normal",
+      page: 1,
+      pageSize: 10,
+      q: "Normal 1",
+    });
+    expect(result.items.map((u) => u.userId)).toEqual(["n1"]);
+  });
+
+  test("q= matches display-name substring, not just prefix (#587)", async () => {
+    // Reproducer from the issue: `Proxy` should match `Ornn Local Proxy`.
+    await repo.upsert({
+      userId: "p1",
+      email: "proxy@x.test",
+      displayName: "Ornn Local Proxy",
+      isAdmin: false,
+    });
+    const result = await repo.listUsers({
+      role: "normal",
+      page: 1,
+      pageSize: 10,
+      q: "Proxy",
+    });
+    expect(result.items.map((u) => u.userId)).toContain("p1");
+  });
+
+  test("q= display-name match is case-insensitive (#587)", async () => {
+    const result = await repo.listUsers({
+      role: "admin",
+      page: 1,
+      pageSize: 10,
+      q: "admin 1",
+    });
+    expect(result.items.map((u) => u.userId)).toEqual(["a1"]);
+  });
+
+  test("q= escapes regex metacharacters in display-name match (#587)", async () => {
+    // `.` is a regex metachar; if unescaped, "1.x" would match every
+    // display name. Pinning so the escape stays in place.
+    await repo.upsert({
+      userId: "z1",
+      email: "z1@x.test",
+      displayName: "Z (1.x)",
+      isAdmin: false,
+    });
+    const matches = await repo.listUsers({
+      role: "normal",
+      page: 1,
+      pageSize: 10,
+      q: "(1.x)",
+    });
+    expect(matches.items.map((u) => u.userId)).toEqual(["z1"]);
+    const nonMatches = await repo.listUsers({
+      role: "normal",
+      page: 1,
+      pageSize: 10,
+      q: "(1*x)",
+    });
+    expect(nonMatches.items.map((u) => u.userId)).not.toContain("z1");
+  });
+
   test("pagination respects pageSize + page", async () => {
     const first = await repo.listUsers({ role: "normal", page: 1, pageSize: 1 });
     const second = await repo.listUsers({ role: "normal", page: 2, pageSize: 1 });
