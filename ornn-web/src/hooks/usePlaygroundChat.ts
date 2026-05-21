@@ -19,10 +19,12 @@
  */
 
 import { useCallback, useRef, useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { usePlaygroundStore } from "@/stores/playgroundStore";
 import { streamChat, type StreamHandle } from "@/services/playgroundStreamApi";
 import type { PlaygroundChatEvent, FileOutput } from "@/types/playground";
 import { track } from "@/lib/analytics";
+import { MY_QUOTA_KEY } from "@/hooks/useQuota";
 
 /**
  * Pacer tick interval. 22 ms ≈ 45 chars/sec when the buffer is small,
@@ -64,6 +66,14 @@ function triggerFileDownload(file: FileOutput) {
 export function usePlaygroundChat() {
   const store = usePlaygroundStore();
   const streamRef = useRef<StreamHandle | null>(null);
+  // Backend charges quota inside the chat handler on `finish` /
+  // `error` — both are billable events. Without an explicit
+  // invalidate, the page renders the pre-charge `useMyQuota` snapshot
+  // until the 60-second poll lands. That's how #630 was happening:
+  // user consumed their last call, the UI still said "1 remaining"
+  // for up to a minute, and a hard refresh was the only way to see
+  // the over-limit state.
+  const qc = useQueryClient();
 
   // Pacer state — chars received from SSE that haven't been painted yet.
   const pendingTokensRef = useRef("");
@@ -142,6 +152,10 @@ export function usePlaygroundChat() {
           s.setError(event.message);
           s.setStreaming(false);
           track("playground.run.failed", { error: event.message });
+          // #630 — error paths can still bill (e.g. tool-call charged
+          // before the LLM blew up), so refresh the snapshot the same
+          // way as the success path.
+          qc.invalidateQueries({ queryKey: MY_QUOTA_KEY });
           break;
 
         case "finish":
@@ -151,10 +165,14 @@ export function usePlaygroundChat() {
           track("playground.run.completed", {
             finishReason: event.finishReason,
           });
+          // #630 — pull the post-charge snapshot so the chip / banner /
+          // OverLimitPage gate reflect the actual remaining count
+          // immediately instead of waiting for the 60s poll.
+          qc.invalidateQueries({ queryKey: MY_QUOTA_KEY });
           break;
       }
     },
-    [drainAll, ensurePacer],
+    [drainAll, ensurePacer, qc],
   );
 
   const sendMessage = useCallback(

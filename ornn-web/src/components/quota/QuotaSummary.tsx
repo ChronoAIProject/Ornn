@@ -14,6 +14,7 @@ import { createPortal } from "react-dom";
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import type { QuotaSnapshot, SurfaceSnapshot } from "@/services/quotaApi";
+import { displayUsagePercent } from "./quotaDisplay";
 
 const SURFACE_LABEL: Record<"playground" | "skillGen", string> = {
   playground: "Playground",
@@ -39,9 +40,11 @@ function formatReset(iso: string): string {
   }
 }
 
-function pct(used: number, ceiling: number): number {
-  if (ceiling <= 0) return 0;
-  return Math.max(0, Math.min(100, Math.round((used / ceiling) * 100)));
+// `pct` now delegates to the shared `displayUsagePercent` so summary
+// + inline banner agree on the "never round up to 100% while a call
+// remains" contract from #629.
+function pct(used: number, ceiling: number, remaining: number): number {
+  return displayUsagePercent(used, ceiling, remaining);
 }
 
 interface SurfaceRowProps {
@@ -52,7 +55,7 @@ interface SurfaceRowProps {
 
 function SurfaceRow({ label, snapshot, resetAt }: SurfaceRowProps) {
   const ceiling = snapshot.defaultAllotment + snapshot.adminGrant;
-  const monthlyPct = pct(snapshot.used, ceiling);
+  const monthlyPct = pct(snapshot.used, ceiling, snapshot.remaining);
   const monthlyTone =
     snapshot.remaining <= 0
       ? "bg-danger"
