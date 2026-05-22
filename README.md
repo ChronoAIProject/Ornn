@@ -36,13 +36,29 @@ Ornn closes the gaps. One model-agnostic registry, one API surface, and a CLI (`
 ## How it works
 
 ```mermaid
+%%{init: {
+  "theme": "base",
+  "themeVariables": {
+    "background": "#0B0907",
+    "primaryColor": "#1A1610",
+    "primaryTextColor": "#F1ECDE",
+    "primaryBorderColor": "#3A3328",
+    "lineColor": "#C9BFAD",
+    "secondaryColor": "#221E16",
+    "tertiaryColor": "#14110B",
+    "fontFamily": "JetBrains Mono, ui-monospace, SFMono-Regular, Menlo, monospace",
+    "fontSize": "14px"
+  }
+}}%%
 flowchart LR
-    subgraph local["Your machine"]
+    subgraph local["YOUR MACHINE"]
+        direction TB
         Agent["AI agent<br/>(any model)"]
         CLI["nyxid CLI"]
         Skill["Pulled skills<br/>(local runtime)"]
     end
-    subgraph cloud["Ornn cloud (ornn.chrono-ai.fun)"]
+    subgraph cloud["ORNN CLOUD · ornn.chrono-ai.fun"]
+        direction TB
         API["ornn-api"]
         Auth["NyxID<br/>(auth + identity)"]
         Store[("Skill registry<br/>+ versioned artifacts")]
@@ -56,6 +72,22 @@ flowchart LR
     API -->|exec| Sandbox
     API -.->|skill artifact| Agent
     Agent -->|runs| Skill
+
+    classDef ember fill:#FF7322,stroke:#C9460D,color:#14130E,stroke-width:1.5px,font-weight:bold
+    classDef arc fill:#5BC8E8,stroke:#3A8FB8,color:#14130E,stroke-width:1.5px,font-weight:bold
+    classDef forged fill:#1A1610,stroke:#3A3328,color:#F1ECDE,stroke-width:1px
+    classDef storage fill:#221E16,stroke:#3A3328,color:#C9BFAD,stroke-width:1px
+
+    class Agent forged
+    class CLI forged
+    class Skill forged
+    class Sandbox forged
+    class API ember
+    class Auth arc
+    class Store storage
+
+    style local fill:#14110B,stroke:#3A3328,color:#C9BFAD,stroke-width:1px
+    style cloud fill:#08070A,stroke:#3A3328,color:#C9BFAD,stroke-width:1.5px
 ```
 
 Every API call is mediated by [`nyxid`](https://github.com/ChronoAIProject/NyxID) — the shared identity + brokering layer ChronoAI uses across products. The agent never holds a long-lived token: `nyxid` refreshes credentials transparently and brokers per-service access for each request.
