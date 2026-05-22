@@ -1,33 +1,19 @@
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="ornn-web/public/logo-dark.svg">
-    <img src="ornn-web/public/logo-light.svg" width="200" alt="Ornn" />
-  </picture>
+  <a href="https://ornn.chrono-ai.fun">
+    <img src="ornn-web/public/hero-brand-dark.svg" alt="Ornn — agent-facing skill-lifecycle API" width="100%" />
+  </a>
 </p>
 
-<p align="center">
+<p>
   <a href="https://github.com/ChronoAIProject/Ornn/actions/workflows/ci.yml"><img src="https://github.com/ChronoAIProject/Ornn/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <a href="https://github.com/ChronoAIProject/Ornn/releases"><img src="https://img.shields.io/github/v/release/ChronoAIProject/Ornn" alt="Latest release" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/github/license/ChronoAIProject/Ornn" alt="License" /></a>
+  &nbsp;<strong>The skill lifecycle API for AI agents, not another marketplace.</strong>
 </p>
 
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="ornn-web/public/hero-brand-dark.svg">
-    <img src="ornn-web/public/hero-brand.svg" alt="Ornn — agent-facing skill-lifecycle API" width="100%" />
-  </picture>
-</p>
-
-<p align="center"><strong>The agent-facing skill-lifecycle API for AI agents.</strong></p>
-
-<p align="center">
-  Ornn official website — <a href="https://ornn.chrono-ai.fun">ornn.chrono-ai.fun</a>
-</p>
-
-<p align="center">
+<p>
   <a href="#what-is-ornn">What is Ornn</a> ·
   <a href="#how-it-works">How it works</a> ·
-  <a href="#sdk-quickstart">SDK quickstart</a> ·
   <a href="#quickstart">Quickstart</a> ·
   <a href="#how-ornn-compares">How Ornn compares</a> ·
   <a href="#examples">Examples</a> ·
@@ -74,49 +60,6 @@ Closest analog: **npm registry + npm CLI fused, model-agnostic** — works for C
 The agent talks to `ornn-api` through `nyxid`, which brokers authentication and authorization on the agent's behalf. Skills are versioned artifacts that the agent pulls, runs in a sandbox, and (optionally) publishes back.
 
 For a deeper view, see [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
-
-## SDK quickstart
-
-Call Ornn directly from code. The SDKs wrap `/api/v1/*` and handle auth header injection, response-envelope unwrapping, and structured errors.
-
-**TypeScript** ([`sdk/typescript`](sdk/typescript))
-
-```bash
-# Pre-publish — install from this monorepo via `bun link` or
-# git-subdirectory pinning. See docs/SDK_PUBLISHING.md.
-bun add @chronoai/ornn-sdk
-```
-
-```ts
-import { OrnnClient } from "@chronoai/ornn-sdk";
-
-const ornn = new OrnnClient({
-  baseUrl: "https://ornn.chrono-ai.fun",
-  token: process.env.ORNN_TOKEN,
-});
-const result = await ornn.search({ q: "pdf parsing" });
-console.log(result.items[0]);
-```
-
-**Python** ([`sdk/python`](sdk/python))
-
-```bash
-pip install ornn-sdk
-```
-
-```python
-import os
-from ornn_sdk import OrnnClient
-
-ornn = OrnnClient(
-    base_url="https://ornn.chrono-ai.fun",
-    token=os.environ["ORNN_TOKEN"],
-)
-result = ornn.search(q="pdf parsing")
-print(result.items[0])
-```
-
-Token sources are pluggable — for dynamic refresh flows, pass `getToken` (TS) / `token_resolver` (Python) instead of a static `token`. See [`sdk/typescript/README.md`](sdk/typescript/README.md) and [`sdk/python/README.md`](sdk/python/README.md) for the full reference.
 
 ## Quickstart
 
