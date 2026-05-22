@@ -11,156 +11,105 @@
   &nbsp;<strong>The skill lifecycle API for AI agents, not another marketplace.</strong>
 </p>
 
-<p>
-  <a href="#what-is-ornn">What is Ornn</a> ·
-  <a href="#how-it-works">How it works</a> ·
-  <a href="#quickstart">Quickstart</a> ·
-  <a href="#how-ornn-compares">How Ornn compares</a> ·
-  <a href="#examples">Examples</a> ·
-  <a href="#documentation">Docs</a> ·
-  <a href="#roadmap">Roadmap</a> ·
-  <a href="#community">Community</a> ·
-  <a href="#contributing">Contributing</a>
-</p>
-
 ---
 
 ## What is Ornn
 
-Ornn is an **agent-facing skill-lifecycle API**, not a human marketplace.
-
-The primary consumer is the AI agent developer / agentic-system builder. Agents call Ornn directly — over HTTP or MCP — to manage their own skill lifecycle:
+Ornn is an **agent-facing skill-lifecycle API**. AI agents call Ornn directly — over HTTPS — to manage the full lifecycle of their skills:
 
 ```
-search → pull → install → execute → build → upload → share
+search → pull → install → execute → audit → build → upload → share
 ```
 
-Closest analog: **npm registry + npm CLI fused, model-agnostic** — works for Claude, GPT, Gemini, or any custom runtime. Not locked to a single model.
+Closest analog: **npm registry + npm CLI, fused, model-agnostic.** It works for Claude, GPT, Gemini, or any custom agent runtime. Not locked to a single model.
 
-`ornn-web` is a secondary surface for skill owners and platform admins; it is not the primary product.
+### Why we built it
+
+Modern AI agents do real work by composing **skills** — packaged prompts, scripts, and tools the agent invokes on demand. As soon as you build more than one agent, the same gaps show up:
+
+- **No shared registry.** Skills live in private repos, gists, and one-off config files. There's no way for an agent to discover one it doesn't already know about.
+- **Model-locked alternatives.** Anthropic Skills, OpenAI custom GPTs, and Gemini Gems each ship a registry — but only for their own runtime. Skills don't cross.
+- **No lifecycle.** Versioning, sandboxed execution, security audit, publish — every team rebuilds these from scratch.
+
+Ornn closes the gaps. One model-agnostic registry, one API surface, and a CLI (`nyxid`) every agent can drive end-to-end. The web UI at [ornn.chrono-ai.fun](https://ornn.chrono-ai.fun) is a thin admin layer for skill owners; the API is the product.
 
 ## How it works
 
-```
-┌──────────────┐    HTTP / MCP    ┌──────────────┐    auth     ┌──────────┐
-│   AI agent   │ ───────────────▶ │   ornn-api   │ ──────────▶ │  NyxID   │
-│ (any model)  │                  │              │             └──────────┘
-└──────────────┘                  │              │   storage   ┌──────────┐
-       │                          │              │ ──────────▶ │ MongoDB  │
-       │                          │              │             └──────────┘
-       │                          │              │   sandbox   ┌──────────┐
-       │ pull / execute           │              │ ──────────▶ │ OpenSbox │
-       ▼                          └──────────────┘             └──────────┘
-┌──────────────┐
-│ Local skill  │
-│   runtime    │
-└──────────────┘
+```mermaid
+flowchart LR
+    subgraph local["Your machine"]
+        Agent["AI agent<br/>(any model)"]
+        CLI["nyxid CLI"]
+        Skill["Pulled skills<br/>(local runtime)"]
+    end
+    subgraph cloud["Ornn cloud (ornn.chrono-ai.fun)"]
+        API["ornn-api"]
+        Auth["NyxID<br/>(auth + identity)"]
+        Store[("Skill registry<br/>+ versioned artifacts")]
+        Sandbox["Sandbox<br/>(remote execution)"]
+    end
+
+    Agent -->|invokes| CLI
+    CLI -->|HTTPS| API
+    API -->|verify token| Auth
+    API -->|read / write| Store
+    API -->|exec| Sandbox
+    API -.->|skill artifact| Agent
+    Agent -->|runs| Skill
 ```
 
-The agent talks to `ornn-api` through `nyxid`, which brokers authentication and authorization on the agent's behalf. Skills are versioned artifacts that the agent pulls, runs in a sandbox, and (optionally) publishes back.
-
-For a deeper view, see [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+Every API call is mediated by [`nyxid`](https://github.com/ChronoAIProject/NyxID) — the shared identity + brokering layer ChronoAI uses across products. The agent never holds a long-lived token: `nyxid` refreshes credentials transparently and brokers per-service access for each request.
 
 ## Quickstart
 
-> **Status:** alpha. Surfaces and schemas can change before v1. Pin a release tag.
+> **Status:** alpha. The API surface can still change before v1 — pin a release tag if you ship to production.
 
-The shortest path to bringing an agent online with Ornn — no manual operator steps inside the agent loop:
+### 1. Create a NyxID account
 
-1. **Install the ChronoAI core service skill into your agent.** This is the bootstrap skill — it introduces Ornn to the agent and drives the rest of setup.
-2. **Let the agent provision the NyxID CLI.** On first run, the core skill instructs the agent to install `nyxid`. The agent follows the skill end-to-end.
-3. **Talk to the agent.** Ask it to search, install, run, build, or publish skills. The agent learns the lifecycle through the same API it just connected to.
+Sign up at [**nyx.chrono-ai.fun**](https://nyx.chrono-ai.fun) with invite code **`NYX-2XXJI08A`**. Sign in with **GitHub**, **Google**, or **Apple** — NyxID is the identity layer that authenticates every Ornn API call. One account covers every ChronoAI service.
 
-Once connected, an agent can hit the API directly. A minimal request shape (after `nyxid` is configured):
+### 2. Install the Ornn agent manual into your AI agent
 
-```bash
-nyxid proxy request ornn-api GET /api/v1/skills?q=summarize
-```
+Open [**`ornn-agent-manual-cli`**](https://ornn.chrono-ai.fun/skills/ornn-agent-manual-cli) and follow the install instructions for your agent runtime (Claude Code, OpenAI Codex, Cursor, …). This skill is the **operational manual Ornn ships for AI agents**: once it's loaded into your agent, the agent knows how to drive the full `search → pull → execute → build → upload → share` lifecycle on its own — no further hand-holding required.
 
-Full per-endpoint reference: [ornn.chrono-ai.fun/docs](https://ornn.chrono-ai.fun/docs).
+Partway through setup, your agent will prompt you to install [**`nyxid`**](https://github.com/ChronoAIProject/NyxID) — the CLI Ornn calls under the hood to broker authenticated requests. Approve the prompt; the agent finishes onboarding itself.
 
-## Run Ornn locally (5 minutes)
+### 3. Talk to your agent
 
-```bash
-git clone https://github.com/ChronoAIProject/Ornn.git
-cd Ornn
-cp .env.compose.sample .env
-docker compose up --build
-```
+That's it. Your agent now has the full Ornn lifecycle. Try any of these in plain language — no special syntax, no flags to memorise:
 
-- `ornn-api` on `http://localhost:3802`
-- `ornn-web` on `http://localhost:5173`
-- MongoDB on `27017`, MinIO console on `9001`
+- **Search the registry.**
+  > *"Find me a skill that converts CSV to JSON."*
 
-This brings up the data + service layer (Mongo, MinIO, `ornn-api`, `ornn-web`). The auth layer (NyxID) stays external — for end-to-end use against authenticated endpoints, point the API at your own NyxID instance (or the staging instance via the team) by setting `NYXID_BASE_URL`. Public endpoints (`/livez`, `/api/v1/skill-format/rules`, `/api/v1/skill-manifest-schema.json`) work without auth out of the box.
+  Hits semantic + keyword search across every public skill.
 
-For full production parity (incl. NyxID, chrono-storage, chrono-sandbox, opensandbox), use the Kubernetes manifests under `deployment/` — see [`CONTRIBUTING.md`](CONTRIBUTING.md) for the long-form setup.
+- **Pull and install a skill.**
+  > *"Pull and install the skill `pdf-extractor`, then use it on `report.pdf`."*
 
-## How Ornn compares
+  Fetches the latest versioned artifact into your local runtime and runs it.
 
-The space of agent skill / tool registries is crowded. Quick orientation:
+- **Trigger a security audit.**
+  > *"Run a security audit on the skill `web-scraper`."*
 
-|                                       | **Ornn** | MCP servers | Smithery | npm registry |
-|---------------------------------------|:--------:|:-----------:|:--------:|:------------:|
-| Agent-callable HTTP API               |    ✓     |   ✓ (RPC)   |    ✗     |      ✓       |
-| Model-agnostic (Claude / GPT / …)     |    ✓     |      ✓      |    ✓     |     n/a      |
-| Execution sandbox                     |    ✓     |      ✗      |    ✓     |      ✗       |
-| Searchable registry (semantic + tag)  |    ✓     |   partial   |    ✓     |    keyword   |
-| Versioning + immutable artifacts      |    ✓     |      ✗      |    ?     |      ✓       |
-| Skill build pipeline (lint + AgentSeal)| ✓       |      ✗      |    ✗     |      ✗       |
-| CLI                                   |   *      |      ✗      |    ✓     |      ✓       |
+  Kicks the AgentSeal pipeline against a published version — static analysis, sandbox probe, dependency scan.
 
-\* CLI is on the roadmap (Phase 2); today the registry-side CLI is `nyxid proxy request ornn-api …`. The web UI at [ornn.chrono-ai.fun](https://ornn.chrono-ai.fun) covers human flows.
+- **Build and publish a new skill.**
+  > *"Build me a skill that summarises RSS feeds and upload it under my account."*
 
-**What this means in practice**
+  Drives `ornn-build` to generate the skill, packages it, and publishes a new version through your NyxID identity.
 
-- **vs MCP servers** — MCP is a protocol for calling tools the agent already has access to; Ornn is the registry + lifecycle around those tools (discover, version, sandbox, build, publish). The two compose: an Ornn-hosted skill can expose an MCP transport.
-- **vs Smithery** — Smithery is a curated UI registry for MCP servers; Ornn is an API-first registry callable directly by agents, with build/execute primitives included.
-- **vs npm registry** — npm versions and ships code; it doesn't know about models, sandboxes, or skill manifests. Ornn does.
+For the full API contract (every endpoint, every error code), see [**ornn.chrono-ai.fun/docs**](https://ornn.chrono-ai.fun/docs).
 
-Treat the table as a working draft — corrections welcome via [Discussions → Ideas](https://github.com/ChronoAIProject/Ornn/discussions/categories/ideas).
-
-## Examples
-
-Three minimal starter skills under [`examples/`](examples) — fork as the starting point for your own. Each one is ~60 lines, runs locally, and demonstrates one of the failure-mode archetypes you'll hit in production:
-
-| Skill | What it shows |
-|---|---|
-| [`text-summarizer`](examples/text-summarizer) | LLM-backed work — model API call, structured I/O |
-| [`csv-processor`](examples/csv-processor) | Pure local computation — file in, JSON out, deterministic |
-| [`api-fetch-wrapper`](examples/api-fetch-wrapper) | External HTTP — secret handling, retries, no-leak errors |
-
-See [`examples/README.md`](examples/README.md) for the anatomy of an Ornn skill + how to adapt one.
-
-## Documentation
-
-- **Product docs** — [ornn.chrono-ai.fun/docs](https://ornn.chrono-ai.fun/docs)
-- **Architecture** — [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
-- **Conventions** — [`docs/CONVENTIONS.md`](docs/CONVENTIONS.md)
-- **API stability & deprecation** — [`docs/API_STABILITY.md`](docs/API_STABILITY.md)
-- **Design system** — [`docs/DESIGN.md`](docs/DESIGN.md)
-
-## Roadmap
-
-Tracked publicly on GitHub:
-
-- **Open issues & milestones** — [Issues](https://github.com/ChronoAIProject/Ornn/issues) · [Milestones](https://github.com/ChronoAIProject/Ornn/milestones)
-- **What shipped** — [Releases](https://github.com/ChronoAIProject/Ornn/releases) · per-package changelogs in [`ornn-api/CHANGELOG.md`](ornn-api/CHANGELOG.md) and [`ornn-web/CHANGELOG.md`](ornn-web/CHANGELOG.md)
-
-## Community
+## Community and Contributing
 
 - **Questions / how-to** → [Discussions → Q&A](https://github.com/ChronoAIProject/Ornn/discussions/categories/q-a)
 - **Ideas / RFCs** → [Discussions → Ideas](https://github.com/ChronoAIProject/Ornn/discussions/categories/ideas)
 - **Show off your agent integration** → [Discussions → Show & Tell](https://github.com/ChronoAIProject/Ornn/discussions/categories/show-and-tell)
 - **Bug or feature** → [open an issue](https://github.com/ChronoAIProject/Ornn/issues/new/choose)
-- **Security report** → [Private Vulnerability Reporting](https://github.com/ChronoAIProject/Ornn/security/advisories/new) — see [SECURITY.md](SECURITY.md)
+- **Roadmap** → [Issues](https://github.com/ChronoAIProject/Ornn/issues) · [Milestones](https://github.com/ChronoAIProject/Ornn/milestones) · [Releases](https://github.com/ChronoAIProject/Ornn/releases)
+- **Security report** → [Private Vulnerability Reporting](https://github.com/ChronoAIProject/Ornn/security/advisories/new) (see [SECURITY.md](SECURITY.md))
 - **Support guide** → [SUPPORT.md](SUPPORT.md)
-
-## Contributing
-
-Pull requests are welcome. Before opening one, read [CONTRIBUTING.md](CONTRIBUTING.md) — it covers the issue-first workflow, branching, commit decomposition, and the changeset rule (CI blocks PRs without one).
-
-By participating you agree to follow our [Code of Conduct](CODE_OF_CONDUCT.md).
+- **Pull requests** → read [CONTRIBUTING.md](CONTRIBUTING.md) first — it covers the issue-first workflow, branching, commit decomposition, and the changeset rule (CI blocks PRs without one). By participating you agree to follow our [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## License
 
