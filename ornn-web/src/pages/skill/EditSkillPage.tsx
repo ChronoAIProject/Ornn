@@ -17,8 +17,19 @@ export function EditSkillPage() {
   const { id } = useParams<{ id: string }>();
   const addToast = useToastStore((s) => s.addToast);
   const { data: skill, isLoading, refetch } = useSkill(id ?? "");
-  const updateMutation = useUpdateSkill(id ?? "");
-  const updatePackageMutation = useUpdateSkillPackage(id ?? "");
+  // #565 — read endpoints accept skill name OR GUID, but #586
+  // tightened PUT / PATCH to GUID-only. The URL param `:id` is the
+  // human-readable skill name; we resolve it through the GET first
+  // (which accepts either), then hand the resulting `guid` to the
+  // write mutations. The fallback to `id` is only exercised on the
+  // first render before skill data arrives — and both mutations are
+  // hidden behind `if (isLoading) {...}` and `if (!skill) {...}`
+  // early returns below, so the user can never click a button while
+  // `writeId` is still pointing at the name. Same pattern as
+  // `useSkillDetail.ts:77`.
+  const writeId = skill?.guid ?? id ?? "";
+  const updateMutation = useUpdateSkill(writeId);
+  const updatePackageMutation = useUpdateSkillPackage(writeId);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [zipFile, setZipFile] = useState<File | null>(null);
 
