@@ -43,40 +43,43 @@ Ornn closes the gaps. One model-agnostic registry, one API surface, and a CLI (`
     "primaryColor": "#1A1610",
     "primaryTextColor": "#F1ECDE",
     "primaryBorderColor": "#3A3328",
-    "lineColor": "#C9BFAD",
+    "lineColor": "#7E776B",
     "secondaryColor": "#221E16",
     "tertiaryColor": "#14110B",
+    "edgeLabelBackground": "#0B0907",
+    "clusterBkg": "#14110B",
+    "clusterBorder": "#3A3328",
     "fontFamily": "JetBrains Mono, ui-monospace, SFMono-Regular, Menlo, monospace",
-    "fontSize": "14px"
+    "fontSize": "13px"
   }
 }}%%
 flowchart LR
-    subgraph local["YOUR MACHINE"]
+    subgraph local["[ § YOUR MACHINE ]"]
         direction TB
-        Agent["AI agent<br/>(any model)"]
+        Agent["AI agent"]
         CLI["nyxid CLI"]
-        Skill["Pulled skills<br/>(local runtime)"]
+        Skill["Pulled skills"]
     end
-    subgraph cloud["ORNN CLOUD · ornn.chrono-ai.fun"]
+    subgraph cloud["[ § ORNN CLOUD ]"]
         direction TB
         API["ornn-api"]
-        Auth["NyxID<br/>(auth + identity)"]
-        Store[("Skill registry<br/>+ versioned artifacts")]
-        Sandbox["Sandbox<br/>(remote execution)"]
+        Auth["NyxID"]
+        Store[("Skill registry")]
+        Sandbox["Sandbox"]
     end
 
-    Agent -->|invokes| CLI
-    CLI -->|HTTPS| API
-    API -->|verify token| Auth
-    API -->|read / write| Store
+    Agent -->|invoke| CLI
+    CLI ==>|HTTPS| API
+    API -->|verify| Auth
+    API -->|r/w| Store
     API -->|exec| Sandbox
-    API -.->|skill artifact| Agent
-    Agent -->|runs| Skill
+    API -.->|artifact| Agent
+    Agent -->|run| Skill
 
-    classDef ember fill:#FF7322,stroke:#C9460D,color:#14130E,stroke-width:1.5px,font-weight:bold
-    classDef arc fill:#5BC8E8,stroke:#3A8FB8,color:#14130E,stroke-width:1.5px,font-weight:bold
-    classDef forged fill:#1A1610,stroke:#3A3328,color:#F1ECDE,stroke-width:1px
-    classDef storage fill:#221E16,stroke:#3A3328,color:#C9BFAD,stroke-width:1px
+    classDef ember fill:#FF7322,stroke:#C9460D,color:#14130E,stroke-width:2px,font-weight:bold
+    classDef arc fill:#5BC8E8,stroke:#3A8FB8,color:#14130E,stroke-width:2px,font-weight:bold
+    classDef forged fill:#1A1610,stroke:#3A3328,color:#F1ECDE,stroke-width:1.5px
+    classDef storage fill:#221E16,stroke:#3A3328,color:#C9BFAD,stroke-width:1.5px
 
     class Agent forged
     class CLI forged
@@ -86,8 +89,10 @@ flowchart LR
     class Auth arc
     class Store storage
 
-    style local fill:#14110B,stroke:#3A3328,color:#C9BFAD,stroke-width:1px
-    style cloud fill:#08070A,stroke:#3A3328,color:#C9BFAD,stroke-width:1.5px
+    style local fill:#221E16,stroke:#3A3328,color:#F1ECDE,stroke-width:1.5px
+    style cloud fill:#14110B,stroke:#3A3328,color:#F1ECDE,stroke-width:1.5px
+
+    linkStyle 1 stroke:#FF7322,stroke-width:2.5px
 ```
 
 Every API call is mediated by [`nyxid`](https://github.com/ChronoAIProject/NyxID) — the shared identity + brokering layer ChronoAI uses across products. The agent never holds a long-lived token: `nyxid` refreshes credentials transparently and brokers per-service access for each request.
