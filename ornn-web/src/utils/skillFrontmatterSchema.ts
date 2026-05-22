@@ -37,9 +37,24 @@ export type OutputType = (typeof OUTPUT_TYPES)[number];
 export const ALLOWED_RUNTIMES = ["node", "python"] as const;
 
 // --- Sub-item schemas ---
+//
+// #649 — YAML allows empty list items (`- ` on a line by itself parses
+// as `null`) and lets authors put non-string values where a string is
+// expected. Default Zod messages on those cases come back as bare
+// `Invalid input` which doesn't tell the author *what to write
+// instead*. Each item schema below carries a custom `error` callback
+// for `invalid_type` that maps to a localizable i18n key with
+// actionable copy. Mirrors the backend pattern in
+// `ornn-api/src/shared/schemas/skillFrontmatter.ts`. The existing
+// `min`/`max`/`regex` messages still fire for non-null shape problems.
 
 const tagItemSchema = z
-  .string()
+  .string({
+    error: (issue) =>
+      issue.code === "invalid_type"
+        ? issueMessage({ key: "errors.frontmatter.tagInvalidType" })
+        : undefined,
+  })
   .min(1)
   .max(30)
   .regex(
@@ -48,7 +63,12 @@ const tagItemSchema = z
   );
 
 const envVarItemSchema = z
-  .string()
+  .string({
+    error: (issue) =>
+      issue.code === "invalid_type"
+        ? issueMessage({ key: "errors.frontmatter.envVarInvalidType" })
+        : undefined,
+  })
   .min(1)
   .max(100)
   .regex(
@@ -56,9 +76,33 @@ const envVarItemSchema = z
     issueMessage({ key: "errors.frontmatter.envVarFormat" }),
   );
 
-const toolItemSchema = z.string().min(1).max(100);
-const runtimeItemSchema = z.string().min(1).max(50);
-const dependencyItemSchema = z.string().min(1).max(200);
+const toolItemSchema = z
+  .string({
+    error: (issue) =>
+      issue.code === "invalid_type"
+        ? issueMessage({ key: "errors.frontmatter.toolInvalidType" })
+        : undefined,
+  })
+  .min(1)
+  .max(100);
+const runtimeItemSchema = z
+  .string({
+    error: (issue) =>
+      issue.code === "invalid_type"
+        ? issueMessage({ key: "errors.frontmatter.runtimeInvalidType" })
+        : undefined,
+  })
+  .min(1)
+  .max(50);
+const dependencyItemSchema = z
+  .string({
+    error: (issue) =>
+      issue.code === "invalid_type"
+        ? issueMessage({ key: "errors.frontmatter.dependencyInvalidType" })
+        : undefined,
+  })
+  .min(1)
+  .max(200);
 
 // --- Metadata sub-schema (without conditional refinement) ---
 
@@ -197,8 +241,19 @@ export const skillFrontmatterSchema = z.object({
       issueMessage({ key: "errors.frontmatter.nameFormat" }),
     ),
   description: z.string().min(1).max(1024),
+  // #649 — YAML parses `version: 0.1` (unquoted) as a number, not a
+  // string. The default Zod message ("Invalid input") doesn't tell
+  // the author to quote the value. Surface an actionable message via
+  // the `invalid_type` branch; the existing regex still catches
+  // wrong-shape strings. Mirrors the backend at
+  // `ornn-api/src/shared/schemas/skillFrontmatter.ts:172-188`.
   version: z
-    .string()
+    .string({
+      error: (issue) =>
+        issue.code === "invalid_type"
+          ? issueMessage({ key: "errors.frontmatter.versionInvalidType" })
+          : undefined,
+    })
     .regex(
       SKILL_VERSION_REGEX,
       issueMessage({ key: "errors.frontmatter.versionFormat" }),
