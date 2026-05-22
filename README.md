@@ -1,30 +1,17 @@
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="ornn-web/public/logo-dark.svg">
-    <img src="ornn-web/public/logo-light.svg" width="200" alt="Ornn" />
-  </picture>
+  <a href="https://ornn.chrono-ai.fun">
+    <img src="ornn-web/public/hero-brand-dark.svg" alt="Ornn — agent-facing skill-lifecycle API" width="100%" />
+  </a>
 </p>
 
-<p align="center">
+<p>
   <a href="https://github.com/ChronoAIProject/Ornn/actions/workflows/ci.yml"><img src="https://github.com/ChronoAIProject/Ornn/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <a href="https://github.com/ChronoAIProject/Ornn/releases"><img src="https://img.shields.io/github/v/release/ChronoAIProject/Ornn" alt="Latest release" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/github/license/ChronoAIProject/Ornn" alt="License" /></a>
+  &nbsp;<strong>The skill lifecycle API for AI agents, not another marketplace.</strong>
 </p>
 
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="ornn-web/public/hero-brand-dark.svg">
-    <img src="ornn-web/public/hero-brand.svg" alt="Ornn — agent-facing skill-lifecycle API" width="100%" />
-  </picture>
-</p>
-
-<p align="center"><strong>The agent-facing skill-lifecycle API for AI agents.</strong></p>
-
-<p align="center">
-  Ornn official website — <a href="https://ornn.chrono-ai.fun">ornn.chrono-ai.fun</a>
-</p>
-
-<p align="center">
+<p>
   <a href="#what-is-ornn">What is Ornn</a> ·
   <a href="#how-it-works">How it works</a> ·
   <a href="#sdk-quickstart">SDK quickstart</a> ·
