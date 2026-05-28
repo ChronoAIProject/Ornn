@@ -355,6 +355,21 @@ export function useSkillDetail(idOrName: string | undefined) {
   const versionAudit = skill ? auditSummaryByVersion?.[skill.version] : undefined;
   const versionAuditRunning =
     versionAuditHistory?.some((r) => r.status === "running") ?? false;
+  // #718 — `auditSummaryByVersion` returns the latest *completed*
+  // record per version, so a newer failed rerun was invisible on
+  // Skill Detail and admins kept seeing the stale prior score as
+  // though it were current. `versionAuditHistory` lists every
+  // record newest-first; if the most recent entry is `failed`
+  // (and newer than the displayed completed audit, when one
+  // exists) we surface that explicitly through `AuditVerdictPill`.
+  const latestVersionAudit = versionAuditHistory?.[0];
+  const versionAuditLatestFailed = Boolean(
+    latestVersionAudit &&
+    latestVersionAudit.status === "failed" &&
+    (!versionAudit ||
+      new Date(latestVersionAudit.createdAt).getTime() >
+        new Date(versionAudit.completedAt ?? versionAudit.createdAt).getTime()),
+  );
   const ownerDisplayName =
     isOwner && user?.displayName
       ? user.displayName
@@ -387,6 +402,7 @@ export function useSkillDetail(idOrName: string | undefined) {
     auditSummaryByVersion,
     versionAudit,
     versionAuditRunning,
+    versionAuditLatestFailed,
     ownerDisplayName,
     ownerAvatarUrl,
     // ── mutations exposed for the modals' loading states ──
