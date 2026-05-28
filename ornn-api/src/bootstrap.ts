@@ -120,6 +120,7 @@ import { migrateLegacyMirrorIntoSettings } from "./domains/settings/sections/mir
 import { LlmProvidersRepository } from "./domains/settings/llmProviders/repository";
 import { LlmProvidersService } from "./domains/settings/llmProviders/service";
 import { createLlmProvidersRoutes } from "./domains/settings/llmProviders/routes";
+import type { ApiFormat } from "./domains/settings/llmProviders/types";
 import { SettingsExporter } from "./domains/settings/exportImport/exporter";
 import { SettingsImporter } from "./domains/settings/exportImport/importer";
 import { createSettingsExportImportRoutes } from "./domains/settings/exportImport/routes";
@@ -312,20 +313,30 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
 
   // Convenience: resolve the LLM provider for a given surface in a
   // single Promise, projecting whichever auth shape the provider uses
-  // into the simpler `{ gatewayUrl, apiKey }` contract `NyxLlmClient`
-  // speaks. `apiKey` empty means "use SA token-exchange flow".
+  // into the simpler `{ gatewayUrl, apiKey, apiFormat }` contract
+  // `NyxLlmClient` speaks. `apiKey` empty means "use SA token-exchange
+  // flow". `apiFormat` selects the upstream endpoint shape (#574); when
+  // no provider is configured we still return a default so the type
+  // shape stays narrow — the empty `gatewayUrl` is what triggers the
+  // fail-closed branch downstream.
   const resolveLlmProviderForSurface = async (
     surface: "playground" | "skillGen",
-  ): Promise<{ gatewayUrl: string; apiKey: string }> => {
+  ): Promise<{ gatewayUrl: string; apiKey: string; apiFormat: ApiFormat }> => {
     const sec =
       surface === "playground"
         ? await settingsService.getPlayground()
         : await settingsService.getSkillGen();
-    if (!sec.defaultProviderId) return { gatewayUrl: "", apiKey: "" };
+    if (!sec.defaultProviderId) {
+      return { gatewayUrl: "", apiKey: "", apiFormat: "responses" };
+    }
     const provider = await llmProvidersService.get(sec.defaultProviderId);
-    if (!provider) return { gatewayUrl: "", apiKey: "" };
+    if (!provider) return { gatewayUrl: "", apiKey: "", apiFormat: "responses" };
     const apiKey = provider.auth.kind === "apiKey" ? provider.auth.apiKey : "";
-    return { gatewayUrl: provider.gatewayUrl, apiKey };
+    return {
+      gatewayUrl: provider.gatewayUrl,
+      apiKey,
+      apiFormat: provider.apiFormat,
+    };
   };
 
   // Same pattern, returning the per-surface model + token cap +
