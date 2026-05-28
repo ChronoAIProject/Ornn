@@ -91,6 +91,14 @@ export function NotificationsPage() {
 
   return (
     <PageTransition>
+      {/*
+        Outer wrapper provides the vertical scroll surface (#723).
+        `RootLayout`'s `<main>` is `overflow-hidden`, so without this
+        the notification list is clipped once it exceeds the viewport
+        and older entries can never be reached by wheel/touch scroll.
+        Same pattern as `UploadSkillPage`.
+      */}
+      <div className="h-full overflow-y-auto">
       <div className="mx-auto w-full max-w-4xl px-6 py-10">
         <header className="mb-6 flex flex-wrap items-center justify-between gap-4">
           <div>
@@ -210,6 +218,7 @@ export function NotificationsPage() {
             ))}
           </ul>
         )}
+      </div>
       </div>
 
       <NotificationDetailModal
