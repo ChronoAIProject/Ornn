@@ -204,7 +204,14 @@ export function UploadSkillPage() {
                         {t(card.titleKey)}
                       </h2>
 
-                      <p className="font-text text-sm sm:text-base text-meta mb-4 sm:mb-6">
+                      {/*
+                        Fixed min-height so the bullet list below starts
+                        on the same vertical baseline across all four
+                        cards regardless of description length (#725).
+                        The Free Mode description is ~1 line; Generative
+                        and GitHub spill to ~2 lines on common viewports.
+                      */}
+                      <p className="font-text text-sm sm:text-base text-meta mb-4 sm:mb-6 min-h-[3rem] sm:min-h-[3.5rem]">
                         {t(card.descKey)}
                       </p>
 
