@@ -11,7 +11,10 @@ import type {
   ResponsesApiInputMessage,
   ResponsesApiTool,
 } from "../../clients/nyxid/llm";
-import type { SandboxClient } from "../../clients/sandboxClient";
+import type {
+  SandboxClient,
+  SandboxExecuteResult,
+} from "../../clients/sandboxClient";
 import type { SkillService } from "../skills/crud/service";
 import type { PlaygroundChatEvent } from "../../shared/types/index";
 import { createLogger } from "../../shared/logger";
@@ -59,6 +62,39 @@ const anyKnownEventSchema = z.union([
   contentPartDeltaEventSchema,
   outputItemDoneEventSchema,
 ]);
+
+/** Server-side tool-call return shape consumed by the playground stream. */
+interface ToolCallResult {
+  text: string;
+  files: Array<{ path: string; content: string; size: number; mimeType: string }>;
+}
+
+/**
+ * Translate a chrono-sandbox `SandboxExecuteResult` (both /execute and
+ * /sessions/{id}/execute return this shape) into the {text, files}
+ * envelope the playground stream feeds back to the LLM and emits as
+ * `file-output` events to the client.
+ */
+function formatSandboxResult(result: SandboxExecuteResult): ToolCallResult {
+  const files = (result.output?.files ?? [])
+    .filter((f): f is typeof f & { content: string } => !!f.content && !f.error)
+    .map((f) => ({
+      path: f.path,
+      content: f.content,
+      size: f.size ?? 0,
+      mimeType: guessMimeType(f.path),
+    }));
+
+  const filesSummary = files.length > 0
+    ? `\nFiles retrieved: ${files.map((f) => `${f.path} (${f.size} bytes)`).join(", ")}`
+    : "";
+
+  const text = result.success
+    ? `Execution succeeded (exit code ${result.output?.exit_code}).\nstdout:\n${result.output?.stdout ?? ""}\nstderr:\n${result.output?.stderr ?? ""}${filesSummary}`
+    : `Execution failed: ${result.error?.message ?? "unknown error"}\nstdout:\n${result.output?.stdout ?? ""}\nstderr:\n${result.output?.stderr ?? ""}`;
+
+  return { text, files };
+}
 
 /** Guess MIME type from file extension. */
 function guessMimeType(path: string): string {
@@ -286,169 +322,289 @@ export class PlaygroundChatService {
       }
     }
 
-    // Tool-use loop: stream LLM → if tool call → execute → feed result → stream again
-    const MAX_TOOL_ROUNDS = 5;
-    for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
-      try {
-        const streamEvents = this.llmClient.stream({
-          model,
-          input,
-          max_output_tokens: defaults.maxOutputTokens,
-          temperature: defaults.temperature,
-          tools: PLAYGROUND_TOOLS,
-        });
+    // Per-chat sandbox session reuse (#531). Same-language tool calls
+    // within one chat share a persistent kernel — installed CLIs,
+    // filesystem state, and env survive across rounds. Sessions are
+    // created lazily on first execute_in_sandbox call and torn down
+    // best-effort in `finally`. Keyed by language because chrono-sandbox
+    // kernels are per-language; a TS skill and a Python skill in the
+    // same chat each get their own session.
+    const sandboxSessions = new Map<string, string>();
+    const createdSessionIds: string[] = [];
 
-        let pendingToolCall: { id: string; name: string; args: Record<string, unknown> } | null = null;
+    try {
+      // Tool-use loop: stream LLM → if tool call → execute → feed result → stream again
+      const MAX_TOOL_ROUNDS = 5;
+      for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
+        try {
+          const streamEvents = this.llmClient.stream({
+            model,
+            input,
+            max_output_tokens: defaults.maxOutputTokens,
+            temperature: defaults.temperature,
+            tools: PLAYGROUND_TOOLS,
+          });
 
-        for await (const event of streamEvents) {
-          if (abortSignal?.aborted) {
-            yield { type: "error", message: "Request aborted" };
-            yield { type: "finish", finishReason: "abort" };
+          let pendingToolCall: { id: string; name: string; args: Record<string, unknown> } | null = null;
+
+          for await (const event of streamEvents) {
+            if (abortSignal?.aborted) {
+              yield { type: "error", message: "Request aborted" };
+              yield { type: "finish", finishReason: "abort" };
+              return;
+            }
+
+            // #449 — parse with a discriminated Zod union instead of
+            // `as any`. Unknown event types are ignored (forward-compat
+            // with new upstream events); shape-mismatch on a known event
+            // logs at debug and is dropped.
+            const parsed = anyKnownEventSchema.safeParse(event);
+            if (!parsed.success) {
+              logger.debug(
+                { issues: parsed.error.issues.slice(0, 2) },
+                "Unrecognized LLM event shape — dropping",
+              );
+              continue;
+            }
+            const parsedEvent = parsed.data;
+
+            // Stream text deltas to client
+            if (parsedEvent.type === "response.output_text.delta") {
+              yield { type: "text-delta", delta: parsedEvent.delta };
+              continue;
+            }
+            if (parsedEvent.type === "response.content_part.delta") {
+              const delta = parsedEvent.delta;
+              if (delta?.type === "output_text" && typeof delta.text === "string") {
+                yield { type: "text-delta", delta: delta.text };
+              }
+              continue;
+            }
+
+            // Capture complete function call from output_item.done
+            // This event contains everything: item.id, item.name, item.arguments
+            if (parsedEvent.type === "response.output_item.done") {
+              const item = parsedEvent.item;
+              if (item?.type === "function_call") {
+                const toolName = item.name ?? "";
+                const toolCallId = item.call_id ?? item.id ?? "";
+                let args: Record<string, unknown> = {};
+                try {
+                  args = JSON.parse(item.arguments ?? "{}");
+                } catch {
+                  logger.error({ rawArgs: String(item.arguments).slice(0, 200) }, "Failed to parse function call arguments");
+                }
+                pendingToolCall = { id: toolCallId, name: toolName, args };
+                logger.info({ toolName, toolCallId }, "Tool call received from LLM");
+              }
+              continue;
+            }
+          }
+
+          // If no tool call, we're done
+          if (!pendingToolCall) {
+            yield { type: "finish", finishReason: "stop" };
             return;
           }
 
-          // #449 — parse with a discriminated Zod union instead of
-          // `as any`. Unknown event types are ignored (forward-compat
-          // with new upstream events); shape-mismatch on a known event
-          // logs at debug and is dropped.
-          const parsed = anyKnownEventSchema.safeParse(event);
-          if (!parsed.success) {
-            logger.debug(
-              { issues: parsed.error.issues.slice(0, 2) },
-              "Unrecognized LLM event shape — dropping",
-            );
-            continue;
-          }
-          const parsedEvent = parsed.data;
+          // Auto-execute the tool call server-side
+          logger.info({ toolName: pendingToolCall.name, round }, "Auto-executing tool call");
+          yield { type: "tool-call", toolCall: pendingToolCall };
 
-          // Stream text deltas to client
-          if (parsedEvent.type === "response.output_text.delta") {
-            yield { type: "text-delta", delta: parsedEvent.delta };
-            continue;
-          }
-          if (parsedEvent.type === "response.content_part.delta") {
-            const delta = parsedEvent.delta;
-            if (delta?.type === "output_text" && typeof delta.text === "string") {
-              yield { type: "text-delta", delta: delta.text };
-            }
-            continue;
+          const toolResult = await this.executeToolCall(
+            pendingToolCall,
+            sandboxSessions,
+            createdSessionIds,
+          );
+          yield { type: "tool-result", toolCallId: pendingToolCall.id, result: toolResult.text };
+
+          // Emit file outputs if any
+          for (const file of toolResult.files) {
+            yield { type: "file-output", file };
           }
 
-          // Capture complete function call from output_item.done
-          // This event contains everything: item.id, item.name, item.arguments
-          if (parsedEvent.type === "response.output_item.done") {
-            const item = parsedEvent.item;
-            if (item?.type === "function_call") {
-              const toolName = item.name ?? "";
-              const toolCallId = item.call_id ?? item.id ?? "";
-              let args: Record<string, unknown> = {};
-              try {
-                args = JSON.parse(item.arguments ?? "{}");
-              } catch {
-                logger.error({ rawArgs: String(item.arguments).slice(0, 200) }, "Failed to parse function call arguments");
-              }
-              pendingToolCall = { id: toolCallId, name: toolName, args };
-              logger.info({ toolName, toolCallId }, "Tool call received from LLM");
-            }
-            continue;
-          }
-        }
+          // Feed tool result back to LLM for next round
+          input.push({
+            role: "assistant" as const,
+            content: `[Tool call: ${pendingToolCall.name}(${JSON.stringify(pendingToolCall.args)})]`,
+          });
+          input.push({
+            role: "user" as const,
+            content: `Tool result for ${pendingToolCall.name}: ${toolResult.text}`,
+          });
 
-        // If no tool call, we're done
-        if (!pendingToolCall) {
-          yield { type: "finish", finishReason: "stop" };
+        } catch (err) {
+          logger.error({ userId, err, round }, "Chat stream error");
+          yield { type: "error", message: err instanceof Error ? err.message : "Stream failed" };
+          yield { type: "finish", finishReason: "error" };
           return;
         }
+      }
 
-        // Auto-execute the tool call server-side
-        logger.info({ toolName: pendingToolCall.name, round }, "Auto-executing tool call");
-        yield { type: "tool-call", toolCall: pendingToolCall };
-
-        const toolResult = await this.executeToolCall(pendingToolCall);
-        yield { type: "tool-result", toolCallId: pendingToolCall.id, result: toolResult.text };
-
-        // Emit file outputs if any
-        for (const file of toolResult.files) {
-          yield { type: "file-output", file };
-        }
-
-        // Feed tool result back to LLM for next round
-        input.push({
-          role: "assistant" as const,
-          content: `[Tool call: ${pendingToolCall.name}(${JSON.stringify(pendingToolCall.args)})]`,
-        });
-        input.push({
-          role: "user" as const,
-          content: `Tool result for ${pendingToolCall.name}: ${toolResult.text}`,
-        });
-
-      } catch (err) {
-        logger.error({ userId, err, round }, "Chat stream error");
-        yield { type: "error", message: err instanceof Error ? err.message : "Stream failed" };
-        yield { type: "finish", finishReason: "error" };
-        return;
+      yield { type: "finish", finishReason: "stop" };
+    } finally {
+      // Best-effort session cleanup. chrono-sandbox sessions also
+      // expire via ttlSecs, but explicit teardown frees the container
+      // immediately. Swallow errors — a leftover session will TTL out.
+      if (createdSessionIds.length > 0) {
+        await Promise.allSettled(
+          createdSessionIds.map(async (sessionId) => {
+            try {
+              await this.sandboxClient.deleteSession(sessionId);
+            } catch (err) {
+              logger.warn(
+                { sessionId, err: (err as Error).message },
+                "Sandbox session delete failed — relying on TTL",
+              );
+            }
+          }),
+        );
       }
     }
-
-    yield { type: "finish", finishReason: "stop" };
   }
 
   /**
-   * Execute a tool call server-side. Returns text result and any output files.
+   * Execute a tool call server-side. Returns text result and any
+   * output files. `sandboxSessions` and `createdSessionIds` are
+   * owned by the caller (`chat()`) — per-chat state that lets
+   * `execute_in_sandbox` reuse the same chrono-sandbox kernel across
+   * tool-use rounds so installed CLIs, env, and filesystem persist
+   * (#531).
    */
   private async executeToolCall(
     toolCall: { id: string; name: string; args: Record<string, unknown> },
-  ): Promise<{ text: string; files: Array<{ path: string; content: string; size: number; mimeType: string }> }> {
+    sandboxSessions: Map<string, string>,
+    createdSessionIds: string[],
+  ): Promise<ToolCallResult> {
     const { name, args } = toolCall;
-    const noFiles: Array<{ path: string; content: string; size: number; mimeType: string }> = [];
 
     if (name === "execute_in_sandbox") {
-      try {
-        const result = await this.sandboxClient.execute({
-          script: (args.script as string) ?? "",
-          language: (args.language as string) ?? "python",
-          outputType: (args.output_type as "text" | "file") ?? "text",
-          env: (args.env as Record<string, string>) ?? {},
-          dependencies: (args.dependencies as string[]) ?? [],
-          retrieveFiles: (args.retrieve_files as string[]) ?? [],
-          inputFiles: (args.input_files as Array<{ path: string; content: string }>) ?? [],
-          timeoutSecs: (args.timeout_secs as number) ?? 120,
-        });
-
-        // Extract retrieved files
-        const files = (result.output?.files ?? [])
-          .filter((f): f is typeof f & { content: string } => !!f.content && !f.error)
-          .map((f) => ({
-            path: f.path,
-            content: f.content,
-            size: f.size ?? 0,
-            mimeType: guessMimeType(f.path),
-          }));
-
-        const filesSummary = files.length > 0
-          ? `\nFiles retrieved: ${files.map((f) => `${f.path} (${f.size} bytes)`).join(", ")}`
-          : "";
-
-        const text = result.success
-          ? `Execution succeeded (exit code ${result.output?.exit_code}).\nstdout:\n${result.output?.stdout ?? ""}\nstderr:\n${result.output?.stderr ?? ""}${filesSummary}`
-          : `Execution failed: ${result.error?.message ?? "unknown error"}\nstdout:\n${result.output?.stdout ?? ""}\nstderr:\n${result.output?.stderr ?? ""}`;
-
-        return { text, files };
-      } catch (err) {
-        return { text: `Sandbox execution failed: ${err instanceof Error ? err.message : String(err)}`, files: noFiles };
-      }
+      return await this.runSandboxToolCall(args, sandboxSessions, createdSessionIds);
     }
 
     if (name === "load_skill") {
       try {
         const skillJson = await this.skillService.getSkillJson((args.skill_id as string) ?? "");
-        return { text: JSON.stringify(skillJson, null, 2), files: noFiles };
+        return { text: JSON.stringify(skillJson, null, 2), files: [] };
       } catch (err) {
-        return { text: `Failed to load skill: ${err instanceof Error ? err.message : String(err)}`, files: noFiles };
+        return { text: `Failed to load skill: ${err instanceof Error ? err.message : String(err)}`, files: [] };
       }
     }
 
-    return { text: `Unknown tool: ${name}`, files: noFiles };
+    return { text: `Unknown tool: ${name}`, files: [] };
+  }
+
+  /**
+   * Dispatch a single `execute_in_sandbox` tool call.
+   *
+   * Lazily reuses a per-language chrono-sandbox session for the chat —
+   * the first call for a language pays the createSession cost (with
+   * the LLM-supplied dependency list installed once); subsequent
+   * same-language calls hit the persistent kernel and see prior CLI
+   * installs, env writes, and filesystem state (#531).
+   *
+   * Fail-open fallbacks keep one-call behaviour identical to
+   * pre-session if session APIs error: createSession failure or
+   * sessionExecute failure both retry via the one-shot `/execute`
+   * endpoint, log a warning, and (for sessionExecute) drop the stale
+   * session id so the next call can recreate.
+   */
+  private async runSandboxToolCall(
+    args: Record<string, unknown>,
+    sandboxSessions: Map<string, string>,
+    createdSessionIds: string[],
+  ): Promise<ToolCallResult> {
+    const script = (args.script as string) ?? "";
+    const language = (args.language as string) ?? "python";
+    const outputType = (args.output_type as "text" | "file") ?? "text";
+    const env = (args.env as Record<string, string>) ?? {};
+    const dependencies = (args.dependencies as string[]) ?? [];
+    const retrieveFiles = (args.retrieve_files as string[]) ?? [];
+    const inputFiles = (args.input_files as Array<{ path: string; content: string }>) ?? [];
+    const timeoutSecs = (args.timeout_secs as number) ?? 120;
+
+    let sessionId = sandboxSessions.get(language);
+
+    if (!sessionId) {
+      try {
+        const session = await this.sandboxClient.createSession({
+          language,
+          dependencies,
+          env,
+          inputFiles,
+          // 10 min covers a typical multi-round playground session; the
+          // server also bumps last_used_at on each execute, so an
+          // active chat won't expire mid-conversation.
+          ttlSecs: 600,
+          networkEnabled: true,
+        });
+        sessionId = session.session_id;
+        sandboxSessions.set(language, sessionId);
+        createdSessionIds.push(sessionId);
+        logger.info(
+          { language, sessionId, deps: dependencies.length },
+          "Sandbox session created for chat",
+        );
+      } catch (err) {
+        logger.warn(
+          { language, err: (err as Error).message },
+          "createSession failed — falling back to one-shot execute",
+        );
+        return await this.runSandboxOneShot({
+          script, language, outputType, env, dependencies,
+          retrieveFiles, inputFiles, timeoutSecs,
+        });
+      }
+    }
+
+    try {
+      const result = await this.sandboxClient.sessionExecute(sessionId, {
+        script,
+        language,
+        outputType,
+        env,
+        inputFiles,
+        retrieveFiles,
+        timeoutSecs,
+      });
+      return formatSandboxResult(result);
+    } catch (err) {
+      logger.warn(
+        { sessionId, language, err: (err as Error).message },
+        "sessionExecute failed — dropping session and falling back to one-shot",
+      );
+      sandboxSessions.delete(language);
+      return await this.runSandboxOneShot({
+        script, language, outputType, env, dependencies,
+        retrieveFiles, inputFiles, timeoutSecs,
+      });
+    }
+  }
+
+  /**
+   * One-shot fallback path used when session APIs are unavailable.
+   * Matches the legacy pre-#531 behaviour exactly so a broken sandbox
+   * session layer never makes the playground worse than it was.
+   */
+  private async runSandboxOneShot(params: {
+    script: string;
+    language: string;
+    outputType: "text" | "file";
+    env: Record<string, string>;
+    dependencies: string[];
+    retrieveFiles: string[];
+    inputFiles: Array<{ path: string; content: string }>;
+    timeoutSecs: number;
+  }): Promise<ToolCallResult> {
+    try {
+      const result = await this.sandboxClient.execute(params);
+      return formatSandboxResult(result);
+    } catch (err) {
+      return {
+        text: `Sandbox execution failed: ${err instanceof Error ? err.message : String(err)}`,
+        files: [],
+      };
+    }
   }
 
   /**
