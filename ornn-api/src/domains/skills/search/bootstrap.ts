@@ -16,6 +16,7 @@ import { SearchService } from "./service";
 import { createSearchRoutes } from "./routes";
 import type { SkillRepository } from "../crud/repository";
 import type { NyxLlmClient } from "../../../clients/nyxid/llm";
+import type { NyxidServiceClient } from "../../../clients/nyxid/service";
 
 export interface SkillSearchWiring {
   readonly service: SearchService;
@@ -32,6 +33,12 @@ export function wireSkillSearch(deps: {
    * route through the new section in the caller.
    */
   defaultModelResolver: () => Promise<string>;
+  /**
+   * NyxID catalog client + SA token accessor. Powers the live
+   * deactivation filter for `/skill-facets/system-services` (#715).
+   */
+  nyxidServiceClient: NyxidServiceClient;
+  getSaAccessToken: () => Promise<string>;
 }): SkillSearchWiring {
   const service = new SearchService({
     skillRepo: deps.skillRepo,
@@ -41,6 +48,8 @@ export function wireSkillSearch(deps: {
   const routes = createSearchRoutes({
     searchService: service,
     skillRepo: deps.skillRepo,
+    nyxidServiceClient: deps.nyxidServiceClient,
+    getSaAccessToken: deps.getSaAccessToken,
   });
   return { service, routes };
 }

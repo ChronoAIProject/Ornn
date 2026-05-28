@@ -712,6 +712,8 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
     llmClient: nyxLlmClient,
     defaultModelResolver: async () =>
       (await resolveSurfaceDefaults("playground")).model,
+    nyxidServiceClient,
+    getSaAccessToken,
   });
 
   // ---- Domain: Skill Generation ----
