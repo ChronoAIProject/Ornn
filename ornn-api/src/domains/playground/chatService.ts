@@ -70,6 +70,46 @@ interface ToolCallResult {
 }
 
 /**
+ * Translate a thrown error from `sandboxClient.{execute,sessionExecute}`
+ * into a user-facing one-liner for the playground transcript (#530).
+ *
+ * `SandboxClient.post` throws an `Error` whose message is
+ * `"Sandbox service error (<status>): <raw body text>"`. The raw body
+ * is often an `{ error, error_code, message }` JSON envelope from
+ * chrono-sandbox; the legacy formatter spat that JSON straight into
+ * the chat. Try to parse the body — if it's the structured envelope
+ * we surface a friendly sentence plus an internal-code hint admins
+ * can grep on. Otherwise fall back to the raw message so any new
+ * upstream shape still makes it to the operator.
+ */
+function formatSandboxError(err: unknown): string {
+  const raw = err instanceof Error ? err.message : String(err);
+  const match = raw.match(/^Sandbox service error \((\d+)\): (.*)$/s);
+  if (!match) return `Sandbox execution failed: ${raw}`;
+  const status = match[1]!;
+  const body = match[2]!;
+  try {
+    const parsed = JSON.parse(body) as {
+      error?: string;
+      error_code?: number;
+      message?: string;
+    };
+    const codeHint =
+      typeof parsed.error_code === "number" ? ` [code ${parsed.error_code}]` : "";
+    const summary = parsed.message ?? parsed.error ?? `HTTP ${status}`;
+    if (status === "500" || (parsed.error_code === 1006)) {
+      return `Sandbox is having trouble running this script${codeHint}. This is usually a transient sandbox-server issue — try again, or simplify the script if it keeps failing.`;
+    }
+    if (status === "504" || status === "503") {
+      return `Sandbox timed out / temporarily unavailable${codeHint}. Try again in a few seconds.`;
+    }
+    return `Sandbox execution failed (HTTP ${status})${codeHint}: ${summary}`;
+  } catch {
+    return `Sandbox execution failed (HTTP ${status}): ${body.slice(0, 200)}`;
+  }
+}
+
+/**
  * Translate a chrono-sandbox `SandboxExecuteResult` (both /execute and
  * /sessions/{id}/execute return this shape) into the {text, files}
  * envelope the playground stream feeds back to the LLM and emits as
@@ -622,10 +662,15 @@ export class PlaygroundChatService {
       const result = await this.sandboxClient.execute(params);
       return formatSandboxResult(result);
     } catch (err) {
-      return {
-        text: `Sandbox execution failed: ${err instanceof Error ? err.message : String(err)}`,
-        files: [],
-      };
+      logger.error(
+        {
+          language: params.language,
+          scriptLen: params.script.length,
+          err: (err as Error).message,
+        },
+        "Sandbox one-shot execute failed",
+      );
+      return { text: formatSandboxError(err), files: [] };
     }
   }
 
