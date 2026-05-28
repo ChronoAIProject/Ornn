@@ -9,7 +9,8 @@
  * @module components/admin/AdminUsersTable
  */
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import { Card } from "@/components/ui/Card";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -34,21 +35,13 @@ interface AdminUsersTableProps {
   description?: string;
 }
 
-const COLUMNS: Array<{
+type ColumnDef = {
   id: keyof AdminUserRow | "actions";
   label: string;
   sortAsc?: AdminUsersSort;
   sortDesc?: AdminUsersSort;
   align?: "left" | "right";
-}> = [
-  { id: "displayName", label: "Username", sortAsc: "displayName:asc", sortDesc: "displayName:desc" },
-  { id: "email", label: "Email", sortAsc: "email:asc", sortDesc: "email:desc" },
-  { id: "skillCount", label: "Skills", sortAsc: "skillCount:asc", sortDesc: "skillCount:desc", align: "right" },
-  { id: "lastActiveAt", label: "Last active", sortAsc: "lastActiveAt:asc", sortDesc: "lastActiveAt:desc", align: "right" },
-  { id: "activityCount", label: "Activities", sortAsc: "activityCount:asc", sortDesc: "activityCount:desc", align: "right" },
-  { id: "firstJoinedAt", label: "First joined", sortAsc: "firstJoinedAt:asc", sortDesc: "firstJoinedAt:desc", align: "right" },
-  { id: "actions", label: "", align: "right" },
-];
+};
 
 function formatDateUTC(iso: string | null, nullLabel: string): string {
   if (!iso) return nullLabel;
@@ -65,10 +58,23 @@ function formatDateUTC(iso: string | null, nullLabel: string): string {
 }
 
 export function AdminUsersTable({ role, title, description }: AdminUsersTableProps) {
+  const { t } = useTranslation();
   const [page, setPage] = useState(1);
   const [query, setQuery] = useState("");
   const debounced = useDebounce(query, 300);
   const [sort, setSort] = useState<AdminUsersSort>("lastActiveAt:desc");
+
+  // COLUMNS rebuild per-`t` so column headers + sort aria labels
+  // follow the active UI language (#697).
+  const COLUMNS = useMemo<ColumnDef[]>(() => [
+    { id: "displayName", label: t("adminUsersTable.columnUsername"), sortAsc: "displayName:asc", sortDesc: "displayName:desc" },
+    { id: "email", label: t("adminUsersTable.columnEmail"), sortAsc: "email:asc", sortDesc: "email:desc" },
+    { id: "skillCount", label: t("adminUsersTable.columnSkills"), sortAsc: "skillCount:asc", sortDesc: "skillCount:desc", align: "right" },
+    { id: "lastActiveAt", label: t("adminUsersTable.columnLastActive"), sortAsc: "lastActiveAt:asc", sortDesc: "lastActiveAt:desc", align: "right" },
+    { id: "activityCount", label: t("adminUsersTable.columnActivities"), sortAsc: "activityCount:asc", sortDesc: "activityCount:desc", align: "right" },
+    { id: "firstJoinedAt", label: t("adminUsersTable.columnFirstJoined"), sortAsc: "firstJoinedAt:asc", sortDesc: "firstJoinedAt:desc", align: "right" },
+    { id: "actions", label: "", align: "right" },
+  ], [t]);
 
   const usersQuery = useQuery({
     queryKey: ["admin", "users", role, debounced, page, sort] as const,
@@ -86,7 +92,7 @@ export function AdminUsersTable({ role, title, description }: AdminUsersTablePro
   const items = usersQuery.data?.items ?? [];
   const totalPages = usersQuery.data?.totalPages ?? 1;
 
-  const toggleSort = (col: typeof COLUMNS[number]) => {
+  const toggleSort = (col: ColumnDef) => {
     if (!col.sortAsc || !col.sortDesc) return;
     if (sort === col.sortDesc) setSort(col.sortAsc);
     else setSort(col.sortDesc);
@@ -111,7 +117,7 @@ export function AdminUsersTable({ role, title, description }: AdminUsersTablePro
             setQuery(e.target.value);
             setPage(1);
           }}
-          placeholder="Filter by email or display name…"
+          placeholder={t("adminUsersTable.filterPlaceholder")}
           aria-label={`Filter ${title}`}
           className="w-full max-w-xs rounded-sm border border-subtle bg-elevated/40 px-3 py-2 font-mono text-xs text-strong placeholder:text-meta/70 focus:border-accent focus:bg-card focus:outline-none"
         />
@@ -125,7 +131,7 @@ export function AdminUsersTable({ role, title, description }: AdminUsersTablePro
             {translateError(usersQuery.error, "Failed to load users")}
           </p>
         ) : items.length === 0 ? (
-          <p className="py-8 text-center font-text text-meta">No users found.</p>
+          <p className="py-8 text-center font-text text-meta">{t("adminUsersTable.empty")}</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full">
@@ -145,7 +151,7 @@ export function AdminUsersTable({ role, title, description }: AdminUsersTablePro
                           <button
                             type="button"
                             onClick={() => toggleSort(col)}
-                            aria-label={`Sort by ${col.label}`}
+                            aria-label={t("adminUsersTable.sortByPrefix", { label: col.label })}
                             className={`inline-flex items-center gap-1 hover:text-accent ${
                               isAsc || isDesc ? "text-strong" : ""
                             }`}
@@ -178,7 +184,7 @@ export function AdminUsersTable({ role, title, description }: AdminUsersTablePro
                       {u.skillCount.toLocaleString()}
                     </td>
                     <td className="px-4 py-3 text-right font-mono text-[11px] text-meta">
-                      {formatDateUTC(u.lastActiveAt, "Never")}
+                      {formatDateUTC(u.lastActiveAt, t("adminUsersTable.never"))}
                     </td>
                     <td className="px-4 py-3 text-right font-mono text-[12px] text-body">
                       {u.activityCount.toLocaleString()}
@@ -191,7 +197,7 @@ export function AdminUsersTable({ role, title, description }: AdminUsersTablePro
                         to={`/admin/quota?userId=${encodeURIComponent(u.userId)}&surface=playground`}
                         className="font-mono text-[11px] uppercase tracking-[0.14em] text-accent hover:text-accent-muted"
                       >
-                        Grant quota
+                        {t("adminUsersTable.grantQuota")}
                       </Link>
                     </td>
                   </tr>

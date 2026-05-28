@@ -1,4 +1,47 @@
 {
+  "nyxidService": {
+    "intro": "将技能绑定到 NyxID 管理员服务会将其标记为系统技能（强制公开）。绑定到个人服务则不会改变隐私设置。",
+    "untied": "未绑定",
+    "untiedDesc": "该技能未绑定任何 NyxID 服务。隐私和共享设置仍由你手动控制。",
+    "adminTier": "管理员服务（系统）",
+    "personalTier": "个人服务",
+    "noServices": "没有可用的 NyxID 服务。请联系平台管理员或在 NyxID 中注册一个。",
+    "willForcePublic": "绑定到管理员服务将强制把该技能设为公开。其他共享设置（用户 / 组织）会被保留，但在技能公开期间不生效。",
+    "tieSuccess": "服务已绑定",
+    "untieSuccess": "服务已解绑"
+  },
+  "markdownEditor": {
+    "preview": "预览",
+    "emptyPreview": "暂无可预览内容…",
+    "helpText": "支持 Markdown 格式。可使用 **粗体**、_斜体_、`代码` 等。"
+  },
+  "adminUsersTable": {
+    "filterPlaceholder": "按邮箱或显示名称筛选…",
+    "empty": "未找到用户。",
+    "never": "从未",
+    "grantQuota": "授予配额",
+    "columnUsername": "用户名",
+    "columnEmail": "邮箱",
+    "columnSkills": "技能数",
+    "columnLastActive": "最近活跃",
+    "columnActivities": "活动数",
+    "columnFirstJoined": "首次加入",
+    "sortByPrefix": "按 {{label}} 排序"
+  },
+  "sidebar": {
+    "navigation": "导航"
+  },
+  "adminSettingsNav": {
+    "llmProviders": "LLM 提供方",
+    "playground": "Playground",
+    "skillGeneration": "技能生成",
+    "githubMirror": "GitHub 镜像",
+    "nyxidIntegration": "NyxID 集成",
+    "skillAuditing": "技能审计",
+    "postHog": "PostHog",
+    "serviceBinding": "服务绑定列表",
+    "exportImport": "导出 / 导入"
+  },
   "common": {
     "save": "保存",
     "cancel": "取消",
@@ -470,6 +513,13 @@
     "startGithub": "导入"
   },
   "guided": {
+    "validation": {
+      "nameMin": "技能名称至少需要 2 个字符",
+      "nameMax": "技能名称最多 64 个字符",
+      "nameShape": "必须以字母或数字开头，仅允许小写字母、数字和短横线",
+      "descMin": "描述至少需要 10 个字符",
+      "contentMin": "正文内容至少需要 50 个字符"
+    },
     "backToModes": "返回模式选择",
     "header": "创建技能",
     "headerDesc": "按下方步骤创建新技能",

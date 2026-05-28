@@ -1,4 +1,47 @@
 {
+  "nyxidService": {
+    "intro": "Binding a skill to a NyxID admin service marks it as a system skill (forced public). Binding to one of your personal services leaves the privacy alone.",
+    "untied": "No binding (unbound)",
+    "untiedDesc": "This skill is not bound to any NyxID service. Privacy and sharing remain manually controlled.",
+    "adminTier": "Admin services (system)",
+    "personalTier": "Personal services",
+    "noServices": "No NyxID services available. Ask a platform admin or register one in NyxID.",
+    "willForcePublic": "Binding to an admin service will force this skill to be public. Other share settings (users / orgs) are kept but ignored while the skill is public.",
+    "tieSuccess": "Service bound",
+    "untieSuccess": "Service unbound"
+  },
+  "markdownEditor": {
+    "preview": "Preview",
+    "emptyPreview": "Nothing to preview yet...",
+    "helpText": "Supports Markdown formatting. Use **bold**, _italic_, `code`, and more."
+  },
+  "adminUsersTable": {
+    "filterPlaceholder": "Filter by email or display name…",
+    "empty": "No users found.",
+    "never": "Never",
+    "grantQuota": "Grant quota",
+    "columnUsername": "Username",
+    "columnEmail": "Email",
+    "columnSkills": "Skills",
+    "columnLastActive": "Last active",
+    "columnActivities": "Activities",
+    "columnFirstJoined": "First joined",
+    "sortByPrefix": "Sort by {{label}}"
+  },
+  "sidebar": {
+    "navigation": "Navigation"
+  },
+  "adminSettingsNav": {
+    "llmProviders": "LLM Providers",
+    "playground": "Playground",
+    "skillGeneration": "Skill Generation",
+    "githubMirror": "GitHub Mirror",
+    "nyxidIntegration": "NyxID Integration",
+    "skillAuditing": "Skill Auditing",
+    "postHog": "PostHog",
+    "serviceBinding": "Service Binding List",
+    "exportImport": "Export / Import"
+  },
   "common": {
     "save": "Save",
     "cancel": "Cancel",
@@ -470,6 +513,13 @@
     "startGithub": "Import"
   },
   "guided": {
+    "validation": {
+      "nameMin": "Name must be at least 2 characters",
+      "nameMax": "Name must be at most 64 characters",
+      "nameShape": "Must start with a letter or number, only lowercase, numbers, and hyphens",
+      "descMin": "Description must be at least 10 characters",
+      "contentMin": "Content must be at least 50 characters"
+    },
     "backToModes": "Back to mode selection",
     "header": "CREATE SKILL",
     "headerDesc": "Follow the steps below to create a new skill",
