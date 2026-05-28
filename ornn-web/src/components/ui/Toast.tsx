@@ -166,7 +166,11 @@ export function ToastContainer({
 
   return (
     <div
-      className={`pointer-events-none fixed z-50 flex flex-col gap-3 ${POSITION_STYLES[position]} ${className}`}
+      // z-[60] (#699) — modals sit at z-50; without this bump the
+      // toast portal renders behind any open modal overlay and the
+      // operation result for an in-modal action (e.g. delete inside
+      // the all-versions modal) becomes dim and unreadable.
+      className={`pointer-events-none fixed z-[60] flex flex-col gap-3 ${POSITION_STYLES[position]} ${className}`}
       role="region"
       aria-label={t("common.aria.notifications")}
     >
