@@ -70,6 +70,7 @@ import { createAuditRoutes } from "./domains/skills/audit/routes";
 
 // Domain: Notifications
 import { wireNotifications } from "./domains/notifications/bootstrap";
+import { wireLaunchPromo } from "./domains/launchPromo/bootstrap";
 
 // Domain: Announcements (landing-page popup)
 import { wireAnnouncements } from "./domains/announcements/bootstrap";
@@ -500,12 +501,15 @@ export async function bootstrap(
     db,
     logger,
   });
-  const { service: notificationService, routes: notificationRoutes } =
-    await wireNotifications({
-      db,
-      logger,
-      broadcastRepo: broadcastRepoForNotifications,
-    });
+  const {
+    service: notificationService,
+    routes: notificationRoutes,
+    repo: notificationRepo,
+  } = await wireNotifications({
+    db,
+    logger,
+    broadcastRepo: broadcastRepoForNotifications,
+  });
 
   // ---- Domain: Announcements (landing-page popup, issue #307) ----
   const { routes: announcementRoutes } = await wireAnnouncements({ db, logger });
@@ -637,9 +641,25 @@ export async function bootstrap(
 
   // ---- Domain: Redemption codes (single-use admin-issued quota grants) ----
   const {
+    service: redemptionCodeService,
     adminRoutes: adminRedemptionCodesRoutes,
     meRoutes: meRedemptionCodesRoutes,
   } = wireRedemptionCodes({ db, logger, quotaService });
+
+  // ---- Domain: Launch promo (#724) ----
+  // Sits on top of redemption codes + notifications: when an admin
+  // (or, in a follow-up PR, the cron loop) awards an eligible user,
+  // the service mints a code via redemptionCodeService.mint and drops
+  // it into the user's notification inbox.
+  const { service: launchPromoService, routes: launchPromoRoutes } =
+    await wireLaunchPromo({
+      db,
+      settingsService,
+      redemptionCodeService,
+      notificationRepo,
+      userDirectoryRepo,
+    });
+  void launchPromoService;
 
   // ---- Per-provider model catalog migration (#270) ----
   // Fold the standalone `models` collection into `llm_providers.models[]`
@@ -941,6 +961,7 @@ export async function bootstrap(
   apiApp.route("/", mirrorRoutes);
   apiApp.route("/", auditRoutes);
   apiApp.route("/", notificationRoutes);
+  apiApp.route("/", launchPromoRoutes);
   apiApp.route("/", announcementRoutes);
   apiApp.route("/", broadcastRoutes);
   apiApp.route("/", analyticsRoutes);

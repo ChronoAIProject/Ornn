@@ -33,6 +33,7 @@ import {
   sections,
   type AssistantSection,
   type ExtrasSection,
+  type LaunchPromoSection,
   type MirrorSection,
   type NyxidSection,
   type PlaygroundSection,
@@ -116,6 +117,9 @@ export class SettingsServiceImpl implements SettingsService {
   }
   async getExtras(): Promise<ExtrasSection> {
     return this.getSection<ExtrasSection>("extras");
+  }
+  async getLaunchPromo(): Promise<LaunchPromoSection> {
+    return this.getSection<LaunchPromoSection>("launchPromo");
   }
 
   async getSection<T>(id: SectionId): Promise<T> {
