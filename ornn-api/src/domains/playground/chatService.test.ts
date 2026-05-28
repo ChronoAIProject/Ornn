@@ -321,3 +321,64 @@ describe("PlaygroundChatService — sandbox session persistence (#531)", () => {
     (sandbox.client as { deleteSession: (id: string) => Promise<void> }).deleteSession = originalDelete;
   });
 });
+
+// ---------------------------------------------------------------------------
+// #721 — user-supplied env values must not flow through the LLM
+// ---------------------------------------------------------------------------
+
+describe("PlaygroundChatService — env value isolation (#721)", () => {
+  it("user-provided envVars override the model's args.env at sandbox-execute time", async () => {
+    const sandbox = makeSandboxClient({});
+    const service = makeService(
+      [
+        makeToolCallEvents({
+          name: "execute_in_sandbox",
+          args: {
+            script: "print(env)",
+            language: "python",
+            // Simulate a model that emitted a guessed/leaky value.
+            env: { SECRET_TOKEN: "model-guessed-value", PUBLIC_FLAG: "model-set" },
+          },
+        }),
+        STOP_EVENTS,
+      ],
+      sandbox,
+    );
+
+    await drain(
+      service.chat(
+        "u1",
+        {
+          messages: [{ role: "user", content: "go" }],
+          envVars: { SECRET_TOKEN: "REAL_SECRET_FROM_UI" },
+        },
+      ),
+    );
+
+    expect(sandbox.calls.sessionExecute).toHaveLength(1);
+    const envSeen = sandbox.calls.sessionExecute[0]!.params.env as Record<string, string>;
+    // Real value wins over model-supplied placeholder.
+    expect(envSeen.SECRET_TOKEN).toBe("REAL_SECRET_FROM_UI");
+    // Keys the user didn't override ride through.
+    expect(envSeen.PUBLIC_FLAG).toBe("model-set");
+  });
+
+  it("no envVars passed → sandbox env is exactly what the model produced", async () => {
+    const sandbox = makeSandboxClient({});
+    const service = makeService(
+      [
+        makeToolCallEvents({
+          name: "execute_in_sandbox",
+          args: { script: "x", language: "python", env: { MARKER: "test123" } },
+        }),
+        STOP_EVENTS,
+      ],
+      sandbox,
+    );
+
+    await drain(service.chat("u1", { messages: [{ role: "user", content: "go" }] }));
+
+    const envSeen = sandbox.calls.sessionExecute[0]!.params.env as Record<string, string>;
+    expect(envSeen).toEqual({ MARKER: "test123" });
+  });
+});
