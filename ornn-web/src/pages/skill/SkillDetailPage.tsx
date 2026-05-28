@@ -91,6 +91,7 @@ export function SkillDetailPage() {
     auditSummaryByVersion,
     versionAudit,
     versionAuditRunning,
+    versionAuditLatestFailed,
     ownerDisplayName,
     ownerAvatarUrl,
     deleteMutation,
@@ -310,7 +311,11 @@ export function SkillDetailPage() {
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></svg>
                 {t("skillDetail.cardAudit", "Audit")}
               </h3>
-              <AuditVerdictPill audit={versionAudit} running={versionAuditRunning} />
+              <AuditVerdictPill
+                audit={versionAudit}
+                running={versionAuditRunning}
+                latestRerunFailed={versionAuditLatestFailed}
+              />
               <p className="font-mono text-[11px] leading-relaxed tracking-wide text-meta">
                 {versionAuditRunning
                   ? t("skillDetail.auditRunningHint", "Scoring against the audit engine — this usually takes 30–60 seconds.")
