@@ -30,6 +30,16 @@ export async function logActivity(action: "login" | "logout"): Promise<void> {
     // them — sending them tripped a preflight-blocked-by-CORS failure
     // on every login. Same dead code as the `apiClient.createHeaders`
     // cleanup; this caller was missed in the original sweep.
+    //
+    // #709 — `credentials: "include"` was a second preflight trap.
+    // The Bearer token already authenticates the request; no cookies
+    // ride this endpoint and the rest of the SPA's `apiClient` calls
+    // never set `credentials`. With `include`, the browser demanded
+    // `Access-Control-Allow-Credentials: true` + a specific (non-*)
+    // `Access-Control-Allow-Origin` on the preflight response — which
+    // the NyxID proxy doesn't return for this endpoint — and blocked
+    // the POST. Dropping it brings this call in line with the rest of
+    // the SPA and the preflight succeeds.
     const headers: HeadersInit = {
       "Content-Type": "application/json",
       Authorization: `Bearer ${accessToken}`,
@@ -38,7 +48,6 @@ export async function logActivity(action: "login" | "logout"): Promise<void> {
     const res = await fetch(`${API_BASE}/api/v1/activity/${action}`, {
       method: "POST",
       headers,
-      credentials: "include",
     });
 
     if (!res.ok) {
