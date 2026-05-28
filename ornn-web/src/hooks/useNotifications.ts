@@ -31,6 +31,14 @@ export function useNotifications(opts: ListNotificationsOptions = {}) {
     queryFn: () => fetchNotifications(opts),
     enabled: isAuthed,
     staleTime: 10_000,
+    // #728 — bell dropdown subscribes to this query. Without a
+    // refetch interval, the badge (from useUnreadNotificationCount,
+    // polled every 30s) would tick to a new count while the list
+    // stayed frozen — user sees "1 unread" with a dropdown that
+    // doesn't actually show the new item. Mirror the count's poll
+    // so the two stay in sync.
+    refetchInterval: isAuthed ? UNREAD_POLL_MS : false,
+    refetchIntervalInBackground: false,
   });
 }
 
