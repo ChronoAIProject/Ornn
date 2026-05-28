@@ -281,13 +281,13 @@ export function BroadcastsPage() {
                       </td>
                       <td className="px-4 py-3 align-top font-mono text-[11px] text-meta">
                         {new Date(b.createdAt).toLocaleString(
-                          undefined,
+                          lang,
                           ROW_DATE_FMT,
                         )}
                       </td>
                       <td className="px-4 py-3 align-top font-mono text-[11px] text-meta">
                         {new Date(b.updatedAt).toLocaleString(
-                          undefined,
+                          lang,
                           ROW_DATE_FMT,
                         )}
                       </td>
