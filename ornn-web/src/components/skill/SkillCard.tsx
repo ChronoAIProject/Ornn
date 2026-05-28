@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/Badge";
 import type { BadgeProps } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import type { SkillSearchResult } from "@/types/search";
+import { useMyOrgs } from "@/hooks/useMe";
 
 const TAG_COLORS: NonNullable<BadgeProps["color"]>[] = ["cyan", "magenta", "yellow", "green"];
 
@@ -101,6 +102,18 @@ export function SkillCard({
   const displayName = ownerDisplayName || skill.createdByDisplayName || skill.createdByEmail || skill.createdBy;
   const timestamp = skill.updatedOn || skill.createdOn;
 
+  // #729 — resolve the specific org that granted access for
+  // `shared-via-org` cards. The skill carries `sharedViaOrgId`; the
+  // current user's NyxID memberships carry display names. Match on
+  // `userId` (NyxID org ids are NyxID user ids). Falls back to the
+  // generic "Via organization" label when the lookup misses (org is
+  // not in the caller's memberships, or the orgs query is loading).
+  const { data: myOrgs } = useMyOrgs();
+  const viaOrgName =
+    skill.myAccessReason === "shared-via-org" && skill.sharedViaOrgId
+      ? myOrgs?.find((o) => o.userId === skill.sharedViaOrgId)?.displayName
+      : undefined;
+
   return (
     <Card
       hoverable
@@ -138,7 +151,11 @@ export function SkillCard({
           `myAccessReason` with a grant-based value. */}
       {skill.myAccessReason === "shared-via-org" && (
         <p className="mb-2 font-text text-[11px] uppercase tracking-wider text-meta">
-          {t("skillComponents.card.viaOrganization", "Via organization")}
+          {viaOrgName
+            ? t("skillComponents.card.viaOrganizationNamed", "Via {{org}}", {
+                org: viaOrgName,
+              })
+            : t("skillComponents.card.viaOrganization", "Via organization")}
         </p>
       )}
       {skill.myAccessReason === "shared-direct" && (

@@ -1038,7 +1038,7 @@
     "quotaUsageDetails": "配额使用详情"
   },
   "search": {
-    "placeholderKeyword": "按名称、描述或标签搜索技能…",
+    "placeholderKeyword": "按名称或描述搜索技能…",
     "placeholderSemantic": "描述你想找什么…",
     "toggleToKeyword": "切换到关键词搜索",
     "toggleToSemantic": "切换到语义搜索",
@@ -1054,6 +1054,7 @@
     "card": {
       "linkedToGithub": "已关联到 GitHub",
       "viaOrganization": "通过组织共享",
+      "viaOrganizationNamed": "通过 {{org}} 共享",
       "sharedBy": "由 {{name}} 共享"
     },
     "grid": {
