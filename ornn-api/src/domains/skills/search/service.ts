@@ -136,9 +136,39 @@ export class SearchService {
     const queryTimeMs = Date.now() - startTime;
     logger.info({ mode, scope, query: query.slice(0, 50), total, queryTimeMs }, "Search completed");
 
-    const items = skills.map((s) =>
+    const rawItems = skills.map((s) =>
       enrichItem(s, { callerUserId: currentUserId, callerOrgIds: userOrgIds }),
     );
+
+    // #720 — zero-trust filter for shared-with-me. applyScope at the
+    // DB layer already gates on the caller's effective orgs, but a
+    // stale cache, a partially-replicated write, or a future query
+    // regression could let a skill leak through that points at an
+    // org the caller is no longer in. Drop such items unconditionally
+    // — the user can't actually open them (skill detail correctly
+    // 404s, that's verified) so surfacing them in search results is
+    // pure misinformation. We log when this trips so cache/data drift
+    // is visible.
+    let items = rawItems;
+    if (scope === "shared-with-me") {
+      const orgSet = new Set(userOrgIds);
+      const filtered = rawItems.filter((item) => {
+        if (item.myAccessReason !== "shared-via-org") return true;
+        if (!item.sharedViaOrgId) return false;
+        return orgSet.has(item.sharedViaOrgId);
+      });
+      if (filtered.length !== rawItems.length) {
+        logger.warn(
+          {
+            userId: currentUserId,
+            droppedCount: rawItems.length - filtered.length,
+            orgsConsidered: userOrgIds.length,
+          },
+          "shared-with-me defensive filter dropped result(s) — applyScope and effective orgs disagree",
+        );
+      }
+      items = filtered;
+    }
     const totalPages = Math.ceil(total / pageSize);
 
     return {
