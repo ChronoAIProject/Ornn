@@ -8,6 +8,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import type { SearchService } from "./service";
 import type { SkillRepository } from "../crud/repository";
+import type { NyxidServiceClient } from "../../../clients/nyxid/service";
 import {
   type AuthVariables,
   nyxidAuthMiddleware,
@@ -69,10 +70,19 @@ function parseCsv(raw: string | undefined): string[] | undefined {
 export interface SearchRoutesConfig {
   searchService: SearchService;
   skillRepo: SkillRepository;
+  /**
+   * NyxID catalog client + SA-token accessor. Used by
+   * `/skill-facets/system-services` to drop services NyxID has
+   * deactivated since the skill's `nyxidServiceId` was cached (#715).
+   * Optional so test wiring can omit the live filter; when omitted
+   * the facet returns the raw DB aggregation (pre-#715 behaviour).
+   */
+  nyxidServiceClient?: NyxidServiceClient;
+  getSaAccessToken?: () => Promise<string>;
 }
 
 export function createSearchRoutes(config: SearchRoutesConfig): Hono<{ Variables: AuthVariables }> {
-  const { searchService, skillRepo } = config;
+  const { searchService, skillRepo, nyxidServiceClient, getSaAccessToken } = config;
   const app = new Hono<{ Variables: AuthVariables }>();
 
   const optionalAuth = optionalAuthMiddleware();
@@ -261,6 +271,28 @@ export function createSearchRoutes(config: SearchRoutesConfig): Hono<{ Variables
    */
   app.get("/skill-facets/system-services", optionalAuth, async (c) => {
     const items = await skillRepo.aggregateSystemServices();
+
+    // Cross-check against NyxID's live active set (#715). The DB
+    // aggregation snapshots the service id/slug/label that was current
+    // when each skill was last bound, so a service NyxID has since
+    // deactivated still shows up here even though it's no longer
+    // bindable or usable. Drop those.
+    if (nyxidServiceClient && getSaAccessToken) {
+      try {
+        const saToken = await getSaAccessToken();
+        const activeIds = await nyxidServiceClient.listActiveServiceIdsAsPlatform(saToken);
+        if (activeIds) {
+          const filtered = items.filter((it) => activeIds.has(it.id));
+          return c.json({ data: { items: filtered }, error: null });
+        }
+      } catch (err) {
+        logger.warn(
+          { err: (err as Error).message },
+          "Failed to resolve active NyxID services; returning unfiltered facet",
+        );
+      }
+    }
+
     return c.json({ data: { items }, error: null });
   });
 
