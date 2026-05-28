@@ -119,19 +119,35 @@ async function handleResponse<T>(response: Response): Promise<ApiResponse<T>> {
   const json = (await response.json()) as unknown;
 
   if (!response.ok) {
-    // Error responses are RFC 7807 `application/problem+json` (#456)
-    // — fields at the body root. The pre-#456 `{ data, error: {…} }`
-    // envelope is no longer emitted.
-    const problem = (json ?? {}) as {
+    // Two error body shapes are observed on non-2xx responses:
+    //
+    //   1. RFC 7807 `application/problem+json` (#456) — `{ code, detail,
+    //      title, status }` at the body root. Newer endpoints emit this.
+    //   2. Legacy `{ data: null, error: { code, message } }` envelope.
+    //      Several domain routes (LLM provider sync, settings validation)
+    //      still throw via `AppError → buildErrorEnvelope` which keeps
+    //      this shape with a non-2xx status, and #694 surfaced that the
+    //      frontend was discarding their actionable `error.message`.
+    //
+    // Try the envelope first because `error.message` is the most
+    // actionable when present; fall back to RFC 7807 fields; final
+    // fallback is the generic literal.
+    const body = (json ?? {}) as {
       code?: string;
       detail?: string;
       title?: string;
       status?: number;
+      error?: { code?: string; message?: string };
     };
+    const envelopeCode = body.error?.code;
+    const envelopeMessage = body.error?.message;
     throw new ApiClientError(
-      problem.code ?? "unknown_error",
-      problem.detail ?? problem.title ?? "An unexpected error occurred",
-      problem.status ?? response.status,
+      envelopeCode ?? body.code ?? "unknown_error",
+      envelopeMessage ??
+        body.detail ??
+        body.title ??
+        "An unexpected error occurred",
+      body.status ?? response.status,
     );
   }
 
