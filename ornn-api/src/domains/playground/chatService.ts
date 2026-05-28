@@ -415,6 +415,7 @@ export class PlaygroundChatService {
             pendingToolCall,
             sandboxSessions,
             createdSessionIds,
+            request.envVars,
           );
           yield { type: "tool-result", toolCallId: pendingToolCall.id, result: toolResult.text };
 
@@ -475,11 +476,17 @@ export class PlaygroundChatService {
     toolCall: { id: string; name: string; args: Record<string, unknown> },
     sandboxSessions: Map<string, string>,
     createdSessionIds: string[],
+    userEnvVars: Record<string, string> | undefined,
   ): Promise<ToolCallResult> {
     const { name, args } = toolCall;
 
     if (name === "execute_in_sandbox") {
-      return await this.runSandboxToolCall(args, sandboxSessions, createdSessionIds);
+      return await this.runSandboxToolCall(
+        args,
+        sandboxSessions,
+        createdSessionIds,
+        userEnvVars,
+      );
     }
 
     if (name === "load_skill") {
@@ -513,11 +520,26 @@ export class PlaygroundChatService {
     args: Record<string, unknown>,
     sandboxSessions: Map<string, string>,
     createdSessionIds: string[],
+    userEnvVars: Record<string, string> | undefined,
   ): Promise<ToolCallResult> {
     const script = (args.script as string) ?? "";
     const language = (args.language as string) ?? "python";
     const outputType = (args.output_type as "text" | "file") ?? "text";
-    const env = (args.env as Record<string, string>) ?? {};
+    // #721 — user-provided env values always win over what the model
+    // supplied in `args.env`. Since #721 we no longer feed the actual
+    // env *values* into the developer message; the model only sees
+    // placeholder shapes (`KEY=<provided-server-side>`) and is told
+    // to reference them by name. Here we replace whatever the model
+    // emitted with the real values for any key the user supplied,
+    // closing the leak path where a chat-completion provider could
+    // serialize the tool call as assistant text and echo the env
+    // back to the user. Keys the model added that aren't in
+    // `userEnvVars` ride through unchanged (the model legitimately
+    // sets ad-hoc env like sentinel markers).
+    const env: Record<string, string> = {
+      ...((args.env as Record<string, string>) ?? {}),
+      ...(userEnvVars ?? {}),
+    };
     const dependencies = (args.dependencies as string[]) ?? [];
     const retrieveFiles = (args.retrieve_files as string[]) ?? [];
     const inputFiles = (args.input_files as Array<{ path: string; content: string }>) ?? [];
@@ -630,11 +652,25 @@ export class PlaygroundChatService {
       lines.push("");
     }
 
-    // Add user-provided env vars
+    // #721 — list ONLY the env var NAMES the user provided values for,
+    // never the values themselves. If the model ever echoes the
+    // developer message back (as it can do when chat-completion
+    // providers serialize `execute_in_sandbox` to assistant text
+    // instead of a structured tool call), the transcript would leak
+    // the user's secret. The server-side path (`runSandboxToolCall`)
+    // injects the real values into the sandbox env at execution
+    // time — the LLM never needs the literal value to issue the
+    // tool call.
     if (envVars && Object.keys(envVars).length > 0) {
       lines.push("### User-provided Environment Variables");
-      for (const [key, value] of Object.entries(envVars)) {
-        lines.push(`- ${key}=${value}`);
+      lines.push(
+        "The user has supplied values for the variables below. Reference each",
+        "by name when constructing `execute_in_sandbox`'s `env` argument —",
+        "the runtime will inject the real values server-side. DO NOT attempt to",
+        "guess, repeat, or echo the values; you do not have them.",
+      );
+      for (const key of Object.keys(envVars)) {
+        lines.push(`- ${key}=<provided-server-side>`);
       }
       lines.push("");
     }
