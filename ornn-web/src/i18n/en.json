@@ -115,6 +115,8 @@
     "auditHistory": "Audit history"
   },
   "explore": {
+    "semanticQueryRequiredTitle": "Enter a search description",
+    "semanticQueryRequiredDesc": "Semantic search needs a description of what you're looking for. Type a phrase in the search box above, or switch back to Keyword mode.",
     "systemSkills": "System Skills",
     "publicSkills": "Public Skills",
     "mySkills": "My Skills",

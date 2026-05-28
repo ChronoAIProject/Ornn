@@ -111,6 +111,12 @@ export function ExplorePage() {
   const selectedSourceUsers = parseCsvParam(searchParams.get("srcUsers"));
 
   const { query, mode } = useSearchStore();
+  // #726 — semantic search requires a query; the backend rejects an
+  // empty `q` with 400 QUERY_REQUIRED and the regular empty state
+  // ("No skills match") looks indistinguishable from a legitimate
+  // zero-result search. When the gate isn't met, render a clear
+  // validation EmptyState instead of the generic "no skills" copy.
+  const semanticGateUnmet = mode === "semantic" && !query.trim();
 
   const { data: systemData, isLoading: systemLoading } = useSystemSkills({
     query: query || undefined,
@@ -286,17 +292,30 @@ export function ExplorePage() {
                 ))}
               </div>
             ) : items.length === 0 ? (
-              <EmptyState
-                title={emptyTitle(activeTab, t as (k: string, f?: string) => string)}
-                description={emptyDescription(activeTab, t as (k: string, f?: string) => string)}
-                action={
-                  activeTab === "my-skills" && isAuthenticated ? (
-                    <Button onClick={() => navigate("/skills/new")}>
-                      {t("explore.createSkill", "Create a skill")}
-                    </Button>
-                  ) : undefined
-                }
-              />
+              semanticGateUnmet ? (
+                <EmptyState
+                  title={t(
+                    "explore.semanticQueryRequiredTitle",
+                    "Enter a search description",
+                  )}
+                  description={t(
+                    "explore.semanticQueryRequiredDesc",
+                    "Semantic search needs a description of what you're looking for. Type a phrase in the search box above, or switch back to Keyword mode.",
+                  )}
+                />
+              ) : (
+                <EmptyState
+                  title={emptyTitle(activeTab, t as (k: string, f?: string) => string)}
+                  description={emptyDescription(activeTab, t as (k: string, f?: string) => string)}
+                  action={
+                    activeTab === "my-skills" && isAuthenticated ? (
+                      <Button onClick={() => navigate("/skills/new")}>
+                        {t("explore.createSkill", "Create a skill")}
+                      </Button>
+                    ) : undefined
+                  }
+                />
+              )
             ) : (
               <motion.div
                 variants={containerVariants}

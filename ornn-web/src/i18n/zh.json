@@ -115,6 +115,8 @@
     "auditHistory": "审计历史"
   },
   "explore": {
+    "semanticQueryRequiredTitle": "请输入搜索描述",
+    "semanticQueryRequiredDesc": "语义搜索需要描述你要找的内容。请在上方搜索框中输入一段描述，或切换回关键字模式。",
     "systemSkills": "系统技能",
     "publicSkills": "公共技能",
     "mySkills": "我的技能",
