@@ -178,7 +178,7 @@ export function MirrorSection() {
             />
 
             <Link
-              to="/admin/skills"
+              to="/admin/mirror"
               className="inline-flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.14em] text-accent hover:text-accent-muted"
             >
               {t("adminSettings.sections.mirror.openDashboard")}

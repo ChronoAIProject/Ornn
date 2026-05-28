@@ -1038,7 +1038,7 @@
     "quotaUsageDetails": "Quota usage details"
   },
   "search": {
-    "placeholderKeyword": "Search skills by name, description, or tags...",
+    "placeholderKeyword": "Search skills by name or description...",
     "placeholderSemantic": "Describe what you're looking for...",
     "toggleToKeyword": "Switch to keyword search",
     "toggleToSemantic": "Switch to semantic search",
@@ -1054,6 +1054,7 @@
     "card": {
       "linkedToGithub": "Linked to GitHub",
       "viaOrganization": "Via organization",
+        "viaOrganizationNamed": "Via {{org}}",
       "sharedBy": "Shared by {{name}}"
     },
     "grid": {

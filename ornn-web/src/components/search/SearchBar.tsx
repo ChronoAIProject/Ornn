@@ -46,7 +46,7 @@ export function SearchBar({ className = "" }: SearchBarProps) {
           placeholder={
             isSemanticMode
               ? t("search.placeholderSemantic", "Describe what you're looking for...")
-              : t("search.placeholderKeyword", "Search skills by name, description, or tags...")
+              : t("search.placeholderKeyword", "Search skills by name or description...")
           }
           className="neon-input w-full rounded py-3 pr-4 pl-12 font-text text-strong placeholder:text-meta/50"
         />
