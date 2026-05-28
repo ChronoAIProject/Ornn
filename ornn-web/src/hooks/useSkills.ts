@@ -383,6 +383,11 @@ export function useDeleteSkillVersion(idOrName: string) {
       queryClient.invalidateQueries({ queryKey: [SKILLS_KEY, idOrName] });
       queryClient.invalidateQueries({ queryKey: [SKILLS_KEY] });
       queryClient.invalidateQueries({ queryKey: [MY_SKILLS_KEY] });
+      // #699 — the All-versions modal subscribes to
+      // [SKILL_VERSIONS_KEY, idOrName]; without this invalidation
+      // the deleted row stays visible and a second delete click
+      // hits the backend with the now-missing version.
+      queryClient.invalidateQueries({ queryKey: [SKILL_VERSIONS_KEY, idOrName] });
       queryClient.invalidateQueries({
         predicate: (q) =>
           Array.isArray(q.queryKey) &&
