@@ -269,7 +269,7 @@ export function MarkdownEditor({
               ) : (
                 <>
                   <PreviewIcon className="h-4 w-4" />
-                  <span className="hidden sm:inline">Preview</span>
+                  <span className="hidden sm:inline">{t("markdownEditor.preview")}</span>
                 </>
               )}
             </button>
@@ -298,7 +298,7 @@ export function MarkdownEditor({
                 </div>
               ) : (
                 <p className="text-meta font-text text-sm italic">
-                  Nothing to preview yet...
+                  {t("markdownEditor.emptyPreview")}
                 </p>
               )}
             </motion.div>
@@ -334,7 +334,7 @@ export function MarkdownEditor({
 
       {/* Help text */}
       <p className="text-xs text-meta font-text">
-        Supports Markdown formatting. Use **bold**, _italic_, `code`, and more.
+        {t("markdownEditor.helpText")}
       </p>
     </div>
   );
