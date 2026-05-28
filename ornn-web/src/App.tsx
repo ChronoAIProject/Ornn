@@ -157,6 +157,9 @@ const AdminAnnouncementsPage = lazy(() =>
 const AdminBroadcastsPage = lazy(() =>
   import("@/pages/admin").then((m) => ({ default: m.BroadcastsPage })),
 );
+const MirrorPage = lazy(() =>
+  import("@/pages/admin/MirrorPage").then((m) => ({ default: m.MirrorPage })),
+);
 
 // Settings layout + section components live under pages/admin/settings.
 const SettingsLayout = lazy(() =>
@@ -293,13 +296,13 @@ const router = createBrowserRouter(
               <Route path="/admin/announcements" element={<AdminAnnouncementsPage />} />
               <Route path="/admin/broadcasts" element={<AdminBroadcastsPage />} />
 
-              {/* /admin/mirror keeps working but redirects to the new
-                  settings/mirror section so existing deep-links + bookmarks
-                  continue to land on the right surface. */}
-              <Route
-                path="/admin/mirror"
-                element={<Navigate to="/admin/settings/mirror" replace />}
-              />
+              {/* /admin/mirror is the deep mirror operations console
+                  (counts, manual reconcile, status). It used to redirect
+                  to /admin/settings/mirror, but that left admins with no
+                  reachable "Manual reconcile" / "Reconcile now" control
+                  (#716). The settings section now links here for the
+                  full operations view. */}
+              <Route path="/admin/mirror" element={<MirrorPage />} />
 
               <Route path="/admin/settings" element={<SettingsLayout />}>
                 <Route
