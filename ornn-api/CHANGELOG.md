@@ -1,5 +1,7 @@
 # ornn-api
 
+## 0.9.1
+
 ## 0.9.0
 
 ### Minor Changes
@@ -342,7 +344,7 @@
 
 - [#672](https://github.com/ChronoAIProject/Ornn/pull/672) [`4a34183`](https://github.com/ChronoAIProject/Ornn/commit/4a34183981bccad6206f0798522a6a7dfb59f8e9) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Frontmatter validation errors now tell the user what to fix ([#649](https://github.com/ChronoAIProject/Ornn/issues/649)).
 
-  The Free / ZIP upload page already shows clear actionable messages for most validation failures (`version` semver rule, tag-regex rule, env-var UPPER_SNAKE_CASE rule), but the `tag`, `runtime`, `tool-list`, `runtime-env-var`, and `runtime-dependency` _item_ schemas surfaced as bare `Invalid input: expected string, received null` when an author hit common YAML mistakes:
+  The Free / ZIP upload page already shows clear actionable messages for most validation failures (`version` semver rule, tag-regex rule, env-var UPPER*SNAKE_CASE rule), but the `tag`, `runtime`, `tool-list`, `runtime-env-var`, and `runtime-dependency` \_item* schemas surfaced as bare `Invalid input: expected string, received null` when an author hit common YAML mistakes:
 
   - `tag: - ` (empty list-item dash) → YAML parses as `null`
   - `version: 0.1` (unquoted) → YAML parses as a number — already addressed in an earlier pass; pinned with a test here so it can't regress.

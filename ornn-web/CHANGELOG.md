@@ -1,5 +1,11 @@
 # ornn-web
 
+## 0.9.1
+
+### Patch Changes
+
+- [#760](https://github.com/ChronoAIProject/Ornn/pull/760) [`46ff335`](https://github.com/ChronoAIProject/Ornn/commit/46ff335a742200a5462faaf1350ada41da3c7a1e) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Fix hosted CORS failure blocking skill save / update / version-deprecation ([#732](https://github.com/ChronoAIProject/Ornn/issues/732)). `skillApi.ts` set `credentials: "include"` on three raw-fetch calls (`createSkill`, `updateSkillPackage`, `setSkillVersionDeprecation`). These authenticate with the `Authorization: Bearer` header, never cookies, so the flag was unnecessary — and fatal: a credentialed request forbids a wildcard `Access-Control-Allow-Origin: *`, which the NyxID proxy returns, so the browser blocked every request at the CORS layer with "Failed to fetch". [#528](https://github.com/ChronoAIProject/Ornn/issues/528) only removed the dead `X-User-*` headers and [#709](https://github.com/ChronoAIProject/Ornn/issues/709) cleared the same trap in `activityApi.ts`; the `skillApi.ts` siblings were missed. Dropping `credentials: "include"` restores hosted skill creation, package update, and version deprecation.
+
 ## 0.9.0
 
 ### Patch Changes
