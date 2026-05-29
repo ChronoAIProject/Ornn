@@ -67,7 +67,6 @@ export async function setSkillVersionDeprecation(
     {
       method: "PATCH",
       headers,
-      credentials: "include",
       body: JSON.stringify(body),
     },
   );
@@ -96,6 +95,15 @@ export async function setSkillVersionDeprecation(
  * CORS error. Same dead code as the `apiClient.createHeaders`
  * cleanup; this was the last unmigrated caller of the ZIP-upload
  * flow.
+ *
+ * #732 / #709 — also drop `credentials: "include"` here (and on the
+ * PUT/PATCH siblings below). These calls authenticate with the
+ * `Authorization: Bearer` header, never cookies. With
+ * `credentials: "include"` the browser rejects the NyxID proxy's
+ * wildcard `Access-Control-Allow-Origin: *` (a credentialed request
+ * forbids wildcard ACAO), blocking the request at the CORS layer
+ * before it leaves the browser — the exact "Failed to fetch" symptom
+ * in #732. Same trap #709 already cleared in activityApi.ts.
  */
 export async function createSkill(zipFile: File, skipValidation = false): Promise<SkillDetail> {
   const token = useAuthStore.getState().accessToken;
@@ -111,7 +119,6 @@ export async function createSkill(zipFile: File, skipValidation = false): Promis
     method: "POST",
     headers,
     body: zipFile,
-    credentials: "include",
   });
 
   if (!response.ok) {
@@ -151,7 +158,6 @@ export async function updateSkillPackage(id: string, zipFile: File, skipValidati
     method: "PUT",
     headers,
     body: zipFile,
-    credentials: "include",
   });
 
   if (!response.ok) {
