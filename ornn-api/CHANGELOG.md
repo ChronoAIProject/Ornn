@@ -1,5 +1,547 @@
 # ornn-api
 
+## 0.9.0
+
+### Minor Changes
+
+- [#645](https://github.com/ChronoAIProject/Ornn/pull/645) [`17cd5d2`](https://github.com/ChronoAIProject/Ornn/commit/17cd5d22a0f6b65a5714e2708b05cfadf2b321c2) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Cursor pagination on `/skill-search` per CONVENTIONS.md §4.3 + SDK auto-pagination iterator ([#457](https://github.com/ChronoAIProject/Ornn/issues/457) + [#465](https://github.com/ChronoAIProject/Ornn/issues/465)).
+
+  **API (`/api/v1/skill-search`)**
+
+  - Accepts `?cursor=<opaque-base64>` (alongside the existing `?page=N`). When both are sent, `cursor` wins.
+  - Accepts `?limit=N` as an alias for the existing `?pageSize=N`.
+  - Response now carries a `meta` envelope: `{ data: { items, total, page, pageSize, totalPages, meta: { limit, hasMore, nextCursor? } }, error }`. The legacy fields stay until they're sunset — clients can migrate at their own pace.
+  - A malformed cursor returns `400 invalid_cursor` (RFC 7807 problem+json) instead of silently falling back to page 1.
+  - Cursor payload is server-internal (`{ page: number }` today, `lastSort` keyset in a future PR) — clients MUST treat it as opaque.
+
+  **SDK (`@chronoai/ornn-sdk`)**
+
+  - `client.search()` now accepts `cursor` + `limit` params (additive).
+  - New `client.searchAll({ q })` returns an `AsyncIterableIterator<SkillSummary>`. Threads `meta.nextCursor` automatically; terminates on `hasMore === false` or no more cursor. 10k-page safety cap.
+
+  ```ts
+  for await (const skill of client.searchAll({ q: "pdf" })) {
+    console.log(skill.name);
+  }
+  ```
+
+  **Out of scope (follow-up)**
+
+  - Real lastSort keyset cursor under the hood — current cursor encodes `{ page }` so the wire contract conforms to §4.3 while the underlying query stays offset-based. Switching the payload is invisible to clients.
+  - Cursor support on other list endpoints (categories, tags, users) — those keep their existing offset shape for now.
+  - Python SDK `search_all()` — follow-up.
+  - `Sunset:` header on the legacy `page`/`pageSize` shape — once cursor adoption is high enough.
+
+- [#628](https://github.com/ChronoAIProject/Ornn/pull/628) [`1177265`](https://github.com/ChronoAIProject/Ornn/commit/1177265362c9f96f2107b4b84dea1ec30c7fc05d) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Add dist-tags for skill versions ([#463](https://github.com/ChronoAIProject/Ornn/issues/463)). Lets callers pin to a stable channel without enumerating versions or hard-coding numbers, matching the shape npm / yarn / pnpm exposes.
+
+  **New surface**
+
+  ```http
+  GET    /api/v1/skills/{idOrName}/dist-tags           → { tags: { latest, stable, ... } }
+  PUT    /api/v1/skills/{id}/dist-tags/{tag}           Body: { version }
+  DELETE /api/v1/skills/{id}/dist-tags/{tag}
+  GET    /api/v1/skills/{idOrName}?version=@stable     → resolves via dist-tag
+  ```
+
+  `SkillDetailResponse` now carries a `distTags` field on every read.
+
+  **Semantics**
+
+  - `latest` is **auto-managed**. Every successful publish sets `distTags.latest = newVersion`. `PUT` / `DELETE` against `latest` return 400 `dist_tag_immutable`.
+  - Custom tags (`stable`, `beta`, `rc-1`, ...) are owner-managed. Tag names match `/^[a-z][a-z0-9-]{0,49}$/` — npm rules, leading letter required so tags don't look like version numbers.
+  - Setting a tag for a non-existent version returns 404 `skill_version_not_found`.
+  - `?version=@latest` falls back to `skill.latestVersion` on legacy skills predating this PR so the resolution path stays compatible.
+
+  **Out of scope**
+
+  - TS / Python SDK helper methods around dist-tags — the endpoints work directly via the raw client. SDK convenience wrappers ride in a follow-up so this PR stays scoped.
+  - OpenAPI spec entries for the new paths — `/api/v1/openapi.json` is already incomplete for `/skills/:id/*` write paths; the bigger contract-test pass in [#462](https://github.com/ChronoAIProject/Ornn/issues/462) will pick all of them up at once.
+  - schemastore-style schema for the dist-tag write body (not visible in any IDE flow today).
+
+- [#623](https://github.com/ChronoAIProject/Ornn/pull/623) [`d39ac3a`](https://github.com/ChronoAIProject/Ornn/commit/d39ac3aa7e73674c232eab7b1bfa6a9e4eff3773) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - **BREAKING:** drop the legacy `ownerId` field from skill responses ([#581](https://github.com/ChronoAIProject/Ornn/issues/581)). The field was a no-op back-compat mirror of `createdBy` for an old "org-as-owner" design that visibility logic no longer consults — `createdBy` + `sharedWithUsers` + `sharedWithOrgs` is the authoritative ownership model.
+
+  Removed from:
+
+  - `ornn-api` — `SkillDocument`, `SkillDetailResponse`, `SkillSearchItem`, repository write path, search service mapping, routes response shape. No DB migration ships; old documents keep the field in storage, code just stops reading it.
+  - `@chronoai/ornn-sdk` (TypeScript) — `SkillDetail.ownerId` dropped.
+  - `ornn-sdk` (Python) — `SkillDetail.owner_id` dropped; `from_dict` tolerates the field appearing on stale responses by ignoring it.
+  - `ornn-web` — `SkillSearchResult.ownerId` dropped.
+
+  Also clears three more dead exports flagged in the same issue:
+
+  - `clients/nyxid/auth.ts` + its colocated test (the `AuthClient` was never mounted — its consumer middleware was deleted earlier).
+  - `INTERNAL_AUTH_HEADER` constant + `ApiKeyInfo` interface (both only referenced by the now-deleted `AuthClient`).
+  - `createErrorHandler` factory (live error handler is `app.onError` in bootstrap; the factory had no callers).
+
+- [#627](https://github.com/ChronoAIProject/Ornn/pull/627) [`f4bbdb1`](https://github.com/ChronoAIProject/Ornn/commit/f4bbdb1ba3ee2dbe522cb931e1d34f10f990d6e1) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Implement the `Idempotency-Key` header documented in CONVENTIONS.md §3.4 ([#459](https://github.com/ChronoAIProject/Ornn/issues/459)).
+
+  State-changing requests (`POST` / `PUT` / `PATCH` / `DELETE`) that include an `Idempotency-Key` header now get retry-safe replay semantics: the server fingerprints `(userId, method, path, key)` and caches the response (body + status + headers) in a new `idempotency_keys` Mongo collection for 24h. Retries within that window get the cached response back with `Idempotency-Replay: true` and the handler is NOT re-executed.
+
+  Matches the `Idempotency-Key` shape Stripe / Square / AWS / GitHub already expose. Closes a real reliability gap where an agent timing-out on a network blip and retrying could create duplicate skills / redemptions / notifications.
+
+  Scope decisions:
+
+  - Cache `2xx` + `4xx` responses (a validation error is deterministic for the same input); skip `5xx` (transient, retrying may succeed).
+  - Keys are scoped per `userId` so two unrelated callers using the same string can't collide.
+  - 24h TTL via a Mongo TTL index on `createdAt` — sweep cost is negligible at our request volume.
+  - Keys longer than 255 chars are silently bypassed rather than rejected, to avoid breaking every existing caller as soon as the middleware ships.
+
+- [#673](https://github.com/ChronoAIProject/Ornn/pull/673) [`38c875b`](https://github.com/ChronoAIProject/Ornn/commit/38c875b646dbfcb2a012ac4084c7e885b96ddc79) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Install-card prompt now pins to the viewed version ([#639](https://github.com/ChronoAIProject/Ornn/issues/639)).
+
+  When a user opened an older skill version (`?version=0.2`) the URL + file viewer correctly switched to that version, but the install card's prompt was still latest-shaped:
+
+  - The pull commands (`nyxid proxy request …/json` + the `curl …/json` line) had no `?version=…`, so an agent following the prompt would silently install `latest` at install time instead of the version the user was actually looking at.
+  - The prompt header didn't mention which version the user had viewed, so even careful agents couldn't tell.
+
+  Fix is end-to-end:
+
+  **Backend (`ornn-api`)**
+
+  - `getSkillJson(idOrName, version?)` now accepts an optional `version` query — literal `<major>.<minor>` OR a dist-tag ([#463](https://github.com/ChronoAIProject/Ornn/issues/463)). When set, the response uses that version's `storageKey` + `metadata`; otherwise the latest package is returned (unchanged behaviour for legacy callers).
+  - Returns a new top-level `version` field so callers can confirm exactly which package they got.
+  - `GET /api/v1/skills/:idOrName/json` reads `?version=` and threads it through. Bad version → `400 invalid_version`; missing version → `404 skill_version_not_found` (RFC 7807). Visibility check unchanged.
+  - Bumped to **minor** because the response shape gains a new field.
+
+  **Frontend (`ornn-web`)**
+
+  - `buildTrySkillPrompt({…, version })` adds `?version=` to both pull URLs (curl + NyxID CLI via `--query version=…`), and to the footer `Ornn URL:`. Header line becomes `# Install Ornn skill: <name> @ <version>` and a "Pinned to version `<X>`" paragraph spells out why the URLs carry the query.
+  - `SkillInstallCard` passes the currently-viewed `skill.version` straight through, so the prompt always matches the page.
+  - No-version callers (theoretical "always pull latest" surfaces) are unaffected — the version is opt-in.
+
+  Pinned with 3 new `buildTrySkillPrompt.test.ts` assertions (version-pinning surfaces, no-pin parity, dist-tag passes through unchanged) and the existing 9 cases re-verified.
+
+- [#621](https://github.com/ChronoAIProject/Ornn/pull/621) [`72ae5d3`](https://github.com/ChronoAIProject/Ornn/commit/72ae5d3a300e1c2a3ffb9ce4bd95148fdedd203f) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - **BREAKING:** every error `code` emitted by `/api/v1/*` is now `lowercase_snake_case` per CONVENTIONS.md §1.4 ([#585](https://github.com/ChronoAIProject/Ornn/issues/585)). `SKILL_NOT_FOUND` → `skill_not_found`, `INVALID_BODY` → `invalid_body`, `FORBIDDEN` → `forbidden`, etc. One-for-one lowercase translation: every existing code keeps its specificity, the parent §1.4 catalog (`validation_error`, `permission_denied`, `resource_not_found`, …) is the taxonomy these subcodes hang under. Clients pinned to the old strings need to switch — `docs/ERRORS.md` ships the full migration map.
+
+  Web call sites that branch on specific codes (`AGENTSEAL_DISABLED`, `OLD_REPO_NOT_CONFIRMED`, `AUDIT_NOT_FOUND`) migrated to the lowercase equivalents in the same PR. No code-aware logic in the published SDK code paths today, so SDK consumers only need to update their own catch-by-code handlers.
+
+- [#646](https://github.com/ChronoAIProject/Ornn/pull/646) [`16fabb2`](https://github.com/ChronoAIProject/Ornn/commit/16fabb29ffe173e48b4906e65c0eb1666fbf232b) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Sliding-window rate-limit middleware + RFC 9239 headers on every response ([#439](https://github.com/ChronoAIProject/Ornn/issues/439) + [#460](https://github.com/ChronoAIProject/Ornn/issues/460)).
+
+  New `ornn-api/src/middleware/rateLimit.ts` exports `rateLimit({ windowMs, max, label?, keyBy? })`. Defaults:
+
+  - **Key:** `auth.userId` when present, else `x-forwarded-for` first IP, else `"anonymous"`.
+  - **Storage:** in-memory `Map` per process; cleanup pass every 60s on access.
+  - **Headers:** `RateLimit-Limit`, `RateLimit-Remaining`, `RateLimit-Reset` (seconds) emitted on every allowed AND denied response. Denied responses also carry `Retry-After`.
+  - **Deny:** throws `AppError(429, "rate_limited", "...")` — the global handler emits it as `application/problem+json` per RFC 7807.
+
+  Applied to the three highest-cost endpoints:
+
+  | Route                   | Limit       | Why                                                  |
+  | ----------------------- | ----------- | ---------------------------------------------------- |
+  | `GET /skill-search`     | 60/min/user | Mongo aggregation (keyword) or LLM rerank (semantic) |
+  | `POST /skills`          | 10/min/user | ZIP validate + storage write + AgentSeal scan        |
+  | `POST /skills/generate` | 20/min/user | Every request is an LLM call                         |
+
+  6 new unit tests pin: header emission, per-user keying, window reset, 429 response shape, multi-label composition. Full suite 704 / 0.
+
+  **Storage caveat for prod:** in-memory means multi-pod clusters get per-pod-buckets — the effective limit is `N × max` where N is the replica count. Acceptable for the current single-replica dev/staging cluster; a Redis backend is the natural next step before prod traffic hits a multi-replica deployment.
+
+- [#625](https://github.com/ChronoAIProject/Ornn/pull/625) [`cfedcec`](https://github.com/ChronoAIProject/Ornn/commit/cfedcec05c9726d8c3f1fe8b681672ab8a78cc6b) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - **BREAKING:** error responses now ship as RFC 7807 `application/problem+json` per CONVENTIONS.md §1.3 ([#456](https://github.com/ChronoAIProject/Ornn/issues/456)). The legacy `{ data: null, error: { code, message } }` envelope is gone on error paths; the fields live at the body root now:
+
+  ```http
+  HTTP/1.1 404 Not Found
+  Content-Type: application/problem+json
+
+  {
+    "type": "https://github.com/ChronoAIProject/Ornn/blob/main/docs/ERRORS.md#skill_not_found",
+    "title": "Resource not found",
+    "status": 404,
+    "detail": "Skill 'foo' not found",
+    "instance": "/v1/skills/foo",
+    "code": "skill_not_found",
+    "requestId": "req_01HXYZ..."
+  }
+  ```
+
+  Success responses keep the `{ data, error: null }` envelope — only errors change.
+
+  `buildProblemJsonBody` helper added to `shared/types/index.ts`; bootstrap and every per-domain test stub use it so wire shape can never drift between dev and CI. Both SDKs (TS + Python) and `ornn-web`'s `apiClient` parse the new shape; error tests across all three pin the new fixture.
+
+- [#626](https://github.com/ChronoAIProject/Ornn/pull/626) [`c3a1e57`](https://github.com/ChronoAIProject/Ornn/commit/c3a1e575b0fabb9be342c3574ac023afc8815155) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Publish JSON Schema for `SKILL.md` frontmatter ([#464](https://github.com/ChronoAIProject/Ornn/issues/464)). New endpoint:
+
+  ```
+  GET /api/v1/skill-manifest-schema.json
+  ```
+
+  - Generated from the Zod source of truth (`shared/schemas/skillFrontmatter.ts`) so the published contract cannot drift from the runtime validator.
+  - Output is JSON Schema **draft-2020-12**, served with `Content-Type: application/schema+json`.
+  - Public, no auth, `Cache-Control: public, max-age=3600`.
+
+  Lets VS Code / Cursor / JetBrains YAML language servers autocomplete + validate `SKILL.md` frontmatter directly against the live server contract. Schema-store registration (`schemastore.org`) is a separate, one-time external action.
+
+  The OpenAPI spec at `GET /api/v1/openapi.json` lists the new path so contract tests pick it up. Documented in `docs/CONVENTIONS.md` §10.1.
+
+- [#622](https://github.com/ChronoAIProject/Ornn/pull/622) [`096a103`](https://github.com/ChronoAIProject/Ornn/commit/096a103d4e5efdfb42ec490287566a9f1985bddc) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - **BREAKING** for two of the three changes — bring URL + header surface in line with CONVENTIONS.md §2/§4/§7 ([#586](https://github.com/ChronoAIProject/Ornn/issues/586)):
+
+  1. **`PATCH /skills/:id/versions/:version` + `DELETE /skills/:id/versions/:version`** — write operations now accept the stable GUID only, not `:idOrName`. Callers passing a name should resolve it via `GET /skills/lookup?name=…` first. (§2.2)
+  2. **`?q=` is the canonical search param** (§4.1). The legacy `?query=` keeps working as a fallback during the alpha grace window — `q` wins when both are present. Both SDKs and ornn-web migrated to send `q`.
+  3. **Deprecation signal is RFC 8594 (`Deprecation: true` + `Link: rel="deprecation"`)** — replaces `X-Skill-Deprecated` / `X-Skill-Deprecation-Note` custom headers (§7).
+
+  The fourth violation flagged in the issue — `/skills/:id/json` → content negotiation via `Accept` header (§3.3) — is **deferred** to a focused follow-up PR. That one rewires the playground and several SDK paths and deserves its own review.
+
+- [#636](https://github.com/ChronoAIProject/Ornn/pull/636) [`632ff6c`](https://github.com/ChronoAIProject/Ornn/commit/632ff6c59dd876f7c57273d79fa08a2ec1dfa6a0) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Mirror the client-side `[#443](https://github.com/ChronoAIProject/Ornn/issues/443)` zip-bomb defense on the backend ([#633](https://github.com/ChronoAIProject/Ornn/issues/633)). Closes the gap surfaced during retrospective verification: an agent / SDK / `curl` client that bypasses the browser SPA could POST a 50 KB ZIP that uncompresses to 500 MB inside `validateZipFormat` or the AgentSeal subprocess.
+
+  New `enforceZipLimits(zipBuffer)` in `shared/utils/zipLimits.ts` walks the ZIP central directory **without extracting** and throws RFC 7807 `413 Payload Too Large` (with stable `lowercase_snake_case` codes per CONVENTIONS.md §1.4) on any of:
+
+  | Cap                     | Default                     | Error code               |
+  | ----------------------- | --------------------------- | ------------------------ |
+  | Cumulative uncompressed | 50 MiB                      | `uncompressed_too_large` |
+  | Per-entry uncompressed  | 25 MiB                      | `uncompressed_too_large` |
+  | File count              | 1000                        | `too_many_files`         |
+  | Compression ratio       | 50× (skipped for tiny ZIPs) | `uncompressed_too_large` |
+  | Invalid ZIP             | —                           | `invalid_zip` (400)      |
+
+  Wired into every authenticated upload path:
+
+  - `POST /api/v1/skills` (create)
+  - `PUT /api/v1/skills/:id` (update, only when a ZIP is actually replaced)
+  - `POST /api/v1/skill-format/validate` (the standalone validator endpoint)
+
+  Defaults match the client-side guard exactly so a ZIP that passes browser pre-flight also passes the server. Configurable via the function signature today (env-var hooks can ride in a follow-up if operators ask for them).
+
+  8 unit tests cover the happy path, each cap, the invalid-ZIP fast-path, and the tiny-ZIP ratio-check carve-out.
+
+### Patch Changes
+
+- [#610](https://github.com/ChronoAIProject/Ornn/pull/610) [`b684b1a`](https://github.com/ChronoAIProject/Ornn/commit/b684b1a548e6ce529b1242d3f31dcf832ca9a668) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Add `maxTimeMS` + ensure indexes on admin skill search ([#446](https://github.com/ChronoAIProject/Ornn/issues/446)). `GET /admin/skills?q=…` ran an escaped `$regex` against `name` and `description` with no time cap and no documented indexes — a crafted partial-match query on a large collection could pin a Mongo node's CPU indefinitely. Adds a 5 s `maxTimeMS` to both `countDocuments` + `find`, and a new `SkillRepository.ensureIndexes()` (wired into bootstrap) that creates `name` (unique), `description`, `createdBy + createdOn`, `createdOn`, and `isPrivate + createdOn` indexes — partial-regex still can't use a btree, but the secondary filters (`createdBy=…`, `isPrivate=…`) and the `createdOn` sort now hit indexes instead of a full collection scan.
+
+- [#669](https://github.com/ChronoAIProject/Ornn/pull/669) [`c00a4c8`](https://github.com/ChronoAIProject/Ornn/commit/c00a4c8f68ddf2fb80740741ec114336d3c3cbff) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Admin Users search now matches display name as well as email ([#587](https://github.com/ChronoAIProject/Ornn/issues/587)).
+
+  The search input's placeholder said "email or display name" but the Mongo filter only matched `email` with an anchored-prefix regex. Display names + display-name substrings were silently ignored, so admins typing `Haylee01` or `Proxy` got empty result lists even though those users existed.
+
+  Fix is additive — the email behaviour is preserved (still an anchored, case-insensitive prefix match), and a case-insensitive **substring** match on `displayName` is OR'd in alongside it. Display names don't have a meaningful prefix (the issue's reproducer was `Proxy` matching `Ornn Local Proxy`), so substring is the right shape.
+
+  Both the unbounded `findAllInRole` (the admin dashboard's paginated-in-memory path) and the paginated `listUsers` (the page-then-fetch path) use the same `buildUserSearchFilter` helper so they stay in sync.
+
+  Regex metacharacters in the query are escaped, same as before — pinned with a new test so the escape stays in place.
+
+- [#634](https://github.com/ChronoAIProject/Ornn/pull/634) [`0bccacf`](https://github.com/ChronoAIProject/Ornn/commit/0bccacf4ec5e0cd24dbd37cfaf826504cedbf411) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Harden the AgentSeal subprocess ([#442](https://github.com/ChronoAIProject/Ornn/issues/442)). Two defensive changes, both small.
+
+  **Boot-time path validation.** `AgentSealScanner`'s constructor now refuses `python` / `script` config values that aren't absolute paths to existing regular files. Closes a lateral-movement gap: if scanner config ever sourced from a less-trusted place (admin-editable UI, env that picks up `PATH`), `spawn("python", ...)` would silently resolve against `$PATH` and let an attacker swap in any binary they could plant on the search path. Validation only fires when `enabled: true`, so dev/test envs that don't have agentseal installed can boot fine. New `AGENTSEAL_ENABLED=false` env flag toggles the whole scanner (default `true`).
+
+  **Unref child after kill.** When the subprocess hits the timeout and we send SIGTERM / SIGKILL, we now also call `child.unref()` so the killed process can no longer keep the API event loop alive during shutdown. Previously, a scanner mid-flight when the API received SIGTERM could delay graceful shutdown by up to `timeoutMs + 1s`.
+
+  Tests: 6 new assertions on the path validator (relative rejected, missing rejected, directory rejected, disabled skips validation, happy path constructs, helper unit-tested). Existing subprocess tests adjusted to use a real on-disk dummy script.
+
+- [#635](https://github.com/ChronoAIProject/Ornn/pull/635) [`d843e0b`](https://github.com/ChronoAIProject/Ornn/commit/d843e0b93631f431c3978e089e8ccba500eb1000) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Audit + tighten the 31 bare `catch {}` blocks across `ornn-api/src` ([#579](https://github.com/ChronoAIProject/Ornn/issues/579)).
+
+  Critical-path catches that swallowed errors silently now capture the error and emit `logger.debug({ err }, '…')` — analytics dispatch, NyxID org lookups, audit-bundle reads, audit-JSON parse, package-parse on source-refresh, optional JSON-array form fields, generation-context binary skips, LLM output parse, GitHub URL parse. Caller behavior is unchanged (still returns null / falls back to defaults), but a misconfigured or broken upstream is now observable in logs instead of hidden behind an empty result set.
+
+  The catches that already logged, already rethrew as `AppError`, or where the return value IS the signal (validation result, violation list, parse-failure fallback) are left alone. Each one that stays silent on purpose now carries a one-line comment explaining why, so a future reader doesn't re-flag it.
+
+- [#648](https://github.com/ChronoAIProject/Ornn/pull/648) [`e5f60a5`](https://github.com/ChronoAIProject/Ornn/commit/e5f60a53d383fd0409dcefd62662efb85c7db97c) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Decompose `bootstrap.ts` per-domain ([#580](https://github.com/ChronoAIProject/Ornn/issues/580)).
+
+  Lifts 10 leaf domains' wiring out of the 1089-line `bootstrap.ts` monolith into per-domain `bootstrap.ts` modules. Each one exports a `wire{Domain}({ db, logger, ...deps })` function that bundles repo construction + `ensureIndexes()` fire-and-forget catch + any one-shot boot migration + service construction + routes construction into a single call. The orchestrator stays in charge of _ordering_ and shared client construction; the per-domain _detail_ moves out.
+
+  Domains extracted:
+
+  - announcements
+  - analytics
+  - quota (consumed by playground / skill-gen / admin)
+  - redemption-codes (admin + me route surfaces, shared service for atomic pivot consistency)
+  - broadcasts (2-step: shared repo first, then service + routes)
+  - notifications (consumes shared broadcasts repo for the merged feed)
+  - platform settings (legacy single-doc surface)
+  - admin (dashboard + users + quota admin)
+  - skill search
+  - skill generation
+  - playground
+
+  What's still inlined: skills CRUD, skill audit, GitHub mirror, settings export/import, and `createAdminRoutes` (skill / generation / agentseal admin). These have heavier cross-cutting dependency lists (scheduler lifecycle, audit fan-out, analytics emitter closures) — extracting them cleanly needs a follow-up.
+
+  bootstrap.ts: **1089 → 970 lines** (-11%, -119 lines net). No behavioral change — boot order is preserved, all 798 tests still pass.
+
+- [#606](https://github.com/ChronoAIProject/Ornn/pull/606) [`0197d3e`](https://github.com/ChronoAIProject/Ornn/commit/0197d3efae5246231fe95308428415709e604e79) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Type-check playground LLM stream events with a Zod discriminated union ([#449](https://github.com/ChronoAIProject/Ornn/issues/449)). `chatService` previously read `event.type`, `event.delta`, `event.item` via `as any` — a runtime no-op that let upstream field renames silently propagate `undefined` through the SSE stream to clients. Three permissive schemas (`response.output_text.delta`, `response.content_part.delta`, `response.output_item.done`) now gate every event; unknown shapes are dropped with a debug log so the upstream API can add fields freely without breaking us.
+
+- [#670](https://github.com/ChronoAIProject/Ornn/pull/670) [`e5e4f0c`](https://github.com/ChronoAIProject/Ornn/commit/e5e4f0c7cd6811cf55d6b188a10c2ebedc17ae2a) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Chat composer length cap + counter ([#654](https://github.com/ChronoAIProject/Ornn/issues/654)).
+
+  The Playground + AI-generation chat composer accepted prompts of any length — the live reproducer was 24 000 chars typed, send button still enabled, no warning. Backend caps existed only for message _count_ (100), never message _content_.
+
+  Front-end (`ChatInput.tsx`):
+
+  - `maxLength={32_000}` on the textarea — browser-side hard cap on typing / paste.
+  - Live `<used> / <max>` counter appears once the input crosses 24 000 chars (75 %); stays hidden below that so the composer isn't chromed for normal use.
+  - Counter flips danger-tone + send button disables when content is over the cap (defensive — `maxLength` should make this unreachable, but covers IME / non-browser-paste edge cases).
+  - Imperative `setValue` (used by suggestion-prompt clicks) truncates past the cap so curated copy can't bypass the limit silently.
+
+  Back-end:
+
+  - `playgroundMessageSchema.content` adds `.max(MAX_CHAT_MESSAGE_CHARS)` — rejects with `400 content_too_long` (RFC 7807 envelope).
+  - `skills/generation` JSON path validates prompt length AND each multi-turn message's content length symmetrically — rejects with `400 prompt_too_long` or `400 content_too_long`.
+
+  The 32 000-char ceiling is `~8k tokens` at 4 chars/token. Generous for interactive prompts without enabling whole-novel pastes; the three constants are deliberately duplicated across `ChatInput.tsx`, `playground/routes.ts`, and `skills/generation/routes.ts` with cross-referencing comments so a change in one stays in step with the others.
+
+  Pinned with `ChatInput.test.tsx` (7 assertions covering `maxLength` attribute, counter visibility, send-enable / disable, imperative truncate, empty disabled).
+
+  Closes [#654](https://github.com/ChronoAIProject/Ornn/issues/654).
+
+- [#595](https://github.com/ChronoAIProject/Ornn/pull/595) [`cc77c2e`](https://github.com/ChronoAIProject/Ornn/commit/cc77c2e59cd7d90253c7534c58a29cc880d82976) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Delete dead `domains/skills/crud/repositories/` subdirectory ([#577](https://github.com/ChronoAIProject/Ornn/issues/577)) — a 218-line `SkillRepository` impl + interface + test that no route, service, or test outside the directory itself imported. The live skill repository (915 lines) lives at `domains/skills/crud/repository.ts` and is unaffected.
+
+- [#643](https://github.com/ChronoAIProject/Ornn/pull/643) [`7179349`](https://github.com/ChronoAIProject/Ornn/commit/717934960687ca5122c37950980d6bd41a3a3c88) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Ship a `docker-compose.yml` for one-command local dev ([#466](https://github.com/ChronoAIProject/Ornn/issues/466)). Brings up MongoDB, MinIO, `ornn-api`, and `ornn-web` in a single `docker compose up`. README's new "Run Ornn locally (5 minutes)" section and `CONTRIBUTING.md`'s rewritten "Getting set up" tier the prerequisites by what each contributor actually needs:
+
+  - **Unit tests / lint / typecheck:** just Bun + Docker.
+  - **Running the services:** `docker compose up`.
+  - **Full integration with NyxID / chrono-storage / chrono-sandbox / opensandbox:** the existing K8s manifests under `deployment/`.
+
+  NyxID stays out of compose deliberately — mocking the OAuth + JWT-signing path is non-trivial and would either ship a fake or pin to a real staging. Public endpoints (`/livez`, `/api/v1/skill-format/rules`, `/api/v1/skill-manifest-schema.json`, OpenAPI spec) work without auth, which is enough for most contributor flows. Auth-required endpoints need `NYXID_BASE_URL` pointed at your own NyxID instance — same model the existing `deployment/.env.ornn` uses.
+
+  Includes a sample `.env.compose.sample` with the only knob a contributor typically overrides (`ENCRYPTION_KEY`).
+
+- [#679](https://github.com/ChronoAIProject/Ornn/pull/679) [`cadc31e`](https://github.com/ChronoAIProject/Ornn/commit/cadc31e870a5e3631e8a588a831462290ac8bb59) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Delete the dead `backfill-skill-author-display-names.ts` migration script ([#254](https://github.com/ChronoAIProject/Ornn/issues/254)).
+
+  The script joined `skills.createdBy` against an `activities` collection to retro-populate `createdByEmail` / `createdByDisplayName` on legacy skill rows. Both prerequisites are gone:
+
+  - New skills cache the author labels at create time (no backfill needed for any post-[#239](https://github.com/ChronoAIProject/Ornn/issues/239) row).
+  - The `activities` collection was retired in [#271](https://github.com/ChronoAIProject/Ornn/issues/271) (PostHog took over the audit pipeline) — no source-side reference to it remains in `ornn-api/src`. The script would read from an empty / nonexistent collection on any current deployment.
+
+  The bug [#254](https://github.com/ChronoAIProject/Ornn/issues/254) originally reported (`$last` in an unsorted aggregation picking arbitrary rows) is moot for a script that can't run usefully anyway. Cleaner to delete than to fix code that's known dead. Also removes the companion test file.
+
+  If a future deployment unearths a database still carrying `activities`, the right cleanup is a fresh one-shot migration scoped to that database, not resurrecting this script.
+
+- [#662](https://github.com/ChronoAIProject/Ornn/pull/662) [`9a54497`](https://github.com/ChronoAIProject/Ornn/commit/9a54497da9a05c4e3af1645861980a7c7386a2e5) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Enable `exactOptionalPropertyTypes` on ornn-api ([#657](https://github.com/ChronoAIProject/Ornn/issues/657) part 1).
+
+  Closes the ornn-api half of the deferred work from [#450](https://github.com/ChronoAIProject/Ornn/issues/450). Enabling the flag surfaced 77 errors across ~35 files. Patterns:
+
+  1. **Optional class fields** assigned from optional deps widen to `T | undefined`. Clients (NyxidOrgsClient, SandboxClient, StorageClient), services (QuotaService.notificationService, AuditService.notificationService/nyxidOrgsClient, SkillService.analyticsEmitter/agentsealScanner).
+
+  2. **Optional interface fields** widen to `T | undefined` so call sites passing Zod-inferred shapes (`{ field: T | undefined }`) fit: SettingsActor, RedemptionCodeDoc, AuditRecord, CreateSkillData, CreateSkillVersionData, GitHubPullInput, SkillDocument, SkillDetailResponse, SkillSearchItem, SkillSource, ExportImportRoutesConfig, SettingsAuditLogger, GeneratedSkill, FetchedBundle, FetchOptions, ExtraFilters, search service params, UpdateAnnouncementInput, UpdateBroadcastDocInput, UpdateBroadcastParams, PlaygroundChatRequest.
+
+  3. **Conditional spread at call sites** for routes/services passing Zod-validated bodies: admin-users, admin/quota, admin/redemption-codes, analytics, notifications, playground, quota, skills setNyxidService, generation resolveModel, analytics emitter + posthog capture, apiRequestTracking, nyxidAuth.
+
+  4. One Zod refinement param widened to `Record<string, unknown>` (announcements `assertCtaPairing`) so it works against both create + update schemas under the stricter inferred types.
+
+  5. One cast in skill generation — Zod's `.optional()` produces `outputType: "text" | "file" | undefined` (explicit-undefined-non-optional) vs the interface's `outputType?:` (optional-with-undefined). Same shape; cast bridges the contract.
+
+  No behavior change — every fix is a type-only nudge. 793 backend tests still pass; typecheck clean.
+
+  ornn-web's `exactOptionalPropertyTypes` (~134 errors) is the remaining half of [#657](https://github.com/ChronoAIProject/Ornn/issues/657) and ships in a follow-up commit.
+
+- [#736](https://github.com/ChronoAIProject/Ornn/pull/736) [`74b8f93`](https://github.com/ChronoAIProject/Ornn/commit/74b8f930784ce0be6a100795e8e68cedf673ec9e) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - `/skill-facets/system-services` now drops services NyxID has deactivated, and the NyxID catalog cache TTL drops from 60s → 10s ([#715](https://github.com/ChronoAIProject/Ornn/issues/715)).
+
+  Background: when NyxID deactivates a service (`DELETE /api/v1/services/:id` is a soft delete that flips `is_active: false`), Ornn kept exposing it. The DB aggregation behind `/skill-facets/system-services` reads `nyxidServiceId/slug/label` straight off skill documents, so any skill ever bound to that service still surfaced the service as a usable filter chip. Per-caller paths (`/me/nyxid-services`, `/nyxid-services/:serviceId/skills`) already filtered `is_active=false` inside `NyxidServiceClient.listServicesForCaller`, but the 60-second cache widened the visibility lag after deactivation.
+
+  Fix:
+
+  - `NyxidServiceClient.listActiveServiceIdsAsPlatform(saToken)` (new): SA-token fetch of NyxID's `/services`, projected to a `Set<string>` of active service ids. Separate from the per-caller cache (one slot — SA view is uniform). Fail-soft: returns `null` on non-2xx or thrown fetch so callers preserve current behaviour when NyxID is unreachable. Same 10s TTL as the per-caller cache.
+  - `cacheTtlMs` lowered from `60_000` to `10_000`. After a NyxID deactivation, every Ornn surface that goes through `findVisibleToCaller` (`/me/nyxid-services`, reverse lookup) drops the service within at most 10s instead of 60s.
+  - `invalidateCache()` also clears the platform cache so admin-side hooks can force a refresh.
+  - `/skill-facets/system-services` (search/routes) now intersects the DB aggregation with the platform active set when `nyxidServiceClient` + `getSaAccessToken` are wired in; falls through to the pre-[#715](https://github.com/ChronoAIProject/Ornn/issues/715) raw aggregation if either is missing or the SA fetch fails. Bootstrap wires both.
+
+  Out of scope: skill detail still shows the historical `nyxidServiceId/slug/label` even when the service is deactivated. The QA report lists this as one of several acceptable mitigations; the simplest "stop misrepresenting the service as usable" path is to ensure the facet (the discovery surface) doesn't advertise it. A follow-up can mark the detail panel as "service unavailable" if we want a louder signal.
+
+  Coverage: colocated `clients/nyxid/service.test.ts` exercises the per-caller `is_active=false` drop (pre-existing defence-in-depth), missing-`is_active` default-to-active, the new platform method (SA token + URL, caching, fail-soft on 5xx and network throw, empty SA short-circuit, `invalidateCache` re-fetch). 8 tests, all green.
+
+- [#746](https://github.com/ChronoAIProject/Ornn/pull/746) [`44f0010`](https://github.com/ChronoAIProject/Ornn/commit/44f00104a6ffd3a2d52cd7581861fc9f8689e254) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - `runSandboxOneShot` now translates chrono-sandbox HTTP errors into a one-line user-facing message and logs structured diagnostics, so the playground transcript stops surfacing raw JSON like `Sandbox service error (500): {"error":"internal_error","error_code":1006,"message":"An internal error occurred"}` ([#530](https://github.com/ChronoAIProject/Ornn/issues/530)).
+
+  Background: `SandboxClient.post` throws an `Error` whose message is `"Sandbox service error (<status>): <raw body>"`. The playground catch handler spat that string straight into the chat. The QA's repro on the `nyxid` skill (`https://ornn.chrono-ai.fun/playground?skill=nyxid` → `LIST CAPABILITIES`) hit a chrono-sandbox internal 500 with `error_code: 1006` and the transcript showed the raw JSON envelope verbatim — useless to the user, and presented as if the failure were the user's fault.
+
+  Fix: new `formatSandboxError` helper parses the `"Sandbox service error (<status>): <body>"` shape. If the body is the structured `{ error, error_code, message }` envelope, it returns a friendly sentence keyed off `status` (500 / 1006 → transient sandbox-server hint, 503/504 → timeout hint, anything else → `HTTP <status> [code N]: <message>`). When the body isn't JSON or the regex doesn't match, it falls back to the raw message so any new upstream shape still reaches the operator. Pino `error` log carries `language`, `scriptLen`, and the raw error message so admins can grep production for 1006-class failures without scrolling chat transcripts.
+
+  The underlying chrono-sandbox 500s themselves are out of scope — those originate inside the sandbox runtime, not Ornn. This change is about UX of the failure surface.
+
+  `runSandboxToolCall`'s `sessionExecute` catch path stays as-is (it already falls back to the one-shot path, which now formats the error before returning).
+
+- [#672](https://github.com/ChronoAIProject/Ornn/pull/672) [`4a34183`](https://github.com/ChronoAIProject/Ornn/commit/4a34183981bccad6206f0798522a6a7dfb59f8e9) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Frontmatter validation errors now tell the user what to fix ([#649](https://github.com/ChronoAIProject/Ornn/issues/649)).
+
+  The Free / ZIP upload page already shows clear actionable messages for most validation failures (`version` semver rule, tag-regex rule, env-var UPPER_SNAKE_CASE rule), but the `tag`, `runtime`, `tool-list`, `runtime-env-var`, and `runtime-dependency` _item_ schemas surfaced as bare `Invalid input: expected string, received null` when an author hit common YAML mistakes:
+
+  - `tag: - ` (empty list-item dash) → YAML parses as `null`
+  - `version: 0.1` (unquoted) → YAML parses as a number — already addressed in an earlier pass; pinned with a test here so it can't regress.
+
+  Fix is additive: each item schema gains a Zod 4 `error` callback that handles `invalid_type` with a clear sentence including a concrete shape example (`tag: [my-tag]`, `runtime: [python]`, `runtime-env-var: [OPENAI_API_KEY]`, etc.). The existing `min`/`max`/`regex` messages still fire for non-null shape problems.
+
+  Pinned with a new `skillFrontmatter.test.ts` — 8 assertions covering version-quoting, null-tag, uppercase-tag (regex preservation), null-env-var, null-runtime, null-tool, null-dependency, and a happy-path round trip.
+
+- [#681](https://github.com/ChronoAIProject/Ornn/pull/681) [`f737be3`](https://github.com/ChronoAIProject/Ornn/commit/f737be38219576a4f420d0825a97737c9b4577d3) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - `Skip validation` on GitHub import now also bypasses the frontmatter Zod check ([#529](https://github.com/ChronoAIProject/Ornn/issues/529)).
+
+  `POST /skills/pull` (and the symmetric `POST /skills` + `POST /skills/:id/refresh` paths) accepted `skipValidation: true` but it only short-circuited the directory-structure validator (`validateZipFormat`). The frontmatter Zod schema in `extractSkillInfo` ran unconditionally, so importing a third-party skill (e.g. Anthropic's official skills repo) with non-Ornn-shaped frontmatter still failed with `frontmatter_validation_failed`. The toggle's name + tooltip both said "skip Ornn package format validation" — users reasonably expected the frontmatter check to be part of that surface.
+
+  Fix extends the `skipValidation` semantics into `extractSkillInfo`. When the flag is set AND the strict schema rejects, the parser falls back to `extractSkillInfoLenient` — a best-effort extract that:
+
+  - Requires `name` (no defensible fallback for the document-id).
+  - Defaults `version` to `0.1` when missing — downstream `parseVersion` still enforces the `<major>.<minor>` format.
+  - Defaults `metadata.category` to `plain` (the safest category — no runtime / tool execution expected). User can edit post-import.
+  - Pulls `tags` only when the value looks plausibly correct (array of strings); dropped silently otherwise.
+  - YAML syntax errors still hard-fail — we can't import what we can't parse, no matter how lenient we want to be.
+
+  The dry-run refresh preview also passes `skipValidation: true` to `extractSkillInfo` so a third-party-shaped SKILL.md doesn't kill the preview flow.
+
+  All 805 existing tests pass; typecheck clean.
+
+- [#611](https://github.com/ChronoAIProject/Ornn/pull/611) [`4003080`](https://github.com/ChronoAIProject/Ornn/commit/40030809eec403225414fa352172850078c1f0b4) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Surface npm-style Subresource Integrity on the skill version manifest ([#461](https://github.com/ChronoAIProject/Ornn/issues/461)). `GET /skills/:idOrName/versions` now returns each version with an `integrity: "sha256-<base64>"` field alongside the existing hex `skillHash`. Clients (SDK + agents) verify a downloaded package byte-for-byte before installing — equivalent in spirit to npm's `package-lock.json` `integrity:` field and PyPI's per-file `sha256_digest`. The underlying hash was already computed at upload + stored on the version doc; this PR just derives the SRI form (`hexToIntegrity` helper) and surfaces it.
+
+- [#603](https://github.com/ChronoAIProject/Ornn/pull/603) [`8e696ac`](https://github.com/ChronoAIProject/Ornn/commit/8e696acc5acc33da5e9bf0c19145d854ab4369ae) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Enforce per-skill visibility on `GET /skills/:idOrName/json` ([#567](https://github.com/ChronoAIProject/Ornn/issues/567)). The endpoint previously gated only on `ornn:skill:read`, so a caller who knew a private skill's name could fetch its full package contents through this route — broader than `/skills/:idOrName`, which applies `canReadSkill`. Now the JSON route loads the skill first and runs the same visibility check (`canReadSkill` against `createdBy` / `sharedWithUsers` / `sharedWithOrgs` + platform-admin permission), returning `SKILL_NOT_FOUND` for inaccessible private skills. Closes the leak surfaced by the `aevatar` `/v1/responses` Ornn bridge.
+
+- [#733](https://github.com/ChronoAIProject/Ornn/pull/733) [`dd6abe5`](https://github.com/ChronoAIProject/Ornn/commit/dd6abe58028c84c385c19112ad027cf1e115ab65) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - NyxLlmClient now routes outbound LLM calls on the resolved provider's `apiFormat` ([#574](https://github.com/ChronoAIProject/Ornn/issues/574)).
+
+  Background: the admin LLM Provider form exposes `apiFormat: chat-completion | responses`, but the runtime client hard-coded `{gatewayUrl}/responses` for both `stream()` and `complete()` and ignored the setting. Providers behind the Chat Completions API — DeepSeek and any OpenAI-compatible gateway without `/responses` — returned 404 on every skill generation request, surfacing in the UI as a misleading "LLM Gateway error (404)" even though the model/key/gateway were all configured correctly.
+
+  Fix: thread `apiFormat` through `resolveLlmProviderForSurface` (`bootstrap.ts`) into the new `LlmProviderResolution.apiFormat` field, and dispatch inside `NyxLlmClient`:
+
+  - `responses` → `POST {gatewayUrl}/responses` with the native Responses-API body (unchanged behavior).
+  - `chat-completion` → `POST {gatewayUrl}/chat/completions` with a translated body (`input` → `messages`, `developer` role → `system`, `max_output_tokens` → `max_tokens`, `instructions` prepended as a `system` message, tools projected into OpenAI function-tool shape). The Chat Completions SSE stream is normalized so each `choices[].delta.content` chunk is yielded as a Responses-API `response.output_text.delta` event — consumers (skill generation + playground) stay format-agnostic.
+
+  Tool-call delta normalization for the chat-completion path is intentionally out of scope here; it is tracked in [#608](https://github.com/ChronoAIProject/Ornn/issues/608) (playground runtime/mixed skills not triggering `execute_in_sandbox` under chat-completion providers).
+
+  Trailing slashes on `gatewayUrl` are still trimmed before path concatenation, and the empty-`gatewayUrl` `LLM_PROVIDER_NOT_CONFIGURED` fail-closed branch is preserved.
+
+  Coverage: new `src/clients/nyxid/llm.test.ts` covers both formats — endpoint dispatch, body translation (role/field/tool mapping), text-delta normalization, content-part flattening, SA-token fallback, trailing-slash trim, fail-closed, and non-2xx surfacing. 11 tests, all green.
+
+- [#680](https://github.com/ChronoAIProject/Ornn/pull/680) [`8c499ac`](https://github.com/ChronoAIProject/Ornn/commit/8c499ac426f0543e6937159e3df3ca9d32121f95) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - LLM provider: save preserves model list + Playground default pin is honoured ([#588](https://github.com/ChronoAIProject/Ornn/issues/588) + [#607](https://github.com/ChronoAIProject/Ornn/issues/607)).
+
+  Two related bugs in the LLM-providers admin surface, fixed together because the diagnosis touched the same `providerUpdateSchema` / `listPickerModels` surface:
+
+  **[#588](https://github.com/ChronoAIProject/Ornn/issues/588) — Saving basic provider settings can clear the model list.** `providerUpdateSchema = providerCreateSchema.partial()` inherited the `models: z.array(...).default([])` from the create schema, so a PATCH that omitted `models` came back as `models: []`. The service then ran `if (patch.models)` — truthy on `[]` — and wiped the persisted list. `ProviderEditDrawer`'s basic-settings save sends only `name` / `gatewayUrl` / `apiFormat` / `auth` / `maxOutputTokens` / `defaultTemperature`, no `models` at all, so every basic-fields save nuked the provider's model catalog. Fix: `.extend({ models: z.array(modelInputSchema).optional() })` on the update schema so `undefined` (caller didn't send it) is distinguishable from `[]` (caller explicitly wiped); service uses `patch.models !== undefined` instead of truthy-check. Explicit `[]` still wipes — preserves the model-list-refresh-found-zero-models intent.
+
+  **[#607](https://github.com/ChronoAIProject/Ornn/issues/607) — Playground saved default model not honoured by picker.** `listPickerModels` derived the default slot from the per-model `defaultForX` flag, not from the per-section `playground.defaultModelId` pin. So admins could save Playground settings with a chosen default, the setting persisted correctly, but `/me/models` returned a different model as default — picker pre-selected the wrong row and chat used it. The chat **execute** path's `resolveSurfaceDefaults` (in `bootstrap.ts`) DID honour the pin; only the picker disagreed. Fix: `listPickerModels(surface, sectionDefaultModelId?)` accepts the pin and the picker route resolves it via a new `sectionDefaultResolver` config function that reads `settingsService.getPlayground() / .getSkillGen()`. Pinned model wins the `default` slot AND sorts first in `items`; stale pin (model removed or disabled) falls through to the per-model `defaultForX` flag, matching the resolver's behaviour.
+
+  Pinned with 3 new service tests:
+
+  - `UT-LLM-004a` — basic-settings save without `models` key preserves existing list ([#588](https://github.com/ChronoAIProject/Ornn/issues/588) reproducer)
+  - `UT-LLM-004b` — explicit `models: []` still wipes ([#588](https://github.com/ChronoAIProject/Ornn/issues/588) symmetry)
+  - `UT-LLM-004c` — picker honours section pin; stale pin falls through ([#607](https://github.com/ChronoAIProject/Ornn/issues/607) reproducer)
+
+  808 / 0 fail ornn-api tests; typecheck clean.
+
+- [#644](https://github.com/ChronoAIProject/Ornn/pull/644) [`d7985f0`](https://github.com/ChronoAIProject/Ornn/commit/d7985f0c40cf74c0d0fcd8a960489a6b1f8b584a) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Consolidate 61 standalone `pino({ level: "info" })` loggers behind a single `createLogger(moduleName)` factory ([#575](https://github.com/ChronoAIProject/Ornn/issues/575)). Before this PR, every module had its own pino instance — neither the `LOG_LEVEL` env var nor the bootstrap logger's redaction rules (`authorization`, `x-api-key`, `password`, `secret`, `apiKey`) made it past the bootstrap. Setting `LOG_LEVEL=debug` to debug a request silently no-op'd on 64 of 65 logger instances, hiding exactly the `logger.debug(...)` calls [#579](https://github.com/ChronoAIProject/Ornn/issues/579) just added.
+
+  New `ornn-api/src/shared/logger.ts` exposes `createLogger(name)` — drop-in replacement for the old pattern. The factory reads `LOG_LEVEL` from env once at module load and applies the same redaction rules the bootstrap pino uses. Every module logger created via the factory inherits both.
+
+  61 sites swept across `ornn-api/src`. The 3 remaining standalone pinos are intentionally-silent test loggers (`pino({ level: "silent" })`) — they suppress output in test runs and aren't a candidate for the factory.
+
+  Bootstrap pino kept separate — it has its own `service: "ornn-api"` binding and adds `requestId` per request, which module loggers don't need.
+
+- [#642](https://github.com/ChronoAIProject/Ornn/pull/642) [`018f9b9`](https://github.com/ChronoAIProject/Ornn/commit/018f9b9a3b90b83f432e79b1a6caa63f24693272) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - OpenAPI contract test pass against `buildSpec()` ([#462](https://github.com/ChronoAIProject/Ornn/issues/462)). New `tests/contract/openapi.test.ts` pins 12 structural properties of the generated spec so it can't silently regress:
+
+  - Spec is OpenAPI 3.1 with title/version/description/servers.
+  - `BearerAuth` security scheme declared.
+  - Every declared path has at least one HTTP method.
+  - Every operation declares `tags`, a `summary` or `operationId`, at least one response, and at least one `2xx` response.
+  - Every `4xx`/`5xx` response uses `application/problem+json` (or JSON-compatible) per RFC 7807 / [#456](https://github.com/ChronoAIProject/Ornn/issues/456).
+  - Every operation outside a small `publicPaths` allowlist declares `BearerAuth` security per CONVENTIONS.md §5.
+  - A foundational route-coverage list (`/skills`, `/skill-search`, `/skill-format/*`, `/skill-manifest-schema.json`) MUST stay in the spec.
+
+  What's NOT in scope (tracked as follow-ups on [#462](https://github.com/ChronoAIProject/Ornn/issues/462)):
+
+  - **Reflection over the live Hono app** to assert every registered route has a spec entry. The current spec covers ~12 of ~50 routes; closing that gap is a separate PR that needs each missing route documented with its own per-route Zod schema.
+  - **Cross-checking declared error codes against handler `throw` statements** — needs a static code-walker.
+
+  The infrastructure for those follow-ups is now in place. Adding a new route without spec metadata, or shipping a half-documented route, fails CI today.
+
+- [#596](https://github.com/ChronoAIProject/Ornn/pull/596) [`3cb8e1e`](https://github.com/ChronoAIProject/Ornn/commit/3cb8e1e4a7e91a321a6c1e3faa186d393ad8cbe6) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Replace `Number(process.env.X ?? "200")` with a fail-fast `parseNonNegativeInt(name, fallback)` helper in `scripts/migrate-quota-to-buckets.ts` ([#447](https://github.com/ChronoAIProject/Ornn/issues/447)). `Number()` silently returns `NaN` on garbage input, baking `NaN` quotas into Mongo when an env file has a typo. The new helper rejects non-numeric input, trailing garbage (`"200abc"`), fractions, negatives, and empty strings at startup with a clear error naming the offending env var. Covered by 9 unit tests in the colocated test file.
+
+- [#744](https://github.com/ChronoAIProject/Ornn/pull/744) [`41f1195`](https://github.com/ChronoAIProject/Ornn/commit/41f119574bd11f2ccd02a54ff2c616d7cf078b9b) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Playground no longer puts user-supplied env _values_ into the LLM prompt and server-side overrides any value the model emits at `execute_in_sandbox` time ([#721](https://github.com/ChronoAIProject/Ornn/issues/721)).
+
+  Before this change, `buildSkillContext` injected `KEY=value` pairs into the developer message so the model could pass them through to `execute_in_sandbox`. When a chat-completion provider returned the tool call as plain assistant text instead of a structured tool-call frame (the failure mode [#608](https://github.com/ChronoAIProject/Ornn/issues/608) fixed for compliant providers — but a non-compliant model can still emit raw JSON in `text-delta`), the env values appeared verbatim in the user-visible transcript. Even with the secret value redacted on the wire, the bug surface was that the secret had ever passed through the LLM at all.
+
+  Fix has two layers:
+
+  - **Developer message**: list only the env-var _names_ the user provided, with a placeholder shape `KEY=<provided-server-side>` and a brief instruction telling the model to reference each by name. The model never has the literal value, so it can't echo it.
+  - **Tool dispatch**: `runSandboxToolCall` merges `request.envVars` (the real values, supplied by the UI / API caller) _on top of_ `args.env` (whatever the model produced). User-supplied keys always win at execution time. Keys the model legitimately invents (sentinel markers, etc.) ride through unchanged.
+
+  Net effect: even if a future regression lets the model serialize a tool call as text again, the transcript carries `KEY=<provided-server-side>` instead of the secret, and the sandbox still runs with the real value because the merge happens on the server before `sessionExecute`.
+
+  Coverage: 2 new tests in `chatService.test.ts` cover the user-override-wins case (real value replaces model's guessed value, untouched keys ride through) and the no-envVars passthrough case (model-only env reaches sandbox unchanged). All 10 tests in the file green.
+
+- [#618](https://github.com/ChronoAIProject/Ornn/pull/618) [`e30af9f`](https://github.com/ChronoAIProject/Ornn/commit/e30af9f1d7b4107973402618936eb63b0580bc0f) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Return `201 Created` + `Location` header on resource-creating POST endpoints ([#458](https://github.com/ChronoAIProject/Ornn/issues/458)). `POST /skills` (ZIP upload), `POST /skills/pull` (GitHub pull), `POST /admin/announcements`, and `POST /admin/broadcasts` previously returned `200 OK` with the resource in the envelope; CONVENTIONS.md §3.2 + RFC 9110 §15.3.2 specify `201 Created` with a `Location: /api/v1/{resource}/{id}` header so clients (and the upcoming SDK auto-pagination wrapper) can discover the canonical URL without re-parsing the body. Response body unchanged — only status code + new header. Existing 200-aware clients still work; the SDK already follows redirects and reads the envelope regardless of 2xx code.
+
+- [#597](https://github.com/ChronoAIProject/Ornn/pull/597) [`ef508ce`](https://github.com/ChronoAIProject/Ornn/commit/ef508cec7e9513df2edf18af47f025031fc12f39) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Validate the shape of `appPrivateKey` on `POST /github/repo` ([#441](https://github.com/ChronoAIProject/Ornn/issues/441)). The mirror settings endpoint previously accepted any non-empty string; pastes with stray whitespace, embedded NULs, missing BEGIN/END markers, or a truncated body wrote garbage into settings and surfaced much later as opaque crypto errors during mirror runs. The new `validateGitHubAppPrivateKey` helper enforces an 8 KB cap, rejects C0 control bytes, requires PKCS#1 / PKCS#8 PEM markers, and round-trips through `crypto.createPrivateKey` to catch shape-passing-but-broken keys before they're persisted. Empty string still clears the key. 12 unit tests cover happy + rejection paths.
+
+- [#599](https://github.com/ChronoAIProject/Ornn/pull/599) [`67533fd`](https://github.com/ChronoAIProject/Ornn/commit/67533fd3a9fcb61387828b677c9d25a363c06d13) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Validate the LLM re-ranker response with Zod instead of an `as Array<...>` cast ([#444](https://github.com/ChronoAIProject/Ornn/issues/444)). `JSON.parse(...) as Array<...>` is a runtime no-op; a malformed model response previously slipped through the GUID filter and broke downstream score arithmetic with `NaN`/`undefined`. The new `rerankResponseSchema` enforces `id` is a non-empty string and `score` is a finite number before the row reaches the filter; schema failures log a warning with the first three Zod issues and return the empty batch (same fail-safe as before, just observable now).
+
+- [#734](https://github.com/ChronoAIProject/Ornn/pull/734) [`228edb9`](https://github.com/ChronoAIProject/Ornn/commit/228edb9fba4f305492b8867073d27bc26cce255e) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - PlaygroundChatService now reuses a per-language chrono-sandbox session across tool-use rounds within one chat ([#531](https://github.com/ChronoAIProject/Ornn/issues/531)).
+
+  Background: every `execute_in_sandbox` tool call went to chrono-sandbox's one-shot `/execute` endpoint, which provisions a fresh kernel each invocation. As a result, anything a previous round installed (CLIs like `nyxid`, npm packages, generated files, env writes) was lost the next round. The LLM would `nyxid login`, then the next call would see no login. Users assumed the flow was working because each individual call succeeded — but the chat-level state never accumulated.
+
+  Fix: in `chat()`, declare a per-stream `Map<language, sessionId>` plus a `createdSessionIds` list. The first `execute_in_sandbox` call for a given language lazily calls `sandboxClient.createSession({ language, dependencies, env, inputFiles, ttlSecs: 600, networkEnabled: true })` and records the session id; subsequent same-language calls hit `sessionExecute(sessionId, ...)` against the persistent kernel. A different language inside the same chat (e.g. javascript then python) lazily creates a second session.
+
+  The whole tool loop is wrapped in `try / finally`; on exit (normal, error, abort) we best-effort `deleteSession` every session we created. chrono-sandbox also expires via `ttlSecs`, so a delete failure logs at `warn` and otherwise falls through — leftover sessions TTL out.
+
+  Fail-open fallbacks preserve pre-fix behaviour if the session layer is unavailable:
+
+  - `createSession` throws → log warn, fall back to one-shot `execute()` for that round; no session recorded.
+  - `sessionExecute` throws → log warn, drop the stale session id from the map (next same-language call will recreate), fall back to one-shot `execute()` for that round.
+
+  Plain (non-sandbox) chats touch nothing — no createSession, no deleteSession, zero overhead.
+
+  Coverage: new colocated `src/domains/playground/chatService.test.ts` exercises the path with a stub `NyxLlmClient` (queued per-round event sequences) and a recording sandbox stub — asserts session creation count, sessionExecute reuse, multi-language isolation, finally-cleanup, both fail-open branches, plain-chat no-op, and delete-failure suppression. 8 tests, all green.
+
+- [#748](https://github.com/ChronoAIProject/Ornn/pull/748) [`3bfc7a0`](https://github.com/ChronoAIProject/Ornn/commit/3bfc7a031aa40abe407f0911f7b4aa38415010e7) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Stale share-target grants are now visible-but-flagged in the Permissions modal, and `skill-search?scope=shared-with-me` defensively drops results pointing at orgs the caller is no longer in ([#720](https://github.com/ChronoAIProject/Ornn/issues/720)).
+
+  **Backend (`SearchService.search`):** after `enrichItem` builds the items, when `scope === "shared-with-me"` a zero-trust pass drops any item whose `myAccessReason === "shared-via-org"` but whose `sharedViaOrgId` isn't in the caller's current `userOrgIds`. `applyScope` already gates this at the DB layer, so this is defence-in-depth against cache lag / partially-replicated writes / future query regressions — and a `warn`-level Pino entry tags any drop so data drift is visible.
+
+  **Frontend (`PermissionsModal`):**
+
+  - Orgs: `fetchOrgSummary` previously back-filled a `null` lookup with the raw org id as the display name, silently hiding the staleness. Now each entry carries `isUnresolved: boolean` (true when NyxID can't resolve the id). Unresolved rows render with a warning-toned row background, an "unresolved" badge with a triangle icon, and a tooltip pointing the owner at the uncheck box to revoke. Click-to-revoke flows through the existing `toggleOrg` path.
+  - Users: when `resolveUsers` doesn't return a row for an id, the placeholder `{ userId, email: "", displayName: userId }` survives — that signal now drives a danger-toned chip + triangle icon + tooltip explaining the user is gone, with the existing `×` button revoking.
+
+  Net effect: owners see exactly what they've granted, see which grants point at entities that no longer resolve, and can clean them up in two clicks. The `skill-search` zero-trust filter ensures the calling user never sees a shared-with-me skill they can't actually open even if the underlying DB / cache disagrees with effective org membership.
+
+- [#658](https://github.com/ChronoAIProject/Ornn/pull/658) [`3eeb787`](https://github.com/ChronoAIProject/Ornn/commit/3eeb7875775ca37faa823c627e6570dbead757cc) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Enable stricter TS flags across all three packages ([#450](https://github.com/ChronoAIProject/Ornn/issues/450)).
+
+  [#450](https://github.com/ChronoAIProject/Ornn/issues/450) part 1 (`noImplicitOverride`) landed in [#638](https://github.com/ChronoAIProject/Ornn/issues/638). This PR closes the bulk of parts 2 + 3:
+
+  - **All 3 packages now have `noUncheckedIndexedAccess: true`.** Array/object bracket access now widens to `T | undefined`, forcing explicit handling. Fix patterns by category:
+
+    - **Length-guarded accesses** — `if (xs.length > 0)` followed by `xs[len-1]`, `findIndex` followed by `arr[idx]`. Marked `!` with a comment naming the guard. Most cases.
+    - **Regex capture groups** — every `match[1]` / `match[2]` followed by a `match` check. Marked `!` with the regex-shape note.
+    - **Defensive `if (!entry)` skips** — `zip.files[path]` where `path` came from `Object.keys(zip.files)`. Switched from `if (entry.dir)` to `if (!entry || entry.dir)` so a future zip-lib refactor that breaks the round-trip drops the file rather than crashes.
+    - **Two non-mechanical fixes**: GenerateSkillModal.STEP_MESSAGES switched from `Record<string, string>` to `as const` (compile-time keys now return `string`, not `string | undefined`); SkillDetailPage.latestVersion now passed as `latestVersion ?? ""`.
+
+  - **SDK only: `exactOptionalPropertyTypes: true`.** The SDK had 4 errors total; all 4 were `{ requestId: undefined }`-style fields that violated the stricter `{ requestId?: string }` contract. Fixed with conditional spread (only set the key when the upstream actually has the value).
+
+  ### Deferred
+
+  `exactOptionalPropertyTypes` on ornn-api (~77 errors) and ornn-web (~134 errors) — tracked as [#657](https://github.com/ChronoAIProject/Ornn/issues/657). These need per-site decisions (conditional spread vs widened field type vs constructor refactor), not mechanical fixes, so they don't fit a single-session PR.
+
+  ### Net
+
+  - 3 tsconfig.json files updated.
+  - ornn-api: 26 files touched (68 fix sites + 1 tsconfig).
+  - ornn-web: 22 files touched (57 fix sites + 1 tsconfig).
+  - sdk/typescript: 3 files touched (4 fix sites + 1 tsconfig).
+  - 798 backend + 110 web + 17 sdk tests all still pass.
+
+- [#638](https://github.com/ChronoAIProject/Ornn/pull/638) [`999cea2`](https://github.com/ChronoAIProject/Ornn/commit/999cea2dd5c45ba2a9c5ba1083a65f60a9a3c89f) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Enable `noImplicitOverride` in `ornn-api`, `ornn-web`, and `sdk/typescript` tsconfigs ([#450](https://github.com/ChronoAIProject/Ornn/issues/450) part 1). Catches accidental method-signature drift during class-inheritance refactors. Only one site needed the explicit `override` keyword (`ErrorBoundary` in `ornn-web`) — zero behavior change.
+
+  The other two flags from [#450](https://github.com/ChronoAIProject/Ornn/issues/450) (`noUncheckedIndexedAccess` and `exactOptionalPropertyTypes`) surface 68 and 75 type errors respectively across `ornn-api` alone. Per the issue's "Land in stages" guidance, those ride in their own follow-up PRs to keep the diff reviewable. Tracked as sub-tasks on [#450](https://github.com/ChronoAIProject/Ornn/issues/450).
+
+- [#613](https://github.com/ChronoAIProject/Ornn/pull/613) [`c7c62ae`](https://github.com/ChronoAIProject/Ornn/commit/c7c62aeff264e5b834552fbd0022c7c0d8870225) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Replace `_id: guid as any` with `skillId(guid)` / `skillIdList(guids)` helpers in `domains/skills/crud/repository.ts` ([#448](https://github.com/ChronoAIProject/Ornn/issues/448)). The skills collection uses UUID strings as `_id`; the MongoDB driver's filter discriminator (`ObjectId | string`) doesn't see that without help, and the previous `as any` propagated unchecked through every query. The new helpers validate non-empty strings up front (the bad-input path that previously silently returned zero docs) and keep the unavoidable cast in one named place. Seven call sites migrated.
+
+- [#647](https://github.com/ChronoAIProject/Ornn/pull/647) [`3d50e90`](https://github.com/ChronoAIProject/Ornn/commit/3d50e90ca70d8effd3cea738fd6d532a0ff71b2e) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Backfill repository-layer unit tests for 6 previously untested domains ([#454](https://github.com/ChronoAIProject/Ornn/issues/454)).
+
+  Adds `repository.test.ts` against `mongodb-memory-server` for: `users`, `platform`, `analytics`, `notifications`, `announcements`, `redemption-codes`. Plus `platform/service.test.ts` to pin the encryption boundary (`apiKey` is plaintext above the service, ciphertext below) and the graceful-degrade path when decryption fails. Each new file covers happy path + at least one edge per public method per the [#454](https://github.com/ChronoAIProject/Ornn/issues/454) acceptance criteria.
+
+  Highlights of what's now pinned in tests:
+
+  - `UserDirectoryRepository`: idempotent upsert preserves `firstSeenAt` while bumping `activityCount`/`lastSeenAt`; `searchByEmailPrefix` escapes regex metacharacters; `listUsers` role partition + pagination.
+  - `PlatformSettingsRepository`: empty doc returns `{}` so the service-layer merge can tell "unset" from "zero"; partial patches don't clobber untouched fields; wrong-type values are skipped gracefully.
+  - `PlatformSettingsService`: `apiKey` round-trips through encryption but never appears in plaintext in Mongo; malformed v1 ciphertext returns `""` (graceful degrade) instead of throwing; legacy pre-encryption rows pass through; 30-s cache is busted by `patch`.
+  - `AnalyticsRepository`: latency is rounded to int + clamped to 0 on negatives; `summarize` window aggregates execution/success/failure/timeout counts + unique-users + success rate; per-version narrowing works.
+  - `NotificationRepository`: per-user ownership is enforced on `markRead` (user A cannot read user B's notification); `unreadOnly` + `before` filters; `markAllRead` reports modifiedCount.
+  - `AnnouncementRepository`: `findActive` honors `[startsAt, endsAt]` window + disabled gate; `findAllReleased` retains expired records (News archive); legacy single-locale rows backfill `*En`/`*Zh` slots so reads stay live during the bilingual migration window.
+  - `RedemptionCodeRepository`: `tryClaimForRedeem` is atomic — concurrent attempts yield exactly one winner; expired/invalidated codes can't be redeemed; `list` search escapes regex metacharacters (no ReDoS, no false positives).
+
+  Net +81 tests, +1 file (no source changes — pure test backfill).
+
+- [#637](https://github.com/ChronoAIProject/Ornn/pull/637) [`d039964`](https://github.com/ChronoAIProject/Ornn/commit/d039964242cfd3d251e4a85d80221da13a34338b) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Sweep the `c.req.json().catch(() => ({}))` bypass pattern across ornn-api routes ([#438](https://github.com/ChronoAIProject/Ornn/issues/438)). Every state-changing endpoint that previously parsed JSON manually now flows through the `validateBody(schema, code)` middleware so malformed bodies surface as RFC 7807 `400 invalid_body` instead of silently coercing to `{}` and bypassing schema validation.
+
+  Affected:
+
+  - `skills/crud/routes` — `POST /skills/pull`, `POST /skills/:id/refresh`, `PUT /skills/:id/source`, JSON branch of `PUT /skills/:id`
+  - `skills/audit/routes` — both audit-trigger endpoints (owner + admin)
+  - `skills/generation/routes` — `POST /skills/generate/from-source`, `POST /skills/generate/from-openapi`, JSON branch of `POST /skills/generate`
+  - `skills/mirror/routes` — `POST /github/repo`
+  - `announcements/routes` — admin create + patch
+  - `broadcasts/routes` — admin create + patch
+  - `settings/routes` — every per-section `PUT`
+  - `settings/llmProviders/routes` — provider create / update / model patch
+  - `settings/exportImport/routes` — `POST /admin/settings/import`
+  - `platform/routes` — `PATCH /admin/settings`
+
+  `validateBody` is also taught to tolerate an empty body (treats it as `{}`) when the schema has no required fields — that's the spot the bypass pattern was covering, and removing it without that tolerance would break the `POST /skills/:id/refresh`-with-no-body case the SPA uses.
+
+  Endpoints with rich per-field validation that's hard to express in Zod (mirror config, platform settings) get a thin gate (`z.record(z.string(), z.unknown())`) so the SyntaxError path is covered, while leaving the existing field checks in place. Future PRs can swap those for full schemas without changing the wire contract.
+
 ## 0.8.0
 
 ### Minor Changes
