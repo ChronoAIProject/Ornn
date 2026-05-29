@@ -20,10 +20,10 @@
  * @module clients/nyxid/userServices
  */
 
-import pino from "pino";
+import { createLogger } from "../../shared/logger";
 import type { NyxidConfigResolver } from "./base";
 
-const logger = pino({ level: "info" }).child({ module: "nyxidUserServicesClient" });
+const logger = createLogger("nyxidUserServicesClient");
 
 /**
  * Minimal per-user service shape Ornn cares about. Mirrors the subset

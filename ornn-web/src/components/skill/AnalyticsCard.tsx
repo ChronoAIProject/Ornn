@@ -38,7 +38,8 @@ function Stat({
 }: {
   label: string;
   value: string | number;
-  hint?: string;
+  // exactOptionalPropertyTypes (#657)
+  hint?: string | undefined;
 }) {
   return (
     <div>

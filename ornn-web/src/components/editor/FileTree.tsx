@@ -19,13 +19,14 @@ export interface FileNode {
 
 export interface FileTreeProps {
   files: FileNode[];
-  selectedId?: string;
+  // Optionals widen to `T | undefined` for exactOptionalPropertyTypes (#657).
+  selectedId?: string | undefined;
   onSelect: (file: FileNode) => void;
-  onCreateFile?: (parentId: string | null, name: string) => void;
-  onCreateFolder?: (parentId: string | null, name: string) => void;
-  onDelete?: (id: string) => void;
-  onRename?: (id: string, newName: string) => void;
-  className?: string;
+  onCreateFile?: ((parentId: string | null, name: string) => void) | undefined;
+  onCreateFolder?: ((parentId: string | null, name: string) => void) | undefined;
+  onDelete?: ((id: string) => void) | undefined;
+  onRename?: ((id: string, newName: string) => void) | undefined;
+  className?: string | undefined;
 }
 
 /** File icon */
@@ -88,18 +89,19 @@ function TrashIcon({ className }: { className?: string }) {
 interface TreeNodeProps {
   node: FileNode;
   level: number;
-  selectedId?: string;
+  // Optionals widen to `T | undefined` for exactOptionalPropertyTypes (#657).
+  selectedId?: string | undefined;
   expandedIds: Set<string>;
   onSelect: (file: FileNode) => void;
   onToggle: (id: string) => void;
-  onCreateFile?: (parentId: string | null) => void;
-  onDelete?: (id: string) => void;
+  onCreateFile?: ((parentId: string | null) => void) | undefined;
+  onDelete?: ((id: string) => void) | undefined;
   /** Currently active creation state */
-  creatingState?: { type: "file" | "folder"; parentId: string | null } | null;
-  newItemName?: string;
-  onNewItemNameChange?: (name: string) => void;
-  onConfirmCreate?: () => void;
-  onCancelCreate?: () => void;
+  creatingState?: { type: "file" | "folder"; parentId: string | null } | null | undefined;
+  newItemName?: string | undefined;
+  onNewItemNameChange?: ((name: string) => void) | undefined;
+  onConfirmCreate?: (() => void) | undefined;
+  onCancelCreate?: (() => void) | undefined;
 }
 
 function TreeNode({
@@ -258,8 +260,8 @@ function TreeNode({
  */
 function computeInitialExpanded(files: FileNode[]): Set<string> {
   const ids = new Set<string>(["root"]);
-  if (files.length === 1 && files[0].type === "folder") {
-    ids.add(files[0].id);
+  if (files.length === 1 && files[0]!.type === "folder") {
+    ids.add(files[0]!.id);
   }
   return ids;
 }
@@ -281,8 +283,8 @@ export function FileTree({
     setExpandedIds((prev) => {
       const next = new Set(prev);
       next.add("root");
-      if (files.length === 1 && files[0].type === "folder") {
-        next.add(files[0].id);
+      if (files.length === 1 && files[0]!.type === "folder") {
+        next.add(files[0]!.id);
       }
       return next;
     });

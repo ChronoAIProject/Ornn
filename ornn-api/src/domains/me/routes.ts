@@ -8,6 +8,7 @@
  */
 
 import { Hono } from "hono";
+import { createLogger } from "../../shared/logger";
 import {
   type AuthVariables,
   nyxidAuthMiddleware,
@@ -20,6 +21,8 @@ import type { SkillRepository } from "../skills/crud/repository";
 import type { UserDirectoryRepository } from "../users/repository";
 import type { AnalyticsEmitter } from "../../infra/analytics";
 import { AppError } from "../../shared/types/index";
+
+const logger = createLogger("meRoutes");
 
 export interface MeRoutesConfig {
   /**
@@ -182,7 +185,7 @@ export function createMeRoutes(config: MeRoutesConfig): Hono<{ Variables: AuthVa
       // No caller token forwarded by the proxy — we can't act on their
       // behalf. Return 404-shaped response so the UI can show "unknown
       // org" without special-casing another error code.
-      throw AppError.notFound("ORG_NOT_FOUND", `Org '${orgId}' not found`);
+      throw AppError.notFound("org_not_found", `Org '${orgId}' not found`);
     }
 
     const baseUrl = await resolveBaseUrl();
@@ -190,7 +193,7 @@ export function createMeRoutes(config: MeRoutesConfig): Hono<{ Variables: AuthVa
       headers: { Authorization: `Bearer ${token}` },
     });
     if (resp.status === 404 || resp.status === 403) {
-      throw AppError.notFound("ORG_NOT_FOUND", `Org '${orgId}' not found`);
+      throw AppError.notFound("org_not_found", `Org '${orgId}' not found`);
     }
     if (!resp.ok) {
       const body = await resp.text().catch(() => "");
@@ -334,7 +337,11 @@ async function resolveOrgDisplayNames(
         if (!resp.ok) return { ...r, displayName: r.id };
         const body = (await resp.json()) as { display_name?: string | null };
         return { ...r, displayName: body.display_name ?? r.id };
-      } catch {
+      } catch (err) {
+        // Fall back to org id as display name; surfaced from a NyxID
+        // hiccup, not a logic bug. Log so we can spot persistent issues
+        // without alerting on every single transient failure.
+        logger.debug({ err, orgId: r.id }, "org display-name lookup failed");
         return { ...r, displayName: r.id };
       }
     }),

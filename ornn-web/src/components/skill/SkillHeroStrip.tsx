@@ -19,18 +19,16 @@ import type { AuditRecord } from "@/types/audit";
 
 interface SkillHeroStripProps {
   skill: SkillDetail;
-  pullCount7d?: number;
-  versionAudit?: AuditRecord;
+  // Optionals widen to `T | undefined` for exactOptionalPropertyTypes (#657).
+  pullCount7d?: number | undefined;
+  versionAudit?: AuditRecord | undefined;
   isAuthenticated: boolean;
   isOwner: boolean;
   ownerDisplayName: string;
-  ownerAvatarUrl?: string | null;
-  /** Click handler for the primary "Try in Playground" CTA. */
+  ownerAvatarUrl?: string | null | undefined;
   onTryPlayground: () => void;
-  /** Click handler for the download icon — only when raw ZIP is available. */
-  onDownloadPackage?: () => void;
-  /** Click handler for the edit icon — only when caller is owner/admin. */
-  onEditSkill?: () => void;
+  onDownloadPackage?: (() => void) | undefined;
+  onEditSkill?: (() => void) | undefined;
 }
 
 /**
@@ -44,7 +42,14 @@ function formatShortDate(iso: string | undefined): string {
 }
 
 /** Render the audit-verdict pill with the right semantic colors. */
-function AuditPill({ audit, t }: { audit?: AuditRecord; t: (key: string, fallback?: string, opts?: object) => string }) {
+// exactOptionalPropertyTypes (#657): widen optionals.
+function AuditPill({
+  audit,
+  t,
+}: {
+  audit?: AuditRecord | undefined;
+  t: (key: string, fallback?: string | undefined, opts?: object | undefined) => string;
+}) {
   if (!audit || audit.status !== "completed") {
     return (
       <span className="inline-flex items-center gap-1.5 rounded-sm border border-strong-edge bg-elevated/40 px-2.5 py-1 font-mono text-[11px] uppercase tracking-wider text-meta">

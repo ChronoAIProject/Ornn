@@ -67,6 +67,7 @@ export function NeonSkeleton({
     return (
       <div className={`flex flex-col gap-2 ${className}`}>
         {Array.from({ length: lines }).map((_, i) => (
+          // Positional list — never reorders, key={i} is intentional (#451).
           <div
             key={i}
             className={`skeleton-shimmer ${VARIANT_STYLES[variant]}`}
@@ -141,6 +142,7 @@ export function TableRowSkeleton({ columns = 5, className = "" }: TableRowSkelet
   return (
     <tr className={className}>
       {Array.from({ length: columns }).map((_, i) => (
+        // Positional list — never reorders, key={i} is intentional (#451).
         <td key={i} className="px-4 py-3">
           <NeonSkeleton
             variant="text"
@@ -300,6 +302,7 @@ export function SkeletonGrid({ count = 6, columns = 3, className = "" }: Skeleto
   return (
     <div className={`grid gap-6 ${gridCols[columns]} ${className}`}>
       {Array.from({ length: count }).map((_, i) => (
+        // Positional list — never reorders, key={i} is intentional (#451).
         <SkillCardSkeleton key={i} />
       ))}
     </div>

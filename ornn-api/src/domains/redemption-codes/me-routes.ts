@@ -14,7 +14,7 @@
  */
 
 import { Hono } from "hono";
-import pino from "pino";
+import { createLogger } from "../../shared/logger";
 import {
   type AuthVariables,
   getAuth,
@@ -25,7 +25,7 @@ import { AppError } from "../../shared/types/index";
 import type { RedemptionCodeService } from "./service";
 import { redeemSchema, type RedeemInput, type RedemptionCodeDoc } from "./types";
 
-const logger = pino({ level: "info" }).child({ module: "meRedemptionCodeRoutes" });
+const logger = createLogger("meRedemptionCodeRoutes");
 
 const HISTORY_PAGE_SIZE_MAX = 100;
 const HISTORY_PAGE_SIZE_DEFAULT = 20;
@@ -36,26 +36,26 @@ export interface MeRedemptionCodesRoutesConfig {
 
 function mapRedeemError(message: string): AppError {
   if (message.startsWith("NOT_FOUND:")) {
-    return new AppError(404, "REDEMPTION_CODE_NOT_FOUND", "Code not found");
+    return new AppError(404, "redemption_code_not_found", "Code not found");
   }
   if (message.startsWith("EXPIRED:")) {
-    return new AppError(410, "REDEMPTION_CODE_EXPIRED", "This code has expired");
+    return new AppError(410, "redemption_code_expired", "This code has expired");
   }
   if (message.startsWith("ALREADY_INVALIDATED:")) {
     return new AppError(
       410,
-      "REDEMPTION_CODE_INVALIDATED",
+      "redemption_code_invalidated",
       "This code has been revoked",
     );
   }
   if (message.startsWith("ALREADY_REDEEMED:")) {
     return new AppError(
       409,
-      "REDEMPTION_CODE_ALREADY_REDEEMED",
+      "redemption_code_already_redeemed",
       "This code has already been redeemed",
     );
   }
-  return AppError.internalError("REDEMPTION_CODE_REDEEM_FAILED", message);
+  return AppError.internalError("redemption_code_redeem_failed", message);
 }
 
 function serializeHistoryItem(doc: RedemptionCodeDoc): Record<string, unknown> {

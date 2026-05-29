@@ -7,6 +7,7 @@
  */
 
 import { Hono } from "hono";
+import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { cors } from "hono/cors";
 import { join } from "node:path";
 import { readFileSync } from "node:fs";
@@ -25,6 +26,13 @@ import { requestIdMiddleware, getRequestId } from "./middleware/requestId";
 // emits an `api.request` PostHog event with caller, method, path,
 // status, durationMs, sourceIp, requestId.
 import { apiRequestTrackingMiddleware } from "./middleware/apiRequestTracking";
+
+// Idempotency-Key middleware (#459). Caches state-changing-request
+// responses for 24h so retries don't create duplicates.
+import {
+  IdempotencyKeyRepository,
+  idempotencyMiddleware,
+} from "./middleware/idempotency";
 
 // Infrastructure
 import { connectMongo, type MongoConnection } from "./infra/db/mongodb";
@@ -58,39 +66,28 @@ import { createAuditRoutes } from "./domains/skills/audit/routes";
 
 
 // Domain: Notifications
-import { NotificationRepository } from "./domains/notifications/repository";
-import { NotificationService } from "./domains/notifications/service";
-import { createNotificationRoutes } from "./domains/notifications/routes";
-import { dropLegacyNotificationCategories } from "./domains/notifications/migration";
+import { wireNotifications } from "./domains/notifications/bootstrap";
 
 // Domain: Announcements (landing-page popup)
-import { AnnouncementRepository } from "./domains/announcements/repository";
-import { AnnouncementService } from "./domains/announcements/service";
-import { createAnnouncementRoutes } from "./domains/announcements/routes";
-import { migrateAnnouncementsToBilingual } from "./domains/announcements/migration";
+import { wireAnnouncements } from "./domains/announcements/bootstrap";
 
 // Domain: Broadcasts (admin-authored notifications, #500)
-import { BroadcastRepository } from "./domains/broadcasts/repository";
-import { BroadcastService } from "./domains/broadcasts/service";
-import { createBroadcastRoutes } from "./domains/broadcasts/routes";
-import { backfillBroadcastRecipientUserIds } from "./domains/broadcasts/migration";
+import {
+  wireBroadcasts,
+  wireBroadcastsRepo,
+} from "./domains/broadcasts/bootstrap";
 
 // Domain: Analytics
-import { AnalyticsRepository } from "./domains/analytics/repository";
-import { AnalyticsService } from "./domains/analytics/service";
-import { createAnalyticsRoutes } from "./domains/analytics/routes";
+import { wireAnalytics } from "./domains/analytics/bootstrap";
 
 // Domain: Skill Search
-import { SearchService } from "./domains/skills/search/service";
-import { createSearchRoutes } from "./domains/skills/search/routes";
+import { wireSkillSearch } from "./domains/skills/search/bootstrap";
 
 // Domain: Skill Generation
-import { SkillGenerationService } from "./domains/skills/generation/service";
-import { createGenerationRoutes } from "./domains/skills/generation/routes";
+import { wireSkillGeneration } from "./domains/skills/generation/bootstrap";
 
 // Domain: Playground
-import { PlaygroundChatService } from "./domains/playground/chatService";
-import { createPlaygroundRoutes } from "./domains/playground/routes";
+import { wirePlayground } from "./domains/playground/bootstrap";
 
 // Domain: Admin
 import { createAdminRoutes } from "./domains/admin/routes";
@@ -113,9 +110,7 @@ import { createMeRoutes } from "./domains/me/routes";
 import { createUserRoutes } from "./domains/users/routes";
 
 // Domain: Platform settings (legacy single-doc — still used by mirror, audit-waiver) ----
-import { PlatformSettingsRepository } from "./domains/platform/repository";
-import { PlatformSettingsService } from "./domains/platform/service";
-import { createPlatformSettingsRoutes } from "./domains/platform/routes";
+import { wirePlatformSettings } from "./domains/platform/bootstrap";
 
 // Domain: Settings (multi-section + LLM providers + export/import) — backend-engineer-2.
 import { SettingsRepository } from "./domains/settings/repository";
@@ -125,28 +120,20 @@ import { migrateLegacyMirrorIntoSettings } from "./domains/settings/sections/mir
 import { LlmProvidersRepository } from "./domains/settings/llmProviders/repository";
 import { LlmProvidersService } from "./domains/settings/llmProviders/service";
 import { createLlmProvidersRoutes } from "./domains/settings/llmProviders/routes";
+import type { ApiFormat } from "./domains/settings/llmProviders/types";
 import { SettingsExporter } from "./domains/settings/exportImport/exporter";
 import { SettingsImporter } from "./domains/settings/exportImport/importer";
 import { createSettingsExportImportRoutes } from "./domains/settings/exportImport/routes";
 import { LlmModelListClient } from "./clients/llmModelListClient";
 
 // Domain: Quota (per-user playground / skill-gen counters + admin grants)
-import { QuotaRepository } from "./domains/quota/repository";
-import { QuotaService } from "./domains/quota/service";
-import { createQuotaRoutes } from "./domains/quota/routes";
+import { wireQuota } from "./domains/quota/bootstrap";
 
 // Domain: Redemption codes (admin-issued single-use quota grants)
-import { RedemptionCodeRepository } from "./domains/redemption-codes/repository";
-import { RedemptionCodeService } from "./domains/redemption-codes/service";
-import { createAdminRedemptionCodesRoutes } from "./domains/admin/redemption-codes/routes";
-import { createMeRedemptionCodesRoutes } from "./domains/redemption-codes/me-routes";
+import { wireRedemptionCodes } from "./domains/redemption-codes/bootstrap";
 
 // Domain: Admin (engineer-1): dashboard, users, quota admin.
-import { AdminDashboardService } from "./domains/admin/dashboard/service";
-import { createAdminDashboardRoutes } from "./domains/admin/dashboard/routes";
-import { createAdminQuotaRoutes } from "./domains/admin/quota/routes";
-import { AdminUsersService } from "./domains/admin-users/service";
-import { createAdminUsersRoutes } from "./domains/admin-users/routes";
+import { wireAdmin } from "./domains/admin/bootstrap";
 
 // LLM provider migration (#270 — fold legacy global model catalog into
 // per-provider arrays). One-time, idempotent, runs before any
@@ -158,7 +145,7 @@ import { createLlmPickerRoutes } from "./domains/settings/llmProviders/routes";
 import { buildSpec } from "./openapi/specBuilder";
 
 // Error handler
-import { AppError } from "./shared/types/index";
+import { AppError, buildProblemJsonBody } from "./shared/types/index";
 
 export interface BootstrapResult {
   app: Hono;
@@ -202,7 +189,7 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
     python: config.agentsealPython,
     script: config.agentsealScript,
     timeoutMs: 60_000,
-    enabled: true,
+    enabled: config.agentsealEnabled,
     logger,
   });
 
@@ -315,22 +302,41 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
     logger.warn({ err }, "users indexes ensureIndexes failed — proceeding anyway"),
   );
 
+  // ---- Idempotency-Key cache (#459). 24h TTL on `idempotency_keys`;
+  // mongo's TTL monitor sweeps once a minute. Index creation is
+  // fire-and-forget so a single-replica boot still comes up if the
+  // monitor temporarily refuses (it'll be re-attempted on next boot).
+  const idempotencyKeyRepo = new IdempotencyKeyRepository(db);
+  void idempotencyKeyRepo.ensureIndexes().catch((err) =>
+    logger.warn({ err }, "idempotency_keys indexes ensureIndexes failed — proceeding anyway"),
+  );
+
   // Convenience: resolve the LLM provider for a given surface in a
   // single Promise, projecting whichever auth shape the provider uses
-  // into the simpler `{ gatewayUrl, apiKey }` contract `NyxLlmClient`
-  // speaks. `apiKey` empty means "use SA token-exchange flow".
+  // into the simpler `{ gatewayUrl, apiKey, apiFormat }` contract
+  // `NyxLlmClient` speaks. `apiKey` empty means "use SA token-exchange
+  // flow". `apiFormat` selects the upstream endpoint shape (#574); when
+  // no provider is configured we still return a default so the type
+  // shape stays narrow — the empty `gatewayUrl` is what triggers the
+  // fail-closed branch downstream.
   const resolveLlmProviderForSurface = async (
     surface: "playground" | "skillGen",
-  ): Promise<{ gatewayUrl: string; apiKey: string }> => {
+  ): Promise<{ gatewayUrl: string; apiKey: string; apiFormat: ApiFormat }> => {
     const sec =
       surface === "playground"
         ? await settingsService.getPlayground()
         : await settingsService.getSkillGen();
-    if (!sec.defaultProviderId) return { gatewayUrl: "", apiKey: "" };
+    if (!sec.defaultProviderId) {
+      return { gatewayUrl: "", apiKey: "", apiFormat: "responses" };
+    }
     const provider = await llmProvidersService.get(sec.defaultProviderId);
-    if (!provider) return { gatewayUrl: "", apiKey: "" };
+    if (!provider) return { gatewayUrl: "", apiKey: "", apiFormat: "responses" };
     const apiKey = provider.auth.kind === "apiKey" ? provider.auth.apiKey : "";
-    return { gatewayUrl: provider.gatewayUrl, apiKey };
+    return {
+      gatewayUrl: provider.gatewayUrl,
+      apiKey,
+      apiFormat: provider.apiFormat,
+    };
   };
 
   // Same pattern, returning the per-surface model + token cap +
@@ -437,6 +443,7 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
 
   // ---- Repositories ----
   const skillRepo = new SkillRepository(db);
+  await skillRepo.ensureIndexes();
   const skillVersionRepo = new SkillVersionRepository(db);
   await skillVersionRepo.ensureIndexes();
 
@@ -451,75 +458,32 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
     agentsealScanner,
   });
 
-  // ---- Domain: Notifications (built before AuditService so the audit
-  //   pipeline can fan out completion notifications) ----
-  const notificationRepo = new NotificationRepository(db);
-  void notificationRepo.ensureIndexes().catch((err) =>
-    logger.warn({ err }, "notifications indexes ensureIndexes failed — proceeding anyway"),
-  );
-  // One-time boot migration (#218) — drop legacy `share.*` rows left over
-  // from the pre-#198 share/audit-gate workflow. Idempotent; no-op after
-  // first run. Failure is non-fatal — old rows surface as ugly UI but
-  // never block the boot.
-  await dropLegacyNotificationCategories(db).catch((err) =>
-    logger.error(
-      { err: err instanceof Error ? err.message : String(err) },
-      "dropLegacyNotificationCategories failed — legacy notification rows may still surface in /notifications until the next deploy",
-    ),
-  );
-  // `broadcastRepo` is constructed in the broadcasts block below; we
-  // need a reference at NotificationService-build time so the merged
-  // feed (#500) can left-join read receipts. Reordered so broadcasts
-  // build first.
-  const broadcastRepoForNotifications = new BroadcastRepository(db);
-  void broadcastRepoForNotifications.ensureIndexes().catch((err) =>
-    logger.warn({ err }, "broadcasts indexes ensureIndexes failed — proceeding anyway"),
-  );
-  // One-shot bilingual + targeting backfill for broadcasts. Pre-#502
-  // docs don't carry `recipientUserIds`; this migration writes an
-  // explicit `null` on every absent doc so the merged feed can rely
-  // on a stable `string[] | null` shape. Idempotent; failure is
-  // non-fatal — the repo mapper's `Array.isArray` guard already
-  // normalises absent fields to `null` on the read path.
-  await backfillBroadcastRecipientUserIds(db, logger).catch((err) =>
-    logger.error(
-      { err: err instanceof Error ? err.message : String(err) },
-      "broadcasts recipientUserIds backfill crashed — mapper fallback will cover reads, retry on next boot",
-    ),
-  );
-  const notificationService = new NotificationService({
-    notificationRepo,
-    broadcastRepo: broadcastRepoForNotifications,
+  // ---- Domain: Notifications + Broadcasts ----
+  // The two share a single BroadcastRepository instance: notifications
+  // reads it on the merged-feed path (#500 left-join), broadcasts
+  // writes through its own service on admin CRUD. Build the repo
+  // first so notifications can take its reference, then wire each
+  // surface's service + routes. Notifications is built before the
+  // audit service so the audit pipeline can fan out completion
+  // notifications.
+  const { repo: broadcastRepoForNotifications } = await wireBroadcastsRepo({
+    db,
+    logger,
   });
-  const notificationRoutes = createNotificationRoutes({ notificationService });
+  const { service: notificationService, routes: notificationRoutes } =
+    await wireNotifications({
+      db,
+      logger,
+      broadcastRepo: broadcastRepoForNotifications,
+    });
 
   // ---- Domain: Announcements (landing-page popup, issue #307) ----
-  const announcementRepo = new AnnouncementRepository(db);
-  void announcementRepo.ensureIndexes().catch((err) =>
-    logger.warn({ err }, "announcements indexes ensureIndexes failed — proceeding anyway"),
-  );
-  // One-shot bilingual backfill: copies legacy single-locale columns
-  // (title / bodyMarkdown / ctaLabel) into the new per-locale slots
-  // (`*En` + `*Zh`) on existing docs. Idempotent — second boot is a
-  // no-op. Failure is logged + non-fatal; the repo's mapper falls
-  // back to legacy fields if the migration hasn't run yet.
-  await migrateAnnouncementsToBilingual(db, logger).catch((err) =>
-    logger.error(
-      { err: err instanceof Error ? err.message : String(err) },
-      "announcements bilingual migration crashed — repo fallback will cover reads, retry on next boot",
-    ),
-  );
-  const announcementService = new AnnouncementService({ repo: announcementRepo });
-  const announcementRoutes = createAnnouncementRoutes({ announcementService });
+  const { routes: announcementRoutes } = await wireAnnouncements({ db, logger });
 
   // ---- Domain: Broadcasts (admin-authored, fan-out via notifications, #500) ----
-  // Reuse the same `BroadcastRepository` instance the notifications
-  // service got — both surfaces share state (admin CRUD + per-user
-  // feed merge), and a single instance keeps the wiring legible.
-  const broadcastService = new BroadcastService({
+  const { routes: broadcastRoutes } = wireBroadcasts({
     repo: broadcastRepoForNotifications,
   });
-  const broadcastRoutes = createBroadcastRoutes({ broadcastService });
 
   // ---- NyxID Orgs Client — built early so the audit fan-out can expand
   //   sharedWithOrgs into member rosters when sending consumer notifications.
@@ -562,12 +526,11 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   const auditRoutes = createAuditRoutes({ auditService, skillService });
 
   // ---- Domain: Analytics ----
-  const analyticsRepo = new AnalyticsRepository(db);
-  void analyticsRepo.ensureIndexes().catch((err) =>
-    logger.warn({ err }, "skill_executions indexes ensureIndexes failed — proceeding anyway"),
-  );
-  const analyticsService = new AnalyticsService({ analyticsRepo });
-  const analyticsRoutes = createAnalyticsRoutes({ analyticsService, skillService });
+  const { service: analyticsService, routes: analyticsRoutes } = wireAnalytics({
+    db,
+    logger,
+    skillService,
+  });
 
   // ---- Domain: Platform settings (admin-editable: audit threshold, mirror config, LLM override) ----
   // Backend-engineer-2 is replacing this with a multi-section
@@ -576,11 +539,10 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   // the existing single-doc `PlatformSettings` shape into the bridge
   // contract — every field a client/route asks for is satisfied here
   // (with sensible fallbacks for sections that don't exist yet).
-  const platformSettingsRepo = new PlatformSettingsRepository(db);
-  const platformSettingsService = new PlatformSettingsService(platformSettingsRepo, {
+  const { routes: platformSettingsRoutes } = wirePlatformSettings({
+    db,
     encryptionKey: config.encryptionKey,
   });
-  const platformSettingsRoutes = createPlatformSettingsRoutes({ platformSettingsService });
 
   // ---- Settings routes (engineer-2): per-section CRUD, LLM providers,
   //   export/import.
@@ -636,35 +598,18 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   });
 
   // ---- Domain: Quota (per-user playground / skill-gen counters + admin grants) ----
-  const quotaRepo = new QuotaRepository(db);
-  void quotaRepo.ensureIndexes().catch((err) =>
-    logger.warn({ err }, "quota indexes ensureIndexes failed — proceeding anyway"),
-  );
-
-  // ---- Domain: Redemption codes (single-use admin-issued quota grants) ----
-  const redemptionCodeRepo = new RedemptionCodeRepository(db);
-  void redemptionCodeRepo.ensureIndexes().catch((err) =>
-    logger.warn({ err }, "redemption_codes indexes ensureIndexes failed — proceeding anyway"),
-  );
-  const quotaService = new QuotaService({
-    repo: quotaRepo,
-    defaults: {
-      getQuotaDefaults: async () => {
-        const [pg, sg] = await Promise.all([
-          settingsService.getPlayground(),
-          settingsService.getSkillGen(),
-        ]);
-        return {
-          defaultPlaygroundMonthly: pg.defaultMonthlyQuota,
-          defaultSkillGenMonthly: sg.defaultMonthlyQuota,
-        };
-      },
-    },
+  const { service: quotaService, routes: quotaRoutes } = wireQuota({
+    db,
+    logger,
+    settingsService,
     notificationService,
   });
-  const quotaRoutes = createQuotaRoutes({
-    quotaService,
-  });
+
+  // ---- Domain: Redemption codes (single-use admin-issued quota grants) ----
+  const {
+    adminRoutes: adminRedemptionCodesRoutes,
+    meRoutes: meRedemptionCodesRoutes,
+  } = wireRedemptionCodes({ db, logger, quotaService });
 
   // ---- Per-provider model catalog migration (#270) ----
   // Fold the standalone `models` collection into `llm_providers.models[]`
@@ -681,8 +626,22 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
 
   // The picker route — `GET /me/models?surface=...` — reads from the
   // per-provider arrays via `LlmProvidersService` (already constructed
-  // upstream as part of `domains/settings/...`).
-  const llmPickerRoutes = createLlmPickerRoutes({ llmProvidersService });
+  // upstream as part of `domains/settings/...`). The section-default
+  // resolver (#607) lets the picker honour the per-surface
+  // `defaultModelId` pin set in admin Playground / Skill-Gen settings,
+  // so the picker pre-selection agrees with what the chat execute
+  // path falls back to. Falls through to the per-model
+  // `defaultForX` flag when no pin is configured.
+  const llmPickerRoutes = createLlmPickerRoutes({
+    llmProvidersService,
+    sectionDefaultResolver: async (surface) => {
+      const sec =
+        surface === "playground"
+          ? await settingsService.getPlayground()
+          : await settingsService.getSkillGen();
+      return sec.defaultModelId ?? null;
+    },
+  });
 
   // ---- Domain: GitHub Mirror ----
   // Single MirrorService instance — runtime-aware. Reads enabled +
@@ -745,49 +704,38 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   });
 
   // ---- Domain: Skill Search ----
-  const searchService = new SearchService({
+  // Search shares the playground surface for default-model resolution
+  // (it's a playground-flavoured LLM call). Backend-eng-2 may add a
+  // dedicated `search` section later; until then, share with playground.
+  const { routes: searchRoutes } = wireSkillSearch({
     skillRepo,
     llmClient: nyxLlmClient,
-    // Default model resolves through the playground surface (search is
-    // a playground-flavoured LLM call). Backend-eng-2 may add a
-    // dedicated `search` section later; until then, share with playground.
     defaultModelResolver: async () =>
       (await resolveSurfaceDefaults("playground")).model,
-  });
-
-  const searchRoutes = createSearchRoutes({
-    searchService,
-    skillRepo,
+    nyxidServiceClient,
+    getSaAccessToken,
   });
 
   // ---- Domain: Skill Generation ----
-  const generationService = new SkillGenerationService({
-    llmClient: nyxLlmClient,
-    defaultsResolver: async () => resolveSurfaceDefaults("skillGen"),
-  });
-
-  const generationRoutes = createGenerationRoutes({
-    generationService,
-    keepAliveIntervalMsResolver: async () =>
-      (await settingsService.getSkillGen()).sseKeepAliveMs,
-    quotaService,
-    llmProvidersService,
-  });
+  const { service: generationService, routes: generationRoutes } =
+    wireSkillGeneration({
+      llmClient: nyxLlmClient,
+      defaultsResolver: async () => resolveSurfaceDefaults("skillGen"),
+      keepAliveIntervalMsResolver: async () =>
+        (await settingsService.getSkillGen()).sseKeepAliveMs,
+      quotaService,
+      llmProvidersService,
+    });
 
   // ---- Domain: Playground ----
-  const chatService = new PlaygroundChatService({
+  const { routes: playgroundRoutes } = wirePlayground({
     llmClient: nyxLlmClient,
     sandboxClient,
     skillService,
     defaultsResolver: async () => resolveSurfaceDefaults("playground"),
-  });
-
-  const playgroundRoutes = createPlaygroundRoutes({
-    chatService,
     keepAliveIntervalMsResolver: async () =>
       (await settingsService.getPlayground()).sseKeepAliveMs,
     analyticsService,
-    skillService,
     quotaService,
     llmProvidersService,
   });
@@ -844,49 +792,52 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
     }, "Request completed");
   });
 
-  // Global error handler — single `AppError` hierarchy across the whole
-  // service, so `instanceof` is sufficient (no more duck-typing).
+  // Global error handler — emits RFC 7807 `application/problem+json`
+  // per CONVENTIONS.md §1.3 (#456). The legacy `{ data, error }`
+  // envelope is gone; clients read fields at the body root now (`code`,
+  // `status`, `detail`, `title`, `type`, `instance`, `requestId`).
   app.onError((err, c) => {
     const requestId = getRequestId(c);
-    // userId is optional on auth-context; use null distinct id when absent.
     const authCtx = (c.get as (k: string) => unknown)("auth") as
       | { userId?: string }
       | undefined;
     const userId = authCtx?.userId ?? null;
 
-    if (err instanceof AppError) {
-      logger.warn({ requestId, code: err.code, status: err.statusCode }, err.message);
-      // 5xx AppErrors are still real server failures — emit api.error
-      // (sampled) so PostHog has the same fidelity as runtime crashes.
-      if (err.statusCode >= 500) {
-        analyticsEmitter.trackApiError({
-          userId,
-          statusCode: err.statusCode,
-          errorCode: err.code,
-          method: c.req.method,
-          path: c.req.path,
-          requestId,
-        });
-      }
-      return c.json(
-        { data: null, error: { code: err.code, message: err.message } },
-        err.statusCode as any,
-      );
+    const appError = err instanceof AppError ? err : null;
+    const statusCode = appError?.statusCode ?? 500;
+    const code = appError?.code ?? "internal_error";
+    const detail = appError ? appError.message : "Internal server error";
+
+    if (appError) {
+      logger.warn({ requestId, code, status: statusCode }, appError.message);
+    } else {
+      logger.error({ requestId, err }, "Unhandled error");
     }
 
-    logger.error({ requestId, err }, "Unhandled error");
-    analyticsEmitter.trackApiError({
-      userId,
-      statusCode: 500,
-      errorCode: "INTERNAL_ERROR",
-      method: c.req.method,
-      path: c.req.path,
+    // 5xx errors (AppError or unhandled crash) feed PostHog so runtime
+    // crashes and `AppError.serviceUnavailable`-class failures land in
+    // the same dashboard.
+    if (statusCode >= 500) {
+      analyticsEmitter.trackApiError({
+        userId,
+        statusCode,
+        errorCode: code,
+        method: c.req.method,
+        path: c.req.path,
+        requestId,
+      });
+    }
+
+    const body = buildProblemJsonBody({
+      statusCode,
+      code,
+      message: detail,
+      instance: c.req.path,
       requestId,
     });
-    return c.json(
-      { data: null, error: { code: "INTERNAL_ERROR", message: "Internal server error" } },
-      500,
-    );
+    return c.json(body, statusCode as ContentfulStatusCode, {
+      "Content-Type": "application/problem+json",
+    });
   });
 
   // ---- API routes — all traffic via NyxID proxy, trust proxy headers ----
@@ -920,34 +871,19 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   // single request even when multiple routes call `readUserOrgMemberships`.
   apiApp.use("*", nyxidOrgLookupMiddleware(nyxidOrgsClient));
 
-  // ---- Admin routes (engineer-1): dashboard, users, quota admin ----
-  const adminDashboardService = new AdminDashboardService({
-    db,
-    userDirectoryRepo,
-  });
-  const adminDashboardRoutes = createAdminDashboardRoutes({
-    dashboardService: adminDashboardService,
-  });
-  const adminUsersService = new AdminUsersService({
-    db,
-    userDirectoryRepo,
-  });
-  const adminUsersRoutes = createAdminUsersRoutes({ adminUsersService });
-  const adminQuotaRoutes = createAdminQuotaRoutes({
-    quotaService,
-    userDirectoryRepo,
-  });
-  const redemptionCodeService = new RedemptionCodeService({
-    repo: redemptionCodeRepo,
-    quotaService,
-  });
-  const adminRedemptionCodesRoutes = createAdminRedemptionCodesRoutes({
-    redemptionCodeService,
-  });
-  const meRedemptionCodesRoutes = createMeRedemptionCodesRoutes({
-    redemptionCodeService,
-  });
+  // Idempotency-Key replay cache (#459). Mounted AFTER `proxyAuthSetup`
+  // so it can scope cache entries per `auth.userId` — without that, two
+  // unrelated callers using the same key would replay each other's
+  // response. Non-mutating methods (GET/HEAD/OPTIONS) and requests
+  // without an `Idempotency-Key` header are passed through untouched.
+  apiApp.use("*", idempotencyMiddleware({ repo: idempotencyKeyRepo }));
 
+  // ---- Admin routes (engineer-1): dashboard, users, quota admin ----
+  const {
+    dashboardRoutes: adminDashboardRoutes,
+    usersRoutes: adminUsersRoutes,
+    quotaRoutes: adminQuotaRoutes,
+  } = wireAdmin({ db, userDirectoryRepo, quotaService });
   apiApp.route("/", skillRoutes);
   apiApp.route("/", mirrorRoutes);
   apiApp.route("/", auditRoutes);

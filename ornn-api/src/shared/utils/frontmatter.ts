@@ -29,13 +29,20 @@ export function extractFrontmatter(
   if (!match) return null;
 
   try {
-    const parsed = parseYaml(match[1]);
+    // FRONTMATTER_REGEX always has capture group 1 when it matches. `!`
+    // is safe under noUncheckedIndexedAccess (#450).
+    const parsed = parseYaml(match[1]!);
     if (typeof parsed !== "object" || parsed === null) return null;
 
     const raw = parsed as Record<string, unknown>;
     const camelized = yamlKeysToCamel(raw);
     return adaptOldFrontmatter(camelized);
   } catch {
+    // Intentional silent (#579): YAML parse errors here surface as a
+    // user-facing "frontmatter is invalid" message from the upstream
+    // validator (`validateSkillFrontmatter`). Logging the raw YAML
+    // would be noisy on every malformed-SKILL.md upload and leaks the
+    // user's frontmatter into logs.
     return null;
   }
 }

@@ -22,9 +22,8 @@
  */
 
 import { PostHog } from "posthog-node";
-import pino, { type Logger } from "pino";
-
-const moduleLogger = pino({ level: "info" }).child({ module: "posthogTracker" });
+import { createLogger, type Logger } from "../../shared/logger";
+const moduleLogger = createLogger("posthogTracker");
 
 export interface AnalyticsTracker {
   /**
@@ -122,7 +121,10 @@ export class PosthogTracker implements AnalyticsTracker {
       this.client.capture({
         distinctId,
         event,
-        properties: properties as Record<string, unknown> | undefined,
+        // exactOptionalPropertyTypes (#657)
+        ...(properties !== undefined
+          ? { properties: properties as Record<string, unknown> }
+          : {}),
       });
       this.logger.info({ event, distinctId: redactDistinctId(distinctId), propKeys }, "PostHog event captured");
       this.logger.debug({ event, distinctId: redactDistinctId(distinctId), properties }, "PostHog event body");

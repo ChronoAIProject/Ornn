@@ -32,6 +32,10 @@ const cronSchedule = z
         CronExpressionParser.parse(s);
         return true;
       } catch {
+        // Intentional silent (#579): the false return becomes a Zod
+        // validation error with the message below — that's the
+        // user-facing signal. Logging the cron-parser exception would
+        // be noisy on every form-validation typo.
         return false;
       }
     },

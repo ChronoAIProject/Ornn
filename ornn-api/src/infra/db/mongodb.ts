@@ -4,9 +4,8 @@
  */
 
 import { MongoClient, type Db } from "mongodb";
-import pino from "pino";
-
-const logger = pino({ level: "info" }).child({ module: "mongodb" });
+import { createLogger } from "../../shared/logger";
+const logger = createLogger("mongodb");
 
 export interface MongoConnection {
   client: MongoClient;

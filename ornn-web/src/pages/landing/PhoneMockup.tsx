@@ -26,17 +26,17 @@ export const PhoneMockup = forwardRef<HTMLDivElement, Props>(function PhoneMocku
     >
       <div
         ref={phoneRef}
-        className="group/phone relative z-10 w-[min(290px,100%)] aspect-[9/19] rounded-[44px] bg-obsidian px-[10px] py-[11px] shadow-[0_0_0_1.5px_#2a2620,inset_0_0_0_1px_rgb(255_255_255/0.04),inset_0_0_0_2px_rgb(0_0_0/0.9),12px_12px_0_0_var(--color-shadow-press)] [transform:perspective(1800px)_rotateY(-5deg)_rotateX(2deg)] [transform-origin:50%_50%] [transition:transform_0.6s_cubic-bezier(.2,.8,.3,1),filter_0.6s_ease] data-[settled=true]:[transform:perspective(1800px)_rotateY(0)_rotateX(0)] data-[dimmed=true]:brightness-[0.55] data-[dimmed=true]:saturate-[0.85] before:pointer-events-none before:absolute before:inset-0 before:z-[2] before:rounded-[44px] before:bg-[linear-gradient(135deg,rgb(255_255_255/0.06),rgb(255_255_255/0)_30%,rgb(255_255_255/0)_70%,rgb(255_255_255/0.04))]"
+        className="group/phone relative z-10 w-[min(290px,100%)] aspect-[9/19] rounded-[44px] bg-obsidian px-[10px] py-[11px] shadow-[0_0_0_1.5px_var(--color-bezel-rim),inset_0_0_0_1px_rgb(255_255_255/0.04),inset_0_0_0_2px_rgb(0_0_0/0.9),12px_12px_0_0_var(--color-shadow-press)] [transform:perspective(1800px)_rotateY(-5deg)_rotateX(2deg)] [transform-origin:50%_50%] [transition:transform_0.6s_cubic-bezier(.2,.8,.3,1),filter_0.6s_ease] data-[settled=true]:[transform:perspective(1800px)_rotateY(0)_rotateX(0)] data-[dimmed=true]:brightness-[0.55] data-[dimmed=true]:saturate-[0.85] before:pointer-events-none before:absolute before:inset-0 before:z-[2] before:rounded-[44px] before:bg-[linear-gradient(135deg,rgb(255_255_255/0.06),rgb(255_255_255/0)_30%,rgb(255_255_255/0)_70%,rgb(255_255_255/0.04))]"
       >
         {/* Side buttons on bezel edges */}
-        <span className="absolute -left-[3px] top-[92px] z-[3] h-6 w-[3px] rounded-l-[2px] bg-[#1a1713] shadow-[inset_0_1px_0_rgb(255_255_255/0.05),inset_0_-1px_0_rgb(0_0_0/0.6)]" />
-        <span className="absolute -left-[3px] top-[132px] z-[3] h-[46px] w-[3px] rounded-l-[2px] bg-[#1a1713] shadow-[inset_0_1px_0_rgb(255_255_255/0.05),inset_0_-1px_0_rgb(0_0_0/0.6)]" />
-        <span className="absolute -left-[3px] top-[190px] z-[3] h-[46px] w-[3px] rounded-l-[2px] bg-[#1a1713] shadow-[inset_0_1px_0_rgb(255_255_255/0.05),inset_0_-1px_0_rgb(0_0_0/0.6)]" />
-        <span className="absolute -right-[3px] top-[150px] z-[3] h-[68px] w-[3px] rounded-r-[2px] bg-[#1a1713] shadow-[inset_0_1px_0_rgb(255_255_255/0.05),inset_0_-1px_0_rgb(0_0_0/0.6)]" />
+        <span className="absolute -left-[3px] top-[92px] z-[3] h-6 w-[3px] rounded-l-[2px] bg-bezel-edge shadow-[inset_0_1px_0_rgb(255_255_255/0.05),inset_0_-1px_0_rgb(0_0_0/0.6)]" />
+        <span className="absolute -left-[3px] top-[132px] z-[3] h-[46px] w-[3px] rounded-l-[2px] bg-bezel-edge shadow-[inset_0_1px_0_rgb(255_255_255/0.05),inset_0_-1px_0_rgb(0_0_0/0.6)]" />
+        <span className="absolute -left-[3px] top-[190px] z-[3] h-[46px] w-[3px] rounded-l-[2px] bg-bezel-edge shadow-[inset_0_1px_0_rgb(255_255_255/0.05),inset_0_-1px_0_rgb(0_0_0/0.6)]" />
+        <span className="absolute -right-[3px] top-[150px] z-[3] h-[68px] w-[3px] rounded-r-[2px] bg-bezel-edge shadow-[inset_0_1px_0_rgb(255_255_255/0.05),inset_0_-1px_0_rgb(0_0_0/0.6)]" />
 
         <div className="relative h-full w-full overflow-hidden rounded-[34px] bg-obsidian shadow-[inset_0_0_0_1px_rgb(255_255_255/0.02)]">
           {/* Notch */}
-          <span className="absolute left-1/2 top-2.5 z-[4] h-[26px] w-[88px] -translate-x-1/2 rounded-[16px] bg-black shadow-[0_0_0_0.5px_#1a1713] after:absolute after:right-3 after:top-1/2 after:h-1.5 after:w-1.5 after:-translate-y-1/2 after:rounded-full after:content-[''] after:bg-[radial-gradient(circle_at_30%_30%,#3a5060,#0b1520)]" />
+          <span className="absolute left-1/2 top-2.5 z-[4] h-[26px] w-[88px] -translate-x-1/2 rounded-[16px] bg-black shadow-[0_0_0_0.5px_var(--color-bezel-edge)] after:absolute after:right-3 after:top-1/2 after:h-1.5 after:w-1.5 after:-translate-y-1/2 after:rounded-full after:content-[''] after:bg-[radial-gradient(circle_at_30%_30%,var(--color-lens-rim),var(--color-lens-deep))]" />
 
           {/* Status bar */}
           <div className="flex h-7 items-center justify-between px-[18px] pl-[22px] font-mono text-[10px] tracking-[0.08em] text-parchment">

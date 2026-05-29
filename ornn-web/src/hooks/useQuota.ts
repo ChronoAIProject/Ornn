@@ -71,11 +71,12 @@ export function useSurfaceQuota(
   };
 }
 
+// exactOptionalPropertyTypes (#657)
 export function useAdminQuotaUsers(params: {
   surface: Surface;
-  page?: number;
-  pageSize?: number;
-  q?: string;
+  page?: number | undefined;
+  pageSize?: number | undefined;
+  q?: string | undefined;
 }) {
   return useQuery({
     queryKey: ["admin", "quota", "users", params] as const,

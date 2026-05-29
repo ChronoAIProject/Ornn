@@ -179,6 +179,105 @@ describe("LlmProvidersService", () => {
     expect(m.displayName).toBe("GPT-4o (renamed)");
   });
 
+  it("UT-LLM-004a: update WITHOUT models key preserves existing list (#588)", async () => {
+    // The ProviderEditDrawer's basic-settings save sends only name /
+    // gatewayUrl / etc. — no `models` field. Before #588 the update
+    // schema's inherited `.default([])` parsed the missing field as
+    // `[]`, then `if (patch.models)` was truthy on `[]` and silently
+    // wiped the model list. This pins the "undefined means preserve"
+    // contract so a future schema refactor can't regress.
+    const { svc } = makeService();
+    const created = await svc.create(
+      { ...baseInput, auth: { kind: "apiKey", apiKey: "sk-aaaaaa" } },
+      ACTOR,
+    );
+    expect(created.models.length).toBeGreaterThan(0);
+    const updated = await svc.update(
+      created._id,
+      {
+        // basic-settings-only patch — no `models` field whatsoever
+        name: "renamed-provider",
+        maxOutputTokens: 4096,
+      },
+      ACTOR,
+    );
+    expect(updated.name).toBe("renamed-provider");
+    expect(updated.maxOutputTokens).toBe(4096);
+    expect(updated.models.length).toBe(created.models.length);
+    expect(updated.models.map((m) => m.id).sort()).toEqual(
+      created.models.map((m) => m.id).sort(),
+    );
+  });
+
+  it("UT-LLM-004b: update WITH explicit models: [] wipes the list (#588)", async () => {
+    // Symmetry check: passing an explicit empty array IS a valid
+    // "remove everything" intent (e.g. the model-list refresh found
+    // zero models on the upstream provider). The fix must preserve
+    // that path while only treating `undefined` as "don't touch".
+    const { svc } = makeService();
+    const created = await svc.create(
+      { ...baseInput, auth: { kind: "apiKey", apiKey: "sk-aaaaaa" } },
+      ACTOR,
+    );
+    expect(created.models.length).toBeGreaterThan(0);
+    const updated = await svc.update(
+      created._id,
+      { models: [] },
+      ACTOR,
+    );
+    expect(updated.models).toEqual([]);
+  });
+
+  it("UT-LLM-004c: listPickerModels honours sectionDefaultModelId override (#607)", async () => {
+    // Admin pins playground.defaultModelId = "gpt-3.5" via settings.
+    // Without the override the picker would return whichever model
+    // has `defaultForPlayground: true`. With the override the pinned
+    // model wins the `default` slot and lands first in the items list,
+    // matching what `resolveSurfaceDefaults` does on the execute path.
+    const { svc } = makeService();
+    await svc.create(
+      {
+        ...baseInput,
+        name: "alpha",
+        auth: { kind: "apiKey", apiKey: "k1" },
+        models: [
+          {
+            id: "gpt-4o",
+            displayName: "GPT-4o",
+            enabledForPlayground: true,
+            defaultForPlayground: true,
+          },
+          {
+            id: "gpt-3.5",
+            displayName: "GPT-3.5",
+            enabledForPlayground: true,
+          },
+        ],
+      },
+      ACTOR,
+    );
+
+    // No override → per-model flag wins, gpt-4o is default.
+    const noOverride = await svc.listPickerModels("playground");
+    expect(noOverride.default).toBe("gpt-4o");
+    expect(noOverride.items[0]?.modelId).toBe("gpt-4o");
+
+    // With section pin → gpt-3.5 wins.
+    const pinned = await svc.listPickerModels("playground", "gpt-3.5");
+    expect(pinned.default).toBe("gpt-3.5");
+    expect(pinned.items[0]?.modelId).toBe("gpt-3.5");
+    expect(pinned.items[0]?.isDefault).toBe(true);
+    // gpt-4o is still in the list, just no longer marked default.
+    const gpt4o = pinned.items.find((i) => i.modelId === "gpt-4o");
+    expect(gpt4o?.isDefault).toBe(false);
+
+    // Pin points at a disabled/missing model → falls through to the
+    // first enabled item; nothing is marked default.
+    const stalePin = await svc.listPickerModels("playground", "gpt-deprecated");
+    expect(stalePin.items.every((i) => i.isDefault === false)).toBe(true);
+    expect(stalePin.default).toBe(stalePin.items[0]?.modelId ?? null);
+  });
+
   it("UT-LLM-005: sync — newly arrived model lands with all surface flags false", async () => {
     const { svc, fetcher } = makeService();
     const created = await svc.create(

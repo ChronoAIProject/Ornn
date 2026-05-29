@@ -18,7 +18,7 @@
 
 import { randomBytes } from "node:crypto";
 import { ObjectId } from "mongodb";
-import pino from "pino";
+import { createLogger } from "../../shared/logger";
 import { isDuplicateKeyError } from "../../shared/types/index";
 import type { Surface } from "../quota/types";
 import type { QuotaService } from "../quota/service";
@@ -32,7 +32,7 @@ import {
   type RedemptionGrantEntry,
 } from "./types";
 
-const logger = pino({ level: "info" }).child({ module: "redemptionCodeService" });
+const logger = createLogger("redemptionCodeService");
 
 const MINT_RETRY_LIMIT = 5;
 
@@ -121,7 +121,10 @@ export class RedemptionCodeService {
     const bytes = randomBytes(REDEMPTION_CODE_LENGTH);
     let out = "";
     for (let i = 0; i < REDEMPTION_CODE_LENGTH; i++) {
-      out += REDEMPTION_CODE_ALPHABET[bytes[i] % REDEMPTION_CODE_ALPHABET.length];
+      // `randomBytes(N)` returns exactly N bytes — loop bound is N, so
+      // `bytes[i]` is always defined. `!` is safe under
+      // noUncheckedIndexedAccess (#450).
+      out += REDEMPTION_CODE_ALPHABET[bytes[i]! % REDEMPTION_CODE_ALPHABET.length];
     }
     return out;
   }

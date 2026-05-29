@@ -6,32 +6,67 @@
 import type { Collection, Db, Document } from "mongodb";
 import type { SkillDocument, SkillMetadata } from "../../../shared/types/index";
 import { AppError } from "../../../shared/types/index";
-import pino from "pino";
+import { createLogger } from "../../../shared/logger";
+/**
+ * Coerce a string GUID into the shape MongoDB's driver expects for
+ * `_id` queries on the skills collection (#448). The collection uses
+ * UUID strings instead of `ObjectId`s; the driver's filter typing
+ * (`ObjectId | string` discriminator) doesn't see that without help.
+ *
+ * One named helper instead of `as any` at every call site:
+ *   - validates the input (empty string would silently match zero
+ *     docs, the failure mode the issue flagged)
+ *   - keeps the necessary cast in a single, named place
+ *
+ * Return type is `never` so the call site accepts both `findOne`
+ * filters and `insertOne` documents — the actual stored value is a
+ * string, but the driver's type slot is `ObjectId`.
+ */
+function skillId(guid: string): never {
+  if (typeof guid !== "string" || guid.length === 0) {
+    throw AppError.badRequest(
+      "invalid_skill_id",
+      "Skill id must be a non-empty string",
+    );
+  }
+  return guid as never;
+}
 
-const logger = pino({ level: "info" }).child({ module: "skillCrudRepository" });
+/** Same shape for `$in` filters on `_id`. Validates each guid up front. */
+function skillIdList(guids: readonly string[]): never {
+  for (const g of guids) {
+    if (typeof g !== "string" || g.length === 0) {
+      throw AppError.badRequest(
+        "invalid_skill_id",
+        "Skill id must be a non-empty string",
+      );
+    }
+  }
+  return guids as never;
+}
 
+const logger = createLogger("skillCrudRepository");
+
+// Optionals widen to `T | undefined` so route layers passing Zod-
+// inferred or other optional inputs fit under
+// exactOptionalPropertyTypes (#657). Repo writes ignore undefined keys.
 export interface CreateSkillData {
   guid: string;
   name: string;
   description: string;
-  license?: string;
-  compatibility?: string;
+  license?: string | undefined;
+  compatibility?: string | undefined;
   metadata: SkillMetadata;
   skillHash: string;
   storageKey: string;
-  /**
-   * Legacy back-compat field. New skills copy `createdBy` here; visibility
-   * logic no longer consults it. Defaults to `createdBy` when omitted.
-   */
-  ownerId?: string;
   createdBy: string;
-  createdByEmail?: string;
-  createdByDisplayName?: string;
-  isPrivate?: boolean;
+  createdByEmail?: string | undefined;
+  createdByDisplayName?: string | undefined;
+  isPrivate?: boolean | undefined;
   /** Initial version, e.g. "1.0". Required. */
   latestVersion: string;
   /** Origin metadata when the skill was created via a pull from an external source. */
-  source?: import("../../../shared/types/index").SkillSource;
+  source?: import("../../../shared/types/index").SkillSource | undefined;
 }
 
 export interface UpdateSkillData {
@@ -74,20 +109,21 @@ export interface SkillFilters {
  * user" chip row).
  */
 export interface ExtraFilters {
-  sharedWithOrgsAny?: string[];
-  sharedWithUsersAny?: string[];
-  createdByAny?: string[];
+  // Optionals widen to `T | undefined` for exactOptionalPropertyTypes (#657).
+  sharedWithOrgsAny?: string[] | undefined;
+  sharedWithUsersAny?: string[] | undefined;
+  createdByAny?: string[] | undefined;
   /**
    * Tri-state system-skill filter applied at the DB match level.
    * `"only"`    → `isSystemSkill: true`.
    * `"exclude"` → `isSystemSkill !== true` (covers absent / false / null).
    * `"any"` / undefined → no constraint.
    */
-  systemFilter?: "any" | "only" | "exclude";
+  systemFilter?: "any" | "only" | "exclude" | undefined;
   /** Restrict to skills tied to this exact NyxID service id. */
-  nyxidServiceId?: string;
+  nyxidServiceId?: string | undefined;
   /** Skills must have ALL listed tags (AND match against `metadata.tags`). */
-  tagsAll?: string[];
+  tagsAll?: string[] | undefined;
 }
 
 export class SkillRepository {
@@ -97,8 +133,31 @@ export class SkillRepository {
     this.collection = db.collection("skills");
   }
 
+  /**
+   * Ensure indexes the skill collection relies on. Idempotent —
+   * MongoDB's createIndex is a no-op when the index already exists
+   * with the same key + options. Called from bootstrap on startup.
+   *
+   * The `name` + `description` indexes feed both the admin regex
+   * search (#446) and the keyword + skill-detail lookups in
+   * service.ts.
+   */
+  async ensureIndexes(): Promise<void> {
+    await Promise.all([
+      this.collection.createIndex({ name: 1 }, { unique: true }),
+      // Partial regex queries can't use a btree index on a long text
+      // field, but having the field indexed at all lets the query
+      // planner skip the COLLSCAN when the regex is anchored or when
+      // the secondary `createdBy` / `isPrivate` filter is present.
+      this.collection.createIndex({ description: 1 }),
+      this.collection.createIndex({ createdBy: 1, createdOn: -1 }),
+      this.collection.createIndex({ createdOn: -1 }),
+      this.collection.createIndex({ isPrivate: 1, createdOn: -1 }),
+    ]);
+  }
+
   async findByGuid(guid: string): Promise<SkillDocument | null> {
-    const doc = await this.collection.findOne({ _id: guid as any });
+    const doc = await this.collection.findOne({ _id: skillId(guid) });
     return mapDoc(doc);
   }
 
@@ -110,7 +169,7 @@ export class SkillRepository {
   async create(data: CreateSkillData): Promise<SkillDocument> {
     const now = new Date();
     const doc: Record<string, unknown> = {
-      _id: data.guid as any,
+      _id: skillId(data.guid),
       name: data.name,
       description: data.description,
       license: data.license ?? null,
@@ -118,7 +177,6 @@ export class SkillRepository {
       metadata: data.metadata,
       skillHash: data.skillHash,
       storageKey: data.storageKey,
-      ownerId: data.ownerId ?? data.createdBy,
       createdBy: data.createdBy,
       createdByEmail: data.createdByEmail ?? null,
       createdByDisplayName: data.createdByDisplayName ?? null,
@@ -142,7 +200,7 @@ export class SkillRepository {
       logger.info({ guid: data.guid, name: data.name }, "Skill created");
     } catch (err: any) {
       if (err?.code === 11000) {
-        throw AppError.conflict("SKILL_NAME_EXISTS", `Skill '${data.name}' already exists`);
+        throw AppError.conflict("skill_name_exists", `Skill '${data.name}' already exists`);
       }
       throw err;
     }
@@ -169,13 +227,41 @@ export class SkillRepository {
     if (data.source !== undefined) setFields.source = data.source;
     if (data.latestVersion !== undefined) setFields.latestVersion = data.latestVersion;
 
-    await this.collection.updateOne({ _id: guid as any }, { $set: setFields });
+    await this.collection.updateOne({ _id: skillId(guid) }, { $set: setFields });
     logger.info({ guid }, "Skill updated");
     return (await this.findByGuid(guid))!;
   }
 
+  /**
+   * Set a single dist-tag (#463) atomically via `$set` on a dotted path.
+   * Doesn't validate that `version` exists — that's the service's job;
+   * the repo just writes whatever's handed in.
+   */
+  async setDistTag(guid: string, tag: string, version: string): Promise<void> {
+    await this.collection.updateOne(
+      { _id: skillId(guid) },
+      { $set: { [`distTags.${tag}`]: version, updatedOn: new Date() } },
+    );
+    logger.info({ guid, tag, version }, "Dist-tag set");
+  }
+
+  /**
+   * Remove a single dist-tag (#463). `$unset` on a dotted path leaves
+   * sibling tags intact; if the resulting object would be empty the
+   * field stays as `{}` (mongo cleans it up on the next full doc
+   * write). Callers that care about empty-object cleanup can
+   * subsequently `$unset` the parent.
+   */
+  async deleteDistTag(guid: string, tag: string): Promise<void> {
+    await this.collection.updateOne(
+      { _id: skillId(guid) },
+      { $unset: { [`distTags.${tag}`]: "" }, $set: { updatedOn: new Date() } },
+    );
+    logger.info({ guid, tag }, "Dist-tag deleted");
+  }
+
   async hardDelete(guid: string): Promise<void> {
-    await this.collection.deleteOne({ _id: guid as any });
+    await this.collection.deleteOne({ _id: skillId(guid) });
     logger.info({ guid }, "Skill hard-deleted");
   }
 
@@ -187,7 +273,7 @@ export class SkillRepository {
    */
   async clearSource(guid: string, updatedBy: string): Promise<SkillDocument | null> {
     await this.collection.updateOne(
-      { _id: guid as any },
+      { _id: skillId(guid) },
       {
         $set: { updatedBy, updatedOn: new Date() },
         $unset: { source: "" },
@@ -225,7 +311,7 @@ export class SkillRepository {
     if (data.isPrivate !== undefined) {
       setFields.isPrivate = data.isPrivate;
     }
-    await this.collection.updateOne({ _id: guid as any }, { $set: setFields });
+    await this.collection.updateOne({ _id: skillId(guid) }, { $set: setFields });
     logger.info(
       { guid, nyxidServiceId: data.nyxidServiceId, isSystemSkill: data.isSystemSkill },
       "Skill NyxID service tie updated",
@@ -343,7 +429,7 @@ export class SkillRepository {
 
     const docs = await this.collection
       .find(matchStage)
-      .project({ _id: 1, name: 1, description: 1, metadata: 1, isPrivate: 1, ownerId: 1, sharedWithUsers: 1, sharedWithOrgs: 1, createdBy: 1, createdByEmail: 1, createdByDisplayName: 1, createdOn: 1, updatedOn: 1, storageKey: 1, skillHash: 1, license: 1, compatibility: 1, updatedBy: 1 })
+      .project({ _id: 1, name: 1, description: 1, metadata: 1, isPrivate: 1, sharedWithUsers: 1, sharedWithOrgs: 1, createdBy: 1, createdByEmail: 1, createdByDisplayName: 1, createdOn: 1, updatedOn: 1, storageKey: 1, skillHash: 1, license: 1, compatibility: 1, updatedBy: 1 })
       .sort({ createdOn: -1 })
       .toArray();
 
@@ -352,7 +438,7 @@ export class SkillRepository {
 
   async findByGuids(guids: string[]): Promise<SkillDocument[]> {
     if (guids.length === 0) return [];
-    const docs = await this.collection.find({ _id: { $in: guids } as any }).toArray();
+    const docs = await this.collection.find({ _id: { $in: skillIdList(guids) } }).toArray();
     return docs.map((d) => mapDoc(d)!);
   }
 
@@ -853,9 +939,6 @@ function mapDoc(doc: Document | null): SkillDocument | null {
     metadata: doc.metadata ?? { category: "plain" },
     skillHash: doc.skillHash ?? "",
     storageKey: doc.storageKey ?? doc.s3Url ?? "",
-    // `ownerId` is a legacy field — new skills copy `createdBy` into it.
-    // Fallback keeps pre-migration reads sane.
-    ownerId: doc.ownerId ?? doc.createdBy ?? "",
     createdBy: doc.createdBy ?? "",
     createdByEmail: doc.createdByEmail ?? undefined,
     createdByDisplayName: doc.createdByDisplayName ?? undefined,
@@ -907,7 +990,21 @@ function mapDoc(doc: Document | null): SkillDocument | null {
             commitSha: doc.mirrorSync.commitSha,
           }
         : undefined,
+    // Dist-tags (#463). Coerce defensively — pre-#463 docs have no
+    // field; corrupted entries with non-string values get filtered.
+    distTags: mapDistTags(doc.distTags),
   };
+}
+
+function mapDistTags(raw: unknown): Record<string, string> | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof v === "string" && v.length > 0) {
+      out[k] = v;
+    }
+  }
+  return Object.keys(out).length === 0 ? undefined : out;
 }
 
 function escapeRegex(str: string): string {

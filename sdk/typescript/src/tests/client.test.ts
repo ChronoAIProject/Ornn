@@ -89,15 +89,16 @@ describe("OrnnClient", () => {
     expect(result.items[0]!.id).toBe("abc");
   });
 
-  test("throws OrnnError with code + status + requestId on envelope failure", async () => {
+  test("throws OrnnError parsing RFC 7807 problem+json body (#456)", async () => {
     const fetchMock = mockFetch(() =>
       jsonResponse(403, {
-        data: null,
-        error: {
-          code: "permission_denied",
-          message: "Missing ornn:skill:admin",
-          requestId: "req_01",
-        },
+        type: "https://github.com/.../ERRORS.md#permission_denied",
+        title: "Permission denied",
+        status: 403,
+        code: "permission_denied",
+        detail: "Missing ornn:skill:admin",
+        instance: "/v1/admin/stats",
+        requestId: "req_01",
       }),
     );
     const client = new OrnnClient({ baseUrl: "https://x", fetch: fetchMock });
@@ -123,7 +124,7 @@ describe("OrnnClient", () => {
     expect(err.code).toBe("unknown_error");
   });
 
-  test("search(): maps q → query and appends params correctly", async () => {
+  test("search(): sends q= and appends params correctly", async () => {
     let capturedUrl = "";
     const fetchMock = mockFetch((url) => {
       capturedUrl = url;
@@ -141,7 +142,9 @@ describe("OrnnClient", () => {
       pageSize: 50,
     });
     expect(capturedUrl).toContain("/api/v1/skill-search?");
-    expect(capturedUrl).toContain("query=pdf");
+    // Canonical search param per CONVENTIONS.md §4.1 (#586).
+    expect(capturedUrl).toContain("q=pdf");
+    expect(capturedUrl).not.toContain("query=pdf");
     expect(capturedUrl).toContain("scope=public");
     expect(capturedUrl).toContain("category=utils");
     expect(capturedUrl).toContain("page=2");
@@ -218,8 +221,15 @@ describe("OrnnClient", () => {
   });
 
   test("downloadPackage(): throws OrnnError on 404", async () => {
+    // 404 body is RFC 7807 problem+json (#456) — fields at the root.
     const fetchMock = mockFetch(() =>
-      jsonResponse(404, { data: null, error: { code: "resource_not_found", message: "no such version" } }),
+      jsonResponse(404, {
+        type: "https://github.com/.../ERRORS.md#resource_not_found",
+        title: "Resource not found",
+        status: 404,
+        code: "resource_not_found",
+        detail: "no such version",
+      }),
     );
     const client = new OrnnClient({ baseUrl: "https://x", fetch: fetchMock });
     const err = (await client.downloadPackage("abc", "9.9").catch((e) => e)) as OrnnError;

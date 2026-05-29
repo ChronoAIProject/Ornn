@@ -9,13 +9,13 @@ metadata:
     - manual
     - skill-lifecycle
     - cli
-version: "1.1"
-lastUpdated: 2026-04-29
+version: "1.2"
+lastUpdated: 2026-05-14
 ---
 
 # Agent Manual (NyxID CLI variant)
 
-> **DEPRECATED — replaced by `chrono-ai-service-manual`.** This skill is kept for one minor release while consumers migrate. The unified manual folds NyxID identity / CLI / proxy AND the Ornn skill lifecycle into a single skill so an agent that wants to drive both halves of the stack only needs one install. **New work should pull `chrono-ai-service-manual` instead** (Ornn skill name; same auth flow, same registry, identical API contract — strict superset of this file). This file will be removed in the release after the unified manual lands.
+> **Scope.** This skill is the CLI-only operational manual for the Ornn half of the Chrono AI stack. If you also need to drive NyxID (identity, services, orgs, OAuth clients, proxy) — for example to register a new service or rotate a client — pull `chrono-ai-service-manual` instead. It is a strict superset of this file, with the same Ornn API contract plus the NyxID half folded in. This skill remains the right pick when the agent only needs Ornn skill-lifecycle operations and wants a smaller context payload.
 
 > **You are an AI agent reading this manual to learn how to use Ornn.** Throughout this document, *"you"* always refers to **the agent itself** — not the human user driving you.
 >
@@ -45,8 +45,9 @@ lastUpdated: 2026-04-29
 > - **Bind a skill to a NyxID service** (system / personal) — §2.9.
 > - **Delete a skill** entirely — §2.11.
 > - **Find skills** (by tag, author, system, shared, etc.) — §2.12.
-> - **Pull your Ornn notifications** (audit fan-out, etc.) — §2.13.
+> - **Pull your Ornn notifications** (audit fan-out, broadcasts, etc.) — §2.13.
 > - **Link a skill to GitHub** or **trigger a sync** from the linked source — §2.14.
+> - **Check your monthly quota** or **pick a valid LLM model** before calling an SSE endpoint — §2.15.
 >
 > Without this manual loaded, you do not know which endpoint to call, how to authenticate, or how to read the response shapes.
 >
@@ -124,7 +125,7 @@ nyxid proxy request ornn-api \
 
 For public skills you can drop the auth and call the same endpoint anonymously — see §2.1 step 3 for fetch alternatives.
 
-The response is `{ items: [{ version, skillHash, createdOn, isDeprecated, deprecationNote, releaseNotes, ... }, ...] }` sorted newest-first. Compare `items[0].version` to the `installedVersion` on the matching record in `~/.ornn/installed-skills.json` and act:
+The response is `{ data: { items: [{ version, skillHash, createdOn, isDeprecated, deprecationNote, releaseNotes, ... }, ...] }, error: null }` sorted newest-first. Compare `data.items[0].version` to the `installedVersion` on the matching record in `~/.ornn/installed-skills.json` and act:
 
 - **Same version** → execute as-is.
 - **Newer version available** → tell the user `"Skill <name> has a newer version <X.Y> (you have <A.B>). Release notes: <releaseNotes>. Update? (y/n)"`. If yes, re-fetch the package (§2.1 step 3), overwrite the local copy, update `installedVersion` + `installedAt` in `~/.ornn/installed-skills.json`, then execute.
@@ -179,10 +180,10 @@ Expected output includes `user_id`, `email`, `roles`, and `permissions`. Confirm
 | Generate a skill with AI (`POST /skills/generate*`) | `ornn:skill:build` |
 | Use the Playground (`POST /playground/chat`) | `ornn:playground:use` |
 | Trigger an audit (`POST /skills/:idOrName/audit`) | none (owner or `ornn:admin:skill`) |
-| Admin operations (`/admin/*`, force-audit, platform settings) | `ornn:admin:skill` |
-| Manage categories (`/admin/categories/*`) | `ornn:admin:category` |
+| Admin operations (`/admin/*`, force-audit, sectioned platform settings) | `ornn:admin:skill` |
+| Admin quota / redemption-codes operations (`/admin/quota/*`, `/admin/redemption-codes/*`, `/admin/dashboard/stats`) | `ornn:quota:admin` |
 
-Most read operations — browsing public skills, version listings, skill format rules, audit verdicts on visible skills, notifications — **need no scalar permission**; they're open to any authenticated caller (and some are anonymous). The exact gates for every endpoint live in `references/api-reference.md`.
+Most read operations — browsing public skills, version listings, skill format rules, audit verdicts on visible skills, notifications, your own quota — **need no scalar permission**; they're open to any authenticated caller (and some are anonymous). The exact gates for every endpoint live in `references/api-reference.md`.
 
 ### 1.4 Discover the Ornn service
 
@@ -580,27 +581,31 @@ Combine query params freely. The full schema (every supported filter, every resp
 Ornn sends notifications on events like audit completion (own + risky-for-consumer fan-out) and other state changes:
 
 ```bash
-# Cheap badge count
+# Cheap badge count (covers per-user notifications AND admin-authored broadcasts)
 nyxid proxy request ornn-api "/api/v1/notifications/unread-count" \
   --method GET --output json
 
-# Fetch unread notifications
+# Fetch unread items (mixed feed — per-user + broadcasts)
 nyxid proxy request ornn-api "/api/v1/notifications?unread=true&limit=50" \
   --method GET --output json
 
-# Mark one notification as read
+# Mark one item as read (accepts either a per-user notification id or a broadcast id)
 nyxid proxy request ornn-api "/api/v1/notifications/<id>/read" \
   --method POST --data '{}' --output json
 
-# Mark all as read
+# Mark every unread item as read
 nyxid proxy request ornn-api "/api/v1/notifications/mark-all-read" \
   --method POST --data '{}' --output json
 ```
 
-Two notification categories are emitted today:
+The feed is a **discriminated union**: each item carries `source: "user"` or `source: "broadcast"`. Branch on `source` before reading category-specific fields — `category`, `title`, `body`, `link`, `data` live on `source: "user"` rows only; `source: "broadcast"` rows carry bilingual `titleI18n` / `bodyMarkdownI18n` instead. Both shapes share `_id`, `readAt`, `createdAt`.
+
+Per-user (`source: "user"`) categories emitted today:
 
 - `audit.completed` — sent to the skill owner on every audit completion.
 - `audit.risky_for_consumer` — fanned out to every consumer of the skill (everyone in `sharedWithUsers` + members of every org in `sharedWithOrgs`) when a verdict comes back `yellow` or `red`. **Treat this as a hard signal to stop using the skill** until you've reviewed the findings; surface it to the user and ask before continuing.
+
+Broadcasts (`source: "broadcast"`) are platform-wide markdown notices authored by platform admins. They have no category — treat them as informational and surface them verbatim (use `titleI18n.en` / `bodyMarkdownI18n.en` unless the user has a `zh` locale).
 
 ### 2.14 Link a skill to GitHub or trigger a sync — *spec: `api-reference.md` §3.2 + §3.3 + §3.15*
 
@@ -665,6 +670,29 @@ Apply response: the refreshed `SkillDetail`. `source.lastSyncedAt` and `source.l
 - `REFRESH_FAILED` (400) on apply, `REFRESH_PREVIEW_FAILED` (400) on dry-run — the upstream folder no longer exists, or the pulled package failed validation. If the upstream is trusted and the failure is validation, retry apply with `skipValidation: true`.
 - `NOT_SKILL_OWNER` (403) — the caller isn't the author and lacks `ornn:admin:skill`.
 
+### 2.15 Check your monthly quota or pick a valid LLM model — *spec: `api-reference.md` §11 Me — caller scope*
+
+The SSE endpoints (`POST /skills/generate*`, `POST /playground/chat`) both meter against a **monthly quota** and require a valid `modelId`. Two cheap reads let you avoid hitting `429 QUOTA_EXCEEDED` or `400 MODEL_NOT_ENABLED` mid-stream:
+
+```bash
+# Your current month's allotments + remaining counts for both metered surfaces
+nyxid proxy request ornn-api "/api/v1/me/quota" \
+  --method GET --output json
+
+# Pick a model the deployment has enabled for the surface you're about to call
+nyxid proxy request ornn-api "/api/v1/me/models?surface=playground" \
+  --method GET --output json
+
+nyxid proxy request ornn-api "/api/v1/me/models?surface=skillGen" \
+  --method GET --output json
+```
+
+`/me/quota` response shape: `{ data: { isAdmin, monthMarker, monthStart, monthEnd, nextMonthlyResetAt, playground: { defaultAllotment, adminGrant, used, remaining, warningThreshold, warning }, skillGen: { ... } }, error: null }`. Admins bypass quota — `isAdmin: true` means every charge is free; the per-surface numbers are still populated but never block.
+
+`/me/models` response shape: `{ data: { items: [{ modelId, displayName, isDefault }, ...], defaultModelId }, error: null }`. Pass `defaultModelId` into the generate / playground body when the user hasn't expressed a preference. The list is platform-controlled — if it's empty the admin has not enabled any model for that surface, and SSE calls will fail with `MODEL_UNAVAILABLE`.
+
+Quota refills automatically at `nextMonthlyResetAt`. If a user is low and needs more before then, they can redeem a code via `POST /api/v1/me/redemption-codes/redeem` with `{"code":"<token>"}` — the response carries the updated grants. Don't redeem codes the user hasn't given you.
+
 ---
 
 ## §3. Conventions & Pitfalls
@@ -689,5 +717,8 @@ Apply response: the refreshed `SkillDetail`. `source.lastSyncedAt` and `source.l
 - `GET /api/v1/skill-format/rules` — canonical skill package format spec, always up-to-date with what the validator enforces.
 - `GET /api/v1/openapi.json` — auto-generated OpenAPI 3 schema. Every endpoint mentioned in this manual is in here with full Zod-derived request/response types.
 - `GET /api/v1/me` — your current identity snapshot (userId, email, displayName, roles, permissions). Useful when debugging a 403.
+- `GET /api/v1/me/quota` — monthly allotment + remaining counts for both metered surfaces (`playground`, `skillGen`). Read before SSE calls so you don't hit `429 QUOTA_EXCEEDED` mid-stream (§2.15).
+- `GET /api/v1/me/models?surface=playground|skillGen` — platform-enabled LLM picker. Pass `defaultModelId` into generate / playground bodies (§2.15).
+- `GET /api/v1/announcements/active` — public, anonymous platform-wide notice (separate from `/notifications`). Useful when you want to know about maintenance windows or pricing changes before kicking off long workflows.
 
 If you find a discrepancy between this manual and the actual API behaviour, the API is right and the manual is stale — re-pull the skill (§0) before assuming a bug.

@@ -4,9 +4,8 @@
  * @module clients/storageClient
  */
 
-import pino from "pino";
-
-const logger = pino({ level: "info" }).child({ module: "storageClient" });
+import { createLogger } from "../shared/logger";
+const logger = createLogger("storageClient");
 
 export interface IStorageClient {
   upload(bucket: string, key: string, data: Uint8Array, contentType: string): Promise<{ url: string }>;
@@ -29,7 +28,8 @@ export type StorageClientConfigResolver = () => Promise<StorageClientConfig>;
 
 export class StorageClient implements IStorageClient {
   private readonly resolver: StorageClientConfigResolver;
-  private readonly getAccessToken?: () => Promise<string>;
+  // exactOptionalPropertyTypes (#657): widen to `T | undefined`.
+  private readonly getAccessToken: (() => Promise<string>) | undefined;
 
   constructor(opts: {
     resolver: StorageClientConfigResolver;

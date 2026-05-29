@@ -111,6 +111,12 @@ export function ExplorePage() {
   const selectedSourceUsers = parseCsvParam(searchParams.get("srcUsers"));
 
   const { query, mode } = useSearchStore();
+  // #726 — semantic search requires a query; the backend rejects an
+  // empty `q` with 400 QUERY_REQUIRED and the regular empty state
+  // ("No skills match") looks indistinguishable from a legitimate
+  // zero-result search. When the gate isn't met, render a clear
+  // validation EmptyState instead of the generic "no skills" copy.
+  const semanticGateUnmet = mode === "semantic" && !query.trim();
 
   const { data: systemData, isLoading: systemLoading } = useSystemSkills({
     query: query || undefined,
@@ -281,21 +287,35 @@ export function ExplorePage() {
             {activeLoading ? (
               <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3 pb-4">
                 {Array.from({ length: 6 }).map((_, i) => (
+                  // Positional list — never reorders, key={i} is intentional (#451).
                   <SkeletonCard key={i} />
                 ))}
               </div>
             ) : items.length === 0 ? (
-              <EmptyState
-                title={emptyTitle(activeTab, t as (k: string, f?: string) => string)}
-                description={emptyDescription(activeTab, t as (k: string, f?: string) => string)}
-                action={
-                  activeTab === "my-skills" && isAuthenticated ? (
-                    <Button onClick={() => navigate("/skills/new")}>
-                      {t("explore.createSkill", "Create a skill")}
-                    </Button>
-                  ) : undefined
-                }
-              />
+              semanticGateUnmet ? (
+                <EmptyState
+                  title={t(
+                    "explore.semanticQueryRequiredTitle",
+                    "Enter a search description",
+                  )}
+                  description={t(
+                    "explore.semanticQueryRequiredDesc",
+                    "Semantic search needs a description of what you're looking for. Type a phrase in the search box above, or switch back to Keyword mode.",
+                  )}
+                />
+              ) : (
+                <EmptyState
+                  title={emptyTitle(activeTab, t as (k: string, f?: string) => string)}
+                  description={emptyDescription(activeTab, t as (k: string, f?: string) => string)}
+                  action={
+                    activeTab === "my-skills" && isAuthenticated ? (
+                      <Button onClick={() => navigate("/skills/new")}>
+                        {t("explore.createSkill", "Create a skill")}
+                      </Button>
+                    ) : undefined
+                  }
+                />
+              )
             ) : (
               <motion.div
                 variants={containerVariants}
@@ -325,7 +345,8 @@ export function ExplorePage() {
 
 interface TabButtonProps {
   label: string;
-  count?: number;
+  // exactOptionalPropertyTypes (#657)
+  count?: number | undefined;
   active: boolean;
   onClick: () => void;
 }
@@ -364,7 +385,8 @@ function TabButton({ label, count, active, onClick }: TabButtonProps) {
 
 interface FilterSidebarProps {
   tab: ExploreTab;
-  selectedServiceId?: string;
+  // exactOptionalPropertyTypes (#657)
+  selectedServiceId?: string | undefined;
   selectedTags: string[];
   selectedAuthors: string[];
   selectedGrantOrgs: string[];
@@ -427,7 +449,8 @@ function SystemFilters({
   selectedServiceId,
   onSetService,
 }: {
-  selectedServiceId?: string;
+  // exactOptionalPropertyTypes (#657)
+  selectedServiceId?: string | undefined;
   onSetService: (id: string | undefined) => void;
 }) {
   const { t } = useTranslation();
@@ -708,15 +731,20 @@ function emptyTitle(tab: ExploreTab, t: (key: string, fallback?: string) => stri
 }
 
 function emptyDescription(tab: ExploreTab, t: (key: string, fallback?: string) => string): string {
+  // #682 — point at the canonical i18n keys (`systemSkillsIntro` /
+  // `sharedWithMeIntro`) so both EN + ZH locales pick up the right
+  // copy. The old `systemSkillsHint` / `sharedHint` keys never
+  // existed in either locale file, so i18n was always falling back
+  // to the English literal for both languages.
   if (tab === "system")
     return t(
-      "explore.systemSkillsHint",
+      "explore.systemSkillsIntro",
       "System skills are skills tied to a NyxID admin service. Platform admins tie any skill to any admin service to publish it as a system skill.",
     );
   if (tab === "public") return t("explore.tryAdjusting", "Try adjusting your search or filters.");
   if (tab === "my-skills") return t("explore.createFirst", "Create your first skill to get started.");
   return t(
-    "explore.sharedHint",
+    "explore.sharedWithMeIntro",
     "When someone grants you access to a private skill — either directly or via an org — it shows up here.",
   );
 }

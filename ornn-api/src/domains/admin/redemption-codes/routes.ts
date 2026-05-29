@@ -13,7 +13,7 @@
  */
 
 import { Hono } from "hono";
-import pino from "pino";
+import { createLogger } from "../../../shared/logger";
 import {
   type AuthVariables,
   getAuth,
@@ -32,7 +32,7 @@ import {
   type RedemptionCodeStatus,
 } from "../../redemption-codes/types";
 
-const logger = pino({ level: "info" }).child({ module: "adminRedemptionCodeRoutes" });
+const logger = createLogger("adminRedemptionCodeRoutes");
 
 const PAGE_SIZE_MAX = 100;
 const PAGE_SIZE_DEFAULT = 20;
@@ -64,23 +64,23 @@ function serializeCode(doc: RedemptionCodeDoc): Record<string, unknown> {
 
 function mapInvalidateError(message: string): AppError {
   if (message.startsWith("NOT_FOUND:")) {
-    return new AppError(404, "REDEMPTION_CODE_NOT_FOUND", "Redemption code not found");
+    return new AppError(404, "redemption_code_not_found", "Redemption code not found");
   }
   if (message.startsWith("ALREADY_REDEEMED:")) {
     return new AppError(
       409,
-      "REDEMPTION_CODE_ALREADY_REDEEMED",
+      "redemption_code_already_redeemed",
       "Redeemed codes cannot be invalidated",
     );
   }
   if (message.startsWith("ALREADY_INVALIDATED:")) {
     return new AppError(
       409,
-      "REDEMPTION_CODE_ALREADY_INVALIDATED",
+      "redemption_code_already_invalidated",
       "Code is already invalidated",
     );
   }
-  return AppError.internalError("REDEMPTION_CODE_INVALIDATE_FAILED", message);
+  return AppError.internalError("redemption_code_invalidate_failed", message);
 }
 
 export function createAdminRedemptionCodesRoutes(
@@ -95,7 +95,7 @@ export function createAdminRedemptionCodesRoutes(
     "/admin/redemption-codes",
     auth,
     requirePermission(QUOTA_ADMIN_PERMISSION),
-    validateBody(mintCodeSchema, "INVALID_REDEMPTION_CODE_BODY"),
+    validateBody(mintCodeSchema, "invalid_redemption_code_body"),
     async (c) => {
       const authCtx = getAuth(c);
       const body = getValidatedBody<MintCodeInput>(c);
@@ -107,7 +107,8 @@ export function createAdminRedemptionCodesRoutes(
             displayName: authCtx.displayName,
           },
           grants: body.grants,
-          note: body.note,
+          // exactOptionalPropertyTypes (#657)
+          ...(body.note !== undefined ? { note: body.note } : {}),
           expiresAt: new Date(body.expiresAt),
         });
         logger.info(
@@ -123,9 +124,9 @@ export function createAdminRedemptionCodesRoutes(
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         if (msg.startsWith("INVALID_GRANTS:") || msg.startsWith("INVALID_EXPIRES_AT:")) {
-          throw AppError.badRequest("INVALID_REDEMPTION_CODE_BODY", msg);
+          throw AppError.badRequest("invalid_redemption_code_body", msg);
         }
-        throw AppError.internalError("REDEMPTION_CODE_MINT_FAILED", msg);
+        throw AppError.internalError("redemption_code_mint_failed", msg);
       }
     },
   );
@@ -153,7 +154,13 @@ export function createAdminRedemptionCodesRoutes(
         PAGE_SIZE_MAX,
         Math.max(1, Number(c.req.query("pageSize")) || PAGE_SIZE_DEFAULT),
       );
-      const result = await redemptionCodeService.list({ page, pageSize, status, search });
+      const result = await redemptionCodeService.list({
+        page,
+        pageSize,
+        // exactOptionalPropertyTypes (#657)
+        ...(status !== undefined ? { status } : {}),
+        ...(search !== undefined ? { search } : {}),
+      });
       return c.json({
         data: {
           items: result.items.map(serializeCode),
@@ -175,11 +182,11 @@ export function createAdminRedemptionCodesRoutes(
     async (c) => {
       const id = c.req.param("id");
       if (!id) {
-        throw AppError.badRequest("INVALID_REDEMPTION_CODE_ID", "id is required");
+        throw AppError.badRequest("invalid_redemption_code_id", "id is required");
       }
       const doc = await redemptionCodeService.findById(id);
       if (!doc) {
-        throw new AppError(404, "REDEMPTION_CODE_NOT_FOUND", "Redemption code not found");
+        throw new AppError(404, "redemption_code_not_found", "Redemption code not found");
       }
       return c.json({ data: { code: serializeCode(doc) }, error: null });
     },
@@ -194,7 +201,7 @@ export function createAdminRedemptionCodesRoutes(
       const authCtx = getAuth(c);
       const id = c.req.param("id");
       if (!id) {
-        throw AppError.badRequest("INVALID_REDEMPTION_CODE_ID", "id is required");
+        throw AppError.badRequest("invalid_redemption_code_id", "id is required");
       }
       try {
         const doc = await redemptionCodeService.invalidate({

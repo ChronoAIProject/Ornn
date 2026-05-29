@@ -11,8 +11,9 @@ import { AVAILABLE_RUNTIMES, RUNTIME_INFO } from "@/utils/constants";
 export interface RuntimeSelectProps {
   selected: string[];
   onChange: (selected: string[]) => void;
-  error?: string;
-  className?: string;
+  // exactOptionalPropertyTypes (#657)
+  error?: string | undefined;
+  className?: string | undefined;
 }
 
 export function RuntimeSelect({

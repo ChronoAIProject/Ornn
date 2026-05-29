@@ -49,10 +49,11 @@ export interface AdminUsersPage {
 
 export async function fetchAdminUsers(params: {
   role: AdminUserRole;
-  q?: string;
-  page?: number;
-  pageSize?: number;
-  sort?: AdminUsersSort;
+  // exactOptionalPropertyTypes (#657)
+  q?: string | undefined;
+  page?: number | undefined;
+  pageSize?: number | undefined;
+  sort?: AdminUsersSort | undefined;
 }): Promise<AdminUsersPage> {
   // Backend takes `sort` (field) and `dir` (asc|desc) as two separate
   // query params. Frontend stores them as one `field:dir` value for

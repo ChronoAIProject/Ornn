@@ -29,12 +29,12 @@
  */
 
 import { spawn } from "node:child_process";
+import { existsSync, statSync } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
-import pino, { type Logger } from "pino";
-
-const moduleLogger = pino({ level: "info" }).child({ module: "agentseal" });
+import { isAbsolute, join } from "node:path";
+import { createLogger, type Logger } from "../../shared/logger";
+const moduleLogger = createLogger("agentseal");
 
 export interface ScanInput {
   /** Skill identity for log correlation. */
@@ -93,6 +93,20 @@ export class AgentSealScanner implements IAgentSealScanner {
     this.timeoutMs = cfg.timeoutMs;
     this.enabled = cfg.enabled;
     this.logger = (cfg.logger ?? moduleLogger).child({ module: "agentseal" });
+
+    // Boot-time path validation (#442). When the scanner is enabled
+    // we'll be `spawn()`ing the python interpreter — accepting a
+    // relative or non-existent path here means we'd either resolve it
+    // against `$PATH` (a subtle lateral-movement vector if config
+    // provenance ever weakens) or fail much later inside a publish
+    // call. Fail fast at construction instead.
+    //
+    // Disabled scanners skip validation so dev/test environments
+    // without agentseal installed don't have to provide fake paths.
+    if (this.enabled) {
+      assertAbsoluteExistingFile("python", this.python);
+      assertAbsoluteExistingFile("script", this.script);
+    }
   }
 
   async scan(input: ScanInput): Promise<ScanResult | null> {
@@ -196,14 +210,19 @@ export class AgentSealScanner implements IAgentSealScanner {
       let settled = false;
 
       // Hard timeout — SIGTERM, then SIGKILL after a short grace.
+      // After signaling, `child.unref()` releases the event-loop hold
+      // so a mid-flight scan can't keep the API process alive past
+      // SIGTERM during shutdown (#442).
       const killTimer = setTimeout(() => {
         if (settled) return;
         settled = true;
         try {
           child.kill("SIGTERM");
+          child.unref();
           setTimeout(() => {
             try {
               child.kill("SIGKILL");
+              child.unref();
             } catch {
               /* already dead */
             }
@@ -251,6 +270,35 @@ export class AgentSealScanner implements IAgentSealScanner {
   }
 }
 
+/**
+ * Boot-time path guard (#442). Throws with a precise message when the
+ * incoming `python` / `script` config isn't an absolute path to an
+ * existing regular file. Called only when AgentSeal is enabled — a
+ * disabled scanner never spawns anything, so loose paths don't matter.
+ *
+ * Exported for direct unit testing.
+ */
+export function assertAbsoluteExistingFile(label: string, value: string): void {
+  if (typeof value !== "string" || value.length === 0) {
+    throw new Error(`AgentSeal '${label}' is required when enabled (got empty string)`);
+  }
+  if (!isAbsolute(value)) {
+    throw new Error(
+      `AgentSeal '${label}' must be an absolute path, got '${value}'. ` +
+        `Relative paths would resolve against $PATH / cwd — refuse to spawn.`,
+    );
+  }
+  if (!existsSync(value)) {
+    throw new Error(`AgentSeal '${label}' does not exist at '${value}'`);
+  }
+  // Symlinks resolve through statSync; a directory or special file at
+  // the configured path is also a refusal — we want a regular file.
+  const st = statSync(value);
+  if (!st.isFile()) {
+    throw new Error(`AgentSeal '${label}' at '${value}' is not a regular file`);
+  }
+}
+
 interface ParsedScan {
   score: number;
   findings: Array<Record<string, unknown>>;
@@ -274,6 +322,10 @@ export function parseSkillScanOutput(raw: string): ParsedScan | null {
   try {
     json = JSON.parse(stripped);
   } catch {
+    // Intentional silent (#579): a malformed scan output already gets
+    // logged at the call site (`scan()` calls `parseSkillScanOutput`
+    // and logs a warn with `rawSnippet` when this returns null). No
+    // value in logging twice.
     return null;
   }
   if (!json || typeof json !== "object" || Array.isArray(json)) return null;
@@ -304,5 +356,12 @@ export function parseSkillScanOutput(raw: string): ParsedScan | null {
       ? Math.max(0, Math.round(obj.scannedFiles))
       : 0;
 
-  return { score, findings, agentsealVersion, scannedAt, scannedFiles };
+  // exactOptionalPropertyTypes (#657)
+  return {
+    score,
+    findings,
+    agentsealVersion,
+    ...(scannedAt !== undefined ? { scannedAt } : {}),
+    scannedFiles,
+  };
 }

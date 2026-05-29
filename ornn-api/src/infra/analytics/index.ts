@@ -268,7 +268,8 @@ export function createAnalyticsEmitter(
   return new AnalyticsEmitter({
     tracker,
     errorSampleRate: config.posthogErrorSampleRate,
-    logger,
+    // exactOptionalPropertyTypes (#657)
+    ...(logger !== undefined ? { logger } : {}),
   });
 }
 

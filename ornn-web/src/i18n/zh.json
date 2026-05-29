@@ -1,4 +1,47 @@
 {
+  "nyxidService": {
+    "intro": "将技能绑定到 NyxID 管理员服务会将其标记为系统技能（强制公开）。绑定到个人服务则不会改变隐私设置。",
+    "untied": "未绑定",
+    "untiedDesc": "该技能未绑定任何 NyxID 服务。隐私和共享设置仍由你手动控制。",
+    "adminTier": "管理员服务（系统）",
+    "personalTier": "个人服务",
+    "noServices": "没有可用的 NyxID 服务。请联系平台管理员或在 NyxID 中注册一个。",
+    "willForcePublic": "绑定到管理员服务将强制把该技能设为公开。其他共享设置（用户 / 组织）会被保留，但在技能公开期间不生效。",
+    "tieSuccess": "服务已绑定",
+    "untieSuccess": "服务已解绑"
+  },
+  "markdownEditor": {
+    "preview": "预览",
+    "emptyPreview": "暂无可预览内容…",
+    "helpText": "支持 Markdown 格式。可使用 **粗体**、_斜体_、`代码` 等。"
+  },
+  "adminUsersTable": {
+    "filterPlaceholder": "按邮箱或显示名称筛选…",
+    "empty": "未找到用户。",
+    "never": "从未",
+    "grantQuota": "授予配额",
+    "columnUsername": "用户名",
+    "columnEmail": "邮箱",
+    "columnSkills": "技能数",
+    "columnLastActive": "最近活跃",
+    "columnActivities": "活动数",
+    "columnFirstJoined": "首次加入",
+    "sortByPrefix": "按 {{label}} 排序"
+  },
+  "sidebar": {
+    "navigation": "导航"
+  },
+  "adminSettingsNav": {
+    "llmProviders": "LLM 提供方",
+    "playground": "Playground",
+    "skillGeneration": "技能生成",
+    "githubMirror": "GitHub 镜像",
+    "nyxidIntegration": "NyxID 集成",
+    "skillAuditing": "技能审计",
+    "postHog": "PostHog",
+    "serviceBinding": "服务绑定列表",
+    "exportImport": "导出 / 导入"
+  },
   "common": {
     "save": "保存",
     "cancel": "取消",
@@ -72,17 +115,36 @@
     "auditHistory": "审计历史"
   },
   "explore": {
+    "semanticQueryRequiredTitle": "请输入搜索描述",
+    "semanticQueryRequiredDesc": "语义搜索需要描述你要找的内容。请在上方搜索框中输入一段描述，或切换回关键字模式。",
     "systemSkills": "系统技能",
     "publicSkills": "公共技能",
     "mySkills": "我的技能",
     "sharedWithMe": "分享给我的",
-    "noSkillsFound": "未找到技能",
+    "noSkillsFound": "没有匹配的公共技能。",
     "noSharedSkills": "还没有人把技能分享给你。",
-    "tryAdjusting": "尝试调整搜索条件，或上传第一个技能。",
-    "noSkillsYet": "暂无技能",
-    "createFirst": "创建你的第一个技能开始吧",
+    "tryAdjusting": "尝试调整搜索条件或筛选项。",
+    "noSkillsYet": "你还没有创建任何技能。",
+    "noSystemSkills": "暂无系统技能。",
+    "createFirst": "创建你的第一个技能开始吧。",
     "uploadSkill": "上传技能",
-    "createSkill": "创建技能"
+    "createSkill": "创建技能",
+    "filterService": "NyxID 服务",
+    "filterTags": "标签",
+    "filterAuthors": "作者",
+    "filterSharedWithUsers": "分享给的用户",
+    "filterSharedWithOrgs": "分享给的组织",
+    "filterSharedByUsers": "用户分享给我",
+    "filterSharedByOrgs": "通过组织分享",
+    "noServices": "暂无系统服务。",
+    "noTags": "暂无标签。",
+    "noAuthors": "暂无作者。",
+    "notSharedWithUsers": "你还没有把任何技能分享给特定用户。",
+    "notSharedWithOrgs": "你还没有把任何技能分享给组织。",
+    "notSharedByUsers": "暂时没有人直接分享技能给你。",
+    "notSharedByOrgs": "暂时没有组织分享技能给你。",
+    "systemSkillsIntro": "系统技能是绑定到 NyxID 管理员服务的技能。平台管理员可以将任意技能绑定到管理员服务，将其发布为系统技能。",
+    "sharedWithMeIntro": "当其他人或组织向你授予某个私有技能的访问权限时，它会出现在这里。"
   },
   "mySkills": {
     "searchPlaceholder": "搜索你的技能…",
@@ -378,6 +440,8 @@
   },
   "playground": {
     "selectSkill": "选择一个技能在试验场中使用。",
+    "notFoundTitle": "未找到技能",
+    "notFoundBody": "该技能不存在，或者你没有访问权限。",
     "browseSkills": "浏览技能",
     "clearChat": "清空对话",
     "fillEnvVars": "在右侧填入所需的环境变量后开始对话。",
@@ -451,6 +515,13 @@
     "startGithub": "导入"
   },
   "guided": {
+    "validation": {
+      "nameMin": "技能名称至少需要 2 个字符",
+      "nameMax": "技能名称最多 64 个字符",
+      "nameShape": "必须以字母或数字开头，仅允许小写字母、数字和短横线",
+      "descMin": "描述至少需要 10 个字符",
+      "contentMin": "正文内容至少需要 50 个字符"
+    },
     "backToModes": "返回模式选择",
     "header": "创建技能",
     "headerDesc": "按下方步骤创建新技能",
@@ -513,7 +584,10 @@
     "previewTitle": "检查并创建",
     "dropHint": "拖拽文件到此处或点击选择",
     "noFiles": "（暂无文件）",
-    "remove": "移除"
+    "remove": "移除",
+    "fileSizeHint": "单文件上限：{{max}}",
+    "fileTooLarge": "{{name}} 大小为 {{size}}，超出单文件 {{max}} 上限。",
+    "fileDuplicate": "{{name}} 在 {{folder}} 中已存在。请先移除再替换。"
   },
   "generative": {
     "backToModes": "返回模式选择",
@@ -619,7 +693,9 @@
     "awaitingTool": "等待工具授权…",
     "placeholder": "输入消息…（Enter 发送，Shift+Enter 换行）",
     "stopGeneration": "停止生成",
-    "sendMessage": "发送消息"
+    "sendMessage": "发送消息",
+    "charCount": "{{count}} / {{max}}",
+    "overLimit": "消息过长。最多 {{max}} 个字符。"
   },
   "quota": {
     "surfacePlayground": "试验场",
@@ -963,6 +1039,14 @@
     "adminUnlimitedUsageTitle": "管理员 · 无限用量",
     "quotaUsageDetails": "配额使用详情"
   },
+  "search": {
+    "placeholderKeyword": "按名称或描述搜索技能…",
+    "placeholderSemantic": "描述你想找什么…",
+    "toggleToKeyword": "切换到关键词搜索",
+    "toggleToSemantic": "切换到语义搜索",
+    "modeKeyword": "关键词",
+    "modeSemantic": "语义"
+  },
   "skillComponents": {
     "generateModal": {
       "title": "生成技能",
@@ -970,7 +1054,10 @@
       "add": "添加"
     },
     "card": {
-      "linkedToGithub": "已关联到 GitHub"
+      "linkedToGithub": "已关联到 GitHub",
+      "viaOrganization": "通过组织共享",
+      "viaOrganizationNamed": "通过 {{org}} 共享",
+      "sharedBy": "由 {{name}} 共享"
     },
     "grid": {
       "emptyTitle": "未找到技能",
@@ -1537,7 +1624,9 @@
       "unrecognizedDirs": "存在未识别目录：{{dirs}}。仅允许 scripts/、references/、assets/。",
       "frontmatterUnparseable": "无法从 SKILL.md frontmatter 解析元数据。请检查并修复 YAML frontmatter 块。",
       "onlyZipAccepted": "仅接受 .zip 文件。",
-      "fileTooLarge": "文件过大（{{size}}）。"
+      "fileTooLarge": "文件过大（{{size}}）。",
+      "unsafePath": "ZIP 条目路径不安全：'{{path}}'。路径不允许包含 '..'、前导斜杠、反斜杠或盘符前缀。",
+      "uncompressedTooLarge": "ZIP 解压后达到 {{actual}} 字节，超过限制 {{max}} 字节。"
     },
     "frontmatter": {
       "panelTitle": "Frontmatter 校验错误",
@@ -1548,6 +1637,12 @@
       "envVarFormat": "环境变量名必须为 UPPER_SNAKE_CASE",
       "nameFormat": "名称必须以字母或数字开头，仅允许小写字母、数字和连字符",
       "versionFormat": "版本必须为 `<主版本>.<次版本>` 格式，例如 `1.0`（非负整数，不含前导零，不含修订位）",
+      "versionInvalidType": "version 必须为带引号的字符串——在 SKILL.md 中写成 `version: \"0.1\"`，不要写成 `version: 0.1`（不带引号时 YAML 会解析为数字，末尾的 0 会被截掉）。",
+      "tagInvalidType": "tag 列表项必须是非空的小写字符串，可包含连字符，例如 `tag: [my-tag]`——YAML 中空的 `- ` 行会解析为 `null`，不是有效的标签。",
+      "envVarInvalidType": "runtime-env-var 列表项必须是非空的 UPPER_SNAKE_CASE 字符串，例如 `runtime-env-var: [OPENAI_API_KEY]`——YAML 中空的 `- ` 行会解析为 `null`。",
+      "toolInvalidType": "tool-list 列表项必须是非空字符串，例如 `tool-list: [Bash, Read]`——YAML 中空的 `- ` 行会解析为 `null`。",
+      "runtimeInvalidType": "runtime 列表项必须是非空字符串，例如 `runtime: [python]`——YAML 中空的 `- ` 行会解析为 `null`。",
+      "dependencyInvalidType": "runtime-dependency 列表项必须是非空字符串，例如 `runtime-dependency: [requests==2.31]`——YAML 中空的 `- ` 行会解析为 `null`。",
       "runtimeRequiredForCategory": "类别为 '{{category}}' 时必须填写 runtime",
       "runtimeForbiddenForCategory": "类别为 '{{category}}' 时不得填写 runtime",
       "toolListRequiredForCategory": "类别为 '{{category}}' 时必须填写 tool-list",

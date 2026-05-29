@@ -35,7 +35,7 @@ class SkillSummary:
     _extra: dict[str, Any] = field(default_factory=dict, repr=False)
 
     @classmethod
-    def from_dict(cls, raw: dict[str, Any]) -> "SkillSummary":
+    def from_dict(cls, raw: dict[str, Any]) -> SkillSummary:
         known = {
             "id",
             "name",
@@ -66,16 +66,17 @@ class SkillSummary:
 
 @dataclass
 class SkillDetail(SkillSummary):
-    owner_id: str = ""
     storage_key: str | None = None
     shared_with_users: list[str] = field(default_factory=list)
     shared_with_orgs: list[str] = field(default_factory=list)
 
     @classmethod
-    def from_dict(cls, raw: dict[str, Any]) -> "SkillDetail":
+    def from_dict(cls, raw: dict[str, Any]) -> SkillDetail:
         base = SkillSummary.from_dict(raw).__dict__
         base.pop("_extra")
-        known_extra = {"ownerId", "storageKey", "sharedWithUsers", "sharedWithOrgs"}
+        # `ownerId` was removed from the wire in #581 — tolerate it
+        # showing up on old API responses (treat as unknown extra).
+        known_extra = {"storageKey", "sharedWithUsers", "sharedWithOrgs"}
         summary_known = {
             "id",
             "name",
@@ -91,11 +92,10 @@ class SkillDetail(SkillSummary):
         extra = {
             k: v
             for k, v in raw.items()
-            if k not in summary_known and k not in known_extra
+            if k not in summary_known and k not in known_extra and k != "ownerId"
         }
         return cls(
             **base,
-            owner_id=raw.get("ownerId", ""),
             storage_key=raw.get("storageKey"),
             shared_with_users=list(raw.get("sharedWithUsers") or []),
             shared_with_orgs=list(raw.get("sharedWithOrgs") or []),
@@ -113,7 +113,7 @@ class SkillVersionEntry:
     deprecation_note: str | None = None
 
     @classmethod
-    def from_dict(cls, raw: dict[str, Any]) -> "SkillVersionEntry":
+    def from_dict(cls, raw: dict[str, Any]) -> SkillVersionEntry:
         return cls(
             version=raw["version"],
             created_on=raw.get("createdOn", ""),
@@ -134,7 +134,7 @@ class SkillSearchResult:
     mode: str | None = None
 
     @classmethod
-    def from_dict(cls, raw: dict[str, Any]) -> "SkillSearchResult":
+    def from_dict(cls, raw: dict[str, Any]) -> SkillSearchResult:
         return cls(
             items=[SkillSummary.from_dict(i) for i in raw.get("items") or []],
             total=int(raw.get("total", 0)),

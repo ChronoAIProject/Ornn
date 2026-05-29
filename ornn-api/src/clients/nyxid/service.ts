@@ -13,10 +13,10 @@
  * @module clients/nyxid/service
  */
 
-import pino from "pino";
+import { createLogger } from "../../shared/logger";
 import type { NyxidConfigResolver } from "./base";
 
-const logger = pino({ level: "info" }).child({ module: "nyxidServiceClient" });
+const logger = createLogger("nyxidServiceClient");
 
 /**
  * Catalog service shape Ornn cares about. Mirrors a small subset of
@@ -55,15 +55,25 @@ export class NyxidServiceClient {
   private readonly resolver: NyxidConfigResolver;
   /**
    * Per-user-token cache. Keyed by the bearer token so two callers don't
-   * leak each other's view. 60-second TTL — services don't change often,
-   * but we don't want to hold an admin's view stale for 5 minutes when
-   * they just toggled visibility.
+   * leak each other's view. Short TTL: when an admin deactivates a
+   * service in NyxID we want Ornn surfaces to drop it promptly (#715).
+   * Pre-#715 this was 60s, which left a window where Ornn still
+   * advertised a service NyxID had deactivated; 10s is the new ceiling.
    */
   private readonly cache = new Map<
     string,
     { services: NyxidCatalogService[]; expiresAt: number }
   >();
-  private readonly cacheTtlMs = 60 * 1000;
+  private readonly cacheTtlMs = 10 * 1000;
+
+  /**
+   * Dedicated cache for the platform-wide active-service id set
+   * resolved via the SA token (`listActiveServiceIdsAsPlatform`). The
+   * SA view is identical for every caller, so one cache slot is
+   * enough — separate from the per-caller `cache` above to avoid
+   * cross-contaminating visibility scopes.
+   */
+  private platformActiveCache: { ids: Set<string>; expiresAt: number } | null = null;
 
   constructor(opts: { resolver: NyxidConfigResolver }) {
     this.resolver = opts.resolver;
@@ -152,5 +162,60 @@ export class NyxidServiceClient {
   invalidateCache(userAccessToken?: string): void {
     if (userAccessToken) this.cache.delete(userAccessToken);
     else this.cache.clear();
+    this.platformActiveCache = null;
+  }
+
+  /**
+   * Resolve the platform-wide set of *active* NyxID service ids using
+   * an SA token (NyxID admin view → every service, before filtering).
+   * Used by Ornn surfaces that need to know "is this service still
+   * usable" independent of the calling user — most importantly the
+   * anonymous-friendly `/skill-facets/system-services` aggregator,
+   * which would otherwise advertise services NyxID has deactivated
+   * (#715).
+   *
+   * Errors fail-soft: when NyxID is unreachable we return `null` so
+   * callers can decide whether to skip the filter (preserve current
+   * behaviour) or fail-closed. Cached for 10s to keep the hot path
+   * cheap without prolonging the visibility lag after a deactivation.
+   */
+  async listActiveServiceIdsAsPlatform(saToken: string): Promise<Set<string> | null> {
+    if (!saToken) return null;
+    const now = Date.now();
+    if (this.platformActiveCache && this.platformActiveCache.expiresAt > now) {
+      return this.platformActiveCache.ids;
+    }
+    try {
+      const baseUrl = await this.resolveBaseUrl();
+      const resp = await fetch(`${baseUrl}/api/v1/services`, {
+        headers: { Authorization: `Bearer ${saToken}` },
+      });
+      if (!resp.ok) {
+        const body = await resp.text().catch(() => "");
+        logger.warn(
+          { status: resp.status, body: body.slice(0, 200) },
+          "NyxID /services SA fetch failed; returning null (no filter)",
+        );
+        return null;
+      }
+      const json = (await resp.json()) as RawListResponse | RawCatalogService[];
+      const raw: RawCatalogService[] = Array.isArray(json)
+        ? json
+        : json.services ?? json.items ?? [];
+      const ids = new Set<string>();
+      for (const r of raw) {
+        if (!r.id) continue;
+        if (r.is_active === false) continue;
+        ids.add(r.id);
+      }
+      this.platformActiveCache = { ids, expiresAt: now + this.cacheTtlMs };
+      return ids;
+    } catch (err) {
+      logger.warn(
+        { err: (err as Error).message },
+        "NyxID /services SA fetch threw; returning null (no filter)",
+      );
+      return null;
+    }
   }
 }

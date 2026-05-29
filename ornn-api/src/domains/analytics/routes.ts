@@ -49,7 +49,7 @@ export function createAnalyticsRoutes(
     const authCtx = c.get("auth");
     const skill = await skillService.getSkill(idOrName);
     if (!authCtx && skill.isPrivate) {
-      throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${idOrName}' not found`);
+      throw AppError.notFound("skill_not_found", `Skill '${idOrName}' not found`);
     }
     if (authCtx && skill.isPrivate) {
       const memberships = await readUserOrgMemberships(c);
@@ -59,7 +59,7 @@ export function createAnalyticsRoutes(
         isPlatformAdmin: authCtx.permissions.includes("ornn:admin:skill"),
       };
       if (!canReadSkill(skill, actor)) {
-        throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${idOrName}' not found`);
+        throw AppError.notFound("skill_not_found", `Skill '${idOrName}' not found`);
       }
     }
     return { skillGuid: skill.guid };
@@ -101,13 +101,13 @@ export function createAnalyticsRoutes(
       const from = fromQ ? new Date(fromQ) : undefined;
       const to = toQ ? new Date(toQ) : undefined;
       if (fromQ && from && Number.isNaN(from.getTime())) {
-        throw AppError.badRequest("INVALID_RANGE", "'from' is not a valid ISO date");
+        throw AppError.badRequest("invalid_range", "'from' is not a valid ISO date");
       }
       if (toQ && to && Number.isNaN(to.getTime())) {
-        throw AppError.badRequest("INVALID_RANGE", "'to' is not a valid ISO date");
+        throw AppError.badRequest("invalid_range", "'to' is not a valid ISO date");
       }
       if (from && to && from >= to) {
-        throw AppError.badRequest("INVALID_RANGE", "'from' must be earlier than 'to'");
+        throw AppError.badRequest("invalid_range", "'from' must be earlier than 'to'");
       }
       const versionParam = c.req.query("version") || undefined;
 
@@ -115,9 +115,10 @@ export function createAnalyticsRoutes(
       const buckets = await analyticsService.getPullsTimeSeries({
         skillGuid,
         bucket: bucketParam as PullBucket,
-        from,
-        to,
-        version: versionParam,
+        // exactOptionalPropertyTypes (#657)
+        ...(from !== undefined ? { from } : {}),
+        ...(to !== undefined ? { to } : {}),
+        ...(versionParam !== undefined ? { version: versionParam } : {}),
       });
       return c.json({ data: { items: buckets }, error: null });
     },

@@ -62,8 +62,8 @@ describe("collectUploadedFiles", () => {
     const file = new File(["content"], "test.ts");
     const result = collectUploadedFiles({ file_0: file });
     expect(result.length).toBe(1);
-    expect(result[0].file).toBe(file);
-    expect(result[0].folder).toBe("");
+    expect(result[0]!.file).toBe(file);
+    expect(result[0]!.folder).toBe("");
   });
 
   test("fileWithFolderMeta_usesFolderMeta", () => {
@@ -72,13 +72,13 @@ describe("collectUploadedFiles", () => {
       file_0: file,
       file_0_folder: "scripts",
     });
-    expect(result[0].folder).toBe("scripts");
+    expect(result[0]!.folder).toBe("scripts");
   });
 
   test("fileWithSlashInName_extractsFolderFromName", () => {
     const file = new File(["content"], "scripts/deploy.ts");
     const result = collectUploadedFiles({ file_0: file });
-    expect(result[0].folder).toBe("scripts");
+    expect(result[0]!.folder).toBe("scripts");
   });
 
   test("multipleFiles_collectsAll", () => {

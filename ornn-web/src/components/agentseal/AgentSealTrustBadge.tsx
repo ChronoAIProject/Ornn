@@ -96,7 +96,7 @@ export function AgentSealTrustBadge({
         {},
       );
       if (res.error) {
-        const isDisabled = res.error.code === "AGENTSEAL_DISABLED";
+        const isDisabled = res.error.code === "agentseal_disabled";
         addToast({
           type: "error",
           message: isDisabled

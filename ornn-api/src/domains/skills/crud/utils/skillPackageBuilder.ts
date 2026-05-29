@@ -5,7 +5,10 @@
  * @module utils/skillPackageBuilder
  */
 
+import { createLogger } from "../../../../shared/logger";
 import { createTarBuffer } from "../../../../shared/utils/tarBuilder";
+
+const logger = createLogger("skillPackageBuilder");
 
 /** Uploaded file entry with folder path metadata. */
 export interface UploadedFileEntry {
@@ -19,7 +22,12 @@ export function parseJsonStringArray(value: unknown): string[] {
   try {
     const parsed = JSON.parse(value);
     return Array.isArray(parsed) ? parsed : [];
-  } catch {
+  } catch (err) {
+    // Malformed JSON in an optional form field falls back to empty
+    // array — the caller treats this as "field not provided". Log
+    // at debug so we can spot a client repeatedly sending bad JSON
+    // (#579).
+    logger.debug({ err, valueHead: value.slice(0, 80) }, "parseJsonStringArray: malformed JSON");
     return [];
   }
 }
@@ -57,7 +65,10 @@ export function collectUploadedFiles(
 
     // If filename already has a folder prefix (e.g., "scripts/deploy.ts"), use it
     if (file.name.includes("/")) {
-      folder = file.name.split("/")[0];
+      // `split("/")[0]` is always present when the string contains "/"
+      // (the substring before the first separator). `!` is safe under
+      // noUncheckedIndexedAccess (#450).
+      folder = file.name.split("/")[0]!;
     }
 
     files.push({ file, folder });

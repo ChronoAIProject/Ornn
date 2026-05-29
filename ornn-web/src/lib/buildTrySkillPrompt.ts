@@ -47,6 +47,18 @@ export interface BuildTrySkillPromptInput {
   metadata: TrySkillPromptMetadata | Record<string, unknown>;
   /** e.g. `window.location.origin` passed in by the caller. */
   ornnOrigin: string;
+  /**
+   * Version the user was viewing when they hit Install (#639). When
+   * provided, the pull URLs pin to `?version=<X>` so the agent
+   * installs the exact version the user saw — not whatever's `latest`
+   * at install time. Also surfaces a "Installing version <X>" header
+   * line so the user/agent sees the pinning explicitly.
+   *
+   * Omit when the source is genuinely version-less (e.g. a hypothetical
+   * "always pull latest" CTA). For the install card on the skill
+   * detail page, always pass the viewed version.
+   */
+  version?: string;
 }
 
 const NONE = "none";
@@ -88,7 +100,7 @@ function renderToolList(tools: TrySkillPromptTool[]): string {
 }
 
 export function buildTrySkillPrompt(input: BuildTrySkillPromptInput): string {
-  const { guid, name, description, metadata, ornnOrigin } = input;
+  const { guid, name, description, metadata, ornnOrigin, version } = input;
   const category = asString((metadata as { category?: unknown }).category) ?? "plain";
   const runtimes = readRuntimes(metadata);
   const tools = readTools(metadata);
@@ -99,13 +111,27 @@ export function buildTrySkillPrompt(input: BuildTrySkillPromptInput): string {
   const toolLine = renderToolList(tools);
 
   const origin = ornnOrigin.replace(/\/+$/, "");
-  const skillUrl = `${origin}/skills/${guid}`;
-  const apiUrl = `${origin}/api/v1/skills/${guid}/json`;
+  // #639 — when the caller knows which version was being viewed, pin
+  // the URLs and the per-run NyxID command. Without this, the agent
+  // silently pulls `latest` at install time, which can be different
+  // from what the user saw on the page.
+  const versionQuery = version ? `?version=${encodeURIComponent(version)}` : "";
+  const versionParam = version ? ` --query version=${version}` : "";
+  const skillUrl = `${origin}/skills/${guid}${versionQuery}`;
+  const apiUrl = `${origin}/api/v1/skills/${guid}/json${versionQuery}`;
 
   return [
-    `# Install Ornn skill: ${name}`,
+    `# Install Ornn skill: ${name}${version ? ` @ ${version}` : ""}`,
     "",
     `> ${description}`,
+    ...(version
+      ? [
+          "",
+          `**Pinned to version \`${version}\`** — both fetch commands below carry`,
+          "`?version=…` so the agent installs the exact version that was open in",
+          "the browser, not whatever's currently `latest`.",
+        ]
+      : []),
     "",
     "You're being given an Ornn skill — a packaged AI capability",
     "(`SKILL.md` prompt + optional scripts + metadata). Follow the steps",
@@ -120,7 +146,7 @@ export function buildTrySkillPrompt(input: BuildTrySkillPromptInput): string {
     "",
     "**Option A — via NyxID CLI** (preferred if `nyxid` is installed and you've run `nyxid login`):",
     "```",
-    `nyxid proxy request ornn-api /api/v1/skills/${guid}/json --output json`,
+    `nyxid proxy request ornn-api /api/v1/skills/${guid}/json${versionParam} --output json`,
     "```",
     "",
     "**Option B — direct HTTPS** (if you already have a NyxID bearer token):",

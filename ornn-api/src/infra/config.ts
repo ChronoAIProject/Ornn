@@ -59,6 +59,13 @@ export interface SkillConfig {
   // timeout move to settings (skillAudit section).
   readonly agentsealPython: string;
   readonly agentsealScript: string;
+  /**
+   * Boot-time master switch (#442). When false the scanner skips path
+   * validation entirely and `scan()` short-circuits to null. Lets
+   * integration tests and any env without agentseal installed boot
+   * without satisfying the absolute-path-must-exist guard.
+   */
+  readonly agentsealEnabled: boolean;
 
   /**
    * Origin used in mirror READMEs to link back to the canonical Ornn
@@ -124,6 +131,10 @@ const envSchema = z.object({
   // ---- AgentSeal (skill trust scanner, #253) — binary paths only ----
   AGENTSEAL_PYTHON: z.string().min(1).default("/opt/agentseal/bin/python"),
   AGENTSEAL_SCRIPT: z.string().min(1).default("/opt/agentseal/scan_skill.py"),
+  // String-typed so `AGENTSEAL_ENABLED=false` in a `.env` file works
+  // without booleanish-string parsing gymnastics. `"false"` disables;
+  // any other value (default `"true"`) enables. Per #442.
+  AGENTSEAL_ENABLED: z.string().default("true"),
 
   /**
    * Public origin agents and humans use to reach Ornn (no trailing
@@ -193,6 +204,7 @@ export function loadConfig(): SkillConfig {
 
     agentsealPython: env.AGENTSEAL_PYTHON,
     agentsealScript: env.AGENTSEAL_SCRIPT,
+    agentsealEnabled: env.AGENTSEAL_ENABLED !== "false",
 
     ornnPublicOrigin: env.ORNN_PUBLIC_ORIGIN.replace(/\/+$/, ""),
   };

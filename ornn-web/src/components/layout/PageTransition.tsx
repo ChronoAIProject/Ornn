@@ -112,7 +112,9 @@ export function PageTransition({
       variants={variants}
       initial="initial"
       animate="animate"
-      exit={exitAnimation ? "exit" : undefined}
+      // exactOptionalPropertyTypes (#657): conditional spread on exit
+      // since framer-motion's `exit?:` doesn't accept explicit undefined.
+      {...(exitAnimation ? { exit: "exit" } : {})}
       transition={transition}
       className={`h-full ${className}`}
     >

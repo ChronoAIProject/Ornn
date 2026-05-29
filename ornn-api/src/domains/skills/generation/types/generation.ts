@@ -13,6 +13,9 @@ export interface GeneratedSkill {
   envVars: string[];
   /** Script files to place in scripts/ directory. */
   scripts: Array<{ filename: string; content: string }>;
+  // exactOptionalPropertyTypes (#657): matches the Zod schema enum
+  // (`["text", "file"]`) — optional, so we widen with `| undefined`.
+  outputType?: "text" | "file" | undefined;
 }
 
 /** Options for LLM completion calls. */

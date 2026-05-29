@@ -68,7 +68,7 @@ Content-Type: application/problem+json
 X-Request-ID: req_01HXYZ...
 
 {
-  "type": "https://github.com/ChronoAIProject/Ornn/blob/main/docs/errors.md#validation_error",
+  "type": "https://github.com/ChronoAIProject/Ornn/blob/main/docs/ERRORS.md#validation_error",
   "title": "Validation failed",
   "status": 400,
   "detail": "Request body failed validation",
@@ -112,10 +112,10 @@ New codes require convention-doc update. Handlers MUST NOT invent ad-hoc codes.
 Point to GitHub markdown anchors in this repository:
 
 ```
-https://github.com/ChronoAIProject/Ornn/blob/main/docs/errors.md#<code>
+https://github.com/ChronoAIProject/Ornn/blob/main/docs/ERRORS.md#<code>
 ```
 
-A matching `docs/errors.md` must exist with `##` headings per error code (GitHub auto-generates anchors). Zero infra cost; resolves day one. Future migration to a docs domain (`docs.ornn.xyz`) is a one-time redirect configuration; no client changes required.
+The catalog lives in [`docs/ERRORS.md`](ERRORS.md) with `##` headings per code (GitHub auto-generates anchors). Zero infra cost; resolves day one. Future migration to a docs domain (`docs.ornn.xyz`) is a one-time redirect configuration; no client changes required.
 
 ---
 
@@ -340,12 +340,14 @@ Endpoints pick a subset and MAY add endpoint-specific events with the same prefi
 
 ## 7. Deprecation
 
+See [`docs/API_STABILITY.md`](API_STABILITY.md) for the public stability commitment, per-route tiers, and the full deprecation lead-time policy. This section codifies the header shape only.
+
 Per RFC 8594 on deprecated endpoints and representations:
 
 ```
 Deprecation: true
 Sunset: Wed, 01 Jan 2027 00:00:00 GMT
-Link: <https://github.com/ChronoAIProject/Ornn/blob/main/docs/deprecations.md#skill-version-v1>; rel="deprecation"
+Link: <https://github.com/ChronoAIProject/Ornn/blob/main/docs/DEPRECATIONS.md#skill-version-v1>; rel="deprecation"
 ```
 
 Free-form notes go in response body, not custom headers. No `X-Skill-Deprecated` style custom headers.
@@ -375,6 +377,22 @@ Every response carries:
 - Every route declares security, request content types, all documented error responses, and at least one example.
 - CI contract test asserts every handler in code appears in the spec with complete metadata.
 - Error `type` URLs point to live documentation per § 1.6.
+
+### 10.1 Skill manifest JSON Schema
+
+The canonical JSON Schema for `SKILL.md` YAML frontmatter is published at:
+
+```
+GET /api/v1/skill-manifest-schema.json
+```
+
+- Generated from the Zod source of truth (`ornn-api/src/shared/schemas/skillFrontmatter.ts`) at server boot — the published schema cannot drift from the runtime validator.
+- Output is JSON Schema **draft-2020-12** (`$schema`) — what current IDEs (VS Code, Cursor, JetBrains) and `schemastore.org` consume.
+- Served with `Content-Type: application/schema+json` (IANA registration). No `{ data, error }` envelope — the body root is the schema document itself, because that's what schema-store tools expect.
+- Public, no auth required. `Cache-Control: public, max-age=3600`.
+- `SKILL_MANIFEST_SCHEMA_VERSION` (currently `"1"`) is bumped manually when the frontmatter contract changes in a way external tooling cares about. Out of an abundance of caution while we're pre-1.0, this version is not yet baked into the URL; consumers should re-fetch on a finite TTL.
+
+Skill authors and tooling SHOULD point their YAML language servers at this URL via `# yaml-language-server: $schema=...` so SKILL.md gets autocomplete + inline validation.
 
 ---
 

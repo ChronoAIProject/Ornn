@@ -15,18 +15,19 @@
 
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
-import pino from "pino";
+import { createLogger } from "../../../shared/logger";
+import { z } from "zod";
+import { validateBody, getValidatedBody } from "../../../middleware/validate";
 import {
   type AuthVariables,
   nyxidAuthMiddleware,
   requirePermission,
 } from "../../../middleware/nyxidAuth";
-import { AppError } from "../../../shared/types/index";
 import type { SettingsActor } from "../types";
 import type { SettingsExporter } from "./exporter";
 import type { ImportResult, SettingsImporter } from "./importer";
 
-const logger = pino({ level: "info" }).child({ module: "settingsExportImportRoutes" });
+const logger = createLogger("settingsExportImportRoutes");
 
 /**
  * Settings audit hook. Bootstrap binds this to
@@ -49,7 +50,7 @@ export interface SettingsAuditLogger {
     sections: ReadonlyArray<{
       id: string;
       status: string;
-      changedFields?: ReadonlyArray<string>;
+      changedFields?: ReadonlyArray<string> | undefined;
     }>;
     dryRun: boolean;
   }): Promise<void>;
@@ -63,12 +64,13 @@ const noopAuditLogger: SettingsAuditLogger = {
 export interface ExportImportRoutesConfig {
   readonly exporter: SettingsExporter;
   readonly importer: SettingsImporter;
+  // Optionals widen to `T | undefined` for exactOptionalPropertyTypes (#657).
   /** Used in the export filename. Default: `prod`. */
-  readonly envName?: string;
+  readonly envName?: string | undefined;
   /** Audit hook. When omitted, exports/imports go un-audited (test mode). */
-  readonly auditLogger?: SettingsAuditLogger;
+  readonly auditLogger?: SettingsAuditLogger | undefined;
   /** Body-size cap on `POST /import`. Default 1 MiB. */
-  readonly importMaxBytes?: number;
+  readonly importMaxBytes?: number | undefined;
 }
 
 export function createSettingsExportImportRoutes(
@@ -114,18 +116,19 @@ export function createSettingsExportImportRoutes(
           {
             data: null,
             error: {
-              code: "PAYLOAD_TOO_LARGE",
+              code: "payload_too_large",
               message: `import body must be ≤ ${importMaxBytes} bytes`,
             },
           },
           413,
         ),
     }),
+    // The importer (`importer.import`) validates the full structured
+    // payload internally. The middleware here just gates JSON-shape
+    // so a SyntaxError becomes 400 invalid_body per #438.
+    validateBody(z.record(z.string(), z.unknown()), "invalid_body"),
     async (c) => {
-      const body = await c.req.json().catch(() => null);
-      if (!body || typeof body !== "object") {
-        throw AppError.badRequest("INVALID_BODY", "JSON body required");
-      }
+      const body = getValidatedBody<Record<string, unknown>>(c);
       // Accept dryRun from either the body (the SPA path) OR the
       // query string (curl / scripts). Body takes precedence. Was
       // query-only before — that silently mutated on the SPA's

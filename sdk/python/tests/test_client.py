@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import httpx
 import pytest
 import respx
 
@@ -13,7 +12,6 @@ from ornn_sdk import (
     SkillSearchResult,
     UpdateSkillMetadata,
 )
-
 
 BASE = "https://ornn.example.com"
 
@@ -44,9 +42,7 @@ class TestAuth:
 
     @respx.mock
     def test_resolver_takes_precedence(self) -> None:
-        route = respx.get(f"{BASE}/api/v1/me").respond(
-            200, json={"data": {}, "error": None}
-        )
+        route = respx.get(f"{BASE}/api/v1/me").respond(200, json={"data": {}, "error": None})
         with make_client(
             token="tok_static",
             token_resolver=lambda: "tok_dynamic",
@@ -56,9 +52,7 @@ class TestAuth:
 
     @respx.mock
     def test_no_auth_header_when_no_token(self) -> None:
-        route = respx.get(f"{BASE}/api/v1/public").respond(
-            200, json={"data": {}, "error": None}
-        )
+        route = respx.get(f"{BASE}/api/v1/public").respond(200, json={"data": {}, "error": None})
         with make_client() as ornn:
             ornn.request("GET", "/public")
         assert "authorization" not in route.calls.last.request.headers
@@ -75,16 +69,18 @@ class TestEnvelope:
         assert result == {"hello": "world"}
 
     @respx.mock
-    def test_raises_ornn_error_on_failure_envelope(self) -> None:
+    def test_raises_ornn_error_on_problem_json(self) -> None:
+        # 4xx body is RFC 7807 problem+json (#456) — root-level fields.
         respx.get(f"{BASE}/api/v1/admin").respond(
             403,
             json={
-                "data": None,
-                "error": {
-                    "code": "permission_denied",
-                    "message": "Missing ornn:skill:admin",
-                    "requestId": "req_01HXYZ",
-                },
+                "type": "https://github.com/.../ERRORS.md#permission_denied",
+                "title": "Permission denied",
+                "status": 403,
+                "code": "permission_denied",
+                "detail": "Missing ornn:skill:admin",
+                "instance": "/v1/admin",
+                "requestId": "req_01HXYZ",
             },
         )
         with make_client() as ornn:
@@ -108,17 +104,19 @@ class TestEnvelope:
 
     @respx.mock
     def test_preserves_structured_errors_list(self) -> None:
+        # `errors[]` rides at the body root inside problem+json (#456).
         respx.post(f"{BASE}/api/v1/skills").respond(
             400,
             json={
-                "data": None,
-                "error": {
-                    "code": "validation_error",
-                    "message": "Validation failed",
-                    "errors": [
-                        {"path": "name", "code": "required", "message": "name is required"},
-                    ],
-                },
+                "type": "https://github.com/.../ERRORS.md#validation_error",
+                "title": "Validation failed",
+                "status": 400,
+                "code": "validation_error",
+                "detail": "Validation failed",
+                "instance": "/v1/skills",
+                "errors": [
+                    {"path": "name", "code": "required", "message": "name is required"},
+                ],
             },
         )
         with make_client() as ornn:
@@ -131,7 +129,7 @@ class TestEnvelope:
 
 class TestSearch:
     @respx.mock
-    def test_maps_q_to_query_param(self) -> None:
+    def test_maps_q_to_canonical_q_param(self) -> None:
         route = respx.get(f"{BASE}/api/v1/skill-search").respond(
             200,
             json={
@@ -149,7 +147,9 @@ class TestSearch:
             result = ornn.search(q="pdf", scope="public", page=2, page_size=50)
         assert isinstance(result, SkillSearchResult)
         req_url = str(route.calls.last.request.url)
-        assert "query=pdf" in req_url
+        # Canonical search param is `q` (CONVENTIONS.md §4.1 / #586).
+        assert "q=pdf" in req_url
+        assert "query=pdf" not in req_url
         assert "scope=public" in req_url
         assert "page=2" in req_url
         assert "pageSize=50" in req_url
@@ -202,7 +202,6 @@ class TestGet:
                     "isPrivate": False,
                     "createdBy": "u1",
                     "createdOn": "2026-01-01T00:00:00Z",
-                    "ownerId": "u1",
                 },
                 "error": None,
             },
@@ -210,7 +209,7 @@ class TestGet:
         with make_client() as ornn:
             detail = ornn.get("my/weird name")
         assert isinstance(detail, SkillDetail)
-        assert detail.owner_id == "u1"
+        assert detail.created_by == "u1"
         assert route.called
 
     @respx.mock
@@ -218,8 +217,12 @@ class TestGet:
         respx.get(f"{BASE}/api/v1/skills/nope").respond(
             404,
             json={
-                "data": None,
-                "error": {"code": "resource_not_found", "message": "no such skill"},
+                "type": "https://github.com/.../ERRORS.md#resource_not_found",
+                "title": "Resource not found",
+                "status": 404,
+                "code": "resource_not_found",
+                "detail": "no such skill",
+                "instance": "/v1/skills/nope",
             },
         )
         with make_client() as ornn:
@@ -268,8 +271,12 @@ class TestDownload:
         respx.get(f"{BASE}/api/v1/skills/abc/versions/9.9/download").respond(
             404,
             json={
-                "data": None,
-                "error": {"code": "resource_not_found", "message": "no such version"},
+                "type": "https://github.com/.../ERRORS.md#resource_not_found",
+                "title": "Resource not found",
+                "status": 404,
+                "code": "resource_not_found",
+                "detail": "no such version",
+                "instance": "/v1/skills/abc/versions/9.9/download",
             },
         )
         with make_client() as ornn:
@@ -292,7 +299,6 @@ class TestPublish:
                     "isPrivate": True,
                     "createdBy": "u1",
                     "createdOn": "2026-01-01T00:00:00Z",
-                    "ownerId": "u1",
                 },
                 "error": None,
             },
@@ -317,7 +323,6 @@ class TestPublish:
                     "isPrivate": False,
                     "createdBy": "admin",
                     "createdOn": "2026-01-01T00:00:00Z",
-                    "ownerId": "admin",
                 },
                 "error": None,
             },
@@ -342,7 +347,6 @@ class TestUpdate:
                     "isPrivate": False,
                     "createdBy": "u1",
                     "createdOn": "2026-01-01T00:00:00Z",
-                    "ownerId": "u1",
                 },
                 "error": None,
             },
@@ -365,7 +369,6 @@ class TestUpdate:
                     "isPrivate": False,
                     "createdBy": "u1",
                     "createdOn": "2026-01-01T00:00:00Z",
-                    "ownerId": "u1",
                 },
                 "error": None,
             },

@@ -1,12 +1,14 @@
 import { useSearchStore } from "@/stores/searchStore";
 import { useDebounce } from "@/hooks/useDebounce";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 export interface SearchBarProps {
   className?: string;
 }
 
 export function SearchBar({ className = "" }: SearchBarProps) {
+  const { t } = useTranslation();
   const setQuery = useSearchStore((s) => s.setQuery);
   const storeQuery = useSearchStore((s) => s.query);
   const mode = useSearchStore((s) => s.mode);
@@ -43,8 +45,8 @@ export function SearchBar({ className = "" }: SearchBarProps) {
           onChange={(e) => setLocalValue(e.target.value)}
           placeholder={
             isSemanticMode
-              ? "Describe what you're looking for..."
-              : "Search skills by name, description, or tags..."
+              ? t("search.placeholderSemantic", "Describe what you're looking for...")
+              : t("search.placeholderKeyword", "Search skills by name or description...")
           }
           className="neon-input w-full rounded py-3 pr-4 pl-12 font-text text-strong placeholder:text-meta/50"
         />
@@ -54,7 +56,11 @@ export function SearchBar({ className = "" }: SearchBarProps) {
       <button
         type="button"
         onClick={() => setMode(isSemanticMode ? "keyword" : "semantic")}
-        title={isSemanticMode ? "Switch to keyword search" : "Switch to semantic search"}
+        title={
+          isSemanticMode
+            ? t("search.toggleToKeyword", "Switch to keyword search")
+            : t("search.toggleToSemantic", "Switch to semantic search")
+        }
         className={`
           flex items-center gap-2 shrink-0 rounded border px-4 py-3 font-text text-sm transition-all
           ${isSemanticMode
@@ -76,7 +82,9 @@ export function SearchBar({ className = "" }: SearchBarProps) {
             />
           </svg>
         )}
-        {isSemanticMode ? "Semantic" : "Keyword"}
+        {isSemanticMode
+          ? t("search.modeSemantic", "Semantic")
+          : t("search.modeKeyword", "Keyword")}
       </button>
     </div>
   );

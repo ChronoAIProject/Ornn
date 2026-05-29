@@ -33,6 +33,7 @@ import {
   requirePermission,
 } from "../../../middleware/nyxidAuth";
 import { AppError } from "../../../shared/types/index";
+import { validateBody, getValidatedBody } from "../../../middleware/validate";
 import type { SettingsActor } from "../types";
 import type { LlmProvidersService, ModelResolution, Surface } from "./service";
 
@@ -69,6 +70,16 @@ export function throwModelResolutionError(resolution: ModelResolution): never {
 
 export interface LlmProvidersRoutesConfig {
   readonly llmProvidersService: LlmProvidersService;
+  /**
+   * Resolve the per-surface section default model id (#607). When set,
+   * `GET /me/models?surface=…` uses it as the picker's `default` slot
+   * so the frontend pre-selection agrees with the execute path's
+   * `resolveSurfaceDefaults` precedence. Optional so legacy callers
+   * (route-only tests, the admin route bundle) can skip wiring it.
+   */
+  readonly sectionDefaultResolver?: (
+    surface: Surface,
+  ) => Promise<string | null>;
 }
 
 export function createLlmProvidersRoutes(
@@ -85,41 +96,54 @@ export function createLlmProvidersRoutes(
     return c.json({ data: { items }, error: null });
   });
 
-  app.post(base, auth, adminGuard, async (c) => {
-    const body = await c.req.json().catch(() => null);
-    if (!body) throw AppError.badRequest("INVALID_BODY", "JSON body required");
-    const actor = currentActor(c);
-    const created = await llmProvidersService.create(body, actor);
-    // Re-fetch through the admin path so the 201 body never carries
-    // the plaintext secret the caller just submitted.
-    const masked = await llmProvidersService.getForAdmin(created._id);
-    return c.json({ data: masked, error: null }, 201);
-  });
+  app.post(
+    base,
+    auth,
+    adminGuard,
+    // Service-internal Zod schemas (`providerCreateSchema`) enforce
+    // the full shape. The middleware here just gates JSON-shape so a
+    // SyntaxError becomes 400 with RFC 7807 envelope (#438).
+    validateBody(z.record(z.string(), z.unknown()), "invalid_body"),
+    async (c) => {
+      const body = getValidatedBody<Record<string, unknown>>(c);
+      const actor = currentActor(c);
+      const created = await llmProvidersService.create(body, actor);
+      // Re-fetch through the admin path so the 201 body never carries
+      // the plaintext secret the caller just submitted.
+      const masked = await llmProvidersService.getForAdmin(created._id);
+      return c.json({ data: masked, error: null }, 201);
+    },
+  );
 
   app.get(`${base}/:id`, auth, adminGuard, async (c) => {
     const id = c.req.param("id");
     const item = await llmProvidersService.getForAdmin(id);
     if (!item) {
-      throw AppError.notFound("PROVIDER_NOT_FOUND", `No provider ${id}`);
+      throw AppError.notFound("provider_not_found", `No provider ${id}`);
     }
     return c.json({ data: item, error: null });
   });
 
-  app.put(`${base}/:id`, auth, adminGuard, async (c) => {
-    const id = c.req.param("id");
-    const body = await c.req.json().catch(() => null);
-    if (!body) throw AppError.badRequest("INVALID_BODY", "JSON body required");
-    const actor = currentActor(c);
-    await llmProvidersService.update(id, body, actor);
-    const masked = await llmProvidersService.getForAdmin(id);
-    return c.json({ data: masked, error: null });
-  });
+  app.put(
+    `${base}/:id`,
+    auth,
+    adminGuard,
+    validateBody(z.record(z.string(), z.unknown()), "invalid_body"),
+    async (c) => {
+      const id = c.req.param("id");
+      const body = getValidatedBody<Record<string, unknown>>(c);
+      const actor = currentActor(c);
+      await llmProvidersService.update(id, body, actor);
+      const masked = await llmProvidersService.getForAdmin(id);
+      return c.json({ data: masked, error: null });
+    },
+  );
 
   app.delete(`${base}/:id`, auth, adminGuard, async (c) => {
     const id = c.req.param("id");
     const ok = await llmProvidersService.deleteById(id);
     if (!ok) {
-      throw AppError.notFound("PROVIDER_NOT_FOUND", `No provider ${id}`);
+      throw AppError.notFound("provider_not_found", `No provider ${id}`);
     }
     return c.body(null, 204);
   });
@@ -142,11 +166,11 @@ export function createLlmProvidersRoutes(
     `${base}/:id/models/:modelId`,
     auth,
     adminGuard,
+    validateBody(z.record(z.string(), z.unknown()), "invalid_body"),
     async (c) => {
       const providerId = c.req.param("id");
       const modelId = c.req.param("modelId");
-      const body = await c.req.json().catch(() => null);
-      if (!body) throw AppError.badRequest("INVALID_BODY", "JSON body required");
+      const body = getValidatedBody<Record<string, unknown>>(c);
       const actor = currentActor(c);
       await llmProvidersService.patchModel(providerId, modelId, body, actor);
       const masked = await llmProvidersService.getForAdmin(providerId);
@@ -167,7 +191,7 @@ export function createLlmProvidersRoutes(
 export function createLlmPickerRoutes(
   config: LlmProvidersRoutesConfig,
 ): Hono<{ Variables: AuthVariables }> {
-  const { llmProvidersService } = config;
+  const { llmProvidersService, sectionDefaultResolver } = config;
   const app = new Hono<{ Variables: AuthVariables }>();
   const auth = nyxidAuthMiddleware();
 
@@ -176,12 +200,21 @@ export function createLlmPickerRoutes(
     const parsed = surfaceSchema.safeParse(surfaceRaw);
     if (!parsed.success) {
       throw AppError.badRequest(
-        "INVALID_SURFACE",
+        "invalid_surface",
         "Query param 'surface' must be 'playground' or 'skillGen'",
       );
     }
     const surface: Surface = parsed.data;
-    const result = await llmProvidersService.listPickerModels(surface);
+    // #607 — pass the section-level pin through so the picker's
+    // default agrees with the execute path. Resolver is optional;
+    // tests that don't wire it fall back to the per-model flag.
+    const sectionDefault = sectionDefaultResolver
+      ? (await sectionDefaultResolver(surface)) ?? undefined
+      : undefined;
+    const result = await llmProvidersService.listPickerModels(
+      surface,
+      sectionDefault,
+    );
     return c.json({
       data: {
         items: result.items.map((r) => ({

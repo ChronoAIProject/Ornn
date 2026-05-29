@@ -23,11 +23,9 @@
  */
 
 import type { Db, Document } from "mongodb";
-import pino from "pino";
+import { createLogger } from "../../../shared/logger";
 
-const logger = pino({ level: "info" }).child({
-  module: "llmProvidersMigration",
-});
+const logger = createLogger("llmProvidersMigration");
 
 interface LegacyModelRow {
   modelId: string;

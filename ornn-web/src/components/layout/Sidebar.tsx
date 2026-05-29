@@ -128,7 +128,7 @@ export function Sidebar({
       {isMobile && (
         <div className="flex h-14 items-center justify-between border-b border-subtle px-4">
           <span className="font-display text-sm uppercase tracking-wider text-accent">
-            Navigation
+            {t("sidebar.navigation")}
           </span>
           <button
             type="button"

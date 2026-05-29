@@ -18,19 +18,14 @@ import { useState } from "react";
 import { formatFileSize } from "@/utils/formatters";
 
 export interface SkillFileViewerProps {
-  /** File content as plaintext */
   content: string;
-  /** File name (for display in header) */
   filename: string;
-  /** Allow editing (textarea instead of pre) */
-  editable?: boolean;
-  /** Callback when content changes */
-  onChange?: (content: string) => void;
-  /** Whether the file is binary */
-  isBinary?: boolean;
-  /** File size in bytes (shown for binary files) */
-  fileSize?: number;
-  className?: string;
+  // Optionals widen to `T | undefined` for exactOptionalPropertyTypes (#657).
+  editable?: boolean | undefined;
+  onChange?: ((content: string) => void) | undefined;
+  isBinary?: boolean | undefined;
+  fileSize?: number | undefined;
+  className?: string | undefined;
 }
 
 function EditIcon({ className }: { className?: string }) {

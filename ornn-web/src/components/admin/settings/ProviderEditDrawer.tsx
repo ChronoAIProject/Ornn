@@ -526,7 +526,8 @@ interface FieldProps {
   label: string;
   value: string;
   onChange: (v: string) => void;
-  error?: string;
+  // exactOptionalPropertyTypes (#657)
+  error?: string | undefined;
 }
 
 function Field({ label, value, onChange, error }: FieldProps) {

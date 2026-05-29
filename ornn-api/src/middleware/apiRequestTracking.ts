@@ -29,8 +29,11 @@
  */
 
 import type { Context, Next, MiddlewareHandler } from "hono";
+import { createLogger } from "../shared/logger";
 import type { AnalyticsEmitter, CallerType } from "../infra/analytics";
 import { getRequestId } from "./requestId";
+
+const logger = createLogger("apiRequestTracking");
 
 export interface ApiRequestTrackingConfig {
   emitter: AnalyticsEmitter;
@@ -60,25 +63,34 @@ export function apiRequestTrackingMiddleware(
         const sourceIp = redactIp(extractSourceIp(c));
         const requestId = getRequestId(c) ?? null;
 
+        // exactOptionalPropertyTypes (#657): conditional spread on
+        // every optional field so we never pass an explicit `undefined`
+        // to a contract that wants `key?: T`.
+        const routePattern = extractRoutePattern(c);
+        const userAgent = capUserAgent(c.req.header("user-agent"));
+        const queryParamKeys = extractQueryParamKeys(c);
+        const requestBytes = parseContentLength(c.req.header("content-length"));
+        const responseBytes = parseContentLength(c.res.headers.get("content-length"));
         config.emitter.trackApiRequest({
           userId,
           callerType,
           method: c.req.method,
           path: c.req.path,
-          routePattern: extractRoutePattern(c),
+          ...(routePattern !== undefined ? { routePattern } : {}),
           status,
           durationMs,
           sourceIp,
           requestId,
-          userAgent: capUserAgent(c.req.header("user-agent")),
-          queryParamKeys: extractQueryParamKeys(c),
-          requestBytes: parseContentLength(c.req.header("content-length")),
-          responseBytes: parseContentLength(
-            c.res.headers.get("content-length"),
-          ),
+          ...(userAgent !== undefined ? { userAgent } : {}),
+          ...(queryParamKeys !== undefined ? { queryParamKeys } : {}),
+          ...(requestBytes !== undefined ? { requestBytes } : {}),
+          ...(responseBytes !== undefined ? { responseBytes } : {}),
         });
-      } catch {
-        /* never fail the request because tracking blew up */
+      } catch (err) {
+        // Never fail the request because tracking blew up (#579) — but
+        // do log so a misconfigured emitter doesn't silently drop every
+        // analytics event for hours.
+        logger.debug({ err }, "api.request tracking emit failed");
       }
     }
   };
@@ -183,7 +195,11 @@ function extractQueryParamKeys(c: Context): string | undefined {
   let queries: Record<string, string>;
   try {
     queries = c.req.query() as Record<string, string>;
-  } catch {
+  } catch (err) {
+    // c.req.query() throws on malformed query strings; analytics
+    // shouldn't fail the request, but record it so a regression in
+    // hono's parser doesn't silently drop every event.
+    logger.debug({ err }, "query-string parse failed in extractQueryParamKeys");
     return undefined;
   }
   const keys = Object.keys(queries);

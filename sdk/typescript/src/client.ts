@@ -41,17 +41,21 @@ interface EnvelopeSuccess<T> {
   readonly error: null;
 }
 
-interface EnvelopeFailure {
-  readonly data: null;
-  readonly error: {
-    readonly code: string;
-    readonly message: string;
-    readonly requestId?: string;
-    readonly errors?: ReadonlyArray<{ path?: string; code?: string; message: string }>;
-  };
+/**
+ * Wire shape for error responses post-#456 — RFC 7807
+ * `application/problem+json`. Fields at the body root; `error` /
+ * `data` are gone.
+ */
+interface ProblemJson {
+  readonly type?: string;
+  readonly title?: string;
+  readonly status?: number;
+  readonly code?: string;
+  readonly detail?: string;
+  readonly instance?: string;
+  readonly requestId?: string;
+  readonly errors?: ReadonlyArray<{ path?: string; code?: string; message: string }>;
 }
-
-type Envelope<T> = EnvelopeSuccess<T> | EnvelopeFailure;
 
 export class OrnnClient {
   private readonly baseUrl: string;
@@ -74,16 +78,23 @@ export class OrnnClient {
 
   // ---- Public API ----
 
-  /** Search skills. Returns paginated results with `items` + pagination meta. */
-  async search(params: SkillSearchParams = {}): Promise<SkillSearchResult> {
+  /** Search skills. Returns one page; for cross-page iteration use `searchAll()`. */
+  async search(
+    params: SkillSearchParams & { cursor?: string; limit?: number } = {},
+  ): Promise<SkillSearchResult> {
     const query = new URLSearchParams();
-    if (params.q) query.set("query", params.q);
+    // Per CONVENTIONS.md §4.1 (#586) the canonical search param is `q`.
+    if (params.q) query.set("q", params.q);
     if (params.scope) query.set("scope", params.scope);
     if (params.category) query.set("category", params.category);
     if (params.tag) query.set("tag", params.tag);
     if (params.runtime) query.set("runtime", params.runtime);
     if (params.mode) query.set("mode", params.mode);
     if (params.systemFilter) query.set("systemFilter", params.systemFilter);
+    // Cursor pagination (#457). When `cursor` is set, server uses it
+    // instead of `page`; both are still accepted for backward compat.
+    if (params.cursor !== undefined) query.set("cursor", params.cursor);
+    if (params.limit !== undefined) query.set("limit", String(params.limit));
     if (params.page !== undefined) query.set("page", String(params.page));
     if (params.pageSize !== undefined) query.set("pageSize", String(params.pageSize));
     const qs = query.toString();
@@ -91,6 +102,40 @@ export class OrnnClient {
       "GET",
       `/skill-search${qs ? `?${qs}` : ""}`,
     );
+  }
+
+  /**
+   * Auto-paginating iterator (#465). Yields every matching skill across
+   * pages; fetches the next page on demand using `meta.nextCursor`:
+   *
+   * ```ts
+   * for await (const skill of client.searchAll({ q: "pdf" })) {
+   *   console.log(skill.name);
+   * }
+   * ```
+   *
+   * Stops cleanly when the server returns `meta.hasMore === false` (or
+   * no `nextCursor`). Per-page errors surface as `OrnnError` and stop
+   * iteration — wrap in try/catch if you want to skip-and-continue.
+   */
+  async *searchAll(
+    params: SkillSearchParams & { limit?: number } = {},
+  ): AsyncIterableIterator<SkillSearchResult["items"][number]> {
+    let cursor: string | undefined;
+    // Loop guard — the server contract says nextCursor only appears
+    // when there's a next page, so this loop terminates naturally on
+    // the last page. Cap at 10k pages defensively in case a misbehaving
+    // server returns nextCursor forever; 10k pages × default limit (9)
+    // is ~90k items which exceeds every realistic registry.
+    for (let i = 0; i < 10_000; i++) {
+      const page: SkillSearchResult = await this.search(
+        cursor !== undefined ? { ...params, cursor } : params,
+      );
+      for (const item of page.items) yield item;
+      const next = page.meta?.nextCursor;
+      if (!next || page.meta?.hasMore === false) return;
+      cursor = next;
+    }
   }
 
   /** Fetch a single skill by GUID or name. */
@@ -182,11 +227,21 @@ export class OrnnClient {
     init: { body?: BodyInit; headers?: Record<string, string> } = {},
   ): Promise<T> {
     const res = await this.rawRequest(method, path, init);
-    const body = (await res.json().catch(() => null)) as Envelope<T> | null;
-    if (!res.ok || !body || body.error !== null) {
-      throw buildError(res.status, body);
+    const body = (await res.json().catch(() => null)) as unknown;
+    if (!res.ok) {
+      // Error responses are RFC 7807 (#456) — fields at the body root.
+      throw buildError(res.status, body as ProblemJson | null);
     }
-    return (body as EnvelopeSuccess<T>).data;
+    // Success responses keep the `{ data, error: null }` envelope.
+    const env = body as EnvelopeSuccess<T> | null;
+    if (!env || env.error !== null) {
+      throw new OrnnError({
+        status: res.status,
+        code: "unknown_error",
+        message: `Ornn API returned ${res.status} with an unexpected body shape`,
+      });
+    }
+    return env.data;
   }
 
   private async rawRequest(
@@ -199,10 +254,14 @@ export class OrnnClient {
     if (token) {
       headers.Authorization = `Bearer ${token}`;
     }
+    // exactOptionalPropertyTypes (#450): `RequestInit.body` is
+    // `BodyInit | null`, not optional-`undefined`. Only set the key
+    // when we actually have a body so we don't pass `body: undefined`
+    // (rejected under the stricter contract).
     return this.fetchImpl(`${this.baseUrl}/api/v1${path}`, {
       method,
-      body: init.body,
       headers,
+      ...(init.body !== undefined ? { body: init.body } : {}),
     });
   }
 }
@@ -213,25 +272,29 @@ function zipToBlob(zip: Blob | ArrayBuffer | Uint8Array): Blob {
 }
 
 async function parseError(res: Response): Promise<OrnnError> {
-  const body = (await res.json().catch(() => null)) as Envelope<unknown> | null;
+  const body = (await res.json().catch(() => null)) as ProblemJson | null;
   return buildError(res.status, body);
 }
 
-function buildError(status: number, body: Envelope<unknown> | null): OrnnError {
-  if (body && body.error) {
-    const err = body.error;
+function buildError(status: number, body: ProblemJson | null): OrnnError {
+  if (body && (body.code || body.detail || body.title)) {
+    // exactOptionalPropertyTypes (#450): only stamp `requestId` /
+    // `errors` keys when the upstream actually provided them — the
+    // payload type is `requestId?: string`, not `string | undefined`,
+    // so `{ requestId: undefined }` is a type error under the
+    // stricter contract.
     const payload: OrnnErrorPayload = {
-      status,
-      code: err.code,
-      message: err.message,
-      requestId: err.requestId,
-      errors: err.errors,
+      status: body.status ?? status,
+      code: body.code ?? "unknown_error",
+      message: body.detail ?? body.title ?? `Ornn API returned ${status}`,
+      ...(body.requestId !== undefined ? { requestId: body.requestId } : {}),
+      ...(body.errors !== undefined ? { errors: body.errors } : {}),
     };
     return new OrnnError(payload);
   }
   return new OrnnError({
     status,
     code: "unknown_error",
-    message: `Ornn API returned ${status} without a recognized error envelope`,
+    message: `Ornn API returned ${status} without a recognized error body`,
   });
 }

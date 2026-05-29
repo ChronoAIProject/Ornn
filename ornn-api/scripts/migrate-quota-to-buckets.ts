@@ -284,6 +284,28 @@ async function sumActiveGrants(
   return rows[0]?.total ?? 0;
 }
 
+/**
+ * Reads `process.env[name]` (or `fallback` when unset) and parses it as
+ * a base-10 integer. Throws if the value is not a finite, non-negative
+ * integer — `Number(env)` silently returns `NaN` on garbage input, which
+ * a migration must never write into Mongo.
+ */
+export function parseNonNegativeInt(name: string, fallback: string): number {
+  const raw = (process.env[name] ?? fallback).trim();
+  if (!/^[0-9]+$/.test(raw)) {
+    throw new Error(
+      `${name} must be a non-negative integer (got: ${JSON.stringify(raw)})`,
+    );
+  }
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || !Number.isInteger(parsed) || parsed < 0) {
+    throw new Error(
+      `${name} must be a non-negative integer (got: ${JSON.stringify(raw)})`,
+    );
+  }
+  return parsed;
+}
+
 // CLI entrypoint -----------------------------------------------------------
 if (import.meta.main) {
   const dryRun = process.argv.includes("--dry-run");
@@ -293,8 +315,8 @@ if (import.meta.main) {
     console.error("MONGODB_URI is required");
     process.exit(1);
   }
-  const defaultPlayground = Number(process.env.DEFAULT_PLAYGROUND_MONTHLY ?? "200");
-  const defaultSkillGen = Number(process.env.DEFAULT_SKILLGEN_MONTHLY ?? "20");
+  const defaultPlayground = parseNonNegativeInt("DEFAULT_PLAYGROUND_MONTHLY", "200");
+  const defaultSkillGen = parseNonNegativeInt("DEFAULT_SKILLGEN_MONTHLY", "20");
   const client = new MongoClient(uri);
   await client.connect();
   try {

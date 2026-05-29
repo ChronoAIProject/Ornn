@@ -28,7 +28,7 @@ By participating you agree to follow our [Code of Conduct](CODE_OF_CONDUCT.md) (
 
 ## Getting set up
 
-Prerequisites: [Bun](https://bun.sh), Docker, a local Kubernetes cluster for full integration runs.
+**For unit tests, lint, typecheck (most PRs):** [Bun](https://bun.sh) + Docker.
 
 ```bash
 git clone https://github.com/ChronoAIProject/Ornn.git
@@ -40,7 +40,16 @@ bun run typecheck
 bun run build:web
 ```
 
-Full local-cluster setup (MongoDB, MinIO, OpenSandbox, NyxID, Ornn services) is documented in the project `CLAUDE.md` under "Local Deployment". You do not need the full cluster to land code changes — unit tests alone are sufficient for most PRs.
+**For running the services locally (`docker compose`):**
+
+```bash
+cp .env.compose.sample .env
+docker compose up --build
+```
+
+Brings up MongoDB, MinIO, `ornn-api`, and `ornn-web`. Auth layer (NyxID) stays external — point at your own NyxID instance via env, or stick to the public endpoints (`/livez`, `/api/v1/skill-format/rules`, etc.) which work without auth. Issue #466.
+
+**For full integration runs (incl. NyxID, chrono-storage, chrono-sandbox, opensandbox):** local Kubernetes cluster. Long-form setup is in `CLAUDE.md` under "Local Deployment". You do not need the full cluster to land most PRs — unit tests + the `docker compose` stack are sufficient for the vast majority.
 
 ## Issue-first workflow
 

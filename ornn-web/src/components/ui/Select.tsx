@@ -14,10 +14,11 @@ export interface SelectOption {
 }
 
 export interface SelectProps extends React.SelectHTMLAttributes<HTMLSelectElement> {
-  label?: string;
-  error?: string;
+  // Optionals widen to `T | undefined` for exactOptionalPropertyTypes (#657).
+  label?: string | undefined;
+  error?: string | undefined;
   options: SelectOption[];
-  placeholder?: string;
+  placeholder?: string | undefined;
 }
 
 // Inline ember chevron — strokes the var(--color-accent) at runtime.

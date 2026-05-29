@@ -24,10 +24,10 @@
  */
 
 import type { Collection, Db } from "mongodb";
-import pino from "pino";
+import { createLogger } from "../../shared/logger";
 import type { UserDirectoryRepository } from "../users/repository";
 
-const logger = pino({ level: "info" }).child({ module: "adminUsersService" });
+const logger = createLogger("adminUsersService");
 
 export type Role = "admin" | "normal";
 

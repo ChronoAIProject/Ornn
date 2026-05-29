@@ -17,18 +17,17 @@ import { Skeleton } from "@/components/ui/Skeleton";
 
 export interface SectionShellProps {
   title: string;
-  description?: string;
+  // Optionals widen to `T | undefined` for exactOptionalPropertyTypes (#657).
+  description?: string | undefined;
   children: ReactNode;
-  /** Form-level error message (e.g. server validation aggregate). */
-  error?: string | null;
-  isLoading?: boolean;
-  isSaving?: boolean;
-  isDirty?: boolean;
+  error?: string | null | undefined;
+  isLoading?: boolean | undefined;
+  isSaving?: boolean | undefined;
+  isDirty?: boolean | undefined;
   onSave: () => void;
-  onReset?: () => void;
-  /** When set, render an "updated" hint under the action row. */
-  updatedAt?: string;
-  updatedBy?: string;
+  onReset?: (() => void) | undefined;
+  updatedAt?: string | undefined;
+  updatedBy?: string | undefined;
 }
 
 function formatUpdated(iso?: string): string | null {

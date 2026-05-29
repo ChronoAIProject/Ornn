@@ -16,7 +16,8 @@
  */
 
 import { Hono } from "hono";
-import pino from "pino";
+import { createLogger } from "../../../shared/logger";
+import { z } from "zod";
 import type { AuditService } from "./service";
 import type { SkillService } from "../crud/service";
 import {
@@ -28,9 +29,15 @@ import {
   requirePermission,
 } from "../../../middleware/nyxidAuth";
 import { AppError } from "../../../shared/types/index";
+import { validateBody, getValidatedBody } from "../../../middleware/validate";
 import { canReadSkill } from "../crud/authorize";
 
-const logger = pino({ level: "info" }).child({ module: "auditRoutes" });
+/** Body schema for POST /skills/:idOrName/audit + admin variant (#438). */
+const auditTriggerSchema = z.object({
+  force: z.boolean().optional(),
+});
+
+const logger = createLogger("auditRoutes");
 
 export interface AuditRoutesConfig {
   auditService: AuditService;
@@ -62,7 +69,7 @@ export function createAuditRoutes(config: AuditRoutesConfig): Hono<{ Variables: 
       const skill = await skillService.getSkill(idOrName, version);
 
       if (!authCtx && skill.isPrivate) {
-        throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${idOrName}' not found`);
+        throw AppError.notFound("skill_not_found", `Skill '${idOrName}' not found`);
       }
       if (authCtx && skill.isPrivate) {
         const memberships = await readUserOrgMemberships(c);
@@ -72,7 +79,7 @@ export function createAuditRoutes(config: AuditRoutesConfig): Hono<{ Variables: 
           isPlatformAdmin: authCtx.permissions.includes("ornn:admin:skill"),
         };
         if (!canReadSkill(skill, actor)) {
-          throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${idOrName}' not found`);
+          throw AppError.notFound("skill_not_found", `Skill '${idOrName}' not found`);
         }
       }
 
@@ -80,7 +87,7 @@ export function createAuditRoutes(config: AuditRoutesConfig): Hono<{ Variables: 
       if (!record) {
         // No audit yet — surface that as 404 so callers can distinguish
         // from a record that returned zeroes.
-        throw AppError.notFound("AUDIT_NOT_FOUND", "No audit has been run for this skill version");
+        throw AppError.notFound("audit_not_found", "No audit has been run for this skill version");
       }
       return c.json({ data: record, error: null });
     },
@@ -102,7 +109,7 @@ export function createAuditRoutes(config: AuditRoutesConfig): Hono<{ Variables: 
 
       const skill = await skillService.getSkill(idOrName);
       if (!authCtx && skill.isPrivate) {
-        throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${idOrName}' not found`);
+        throw AppError.notFound("skill_not_found", `Skill '${idOrName}' not found`);
       }
       if (authCtx && skill.isPrivate) {
         const memberships = await readUserOrgMemberships(c);
@@ -112,7 +119,7 @@ export function createAuditRoutes(config: AuditRoutesConfig): Hono<{ Variables: 
           isPlatformAdmin: authCtx.permissions.includes("ornn:admin:skill"),
         };
         if (!canReadSkill(skill, actor)) {
-          throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${idOrName}' not found`);
+          throw AppError.notFound("skill_not_found", `Skill '${idOrName}' not found`);
         }
       }
 
@@ -139,7 +146,7 @@ export function createAuditRoutes(config: AuditRoutesConfig): Hono<{ Variables: 
       const skill = await skillService.getSkill(idOrName);
 
       if (!authCtx && skill.isPrivate) {
-        throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${idOrName}' not found`);
+        throw AppError.notFound("skill_not_found", `Skill '${idOrName}' not found`);
       }
       if (authCtx && skill.isPrivate) {
         const memberships = await readUserOrgMemberships(c);
@@ -149,7 +156,7 @@ export function createAuditRoutes(config: AuditRoutesConfig): Hono<{ Variables: 
           isPlatformAdmin: authCtx.permissions.includes("ornn:admin:skill"),
         };
         if (!canReadSkill(skill, actor)) {
-          throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${idOrName}' not found`);
+          throw AppError.notFound("skill_not_found", `Skill '${idOrName}' not found`);
         }
       }
 
@@ -167,17 +174,17 @@ export function createAuditRoutes(config: AuditRoutesConfig): Hono<{ Variables: 
   app.post(
     "/skills/:idOrName/audit",
     auth,
+    validateBody(auditTriggerSchema, "invalid_audit_body"),
     async (c) => {
       const idOrName = c.req.param("idOrName");
       const authCtx = getAuth(c);
-      const body = (await c.req.json().catch(() => ({}))) as { force?: unknown };
-      const force = body.force === true;
+      const { force = false } = getValidatedBody<z.infer<typeof auditTriggerSchema>>(c);
 
       const skill = await skillService.getSkill(idOrName);
       const isPlatformAdmin = authCtx.permissions.includes("ornn:admin:skill");
       if (skill.createdBy !== authCtx.userId && !isPlatformAdmin) {
         throw AppError.forbidden(
-          "NOT_SKILL_OWNER",
+          "not_skill_owner",
           "Only the skill's author or a platform admin can start an audit",
         );
       }
@@ -200,11 +207,11 @@ export function createAuditRoutes(config: AuditRoutesConfig): Hono<{ Variables: 
     "/admin/skills/:idOrName/audit",
     auth,
     requirePermission("ornn:admin:skill"),
+    validateBody(auditTriggerSchema, "invalid_audit_body"),
     async (c) => {
       const idOrName = c.req.param("idOrName");
       const authCtx = getAuth(c);
-      const body = (await c.req.json().catch(() => ({}))) as { force?: unknown };
-      const force = body.force === true;
+      const { force = false } = getValidatedBody<z.infer<typeof auditTriggerSchema>>(c);
 
       logger.info({ idOrName, triggeredBy: authCtx.userId, force }, "Admin audit triggered");
       const record = await auditService.runAudit(idOrName, {

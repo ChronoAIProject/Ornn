@@ -28,7 +28,19 @@ jobs:
       - uses: actions/checkout@v6
       - uses: oven-sh/setup-bun@v2
       - run: bun install --frozen-lockfile
-      - run: bun run test
+      - run: bun run test:coverage
+      # Codecov upload (#471). No token needed for public repos.
+      # `directory: ./coverage` picks up the per-package lcov files
+      # that bun test --coverage writes into each workspace.
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        if: ${{ !cancelled() }}
+        with:
+          flags: bun
+          fail_ci_if_error: false
+          # Per-package lcov files land under coverage/ in each
+          # workspace; codecov-action recurses by default.
+          files: ./ornn-api/coverage/lcov.info,./ornn-web/coverage/lcov.info,./sdk/typescript/coverage/lcov.info
 
   python-sdk-test:
     runs-on: ubuntu-latest
@@ -42,9 +54,59 @@ jobs:
       - name: Install ornn-sdk (python)
         working-directory: sdk/python
         run: pip install -e ".[dev]"
-      - name: Run pytest
+      - name: Lint (ruff)
         working-directory: sdk/python
-        run: pytest -q
+        run: ruff check .
+      - name: Format check (ruff)
+        working-directory: sdk/python
+        run: ruff format --check .
+      - name: Type check (mypy)
+        working-directory: sdk/python
+        run: mypy
+      - name: Run pytest with coverage
+        working-directory: sdk/python
+        run: pytest -q --cov=src/ornn_sdk --cov-report=xml --cov-report=term
+      # Codecov upload (#471) — same as the bun job but for the
+      # Python SDK's coverage.xml.
+      - name: Upload Python coverage to Codecov
+        uses: codecov/codecov-action@v4
+        if: ${{ !cancelled() }}
+        with:
+          flags: python
+          fail_ci_if_error: false
+          files: ./sdk/python/coverage.xml
+
+  # Audit the Python SDK's transitive deps for known CVEs (#445).
+  # We install the runtime deps directly (httpx + dev tools) rather
+  # than `pip install -e .` because pip-audit refuses editable
+  # installs of packages that aren't on PyPI yet (ornn-sdk is held
+  # for v1 per #473). The audit walks the resolved env via the OSV
+  # database — transitive deps (h11, anyio, certifi, idna, …) are
+  # all covered.
+  python-sdk-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Install runtime + dev deps directly
+        working-directory: sdk/python
+        # Read the bounds from pyproject.toml without installing
+        # ornn-sdk itself. tomllib is stdlib in 3.11+; we're on 3.12.
+        run: |
+          python -c "
+          import tomllib, subprocess, sys
+          cfg = tomllib.load(open('pyproject.toml', 'rb'))
+          deps = cfg['project']['dependencies']
+          deps += cfg['project']['optional-dependencies']['dev']
+          subprocess.check_call([sys.executable, '-m', 'pip', 'install', *deps])
+          "
+          pip install pip-audit
+      - name: Audit dependencies
+        working-directory: sdk/python
+        # `--strict` fails on any known CVE in the installed env.
+        run: pip-audit --strict
 
   build:
     runs-on: ubuntu-latest

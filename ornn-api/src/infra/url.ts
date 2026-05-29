@@ -79,7 +79,10 @@ interface Cidr {
 }
 
 function parseCidr(spec: string): Cidr | null {
-  const [hostPart, bitsPart] = spec.split("/");
+  // `split("/")` always yields at least one element; if `spec` has no
+  // `/`, hostPart is the whole string and bitsPart is undefined. `!`
+  // is safe under noUncheckedIndexedAccess (#450).
+  const [hostPart, bitsPart] = spec.split("/") as [string, string | undefined];
   const base = parseIpv4(hostPart);
   if (base === null) return null;
   const maskBits = bitsPart ? Number(bitsPart) : 32;
@@ -122,13 +125,18 @@ export function isPrivateHost(host: string): boolean {
     if (h.startsWith("fe80:") || h.startsWith("fe80::")) return true;
     // `fc00::/7` covers `fc00::` through `fdff::`.
     if (h.startsWith("fc") || h.startsWith("fd")) {
-      const first = h.split(":")[0];
+      // split(":")[0] is the substring before the first ":" (always
+      // present when split runs). `!` is safe under
+      // noUncheckedIndexedAccess (#450).
+      const first = h.split(":")[0]!;
       if (/^f[cd][0-9a-f]{0,2}$/.test(first)) return true;
     }
     // `::ffff:<v4>` mapped form.
     const mapped = h.match(/^::ffff:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/);
     if (mapped) {
-      const ip = parseIpv4(mapped[1]);
+      // The regex has one capture group; if it matched, group 1 is
+      // present. `!` is safe under noUncheckedIndexedAccess (#450).
+      const ip = parseIpv4(mapped[1]!);
       if (ip === null) return true; // malformed — reject conservatively
       return PRIVATE_CIDRS.some((c) => ipv4InCidr(ip, c));
     }

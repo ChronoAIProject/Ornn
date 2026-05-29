@@ -8,7 +8,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { MongoMemoryServer } from "mongodb-memory-server";
 import { MongoClient, type Db } from "mongodb";
-import { migrate } from "./migrate-quota-to-buckets";
+import { migrate, parseNonNegativeInt } from "./migrate-quota-to-buckets";
 
 let mongo: MongoMemoryServer;
 let client: MongoClient;
@@ -256,5 +256,61 @@ describe("IT-QUOTA-MIGRATION end-to-end seeded old world", () => {
     expect(report.archivedGrants).toBe(1);
     expect(notifier.calls.length).toBe(1);
     expect(notifier.calls[0].targetUserId).toBe("u1");
+  });
+});
+
+describe("parseNonNegativeInt — fail-fast on garbage env input (#447)", () => {
+  const ENV_NAME = "ORNN_TEST_INT";
+
+  afterAll(() => {
+    delete process.env[ENV_NAME];
+  });
+
+  beforeEach(() => {
+    delete process.env[ENV_NAME];
+  });
+
+  test("uses fallback when env var is unset", () => {
+    expect(parseNonNegativeInt(ENV_NAME, "200")).toBe(200);
+  });
+
+  test("parses a valid integer", () => {
+    process.env[ENV_NAME] = "42";
+    expect(parseNonNegativeInt(ENV_NAME, "0")).toBe(42);
+  });
+
+  test("trims surrounding whitespace", () => {
+    process.env[ENV_NAME] = "  17  ";
+    expect(parseNonNegativeInt(ENV_NAME, "0")).toBe(17);
+  });
+
+  test("accepts zero", () => {
+    process.env[ENV_NAME] = "0";
+    expect(parseNonNegativeInt(ENV_NAME, "99")).toBe(0);
+  });
+
+  test("rejects non-numeric input", () => {
+    process.env[ENV_NAME] = "abc";
+    expect(() => parseNonNegativeInt(ENV_NAME, "200")).toThrow(/must be a non-negative integer/);
+  });
+
+  test("rejects trailing garbage that Number(env) would silently truncate", () => {
+    process.env[ENV_NAME] = "200abc";
+    expect(() => parseNonNegativeInt(ENV_NAME, "0")).toThrow(/must be a non-negative integer/);
+  });
+
+  test("rejects negative values", () => {
+    process.env[ENV_NAME] = "-1";
+    expect(() => parseNonNegativeInt(ENV_NAME, "0")).toThrow(/must be a non-negative integer/);
+  });
+
+  test("rejects fractional values", () => {
+    process.env[ENV_NAME] = "1.5";
+    expect(() => parseNonNegativeInt(ENV_NAME, "0")).toThrow(/must be a non-negative integer/);
+  });
+
+  test("rejects empty string", () => {
+    process.env[ENV_NAME] = "";
+    expect(() => parseNonNegativeInt(ENV_NAME, "200")).toThrow(/must be a non-negative integer/);
   });
 });

@@ -5,12 +5,15 @@ import { Badge } from "@/components/ui/Badge";
 import type { BadgeProps } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import type { SkillSearchResult } from "@/types/search";
+import { useMyOrgs } from "@/hooks/useMe";
 
 const TAG_COLORS: NonNullable<BadgeProps["color"]>[] = ["cyan", "magenta", "yellow", "green"];
 
 function getTagColor(tag: string): NonNullable<BadgeProps["color"]> {
   const hash = tag.split("").reduce((a, c) => a + c.charCodeAt(0), 0);
-  return TAG_COLORS[hash % TAG_COLORS.length];
+  // `hash % TAG_COLORS.length` is always in-range for a non-empty
+  // array. `!` is safe under noUncheckedIndexedAccess (#450).
+  return TAG_COLORS[hash % TAG_COLORS.length]!;
 }
 
 /** Format a date string to exact SGT (Asia/Singapore) timestamp */
@@ -30,19 +33,14 @@ function formatDateSGT(dateStr: string): string {
 
 export interface SkillCardProps {
   skill: SkillSearchResult;
-  /** Show status badge and toggle (for My Skills page) */
-  showOwnerControls?: boolean;
-  /** Current user ID to check ownership */
-  currentUserId?: string;
-  /** Display name to show instead of user ID */
-  ownerDisplayName?: string;
-  /** Avatar URL */
-  ownerAvatarUrl?: string | null;
-  /** Callback when edit is clicked */
-  onEdit?: (skill: SkillSearchResult) => void;
-  /** Callback when delete is clicked */
-  onDelete?: (skill: SkillSearchResult) => void;
-  className?: string;
+  // Optionals widen to `T | undefined` for exactOptionalPropertyTypes (#657).
+  showOwnerControls?: boolean | undefined;
+  currentUserId?: string | undefined;
+  ownerDisplayName?: string | undefined;
+  ownerAvatarUrl?: string | null | undefined;
+  onEdit?: ((skill: SkillSearchResult) => void) | undefined;
+  onDelete?: ((skill: SkillSearchResult) => void) | undefined;
+  className?: string | undefined;
 }
 
 /**
@@ -53,8 +51,11 @@ export interface SkillCardProps {
  * `permissionSummary` which the backend computes per-request.
  */
 function PermissionBadges({ skill }: { skill: SkillSearchResult }) {
+  // Reach `t` via the parent's hook context — the badge labels are
+  // short visible UI strings (#682) and must localize.
+  const { t } = useTranslation();
   if (!skill.isPrivate) {
-    return <Badge color="green">🌐 Public</Badge>;
+    return <Badge color="green">🌐 {t("common.public")}</Badge>;
   }
   const ps = skill.permissionSummary;
   const userCount = ps?.sharedUserCount ?? 0;
@@ -62,7 +63,7 @@ function PermissionBadges({ skill }: { skill: SkillSearchResult }) {
   const hasGrants = userCount > 0 || orgCount > 0;
   return (
     <>
-      {!hasGrants && <Badge color="cyan">🔒 Private</Badge>}
+      {!hasGrants && <Badge color="cyan">🔒 {t("common.private")}</Badge>}
       {userCount > 0 && <Badge color="magenta">👥 {userCount}</Badge>}
       {orgCount > 0 && <Badge color="cyan">🏢 {orgCount}</Badge>}
     </>
@@ -101,6 +102,18 @@ export function SkillCard({
   const displayName = ownerDisplayName || skill.createdByDisplayName || skill.createdByEmail || skill.createdBy;
   const timestamp = skill.updatedOn || skill.createdOn;
 
+  // #729 — resolve the specific org that granted access for
+  // `shared-via-org` cards. The skill carries `sharedViaOrgId`; the
+  // current user's NyxID memberships carry display names. Match on
+  // `userId` (NyxID org ids are NyxID user ids). Falls back to the
+  // generic "Via organization" label when the lookup misses (org is
+  // not in the caller's memberships, or the orgs query is loading).
+  const { data: myOrgs } = useMyOrgs();
+  const viaOrgName =
+    skill.myAccessReason === "shared-via-org" && skill.sharedViaOrgId
+      ? myOrgs?.find((o) => o.userId === skill.sharedViaOrgId)?.displayName
+      : undefined;
+
   return (
     <Card
       hoverable
@@ -138,12 +151,16 @@ export function SkillCard({
           `myAccessReason` with a grant-based value. */}
       {skill.myAccessReason === "shared-via-org" && (
         <p className="mb-2 font-text text-[11px] uppercase tracking-wider text-meta">
-          Via organization
+          {viaOrgName
+            ? t("skillComponents.card.viaOrganizationNamed", "Via {{org}}", {
+                org: viaOrgName,
+              })
+            : t("skillComponents.card.viaOrganization", "Via organization")}
         </p>
       )}
       {skill.myAccessReason === "shared-direct" && (
         <p className="mb-2 font-text text-[11px] uppercase tracking-wider text-meta">
-          Shared by {displayName}
+          {t("skillComponents.card.sharedBy", "Shared by {{name}}", { name: displayName })}
         </p>
       )}
 

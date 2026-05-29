@@ -30,6 +30,37 @@ export interface ZipValidationResult {
 /** Recognized top-level directories in a skill package */
 const RECOGNIZED_DIRS = new Set(["scripts", "references", "assets"]);
 
+/**
+ * Cumulative uncompressed-size cap for a skill ZIP (#443). 50 MB is
+ * larger than any plausible legit skill package today; it caps zip-
+ * bomb expansion before we try to decompress every entry into memory.
+ */
+export const MAX_TOTAL_UNCOMPRESSED_BYTES = 50 * 1024 * 1024;
+
+/**
+ * Explicit zip-slip / unsafe-path predicate (#443). JSZip handles
+ * traversal internally for `.file()` lookups, but the validator's path
+ * logic is string-prefix based; if JSZip's protection ever lapses or
+ * we switch unzip library, the existing code would happily resolve
+ * `../escape.txt` outside the skill directory. Cheap, explicit defence:
+ *
+ *   - reject any segment equal to `..`
+ *   - reject any path that starts with `/` (absolute) or contains `:`
+ *     (Windows drive prefix — `C:\\evil.bat`)
+ *   - reject backslash anywhere (PKZip allows them; some tooling treats
+ *     them as path separators after extraction)
+ */
+function isUnsafeEntryPath(rawPath: string): boolean {
+  if (rawPath.startsWith("/")) return true;
+  if (rawPath.includes("\\")) return true;
+  if (/^[A-Za-z]:/.test(rawPath)) return true;
+  const segments = rawPath.split("/");
+  for (const seg of segments) {
+    if (seg === "..") return true;
+  }
+  return false;
+}
+
 /** OS-generated junk files to filter out */
 const JUNK_FILE_NAMES = new Set([
   ".DS_Store",
@@ -86,7 +117,10 @@ export function isBinaryContent(content: Uint8Array): boolean {
  * Determines the skill folder for a given file path.
  */
 function getFolder(path: string): SkillFolder {
-  const firstSegment = path.split("/")[0];
+  // `split("/")[0]` is always present — it's the substring before the
+  // first `/`, or the whole string when there's no separator. `!` is
+  // safe under noUncheckedIndexedAccess (#450).
+  const firstSegment = path.split("/")[0]!;
   if (RECOGNIZED_DIRS.has(firstSegment)) {
     return firstSegment as SkillFolder;
   }
@@ -108,11 +142,13 @@ function normalizeEntries(
   // the ZIP wraps everything in a single root folder
   if (
     topLevelEntries.length === 1 &&
-    topLevelEntries[0].dir
+    topLevelEntries[0]!.dir
   ) {
-    const prefix = topLevelEntries[0].path.endsWith("/")
-      ? topLevelEntries[0].path
-      : topLevelEntries[0].path + "/";
+    // Length-guarded above (`topLevelEntries.length === 1`) — index 0
+    // is guaranteed defined. `!` is safe under
+    // noUncheckedIndexedAccess (#450).
+    const entry = topLevelEntries[0]!;
+    const prefix = entry.path.endsWith("/") ? entry.path : entry.path + "/";
 
     const normalized = entries
       .filter((e) => e.path !== prefix && e.path.startsWith(prefix))
@@ -152,12 +188,59 @@ export async function validateSkillZip(
     };
   }
 
-  // Collect all entries, filtering out OS junk files
+  // Collect all entries, filtering out OS junk files. Reject any entry
+  // whose path tries to escape the skill directory (#443) and bail
+  // when the cumulative uncompressed size exceeds the cap. Both checks
+  // run during forEach so we never enter the extraction loop on a
+  // hostile ZIP.
   const rawEntries: Array<{ path: string; dir: boolean }> = [];
+  let unsafePath: string | null = null;
+  let totalUncompressed = 0;
   zip.forEach((relativePath, entry) => {
     if (isJunkPath(relativePath)) return;
+    if (isUnsafeEntryPath(relativePath)) {
+      unsafePath = relativePath;
+      return;
+    }
+    // JSZip exposes uncompressed size through `_data.uncompressedSize`
+    // on the internal CompressedObject. Public API doesn't surface it
+    // pre-decompression; this is the only way to refuse a zip-bomb
+    // without first decompressing it.
+    const entryWithInternal = entry as unknown as {
+      _data?: { uncompressedSize?: number };
+    };
+    const uncompressed = entryWithInternal._data?.uncompressedSize ?? 0;
+    totalUncompressed += uncompressed;
     rawEntries.push({ path: relativePath, dir: entry.dir });
   });
+
+  if (unsafePath !== null) {
+    return {
+      status: "invalid",
+      files: [],
+      metadata: null,
+      errors: [{ key: "errors.zip.unsafePath", params: { path: unsafePath } }],
+      warnings: [],
+    };
+  }
+
+  if (totalUncompressed > MAX_TOTAL_UNCOMPRESSED_BYTES) {
+    return {
+      status: "invalid",
+      files: [],
+      metadata: null,
+      errors: [
+        {
+          key: "errors.zip.uncompressedTooLarge",
+          params: {
+            actual: totalUncompressed,
+            max: MAX_TOTAL_UNCOMPRESSED_BYTES,
+          },
+        },
+      ],
+      warnings: [],
+    };
+  }
 
   const { normalized, prefix } = normalizeEntries(rawEntries);
 
@@ -185,7 +268,9 @@ export async function validateSkillZip(
     if (entry.dir && !entry.path.includes("/")) {
       topDirs.add(entry.path.replace("/", ""));
     } else if (!entry.dir && entry.path.includes("/")) {
-      const firstDir = entry.path.split("/")[0];
+      // `split("/")[0]` is always present when the string contains
+      // "/". `!` is safe under noUncheckedIndexedAccess (#450).
+      const firstDir = entry.path.split("/")[0]!;
       topDirs.add(firstDir);
     }
   }

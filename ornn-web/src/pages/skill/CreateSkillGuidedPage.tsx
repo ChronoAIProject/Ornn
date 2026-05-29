@@ -7,7 +7,7 @@
 
 import { useState, useCallback, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { useForm } from "react-hook-form";
+import { useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { AnimatePresence } from "framer-motion";
 import { PageTransition } from "@/components/layout/PageTransition";
@@ -26,7 +26,7 @@ import { useAuthStore } from "@/stores/authStore";
 import { track } from "@/lib/analytics";
 import { buildSkillMd } from "@/utils/frontmatterBuilder";
 import { buildFileTreeFromFolders, readUploadedFileContents } from "@/utils/fileTreeBuilder";
-import { basicInfoSchema, contentSchema, type BasicInfoData, type BasicInfoInput, type ContentData, type ContentInput } from "@/utils/skillCreateSchemas";
+import { basicInfoSchema, contentSchema, makeBasicInfoSchema, makeContentSchema, type BasicInfoData, type BasicInfoInput, type ContentData, type ContentInput } from "@/utils/skillCreateSchemas";
 import type { FileNode } from "@/components/editor/FileTree";
 import type { SkillMetadata, SkillMetadataBlock, UploadableFolder } from "@/types/skillPackage";
 import { createDefaultSkillMetadata } from "@/types/skillPackage";
@@ -120,9 +120,30 @@ export function CreateSkillGuidedPage() {
     new Map(),
   );
 
-  // Basic info form (nested metadata)
+  // Schemas are rebuilt per-`t` so a language switch refreshes the
+  // validation messages (#695). `t` is cast because react-i18next's
+  // overloaded TFunction doesn't structurally match the simple
+  // signature `makeXSchema` accepts. The resulting schema is cast to
+  // the static schema type so `zodResolver`'s precise typing on the
+  // existing `basicInfoSchema` / `contentSchema` exports keeps working
+  // — at runtime the localized factory is what produces error
+  // messages.
+  const tx = t as unknown as (key: string) => string;
+  const basicInfoSchemaLocalized = useMemo(
+    () => makeBasicInfoSchema(tx) as typeof basicInfoSchema,
+    [tx],
+  );
+  const contentSchemaLocalized = useMemo(
+    () => makeContentSchema(tx) as typeof contentSchema,
+    [tx],
+  );
+
   const basicInfoForm = useForm<BasicInfoInput, unknown, BasicInfoData>({
-    resolver: zodResolver(basicInfoSchema),
+    // Cast: zodResolver infers a slightly different Resolver shape
+    // from the factory's return type; structurally identical to the
+    // one inferred from the static `basicInfoSchema`, which the
+    // pre-#695 code used here directly.
+    resolver: zodResolver(basicInfoSchemaLocalized) as Resolver<BasicInfoInput, unknown, BasicInfoData>,
     defaultValues: {
       name: formData.name,
       description: formData.description,
@@ -141,7 +162,7 @@ export function CreateSkillGuidedPage() {
 
   // Content form
   const contentForm = useForm<ContentInput, unknown, ContentData>({
-    resolver: zodResolver(contentSchema),
+    resolver: zodResolver(contentSchemaLocalized) as Resolver<ContentInput, unknown, ContentData>,
     defaultValues: {
       readmeMd: formData.readmeMd,
     },
@@ -354,7 +375,10 @@ export function CreateSkillGuidedPage() {
           <CompactStepIndicator
             currentStep={currentStep}
             totalSteps={translatedSteps.length}
-            currentLabel={translatedSteps[currentStep].label}
+            // `currentStep` is bounded by `translatedSteps.length`
+            // (`setCurrentStep` clamps in handlers above). `!` is safe
+            // under noUncheckedIndexedAccess (#450).
+            currentLabel={translatedSteps[currentStep]!.label}
           />
         </div>
 

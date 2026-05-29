@@ -15,10 +15,10 @@
 
 import type { Context, Next } from "hono";
 import { createMiddleware } from "hono/factory";
-import pino from "pino";
+import { createLogger } from "../shared/logger";
 import { AppError } from "../shared/types/index";
 
-const logger = pino({ level: "info" }).child({ module: "nyxidAuth" });
+const logger = createLogger("nyxidAuth");
 
 // ---------------------------------------------------------------------------
 // Types
@@ -99,7 +99,9 @@ function decodeJwtPayload(token: string): IdentityAssertionPayload | null {
   try {
     const parts = token.split(".");
     if (parts.length !== 3) return null;
-    const payload = Buffer.from(parts[1], "base64url").toString("utf-8");
+    // Length-checked above — parts[1] is guaranteed defined. `!` is
+    // safe under noUncheckedIndexedAccess (#450).
+    const payload = Buffer.from(parts[1]!, "base64url").toString("utf-8");
     return JSON.parse(payload) as IdentityAssertionPayload;
   } catch (e) {
     logger.warn({ error: (e as Error).message }, "Failed to decode identity token");
@@ -161,13 +163,14 @@ export function proxyAuthSetup(options: ProxyAuthSetupOptions = {}) {
       const payload = decodeJwtPayload(identityToken);
       if (payload?.sub) {
         const email = payload.email ?? "";
+        // exactOptionalPropertyTypes (#657)
         const auth: AuthContext = {
           userId: payload.sub,
           email,
           displayName: payload.name ?? email ?? payload.sub,
           roles: payload.roles ?? [],
           permissions: payload.permissions ?? [],
-          userAccessToken,
+          ...(userAccessToken !== undefined ? { userAccessToken } : {}),
         };
         c.set("auth", auth);
         try {
@@ -185,13 +188,14 @@ export function proxyAuthSetup(options: ProxyAuthSetupOptions = {}) {
     const userId = c.req.header("X-NyxID-User-Id");
     if (userId) {
       const email = c.req.header("X-NyxID-User-Email") ?? "";
+      // exactOptionalPropertyTypes (#657)
       const auth: AuthContext = {
         userId,
         email,
         displayName: c.req.header("X-NyxID-User-Name") ?? email ?? userId,
         roles: [],
         permissions: [],
-        userAccessToken,
+        ...(userAccessToken !== undefined ? { userAccessToken } : {}),
       };
       c.set("auth", auth);
       try {
@@ -217,7 +221,7 @@ export function nyxidAuthMiddleware() {
   return createMiddleware<{ Variables: AuthVariables }>(async (c, next) => {
     const auth = c.get("auth");
     if (!auth) {
-      throw new AppError(401, "AUTH_MISSING", "Authentication required");
+      throw new AppError(401, "auth_missing", "Authentication required");
     }
     await next();
   });
@@ -243,13 +247,13 @@ export function requirePermission(...required: string[]) {
   return async (c: Context<{ Variables: AuthVariables }>, next: Next) => {
     const auth = c.get("auth");
     if (!auth) {
-      throw new AppError(401, "AUTH_MISSING", "Not authenticated");
+      throw new AppError(401, "auth_missing", "Not authenticated");
     }
 
     for (const perm of required) {
       if (!auth.permissions.includes(perm)) {
         logger.warn({ userId: auth.userId, missing: perm }, "Permission denied");
-        throw new AppError(403, "FORBIDDEN", `Missing permission: ${perm}`);
+        throw new AppError(403, "forbidden", `Missing permission: ${perm}`);
       }
     }
 
@@ -264,12 +268,12 @@ export function requireOwnerOrAdmin(getResourceOwnerId: (c: Context) => Promise<
   return async (c: Context<{ Variables: AuthVariables }>, next: Next) => {
     const auth = c.get("auth");
     if (!auth) {
-      throw new AppError(401, "AUTH_MISSING", "Not authenticated");
+      throw new AppError(401, "auth_missing", "Not authenticated");
     }
 
     const ownerId = await getResourceOwnerId(c);
     if (auth.userId !== ownerId && !auth.permissions.includes("ornn:admin:skill")) {
-      throw new AppError(403, "FORBIDDEN", "You can only operate on your own resources");
+      throw new AppError(403, "forbidden", "You can only operate on your own resources");
     }
 
     await next();
@@ -282,7 +286,7 @@ export function requireOwnerOrAdmin(getResourceOwnerId: (c: Context) => Promise<
 export function getAuth(c: Context<{ Variables: AuthVariables }>): AuthContext {
   const auth = c.get("auth");
   if (!auth) {
-    throw new AppError(401, "AUTH_MISSING", "Not authenticated");
+    throw new AppError(401, "auth_missing", "Not authenticated");
   }
   return auth;
 }

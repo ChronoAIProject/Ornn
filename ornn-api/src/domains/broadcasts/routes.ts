@@ -27,7 +27,8 @@ import {
   nyxidAuthMiddleware,
   requirePermission,
 } from "../../middleware/nyxidAuth";
-import { AppError } from "../../shared/types/index";
+import { z } from "zod";
+import { validateBody, getValidatedBody } from "../../middleware/validate";
 import { createBroadcastSchema, patchBroadcastSchema } from "./schemas";
 import type { BroadcastService } from "./service";
 
@@ -50,47 +51,49 @@ export function createBroadcastRoutes(
     return c.json({ data: { items }, error: null });
   });
 
-  app.post("/admin/broadcasts", auth, adminGuard, async (c) => {
-    const authCtx = getAuth(c);
-    const body = await c.req.json().catch(() => ({}));
-    const parsed = createBroadcastSchema.safeParse(body);
-    if (!parsed.success) {
-      throw AppError.badRequest(
-        "INVALID_BROADCAST_INPUT",
-        parsed.error.issues
-          .map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`)
-          .join("; "),
-      );
-    }
-    const created = await broadcastService.create({
-      titleI18n: parsed.data.titleI18n,
-      bodyMarkdownI18n: parsed.data.bodyMarkdownI18n,
-      createdBy: authCtx.userId,
-      recipientUserIds: parsed.data.recipientUserIds,
-    });
-    return c.json({ data: created, error: null }, 201);
-  });
+  app.post(
+    "/admin/broadcasts",
+    auth,
+    adminGuard,
+    validateBody(createBroadcastSchema, "invalid_broadcast_input"),
+    async (c) => {
+      const authCtx = getAuth(c);
+      const data = getValidatedBody<z.infer<typeof createBroadcastSchema>>(c);
+      const created = await broadcastService.create({
+        titleI18n: data.titleI18n,
+        bodyMarkdownI18n: data.bodyMarkdownI18n,
+        createdBy: authCtx.userId,
+        // exactOptionalPropertyTypes (#657)
+        ...(data.recipientUserIds !== undefined
+          ? { recipientUserIds: data.recipientUserIds }
+          : {}),
+      });
+      // 201 + Location per CONVENTIONS.md §3.2 (#458).
+      c.header("Location", `/api/v1/admin/broadcasts/${created.id}`);
+      return c.json({ data: created, error: null }, 201);
+    },
+  );
 
-  app.patch("/admin/broadcasts/:id", auth, adminGuard, async (c) => {
-    const authCtx = getAuth(c);
-    const id = c.req.param("id");
-    const body = await c.req.json().catch(() => ({}));
-    const parsed = patchBroadcastSchema.safeParse(body);
-    if (!parsed.success) {
-      throw AppError.badRequest(
-        "INVALID_BROADCAST_INPUT",
-        parsed.error.issues
-          .map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`)
-          .join("; "),
-      );
-    }
-    const updated = await broadcastService.update(id, {
-      titleI18n: parsed.data.titleI18n,
-      bodyMarkdownI18n: parsed.data.bodyMarkdownI18n,
-      updatedBy: authCtx.userId,
-    });
-    return c.json({ data: updated, error: null });
-  });
+  app.patch(
+    "/admin/broadcasts/:id",
+    auth,
+    adminGuard,
+    validateBody(patchBroadcastSchema, "invalid_broadcast_input"),
+    async (c) => {
+      const authCtx = getAuth(c);
+      const id = c.req.param("id");
+      const data = getValidatedBody<z.infer<typeof patchBroadcastSchema>>(c);
+      const updated = await broadcastService.update(id, {
+        // exactOptionalPropertyTypes (#657)
+        ...(data.titleI18n !== undefined ? { titleI18n: data.titleI18n } : {}),
+        ...(data.bodyMarkdownI18n !== undefined
+          ? { bodyMarkdownI18n: data.bodyMarkdownI18n }
+          : {}),
+        updatedBy: authCtx.userId,
+      });
+      return c.json({ data: updated, error: null });
+    },
+  );
 
   app.delete("/admin/broadcasts/:id", auth, adminGuard, async (c) => {
     const id = c.req.param("id");

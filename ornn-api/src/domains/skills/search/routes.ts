@@ -8,6 +8,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import type { SearchService } from "./service";
 import type { SkillRepository } from "../crud/repository";
+import type { NyxidServiceClient } from "../../../clients/nyxid/service";
 import {
   type AuthVariables,
   nyxidAuthMiddleware,
@@ -17,16 +18,31 @@ import {
 } from "../../../middleware/nyxidAuth";
 import { validateQuery, getValidatedQuery } from "../../../middleware/validate";
 import { AppError } from "../../../shared/types/index";
-import pino from "pino";
-
-const logger = pino({ level: "info" }).child({ module: "skillSearchRoutes" });
+import { createLogger } from "../../../shared/logger";
+import { decodeCursor, buildNextCursor } from "../../../shared/cursor";
+import { rateLimit } from "../../../middleware/rateLimit";
+const logger = createLogger("skillSearchRoutes");
 
 const searchQuerySchema = z.object({
-  query: z.string().max(2000).optional().default(""),
+  // Canonical search param is `q` per CONVENTIONS.md §4.1 (#586).
+  // The legacy `query` is still parsed for the duration of the alpha
+  // grace window — clients on the old SDK keep working until they
+  // upgrade. `q` wins when both are present.
+  q: z.string().max(2000).optional(),
+  query: z.string().max(2000).optional(),
   mode: z.enum(["keyword", "semantic"]).optional().default("keyword"),
   scope: z.enum(["public", "private", "mixed", "shared-with-me", "mine"]).optional().default("private"),
   page: z.coerce.number().int().min(1).optional().default(1),
   pageSize: z.coerce.number().int().min(1).max(100).optional().default(9),
+  /**
+   * Cursor-based pagination per CONVENTIONS.md §4.3 (#457). Opaque
+   * base64-JSON token returned by previous response's `meta.nextCursor`.
+   * When set, takes precedence over `page` (same `pageSize` still
+   * applies). Backward-compat: callers may still send `page=N` until
+   * the offset shape is sunset.
+   */
+  cursor: z.string().max(2048).optional(),
+  limit: z.coerce.number().int().min(1).max(100).optional(),
   model: z.string().optional(),
   /** System-skill tri-state filter. `any` (default) keeps all; `only`
    *  restricts to skills tied to an admin/platform NyxID service
@@ -54,10 +70,19 @@ function parseCsv(raw: string | undefined): string[] | undefined {
 export interface SearchRoutesConfig {
   searchService: SearchService;
   skillRepo: SkillRepository;
+  /**
+   * NyxID catalog client + SA-token accessor. Used by
+   * `/skill-facets/system-services` to drop services NyxID has
+   * deactivated since the skill's `nyxidServiceId` was cached (#715).
+   * Optional so test wiring can omit the live filter; when omitted
+   * the facet returns the raw DB aggregation (pre-#715 behaviour).
+   */
+  nyxidServiceClient?: NyxidServiceClient;
+  getSaAccessToken?: () => Promise<string>;
 }
 
 export function createSearchRoutes(config: SearchRoutesConfig): Hono<{ Variables: AuthVariables }> {
-  const { searchService, skillRepo } = config;
+  const { searchService, skillRepo, nyxidServiceClient, getSaAccessToken } = config;
   const app = new Hono<{ Variables: AuthVariables }>();
 
   const optionalAuth = optionalAuthMiddleware();
@@ -72,10 +97,32 @@ export function createSearchRoutes(config: SearchRoutesConfig): Hono<{ Variables
   app.get(
     "/skill-search",
     optionalAuth,
-    validateQuery(searchQuerySchema, "INVALID_QUERY"),
+    // Rate limit (#439): keyword search hits Mongo (cheap), semantic
+    // hits an LLM (paid). One generous cap covers both — the hot path
+    // is the keyword scope, and the semantic gate inside `searchService`
+    // already requires auth so the per-user key matters. RFC 9239
+    // headers go out on every response (#460).
+    rateLimit({ windowMs: 60_000, max: 60, label: "skill-search" }),
+    validateQuery(searchQuerySchema, "invalid_query"),
     async (c) => {
       const parsed = getValidatedQuery<z.infer<typeof searchQuerySchema>>(c);
-      const { query, mode, page, pageSize, model, systemFilter } = parsed;
+      // q wins; legacy `query` is the fallback for un-upgraded clients (#586).
+      const query = parsed.q ?? parsed.query ?? "";
+      const { mode, model, systemFilter } = parsed;
+      // Cursor pagination (#457). `cursor` wins over `page` when both
+      // are sent. `limit` aliases `pageSize` per CONVENTIONS.md §4.3.
+      const pageSize = parsed.limit ?? parsed.pageSize;
+      let page = parsed.page;
+      if (parsed.cursor !== undefined) {
+        const decoded = decodeCursor(parsed.cursor);
+        if (!decoded) {
+          throw AppError.badRequest(
+            "invalid_cursor",
+            "The provided cursor is malformed or from a previous API version.",
+          );
+        }
+        page = decoded.page;
+      }
       const authCtx = c.get("auth");
       const isAnonymous = !authCtx;
 
@@ -120,7 +167,28 @@ export function createSearchRoutes(config: SearchRoutesConfig): Hono<{ Variables
         tagsAll: parseCsv(parsed.tags),
       });
 
-      return c.json({ data: response, error: null });
+      // Augment the legacy response shape with the cursor envelope
+      // per CONVENTIONS.md §4.3 (#457). `data.items` + `data.meta`
+      // are the canonical fields going forward; the existing
+      // `total/totalPages/page/pageSize/items` keys stay alongside
+      // for backward compat until they're sunset.
+      const itemsReturned = response.items.length;
+      const meta = {
+        limit: pageSize,
+        hasMore: itemsReturned >= pageSize && response.page * pageSize < response.total,
+        nextCursor: buildNextCursor({
+          currentPage: response.page,
+          pageSize,
+          itemsReturned,
+        }),
+      };
+      return c.json({
+        data: {
+          ...response,
+          meta,
+        },
+        error: null,
+      });
     },
   );
 
@@ -148,7 +216,7 @@ export function createSearchRoutes(config: SearchRoutesConfig): Hono<{ Variables
     const scopeRaw = (c.req.query("scope") || "public") as string;
     const allowed = ["public", "private", "mixed", "shared-with-me", "mine", "system"] as const;
     if (!(allowed as readonly string[]).includes(scopeRaw)) {
-      throw AppError.badRequest("INVALID_SCOPE", `Unknown scope '${scopeRaw}'`);
+      throw AppError.badRequest("invalid_scope", `Unknown scope '${scopeRaw}'`);
     }
     const scope = scopeRaw as (typeof allowed)[number];
     if ((scope === "mine" || scope === "shared-with-me") && !authCtx) {
@@ -177,7 +245,7 @@ export function createSearchRoutes(config: SearchRoutesConfig): Hono<{ Variables
     const allowed = ["public", "shared-with-me", "system", "mixed"] as const;
     if (!(allowed as readonly string[]).includes(scopeRaw)) {
       throw AppError.badRequest(
-        "INVALID_SCOPE",
+        "invalid_scope",
         `Unknown or unsupported scope '${scopeRaw}' for authors facet`,
       );
     }
@@ -203,6 +271,28 @@ export function createSearchRoutes(config: SearchRoutesConfig): Hono<{ Variables
    */
   app.get("/skill-facets/system-services", optionalAuth, async (c) => {
     const items = await skillRepo.aggregateSystemServices();
+
+    // Cross-check against NyxID's live active set (#715). The DB
+    // aggregation snapshots the service id/slug/label that was current
+    // when each skill was last bound, so a service NyxID has since
+    // deactivated still shows up here even though it's no longer
+    // bindable or usable. Drop those.
+    if (nyxidServiceClient && getSaAccessToken) {
+      try {
+        const saToken = await getSaAccessToken();
+        const activeIds = await nyxidServiceClient.listActiveServiceIdsAsPlatform(saToken);
+        if (activeIds) {
+          const filtered = items.filter((it) => activeIds.has(it.id));
+          return c.json({ data: { items: filtered }, error: null });
+        }
+      } catch (err) {
+        logger.warn(
+          { err: (err as Error).message },
+          "Failed to resolve active NyxID services; returning unfiltered facet",
+        );
+      }
+    }
+
     return c.json({ data: { items }, error: null });
   });
 

@@ -16,13 +16,14 @@ import { track } from "@/lib/analytics";
 /** Minimum interval (ms) between token state flushes */
 const TOKEN_FLUSH_INTERVAL_MS = 50;
 
+// Optionals widen to `T | undefined` for exactOptionalPropertyTypes (#657).
 export interface ChatDisplayMessage {
   id: string;
   role: "user" | "assistant";
   content: string;
-  isStreaming?: boolean;
-  skillName?: string;
-  skillDescription?: string;
+  isStreaming?: boolean | undefined;
+  skillName?: string | undefined;
+  skillDescription?: string | undefined;
 }
 
 interface GenerationState {
@@ -85,10 +86,10 @@ export function useSkillGeneration(): UseSkillGenerationReturn {
     setState((prev) => {
       const messages = [...prev.chatMessages];
       const lastIdx = messages.length - 1;
-      if (lastIdx >= 0 && messages[lastIdx].role === "assistant" && messages[lastIdx].isStreaming) {
+      if (lastIdx >= 0 && messages[lastIdx]!.role === "assistant" && messages[lastIdx]!.isStreaming) {
         messages[lastIdx] = {
-          ...messages[lastIdx],
-          content: messages[lastIdx].content + buffered,
+          ...messages[lastIdx]!,
+          content: messages[lastIdx]!.content + buffered,
         };
       }
       return {
@@ -129,10 +130,10 @@ export function useSkillGeneration(): UseSkillGenerationReturn {
           setState((prev) => {
             const messages = [...prev.chatMessages];
             const lastIdx = messages.length - 1;
-            if (lastIdx >= 0 && messages[lastIdx].role === "assistant" && messages[lastIdx].isStreaming) {
+            if (lastIdx >= 0 && messages[lastIdx]!.role === "assistant" && messages[lastIdx]!.isStreaming) {
               messages[lastIdx] = {
-                ...messages[lastIdx],
-                content: messages[lastIdx].content + buffered,
+                ...messages[lastIdx]!,
+                content: messages[lastIdx]!.content + buffered,
               };
             }
             return {
@@ -189,10 +190,10 @@ export function useSkillGeneration(): UseSkillGenerationReturn {
           setState((prev) => {
             const messages = [...prev.chatMessages];
             const lastIdx = messages.length - 1;
-            if (lastIdx >= 0 && messages[lastIdx].role === "assistant" && messages[lastIdx].isStreaming) {
+            if (lastIdx >= 0 && messages[lastIdx]!.role === "assistant" && messages[lastIdx]!.isStreaming) {
               messages[lastIdx] = {
-                ...messages[lastIdx],
-                content: messages[lastIdx].content + buffered,
+                ...messages[lastIdx]!,
+                content: messages[lastIdx]!.content + buffered,
               };
             }
             return {
