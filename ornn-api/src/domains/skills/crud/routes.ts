@@ -20,12 +20,11 @@ import {
   optionalAuthMiddleware,
   requirePermission,
   getAuth,
-  readUserOrgMemberships,
   readUserOrgIds,
 } from "../../../middleware/nyxidAuth";
 import { validateBody, getValidatedBody } from "../../../middleware/validate";
 import { AppError } from "../../../shared/types/index";
-import { canReadSkill, canManageSkill } from "./authorize";
+import { canReadSkill, canManageSkill, buildActorContext } from "./authorize";
 import { parseGithubUrl } from "./utils/githubPull";
 import { enforceZipLimits } from "../../../shared/utils/zipLimits";
 import { rateLimit } from "../../../middleware/rateLimit";
@@ -568,16 +567,7 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
       // Build the caller's actor once — `requirePermission` above
       // guarantees authCtx is set. Used both for the defense-in-depth
       // pre-check below and threaded into the service call (#806).
-      const authCtxForVisibility = c.get("auth");
-      if (!authCtxForVisibility) {
-        throw AppError.notFound("skill_not_found", `Skill '${idOrName}' not found`);
-      }
-      const memberships = await readUserOrgMemberships(c);
-      const actor = {
-        userId: authCtxForVisibility.userId,
-        memberships,
-        isPlatformAdmin: authCtxForVisibility.permissions.includes("ornn:admin:skill"),
-      };
+      const actor = await buildActorContext(c);
 
       // Visibility check (#567) — the package contents endpoint must
       // not be more permissive than the metadata endpoint. Load the
@@ -639,12 +629,7 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
         throw AppError.notFound("skill_not_found", `Skill '${idOrName}' not found`);
       }
       if (authCtx && skill.isPrivate) {
-        const memberships = await readUserOrgMemberships(c);
-        const actor = {
-          userId: authCtx.userId,
-          memberships,
-          isPlatformAdmin: authCtx.permissions.includes("ornn:admin:skill"),
-        };
+        const actor = await buildActorContext(c);
         if (!canReadSkill(skill, actor)) {
           throw AppError.notFound("skill_not_found", `Skill '${idOrName}' not found`);
         }
@@ -679,12 +664,7 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
         throw AppError.notFound("skill_not_found", `Skill '${idOrName}' not found`);
       }
       if (authCtx && skill.isPrivate) {
-        const memberships = await readUserOrgMemberships(c);
-        const actor = {
-          userId: authCtx.userId,
-          memberships,
-          isPlatformAdmin: authCtx.permissions.includes("ornn:admin:skill"),
-        };
+        const actor = await buildActorContext(c);
         if (!canReadSkill(skill, actor)) {
           throw AppError.notFound("skill_not_found", `Skill '${idOrName}' not found`);
         }
@@ -718,12 +698,7 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
 
       // Authenticated users: apply the full ownership/org-visibility rules.
       if (authCtx && skill.isPrivate) {
-        const memberships = await readUserOrgMemberships(c);
-        const actor = {
-          userId: authCtx.userId,
-          memberships,
-          isPlatformAdmin: authCtx.permissions.includes("ornn:admin:skill"),
-        };
+        const actor = await buildActorContext(c);
         if (!canReadSkill(skill, actor)) {
           throw AppError.notFound("skill_not_found", `Skill '${idOrName}' not found`);
         }
@@ -798,12 +773,7 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
       if (!existing) {
         throw AppError.notFound("skill_not_found", `Skill '${id}' not found`);
       }
-      const memberships = await readUserOrgMemberships(c);
-      const actor = {
-        userId: authCtx.userId,
-        memberships,
-        isPlatformAdmin: authCtx.permissions.includes("ornn:admin:skill"),
-      };
+      const actor = await buildActorContext(c);
       if (!canManageSkill(existing, actor)) {
         throw AppError.forbidden(
           "forbidden",
@@ -862,12 +832,7 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
         throw AppError.notFound("skill_not_found", `Skill '${idOrName}' not found`);
       }
       if (authCtx && skill.isPrivate) {
-        const memberships = await readUserOrgMemberships(c);
-        const actor = {
-          userId: authCtx.userId,
-          memberships,
-          isPlatformAdmin: authCtx.permissions.includes("ornn:admin:skill"),
-        };
+        const actor = await buildActorContext(c);
         if (!canReadSkill(skill, actor)) {
           throw AppError.notFound("skill_not_found", `Skill '${idOrName}' not found`);
         }
@@ -893,18 +858,13 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
     async (c) => {
       const id = c.req.param("id");
       const tag = c.req.param("tag");
-      const authCtx = getAuth(c);
 
       const existing = await skillRepo.findByGuid(id);
       if (!existing) {
         throw AppError.notFound("skill_not_found", `Skill '${id}' not found`);
       }
-      const memberships = await readUserOrgMemberships(c);
-      const actor = {
-        userId: authCtx.userId,
-        memberships,
-        isPlatformAdmin: authCtx.permissions.includes("ornn:admin:skill"),
-      };
+      // buildActorContext throws 401 when unauthenticated.
+      const actor = await buildActorContext(c);
       if (!canManageSkill(existing, actor)) {
         throw AppError.forbidden(
           "forbidden",
@@ -931,18 +891,13 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
     async (c) => {
       const id = c.req.param("id");
       const tag = c.req.param("tag");
-      const authCtx = getAuth(c);
 
       const existing = await skillRepo.findByGuid(id);
       if (!existing) {
         throw AppError.notFound("skill_not_found", `Skill '${id}' not found`);
       }
-      const memberships = await readUserOrgMemberships(c);
-      const actor = {
-        userId: authCtx.userId,
-        memberships,
-        isPlatformAdmin: authCtx.permissions.includes("ornn:admin:skill"),
-      };
+      // buildActorContext throws 401 when unauthenticated.
+      const actor = await buildActorContext(c);
       if (!canManageSkill(existing, actor)) {
         throw AppError.forbidden(
           "forbidden",
@@ -974,12 +929,7 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
       if (!existing) {
         throw AppError.notFound("skill_not_found", `Skill '${guid}' not found`);
       }
-      const memberships = await readUserOrgMemberships(c);
-      const actor = {
-        userId: authCtx.userId,
-        memberships,
-        isPlatformAdmin: authCtx.permissions.includes("ornn:admin:skill"),
-      };
+      const actor = await buildActorContext(c);
       if (!canManageSkill(existing, actor)) {
         throw AppError.forbidden(
           "forbidden",
@@ -1103,12 +1053,7 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
       if (!existing) {
         throw AppError.notFound("skill_not_found", `Skill '${guid}' not found`);
       }
-      const memberships = await readUserOrgMemberships(c);
-      const actor = {
-        userId: authCtx.userId,
-        memberships,
-        isPlatformAdmin: authCtx.permissions.includes("ornn:admin:skill"),
-      };
+      const actor = await buildActorContext(c);
       if (!canManageSkill(existing, actor)) {
         throw AppError.forbidden(
           "forbidden",
@@ -1171,9 +1116,8 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
       if (!existing) {
         throw AppError.notFound("skill_not_found", `Skill '${guid}' not found`);
       }
-      const memberships = await readUserOrgMemberships(c);
       const isPlatformAdmin = authCtx.permissions.includes("ornn:admin:skill");
-      const actor = { userId: authCtx.userId, memberships, isPlatformAdmin };
+      const actor = await buildActorContext(c);
       if (!canManageSkill(existing, actor)) {
         throw AppError.forbidden(
           "forbidden",
@@ -1343,12 +1287,7 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
       if (!skill) {
         throw AppError.notFound("skill_not_found", `Skill '${guid}' not found`);
       }
-      const memberships = await readUserOrgMemberships(c);
-      const actor = {
-        userId: authCtx.userId,
-        memberships,
-        isPlatformAdmin: authCtx.permissions.includes("ornn:admin:skill"),
-      };
+      const actor = await buildActorContext(c);
       if (!canManageSkill(skill, actor)) {
         throw AppError.forbidden(
           "forbidden",
@@ -1395,12 +1334,7 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
       if (!skill) {
         throw AppError.notFound("skill_not_found", `Skill '${id}' not found`);
       }
-      const memberships = await readUserOrgMemberships(c);
-      const actor = {
-        userId: authCtx.userId,
-        memberships,
-        isPlatformAdmin: authCtx.permissions.includes("ornn:admin:skill"),
-      };
+      const actor = await buildActorContext(c);
       if (!canManageSkill(skill, actor)) {
         throw AppError.forbidden(
           "forbidden",
