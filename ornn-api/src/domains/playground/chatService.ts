@@ -17,7 +17,7 @@ import type {
 } from "../../clients/sandboxClient";
 import type { SkillService } from "../skills/crud/service";
 import type { PlaygroundChatEvent } from "../../shared/types/index";
-import { type ActorContext, SYSTEM_ACTOR } from "../skills/crud/authorize";
+import type { ActorContext } from "../skills/crud/authorize";
 import { createLogger } from "../../shared/logger";
 import { z } from "zod";
 
@@ -310,14 +310,14 @@ export class PlaygroundChatService {
   async *chat(
     userId: string,
     request: PlaygroundChatRequest,
-    abortSignal?: AbortSignal,
-    options?: { modelId?: string; actor?: ActorContext },
+    abortSignal: AbortSignal | undefined,
+    options: { modelId?: string; actor: ActorContext },
   ): AsyncGenerator<PlaygroundChatEvent> {
-    // #806 — object-level authorization for skill loads. The route
-    // builds the caller's real actor; internal/test callers that omit
-    // it fall back to SYSTEM_ACTOR. This single actor gates BOTH skill
-    // bypass paths below (skillId injection + the load_skill tool).
-    const actor = options?.actor ?? SYSTEM_ACTOR;
+    // #806/#826 — object-level authorization for skill loads. The actor
+    // is REQUIRED: every caller (routes + tests) must supply the real
+    // caller context. This single actor gates BOTH skill bypass paths
+    // below (skillId injection + the load_skill tool).
+    const actor = options.actor;
     // Resolve LLM defaults from admin settings on every call so
     // operator updates land without a pod restart.
     let defaults: PlaygroundLlmDefaults;
@@ -341,7 +341,7 @@ export class PlaygroundChatService {
     // Resolved model id (already validated by the route). Falls back
     // to settings default for tests / internal callers that don't
     // go through the model picker.
-    const model = options?.modelId ?? defaults.model;
+    const model = options.modelId ?? defaults.model;
     const input = this.buildInput(request);
 
     // Inject system prompt as developer message (instructions field is ignored by upstream LLM)
