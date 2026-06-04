@@ -1122,7 +1122,7 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
         isPrivate: body.isPrivate,
         sharedWithUsers: body.sharedWithUsers,
         sharedWithOrgs: body.sharedWithOrgs,
-      });
+      }, actor);
 
       const updated = await skillService.getSkill(guid);
 
