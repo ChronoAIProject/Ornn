@@ -192,6 +192,15 @@ export function idempotencyMiddleware(config: IdempotencyConfig): MiddlewareHand
     try {
       const responseHeaders = captureHeaders(res);
       const contentType = responseHeaders["content-type"] ?? "";
+      // CWE-770 (#812): never buffer/persist a streaming body. SSE responses
+      // are unbounded; clone().text() would tee + drain the live stream into
+      // memory and persist a frozen blob that replays incorrectly. Pass the
+      // live stream through untouched. startsWith — prod emits
+      // "text/event-stream; charset=utf-8" (playground/routes.ts), so === misses it.
+      if (contentType.startsWith("text/event-stream")) {
+        logger.debug({ id, path }, "Idempotency skip: streaming response not cached");
+        return;
+      }
       let body: string;
       let encoding: "utf-8" | "base64";
       if (contentType.startsWith("application/") || contentType.startsWith("text/")) {
