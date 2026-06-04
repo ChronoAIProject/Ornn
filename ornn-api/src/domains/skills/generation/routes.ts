@@ -69,9 +69,17 @@ async function resolveKeepAliveMs(
 }
 
 /**
- * Run quota check + model resolution for a skill-gen request. Returns
+ * Run model resolution + quota reserve for a skill-gen request. Returns
  * the resolved model id; throws the appropriate AppError when either
- * gate fails (quota → 429, models → 503/4xx).
+ * gate fails (models → 503/4xx, quota → 429).
+ *
+ * Order is load-bearing (#808): model resolution runs FIRST so a
+ * resolution failure can't strand a reserved quota slot. `resolveModel`
+ * is a pure catalog read (no LLM), so reserving last still keeps the
+ * "429 before any LLM cost" guarantee. Once `checkAllowed` reserves,
+ * every caller threads the result straight into `streamGenerationEvents`,
+ * whose `finally` always reconciles the reservation (commit on success,
+ * release on system_error/abort).
  */
 async function preflight(
   c: Context<{ Variables: AuthVariables }>,
@@ -80,12 +88,6 @@ async function preflight(
   requestedModelId: string | undefined,
 ): Promise<{ modelId: string; userId: string; permissions: readonly string[] | undefined }> {
   const authCtx = getAuth(c);
-  const decision = await quotaService.checkAllowed({
-    userId: authCtx.userId,
-    permissions: authCtx.permissions,
-    surface: "skillGen",
-  });
-  if (!decision.allowed) throwQuotaError(decision);
 
   const resolution = await llmProvidersService.resolveModel({
     surface: "skillGen",
@@ -93,6 +95,14 @@ async function preflight(
     ...(requestedModelId !== undefined ? { requested: requestedModelId } : {}),
   });
   if (resolution.kind !== "ok") throwModelResolutionError(resolution);
+
+  const decision = await quotaService.checkAllowed({
+    userId: authCtx.userId,
+    permissions: authCtx.permissions,
+    surface: "skillGen",
+  });
+  if (!decision.allowed) throwQuotaError(decision);
+
   return { modelId: resolution.modelId, userId: authCtx.userId, permissions: authCtx.permissions };
 }
 
