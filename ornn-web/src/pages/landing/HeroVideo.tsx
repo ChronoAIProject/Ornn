@@ -85,8 +85,12 @@ export function HeroVideo() {
         className="pointer-events-none absolute inset-x-0 top-0 z-0 h-56 bg-gradient-to-b from-[var(--color-page)] to-transparent opacity-90"
       />
 
-      {/* CTA — top-left, below the Navbar, clear of the caption band. */}
-      <div className="absolute left-8 top-24 z-10 flex gap-3 sm:left-12 sm:top-28">
+      {/* CTA — top-left, below the Navbar, clear of the caption band. The
+          local plate (overlay surface + blur + strong border, the same
+          vocabulary as HeroStage's final-CTA overlay) keeps the labels above
+          WCAG AA regardless of the decorative video frame behind them — the
+          top scrim alone can't guarantee contrast once the CTA outgrows it. */}
+      <div className="absolute left-8 top-24 z-10 flex gap-3 rounded-[4px] border border-[color:var(--color-border-strong)] [background-color:var(--surface-overlay)] p-3 backdrop-blur-[14px] sm:left-12 sm:top-28">
         <EmberLink to="/registry">{t("landing.browseSkills")}</EmberLink>
         <EmberLink to="/skills/new" variant="ghost">
           {t("landing.publishYours")}
