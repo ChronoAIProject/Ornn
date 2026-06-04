@@ -44,6 +44,9 @@ export interface ActorContext {
   isPlatformAdmin: boolean;
 }
 
+/** Internal/system caller — bypasses visibility (mirror, server-side jobs). */
+export const SYSTEM_ACTOR: ActorContext = { userId: "__system__", memberships: [], isPlatformAdmin: true };
+
 /** Returns true when `actor` is allowed to read the skill. */
 export function canReadSkill(skill: SkillOwnership, actor: ActorContext): boolean {
   if (!skill.isPrivate) return true;

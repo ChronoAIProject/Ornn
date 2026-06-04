@@ -22,6 +22,7 @@ import { MirrorService, type MirrorSettingsReader } from "./mirrorService";
 import type { GitHubMirrorClient, TreeEntry } from "./githubMirrorClient";
 import type { SkillRepository } from "../crud/repository";
 import type { SkillService } from "../crud/service";
+import type { ActorContext } from "../crud/authorize";
 import type { SkillDocument } from "../../../shared/types/index";
 import type { MirrorSection } from "../../settings/sections/mirror";
 
@@ -156,9 +157,11 @@ function makeFakeSkillService(
   filesByGuid: Record<string, Record<string, string>>,
 ): SkillService {
   return {
-    getSkillJson: mock(async (idOrName: string) => ({
+    // Signature mirrors the #806 service change: (idOrName, actor, version?).
+    getSkillJson: mock(async (idOrName: string, _actor: ActorContext, _version?: string) => ({
       name: "demo-skill",
       description: "A test skill.",
+      version: "1.0",
       metadata: { category: "plain" },
       files: filesByGuid[idOrName] ?? {},
     })),

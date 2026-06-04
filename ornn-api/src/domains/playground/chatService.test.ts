@@ -33,6 +33,8 @@ import type {
 } from "../../clients/nyxid/llm";
 import type { SkillService } from "../skills/crud/service";
 import type { PlaygroundChatEvent } from "../../shared/types/index";
+import { AppError } from "../../shared/types/index";
+import { canReadSkill, type ActorContext, type SkillOwnership } from "../skills/crud/authorize";
 
 // ---------------------------------------------------------------------------
 // Stubs
@@ -75,8 +77,37 @@ function makeLlmClient(rounds: ResponsesApiStreamEvent[][]): NyxLlmClient {
   } as unknown as NyxLlmClient;
 }
 
+// #806 — a private skill fixture used to exercise object-level
+// authorization on both skill-load paths. The marker string below must
+// appear in the package contents and ONLY in the package contents, so a
+// "contents leaked?" assertion can grep the transcript for it.
+const SECRET_MARKER = "SUPER_SECRET_SKILL_BODY_4f2a";
+const PRIVATE_SKILL_FIXTURE: SkillOwnership = {
+  createdBy: "owner-1",
+  isPrivate: true,
+  sharedWithUsers: ["shared-1"],
+  sharedWithOrgs: ["org-9"],
+};
+
+/**
+ * Authz-aware stub: runs the REAL `canReadSkill` against the private
+ * fixture and the actor it was handed. Denied → throws the same
+ * `skill_not_found` AppError the production service throws; allowed →
+ * returns a package whose files embed `SECRET_MARKER`.
+ */
 const SKILL_SERVICE_STUB: SkillService = {
-  getSkillJson: async () => ({ name: "stub", description: "", metadata: {}, files: {} }),
+  getSkillJson: async (_idOrName: string, actor: ActorContext) => {
+    if (!canReadSkill(PRIVATE_SKILL_FIXTURE, actor)) {
+      throw AppError.notFound("skill_not_found", `Skill '${_idOrName}' not found`);
+    }
+    return {
+      name: "demo-skill",
+      description: "",
+      version: "1.0",
+      metadata: {},
+      files: { "SKILL.md": `# demo\n${SECRET_MARKER}` },
+    };
+  },
 } as unknown as SkillService;
 
 const DEFAULTS_RESOLVER = async () => ({
@@ -380,5 +411,112 @@ describe("PlaygroundChatService — env value isolation (#721)", () => {
 
     const envSeen = sandbox.calls.sessionExecute[0]!.params.env as Record<string, string>;
     expect(envSeen).toEqual({ MARKER: "test123" });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// #806 — object-level authorization (BOLA / OWASP API1) on skill loads.
+//
+// Two bypass paths must both be gated by the caller's actor:
+//   (a) the `request.skillId` developer-message injection
+//   (b) the `load_skill` tool call
+//
+// The stub runs the REAL `canReadSkill` against PRIVATE_SKILL_FIXTURE, so
+// these tests exercise the production policy end-to-end through chat().
+// ---------------------------------------------------------------------------
+
+const STRANGER: ActorContext = { userId: "stranger", memberships: [], isPlatformAdmin: false };
+const OWNER: ActorContext = { userId: "owner-1", memberships: [], isPlatformAdmin: false };
+const SHARED_USER: ActorContext = { userId: "shared-1", memberships: [], isPlatformAdmin: false };
+const ORG_MEMBER: ActorContext = {
+  userId: "someone-else",
+  memberships: [{ userId: "org-9", role: "member", displayName: "Org Nine" }],
+  isPlatformAdmin: false,
+};
+const ADMIN: ActorContext = { userId: "admin-1", memberships: [], isPlatformAdmin: true };
+
+/** True if any emitted event's serialized form contains the secret marker. */
+function leaksMarker(events: PlaygroundChatEvent[]): boolean {
+  return events.some((e) => JSON.stringify(e).includes(SECRET_MARKER));
+}
+
+/** Drive a chat over the `request.skillId` injection path for `actor`. */
+async function runSkillIdPath(actor: ActorContext): Promise<PlaygroundChatEvent[]> {
+  const sandbox = makeSandboxClient({});
+  const service = makeService([STOP_EVENTS], sandbox);
+  return drain(
+    service.chat(
+      "u1",
+      { messages: [{ role: "user", content: "go" }], skillId: "demo-skill" },
+      undefined,
+      { actor },
+    ),
+  );
+}
+
+/** Drive a chat that issues a single `load_skill` tool call for `actor`. */
+async function runLoadSkillPath(actor: ActorContext): Promise<PlaygroundChatEvent[]> {
+  const sandbox = makeSandboxClient({});
+  const service = makeService(
+    [makeToolCallEvents({ name: "load_skill", args: { skill_id: "demo-skill" } }), STOP_EVENTS],
+    sandbox,
+  );
+  return drain(
+    service.chat("u1", { messages: [{ role: "user", content: "load it" }] }, undefined, { actor }),
+  );
+}
+
+describe("PlaygroundChatService — skill-load authorization (#806)", () => {
+  it("(1) stranger via skillId path → error event, NO skill contents injected", async () => {
+    const events = await runSkillIdPath(STRANGER);
+    const err = events.find((e) => e.type === "error");
+    expect(err).toBeDefined();
+    expect((err as { message: string }).message).toContain("Failed to load skill");
+    expect(events.some((e) => e.type === "finish" && (e as { finishReason?: string }).finishReason === "error")).toBe(true);
+    expect(leaksMarker(events)).toBe(false);
+  });
+
+  it("(2) stranger via load_skill tool → access-denied tool result, NO contents", async () => {
+    const events = await runLoadSkillPath(STRANGER);
+    const toolResult = events.find((e) => e.type === "tool-result") as { result: string } | undefined;
+    expect(toolResult).toBeDefined();
+    expect(toolResult!.result).toContain("Failed to load skill");
+    expect(toolResult!.result).not.toContain(SECRET_MARKER);
+    expect(leaksMarker(events)).toBe(false);
+  });
+
+  it("(3) owner-1 succeeds on both paths", async () => {
+    // skillId path: no error event, finishes normally.
+    const skillIdEvents = await runSkillIdPath(OWNER);
+    expect(skillIdEvents.some((e) => e.type === "error")).toBe(false);
+    expect(skillIdEvents.some((e) => e.type === "finish")).toBe(true);
+    // load_skill path: tool result carries the package contents.
+    const loadEvents = await runLoadSkillPath(OWNER);
+    const toolResult = loadEvents.find((e) => e.type === "tool-result") as { result: string } | undefined;
+    expect(toolResult!.result).toContain(SECRET_MARKER);
+  });
+
+  it("(4) shared-1 (per-user grant) succeeds on both paths", async () => {
+    const skillIdEvents = await runSkillIdPath(SHARED_USER);
+    expect(skillIdEvents.some((e) => e.type === "error")).toBe(false);
+    const loadEvents = await runLoadSkillPath(SHARED_USER);
+    const toolResult = loadEvents.find((e) => e.type === "tool-result") as { result: string } | undefined;
+    expect(toolResult!.result).toContain(SECRET_MARKER);
+  });
+
+  it("(5) org-9 member (per-org grant) succeeds on both paths", async () => {
+    const skillIdEvents = await runSkillIdPath(ORG_MEMBER);
+    expect(skillIdEvents.some((e) => e.type === "error")).toBe(false);
+    const loadEvents = await runLoadSkillPath(ORG_MEMBER);
+    const toolResult = loadEvents.find((e) => e.type === "tool-result") as { result: string } | undefined;
+    expect(toolResult!.result).toContain(SECRET_MARKER);
+  });
+
+  it("(6) platform admin succeeds on both paths", async () => {
+    const skillIdEvents = await runSkillIdPath(ADMIN);
+    expect(skillIdEvents.some((e) => e.type === "error")).toBe(false);
+    const loadEvents = await runLoadSkillPath(ADMIN);
+    const toolResult = loadEvents.find((e) => e.type === "tool-result") as { result: string } | undefined;
+    expect(toolResult!.result).toContain(SECRET_MARKER);
   });
 });

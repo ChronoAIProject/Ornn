@@ -19,6 +19,7 @@ import {
   nyxidAuthMiddleware,
   requirePermission,
   getAuth,
+  readUserOrgMemberships,
 } from "../../middleware/nyxidAuth";
 import { validateBody, getValidatedBody } from "../../middleware/validate";
 import { createLogger } from "../../shared/logger";
@@ -124,6 +125,20 @@ export function createPlaygroundRoutes(config: PlaygroundRoutesConfig): Hono<{ V
       if (resolution.kind !== "ok") throwModelResolutionError(resolution);
       const resolvedModelId = resolution.modelId;
 
+      // #806 — build the caller's object-level authorization actor and
+      // thread it into the chat service. This mirrors the actor build in
+      // GET /skills/:idOrName/json and depends on nyxidOrgLookupMiddleware
+      // being mounted in bootstrap.ts ahead of the playground routes so
+      // `readUserOrgMemberships` resolves the caller's org memberships.
+      // The chat service uses this single actor to gate BOTH skill bypass
+      // paths (the `skillId` injection and the `load_skill` tool).
+      const memberships = await readUserOrgMemberships(c);
+      const actor = {
+        userId: authCtx.userId,
+        memberships,
+        isPlatformAdmin: authCtx.permissions.includes("ornn:admin:skill"),
+      };
+
       // Record a `playground` pull if the chat is bound to a skill. The
       // chat service loads the skill internally; we duplicate the lookup
       // here so analytics doesn't change the chat-service contract. Cost
@@ -227,6 +242,7 @@ export function createPlaygroundRoutes(config: PlaygroundRoutesConfig): Hono<{ V
         try {
           for await (const event of chatService.chat(authCtx.userId, chatRequest, signal, {
             modelId: resolvedModelId,
+            actor,
           })) {
             await writeEvent(event);
             if (event.type === "tool-result") outcome = "skill_error";

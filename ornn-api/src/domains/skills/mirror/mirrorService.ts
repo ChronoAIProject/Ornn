@@ -28,6 +28,7 @@ import { GitHubAppAuth } from "./githubAppAuth";
 import { GitHubMirrorClient, type TreeEntry } from "./githubMirrorClient";
 import type { SkillRepository } from "../crud/repository";
 import type { SkillService } from "../crud/service";
+import { SYSTEM_ACTOR } from "../crud/authorize";
 import type { SkillDocument } from "../../../shared/types/index";
 import type { MirrorSection } from "../../settings/sections/mirror";
 
@@ -353,8 +354,10 @@ export class MirrorService {
    */
   private async buildSkillFolder(skill: SkillDocument): Promise<Map<string, string>> {
     // Reuse the existing `/skills/:id/json` extraction so we don't
-    // duplicate ZIP logic. Pulls latest version.
-    const json = await this.deps.skillService.getSkillJson(skill.guid);
+    // duplicate ZIP logic. Pulls latest version. Mirror is a trusted
+    // server job, so it reads with SYSTEM_ACTOR (#806) — the eligibility
+    // filter already guarantees only fully-public skills reach here.
+    const json = await this.deps.skillService.getSkillJson(skill.guid, SYSTEM_ACTOR);
     const out = new Map<string, string>();
     for (const [path, content] of Object.entries(json.files)) {
       // Drop README.md from the package if any, since we're writing
