@@ -21,9 +21,11 @@
  *
  * Mount order: must run AFTER `proxyAuthSetup` so `auth.userId` is
  * available for keying. When auth is missing (public endpoints), the
- * key falls back to the proxy-forwarded IP. Without IP either,
- * everyone shares the "anonymous" bucket — a fail-safe for the rare
- * truly-public path.
+ * key falls back to a trusted-position `x-forwarded-for` token —
+ * counted from the right per `ORNN_TRUSTED_PROXY_HOPS` so a client-
+ * prepended leftmost token can't shard the bucket (CWE-348, #813).
+ * Without a usable token, everyone shares the "anonymous" bucket — a
+ * fail-safe for the rare truly-public path.
  *
  * @module middleware/rateLimit
  */
@@ -33,6 +35,19 @@ import { AppError } from "../shared/types/index";
 import { createLogger } from "../shared/logger";
 
 const logger = createLogger("rateLimit");
+
+const TRUSTED_HOPS_ENV = "ORNN_TRUSTED_PROXY_HOPS";
+/**
+ * Number of trusted proxies that append to X-Forwarded-For in front of
+ * ornn-api, beyond the immediate connecting peer. Default 0 = key on the
+ * peer-appended (rightmost) token. The real client IP sits `hops` tokens
+ * from the right; counting from the right defeats client-prepended spoof
+ * tokens. Operators set this to match their ingress topology (#813).
+ */
+function readTrustedProxyHops(): number {
+  const raw = Number(process.env[TRUSTED_HOPS_ENV]);
+  return Number.isInteger(raw) && raw >= 0 ? raw : 0; // default/clamp on unset/NaN/negative/non-int
+}
 
 export interface RateLimitConfig {
   /** Window length in milliseconds. */
@@ -85,10 +100,23 @@ function cleanupExpired(now: number): void {
 function defaultKeyBy(c: Context): string {
   const auth = (c.get as unknown as (k: "auth") => { userId?: string } | undefined)("auth");
   if (auth?.userId) return `user:${auth.userId}`;
-  // Trust proxy-forwarded IP — production traffic comes through
-  // NyxID's reverse proxy which sets `x-forwarded-for`.
-  const ip = c.req.header("x-forwarded-for")?.split(",")[0]?.trim();
-  if (ip) return `ip:${ip}`;
+  // XFF arrives as `client, …prepended…, realClient, proxy1, …` (proxies
+  // APPEND). Key on the trusted hop counted from the RIGHT so a client-
+  // prepended leftmost token cannot shard the bucket (CWE-348, #813).
+  const xff = c.req.header("x-forwarded-for");
+  if (xff) {
+    const tokens = xff.split(",").map((t) => t.trim()).filter((t) => t.length > 0);
+    const idx = tokens.length - 1 - readTrustedProxyHops();
+    // idx < 0 means the chain is shorter than the configured trusted-hop
+    // count (misconfig or a request that skipped the proxy chain): we cannot
+    // identify a trusted token, so bucket together rather than trust a
+    // client-controlled token. CRITICAL: do NOT clamp to tokens[0] — that is
+    // the spoofable leftmost token (the exact bug). Fail safe to a shared bucket.
+    if (idx >= 0) {
+      const ip = tokens[idx];
+      if (ip) return `ip:${ip}`;
+    }
+  }
   return "anonymous";
 }
 
