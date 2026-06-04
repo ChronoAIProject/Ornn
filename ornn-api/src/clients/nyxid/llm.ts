@@ -25,6 +25,7 @@
  */
 
 import { createLogger } from "../../shared/logger";
+import { safeFetch } from "../../infra/safeFetch";
 import type { ApiFormat } from "../../domains/settings/llmProviders/types";
 import type { NyxidSaTokenProvider } from "./base";
 
@@ -375,7 +376,7 @@ export class NyxLlmClient {
         ? buildChatCompletionBody(params, true)
         : buildResponsesBody(params, true);
 
-    const response = await fetch(`${gatewayUrl}${path}`, {
+    const response = await safeFetch(`${gatewayUrl}${path}`, {
       method: "POST",
       headers: {
         "Authorization": authHeader,
@@ -424,7 +425,7 @@ export class NyxLlmClient {
         ? buildChatCompletionBody(params, false)
         : buildResponsesBody(params, false);
 
-    const response = await fetch(`${gatewayUrl}${path}`, {
+    const response = await safeFetch(`${gatewayUrl}${path}`, {
       method: "POST",
       headers: {
         "Authorization": authHeader,

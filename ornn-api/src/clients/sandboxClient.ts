@@ -5,6 +5,7 @@
  */
 
 import { createLogger } from "../shared/logger";
+import { safeFetch } from "../infra/safeFetch";
 const logger = createLogger("sandboxClient");
 
 // ── Shared types ──────────────────────────────────────────────────────
@@ -296,7 +297,7 @@ export class SandboxClient {
 
     const baseUrl = await this.resolveBaseUrl();
     const auth = await this.authHeaders();
-    const response = await fetch(`${baseUrl}/sessions/${sessionId}`, {
+    const response = await safeFetch(`${baseUrl}/sessions/${sessionId}`, {
       method: "DELETE",
       headers: auth,
     });
@@ -315,7 +316,7 @@ export class SandboxClient {
 
     const baseUrl = await this.resolveBaseUrl();
     const auth = await this.authHeaders();
-    const response = await fetch(`${baseUrl}/sessions`, { headers: auth });
+    const response = await safeFetch(`${baseUrl}/sessions`, { headers: auth });
     if (!response.ok) {
       const text = await response.text().catch(() => "");
       throw new Error(`List sessions failed (${response.status}): ${text}`);
@@ -329,7 +330,7 @@ export class SandboxClient {
   private async post<T>(path: string, body: Record<string, unknown>): Promise<T> {
     const baseUrl = await this.resolveBaseUrl();
     const auth = await this.authHeaders();
-    const response = await fetch(`${baseUrl}${path}`, {
+    const response = await safeFetch(`${baseUrl}${path}`, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...auth },
       body: JSON.stringify(body),
@@ -347,7 +348,7 @@ export class SandboxClient {
   private async *streamSSE(path: string, body: Record<string, unknown>): AsyncGenerator<StreamEvent> {
     const baseUrl = await this.resolveBaseUrl();
     const auth = await this.authHeaders();
-    const response = await fetch(`${baseUrl}${path}`, {
+    const response = await safeFetch(`${baseUrl}${path}`, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...auth },
       body: JSON.stringify(body),
