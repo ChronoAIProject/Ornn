@@ -612,6 +612,41 @@ describe("UT-QUOTA-021 snapshot has no daily/expiresAt", () => {
   });
 });
 
+describe("UT-QUOTA-024 charge reconciles against the reserved month bucket", () => {
+  test("reserve in May, charge with the May reservedAt (wall-clock June) → May bucket charged, no June bucket", async () => {
+    const { service, repo } = build({ defaultPg: 5 });
+    // Reservation taken at the very last second of May.
+    const reservedAt = new Date(Date.UTC(2026, 4, 31, 23, 59, 59, 0));
+    await service.checkAllowed({
+      userId: "u1",
+      permissions: [],
+      surface: "playground",
+      now: reservedAt,
+    });
+    // The May bucket now holds the reservation.
+    expect(repo.buckets.get("u1:playground:2026-05")?.used).toBe(1);
+
+    // The run finishes after the UTC month rollover. #827: the route
+    // threads the reservation instant (`reservedAt`, still May) into the
+    // charge so the per-model commit lands in the SAME bucket the slot
+    // was reserved against — NOT a fresh June bucket keyed by wall-clock.
+    await service.chargeOnCompletion({
+      userId: "u1",
+      permissions: [],
+      surface: "playground",
+      outcome: "success",
+      modelId: "gpt-4o",
+      now: reservedAt,
+    });
+
+    const mayBucket = repo.buckets.get("u1:playground:2026-05");
+    expect(mayBucket?.used).toBe(1);
+    expect(mayBucket?.usedByModel["gpt-4o"]).toBe(1);
+    // No June bucket was created — the charge did not straddle the boundary.
+    expect(repo.buckets.has("u1:playground:2026-06")).toBe(false);
+  });
+});
+
 describe("UT-QUOTA-023 year boundary rollover", () => {
   test("Dec 31 23:59:59.999Z → 2026; Jan 1 00:00Z → 2027", async () => {
     const { service, repo } = build();
