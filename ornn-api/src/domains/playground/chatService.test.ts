@@ -116,6 +116,12 @@ const DEFAULTS_RESOLVER = async () => ({
   temperature: 0.5,
 });
 
+// #826 — `chat()` now requires an explicit actor (the SYSTEM_ACTOR
+// fallback was dropped). `isPlatformAdmin: true` preserves the old
+// SYSTEM_ACTOR-bypass intent for the session/env/timeout tests that
+// don't exercise object-level authorization.
+const TEST_ACTOR: ActorContext = { userId: "u1", memberships: [], isPlatformAdmin: true };
+
 interface SandboxCalls {
   createSession: Array<{ params: CreateSessionParams }>;
   sessionExecute: Array<{ sessionId: string; params: SessionExecuteParams }>;
@@ -205,7 +211,7 @@ describe("PlaygroundChatService — sandbox session persistence (#531)", () => {
       sandbox,
     );
 
-    await drain(service.chat("u1", { messages: [{ role: "user", content: "go" }] }));
+    await drain(service.chat("u1", { messages: [{ role: "user", content: "go" }] }, undefined, { actor: TEST_ACTOR }));
 
     expect(sandbox.calls.createSession).toHaveLength(1);
     expect(sandbox.calls.createSession[0]!.params).toMatchObject({
@@ -228,7 +234,7 @@ describe("PlaygroundChatService — sandbox session persistence (#531)", () => {
       sandbox,
     );
 
-    await drain(service.chat("u1", { messages: [{ role: "user", content: "go" }] }));
+    await drain(service.chat("u1", { messages: [{ role: "user", content: "go" }] }, undefined, { actor: TEST_ACTOR }));
 
     expect(sandbox.calls.createSession).toHaveLength(1);
     expect(sandbox.calls.sessionExecute).toHaveLength(2);
@@ -248,7 +254,7 @@ describe("PlaygroundChatService — sandbox session persistence (#531)", () => {
       sandbox,
     );
 
-    await drain(service.chat("u1", { messages: [{ role: "user", content: "go" }] }));
+    await drain(service.chat("u1", { messages: [{ role: "user", content: "go" }] }, undefined, { actor: TEST_ACTOR }));
 
     expect(sandbox.calls.createSession).toHaveLength(2);
     expect(sandbox.calls.createSession.map((c) => c.params.language)).toEqual(["javascript", "python"]);
@@ -266,7 +272,7 @@ describe("PlaygroundChatService — sandbox session persistence (#531)", () => {
       sandbox,
     );
 
-    await drain(service.chat("u1", { messages: [{ role: "user", content: "go" }] }));
+    await drain(service.chat("u1", { messages: [{ role: "user", content: "go" }] }, undefined, { actor: TEST_ACTOR }));
 
     expect(sandbox.calls.deleteSession).toEqual(["sess-1"]);
   });
@@ -284,7 +290,7 @@ describe("PlaygroundChatService — sandbox session persistence (#531)", () => {
       sandbox,
     );
 
-    const events = await drain(service.chat("u1", { messages: [{ role: "user", content: "go" }] }));
+    const events = await drain(service.chat("u1", { messages: [{ role: "user", content: "go" }] }, undefined, { actor: TEST_ACTOR }));
 
     expect(sandbox.calls.createSession).toHaveLength(1);
     expect(sandbox.calls.sessionExecute).toHaveLength(0);
@@ -308,7 +314,7 @@ describe("PlaygroundChatService — sandbox session persistence (#531)", () => {
       sandbox,
     );
 
-    await drain(service.chat("u1", { messages: [{ role: "user", content: "go" }] }));
+    await drain(service.chat("u1", { messages: [{ role: "user", content: "go" }] }, undefined, { actor: TEST_ACTOR }));
 
     expect(sandbox.calls.createSession).toHaveLength(1);
     expect(sandbox.calls.sessionExecute).toHaveLength(1);
@@ -319,7 +325,7 @@ describe("PlaygroundChatService — sandbox session persistence (#531)", () => {
     const sandbox = makeSandboxClient({});
     const service = makeService([STOP_EVENTS], sandbox);
 
-    await drain(service.chat("u1", { messages: [{ role: "user", content: "hi" }] }));
+    await drain(service.chat("u1", { messages: [{ role: "user", content: "hi" }] }, undefined, { actor: TEST_ACTOR }));
 
     expect(sandbox.calls.createSession).toHaveLength(0);
     expect(sandbox.calls.sessionExecute).toHaveLength(0);
@@ -345,7 +351,7 @@ describe("PlaygroundChatService — sandbox session persistence (#531)", () => {
     );
 
     // Should complete without throwing despite the delete failure.
-    const events = await drain(service.chat("u1", { messages: [{ role: "user", content: "go" }] }));
+    const events = await drain(service.chat("u1", { messages: [{ role: "user", content: "go" }] }, undefined, { actor: TEST_ACTOR }));
     expect(events.some((e) => e.type === "finish")).toBe(true);
     expect(sandbox.calls.deleteSession).toEqual(["sess-1"]);
     // Restore in case the test runner shares state.
@@ -383,6 +389,8 @@ describe("PlaygroundChatService — env value isolation (#721)", () => {
           messages: [{ role: "user", content: "go" }],
           envVars: { SECRET_TOKEN: "REAL_SECRET_FROM_UI" },
         },
+        undefined,
+        { actor: TEST_ACTOR },
       ),
     );
 
@@ -407,7 +415,7 @@ describe("PlaygroundChatService — env value isolation (#721)", () => {
       sandbox,
     );
 
-    await drain(service.chat("u1", { messages: [{ role: "user", content: "go" }] }));
+    await drain(service.chat("u1", { messages: [{ role: "user", content: "go" }] }, undefined, { actor: TEST_ACTOR }));
 
     const envSeen = sandbox.calls.sessionExecute[0]!.params.env as Record<string, string>;
     expect(envSeen).toEqual({ MARKER: "test123" });
@@ -554,7 +562,7 @@ describe("PlaygroundChatService — sandbox timeout clamp (#819)", () => {
         sandbox,
       );
 
-      await drain(service.chat("u1", { messages: [{ role: "user", content: "go" }] }));
+      await drain(service.chat("u1", { messages: [{ role: "user", content: "go" }] }, undefined, { actor: TEST_ACTOR }));
 
       expect(sandbox.calls.sessionExecute).toHaveLength(1);
       expect(sandbox.calls.sessionExecute[0]!.params.timeoutSecs).toBe(expected);

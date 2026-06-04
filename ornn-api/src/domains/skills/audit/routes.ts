@@ -25,12 +25,11 @@ import {
   getAuth,
   nyxidAuthMiddleware,
   optionalAuthMiddleware,
-  readUserOrgMemberships,
   requirePermission,
 } from "../../../middleware/nyxidAuth";
 import { AppError } from "../../../shared/types/index";
 import { validateBody, getValidatedBody } from "../../../middleware/validate";
-import { canReadSkill } from "../crud/authorize";
+import { canReadSkill, buildActorContext } from "../crud/authorize";
 
 /** Body schema for POST /skills/:idOrName/audit + admin variant (#438). */
 const auditTriggerSchema = z.object({
@@ -72,12 +71,7 @@ export function createAuditRoutes(config: AuditRoutesConfig): Hono<{ Variables: 
         throw AppError.notFound("skill_not_found", `Skill '${idOrName}' not found`);
       }
       if (authCtx && skill.isPrivate) {
-        const memberships = await readUserOrgMemberships(c);
-        const actor = {
-          userId: authCtx.userId,
-          memberships,
-          isPlatformAdmin: authCtx.permissions.includes("ornn:admin:skill"),
-        };
+        const actor = await buildActorContext(c);
         if (!canReadSkill(skill, actor)) {
           throw AppError.notFound("skill_not_found", `Skill '${idOrName}' not found`);
         }
@@ -112,12 +106,7 @@ export function createAuditRoutes(config: AuditRoutesConfig): Hono<{ Variables: 
         throw AppError.notFound("skill_not_found", `Skill '${idOrName}' not found`);
       }
       if (authCtx && skill.isPrivate) {
-        const memberships = await readUserOrgMemberships(c);
-        const actor = {
-          userId: authCtx.userId,
-          memberships,
-          isPlatformAdmin: authCtx.permissions.includes("ornn:admin:skill"),
-        };
+        const actor = await buildActorContext(c);
         if (!canReadSkill(skill, actor)) {
           throw AppError.notFound("skill_not_found", `Skill '${idOrName}' not found`);
         }
@@ -149,12 +138,7 @@ export function createAuditRoutes(config: AuditRoutesConfig): Hono<{ Variables: 
         throw AppError.notFound("skill_not_found", `Skill '${idOrName}' not found`);
       }
       if (authCtx && skill.isPrivate) {
-        const memberships = await readUserOrgMemberships(c);
-        const actor = {
-          userId: authCtx.userId,
-          memberships,
-          isPlatformAdmin: authCtx.permissions.includes("ornn:admin:skill"),
-        };
+        const actor = await buildActorContext(c);
         if (!canReadSkill(skill, actor)) {
           throw AppError.notFound("skill_not_found", `Skill '${idOrName}' not found`);
         }

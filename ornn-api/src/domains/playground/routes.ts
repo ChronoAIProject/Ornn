@@ -19,8 +19,8 @@ import {
   nyxidAuthMiddleware,
   requirePermission,
   getAuth,
-  readUserOrgMemberships,
 } from "../../middleware/nyxidAuth";
+import { buildActorContext } from "../skills/crud/authorize";
 import { validateBody, getValidatedBody } from "../../middleware/validate";
 import { rateLimit } from "../../middleware/rateLimit";
 import { createLogger } from "../../shared/logger";
@@ -127,18 +127,12 @@ export function createPlaygroundRoutes(config: PlaygroundRoutesConfig): Hono<{ V
       const resolvedModelId = resolution.modelId;
 
       // #806 — build the caller's object-level authorization actor and
-      // thread it into the chat service. This mirrors the actor build in
-      // GET /skills/:idOrName/json and depends on nyxidOrgLookupMiddleware
-      // being mounted in bootstrap.ts ahead of the playground routes so
-      // `readUserOrgMemberships` resolves the caller's org memberships.
-      // The chat service uses this single actor to gate BOTH skill bypass
-      // paths (the `skillId` injection and the `load_skill` tool).
-      const memberships = await readUserOrgMemberships(c);
-      const actor = {
-        userId: authCtx.userId,
-        memberships,
-        isPlatformAdmin: authCtx.permissions.includes("ornn:admin:skill"),
-      };
+      // thread it into the chat service. Depends on nyxidOrgLookupMiddleware
+      // being mounted in bootstrap.ts ahead of the playground routes so the
+      // helper can resolve the caller's org memberships. The chat service
+      // uses this single actor to gate BOTH skill bypass paths (the
+      // `skillId` injection and the `load_skill` tool).
+      const actor = await buildActorContext(c);
 
       // Quota reserve — atomically claims a slot under the cap guard and
       // rejects with 429 BEFORE any LLM cost is incurred (#808). Runs
