@@ -4,9 +4,13 @@
  * Composition root for the editorial-forge landing. Owns the page-level
  * background and font; everything inside is driven by Tailwind utilities
  * backed by the `--color-*` and `--font-display` tokens declared in
- * styles/neon.css. The hero scroll-scrub lives in `HeroStage`.
+ * styles/neon.css.
  *
- * Routed bare (no RootLayout) so the 820vh sticky hero owns its scroll.
+ * Hero (#840): the landing now leads with `HeroVideo` — a full-bleed,
+ * autoplaying, muted, looping background intro video (static poster under
+ * reduced-motion) with a top-left CTA pair. The prior scroll-scrub
+ * `HeroStage` is retained in `pages/landing/` (and stays compilable) but is
+ * no longer mounted; it can be remounted if we revisit the scrub narrative.
  *
  * Pre-launch trim (#324): the lower marketing sections (Why / Install /
  * Featured / VS / Publish) are unmounted in favor of a hero-only
@@ -15,7 +19,7 @@
  * deleted.
  */
 import { Navbar } from "@/components/layout/Navbar";
-import { HeroStage } from "@/pages/landing/HeroStage";
+import { HeroVideo } from "@/pages/landing/HeroVideo";
 import { LandingFooter } from "@/pages/landing/LandingFooter";
 import { LandingChrome } from "@/pages/landing/LandingChrome";
 import { AnnouncementPopup } from "@/pages/landing/AnnouncementPopup";
@@ -32,7 +36,7 @@ export function LandingPage() {
           the app root in App.tsx so app-shell pages share it. */}
       <Navbar showGetStartedCta />
       <main>
-        <HeroStage />
+        <HeroVideo />
       </main>
       <LandingFooter />
       <AnnouncementPopup />
