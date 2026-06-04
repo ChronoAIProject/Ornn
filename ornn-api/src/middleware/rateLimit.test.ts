@@ -144,6 +144,42 @@ describe("rateLimit middleware (#439 + #460)", () => {
     const r3 = await app.request("/");
     expect(r3.status).toBe(429);
   });
+
+  test("per-pod isolation is by-design: independent limiter instances do NOT share a budget (shared store tracked in #837)", async () => {
+    // This is the asserted-by-design DUAL of the issue's shared-store AC
+    // (#814): because the deployment is pinned single-replica (no HPA),
+    // per-pod budgets are the intended behaviour, NOT a bug. We simulate
+    // two pods with two independent limiter instances. The module-level
+    // `buckets` Map is shared in-process but NAMESPACED by `label`, so we
+    // MUST give each instance a DISTINCT label ("iso-a" vs "iso-b") to
+    // genuinely prove separate budgets — a shared label would let B's
+    // first hit reuse A's bucket and make this test pass vacuously.
+    function makePodApp(label: string) {
+      const pod = new Hono();
+      pod.use("*", rateLimit({ windowMs: 60_000, max: 2, label }));
+      pod.get("/", (c) => c.json({ ok: true }));
+      pod.onError((err, c) => {
+        if (err instanceof AppError) return c.json({ code: err.code }, err.statusCode as never);
+        return c.json({ code: "internal_error" }, 500);
+      });
+      return pod;
+    }
+    const podA = makePodApp("iso-a");
+    const podB = makePodApp("iso-b");
+
+    // Drive instance A to its cap (max=2): two 200s then a 429 on the 3rd.
+    expect((await podA.request("/")).status).toBe(200);
+    expect((await podA.request("/")).status).toBe(200);
+    expect((await podA.request("/")).status).toBe(429);
+
+    // Instance B's budget is untouched by A exhausting A's — its first two
+    // requests still succeed. Combined throughput is 2×max (4), NOT a
+    // single shared max of 2. This is the per-pod multiplication that the
+    // shared-store backend (#837) would eliminate once replicas > 1.
+    expect((await podB.request("/")).status).toBe(200);
+    expect((await podB.request("/")).status).toBe(200);
+    expect((await podB.request("/")).status).toBe(429);
+  });
 });
 
 /**
