@@ -129,6 +129,14 @@ export interface ExtraFilters {
 export class SkillRepository {
   private readonly collection: Collection;
 
+  /**
+   * Server-side cap on paginated reads. Bounds the worst-case
+   * `.skip()` scan + its paired `countDocuments` so a deep page (even
+   * within the clamped page ceiling) can't tie up a Mongo worker for
+   * an unbounded stretch (CWE-770, #810). Mirrors admin/routes.ts.
+   */
+  private static readonly MAX_QUERY_MS = 5_000;
+
   constructor(db: Db) {
     this.collection = db.collection("skills");
   }
@@ -337,13 +345,16 @@ export class SkillRepository {
     applyScope(matchStage, scope, currentUserId, userOrgIds);
     applyExtraFilters(matchStage, { nyxidServiceId: serviceId });
 
-    const total = await this.collection.countDocuments(matchStage);
+    const total = await this.collection.countDocuments(matchStage, {
+      maxTimeMS: SkillRepository.MAX_QUERY_MS,
+    });
     const offset = (page - 1) * pageSize;
     const docs = await this.collection
       .find(matchStage)
       .sort({ createdOn: -1 })
       .skip(offset)
       .limit(pageSize)
+      .maxTimeMS(SkillRepository.MAX_QUERY_MS)
       .toArray();
     return { skills: docs.map((d) => mapDoc(d)!), total };
   }
@@ -381,9 +392,17 @@ export class SkillRepository {
 
     applyExtraFilters(matchStage, extraFilters);
 
-    const total = await this.collection.countDocuments(matchStage);
+    const total = await this.collection.countDocuments(matchStage, {
+      maxTimeMS: SkillRepository.MAX_QUERY_MS,
+    });
     const offset = (page - 1) * pageSize;
-    const docs = await this.collection.find(matchStage).sort({ createdOn: -1 }).skip(offset).limit(pageSize).toArray();
+    const docs = await this.collection
+      .find(matchStage)
+      .sort({ createdOn: -1 })
+      .skip(offset)
+      .limit(pageSize)
+      .maxTimeMS(SkillRepository.MAX_QUERY_MS)
+      .toArray();
 
     return { skills: docs.map((d) => mapDoc(d)!), total };
   }
@@ -408,9 +427,17 @@ export class SkillRepository {
 
     applyExtraFilters(matchStage, extraFilters);
 
-    const total = await this.collection.countDocuments(matchStage);
+    const total = await this.collection.countDocuments(matchStage, {
+      maxTimeMS: SkillRepository.MAX_QUERY_MS,
+    });
     const offset = (page - 1) * pageSize;
-    const docs = await this.collection.find(matchStage).sort({ createdOn: -1 }).skip(offset).limit(pageSize).toArray();
+    const docs = await this.collection
+      .find(matchStage)
+      .sort({ createdOn: -1 })
+      .skip(offset)
+      .limit(pageSize)
+      .maxTimeMS(SkillRepository.MAX_QUERY_MS)
+      .toArray();
 
     return { skills: docs.map((d) => mapDoc(d)!), total };
   }
