@@ -6,6 +6,8 @@ metadata:
   labels:
     app: ornn-api
 spec:
+  # Pinned to 1: the in-process rate limiter (ornn-api/src/middleware/rateLimit.ts) keeps per-pod buckets.
+  # Do NOT raise >1 or add an HPA without a shared-store backend first (#837) — per-pod buckets multiply the effective limit by replica count.
   replicas: 1
   selector:
     matchLabels:
