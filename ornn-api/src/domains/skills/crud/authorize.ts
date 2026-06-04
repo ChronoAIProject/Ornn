@@ -29,7 +29,7 @@
 import type { Context } from "hono";
 import {
   getAuth,
-  readUserOrgMemberships,
+  readUserOrgMembershipResolution,
   type AuthVariables,
   type OrgMembershipFact,
 } from "../../../middleware/nyxidAuth";
@@ -48,10 +48,29 @@ export interface ActorContext {
   userId: string;
   memberships: OrgMembershipFact[];
   isPlatformAdmin: boolean;
+  /**
+   * Whether the org-membership lookup resolved authoritatively (#842).
+   * `true` when NyxID answered (including a 200-empty list); `false` when
+   * the lookup was unresolved (no forwarded token / NyxID unreachable).
+   * Write gates that share a skill into orgs must distinguish an empty
+   * `memberships` that means "member of nothing" (resolved) from one that
+   * means "we couldn't ask" (unresolved) — the latter is a retryable 503,
+   * not a 403. Read gates ignore this field (they fail soft regardless).
+   */
+  membershipsResolved: boolean;
 }
 
-/** Internal/system caller — bypasses visibility (mirror, server-side jobs). */
-export const SYSTEM_ACTOR: ActorContext = { userId: "__system__", memberships: [], isPlatformAdmin: true };
+/**
+ * Internal/system caller — bypasses visibility (mirror, server-side jobs).
+ * `membershipsResolved: true` so system callers are never treated as having
+ * an unresolved org lookup.
+ */
+export const SYSTEM_ACTOR: ActorContext = {
+  userId: "__system__",
+  memberships: [],
+  isPlatformAdmin: true,
+  membershipsResolved: true,
+};
 
 /**
  * Build the caller's object-level authorization actor from the request.
@@ -63,11 +82,16 @@ export async function buildActorContext(
   c: Context<{ Variables: AuthVariables }>,
 ): Promise<ActorContext> {
   const auth = getAuth(c);
-  const memberships = await readUserOrgMemberships(c);
+  // Resolution-aware read (#842): carry whether NyxID answered so the write
+  // gate can tell "member of nothing" (resolved) from "couldn't ask"
+  // (unresolved). `.memberships` is the same fail-soft `[]` the read path
+  // already used for both cases, so read callers are unaffected.
+  const resolution = await readUserOrgMembershipResolution(c);
   return {
     userId: auth.userId,
-    memberships,
+    memberships: resolution.memberships,
     isPlatformAdmin: auth.permissions.includes("ornn:admin:skill"),
+    membershipsResolved: resolution.status === "resolved",
   };
 }
 

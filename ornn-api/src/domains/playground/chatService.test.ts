@@ -120,7 +120,7 @@ const DEFAULTS_RESOLVER = async () => ({
 // fallback was dropped). `isPlatformAdmin: true` preserves the old
 // SYSTEM_ACTOR-bypass intent for the session/env/timeout tests that
 // don't exercise object-level authorization.
-const TEST_ACTOR: ActorContext = { userId: "u1", memberships: [], isPlatformAdmin: true };
+const TEST_ACTOR: ActorContext = { userId: "u1", memberships: [], isPlatformAdmin: true, membershipsResolved: true };
 
 interface SandboxCalls {
   createSession: Array<{ params: CreateSessionParams }>;
@@ -433,15 +433,16 @@ describe("PlaygroundChatService — env value isolation (#721)", () => {
 // these tests exercise the production policy end-to-end through chat().
 // ---------------------------------------------------------------------------
 
-const STRANGER: ActorContext = { userId: "stranger", memberships: [], isPlatformAdmin: false };
-const OWNER: ActorContext = { userId: "owner-1", memberships: [], isPlatformAdmin: false };
-const SHARED_USER: ActorContext = { userId: "shared-1", memberships: [], isPlatformAdmin: false };
+const STRANGER: ActorContext = { userId: "stranger", memberships: [], isPlatformAdmin: false, membershipsResolved: true };
+const OWNER: ActorContext = { userId: "owner-1", memberships: [], isPlatformAdmin: false, membershipsResolved: true };
+const SHARED_USER: ActorContext = { userId: "shared-1", memberships: [], isPlatformAdmin: false, membershipsResolved: true };
 const ORG_MEMBER: ActorContext = {
   userId: "someone-else",
   memberships: [{ userId: "org-9", role: "member", displayName: "Org Nine" }],
   isPlatformAdmin: false,
+  membershipsResolved: true,
 };
-const ADMIN: ActorContext = { userId: "admin-1", memberships: [], isPlatformAdmin: true };
+const ADMIN: ActorContext = { userId: "admin-1", memberships: [], isPlatformAdmin: true, membershipsResolved: true };
 
 /** True if any emitted event's serialized form contains the secret marker. */
 function leaksMarker(events: PlaygroundChatEvent[]): boolean {
