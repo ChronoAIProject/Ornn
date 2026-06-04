@@ -100,6 +100,31 @@ describe("idempotency middleware (#459)", () => {
     expect(second.headers.get("Location")).toBe("/v1/skills/abc");
   });
 
+  test("SSE responses are passed through unbuffered and never persisted (#812, CWE-770)", async () => {
+    const { app, counter } = makeApp(
+      () =>
+        new Response(
+          new ReadableStream({
+            start(controller) {
+              controller.enqueue(new TextEncoder().encode("data: one\n\n"));
+              controller.enqueue(new TextEncoder().encode("data: two\n\n"));
+              controller.close();
+            },
+          }),
+          { status: 200, headers: { "Content-Type": "text/event-stream; charset=utf-8" } },
+        ),
+    );
+    const headers = { "Idempotency-Key": "sse-key" };
+    const first = await app.request("/api/v1/skills", { method: "POST", headers });
+    expect(first.status).toBe(200);
+    expect(first.headers.get("content-type")).toBe("text/event-stream; charset=utf-8");
+    expect(await first.text()).toBe("data: one\n\ndata: two\n\n");
+    expect(await db.collection("idempotency_keys").countDocuments()).toBe(0);
+    const second = await app.request("/api/v1/skills", { method: "POST", headers });
+    expect(counter.value).toBe(2); // handler re-ran, not replayed
+    expect(second.headers.get("Idempotency-Replay")).toBe(null);
+  });
+
   test("different users with the same key DON'T collide (per-user scoping)", async () => {
     const { app, counter } = makeApp((c) =>
       new Response(JSON.stringify({ id: c.value }), {
