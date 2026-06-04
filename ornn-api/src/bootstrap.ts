@@ -156,7 +156,23 @@ export interface BootstrapResult {
   shutdown: () => Promise<void>;
 }
 
-export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
+/**
+ * Test-only dependency overrides. Production callers pass nothing — the
+ * single optional second argument lets integration tests substitute the
+ * `NyxLlmClient` with an in-process fake (see `tests/mocks/llmGateway.ts`)
+ * so quota-charge / per-model accounting flows run without real network
+ * IO. The override, when present, replaces the single `nyxLlmClient` that
+ * the playground, skill-gen, search, and audit domains all share.
+ */
+export interface BootstrapOverrides {
+  /** Substitute the shared LLM gateway client (integration tests only). */
+  llmClient?: NyxLlmClient;
+}
+
+export async function bootstrap(
+  config: SkillConfig,
+  overrides?: BootstrapOverrides,
+): Promise<BootstrapResult> {
   const logger = pino({
     level: config.logLevel,
     ...(config.logPretty ? { transport: { target: "pino-pretty" } } : {}),
@@ -432,10 +448,12 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   // selection still resolves through this single client. Backend-eng-2
   // will swap this for a per-surface provider lookup once the
   // `llm_providers` collection ships.
-  const nyxLlmClient = new NyxLlmClient({
-    resolver: async () => resolveLlmProviderForSurface("playground"),
-    saTokenProvider,
-  });
+  const nyxLlmClient =
+    overrides?.llmClient ??
+    new NyxLlmClient({
+      resolver: async () => resolveLlmProviderForSurface("playground"),
+      saTokenProvider,
+    });
 
   // ---- Repositories ----
   const skillRepo = new SkillRepository(db);
