@@ -13,9 +13,15 @@
  * style SDKs, etc.) read these and self-throttle. Without them,
  * clients can't tell the difference between "go slower" and "go away".
  *
- * Storage is in-memory per process — fine for the single-replica dev /
- * staging cluster; multi-pod prod will need a Redis backend before
- * this can be tightened. The middleware behind the scenes uses a
+ * Storage is INTENTIONALLY process-local. The bucket budget is
+ * PER-POD, and this is correct ONLY while ornn-api runs single-replica
+ * with no HPA — the current, asserted deployment topology
+ * (`deployment/ornn-api/deployment.yaml` pins `replicas: 1`). Raising
+ * `replicas > 1` or adding an HPA WITHOUT a shared-store backend first
+ * (tracked in #837) is a correctness bug: per-pod buckets multiply the
+ * effective limit by the replica count. The shared store is therefore a
+ * hard PREREQUISITE for any horizontal scale-out, not a later
+ * optimisation. The middleware behind the scenes uses a
  * `Map<key, { count, resetAt }>` with periodic-on-access cleanup so
  * idle keys don't accumulate forever.
  *
