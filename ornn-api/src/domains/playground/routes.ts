@@ -105,18 +105,13 @@ export function createPlaygroundRoutes(config: PlaygroundRoutesConfig): Hono<{ V
 
       logger.info({ userId: authCtx.userId, messageCount: parsed.messages.length }, "Chat request");
 
-      // Quota check — rejects with 429 BEFORE any LLM cost is incurred.
-      // Admins bypass via permission inside the service.
-      const decision = await quotaService.checkAllowed({
-        userId: authCtx.userId,
-        permissions: authCtx.permissions,
-        surface: "playground",
-      });
-      if (!decision.allowed) throwQuotaError(decision);
-
       // Resolve the model — explicit `modelId` (validated against the
       // surface's enabled list) or the admin-set default. 503 when no
-      // models are enabled for the playground surface.
+      // models are enabled for the playground surface. This (and the
+      // org-membership read below) run BEFORE the quota reserve so a
+      // model/auth failure can't strand a reserved slot (#808) — both
+      // are pure reads that touch no LLM, so "429 before LLM cost" still
+      // holds.
       const resolution = await llmProvidersService.resolveModel({
         surface: "playground",
         // exactOptionalPropertyTypes (#657)
@@ -138,6 +133,20 @@ export function createPlaygroundRoutes(config: PlaygroundRoutesConfig): Hono<{ V
         memberships,
         isPlatformAdmin: authCtx.permissions.includes("ornn:admin:skill"),
       };
+
+      // Quota reserve — atomically claims a slot under the cap guard and
+      // rejects with 429 BEFORE any LLM cost is incurred (#808). Runs
+      // last among the pre-stream awaits: from here to the producer's
+      // `finally` (which always calls chargeOnCompletion) nothing can
+      // throw, so a reserved slot is always reconciled (committed on
+      // success, released on system_error/abort). Admins bypass inside
+      // the service and take no reservation.
+      const decision = await quotaService.checkAllowed({
+        userId: authCtx.userId,
+        permissions: authCtx.permissions,
+        surface: "playground",
+      });
+      if (!decision.allowed) throwQuotaError(decision);
 
       // Record a `playground` pull if the chat is bound to a skill. The
       // chat service loads the skill internally; we duplicate the lookup

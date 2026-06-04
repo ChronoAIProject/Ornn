@@ -32,44 +32,76 @@ class FakeRepo {
       .sort((a, b) => a.monthMarker.localeCompare(b.monthMarker));
   }
 
-  async incrementUsed(p: {
+  /**
+   * In-memory mirror of the atomic cap-guarded reserve. JS runs this
+   * body to completion without interleaving (no `await` between the
+   * read and the write), so it is serialized the same way Mongo's
+   * single-document `findOneAndUpdate` is — at most one reserve per
+   * slot wins.
+   */
+  async reserveSlot(p: {
     userId: string;
     surface: Surface;
-    modelId: string | null | undefined;
-    defaultAllotment: number;
+    effectiveDefault: number;
     now?: Date;
   }) {
     const now = p.now ?? new Date();
     const { monthMarker, monthStart, monthEnd } = monthBounds(now);
     const id = bucketId(p.userId, p.surface, monthMarker);
     const existing = this.buckets.get(id);
+    if (existing) {
+      const cap = existing.adminGrant + p.effectiveDefault;
+      if (existing.used >= cap) return false;
+      this.buckets.set(id, { ...existing, used: existing.used + 1, updatedAt: now });
+      return true;
+    }
+    if (p.effectiveDefault < 1) return false;
+    this.buckets.set(id, {
+      _id: id,
+      userId: p.userId,
+      surface: p.surface,
+      monthMarker,
+      monthStart,
+      monthEnd,
+      defaultAllotment: p.effectiveDefault,
+      adminGrant: 0,
+      used: 1,
+      usedByModel: {},
+      createdAt: now,
+      updatedAt: now,
+    });
+    return true;
+  }
+
+  async commitModel(p: {
+    userId: string;
+    surface: Surface;
+    modelId: string | null | undefined;
+    now?: Date;
+  }) {
+    const now = p.now ?? new Date();
+    const { monthMarker } = monthBounds(now);
+    const id = bucketId(p.userId, p.surface, monthMarker);
+    const existing = this.buckets.get(id);
+    if (!existing) return;
     const modelKey = p.modelId && p.modelId.length > 0 ? p.modelId : "__unknown__";
-    const next: QuotaBucketDoc = existing
-      ? {
-          ...existing,
-          used: existing.used + 1,
-          usedByModel: {
-            ...existing.usedByModel,
-            [modelKey]: (existing.usedByModel[modelKey] ?? 0) + 1,
-          },
-          updatedAt: now,
-        }
-      : {
-          _id: id,
-          userId: p.userId,
-          surface: p.surface,
-          monthMarker,
-          monthStart,
-          monthEnd,
-          defaultAllotment: p.defaultAllotment,
-          adminGrant: 0,
-          used: 1,
-          usedByModel: { [modelKey]: 1 },
-          createdAt: now,
-          updatedAt: now,
-        };
-    this.buckets.set(id, next);
-    return next;
+    this.buckets.set(id, {
+      ...existing,
+      usedByModel: {
+        ...existing.usedByModel,
+        [modelKey]: (existing.usedByModel[modelKey] ?? 0) + 1,
+      },
+      updatedAt: now,
+    });
+  }
+
+  async releaseSlot(p: { userId: string; surface: Surface; now?: Date }) {
+    const now = p.now ?? new Date();
+    const { monthMarker } = monthBounds(now);
+    const id = bucketId(p.userId, p.surface, monthMarker);
+    const existing = this.buckets.get(id);
+    if (!existing || existing.used <= 0) return;
+    this.buckets.set(id, { ...existing, used: existing.used - 1, updatedAt: now });
   }
 
   async incrementAdminGrant(p: {
@@ -180,8 +212,8 @@ describe("UT-QUOTA-002 first-call shows clean snapshot", () => {
   });
 });
 
-describe("UT-QUOTA-003 allowed when under cap", () => {
-  test("used < default+grant → allowed", async () => {
+describe("UT-QUOTA-003 allowed when under cap (reserves the slot)", () => {
+  test("used < default+grant → allowed; checkAllowed reserves (used++)", async () => {
     const { service, repo } = build();
     const now = new Date(Date.UTC(2026, 4, 15));
     repo.buckets.set("u1:playground:2026-05", {
@@ -205,6 +237,8 @@ describe("UT-QUOTA-003 allowed when under cap", () => {
       now,
     });
     expect(d.allowed).toBe(true);
+    // The check IS the reserve now (#808): the slot is claimed up front.
+    expect(repo.buckets.get("u1:playground:2026-05")?.used).toBe(51);
   });
 });
 
@@ -234,6 +268,8 @@ describe("UT-QUOTA-004 blocked when at cap", () => {
     });
     expect(d.allowed).toBe(false);
     if (!d.allowed) expect(d.message).toContain("playground");
+    // A denied reserve must not over-count past the cap.
+    expect(repo.buckets.get("u1:playground:2026-05")?.used).toBe(100);
   });
 });
 
@@ -265,10 +301,11 @@ describe("UT-QUOTA-005 admin grant lifts ceiling", () => {
   });
 });
 
-describe("UT-QUOTA-006 charge success increments used+usedByModel", () => {
-  test("used+=1 and usedByModel.<id>+=1", async () => {
+describe("UT-QUOTA-006 reserve+success commits used+usedByModel", () => {
+  test("reserve bumps used to 1; success commit records usedByModel.<id>", async () => {
     const { service, repo } = build();
     const now = new Date(Date.UTC(2026, 4, 15));
+    await service.checkAllowed({ userId: "u1", permissions: [], surface: "playground", now });
     await service.chargeOnCompletion({
       userId: "u1",
       permissions: [],
@@ -283,9 +320,10 @@ describe("UT-QUOTA-006 charge success increments used+usedByModel", () => {
   });
 });
 
-describe("UT-QUOTA-007 skill_error charges 1", () => {
-  test("used+=1 on skill_error", async () => {
+describe("UT-QUOTA-007 reserve+skill_error keeps the slot consumed", () => {
+  test("used stays 1 on skill_error (chargeable — ran the skill)", async () => {
     const { service, repo } = build();
+    await service.checkAllowed({ userId: "u1", permissions: [], surface: "playground" });
     await service.chargeOnCompletion({
       userId: "u1",
       permissions: [],
@@ -296,22 +334,25 @@ describe("UT-QUOTA-007 skill_error charges 1", () => {
   });
 });
 
-describe("UT-QUOTA-008 system_error charges 0", () => {
-  test("DB unchanged on system_error", async () => {
+describe("UT-QUOTA-008 reserve+system_error releases the slot", () => {
+  test("used returns to 0 on system_error (refund — never reached skill)", async () => {
     const { service, repo } = build();
+    await service.checkAllowed({ userId: "u1", permissions: [], surface: "playground" });
+    expect([...repo.buckets.values()][0]?.used).toBe(1);
     await service.chargeOnCompletion({
       userId: "u1",
       permissions: [],
       surface: "playground",
       outcome: "system_error",
     });
-    expect(repo.buckets.size).toBe(0);
+    expect([...repo.buckets.values()][0]?.used).toBe(0);
   });
 });
 
 describe("UT-QUOTA-009 unknown modelId routes to __unknown__", () => {
-  test("missing modelId → usedByModel.__unknown__: 1", async () => {
+  test("missing modelId on commit → usedByModel.__unknown__: 1", async () => {
     const { service, repo } = build();
+    await service.checkAllowed({ userId: "u1", permissions: [], surface: "playground" });
     await service.chargeOnCompletion({
       userId: "u1",
       permissions: [],
@@ -322,25 +363,70 @@ describe("UT-QUOTA-009 unknown modelId routes to __unknown__", () => {
   });
 });
 
+describe("UT-QUOTA-009a checkAllowed denies once the cap is reached", () => {
+  test("repeated reserves on a cap-1 default exhaust then deny", async () => {
+    const { service, repo } = build({ defaultPg: 2 });
+    const now = new Date(Date.UTC(2026, 4, 15));
+    const d1 = await service.checkAllowed({ userId: "u1", permissions: [], surface: "playground", now });
+    const d2 = await service.checkAllowed({ userId: "u1", permissions: [], surface: "playground", now });
+    const d3 = await service.checkAllowed({ userId: "u1", permissions: [], surface: "playground", now });
+    expect(d1.allowed).toBe(true);
+    expect(d2.allowed).toBe(true);
+    expect(d3.allowed).toBe(false);
+    // Cap is 2 — the third reserve must not push used to 3.
+    expect(repo.buckets.get("u1:playground:2026-05")?.used).toBe(2);
+  });
+});
+
+describe("UT-QUOTA-009b admin bypass reserves and releases nothing", () => {
+  test("admin checkAllowed + chargeOnCompletion (both outcomes) leave no bucket", async () => {
+    const { service, repo } = build();
+    const d = await service.checkAllowed({
+      userId: "admin",
+      permissions: [ADMIN_PERM],
+      surface: "playground",
+    });
+    expect(d.allowed).toBe(true);
+    if (d.allowed) expect(d.isAdminBypass).toBe(true);
+    await service.chargeOnCompletion({
+      userId: "admin",
+      permissions: [ADMIN_PERM],
+      surface: "playground",
+      outcome: "system_error",
+    });
+    await service.chargeOnCompletion({
+      userId: "admin",
+      permissions: [ADMIN_PERM],
+      surface: "playground",
+      outcome: "success",
+    });
+    expect(repo.buckets.size).toBe(0);
+  });
+});
+
+describe("UT-QUOTA-010 release then reserve frees the slot again", () => {
+  test("a system_error refund lets a later request through at the cap", async () => {
+    const { service, repo } = build({ defaultPg: 1 });
+    const now = new Date(Date.UTC(2026, 4, 15));
+    // Consume the single slot.
+    expect((await service.checkAllowed({ userId: "u1", permissions: [], surface: "playground", now })).allowed).toBe(true);
+    // Second is denied at the cap.
+    expect((await service.checkAllowed({ userId: "u1", permissions: [], surface: "playground", now })).allowed).toBe(false);
+    // First run fails with a system error → slot released.
+    await service.chargeOnCompletion({ userId: "u1", permissions: [], surface: "playground", outcome: "system_error", now });
+    expect(repo.buckets.get("u1:playground:2026-05")?.used).toBe(0);
+    // Now a fresh request is admitted again.
+    expect((await service.checkAllowed({ userId: "u1", permissions: [], surface: "playground", now })).allowed).toBe(true);
+  });
+});
+
 describe("UT-QUOTA-011 boundary millisecond rollover", () => {
   test("Jun 1 00:00:00.000Z creates new June bucket; May untouched", async () => {
     const { service, repo } = build();
     const may = new Date(Date.UTC(2026, 4, 31, 23, 59, 59, 999));
-    await service.chargeOnCompletion({
-      userId: "u1",
-      permissions: [],
-      surface: "playground",
-      outcome: "success",
-      now: may,
-    });
+    await service.checkAllowed({ userId: "u1", permissions: [], surface: "playground", now: may });
     const jun = new Date(Date.UTC(2026, 5, 1, 0, 0, 0, 0));
-    await service.chargeOnCompletion({
-      userId: "u1",
-      permissions: [],
-      surface: "playground",
-      outcome: "success",
-      now: jun,
-    });
+    await service.checkAllowed({ userId: "u1", permissions: [], surface: "playground", now: jun });
     const mayBucket = repo.buckets.get("u1:playground:2026-05");
     const junBucket = repo.buckets.get("u1:playground:2026-06");
     expect(mayBucket?.used).toBe(1);
@@ -352,13 +438,7 @@ describe("UT-QUOTA-012 last millisecond of May → 2026-05", () => {
   test("monthMarker stays May at 23:59:59.999", async () => {
     const { service, repo } = build();
     const may = new Date(Date.UTC(2026, 4, 31, 23, 59, 59, 999));
-    await service.chargeOnCompletion({
-      userId: "u1",
-      permissions: [],
-      surface: "playground",
-      outcome: "success",
-      now: may,
-    });
+    await service.checkAllowed({ userId: "u1", permissions: [], surface: "playground", now: may });
     expect(repo.buckets.has("u1:playground:2026-05")).toBe(true);
   });
 });
@@ -536,21 +616,9 @@ describe("UT-QUOTA-023 year boundary rollover", () => {
   test("Dec 31 23:59:59.999Z → 2026; Jan 1 00:00Z → 2027", async () => {
     const { service, repo } = build();
     const dec = new Date(Date.UTC(2026, 11, 31, 23, 59, 59, 999));
-    await service.chargeOnCompletion({
-      userId: "u1",
-      permissions: [],
-      surface: "playground",
-      outcome: "success",
-      now: dec,
-    });
+    await service.checkAllowed({ userId: "u1", permissions: [], surface: "playground", now: dec });
     const jan = new Date(Date.UTC(2027, 0, 1, 0, 0, 0, 0));
-    await service.chargeOnCompletion({
-      userId: "u1",
-      permissions: [],
-      surface: "playground",
-      outcome: "success",
-      now: jan,
-    });
+    await service.checkAllowed({ userId: "u1", permissions: [], surface: "playground", now: jan });
     expect(repo.buckets.has("u1:playground:2026-12")).toBe(true);
     expect(repo.buckets.has("u1:playground:2027-01")).toBe(true);
   });
