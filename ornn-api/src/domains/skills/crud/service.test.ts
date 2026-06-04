@@ -71,9 +71,9 @@ function makeService(skill: SkillDocument, presignedUrl: string): SkillService {
   });
 }
 
-const STRANGER: ActorContext = { userId: "stranger", memberships: [], isPlatformAdmin: false };
-const OWNER: ActorContext = { userId: "owner-1", memberships: [], isPlatformAdmin: false };
-const ADMIN: ActorContext = { userId: "admin-1", memberships: [], isPlatformAdmin: true };
+const STRANGER: ActorContext = { userId: "stranger", memberships: [], isPlatformAdmin: false, membershipsResolved: true };
+const OWNER: ActorContext = { userId: "owner-1", memberships: [], isPlatformAdmin: false, membershipsResolved: true };
+const ADMIN: ActorContext = { userId: "admin-1", memberships: [], isPlatformAdmin: true, membershipsResolved: true };
 
 describe("SkillService.getSkillJson — object-level authorization (#806)", () => {
   it("private skill + stranger actor throws skill_not_found before any download", async () => {
@@ -248,7 +248,7 @@ describe("SkillService.setSkillPermissions — org-membership gate (#815)", () =
       makeSkillDoc({ guid: "guid-1", createdBy: "owner-1", isPrivate: true }),
     );
     // Caller owns the skill (passes the route gate) but is a member of no org.
-    const actor: ActorContext = { userId: "owner-1", memberships: [], isPlatformAdmin: false };
+    const actor: ActorContext = { userId: "owner-1", memberships: [], isPlatformAdmin: false, membershipsResolved: true };
 
     let thrown: unknown;
     try {
@@ -276,6 +276,7 @@ describe("SkillService.setSkillPermissions — org-membership gate (#815)", () =
       userId: "owner-1",
       memberships: [{ userId: "org-A", role: "member", displayName: "" }],
       isPlatformAdmin: false,
+      membershipsResolved: true,
     };
 
     const result = await service.setSkillPermissions(
@@ -293,7 +294,7 @@ describe("SkillService.setSkillPermissions — org-membership gate (#815)", () =
       makeSkillDoc({ guid: "guid-1", createdBy: "owner-1", isPrivate: true }),
     );
     // Admin has zero memberships but the bypass lets them share into org-A.
-    const actor: ActorContext = { userId: "admin-1", memberships: [], isPlatformAdmin: true };
+    const actor: ActorContext = { userId: "admin-1", memberships: [], isPlatformAdmin: true, membershipsResolved: true };
 
     const result = await service.setSkillPermissions(
       "guid-1",
@@ -319,7 +320,142 @@ describe("SkillService.setSkillPermissions — org-membership gate (#815)", () =
       userId: "u2",
       memberships: [{ userId: "org-X", role: "member", displayName: "" }],
       isPlatformAdmin: false,
+      membershipsResolved: true,
     };
     expect(canReadSkill(skill, orgMember)).toBe(false);
+  });
+
+  /**
+   * #842 — unresolved org-membership read.
+   *
+   * The #815 gate above intersects `sharedWithOrgs` against the caller's
+   * `memberships`. When the org-membership lookup is UNRESOLVED (forwarded
+   * token absent or NyxID unreachable) `memberships` is empty for a
+   * non-membership reason — so the #815 intersection would 403 a legitimate
+   * member. `setSkillPermissions` instead fails closed with a retryable 503
+   * `org_membership_unavailable`, but only when the caller actually shares
+   * into an org. A public / user-only change needs no membership data and
+   * succeeds even while the lookup is unresolved. A resolved-not-member share
+   * still gets the #815 403, naming only the offending org id(s).
+   */
+  it("(a) unresolved lookup + sharing into an org → 503 org_membership_unavailable, no write", async () => {
+    const { service, state } = makePermissionsService(
+      makeSkillDoc({ guid: "guid-1", createdBy: "owner-1", isPrivate: true }),
+    );
+    // Owner passes the route gate, but the org lookup never resolved — empty
+    // memberships here means "couldn't ask", not "member of nothing".
+    const actor: ActorContext = {
+      userId: "owner-1",
+      memberships: [],
+      isPlatformAdmin: false,
+      membershipsResolved: false,
+    };
+
+    let thrown: unknown;
+    try {
+      await service.setSkillPermissions(
+        "guid-1",
+        "owner-1",
+        { isPrivate: true, sharedWithUsers: [], sharedWithOrgs: ["org-X"] },
+        actor,
+      );
+    } catch (err) {
+      thrown = err;
+    }
+    expect(thrown).toBeInstanceOf(AppError);
+    expect((thrown as AppError).code).toBe("org_membership_unavailable");
+    expect((thrown as AppError).statusCode).toBe(503);
+    // Fails closed before persistence — nothing was written.
+    expect(state.updateCalled).toBe(false);
+  });
+
+  it("(b) unresolved lookup + NOT sharing into any org → succeeds", async () => {
+    const { service, state } = makePermissionsService(
+      makeSkillDoc({ guid: "guid-1", createdBy: "owner-1", isPrivate: true }),
+    );
+    // Lookup unresolved, but the caller only flips visibility / shares with a
+    // user — no org data is needed, so the write proceeds.
+    const actor: ActorContext = {
+      userId: "owner-1",
+      memberships: [],
+      isPlatformAdmin: false,
+      membershipsResolved: false,
+    };
+
+    const result = await service.setSkillPermissions(
+      "guid-1",
+      "owner-1",
+      { isPrivate: false, sharedWithUsers: ["friend-1"], sharedWithOrgs: [] },
+      actor,
+    );
+    expect(state.updateCalled).toBe(true);
+    expect(result.isPrivate).toBe(false);
+    expect(result.sharedWithOrgs).toEqual([]);
+  });
+
+  it("(c) resolved-not-member + sharing into an org → 403 not_org_member naming the org", async () => {
+    const { service, state } = makePermissionsService(
+      makeSkillDoc({ guid: "guid-1", createdBy: "owner-1", isPrivate: true }),
+    );
+    // Lookup resolved authoritatively: caller belongs to no org. Sharing into
+    // org-X is a genuine non-membership → the #815 403, not a 503.
+    const actor: ActorContext = {
+      userId: "owner-1",
+      memberships: [],
+      isPlatformAdmin: false,
+      membershipsResolved: true,
+    };
+
+    let thrown: unknown;
+    try {
+      await service.setSkillPermissions(
+        "guid-1",
+        "owner-1",
+        { isPrivate: true, sharedWithUsers: [], sharedWithOrgs: ["org-X"] },
+        actor,
+      );
+    } catch (err) {
+      thrown = err;
+    }
+    expect(thrown).toBeInstanceOf(AppError);
+    expect((thrown as AppError).code).toBe("not_org_member");
+    expect((thrown as AppError).statusCode).toBe(403);
+    expect((thrown as AppError).message).toContain("org-X");
+    expect(state.updateCalled).toBe(false);
+  });
+
+  it("(d) resolved partial membership → atomic 403 naming ONLY the non-member org", async () => {
+    const { service, state } = makePermissionsService(
+      makeSkillDoc({ guid: "guid-1", createdBy: "owner-1", isPrivate: true }),
+    );
+    // Member of org-A only; tries to share into [org-A, org-B]. The whole
+    // write is rejected atomically (org-A is NOT persisted) and the message
+    // names only the offending org-B, not org-A.
+    const actor: ActorContext = {
+      userId: "owner-1",
+      memberships: [{ userId: "org-A", role: "member", displayName: "" }],
+      isPlatformAdmin: false,
+      membershipsResolved: true,
+    };
+
+    let thrown: unknown;
+    try {
+      await service.setSkillPermissions(
+        "guid-1",
+        "owner-1",
+        { isPrivate: true, sharedWithUsers: [], sharedWithOrgs: ["org-A", "org-B"] },
+        actor,
+      );
+    } catch (err) {
+      thrown = err;
+    }
+    expect(thrown).toBeInstanceOf(AppError);
+    expect((thrown as AppError).code).toBe("not_org_member");
+    expect((thrown as AppError).statusCode).toBe(403);
+    const msg = (thrown as AppError).message;
+    expect(msg).toContain("org-B");
+    expect(msg).not.toContain("org-A");
+    // Atomic — no partial persistence of the member org.
+    expect(state.updateCalled).toBe(false);
   });
 });
