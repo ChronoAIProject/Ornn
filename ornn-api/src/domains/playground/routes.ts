@@ -22,6 +22,7 @@ import {
   readUserOrgMemberships,
 } from "../../middleware/nyxidAuth";
 import { validateBody, getValidatedBody } from "../../middleware/validate";
+import { rateLimit } from "../../middleware/rateLimit";
 import { createLogger } from "../../shared/logger";
 const logger = createLogger("playgroundRoutes");
 
@@ -98,6 +99,11 @@ export function createPlaygroundRoutes(config: PlaygroundRoutesConfig): Hono<{ V
   app.post(
     "/playground/chat",
     requirePermission("ornn:playground:use"),
+    // Rate limit (#809): per-user 20/min, same cap as skills-generate
+    // (generation/routes.ts) — playground chat runs an LLM call per request,
+    // same cost class. Mounted before validateBody so a flood of malformed
+    // bodies still 429s before Zod (and before any LLM cost).
+    rateLimit({ windowMs: 60_000, max: 20, label: "playground-chat" }),
     validateBody(chatRequestSchema, "VALIDATION_ERROR"),
     async (c) => {
       const authCtx = getAuth(c);
