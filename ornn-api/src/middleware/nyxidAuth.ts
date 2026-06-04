@@ -262,25 +262,6 @@ export function requirePermission(...required: string[]) {
 }
 
 /**
- * Allows access if user owns the resource or has ornn:admin:skill permission.
- */
-export function requireOwnerOrAdmin(getResourceOwnerId: (c: Context) => Promise<string>) {
-  return async (c: Context<{ Variables: AuthVariables }>, next: Next) => {
-    const auth = c.get("auth");
-    if (!auth) {
-      throw new AppError(401, "auth_missing", "Not authenticated");
-    }
-
-    const ownerId = await getResourceOwnerId(c);
-    if (auth.userId !== ownerId && !auth.permissions.includes("ornn:admin:skill")) {
-      throw new AppError(403, "forbidden", "You can only operate on your own resources");
-    }
-
-    await next();
-  };
-}
-
-/**
  * Helper to get auth context from request. Throws if not authenticated.
  */
 export function getAuth(c: Context<{ Variables: AuthVariables }>): AuthContext {
