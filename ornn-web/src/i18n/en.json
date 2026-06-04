@@ -427,6 +427,7 @@
     "privateTitle": "Private",
     "privateDesc": "Only you and platform admins can see this skill. Active when nothing above is set.",
     "searchPlaceholder": "type an email to find a user...",
+    "searchHint": "Type at least 2 characters to search.",
     "removeUser": "Remove",
     "noOrgs": "No organizations to choose from.",
     "noUsersYet": "No users added yet.",
