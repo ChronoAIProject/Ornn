@@ -1116,7 +1116,6 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
       if (!existing) {
         throw AppError.notFound("skill_not_found", `Skill '${guid}' not found`);
       }
-      const isPlatformAdmin = authCtx.permissions.includes("ornn:admin:skill");
       const actor = await buildActorContext(c);
       if (!canManageSkill(existing, actor)) {
         throw AppError.forbidden(
@@ -1131,7 +1130,7 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
       const updated = await skillService.tieToNyxidService(
         guid,
         body.nyxidServiceId,
-        { userId: authCtx.userId, isPlatformAdmin },
+        { userId: authCtx.userId, isPlatformAdmin: actor.isPlatformAdmin },
         async (id) => {
           // Synthetic ids (`synthetic:<slug>`) come from
           // `EXTRA_NYXID_SERVICES` config — short-circuit before the
