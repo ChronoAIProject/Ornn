@@ -1,0 +1,63 @@
+# auto:exclude-from-parity
+# ^ MUST remain the first line. ci-parity-check.sh ignores any workflow whose
+#   line 1 carries this marker, so this backstop never breaks develop/develop-auto
+#   CI parity (it is auto-infrastructure, not a CI gate).
+#
+# Server-side base-lock backstop (OPTIONAL — the user adds this at bootstrap).
+# Defense-in-depth behind bin/auto-pr-create.sh's three local guards: it fails any
+# /auto-authored PR whose base branch is not develop-auto. Belt-and-suspenders so a
+# misconfigured gh default-branch fallback can never land auto work on main/develop.
+#
+# "Auto-authored" is recognized two ways (either is sufficient):
+#   1. head branch matches the auto/<type>/<issue#>-<slug> convention (auto/*), OR
+#   2. PR author login == the pinned /auto account (default: sh1ningwang;
+#      override via repo/org variable AUTO_GH_ACCOUNT).
+# Human PRs (any other author + non-auto/* branch) are unaffected.
+#
+# pull_request_target runs in the BASE repo context. This workflow performs NO
+# checkout and runs NO PR code — it only reads event metadata — so the elevated
+# context is safe.
+name: auto-base-guard
+
+on:
+  pull_request_target:
+    types: [opened, reopened, edited, synchronize]
+
+permissions:
+  contents: read
+
+jobs:
+  guard-base:
+    name: Enforce develop-auto base for /auto PRs
+    runs-on: ubuntu-latest
+    steps:
+      - name: Reject /auto PRs not targeting develop-auto
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          # Default pinned account; override with a repo/org variable if needed.
+          AUTO_GH_ACCOUNT: ${{ vars.AUTO_GH_ACCOUNT || 'sh1ningwang' }}
+          AUTO_BASE_BRANCH: develop-auto
+        run: |
+          set -euo pipefail
+
+          is_auto_pr=false
+          case "$HEAD_REF" in
+            auto/*) is_auto_pr=true ;;
+          esac
+          if [ "$PR_AUTHOR" = "$AUTO_GH_ACCOUNT" ]; then
+            is_auto_pr=true
+          fi
+
+          if [ "$is_auto_pr" != "true" ]; then
+            echo "Not an /auto PR (author=$PR_AUTHOR head=$HEAD_REF); base guard not applicable."
+            exit 0
+          fi
+
+          if [ "$BASE_REF" != "$AUTO_BASE_BRANCH" ]; then
+            echo "::error title=Base-lock violation::/auto PR (author=$PR_AUTHOR head=$HEAD_REF) targets '$BASE_REF'; must target '$AUTO_BASE_BRANCH'."
+            exit 1
+          fi
+
+          echo "OK: /auto PR correctly targets $AUTO_BASE_BRANCH."

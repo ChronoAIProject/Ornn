@@ -2,7 +2,7 @@ name: Require team review
 
 on:
   pull_request:
-    branches: [main, develop]
+    branches: [main, develop, develop-auto]
     types: [opened, synchronize, reopened]
   pull_request_review:
     types: [submitted]
