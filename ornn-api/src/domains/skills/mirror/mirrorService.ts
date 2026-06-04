@@ -31,6 +31,7 @@ import type { SkillService } from "../crud/service";
 import { SYSTEM_ACTOR } from "../crud/authorize";
 import type { SkillDocument } from "../../../shared/types/index";
 import type { MirrorSection } from "../../settings/sections/mirror";
+import { SKILL_NAME_REGEX, SKILL_NAME_MAX } from "../../../shared/schemas/skillFrontmatter";
 
 const logger = createLogger("mirrorService");
 
@@ -260,6 +261,16 @@ export class MirrorService {
     const desired = new Map<string, string>(); // path → content
     const skillByName = new Map<string, { guid: string; version: string }>();
     for (const skill of eligible) {
+      // #807 (CWE-22): skip — do NOT abort — a row whose name would
+      // escape its `<name>/` subtree. One poisoned row must not stop the
+      // whole sweep from mirroring every other (safe) skill.
+      if (!SKILL_NAME_REGEX.test(skill.name) || skill.name.length > SKILL_NAME_MAX) {
+        logger.error(
+          { guid: skill.guid, name: skill.name },
+          "reconcileAll: skipping skill with unsafe folder name",
+        );
+        continue;
+      }
       skillByName.set(skill.name, { guid: skill.guid, version: skill.latestVersion });
       const folder = await this.buildSkillFolder(skill);
       for (const [relPath, content] of folder) {
@@ -473,12 +484,31 @@ export class MirrorService {
    * reconcile (first-push bootstrap). Callers use the return value to
    * decide whether to stamp `mirrorSync` on the DB.
    */
+  /**
+   * Defense-in-depth (#807, CWE-22): the create/import path already
+   * rejects non-kebab-case names, but a row that predates that fix (or
+   * one written by some future path) could still carry a name like
+   * `../evil` or `a/b`. Every site that interpolates `skill.name` into a
+   * mirror blob path runs this guard first so a poisoned name can never
+   * escape its own `<name>/` subtree in the public mirror repo.
+   */
+  private assertSafeSkillFolder(name: string): void {
+    if (!SKILL_NAME_REGEX.test(name) || name.length > SKILL_NAME_MAX) {
+      logger.error({ name }, "mirror: refusing unsafe skill folder name");
+      throw new Error(`Unsafe mirror skill folder name: ${name}`);
+    }
+  }
+
   private async commitSkillFolderChange(
     client: GitHubMirrorClient,
     skillName: string,
     desired: Map<string, string> | null,
     op: "publish" | "remove",
   ): Promise<{ sha: string; committedAt: Date } | null> {
+    // Guard before any path interpolation. Throwing is correct here: the
+    // call is scoped to a single skill (publishSkill / removeSkill), so a
+    // bad name fails just that operation, never a batch.
+    this.assertSafeSkillFolder(skillName);
     const headCommit = await client.getDefaultBranchHead();
     if (!headCommit) {
       // First-ever push — bootstrap requires an initial commit. Defer

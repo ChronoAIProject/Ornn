@@ -131,3 +131,65 @@ describe("SkillService.getSkillJson — object-level authorization (#806)", () =
     expect(result.files["SKILL.md"]).toContain(SECRET_BODY);
   });
 });
+
+/**
+ * #807 (CWE-22) — `extractSkillInfoLenient` is the `skip_validation=true`
+ * import path. It used to accept ANY non-empty `name`, including
+ * `../evil` / `/etc/passwd` / `..`, which then flowed into the public-
+ * mirror blob paths and could escape the skill's own `<name>/` subtree.
+ * The lenient path must now enforce the SAME kebab-case rule the strict
+ * Zod schema enforces.
+ *
+ * The method is private; we reach it via a cast (the file already casts
+ * deps to stubs elsewhere). It's a pure transform — no storage / repo
+ * call happens before the name guard — so empty stubs are sufficient.
+ */
+describe("SkillService.extractSkillInfoLenient — kebab-case name guard (#807)", () => {
+  function makeLenientService(): SkillService {
+    return new SkillService({
+      skillRepo: {} as unknown as SkillRepository,
+      skillVersionRepo: {} as unknown as SkillVersionRepository,
+      storageClient: {} as unknown as IStorageClient,
+      storageBucketResolver: async () => "test-bucket",
+    });
+  }
+
+  /** Call the private method through a typed cast. */
+  function callLenient(raw: Record<string, unknown>): { name: string } {
+    const svc = makeLenientService() as unknown as {
+      extractSkillInfoLenient: (r: Record<string, unknown>) => { name: string };
+    };
+    return svc.extractSkillInfoLenient(raw);
+  }
+
+  const TRAVERSAL_NAMES = [
+    "../evil",
+    "/etc/passwd",
+    "..",
+    "a/b",
+    "a\\b",
+    "Foo",
+    "a.b",
+    "-lead",
+    "a".repeat(65),
+  ];
+
+  for (const name of TRAVERSAL_NAMES) {
+    it(`rejects ${JSON.stringify(name)} with frontmatter_validation_failed`, () => {
+      let thrown: unknown;
+      try {
+        callLenient({ name });
+      } catch (err) {
+        thrown = err;
+      }
+      expect(thrown).toBeInstanceOf(AppError);
+      expect((thrown as AppError).code).toBe("frontmatter_validation_failed");
+      expect((thrown as AppError).statusCode).toBe(400);
+    });
+  }
+
+  it("accepts a valid kebab-case name and returns it unchanged", () => {
+    const result = callLenient({ name: "valid-skill-1" });
+    expect(result.name).toBe("valid-skill-1");
+  });
+});

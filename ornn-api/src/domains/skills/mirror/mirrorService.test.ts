@@ -340,3 +340,63 @@ describe("MirrorService idempotency", () => {
     expect(result.unchanged).toBeGreaterThanOrEqual(1);
   });
 });
+
+describe("MirrorService path-traversal guard (#807, CWE-22)", () => {
+  it("removeSkill throws on a traversal name before touching the mirror", async () => {
+    const { github, calls } = makeFakeGithub({
+      currentTree: [
+        { path: "../evil/SKILL.md", mode: "100644", type: "blob", sha: "x" },
+      ],
+    });
+    const svc = new MirrorService({
+      githubClientForTest: github,
+      skillRepo: makeFakeRepo([]),
+      skillService: makeFakeSkillService({}),
+      ornnPublicOrigin: "https://example",
+      settingsService: makeFakeSettings(),
+    });
+    // `removeSkill(name)` reaches `commitSkillFolderChange` directly with
+    // the raw name — the guard at the top must reject it.
+    await expect(svc.removeSkill("../evil")).rejects.toThrow(/unsafe mirror skill folder name/i);
+    // Nothing was written to the mirror.
+    expect(calls.trees.length).toBe(0);
+    expect(calls.commits.length).toBe(0);
+    expect(calls.tags.length).toBe(0);
+  });
+
+  it("reconcileAll skips a malformed-name skill but still mirrors the good one", async () => {
+    const goodSkill = makeSkill({ guid: "g-good", name: "good-skill", isPrivate: false });
+    // Malformed name that would escape its subtree if interpolated.
+    const badSkill = makeSkill({ guid: "g-bad", name: "../escape", isPrivate: false });
+    const { github, calls } = makeFakeGithub();
+    const svc = new MirrorService({
+      githubClientForTest: github,
+      skillRepo: makeFakeRepo([goodSkill, badSkill]),
+      skillService: makeFakeSkillService({
+        "g-good": { "SKILL.md": "# good" },
+        "g-bad": { "SKILL.md": "# bad" },
+      }),
+      ornnPublicOrigin: "https://example",
+      settingsService: makeFakeSettings(),
+    });
+    // The whole sweep must NOT abort because of one poisoned row.
+    const result = await svc.reconcileAll();
+
+    // Every path written stays inside a safe `<name>/` prefix — nothing
+    // escapes via `../`, and the bad skill's name appears in no path.
+    for (const tree of calls.trees) {
+      for (const entry of tree.entries) {
+        expect(entry.path).not.toContain("..");
+        expect(entry.path.startsWith("../escape")).toBe(false);
+      }
+    }
+    // The good skill WAS mirrored (its SKILL.md got uploaded).
+    const goodMirrored = calls.blobs.some((b) => b.content === "# good");
+    expect(goodMirrored).toBe(true);
+    // The bad skill's content never reached the mirror.
+    const badMirrored = calls.blobs.some((b) => b.content === "# bad");
+    expect(badMirrored).toBe(false);
+    // The sweep produced a commit (the good skill is a real add).
+    expect(result.added).toBeGreaterThanOrEqual(1);
+  });
+});

@@ -30,7 +30,11 @@ function hexToIntegrity(hex: string): string {
   }
   return `sha256-${Buffer.from(bytes).toString("base64")}`;
 }
-import { validateSkillFrontmatter } from "../../../shared/schemas/skillFrontmatter";
+import {
+  validateSkillFrontmatter,
+  SKILL_NAME_REGEX,
+  SKILL_NAME_MAX,
+} from "../../../shared/schemas/skillFrontmatter";
 import { resolveZipRoot } from "../../../shared/utils/zip";
 import { parseVersion, isGreater } from "./version";
 import { diffSkillInterface, type InterfaceChange } from "./interfaceDiff";
@@ -1536,6 +1540,19 @@ export class SkillService {
         "name: required (cannot be derived under skipValidation either)",
       );
     }
+    // #807 (CWE-22): the strict path rejects non-kebab-case names via the
+    // Zod schema; the lenient path bypassed it, so a crafted name (`../`,
+    // `/etc/passwd`, `..`) flowed straight into the public-mirror blob
+    // paths and could escape the skill's own `<name>/` subtree. Enforce
+    // the SAME kebab-case rule here so `skipValidation` can never widen
+    // the name surface beyond the strict path.
+    if (name.length > SKILL_NAME_MAX || !SKILL_NAME_REGEX.test(name)) {
+      logger.warn({ name }, "skipValidation: rejecting non-kebab-case skill name");
+      throw AppError.badRequest(
+        "frontmatter_validation_failed",
+        `name: must be kebab-case (^[a-z0-9][a-z0-9-]*$, <= ${SKILL_NAME_MAX} chars)`,
+      );
+    }
     const description =
       typeof raw.description === "string" ? raw.description : "";
     const version =
@@ -1699,10 +1716,12 @@ export class SkillService {
     const allPaths = Object.keys(zip.files);
     const { rootFolderName, rootEntries, getFile } = resolveZipRoot(zip, allPaths);
 
-    const KEBAB_RE = /^[a-z0-9][a-z0-9-]*$/;
+    // #807: reuse the canonical kebab-case rule (was a duplicate local
+    // regex) so folder-name validation can never drift from the name rule
+    // enforced on the create/import path.
     const ALLOWED_ROOT = new Set(["SKILL.md", "scripts", "references", "assets"]);
 
-    if (rootFolderName && !KEBAB_RE.test(rootFolderName)) {
+    if (rootFolderName && !SKILL_NAME_REGEX.test(rootFolderName)) {
       violations.push({
         rule: "folder-name-kebab-case",
         message: `Package folder name "${rootFolderName}" must be kebab-case.`,

@@ -161,9 +161,21 @@ export const refinedMetadataSchema = metadataSchema.superRefine((data, ctx) => {
  */
 export const SKILL_VERSION_REGEX = /^(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 
+/**
+ * Canonical skill-name shape: kebab-case, must start with a lowercase
+ * letter or digit. Single source of truth — consumed by the strict
+ * frontmatter schema, the lenient (`skipValidation`) extractor, the ZIP
+ * folder-name check, and the GitHub-mirror folder-name guard. This regex
+ * already rejects `/`, `\`, `.`, `..`, a leading `-`, and uppercase, so
+ * a skill name can never escape its `<name>/` subtree on the public
+ * mirror (CWE-22 path traversal, #807).
+ */
+export const SKILL_NAME_REGEX = /^[a-z0-9][a-z0-9-]*$/;
+export const SKILL_NAME_MAX = 64;
+
 // Full frontmatter schema
 export const skillFrontmatterSchema = z.object({
-  name: z.string().min(1).max(64).regex(/^[a-z0-9][a-z0-9-]*$/, "Name must be kebab-case"),
+  name: z.string().min(1).max(SKILL_NAME_MAX).regex(SKILL_NAME_REGEX, "Name must be kebab-case"),
   description: z.string().min(1).max(1024),
   // YAML parses `version: 0.1` (unquoted) as a float and `1.0` as an
   // integer `1`, which both lose the intended two-digit shape. We require
