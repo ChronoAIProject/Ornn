@@ -229,10 +229,14 @@ describe("IT-SKILLGEN-CHARGE-* (via injected LLM mock)", () => {
 
 describe("IT-SKILLGEN-ABORT", () => {
   test("abort mid-stream releases the reserved slot (used back to baseline)", async () => {
+    // `delayMs` parks the mock producer on a real timer between stream
+    // events so the abort lands deterministically while the generator is
+    // suspended mid-stream — by control flow, not back-pressure luck.
     const { client } = installLlmGatewayMock({
       outcome: "success",
       modelId: "gpt-test",
       text: VALID_SKILL_JSON,
+      delayMs: 50,
     });
     const oh = await startHarness({ llmClient: client as NyxLlmClient });
     try {

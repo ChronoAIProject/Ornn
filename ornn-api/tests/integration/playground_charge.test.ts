@@ -21,10 +21,16 @@
  */
 
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test";
+import { Hono } from "hono";
 import { startHarness, type Harness, authHeaders } from "./harness";
 import { resetCollections } from "./cleanup";
 import { installLlmGatewayMock } from "../mocks/llmGateway";
 import type { NyxLlmClient } from "../../src/clients/nyxid/llm";
+import {
+  createPlaygroundRoutes,
+  type PlaygroundRoutesConfig,
+} from "../../src/domains/playground/routes";
+import type { PlaygroundChatEvent } from "../../src/shared/types/index";
 
 let h: Harness;
 
@@ -223,7 +229,17 @@ describe("IT-PLAYGROUND-CHARGE-* (via injected LLM mock)", () => {
     }
   });
 
-  test("skill_error outcome charges 1", async () => {
+  test("completed run with dropped unknown error event still charges 1 (playground has no skill_error mapping — see follow-up)", async () => {
+    // NOTE: the mock's `skill_error` outcome yields a `response.error` +
+    // `response.completed{finishReason:"skill_error"}`, but the playground
+    // chat service's event union does not recognize those shapes — they
+    // are dropped as unknown events. The run therefore terminates on the
+    // service's own `finish{finishReason:"stop"}`, so the route records a
+    // SUCCESS-shaped completion. There is no skill_error event path on the
+    // playground surface today; this case asserts that a completed run
+    // (with the error frame silently dropped) still commits a +1 charge —
+    // identical to the success case. Wiring a real playground skill_error
+    // outcome is a separate product follow-up, intentionally out of scope.
     const { client } = installLlmGatewayMock({
       outcome: "skill_error",
       modelId: "gpt-test",
@@ -288,12 +304,16 @@ describe("IT-PLAYGROUND-CHARGE-* (via injected LLM mock)", () => {
 
 describe("IT-PLAYGROUND-ABORT", () => {
   test("abort mid-stream releases the reserved slot (used back to baseline)", async () => {
-    // Slow the mock stream so the abort lands while the producer is still
-    // pumping. Outcome=success, but the client aborts before `finish`.
+    // `delayMs` parks the mock producer on a real timer between stream
+    // events (after `response.created`, before `response.completed`), so
+    // the abort below lands deterministically while the generator is
+    // suspended mid-stream — by control flow, not back-pressure luck.
+    // Outcome would be success, but the client aborts before `finish`.
     const { client } = installLlmGatewayMock({
       outcome: "success",
       modelId: "gpt-test",
       text: "streaming...",
+      delayMs: 50,
     });
     const oh = await startHarness({ llmClient: client as NyxLlmClient });
     try {
@@ -329,5 +349,104 @@ describe("IT-PLAYGROUND-ABORT", () => {
     } finally {
       await oh.cleanup();
     }
+  });
+});
+
+/**
+ * IT-PLAYGROUND-RESERVEDAT-THREADING — route-wiring guard (#827).
+ *
+ * The route captures a single `reservedAt = new Date()` and MUST thread
+ * that SAME instant into BOTH `quotaService.checkAllowed({ now })` (reserve)
+ * AND `quotaService.chargeOnCompletion({ now })` (commit/release). Without
+ * it, a run that straddles a UTC month boundary reserves in one month's
+ * bucket and reconciles against another. The route calls `new Date()`
+ * internally, so the instant can't be pinned from outside — instead this
+ * test stubs the quota service and captures the `now` arg of each call,
+ * then asserts they are the SAME `Date` instance. Deleting `now:` from
+ * either call site makes that call default to its own `new Date()`, so the
+ * two captured instants diverge and this test fails.
+ *
+ * This is a pure route-wiring unit test (no DB harness): it mounts the real
+ * `createPlaygroundRoutes` with stubbed collaborators, mirroring the auth-
+ * stub technique in `src/domains/playground/routes.test.ts`. Playground-only
+ * is acceptable here — the generation routes have no comparable stub harness
+ * (their routes.test mounts the full app), so a mirror is out of scope.
+ */
+describe("IT-PLAYGROUND-RESERVEDAT-THREADING (route wiring #827)", () => {
+  test("checkAllowed and chargeOnCompletion receive the SAME reserve instant", async () => {
+    let reserveNow: Date | undefined;
+    let chargeNow: Date | undefined;
+
+    const quotaService = {
+      checkAllowed: async (params: { now?: Date }) => {
+        reserveNow = params.now;
+        return { allowed: true, isAdminBypass: false } as const;
+      },
+      chargeOnCompletion: async (params: { now?: Date }) => {
+        chargeNow = params.now;
+      },
+    };
+
+    const chatService = {
+      async *chat(): AsyncGenerator<PlaygroundChatEvent> {
+        // Complete cleanly so the route flips outcome to "success" and
+        // reaches the `finally` that calls chargeOnCompletion.
+        yield { type: "finish", finishReason: "stop" };
+      },
+    };
+
+    const llmProvidersService = {
+      resolveModel: async () => ({
+        kind: "ok" as const,
+        modelId: "gpt-test",
+        displayName: "gpt-test",
+        providerId: "prov-test",
+      }),
+    };
+
+    const config = {
+      chatService,
+      quotaService,
+      llmProvidersService,
+      keepAliveIntervalMsResolver: async () => 15_000,
+    } as unknown as PlaygroundRoutesConfig;
+
+    const app = new Hono();
+    // Upstream auth stub — the real `nyxidAuthMiddleware` only READS
+    // `c.get("auth")`, so this survives into the route chain and satisfies
+    // both it and `requirePermission`.
+    app.use("*", async (c, next) => {
+      c.set(
+        "auth" as never,
+        { userId: "u-thread", permissions: ["ornn:playground:use"] } as never,
+      );
+      await next();
+    });
+    app.route("/", createPlaygroundRoutes(config));
+
+    // Route module mounts at `/playground/chat`; the `/api/v1` prefix is
+    // added in bootstrap, not here, so request the bare path.
+    const res = await app.request("/playground/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ messages: [{ role: "user", content: "hi" }] }),
+    });
+    expect(res.status).toBe(200);
+    // Drain so the producer's `finally` (chargeOnCompletion) runs.
+    await drainBody(res);
+
+    // The charge fires from the producer's `finally` after the stream
+    // closes; poll until it's observed rather than racing a fixed sleep.
+    for (let i = 0; i < 200 && chargeNow === undefined; i++) {
+      await new Promise((r) => setTimeout(r, 5));
+    }
+
+    expect(reserveNow).toBeInstanceOf(Date);
+    expect(chargeNow).toBeInstanceOf(Date);
+    // Load-bearing: same instant, threaded from the route's single
+    // `reservedAt`. Strict identity — dropping `now:` from either call
+    // makes one default to its own `new Date()` and breaks this.
+    expect(chargeNow).toBe(reserveNow as Date);
+    expect((chargeNow as Date).getTime()).toBe((reserveNow as Date).getTime());
   });
 });
