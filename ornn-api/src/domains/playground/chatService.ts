@@ -174,7 +174,7 @@ When calling execute_in_sandbox:
 - env: the user-provided environment variables (already in context)
 - output_type: from metadata (text or file)
 - retrieve_files: glob patterns for output files (e.g. ["*.png", "*.jpg"])
-- timeout_secs: 120 (default)
+- timeout_secs: 60 (default, clamped to 1-600)
 
 Be concise. Act, don't explain.`;
 
@@ -594,7 +594,14 @@ export class PlaygroundChatService {
     const dependencies = (args.dependencies as string[]) ?? [];
     const retrieveFiles = (args.retrieve_files as string[]) ?? [];
     const inputFiles = (args.input_files as Array<{ path: string; content: string }>) ?? [];
-    const timeoutSecs = (args.timeout_secs as number) ?? 120;
+    // #819 — coerce + clamp the model-supplied timeout before it reaches the
+    // sandbox client. Computed once here; flows into the session path and both
+    // one-shot fallbacks, so this is the single chokepoint for this value.
+    // Non-numeric / NaN falls back to the documented 60s default.
+    const rawTimeout = Number(args.timeout_secs);
+    const timeoutSecs = Number.isFinite(rawTimeout)
+      ? Math.min(600, Math.max(1, Math.trunc(rawTimeout)))
+      : 60;
 
     let sessionId = sandboxSessions.get(language);
 

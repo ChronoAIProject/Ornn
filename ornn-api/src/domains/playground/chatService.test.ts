@@ -520,3 +520,44 @@ describe("PlaygroundChatService — skill-load authorization (#806)", () => {
     expect(toolResult!.result).toContain(SECRET_MARKER);
   });
 });
+
+// ---------------------------------------------------------------------------
+// #819 — model-supplied timeout_secs is coerced + clamped to 1-600 before it
+// reaches the sandbox client. The clamp lives at the single chokepoint in
+// runSandboxToolCall, so asserting on the session-execute path is sufficient.
+// ---------------------------------------------------------------------------
+
+describe("PlaygroundChatService — sandbox timeout clamp (#819)", () => {
+  const cases: Array<{ label: string; input: unknown; expected: number }> = [
+    { label: "0 clamps up to the 1s floor", input: 0, expected: 1 },
+    { label: "-5 clamps up to the 1s floor", input: -5, expected: 1 },
+    // The tool-call args are JSON-serialized by makeToolCallEvents exactly as
+    // the real LLM stream emits them, and JSON.stringify coerces a literal NaN
+    // to null (-> Number(null) === 0, not NaN). A non-numeric *string* is the
+    // value that actually survives that boundary and reaches the service as a
+    // NaN under Number(...), so it is the faithful trigger for the 60s fallback.
+    { label: "non-numeric input falls back to the 60s default", input: "not-a-number", expected: 60 },
+    { label: "10_000 clamps down to the 600s ceiling", input: 10_000, expected: 600 },
+  ];
+
+  for (const { label, input, expected } of cases) {
+    it(label, async () => {
+      const sandbox = makeSandboxClient({});
+      const service = makeService(
+        [
+          makeToolCallEvents({
+            name: "execute_in_sandbox",
+            args: { script: "x", language: "python", timeout_secs: input as never },
+          }),
+          STOP_EVENTS,
+        ],
+        sandbox,
+      );
+
+      await drain(service.chat("u1", { messages: [{ role: "user", content: "go" }] }));
+
+      expect(sandbox.calls.sessionExecute).toHaveLength(1);
+      expect(sandbox.calls.sessionExecute[0]!.params.timeoutSecs).toBe(expected);
+    });
+  }
+});
