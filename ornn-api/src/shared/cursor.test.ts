@@ -9,7 +9,7 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { encodeCursor, decodeCursor, buildNextCursor } from "./cursor";
+import { encodeCursor, decodeCursor, buildNextCursor, MAX_PAGE } from "./cursor";
 
 describe("encodeCursor + decodeCursor round-trip", () => {
   test("encodes + decodes a page payload losslessly", () => {
@@ -39,6 +39,12 @@ describe("encodeCursor + decodeCursor round-trip", () => {
     expect(decodeCursor(Buffer.from('{"page":-1}', "utf-8").toString("base64url"))).toBeNull();
     // page is 0
     expect(decodeCursor(Buffer.from('{"page":0}', "utf-8").toString("base64url"))).toBeNull();
+    // page at the ceiling is still valid (CWE-770 #810)
+    expect(decodeCursor(encodeCursor({ page: MAX_PAGE }))).toEqual({ page: MAX_PAGE });
+    // page one past the ceiling → null
+    expect(decodeCursor(encodeCursor({ page: MAX_PAGE + 1 }))).toBeNull();
+    // forged huge page → null (the unbounded-`.skip()` DoS vector)
+    expect(decodeCursor(Buffer.from('{"page":999999999}', "utf-8").toString("base64url"))).toBeNull();
   });
 });
 

@@ -16,6 +16,10 @@
  * @module shared/cursor
  */
 
+// Ceiling bounds `.skip()` so a forged cursor can't drive a multi-second
+// collection scan (CWE-770, #810).
+export const MAX_PAGE = 10_000;
+
 export interface CursorPayload {
   /** 1-indexed page number — what the underlying offset query reads. */
   page: number;
@@ -29,7 +33,9 @@ export function encodeCursor(payload: CursorPayload): string {
 /**
  * Decode an opaque cursor. Returns `null` for any malformed input —
  * the route layer then surfaces a 400 `invalid_cursor` so an old
- * client doesn't end up paginating from page 1 silently.
+ * client doesn't end up paginating from page 1 silently. A page above
+ * `MAX_PAGE` is also rejected so a forged cursor can't drive an
+ * unbounded `.skip()` (CWE-770, #810).
  */
 export function decodeCursor(raw: string | undefined): CursorPayload | null {
   if (!raw || typeof raw !== "string" || raw.length === 0) return null;
@@ -38,7 +44,7 @@ export function decodeCursor(raw: string | undefined): CursorPayload | null {
     const parsed = JSON.parse(json) as unknown;
     if (!parsed || typeof parsed !== "object") return null;
     const page = (parsed as { page?: unknown }).page;
-    if (typeof page !== "number" || !Number.isInteger(page) || page < 1) return null;
+    if (typeof page !== "number" || !Number.isInteger(page) || page < 1 || page > MAX_PAGE) return null;
     return { page };
   } catch {
     return null;
