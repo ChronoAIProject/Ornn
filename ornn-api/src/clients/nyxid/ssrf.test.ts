@@ -29,6 +29,9 @@ mock.module("node:dns/promises", () => ({
 
 const { NyxidSaTokenProvider } = await import("./base");
 const { NyxidServiceClient } = await import("./service");
+const { NyxidOrgsClient } = await import("./orgs");
+const { NyxidUserServicesClient } = await import("./userServices");
+const { NyxLlmCatalogClient } = await import("./llmCatalog");
 const { SsrfRefusalError } = await import("../../infra/url");
 
 const ALLOWLIST_ENV = "ORNN_URL_ALLOWLIST_CIDR";
@@ -106,5 +109,81 @@ describe("NyxidServiceClient SSRF preflight (#811) — baseApiUrl sibling", () =
     process.env[ALLOWLIST_ENV] = "rebind.test";
     await makeClient().listServicesForCaller("user-token");
     expect(fetchCalls).toEqual(["http://rebind.test/api/v1/services"]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// #832 — per-call-site SSRF smoke tests. Each named outbound site must
+// route through `safeFetch`, so a rebound resolver host is refused before
+// the network call (and before any bearer/credential is sent). We assert
+// the fetch spy recorded ZERO calls; the surfaced behaviour matches each
+// client's documented contract (throw on fail-closed reads, [] on
+// fail-soft reads).
+// ---------------------------------------------------------------------------
+
+describe("NyxidOrgsClient SSRF preflight (#832) — orgs sites", () => {
+  // listUserOrgs is fail-closed (throws); listOrgMembers is fail-soft
+  // (returns [] and logs). A working SA token provider is injected so
+  // the listOrgMembers refusal lands at the /members fetch, not the SA
+  // token exchange.
+  const stubSa = {
+    getAccessToken: async () => "sa-token",
+  } as unknown as InstanceType<typeof NyxidSaTokenProvider>;
+
+  function makeClient() {
+    return new NyxidOrgsClient({
+      resolver: async () => ({ baseApiUrl: "http://rebind.test" }),
+      saTokenProvider: stubSa,
+    });
+  }
+
+  it("listUserOrgs() refuses a rebound baseApiUrl before sending the user bearer", async () => {
+    await expect(makeClient().listUserOrgs("user-token")).rejects.toBeInstanceOf(
+      SsrfRefusalError,
+    );
+    expect(fetchCalls).toHaveLength(0);
+  });
+
+  it("listOrgMembers() refuses a rebound baseApiUrl (fail-soft []) before sending the SA bearer", async () => {
+    const out = await makeClient().listOrgMembers("org-user-id");
+    expect(out).toEqual([]);
+    expect(fetchCalls).toHaveLength(0);
+  });
+});
+
+describe("NyxidUserServicesClient SSRF preflight (#832) — user-services site", () => {
+  function makeClient() {
+    return new NyxidUserServicesClient({
+      resolver: async () => ({ baseApiUrl: "http://rebind.test" }),
+    });
+  }
+
+  it("listUserServices() refuses a rebound baseApiUrl before sending the user bearer", async () => {
+    await expect(
+      makeClient().listUserServices("user-token"),
+    ).rejects.toBeInstanceOf(SsrfRefusalError);
+    expect(fetchCalls).toHaveLength(0);
+  });
+});
+
+describe("NyxLlmCatalogClient SSRF preflight (#832) — catalog site", () => {
+  // A working SA token provider is injected so the refusal lands at the
+  // catalog `/models` fetch (the named site), not the token exchange.
+  const stubSa = {
+    getAccessToken: async () => "sa-token",
+  } as unknown as InstanceType<typeof NyxidSaTokenProvider>;
+
+  function makeClient() {
+    return new NyxLlmCatalogClient({
+      resolver: async () => ({ baseApiUrl: "http://rebind.test" }),
+      saTokenProvider: stubSa,
+    });
+  }
+
+  it("listUpstreamModels() refuses a rebound catalog host before reading the model list", async () => {
+    await expect(makeClient().listUpstreamModels()).rejects.toBeInstanceOf(
+      SsrfRefusalError,
+    );
+    expect(fetchCalls).toHaveLength(0);
   });
 });
