@@ -74,12 +74,7 @@ export interface SkillConfig {
    */
   readonly ornnPublicOrigin: string;
 
-  /**
-   * Master passphrase for AES-256-GCM at-rest secret encryption (LLM
-   * provider apiKey, future operator-pasted secrets). Falls back to a
-   * dev sentinel when `ENCRYPTION_KEY` is unset — production deployments
-   * MUST override.
-   */
+  /** Master passphrase for AES-256-GCM at-rest secret encryption. Required, ≥32 chars; boot fails with ConfigError if missing/short. See ENCRYPTION_KEY in envSchema for full rationale. */
   readonly encryptionKey: string;
 }
 
