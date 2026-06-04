@@ -147,6 +147,10 @@ import { buildSpec } from "./openapi/specBuilder";
 // Error handler
 import { AppError, buildProblemJsonBody } from "./shared/types/index";
 
+// Shared redaction list — single source of truth for sensitive log
+// fields, shared with index.ts and the createLogger factory.
+import { REDACT_PATHS } from "./shared/logger";
+
 export interface BootstrapResult {
   app: Hono;
   shutdown: () => Promise<void>;
@@ -156,15 +160,7 @@ export async function bootstrap(config: SkillConfig): Promise<BootstrapResult> {
   const logger = pino({
     level: config.logLevel,
     ...(config.logPretty ? { transport: { target: "pino-pretty" } } : {}),
-    redact: {
-      paths: [
-        "req.headers.authorization",
-        "req.headers[\"x-api-key\"]",
-        "*.password",
-        "*.secret",
-        "*.apiKey",
-      ],
-    },
+    redact: { paths: REDACT_PATHS },
   }).child({ service: "ornn-api" });
 
   logger.info("Bootstrapping ornn-api service...");
