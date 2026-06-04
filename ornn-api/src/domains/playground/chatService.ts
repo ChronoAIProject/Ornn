@@ -17,6 +17,7 @@ import type {
 } from "../../clients/sandboxClient";
 import type { SkillService } from "../skills/crud/service";
 import type { PlaygroundChatEvent } from "../../shared/types/index";
+import { type ActorContext, SYSTEM_ACTOR } from "../skills/crud/authorize";
 import { createLogger } from "../../shared/logger";
 import { z } from "zod";
 
@@ -310,8 +311,13 @@ export class PlaygroundChatService {
     userId: string,
     request: PlaygroundChatRequest,
     abortSignal?: AbortSignal,
-    options?: { modelId?: string },
+    options?: { modelId?: string; actor?: ActorContext },
   ): AsyncGenerator<PlaygroundChatEvent> {
+    // #806 — object-level authorization for skill loads. The route
+    // builds the caller's real actor; internal/test callers that omit
+    // it fall back to SYSTEM_ACTOR. This single actor gates BOTH skill
+    // bypass paths below (skillId injection + the load_skill tool).
+    const actor = options?.actor ?? SYSTEM_ACTOR;
     // Resolve LLM defaults from admin settings on every call so
     // operator updates land without a pod restart.
     let defaults: PlaygroundLlmDefaults;
@@ -347,7 +353,7 @@ export class PlaygroundChatService {
     // Auto-inject skill context if skillId is provided
     if (request.skillId) {
       try {
-        const skillJson = await this.skillService.getSkillJson(request.skillId);
+        const skillJson = await this.skillService.getSkillJson(request.skillId, actor);
         const skillContext = this.buildSkillContext(skillJson, request.envVars);
         input.unshift({
           role: "developer" as const,
@@ -456,6 +462,7 @@ export class PlaygroundChatService {
             sandboxSessions,
             createdSessionIds,
             request.envVars,
+            actor,
           );
           yield { type: "tool-result", toolCallId: pendingToolCall.id, result: toolResult.text };
 
@@ -517,6 +524,7 @@ export class PlaygroundChatService {
     sandboxSessions: Map<string, string>,
     createdSessionIds: string[],
     userEnvVars: Record<string, string> | undefined,
+    actor: ActorContext,
   ): Promise<ToolCallResult> {
     const { name, args } = toolCall;
 
@@ -531,7 +539,10 @@ export class PlaygroundChatService {
 
     if (name === "load_skill") {
       try {
-        const skillJson = await this.skillService.getSkillJson((args.skill_id as string) ?? "");
+        // #806 — gate the load through the caller's actor. A skill the
+        // caller can't read throws skill_not_found here, so the tool
+        // result below carries the denial string, never the contents.
+        const skillJson = await this.skillService.getSkillJson((args.skill_id as string) ?? "", actor);
         return { text: JSON.stringify(skillJson, null, 2), files: [] };
       } catch (err) {
         return { text: `Failed to load skill: ${err instanceof Error ? err.message : String(err)}`, files: [] };

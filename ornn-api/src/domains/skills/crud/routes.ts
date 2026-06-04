@@ -565,29 +565,31 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
       const version = c.req.query("version");
       logger.info({ idOrName, version: version ?? null }, "Skill jsonize request");
 
+      // Build the caller's actor once — `requirePermission` above
+      // guarantees authCtx is set. Used both for the defense-in-depth
+      // pre-check below and threaded into the service call (#806).
+      const authCtxForVisibility = c.get("auth");
+      if (!authCtxForVisibility) {
+        throw AppError.notFound("skill_not_found", `Skill '${idOrName}' not found`);
+      }
+      const memberships = await readUserOrgMemberships(c);
+      const actor = {
+        userId: authCtxForVisibility.userId,
+        memberships,
+        isPlatformAdmin: authCtxForVisibility.permissions.includes("ornn:admin:skill"),
+      };
+
       // Visibility check (#567) — the package contents endpoint must
       // not be more permissive than the metadata endpoint. Load the
       // skill first and reject inaccessible private skills with the
-      // same `SKILL_NOT_FOUND` shape `/skills/:idOrName` uses.
+      // same `SKILL_NOT_FOUND` shape `/skills/:idOrName` uses. Kept as
+      // defense-in-depth on top of the service-level gate (#806).
       const skill = await skillService.getSkill(idOrName);
-      if (skill.isPrivate) {
-        const authCtx = c.get("auth");
-        // `requirePermission` above guarantees authCtx is set.
-        if (!authCtx) {
-          throw AppError.notFound("skill_not_found", `Skill '${idOrName}' not found`);
-        }
-        const memberships = await readUserOrgMemberships(c);
-        const actor = {
-          userId: authCtx.userId,
-          memberships,
-          isPlatformAdmin: authCtx.permissions.includes("ornn:admin:skill"),
-        };
-        if (!canReadSkill(skill, actor)) {
-          throw AppError.notFound("skill_not_found", `Skill '${idOrName}' not found`);
-        }
+      if (skill.isPrivate && !canReadSkill(skill, actor)) {
+        throw AppError.notFound("skill_not_found", `Skill '${idOrName}' not found`);
       }
 
-      const result = await skillService.getSkillJson(idOrName, version);
+      const result = await skillService.getSkillJson(idOrName, actor, version);
       // Programmatic pull — closest signal to the north-star metric.
       // Fire-and-forget; the analytics service swallows its own errors.
       const authCtx = c.get("auth");

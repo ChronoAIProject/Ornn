@@ -14,6 +14,7 @@ import { AppError } from "../../../shared/types/index";
 import { fetchSkillFromGitHub, parseGithubUrl, type GitHubPullInput } from "./utils/githubPull";
 import { computeVersionDiff, type VersionDiffResult } from "./utils/versionDiff";
 import { isReservedVerb } from "../../../shared/reservedVerbs";
+import { canReadSkill, type ActorContext } from "./authorize";
 
 /**
  * Convert the stored hex `skillHash` into npm-style Subresource Integrity
@@ -1140,9 +1141,16 @@ export class SkillService {
    *
    * When `version` is omitted the response is the latest package — same
    * as before.
+   *
+   * #806 — object-level authorization (BOLA / OWASP API1). `actor` is a
+   * REQUIRED arg: the loaded skill doc is run through `canReadSkill`
+   * before any storage download, so a private skill the actor cannot
+   * read surfaces as `skill_not_found` instead of leaking its package
+   * (incl. embedded secrets). Trusted server jobs pass `SYSTEM_ACTOR`.
    */
   async getSkillJson(
     idOrName: string,
+    actor: ActorContext,
     version?: string,
   ): Promise<{
     name: string;
@@ -1157,6 +1165,17 @@ export class SkillService {
       skill = await this.skillRepo.findByName(idOrName);
     }
     if (!skill) {
+      throw AppError.notFound("skill_not_found", `Skill '${idOrName}' not found`);
+    }
+
+    // 1.5 Object-level authorization (#806, BOLA / OWASP API1). The
+    //      package-contents path must not be more permissive than the
+    //      metadata path: a private skill the actor cannot read is
+    //      denied here, before any storage download, with the same
+    //      `skill_not_found` shape so existence isn't leaked. Never log
+    //      file contents or secrets — only ids.
+    if (!canReadSkill(skill, actor)) {
+      logger.info({ idOrName, actorUserId: actor.userId }, "getSkillJson visibility denied");
       throw AppError.notFound("skill_not_found", `Skill '${idOrName}' not found`);
     }
 
