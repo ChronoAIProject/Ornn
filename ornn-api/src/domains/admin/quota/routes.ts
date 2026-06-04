@@ -24,6 +24,7 @@ import {
 } from "../../../middleware/nyxidAuth";
 import { validateBody, getValidatedBody } from "../../../middleware/validate";
 import { AppError } from "../../../shared/types/index";
+import { MAX_PAGE } from "../../../shared/cursor";
 import type { UserDirectoryRepository } from "../../users/repository";
 import type { QuotaService } from "../../quota/service";
 import {
@@ -239,7 +240,9 @@ export function createAdminQuotaRoutes(
     auth,
     requirePermission(QUOTA_ADMIN_PERMISSION),
     async (c) => {
-      const page = Math.max(1, Number(c.req.query("page")) || 1);
+      // Clamp to MAX_PAGE so a huge ?page= can't drive an unbounded
+      // `.skip()` scan in the grant-audit query (CWE-770, #810).
+      const page = Math.min(MAX_PAGE, Math.max(1, Number(c.req.query("page")) || 1));
       const pageSize = Math.min(200, Math.max(1, Number(c.req.query("pageSize")) || 50));
       const targetUserId = c.req.query("userId") || undefined;
       const adminUserId = c.req.query("adminUserId") || undefined;
