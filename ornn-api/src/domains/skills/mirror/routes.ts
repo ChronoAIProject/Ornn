@@ -40,6 +40,7 @@ import {
 } from "../../../middleware/nyxidAuth";
 import { AppError } from "../../../shared/types/index";
 import { isMidMaskSentinel, midMaskSecret } from "../../../infra/crypto";
+import { OWNER_RE, REPO_RE } from "../../../shared/githubNaming";
 import type { MirrorService, ReconcileResult } from "./mirrorService";
 import type { MirrorScheduler, ScheduledRunStatus } from "./scheduler";
 import type { SettingsService, SettingsActor } from "../../settings/types";
@@ -52,13 +53,12 @@ const logger = createLogger("mirrorRoutes");
 /**
  * GitHub naming validation.
  *
- *   owner: alphanumeric + dashes; can't start or end with a dash; 1–39 chars.
- *   repo:  alphanumeric + dot/dash/underscore; 1–100 chars.
+ *   owner / repo: see `shared/githubNaming` (OWNER_RE / REPO_RE) — the
+ *          single source of truth shared with the mirror settings section
+ *          and the repo-pull path.
  *   branch: any non-empty string up to 250 chars (git's actual limit is
  *          looser but we want a sane upper bound and disallow control chars).
  */
-const OWNER_RE = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/;
-const REPO_RE = /^[A-Za-z0-9._-]{1,100}$/;
 // eslint-disable-next-line no-control-regex -- intentional: rejects branch names containing C0 control chars or DEL.
 const BRANCH_RE = /^[^\x00-\x1f\x7f]{1,250}$/;
 const APP_ID_RE = /^[0-9]{1,15}$/;
