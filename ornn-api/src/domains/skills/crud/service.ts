@@ -14,7 +14,7 @@ import { AppError } from "../../../shared/types/index";
 import { fetchSkillFromGitHub, parseGithubUrl, type GitHubPullInput } from "./utils/githubPull";
 import { computeVersionDiff, type VersionDiffResult } from "./utils/versionDiff";
 import { isReservedVerb } from "../../../shared/reservedVerbs";
-import { canReadSkill, type ActorContext } from "./authorize";
+import { canReadSkill, isMemberOfOrg, type ActorContext } from "./authorize";
 
 /**
  * Convert the stored hex `skillHash` into npm-style Subresource Integrity
@@ -464,6 +464,13 @@ export class SkillService {
    *
    * Ownership (`createdBy`) is left untouched — permissions don't
    * change who wrote the skill, they just widen who can read it.
+   *
+   * CWE-862 (#815): in addition to the route write gate, this method now
+   * enforces that the caller may only share a skill into orgs they are a
+   * member of — every `sharedWithOrgs` id is intersected against the
+   * caller's memberships (platform admins exempt). Defense-in-depth: the
+   * check lives here so any future caller of the service is covered, not
+   * just the current route.
    */
   async setSkillPermissions(
     guid: string,
@@ -473,6 +480,7 @@ export class SkillService {
       sharedWithUsers: string[];
       sharedWithOrgs: string[];
     },
+    actor: ActorContext,
   ): Promise<SkillDetailResponse> {
     const existing = await this.skillRepo.findByGuid(guid);
     if (!existing) {
@@ -499,6 +507,20 @@ export class SkillService {
     const sharedWithOrgs = Array.from(
       new Set(permissions.sharedWithOrgs.filter((id) => !!id)),
     );
+
+    // CWE-862 (#815): an owner may only share into orgs they belong to.
+    // isMemberOfOrg is membership-only (does not consider platform admin), so
+    // gate the whole check behind the admin bypass.
+    if (!actor.isPlatformAdmin) {
+      const nonMember = sharedWithOrgs.filter((orgId) => !isMemberOfOrg(actor, orgId));
+      if (nonMember.length > 0) {
+        logger.warn({ guid, userId, nonMember }, "Rejected skill share into non-member org(s) (#815)");
+        throw AppError.forbidden(
+          "not_org_member",
+          `Cannot share skill into org(s) you are not a member of: ${nonMember.join(", ")}`,
+        );
+      }
+    }
 
     const updated = await this.skillRepo.update(guid, {
       isPrivate: permissions.isPrivate,

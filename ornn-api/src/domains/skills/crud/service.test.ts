@@ -20,7 +20,7 @@
 import { describe, expect, it } from "bun:test";
 import JSZip from "jszip";
 import { SkillService } from "./service";
-import { SYSTEM_ACTOR, type ActorContext } from "./authorize";
+import { SYSTEM_ACTOR, canReadSkill, type ActorContext } from "./authorize";
 import type { SkillRepository } from "./repository";
 import type { SkillVersionRepository } from "./skillVersionRepository";
 import type { IStorageClient } from "../../../clients/storageClient";
@@ -191,5 +191,135 @@ describe("SkillService.extractSkillInfoLenient — kebab-case name guard (#807)"
   it("accepts a valid kebab-case name and returns it unchanged", () => {
     const result = callLenient({ name: "valid-skill-1" });
     expect(result.name).toBe("valid-skill-1");
+  });
+});
+
+/**
+ * #815 (CWE-862) — `setSkillPermissions` org-membership gate.
+ *
+ * `PUT /skills/:id/permissions` let an owner share a skill into any org id,
+ * including ones they're not a member of. The service now intersects every
+ * deduped `sharedWithOrgs` id against the caller's memberships and rejects
+ * non-member ids with `not_org_member` (403), before the persistence write.
+ * Platform admins are exempt.
+ *
+ * The repo `update` stub echoes the patched doc so the success path resolves
+ * through `buildDetailResponse`. A capture flag on `update` proves the deny
+ * case short-circuits before any write.
+ */
+describe("SkillService.setSkillPermissions — org-membership gate (#815)", () => {
+  /**
+   * Build a service whose repo `findByGuid` returns a fixed skill doc and
+   * whose `update` echoes the patched fields back onto that doc while
+   * recording that it was called (via the returned `state.updateCalled`).
+   * `skillVersionRepo.findLatestBySkill` returns null so `buildDetailResponse`
+   * stays on the no-overlay path; storage just mints a dummy presigned URL.
+   */
+  function makePermissionsService(skill: SkillDocument): {
+    service: SkillService;
+    state: { updateCalled: boolean };
+  } {
+    const state = { updateCalled: false };
+    const skillRepo = {
+      findByGuid: async (guid: string) => (guid === skill.guid ? skill : null),
+      findByName: async () => null,
+      update: async (_guid: string, patch: Partial<SkillDocument>) => {
+        state.updateCalled = true;
+        return { ...skill, ...patch } as SkillDocument;
+      },
+    } as unknown as SkillRepository;
+    const skillVersionRepo = {
+      findLatestBySkill: async () => null,
+    } as unknown as SkillVersionRepository;
+    const storageClient = {
+      getPresignedUrl: async () => ({ presignedUrl: "http://unused", expiresAt: "" }),
+    } as unknown as IStorageClient;
+    const service = new SkillService({
+      skillRepo,
+      skillVersionRepo,
+      storageClient,
+      storageBucketResolver: async () => "test-bucket",
+    });
+    return { service, state };
+  }
+
+  it("rejects sharing into an org the caller is not a member of", async () => {
+    const { service, state } = makePermissionsService(
+      makeSkillDoc({ guid: "guid-1", createdBy: "owner-1", isPrivate: true }),
+    );
+    // Caller owns the skill (passes the route gate) but is a member of no org.
+    const actor: ActorContext = { userId: "owner-1", memberships: [], isPlatformAdmin: false };
+
+    let thrown: unknown;
+    try {
+      await service.setSkillPermissions(
+        "guid-1",
+        "owner-1",
+        { isPrivate: true, sharedWithUsers: [], sharedWithOrgs: ["org-X"] },
+        actor,
+      );
+    } catch (err) {
+      thrown = err;
+    }
+    expect(thrown).toBeInstanceOf(AppError);
+    expect((thrown as AppError).code).toBe("not_org_member");
+    expect((thrown as AppError).statusCode).toBe(403);
+    // Rejection happens before persistence — the write was never attempted.
+    expect(state.updateCalled).toBe(false);
+  });
+
+  it("allows sharing into an org the caller belongs to", async () => {
+    const { service, state } = makePermissionsService(
+      makeSkillDoc({ guid: "guid-1", createdBy: "owner-1", isPrivate: true }),
+    );
+    const actor: ActorContext = {
+      userId: "owner-1",
+      memberships: [{ userId: "org-A", role: "member", displayName: "" }],
+      isPlatformAdmin: false,
+    };
+
+    const result = await service.setSkillPermissions(
+      "guid-1",
+      "owner-1",
+      { isPrivate: true, sharedWithUsers: [], sharedWithOrgs: ["org-A"] },
+      actor,
+    );
+    expect(state.updateCalled).toBe(true);
+    expect(result.sharedWithOrgs).toContain("org-A");
+  });
+
+  it("platform admin may share into any org", async () => {
+    const { service, state } = makePermissionsService(
+      makeSkillDoc({ guid: "guid-1", createdBy: "owner-1", isPrivate: true }),
+    );
+    // Admin has zero memberships but the bypass lets them share into org-A.
+    const actor: ActorContext = { userId: "admin-1", memberships: [], isPlatformAdmin: true };
+
+    const result = await service.setSkillPermissions(
+      "guid-1",
+      "admin-1",
+      { isPrivate: true, sharedWithUsers: [], sharedWithOrgs: ["org-A"] },
+      actor,
+    );
+    expect(state.updateCalled).toBe(true);
+    expect(result.sharedWithOrgs).toContain("org-A");
+  });
+
+  it("a rejected share does not leak read access (AC#2)", () => {
+    // The rejected org id was never persisted, so the stored ACL has an
+    // empty `sharedWithOrgs`. A member of that org must still be denied
+    // read — proving the failed share leaked nothing into the read gate.
+    const skill = {
+      createdBy: "owner-1",
+      isPrivate: true,
+      sharedWithUsers: [],
+      sharedWithOrgs: [],
+    };
+    const orgMember: ActorContext = {
+      userId: "u2",
+      memberships: [{ userId: "org-X", role: "member", displayName: "" }],
+      isPlatformAdmin: false,
+    };
+    expect(canReadSkill(skill, orgMember)).toBe(false);
   });
 });
