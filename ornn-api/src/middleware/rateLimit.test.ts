@@ -145,3 +145,91 @@ describe("rateLimit middleware (#439 + #460)", () => {
     expect(r3.status).toBe(429);
   });
 });
+
+/**
+ * Anonymous (no-auth) keying — the spoofable-XFF surface (#813, CWE-348).
+ *
+ * The leftmost X-Forwarded-For token is client-controlled: an attacker
+ * can rotate it per request to shard the per-IP bucket and bypass the
+ * cap. The fix keys on a trusted token counted from the RIGHT (proxies
+ * append), configurable via ORNN_TRUSTED_PROXY_HOPS. These tests build
+ * a bare app with NO auth stub so `defaultKeyBy` falls through to the
+ * IP branch.
+ */
+describe("rateLimit middleware — anonymous XFF keying (#813)", () => {
+  beforeEach(() => __resetRateLimitForTests());
+
+  // Bare app: no auth stub, so defaultKeyBy hits the x-forwarded-for path.
+  function makeAnonApp(opts: { windowMs?: number; max?: number; label?: string }) {
+    const app = new Hono();
+    app.use(
+      "*",
+      rateLimit({
+        windowMs: opts.windowMs ?? 60_000,
+        max: opts.max ?? 2,
+        label: opts.label ?? "ip",
+      }),
+    );
+    app.get("/", (c) => c.json({ ok: true }));
+    app.onError((err, c) => {
+      if (err instanceof AppError) {
+        const body = buildProblemJsonBody({
+          statusCode: err.statusCode,
+          code: err.code,
+          message: err.message,
+          instance: c.req.path,
+          requestId: null,
+        });
+        return c.json(body, err.statusCode as never, {
+          "Content-Type": "application/problem+json",
+        });
+      }
+      return c.json({ error: { code: "internal_error", message: String(err) } }, 500);
+    });
+    return app;
+  }
+
+  test("anonymous: distinct spoofed leftmost XFF + same trusted hop share one bucket", async () => {
+    // Default hops=0 → trusted token is the rightmost "9.9.9.9", shared by
+    // all three. The distinct leftmost tokens are client-prepended spoofs
+    // and MUST NOT shard the bucket.
+    const app = makeAnonApp({ windowMs: 60_000, max: 2, label: "ip" });
+    const r1 = await app.request("/", { headers: { "x-forwarded-for": "1.1.1.1, 9.9.9.9" } });
+    const r2 = await app.request("/", { headers: { "x-forwarded-for": "2.2.2.2, 9.9.9.9" } });
+    const r3 = await app.request("/", { headers: { "x-forwarded-for": "3.3.3.3, 9.9.9.9" } });
+    expect(r1.status).toBe(200);
+    expect(r2.status).toBe(200);
+    expect(r3.status).toBe(429); // shared bucket exhausted at max=2
+  });
+
+  test("anonymous: distinct trusted hop → separate buckets", async () => {
+    // Different rightmost (trusted) token → genuinely different clients →
+    // independent buckets. max=1 means each is allowed exactly once.
+    const app = makeAnonApp({ windowMs: 60_000, max: 1, label: "ip" });
+    const a = await app.request("/", { headers: { "x-forwarded-for": "1.1.1.1, 8.8.8.8" } });
+    const b = await app.request("/", { headers: { "x-forwarded-for": "1.1.1.1, 9.9.9.9" } });
+    expect(a.status).toBe(200);
+    expect(b.status).toBe(200); // different trusted token → not the same bucket
+  });
+
+  test("respects ORNN_TRUSTED_PROXY_HOPS (counts from the right)", async () => {
+    // With hops=1 the trusted token is len-2 = "7.7.7.7" for all three
+    // requests, even though both the leftmost spoof AND the rightmost peer
+    // token differ per request. Proves the index is computed from the right.
+    const prev = process.env.ORNN_TRUSTED_PROXY_HOPS;
+    process.env.ORNN_TRUSTED_PROXY_HOPS = "1";
+    try {
+      const app = makeAnonApp({ windowMs: 60_000, max: 2, label: "ip" });
+      const r1 = await app.request("/", { headers: { "x-forwarded-for": "a, 7.7.7.7, peer1" } });
+      const r2 = await app.request("/", { headers: { "x-forwarded-for": "b, 7.7.7.7, peer2" } });
+      const r3 = await app.request("/", { headers: { "x-forwarded-for": "c, 7.7.7.7, peer3" } });
+      expect(r1.status).toBe(200);
+      expect(r2.status).toBe(200);
+      expect(r3.status).toBe(429); // all keyed on "7.7.7.7" → bucket exhausted
+    } finally {
+      // Restore so the env var doesn't leak into sibling tests.
+      if (prev === undefined) delete process.env.ORNN_TRUSTED_PROXY_HOPS;
+      else process.env.ORNN_TRUSTED_PROXY_HOPS = prev;
+    }
+  });
+});
