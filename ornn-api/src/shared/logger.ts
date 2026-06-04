@@ -13,6 +13,12 @@
  *      all of that — a misconfigured handler logging req headers
  *      would leak bearer tokens.
  *
+ * `REDACT_PATHS` (exported below) is the single source of truth for
+ * the redaction list. Both other pino roots — `bootstrap.ts`'s
+ * request/response logger and `index.ts`'s startup logger — import it
+ * rather than re-declaring their own list, so adding a sensitive field
+ * here covers every logger in the process at once.
+ *
  * `createLogger(moduleName)` returns a child of a single process-wide
  * pino root configured with both — every consumer inherits both knobs
  * for free.
@@ -51,16 +57,23 @@ export type { Logger };
 const LEVEL = process.env.LOG_LEVEL ?? "info";
 
 /**
- * Default redaction rules. Mirrors the bootstrap pino exactly so
- * module loggers can't accidentally log a bearer token. Adding new
- * sensitive fields here updates every logger in the codebase.
+ * Default redaction rules — the single source of truth for log
+ * redaction across the whole service. Imported by `bootstrap.ts` and
+ * `index.ts` so every pino root shares one list; module loggers
+ * created via `createLogger()` inherit it too. Adding a sensitive
+ * field here updates every logger in the codebase.
  */
-const REDACT_PATHS = [
+export const REDACT_PATHS = [
   "req.headers.authorization",
   'req.headers["x-api-key"]',
   "*.password",
   "*.secret",
   "*.apiKey",
+  "*.token",
+  "*.accessToken",
+  "*.userAccessToken",
+  "*.clientSecret",
+  "*.privateKey",
 ];
 
 /**
