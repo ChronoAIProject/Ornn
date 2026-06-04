@@ -512,6 +512,23 @@ export class SkillService {
     // isMemberOfOrg is membership-only (does not consider platform admin), so
     // gate the whole check behind the admin bypass.
     if (!actor.isPlatformAdmin) {
+      // #842: an unresolved org-membership lookup (forwarded token absent or
+      // NyxID unreachable) leaves `memberships` empty for a non-membership
+      // reason. Validating a share into orgs against that empty list would
+      // wrongly 403 a legitimate member, so fail closed with a retryable 503
+      // instead — but only when the caller actually asked to share into an
+      // org. A public / user-only change (empty sharedWithOrgs) needs no
+      // membership data and proceeds even while the lookup is unresolved.
+      if (sharedWithOrgs.length > 0 && !actor.membershipsResolved) {
+        logger.warn(
+          { guid, userId },
+          "Org membership unresolved; cannot validate share into orgs (#842)",
+        );
+        throw AppError.serviceUnavailable(
+          "org_membership_unavailable",
+          "Could not verify your organization memberships right now. Retry shortly.",
+        );
+      }
       const nonMember = sharedWithOrgs.filter((orgId) => !isMemberOfOrg(actor, orgId));
       if (nonMember.length > 0) {
         logger.warn({ guid, userId, nonMember }, "Rejected skill share into non-member org(s) (#815)");
