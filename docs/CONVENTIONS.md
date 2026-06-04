@@ -96,6 +96,7 @@ Optional: `detail`, `errors[]`.
 | `resource_conflict` | 409 | State conflict (duplicate, concurrent modification, etc.) |
 | `rate_limited` | 429 | Caller exceeded rate limit |
 | `upstream_unavailable` | 502 / 503 | Dependency (NyxID, LLM, sandbox, ...) failed |
+| `org_membership_unavailable` | 503 | NyxID org-membership lookup unresolved — forwarded token absent or lookup failed. Retryable |
 | `internal_error` | 500 | Unhandled server error |
 
 New codes require convention-doc update. Handlers MUST NOT invent ad-hoc codes.
