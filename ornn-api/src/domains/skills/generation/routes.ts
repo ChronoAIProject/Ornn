@@ -86,7 +86,12 @@ async function preflight(
   quotaService: QuotaService,
   llmProvidersService: LlmProvidersService,
   requestedModelId: string | undefined,
-): Promise<{ modelId: string; userId: string; permissions: readonly string[] | undefined }> {
+): Promise<{
+  modelId: string;
+  userId: string;
+  permissions: readonly string[] | undefined;
+  reservedAt: Date;
+}> {
   const authCtx = getAuth(c);
 
   const resolution = await llmProvidersService.resolveModel({
@@ -96,14 +101,24 @@ async function preflight(
   });
   if (resolution.kind !== "ok") throwModelResolutionError(resolution);
 
+  // Capture the reservation instant so the charge lands in the SAME
+  // month bucket the slot was reserved against (#827) — see the
+  // playground route for the boundary-straddle rationale.
+  const reservedAt = new Date();
   const decision = await quotaService.checkAllowed({
     userId: authCtx.userId,
     permissions: authCtx.permissions,
     surface: "skillGen",
+    now: reservedAt,
   });
   if (!decision.allowed) throwQuotaError(decision);
 
-  return { modelId: resolution.modelId, userId: authCtx.userId, permissions: authCtx.permissions };
+  return {
+    modelId: resolution.modelId,
+    userId: authCtx.userId,
+    permissions: authCtx.permissions,
+    reservedAt,
+  };
 }
 
 /**
@@ -124,6 +139,12 @@ async function streamGenerationEvents(
     permissions: readonly string[] | undefined;
     /** Resolved model id used for the LLM call — flows into `usedByModel`. */
     modelId: string;
+    /**
+     * Reservation instant captured at `preflight` time (#827). Threaded
+     * into `chargeOnCompletion` as `now` so the commit/release reconciles
+     * against the month bucket the slot was reserved in, not wall-clock.
+     */
+    reservedAt: Date;
   },
 ) {
   c.header("Cache-Control", "no-cache");
@@ -158,6 +179,8 @@ async function streamGenerationEvents(
             surface: "skillGen",
             outcome,
             modelId: chargeAfter.modelId,
+            // Reconcile against the reserved month bucket (#827).
+            now: chargeAfter.reservedAt,
           })
           .catch((err) => {
             logger.warn(
@@ -311,7 +334,7 @@ export function createGenerationRoutes(config: GenerationRoutesConfig): Hono<{ V
               pf.modelId,
             ),
             keepAliveMs,
-            { quotaService, userId: pf.userId, permissions: pf.permissions, modelId: pf.modelId },
+            { quotaService, userId: pf.userId, permissions: pf.permissions, modelId: pf.modelId, reservedAt: pf.reservedAt },
           );
         }
 
@@ -344,7 +367,7 @@ export function createGenerationRoutes(config: GenerationRoutesConfig): Hono<{ V
         c,
         generationService.generateStream(query, signal, pf.modelId),
         keepAliveMs,
-        { quotaService, userId: pf.userId, permissions: pf.permissions, modelId: pf.modelId },
+        { quotaService, userId: pf.userId, permissions: pf.permissions, modelId: pf.modelId, reservedAt: pf.reservedAt },
       );
     },
   );
@@ -461,7 +484,7 @@ export function createGenerationRoutes(config: GenerationRoutesConfig): Hono<{ V
           pf.modelId,
         ),
         keepAliveMs,
-        { quotaService, userId: pf.userId, permissions: pf.permissions, modelId: pf.modelId },
+        { quotaService, userId: pf.userId, permissions: pf.permissions, modelId: pf.modelId, reservedAt: pf.reservedAt },
       );
     },
   );
@@ -516,7 +539,7 @@ export function createGenerationRoutes(config: GenerationRoutesConfig): Hono<{ V
           pf.modelId,
         ),
         keepAliveMs,
-        { quotaService, userId: pf.userId, permissions: pf.permissions, modelId: pf.modelId },
+        { quotaService, userId: pf.userId, permissions: pf.permissions, modelId: pf.modelId, reservedAt: pf.reservedAt },
       );
     },
   );

@@ -141,10 +141,18 @@ export function createPlaygroundRoutes(config: PlaygroundRoutesConfig): Hono<{ V
       // throw, so a reserved slot is always reconciled (committed on
       // success, released on system_error/abort). Admins bypass inside
       // the service and take no reservation.
+      // Capture the reservation instant so the eventual charge lands in
+      // the SAME calendar-month bucket the slot was reserved against
+      // (#827). Without this, a run that starts at 23:59:59 on the last
+      // day of a month and finishes after the UTC rollover would commit
+      // its per-model tally to the next month's bucket while `used` was
+      // bumped in the previous one — a benign but confusing straddle.
+      const reservedAt = new Date();
       const decision = await quotaService.checkAllowed({
         userId: authCtx.userId,
         permissions: authCtx.permissions,
         surface: "playground",
+        now: reservedAt,
       });
       if (!decision.allowed) throwQuotaError(decision);
 
@@ -275,6 +283,10 @@ export function createPlaygroundRoutes(config: PlaygroundRoutesConfig): Hono<{ V
               surface: "playground",
               outcome,
               modelId: resolvedModelId,
+              // Reconcile against the reserved month bucket (#827), not
+              // wall-clock-now, so a month-boundary straddle commits/
+              // releases the slot it actually reserved.
+              now: reservedAt,
             })
             .catch((err) => {
               logger.warn(
