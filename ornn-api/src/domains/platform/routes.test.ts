@@ -168,6 +168,33 @@ describe("PATCH /admin/settings — validation", () => {
     expect(patchCalls.length).toBe(0);
   });
 
+  // Lower-bound boundary: the guard rejects `n < 0` before rounding/persisting.
+  test("auditWaiverThreshold negative (-1) → 400 invalid_setting", async () => {
+    const res = await app.request("/admin/settings", {
+      method: "PATCH",
+      headers: jsonHeaders(),
+      body: JSON.stringify({ auditWaiverThreshold: -1 }),
+    });
+    expect(res.status).toBe(400);
+    const json = (await res.json()) as { code: string };
+    expect(json.code).toBe("invalid_setting");
+    expect(patchCalls.length).toBe(0);
+  });
+
+  // Non-numeric input: Number("x") is NaN, so the `!Number.isFinite(n)` arm of
+  // the same guard fires → 400 invalid_setting (route never coerces it to 0).
+  test("auditWaiverThreshold non-number ('x') → 400 invalid_setting", async () => {
+    const res = await app.request("/admin/settings", {
+      method: "PATCH",
+      headers: jsonHeaders(),
+      body: JSON.stringify({ auditWaiverThreshold: "x" }),
+    });
+    expect(res.status).toBe(400);
+    const json = (await res.json()) as { code: string };
+    expect(json.code).toBe("invalid_setting");
+    expect(patchCalls.length).toBe(0);
+  });
+
   test("auditWaiverThreshold rounds to 1 decimal place", async () => {
     const res = await app.request("/admin/settings", {
       method: "PATCH",

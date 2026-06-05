@@ -153,11 +153,17 @@ describe("GET /admin/users", () => {
     expect(listCalls[0]!.dir).toBe("asc");
   });
 
-  test("invalid sort key → zod throws → 500 (route does not silently pass)", async () => {
+  test("invalid sort currently escapes as 500 internal_error (KNOWN DEFECT — should be 400; tracked in #908)", async () => {
+    // Documents current buggy behavior: the route calls raw `sortKeySchema.parse`
+    // (and `dirSchema.parse`) on the `sort`/`dir` query params. A bad value makes
+    // zod throw a ZodError, which carries no `statusCode`/`code`, so it escapes to
+    // the bootstrap's non-AppError→500 mapper instead of being a client error.
+    // Target fix: mirror the `role` param's `safeParse` guard and raise a 400
+    // `invalid_sort` / `invalid_dir` AppError. Until that lands we pin the
+    // current 500 so the regression is visible and the fix flips this assertion.
     const res = await app.request("/admin/users?sort=bogusColumn", {
       headers: authHeaders(),
     });
-    // sortKeySchema.parse throws a ZodError (no statusCode) → onError 500.
     expect(res.status).toBe(500);
     expect(listCalls.length).toBe(0);
   });
