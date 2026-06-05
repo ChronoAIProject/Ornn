@@ -40,7 +40,7 @@ import { useMyQuota } from "@/hooks/useQuota";
 import {
   extractEnvVarKeys,
   isRuntimeBased,
-} from "@/components/playground/PlaygroundHelpers";
+} from "@/components/playground/PlaygroundHelpers.helpers";
 import type { DrawerKey } from "@/components/playground/PlaygroundRail";
 
 export function usePlaygroundSession(skillName: string | null) {
