@@ -49,9 +49,11 @@ import type { SkillDetailResponse } from "../../../shared/types/index";
 //
 // Mirrors EXACTLY the two methods the service calls
 // (notifyAuditCompleted({ownerUserId,...}) +
-//  notifyAuditRiskyForConsumer({consumerUserId,...})). The shared
-// tests/mocks/notificationService.ts uses a different param shape and
-// would not typecheck against the real call sites.
+//  notifyAuditRiskyForConsumer({consumerUserId,...})). A local recorder
+// is used rather than a shared one because the real service keys
+// notifyAuditCompleted off `ownerUserId` (not `userId`) and the risky
+// emitter off `consumerUserId` — a `{ userId }`-shaped generic mock
+// would not typecheck against these call sites.
 
 interface CompletedCall {
   ownerUserId: string;
