@@ -6,7 +6,7 @@
 
 import { createHash } from "node:crypto";
 import { randomUUID } from "node:crypto";
-import type { SkillRepository } from "./repository";
+import type { SkillRepository, UpdateSkillData } from "./repository";
 import type { SkillVersionRepository } from "./skillVersionRepository";
 import type { IStorageClient } from "../../../clients/storageClient";
 import type { SkillDocument, SkillMetadata, SkillDetailResponse, SkillVersionDocument, SkillSource } from "../../../shared/types/index";
@@ -580,7 +580,7 @@ export class SkillService {
       );
     }
 
-    const updateData: Record<string, unknown> = { updatedBy: userId };
+    const updateData: UpdateSkillData = { updatedBy: userId };
 
     if (options.zipBuffer) {
       if (!options.skipValidation) {
@@ -682,7 +682,7 @@ export class SkillService {
       updateData.source = options.source;
     }
 
-    const updated = await this.skillRepo.update(guid, updateData as any);
+    const updated = await this.skillRepo.update(guid, updateData);
     return this.buildDetailResponse(updated);
   }
 
