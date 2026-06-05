@@ -31,19 +31,19 @@ function usePrefersReducedMotion(): boolean {
 }
 
 /**
- * HeroVideo — the full-bleed landing hero (#840).
+ * HeroVideo — the full-bleed landing hero (#840, #896).
  *
  * Replaces the scroll-scrub `HeroStage` narrative with a single autoplaying,
  * muted, looping background intro video that fills the viewport. The video is
- * decorative (`aria-hidden`) — the burned-in captions carry the message — so
- * the only interactive content is the CTA pair.
+ * pure animation — no caption layer (#896) — and decorative (`aria-hidden`),
+ * so the only interactive (and only textual) content is the CTA pair.
  *
  * Reduced-motion users get the static poster frame instead of the video.
  *
- * Caption-safety (AC4): the source video burns its captions into the
- * lower-center band, so the CTA + scrim live at the TOP-LEFT (clear of the
- * Navbar) and the scrim is a top-down gradient. A bottom CTA/scrim would sit
- * on top of — and an ember-tinted scrim would muddy — the orange caption text.
+ * The asset is true 16:9 (1920x1080@60, H.264 High@L4.2 — kept ≤ L5.1 so
+ * phones can hardware-decode it, see #870). `object-cover` scales/crops it to
+ * any viewport ratio, so real content pixels fill the screen edge-to-edge —
+ * there are no baked-in letterbox bars (unlike the pre-#896 2.4:1 frame).
  */
 export function HeroVideo() {
   const reduced = usePrefersReducedMotion();
@@ -85,18 +85,18 @@ export function HeroVideo() {
       )}
 
       {/* Top scrim — local to the CTA corner, never the full frame, so the
-          lower-center burned-in captions stay legible. Top-down page-tone
-          gradient anchors the CTA against the bright forge ceiling + Navbar. */}
+          animation stays unobscured. Top-down page-tone gradient anchors the
+          CTA against the bright forge ceiling + Navbar. */}
       <div
         aria-hidden="true"
         className="pointer-events-none absolute inset-x-0 top-0 z-0 h-56 bg-gradient-to-b from-[var(--color-page)] to-transparent opacity-90"
       />
 
-      {/* CTA — top-left, below the Navbar, clear of the caption band. The
-          local plate (overlay surface + blur + strong border, the same
-          vocabulary as HeroStage's final-CTA overlay) keeps the labels above
-          WCAG AA regardless of the decorative video frame behind them — the
-          top scrim alone can't guarantee contrast once the CTA outgrows it. */}
+      {/* CTA — top-left, below the Navbar. The local plate (overlay surface +
+          blur + strong border, the same vocabulary as HeroStage's final-CTA
+          overlay) keeps the labels above WCAG AA regardless of the decorative
+          video frame behind them — the top scrim alone can't guarantee
+          contrast once the CTA outgrows it. */}
       <div className="absolute left-8 top-24 z-10 flex gap-3 rounded-[4px] border border-[color:var(--color-border-strong)] [background-color:var(--surface-overlay)] p-3 backdrop-blur-[14px] sm:left-12 sm:top-28">
         <EmberLink to="/registry">{t("landing.browseSkills")}</EmberLink>
         <EmberLink to="/skills/new" variant="ghost">
