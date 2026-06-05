@@ -52,7 +52,7 @@ export function HeroVideo() {
   return (
     <section
       aria-label={t("aria.productOverview", { brand: "Ornn" })}
-      className="relative h-[100svh] min-h-[640px] w-full overflow-hidden bg-page"
+      className="relative h-[100svh] w-full overflow-hidden bg-page"
     >
       {reduced ? (
         <img
