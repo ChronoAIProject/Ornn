@@ -16,13 +16,41 @@
  * VALUES never are.
  */
 
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 import { PostHog } from "posthog-node";
 import { NoopTracker, PosthogTracker, createTracker } from "./posthog";
 import type { Logger } from "../../shared/logger";
 
 const FAKE_KEY = "phc_fake_key_for_test";
 const FAKE_HOST = "https://eu.i.posthog.com";
+
+// ---- Open-handle hygiene ---------------------------------------------
+//
+// Every `new PosthogTracker(...)` (directly or via `createTracker`) runs
+// the constructor's `new PostHog(...)`, which spins up a live posthog-node
+// v5 client. v5 arms its background flush timer lazily (first `capture`),
+// so in this suite — where we swap `.client` for a stub before any capture
+// reaches the real client — the timer is usually NOT armed and the process
+// exits clean. But that is an implementation detail of the SDK, not a
+// guarantee we want to depend on. So we register every REAL client the
+// moment it is created and `await client.shutdown()` each in afterEach,
+// making the no-open-handles property explicit rather than incidental.
+const leakedClients: PostHog[] = [];
+
+/** Register a real posthog-node client for deterministic draining. */
+function registerForDrain(client: PostHog): void {
+  leakedClients.push(client);
+}
+
+afterEach(async () => {
+  // Drain every real client created during the test, swallowing failures
+  // (these clients never connect to a live backend). Clear after so each
+  // test only drains its own.
+  await Promise.all(
+    leakedClients.map((c) => c.shutdown().catch(() => undefined)),
+  );
+  leakedClients.length = 0;
+});
 
 // ---- Test doubles ----------------------------------------------------
 
@@ -54,11 +82,6 @@ class FakeLogger {
 
   asLogger(): Logger {
     return this as unknown as Logger;
-  }
-
-  /** Every object arg passed to any level, flattened for value scans. */
-  allLoggedObjects(): Record<string, unknown>[] {
-    return [...this.infoCalls, ...this.debugCalls, ...this.errorCalls].map((c) => c.obj);
   }
 }
 
@@ -95,7 +118,12 @@ function trackerWith(stub: object, logger: FakeLogger, projectId?: string | null
     },
     logger.asLogger(),
   );
-  (tracker as unknown as { client: object }).client = stub;
+  // The constructor already built a live `PostHog` client. Capture it for
+  // draining BEFORE we overwrite the field with the stub, otherwise the
+  // real client (and any timer it may have armed) is orphaned.
+  const fieldSeam = tracker as unknown as { client: object };
+  registerForDrain(fieldSeam.client as PostHog);
+  fieldSeam.client = stub;
   return tracker;
 }
 
@@ -172,21 +200,31 @@ describe("PosthogTracker.track / shutdown", () => {
     expect(captured.event).toBe("skill.executed");
     expect(captured.properties).toEqual({ a: 1, b: 2 });
 
-    // info logged once with the property KEY list.
+    // Redaction oracle — exact-object assertion, not a substring scan. The
+    // info line MUST be EXACTLY the redacted shape: event name + redacted
+    // distinctId + property KEY list, and NOTHING else (no values, no
+    // stray properties body). `toEqual` fails on any extra key, so a future
+    // change that leaks `properties` (or any value-bearing field) onto the
+    // info line is caught structurally rather than by a fragile `:1` scan.
     expect(logger.infoCalls).toHaveLength(1);
-    expect(logger.infoCalls[0]!.obj.propKeys).toEqual(["a", "b"]);
+    expect(logger.infoCalls[0]!.obj).toEqual({
+      event: "skill.executed",
+      distinctId: "user-id",
+      propKeys: ["a", "b"],
+    });
 
-    // Redaction contract: no property VALUE (1 or 2) appears in ANY log
-    // object arg. JSON-serialize each and scan for the values.
-    for (const obj of logger.allLoggedObjects()) {
-      // `properties` is intentionally only present on the debug body line;
-      // strip it before scanning so we test the info/error redaction, not
-      // the deliberate debug-level body.
-      const { properties: _props, ...rest } = obj;
-      const serialized = JSON.stringify(rest);
-      expect(serialized).not.toContain(":1");
-      expect(serialized).not.toContain(":2");
-    }
+    // No error line on the happy path.
+    expect(logger.errorCalls).toHaveLength(0);
+
+    // The debug body line is the ONLY place values are allowed; it carries
+    // the full properties object verbatim. Asserting its exact shape pins
+    // the value/key boundary: values live here and only here.
+    expect(logger.debugCalls).toHaveLength(1);
+    expect(logger.debugCalls[0]!.obj).toEqual({
+      event: "skill.executed",
+      distinctId: "user-id",
+      properties: { a: 1, b: 2 },
+    });
   });
 
   test("anonymous caller gets an anon: distinctId and it stays redacted", () => {
@@ -202,10 +240,15 @@ describe("PosthogTracker.track / shutdown", () => {
 
     // The logged distinctId is the redacted form (anon: + 8 chars head is
     // longer than 8 so it gets truncated with the ellipsis).
-    const loggedId = logger.infoCalls[0]!.obj.distinctId as string;
+    const { distinctId: loggedId, ...rest } = logger.infoCalls[0]!.obj;
     expect(loggedId).toMatch(/^anon:.*…$/);
     // The full anonymous id is never logged at info level verbatim.
     expect(loggedId).not.toBe(captured.distinctId);
+
+    // Exact-object oracle on the rest of the info line: the volatile
+    // distinctId is stripped above; everything else MUST match the redacted
+    // shape with no extra value-bearing fields.
+    expect(rest).toEqual({ event: "skill.viewed", propKeys: [] });
   });
 
   test("redactDistinctId truncates ids longer than 8 chars", () => {
@@ -215,7 +258,11 @@ describe("PosthogTracker.track / shutdown", () => {
 
     tracker.track("0123456789abcdef", "evt");
 
-    expect(logger.infoCalls[0]!.obj.distinctId).toBe("01234567…");
+    expect(logger.infoCalls[0]!.obj).toEqual({
+      event: "evt",
+      distinctId: "01234567…",
+      propKeys: [],
+    });
   });
 
   test("redactDistinctId leaves ids of 8 chars or fewer verbatim", () => {
@@ -225,7 +272,11 @@ describe("PosthogTracker.track / shutdown", () => {
 
     tracker.track("short", "evt");
 
-    expect(logger.infoCalls[0]!.obj.distinctId).toBe("short");
+    expect(logger.infoCalls[0]!.obj).toEqual({
+      event: "evt",
+      distinctId: "short",
+      propKeys: [],
+    });
   });
 
   test("omits the properties key on capture when no properties are passed", () => {
@@ -239,7 +290,11 @@ describe("PosthogTracker.track / shutdown", () => {
     // exactOptionalPropertyTypes (#657): the spread omits `properties`
     // entirely rather than passing `undefined`.
     expect("properties" in captured).toBe(false);
-    expect(logger.infoCalls[0]!.obj.propKeys).toEqual([]);
+    expect(logger.infoCalls[0]!.obj).toEqual({
+      event: "evt",
+      distinctId: "user-id",
+      propKeys: [],
+    });
   });
 
   test("fail-open: a throwing capture is caught and logged, never rethrown", () => {
@@ -256,8 +311,16 @@ describe("PosthogTracker.track / shutdown", () => {
 
     expect(() => tracker.track("user-id", "evt", { a: 1 })).not.toThrow();
     expect(logger.errorCalls).toHaveLength(1);
-    expect(logger.errorCalls[0]!.obj.event).toBe("evt");
     expect(logger.errorCalls[0]!.msg).toBe("PostHog capture failed");
+
+    // Redaction oracle on the ERROR line: the property value (`1`) MUST NOT
+    // leak even on the failure path. Strip the volatile `err` (an Error
+    // instance) and assert the rest is EXACTLY the event name — no
+    // distinctId, no propKeys, no properties body. `err` is asserted
+    // separately so a future change carrying `properties` here fails.
+    const { err, ...rest } = logger.errorCalls[0]!.obj;
+    expect(err).toBeInstanceOf(Error);
+    expect(rest).toEqual({ event: "evt" });
   });
 
   test("shutdown success logs an info line", async () => {
