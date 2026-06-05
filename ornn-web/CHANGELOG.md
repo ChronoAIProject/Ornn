@@ -1,5 +1,11 @@
 # ornn-web
 
+## 0.10.1
+
+### Patch Changes
+
+- [#871](https://github.com/ChronoAIProject/Ornn/pull/871) [`47683b0`](https://github.com/ChronoAIProject/Ornn/commit/47683b02f8a5a9695b2fc80a0ce48b19f3ff242c) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Fix the landing hero video freezing on phones and other devices. The 4K upscale shipped an H.264 Level 6.0 / 5184px-wide asset that exceeds the hardware decoder limits of phones and most laptops, so the hero stayed stuck on the poster frame everywhere except the author's desktop. Reverted the video and poster to a universally-decodable 1080p encode (2592×1080, H.264 High Level 5.0), so the intro now autoplays for everyone.
+
 ## 0.10.0
 
 ### Minor Changes
