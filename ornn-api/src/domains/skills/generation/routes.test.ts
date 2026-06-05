@@ -72,6 +72,7 @@ function happyFrames(): SkillStreamEvent[] {
 
 interface ChargeCall {
   userId: string;
+  permissions: readonly string[] | undefined;
   surface: string;
   outcome: ChargeOutcome;
   modelId: string;
@@ -131,13 +132,20 @@ class FakeGenerationService {
 class FakeQuotaService {
   allowed = true;
   checkAllowedCalls = 0;
+  checkAllowedArgs: Array<{ permissions: readonly string[] | undefined }> = [];
   charges: ChargeCall[] = [];
 
-  async checkAllowed(): Promise<
+  async checkAllowed(input: {
+    userId: string;
+    permissions: readonly string[] | undefined;
+    surface: string;
+    now: Date;
+  }): Promise<
     | { allowed: true; isAdminBypass: boolean }
     | { allowed: false; isAdminBypass: false; surface: "skillGen"; message: string }
   > {
     this.checkAllowedCalls += 1;
+    this.checkAllowedArgs.push({ permissions: input.permissions });
     if (this.allowed) return { allowed: true, isAdminBypass: false };
     return {
       allowed: false,
@@ -149,6 +157,7 @@ class FakeQuotaService {
 
   async chargeOnCompletion(input: {
     userId: string;
+    permissions: readonly string[] | undefined;
     surface: string;
     outcome: ChargeOutcome;
     modelId: string;
@@ -156,6 +165,7 @@ class FakeQuotaService {
   }): Promise<void> {
     this.charges.push({
       userId: input.userId,
+      permissions: input.permissions,
       surface: input.surface,
       outcome: input.outcome,
       modelId: input.modelId,
@@ -343,6 +353,10 @@ describe("POST /skills/generate — charge-outcome matrix", () => {
     expect(quota.charges[0]!.modelId).toBe(MODEL_ID);
     expect(quota.charges[0]!.userId).toBe(USER_ID);
     expect(quota.charges[0]!.now).toBeInstanceOf(Date);
+    // The auth context's permissions flow into BOTH quota gates — a
+    // regression dropping the field on either call would pass silently.
+    expect(quota.charges[0]!.permissions).toEqual([BUILD_PERM]);
+    expect(quota.checkAllowedArgs[0]!.permissions).toEqual([BUILD_PERM]);
   });
 
   it("validation_error without complete charges outcome=skill_error", async () => {
@@ -507,7 +521,7 @@ describe("POST /skills/generate — validation", () => {
 describe("POST /skills/generate — multipart", () => {
   async function makeZip(): Promise<Blob> {
     const zip = new JSZip();
-    zip.file("SKILL.md", "# Demo\nA demo skill package.");
+    zip.file("SKILL.md", "# Demo\nA demo skill package. DISTINCTIVE_SKILL_MARKER_42");
     zip.file("scripts/main.js", "console.log('hi');");
     const bytes = await zip.generateAsync({ type: "uint8array" });
     return new Blob([bytes as unknown as BlobPart], { type: "application/zip" });
@@ -534,7 +548,12 @@ describe("POST /skills/generate — multipart", () => {
     // The resolved model id is what the generator is told to use.
     expect(gen.generateStreamCalls[0]!.modelOverride).toBe(MODEL_ID);
     // The package content is folded into the query.
-    expect(gen.generateStreamCalls[0]!.query).toContain("improve this skill");
+    const query = gen.generateStreamCalls[0]!.query;
+    expect(query).toContain("improve this skill");
+    // analyzePackageContent → "Existing skill package content:" prefix
+    // branch: the SKILL.md from the ZIP must be threaded into the query.
+    expect(query).toContain("Existing skill package content:");
+    expect(query).toContain("DISTINCTIVE_SKILL_MARKER_42");
   });
 
   it("rejects multipart with a missing prompt", async () => {
