@@ -14,6 +14,7 @@ import { AppError } from "../../../shared/types/index";
 import { fetchSkillFromGitHub, parseGithubUrl, type GitHubPullInput } from "./utils/githubPull";
 import { computeVersionDiff, type VersionDiffResult } from "./utils/versionDiff";
 import { isReservedVerb } from "../../../shared/reservedVerbs";
+import { canReadSkill, isMemberOfOrg, type ActorContext } from "./authorize";
 
 /**
  * Convert the stored hex `skillHash` into npm-style Subresource Integrity
@@ -29,7 +30,11 @@ function hexToIntegrity(hex: string): string {
   }
   return `sha256-${Buffer.from(bytes).toString("base64")}`;
 }
-import { validateSkillFrontmatter } from "../../../shared/schemas/skillFrontmatter";
+import {
+  validateSkillFrontmatter,
+  SKILL_NAME_REGEX,
+  SKILL_NAME_MAX,
+} from "../../../shared/schemas/skillFrontmatter";
 import { resolveZipRoot } from "../../../shared/utils/zip";
 import { parseVersion, isGreater } from "./version";
 import { diffSkillInterface, type InterfaceChange } from "./interfaceDiff";
@@ -459,6 +464,13 @@ export class SkillService {
    *
    * Ownership (`createdBy`) is left untouched — permissions don't
    * change who wrote the skill, they just widen who can read it.
+   *
+   * CWE-862 (#815): in addition to the route write gate, this method now
+   * enforces that the caller may only share a skill into orgs they are a
+   * member of — every `sharedWithOrgs` id is intersected against the
+   * caller's memberships (platform admins exempt). Defense-in-depth: the
+   * check lives here so any future caller of the service is covered, not
+   * just the current route.
    */
   async setSkillPermissions(
     guid: string,
@@ -468,6 +480,7 @@ export class SkillService {
       sharedWithUsers: string[];
       sharedWithOrgs: string[];
     },
+    actor: ActorContext,
   ): Promise<SkillDetailResponse> {
     const existing = await this.skillRepo.findByGuid(guid);
     if (!existing) {
@@ -494,6 +507,37 @@ export class SkillService {
     const sharedWithOrgs = Array.from(
       new Set(permissions.sharedWithOrgs.filter((id) => !!id)),
     );
+
+    // CWE-862 (#815): an owner may only share into orgs they belong to.
+    // isMemberOfOrg is membership-only (does not consider platform admin), so
+    // gate the whole check behind the admin bypass.
+    if (!actor.isPlatformAdmin) {
+      // #842: an unresolved org-membership lookup (forwarded token absent or
+      // NyxID unreachable) leaves `memberships` empty for a non-membership
+      // reason. Validating a share into orgs against that empty list would
+      // wrongly 403 a legitimate member, so fail closed with a retryable 503
+      // instead — but only when the caller actually asked to share into an
+      // org. A public / user-only change (empty sharedWithOrgs) needs no
+      // membership data and proceeds even while the lookup is unresolved.
+      if (sharedWithOrgs.length > 0 && !actor.membershipsResolved) {
+        logger.warn(
+          { guid, userId },
+          "Org membership unresolved; cannot validate share into orgs (#842)",
+        );
+        throw AppError.serviceUnavailable(
+          "org_membership_unavailable",
+          "Could not verify your organization memberships right now. Retry shortly.",
+        );
+      }
+      const nonMember = sharedWithOrgs.filter((orgId) => !isMemberOfOrg(actor, orgId));
+      if (nonMember.length > 0) {
+        logger.warn({ guid, userId, nonMember }, "Rejected skill share into non-member org(s) (#815)");
+        throw AppError.forbidden(
+          "not_org_member",
+          `Cannot share skill into org(s) you are not a member of: ${nonMember.join(", ")}`,
+        );
+      }
+    }
 
     const updated = await this.skillRepo.update(guid, {
       isPrivate: permissions.isPrivate,
@@ -1140,9 +1184,16 @@ export class SkillService {
    *
    * When `version` is omitted the response is the latest package — same
    * as before.
+   *
+   * #806 — object-level authorization (BOLA / OWASP API1). `actor` is a
+   * REQUIRED arg: the loaded skill doc is run through `canReadSkill`
+   * before any storage download, so a private skill the actor cannot
+   * read surfaces as `skill_not_found` instead of leaking its package
+   * (incl. embedded secrets). Trusted server jobs pass `SYSTEM_ACTOR`.
    */
   async getSkillJson(
     idOrName: string,
+    actor: ActorContext,
     version?: string,
   ): Promise<{
     name: string;
@@ -1157,6 +1208,17 @@ export class SkillService {
       skill = await this.skillRepo.findByName(idOrName);
     }
     if (!skill) {
+      throw AppError.notFound("skill_not_found", `Skill '${idOrName}' not found`);
+    }
+
+    // 1.5 Object-level authorization (#806, BOLA / OWASP API1). The
+    //      package-contents path must not be more permissive than the
+    //      metadata path: a private skill the actor cannot read is
+    //      denied here, before any storage download, with the same
+    //      `skill_not_found` shape so existence isn't leaked. Never log
+    //      file contents or secrets — only ids.
+    if (!canReadSkill(skill, actor)) {
+      logger.info({ idOrName, actorUserId: actor.userId }, "getSkillJson visibility denied");
       throw AppError.notFound("skill_not_found", `Skill '${idOrName}' not found`);
     }
 
@@ -1517,6 +1579,19 @@ export class SkillService {
         "name: required (cannot be derived under skipValidation either)",
       );
     }
+    // #807 (CWE-22): the strict path rejects non-kebab-case names via the
+    // Zod schema; the lenient path bypassed it, so a crafted name (`../`,
+    // `/etc/passwd`, `..`) flowed straight into the public-mirror blob
+    // paths and could escape the skill's own `<name>/` subtree. Enforce
+    // the SAME kebab-case rule here so `skipValidation` can never widen
+    // the name surface beyond the strict path.
+    if (name.length > SKILL_NAME_MAX || !SKILL_NAME_REGEX.test(name)) {
+      logger.warn({ name }, "skipValidation: rejecting non-kebab-case skill name");
+      throw AppError.badRequest(
+        "frontmatter_validation_failed",
+        `name: must be kebab-case (^[a-z0-9][a-z0-9-]*$, <= ${SKILL_NAME_MAX} chars)`,
+      );
+    }
     const description =
       typeof raw.description === "string" ? raw.description : "";
     const version =
@@ -1680,10 +1755,12 @@ export class SkillService {
     const allPaths = Object.keys(zip.files);
     const { rootFolderName, rootEntries, getFile } = resolveZipRoot(zip, allPaths);
 
-    const KEBAB_RE = /^[a-z0-9][a-z0-9-]*$/;
+    // #807: reuse the canonical kebab-case rule (was a duplicate local
+    // regex) so folder-name validation can never drift from the name rule
+    // enforced on the create/import path.
     const ALLOWED_ROOT = new Set(["SKILL.md", "scripts", "references", "assets"]);
 
-    if (rootFolderName && !KEBAB_RE.test(rootFolderName)) {
+    if (rootFolderName && !SKILL_NAME_REGEX.test(rootFolderName)) {
       violations.push({
         rule: "folder-name-kebab-case",
         message: `Package folder name "${rootFolderName}" must be kebab-case.`,

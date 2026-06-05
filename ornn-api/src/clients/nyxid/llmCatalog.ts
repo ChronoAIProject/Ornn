@@ -17,6 +17,7 @@
  */
 
 import { createLogger } from "../../shared/logger";
+import { safeFetch } from "../../infra/safeFetch";
 import type { NyxidConfigResolver, NyxidSaTokenProvider } from "./base";
 
 const logger = createLogger("nyxLlmCatalogClient");
@@ -72,7 +73,7 @@ export class NyxLlmCatalogClient {
   async listUpstreamModels(): Promise<UpstreamModel[]> {
     const url = await this.resolveUrl();
     const token = await this.saTokenProvider.getAccessToken();
-    const resp = await fetch(url, {
+    const resp = await safeFetch(url, {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (!resp.ok) {

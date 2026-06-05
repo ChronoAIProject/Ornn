@@ -16,6 +16,7 @@
 
 import JSZip from "jszip";
 import { createLogger } from "../../../../shared/logger";
+import { hasUnsafeSegment } from "../../../../shared/githubNaming";
 const logger = createLogger("githubSkillPull");
 
 export interface GitHubPullInput {
@@ -63,7 +64,10 @@ const DEFAULT_MAX_BYTES = 10 * 1024 * 1024;
 /** Validates `owner/name` and strips any trailing whitespace. */
 export function normalizeRepoIdentifier(repo: string): string {
   const trimmed = repo.trim();
-  if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(trimmed)) {
+  if (
+    !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(trimmed) ||
+    hasUnsafeSegment(trimmed)
+  ) {
     throw new Error(
       `Invalid GitHub repo identifier '${repo}'. Expected 'owner/name'.`,
     );

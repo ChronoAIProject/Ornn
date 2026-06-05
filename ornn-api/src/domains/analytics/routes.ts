@@ -21,10 +21,9 @@ import { Hono, type Context } from "hono";
 import {
   type AuthVariables,
   optionalAuthMiddleware,
-  readUserOrgMemberships,
 } from "../../middleware/nyxidAuth";
 import { AppError } from "../../shared/types/index";
-import { canReadSkill } from "../skills/crud/authorize";
+import { canReadSkill, buildActorContext } from "../skills/crud/authorize";
 import type { SkillService } from "../skills/crud/service";
 import type { AnalyticsService } from "./service";
 import type { PullBucket } from "./types";
@@ -52,12 +51,7 @@ export function createAnalyticsRoutes(
       throw AppError.notFound("skill_not_found", `Skill '${idOrName}' not found`);
     }
     if (authCtx && skill.isPrivate) {
-      const memberships = await readUserOrgMemberships(c);
-      const actor = {
-        userId: authCtx.userId,
-        memberships,
-        isPlatformAdmin: authCtx.permissions.includes("ornn:admin:skill"),
-      };
+      const actor = await buildActorContext(c);
       if (!canReadSkill(skill, actor)) {
         throw AppError.notFound("skill_not_found", `Skill '${idOrName}' not found`);
       }

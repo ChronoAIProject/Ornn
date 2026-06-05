@@ -17,6 +17,7 @@ import type {
 } from "../../clients/sandboxClient";
 import type { SkillService } from "../skills/crud/service";
 import type { PlaygroundChatEvent } from "../../shared/types/index";
+import type { ActorContext } from "../skills/crud/authorize";
 import { createLogger } from "../../shared/logger";
 import { z } from "zod";
 
@@ -173,7 +174,7 @@ When calling execute_in_sandbox:
 - env: the user-provided environment variables (already in context)
 - output_type: from metadata (text or file)
 - retrieve_files: glob patterns for output files (e.g. ["*.png", "*.jpg"])
-- timeout_secs: 120 (default)
+- timeout_secs: 60 (default, clamped to 1-600)
 
 Be concise. Act, don't explain.`;
 
@@ -309,9 +310,14 @@ export class PlaygroundChatService {
   async *chat(
     userId: string,
     request: PlaygroundChatRequest,
-    abortSignal?: AbortSignal,
-    options?: { modelId?: string },
+    abortSignal: AbortSignal | undefined,
+    options: { modelId?: string; actor: ActorContext },
   ): AsyncGenerator<PlaygroundChatEvent> {
+    // #806/#826 — object-level authorization for skill loads. The actor
+    // is REQUIRED: every caller (routes + tests) must supply the real
+    // caller context. This single actor gates BOTH skill bypass paths
+    // below (skillId injection + the load_skill tool).
+    const actor = options.actor;
     // Resolve LLM defaults from admin settings on every call so
     // operator updates land without a pod restart.
     let defaults: PlaygroundLlmDefaults;
@@ -335,7 +341,7 @@ export class PlaygroundChatService {
     // Resolved model id (already validated by the route). Falls back
     // to settings default for tests / internal callers that don't
     // go through the model picker.
-    const model = options?.modelId ?? defaults.model;
+    const model = options.modelId ?? defaults.model;
     const input = this.buildInput(request);
 
     // Inject system prompt as developer message (instructions field is ignored by upstream LLM)
@@ -347,7 +353,7 @@ export class PlaygroundChatService {
     // Auto-inject skill context if skillId is provided
     if (request.skillId) {
       try {
-        const skillJson = await this.skillService.getSkillJson(request.skillId);
+        const skillJson = await this.skillService.getSkillJson(request.skillId, actor);
         const skillContext = this.buildSkillContext(skillJson, request.envVars);
         input.unshift({
           role: "developer" as const,
@@ -456,6 +462,7 @@ export class PlaygroundChatService {
             sandboxSessions,
             createdSessionIds,
             request.envVars,
+            actor,
           );
           yield { type: "tool-result", toolCallId: pendingToolCall.id, result: toolResult.text };
 
@@ -517,6 +524,7 @@ export class PlaygroundChatService {
     sandboxSessions: Map<string, string>,
     createdSessionIds: string[],
     userEnvVars: Record<string, string> | undefined,
+    actor: ActorContext,
   ): Promise<ToolCallResult> {
     const { name, args } = toolCall;
 
@@ -531,7 +539,10 @@ export class PlaygroundChatService {
 
     if (name === "load_skill") {
       try {
-        const skillJson = await this.skillService.getSkillJson((args.skill_id as string) ?? "");
+        // #806 — gate the load through the caller's actor. A skill the
+        // caller can't read throws skill_not_found here, so the tool
+        // result below carries the denial string, never the contents.
+        const skillJson = await this.skillService.getSkillJson((args.skill_id as string) ?? "", actor);
         return { text: JSON.stringify(skillJson, null, 2), files: [] };
       } catch (err) {
         return { text: `Failed to load skill: ${err instanceof Error ? err.message : String(err)}`, files: [] };
@@ -583,7 +594,14 @@ export class PlaygroundChatService {
     const dependencies = (args.dependencies as string[]) ?? [];
     const retrieveFiles = (args.retrieve_files as string[]) ?? [];
     const inputFiles = (args.input_files as Array<{ path: string; content: string }>) ?? [];
-    const timeoutSecs = (args.timeout_secs as number) ?? 120;
+    // #819 — coerce + clamp the model-supplied timeout before it reaches the
+    // sandbox client. Computed once here; flows into the session path and both
+    // one-shot fallbacks, so this is the single chokepoint for this value.
+    // Non-numeric / NaN falls back to the documented 60s default.
+    const rawTimeout = Number(args.timeout_secs);
+    const timeoutSecs = Number.isFinite(rawTimeout)
+      ? Math.min(600, Math.max(1, Math.trunc(rawTimeout)))
+      : 60;
 
     let sessionId = sandboxSessions.get(language);
 

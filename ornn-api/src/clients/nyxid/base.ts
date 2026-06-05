@@ -17,6 +17,7 @@
  */
 
 import { createLogger } from "../../shared/logger";
+import { safeFetch } from "../../infra/safeFetch";
 const logger = createLogger("nyxidSaTokenProvider");
 
 /**
@@ -82,7 +83,7 @@ export class NyxidSaTokenProvider {
       client_id: clientId,
       client_secret: clientSecret,
     });
-    const resp = await fetch(tokenUrl, {
+    const resp = await safeFetch(tokenUrl, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: body.toString(),

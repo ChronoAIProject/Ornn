@@ -18,6 +18,7 @@ import { MongoMemoryServer } from "mongodb-memory-server";
 import { MongoClient, type Db } from "mongodb";
 import { bootstrap } from "../../src/bootstrap";
 import type { SkillConfig } from "../../src/infra/config";
+import type { NyxLlmClient } from "../../src/clients/nyxid/llm";
 import type { Hono } from "hono";
 
 export interface Harness {
@@ -65,6 +66,17 @@ export function authHeaders(auth: SimAuth): Record<string, string> {
   };
 }
 
+/**
+ * Optional per-harness dependency overrides. Mirrors `BootstrapOverrides`
+ * — the only knob today is swapping the shared `NyxLlmClient` for an
+ * in-process fake (`tests/mocks/llmGateway.ts`) so charge-path tests run
+ * the real route → service → quota wiring without touching the network.
+ */
+export interface StartHarnessOptions {
+  /** Substitute the shared LLM gateway client. */
+  llmClient?: NyxLlmClient;
+}
+
 let cached: Harness | null = null;
 
 /**
@@ -74,9 +86,18 @@ let cached: Harness | null = null;
  * Mongo takes ~2s each time, so sharing one instance per `bun test` run
  * is worth the isolation trade-off. Individual tests MUST clean up any
  * state they seed via the `db` handle.
+ *
+ * When `opts.llmClient` is set the cache is SKIPPED and a fresh,
+ * non-shared harness is built — an override harness wires a different LLM
+ * client, so handing back the shared default-harness instance would be
+ * wrong. Override harnesses are not shared; the caller owns its lifecycle
+ * and MUST `cleanup()` it.
  */
-export async function startHarness(): Promise<Harness> {
-  if (cached) return cached;
+export async function startHarness(
+  opts?: StartHarnessOptions,
+): Promise<Harness> {
+  const useOverride = !!opts?.llmClient;
+  if (cached && !useOverride) return cached;
 
   const mongo = await MongoMemoryServer.create();
   const mongoUri = mongo.getUri();
@@ -107,7 +128,11 @@ export async function startHarness(): Promise<Harness> {
     agentsealEnabled: false,
   };
 
-  const { app, shutdown } = await bootstrap(config);
+  const { app, shutdown } = await bootstrap(
+    config,
+    // exactOptionalPropertyTypes (#657): only attach the key when set.
+    opts?.llmClient ? { llmClient: opts.llmClient } : undefined,
+  );
 
   // Separate client for test-side seeding. Bootstrap holds its own
   // internal client; closing ours does not affect it.
@@ -123,10 +148,12 @@ export async function startHarness(): Promise<Harness> {
       await client.close().catch(() => {});
       await shutdown().catch(() => {});
       await mongo.stop().catch(() => {});
-      cached = null;
+      // Only the shared default harness lives in `cached`; an override
+      // harness was never stored there, so don't clobber the shared one.
+      if (!useOverride) cached = null;
     },
   };
 
-  cached = harness;
+  if (!useOverride) cached = harness;
   return harness;
 }

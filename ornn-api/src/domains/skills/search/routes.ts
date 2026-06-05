@@ -19,7 +19,7 @@ import {
 import { validateQuery, getValidatedQuery } from "../../../middleware/validate";
 import { AppError } from "../../../shared/types/index";
 import { createLogger } from "../../../shared/logger";
-import { decodeCursor, buildNextCursor } from "../../../shared/cursor";
+import { decodeCursor, buildNextCursor, MAX_PAGE } from "../../../shared/cursor";
 import { rateLimit } from "../../../middleware/rateLimit";
 const logger = createLogger("skillSearchRoutes");
 
@@ -32,7 +32,7 @@ const searchQuerySchema = z.object({
   query: z.string().max(2000).optional(),
   mode: z.enum(["keyword", "semantic"]).optional().default("keyword"),
   scope: z.enum(["public", "private", "mixed", "shared-with-me", "mine"]).optional().default("private"),
-  page: z.coerce.number().int().min(1).optional().default(1),
+  page: z.coerce.number().int().min(1).max(MAX_PAGE).optional().default(1),
   pageSize: z.coerce.number().int().min(1).max(100).optional().default(9),
   /**
    * Cursor-based pagination per CONVENTIONS.md §4.3 (#457). Opaque

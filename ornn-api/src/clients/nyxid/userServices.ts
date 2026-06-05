@@ -21,6 +21,7 @@
  */
 
 import { createLogger } from "../../shared/logger";
+import { safeFetch } from "../../infra/safeFetch";
 import type { NyxidConfigResolver } from "./base";
 
 const logger = createLogger("nyxidUserServicesClient");
@@ -76,7 +77,7 @@ export class NyxidUserServicesClient {
   async listUserServices(userAccessToken: string): Promise<UserService[]> {
     const baseUrl = await this.resolveBaseUrl();
     const url = `${baseUrl}/api/v1/user-services`;
-    const resp = await fetch(url, {
+    const resp = await safeFetch(url, {
       headers: { Authorization: `Bearer ${userAccessToken}` },
     });
     if (!resp.ok) {

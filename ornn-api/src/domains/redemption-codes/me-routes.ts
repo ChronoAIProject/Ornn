@@ -24,6 +24,7 @@ import { validateBody, getValidatedBody } from "../../middleware/validate";
 import { AppError } from "../../shared/types/index";
 import type { RedemptionCodeService } from "./service";
 import { redeemSchema, type RedeemInput, type RedemptionCodeDoc } from "./types";
+import { MAX_PAGE } from "../../shared/cursor";
 
 const logger = createLogger("meRedemptionCodeRoutes");
 
@@ -130,7 +131,9 @@ export function createMeRedemptionCodesRoutes(
   // GET /me/redemption-codes/history
   app.get("/me/redemption-codes/history", auth, async (c) => {
     const authCtx = getAuth(c);
-    const page = Math.max(1, Number(c.req.query("page")) || 1);
+    // Clamp to MAX_PAGE so a huge ?page= can't drive an unbounded
+    // `.skip()` scan in the redeemed-code history query (CWE-770, #810).
+    const page = Math.min(MAX_PAGE, Math.max(1, Number(c.req.query("page")) || 1));
     const pageSize = Math.min(
       HISTORY_PAGE_SIZE_MAX,
       Math.max(1, Number(c.req.query("pageSize")) || HISTORY_PAGE_SIZE_DEFAULT),
