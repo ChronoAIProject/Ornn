@@ -40,7 +40,10 @@ server {
     }
 
     # ── Static asset caching ──────────────────────────────────────────────
-    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
+    #    mp4 is safe to cache immutably because video assets are imported
+    #    through Vite and served under content-hashed URLs (see HeroVideo);
+    #    an asset swap changes the URL, never the bytes behind a cached one.
+    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot|mp4)$ {
         expires 1y;
         add_header Cache-Control "public, immutable";
         try_files $uri =404;

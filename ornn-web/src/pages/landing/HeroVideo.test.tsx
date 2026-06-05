@@ -22,6 +22,11 @@ import { render, screen, cleanup } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 
 import { HeroVideo } from "./HeroVideo";
+// Same Vite-hashed asset URLs the component imports — assert against these
+// instead of hardcoded /public paths (the assets are content-hashed for
+// cache-busting, so their served URLs are not stable strings).
+import introPoster from "@/assets/ornn-intro-poster.jpg";
+import introVideo from "@/assets/ornn-intro.mp4";
 
 function stubMatchMedia(matches: boolean) {
   Object.defineProperty(window, "matchMedia", {
@@ -67,12 +72,12 @@ describe("HeroVideo", () => {
       expect(el.autoplay).toBe(true);
       expect(el.loop).toBe(true);
       expect(el.playsInline).toBe(true);
-      expect(el.getAttribute("poster")).toBe("/ornn-intro-poster.jpg");
+      expect(el.getAttribute("poster")).toBe(introPoster);
       expect(el.getAttribute("aria-hidden")).toBe("true");
 
       const source = el.querySelector("source");
       expect(source).not.toBeNull();
-      expect(source?.getAttribute("src")).toBe("/ornn-intro.mp4");
+      expect(source?.getAttribute("src")).toBe(introVideo);
       expect(source?.getAttribute("type")).toBe("video/mp4");
     });
 
@@ -93,9 +98,7 @@ describe("HeroVideo", () => {
     it("renders the static poster image and no video", () => {
       const { container } = renderHero();
       expect(container.querySelector("video")).toBeNull();
-      const poster = container.querySelector(
-        'img[src="/ornn-intro-poster.jpg"]',
-      );
+      const poster = container.querySelector(`img[src="${introPoster}"]`);
       expect(poster).not.toBeNull();
     });
   });
