@@ -15,6 +15,37 @@ const mintMutateAsync = vi.fn();
 const useMintCode = vi.fn();
 const addToast = vi.fn();
 
+// Pass-through framer-motion so the Modal's AnimatePresence honours
+// unmounting synchronously — required by the reopen-reset case below, where
+// the keyed form must actually unmount on close and remount on reopen. The
+// existing cases render with isOpen=true throughout, so pass-through is a
+// no-op for them.
+vi.mock("framer-motion", () => ({
+  AnimatePresence: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  motion: new Proxy(
+    {},
+    {
+      get:
+        (_t, tag: string) =>
+        ({
+          children,
+          initial: _i,
+          animate: _a,
+          exit: _e,
+          transition: _tr,
+          ...rest
+        }: Record<string, unknown> & { children?: React.ReactNode }) => {
+          void _i;
+          void _a;
+          void _e;
+          void _tr;
+          const Tag = tag as keyof React.JSX.IntrinsicElements;
+          return <Tag {...rest}>{children}</Tag>;
+        },
+    },
+  ),
+}));
+
 vi.mock("@/hooks/useRedemptionCodes", () => ({
   useMintCode: () => useMintCode(),
 }));
@@ -113,5 +144,33 @@ describe("MintRedemptionCodeModal", () => {
     expect(addToast).toHaveBeenCalledWith(
       expect.objectContaining({ type: "success" }),
     );
+  });
+
+  it("resets dirty form state to defaults on close + reopen (#888)", () => {
+    // Pins the `key={isOpen ? "open" : "closed"}` remount on the inner form.
+    // The form's state has no reset effect — it relies entirely on the keyed
+    // unmount/remount. STALE-STATE-FIRST: dirty a field, close (key → "closed"
+    // → form unmounts), reopen (key → "open" → fresh construction) and assert
+    // the field is back to its default rather than carrying the stale edit.
+    const { rerender } = render(
+      <MintRedemptionCodeModal isOpen={true} onClose={() => {}} />,
+    );
+
+    const amount = screen.getByLabelText(/grant 1 amount/i) as HTMLInputElement;
+    expect(amount.value).toBe("100"); // EMPTY_GRANT default
+    fireEvent.change(amount, { target: { value: "999" } });
+    expect(
+      (screen.getByLabelText(/grant 1 amount/i) as HTMLInputElement).value,
+    ).toBe("999");
+
+    // Close — the keyed form unmounts (AnimatePresence is pass-through here).
+    rerender(<MintRedemptionCodeModal isOpen={false} onClose={() => {}} />);
+    expect(screen.queryByLabelText(/grant 1 amount/i)).not.toBeInTheDocument();
+
+    // Reopen — a brand-new form is constructed; the dirty 999 is gone.
+    rerender(<MintRedemptionCodeModal isOpen={true} onClose={() => {}} />);
+    expect(
+      (screen.getByLabelText(/grant 1 amount/i) as HTMLInputElement).value,
+    ).toBe("100");
   });
 });
