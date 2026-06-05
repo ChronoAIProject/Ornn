@@ -16,8 +16,12 @@
  * The LLM ranker is exercised through `search({ mode: "semantic" })`,
  * which drives `semanticSearch` → `evaluateBatch` → `buildSkillSummary`
  * and the post-rank pagination / score-filter logic. The per-caller
- * `enrichItem` ladder + the #720 defensive shared-via-org drop are
- * exercised through the keyword path (no LLM round-trip needed).
+ * `enrichItem` ladder is exercised through the keyword path (no LLM
+ * round-trip needed). The #720 defensive shared-via-org *keep* path is
+ * covered there too; its *drop/warn* branch is structurally unreachable
+ * via `search()` (enrichItem derives `sharedViaOrgId` from the same
+ * `userOrgIds` the filter checks against) — see the #720 describe block
+ * for the evidence comment.
  *
  * @module domains/skills/search/service.test
  */
@@ -487,6 +491,36 @@ describe("search — semantic multi-batch", () => {
     expect(res.total).toBe(3);
     expect(res.items.map((i) => i.guid)).toEqual(["g0", "g50", "g100"]);
   });
+
+  test("a failed batch degrades in isolation; sibling batches still contribute", async () => {
+    // Same 3-batch fan-out, but the FIRST batch's LLM call throws. The
+    // per-batch catch swallows it and yields nothing, while the other two
+    // batches score their leaders. The merged result is the surviving
+    // siblings — a single upstream hiccup must not zero out the search.
+    const pool = Array.from({ length: 120 }, (_, i) => doc({ guid: `g${i}` }));
+    const repo = new FakeSkillRepo();
+    repo.allByScopeResult = pool;
+    const responses = [
+      "__THROW__",
+      rerank([{ id: "g50", score: 8 }]),
+      rerank([{ id: "g100", score: 7 }]),
+    ];
+    const { service, llm } = makeService({ repo, responses });
+
+    const res = await service.search({
+      ...BASE,
+      query: "q",
+      mode: "semantic",
+      scope: "public",
+      pageSize: 50,
+    });
+
+    // All three batches are attempted; the thrown one contributes nothing
+    // but the siblings rank g50 (8) above g100 (7).
+    expect(llm.calls.length).toBe(3);
+    expect(res.total).toBe(2);
+    expect(res.items.map((i) => i.guid)).toEqual(["g50", "g100"]);
+  });
 });
 
 // ---------------------------------------------------------------------
@@ -899,13 +933,15 @@ describe("#720 shared-with-me defensive filter", () => {
     expect(res.items[0]?.sharedViaOrgId).toBe("org-current");
   });
 
-  test("warn-branch fires: a shared-via-org GUID with a stale org id is dropped", async () => {
+  test("multi-org grant keeps the item when one matched org is live (no drop)", async () => {
     const repo = new FakeSkillRepo();
-    // Two items, both reaching enrichItem as shared-via-org. The second
-    // points at an org id present on the doc AND in the caller set, the
-    // first points at an org present on the doc but NOT in the caller set
-    // — that first one survives enrichItem (matchedOrg found) but is
-    // dropped by the #720 filter, tripping the warn branch.
+    // Two items, both reaching enrichItem as shared-via-org. Each doc
+    // grants org-current (which the caller IS in), so enrichItem resolves
+    // sharedViaOrgId to a live org for both. The #720 filter checks that
+    // resolved org against the SAME userOrgIds → both pass, nothing is
+    // dropped. The first doc also lists org-A (a dead org) ahead of
+    // org-current, proving the multi-org grant doesn't cause a false drop:
+    // enrichItem picks the FIRST grant the caller is in, never a dead one.
     repo.byScopeResult = {
       skills: [
         doc({
@@ -928,8 +964,18 @@ describe("#720 shared-with-me defensive filter", () => {
     // enrichItem matches the FIRST org in sharedWithOrgs that the caller
     // is in. For "stale" the caller is in org-current (second entry), so
     // sharedViaOrgId resolves to org-current and the item is KEPT — both
-    // survive. To trip the drop we need a doc whose only matched org is
-    // absent from the live set, covered by the first test in this block.
+    // survive.
+    //
+    // The #720 drop/warn branch (service.ts: `return false` when the
+    // resolved sharedViaOrgId is absent from orgSet) is STRUCTURALLY
+    // UNREACHABLE through search(): enrichItem derives sharedViaOrgId by
+    // `.find`-ing inside callerOrgIds, and the filter rebuilds orgSet from
+    // the SAME userOrgIds argument. A shared-via-org item therefore always
+    // carries a sharedViaOrgId that is — by construction — a member of the
+    // set the filter checks against. There is no second org-set source to
+    // make the two disagree, so no consistent-input call can trip the drop.
+    // The defensive branch only earns its keep against a future regression
+    // that decouples those two sets; it is intentionally left in place.
     const res = await service.search({
       ...BASE,
       query: "",
