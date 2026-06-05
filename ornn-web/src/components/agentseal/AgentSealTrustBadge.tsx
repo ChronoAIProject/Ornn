@@ -20,7 +20,6 @@ import { useTranslation } from "react-i18next";
 import {
   styleForScore,
   formatAgentSealVersion,
-  type AgentSealBand,
 } from "@/lib/agentsealBand";
 import type { AgentSealScan, AgentSealFinding } from "@/types/domain";
 import { apiPost } from "@/services/apiClient";
@@ -476,5 +475,3 @@ function RescanButton({ onClick, loading }: RescanButtonProps) {
     </button>
   );
 }
-
-export type { AgentSealBand };
