@@ -24,7 +24,11 @@
 import { describe, expect, test } from "bun:test";
 import { NotificationService } from "./service";
 import type { NotificationDocument } from "./types";
-import type { NotificationRepository, ListOptions } from "./repository";
+import type {
+  CreateNotificationInput,
+  NotificationRepository,
+  ListOptions,
+} from "./repository";
 import type { BroadcastRepository } from "../broadcasts/repository";
 import type {
   BroadcastDocument,
@@ -33,6 +37,30 @@ import type {
 
 class FakeNotificationRepo {
   rows: NotificationDocument[] = [];
+  /** Captures every `emit` → `create` call so emitter tests can pin payloads. */
+  created: CreateNotificationInput[] = [];
+  /** When true, `create` rejects — exercises the emit swallow-on-reject path. */
+  createShouldReject = false;
+
+  async create(input: CreateNotificationInput): Promise<NotificationDocument> {
+    if (this.createShouldReject) {
+      throw new Error("simulated persistence failure");
+    }
+    this.created.push(input);
+    const doc: NotificationDocument = {
+      _id: `n-${this.created.length}`,
+      userId: input.userId,
+      category: input.category,
+      title: input.title,
+      ...(input.body !== undefined ? { body: input.body } : {}),
+      ...(input.link !== undefined ? { link: input.link } : {}),
+      data: input.data ?? {},
+      readAt: null,
+      createdAt: new Date(),
+    };
+    this.rows.push(doc);
+    return doc;
+  }
 
   async list(userId: string, options: ListOptions = {}): Promise<NotificationDocument[]> {
     let out = this.rows.filter((r) => r.userId === userId);
@@ -468,5 +496,189 @@ describe("NotificationService — recipientUserIds filter (#502)", () => {
     await broadcastRepo.markRead("u-1", "b-targeted-u1-read");
     const feed = await svc.listFeedForUser("u-1", { unreadOnly: true });
     expect(feed.map((i) => i._id)).toEqual(["b-targeted-u1-unread"]);
+  });
+});
+
+describe("NotificationService — emitters", () => {
+  test("notifyAuditCompleted — green verdict pins the passed payload", async () => {
+    const { svc, notificationRepo } = makeService();
+    await svc.notifyAuditCompleted({
+      ownerUserId: "owner-1",
+      skillGuid: "guid abc",
+      skillName: "My Skill",
+      version: "1.0.0",
+      verdict: "green",
+      overallScore: 9.25,
+    });
+    expect(notificationRepo.created).toHaveLength(1);
+    const sent = notificationRepo.created[0]!;
+    expect(sent).toEqual({
+      userId: "owner-1",
+      category: "audit.completed",
+      title: "Skill audit passed — My Skill v1.0.0 · score 9.3/10",
+      body: "Audit verdict was green. No follow-up required.",
+      // skillGuid is URL-encoded into the deep link.
+      link: "/skills/guid%20abc/audits?version=1.0.0",
+      data: {
+        skillGuid: "guid abc",
+        skillName: "My Skill",
+        version: "1.0.0",
+        verdict: "green",
+        overallScore: 9.25,
+      },
+    });
+  });
+
+  test("notifyAuditCompleted — yellow/red verdict pins the flagged-risk payload", async () => {
+    const { svc, notificationRepo } = makeService();
+    await svc.notifyAuditCompleted({
+      ownerUserId: "owner-2",
+      skillGuid: "abc",
+      skillName: "Risky Skill",
+      version: "2.1.0",
+      verdict: "red",
+      overallScore: 3,
+    });
+    const sent = notificationRepo.created[0]!;
+    expect(sent.title).toBe("Skill audit flagged risk — Risky Skill v2.1.0 · score 3.0/10");
+    expect(sent.body).toBe(
+      "Audit found one or more flagged areas. Review the findings before continuing to share.",
+    );
+    expect(sent.category).toBe("audit.completed");
+    expect(sent.data).toEqual({
+      skillGuid: "abc",
+      skillName: "Risky Skill",
+      version: "2.1.0",
+      verdict: "red",
+      overallScore: 3,
+    });
+  });
+
+  test("notifyAuditRiskyForConsumer pins the consumer-side payload", async () => {
+    const { svc, notificationRepo } = makeService();
+    await svc.notifyAuditRiskyForConsumer({
+      consumerUserId: "consumer-1",
+      skillGuid: "abc",
+      skillName: "Shared Skill",
+      version: "1.2.3",
+      verdict: "yellow",
+      overallScore: 6.5,
+    });
+    const sent = notificationRepo.created[0]!;
+    expect(sent).toEqual({
+      userId: "consumer-1",
+      category: "audit.risky_for_consumer",
+      title: 'Skill "Shared Skill" v1.2.3 you have access to was flagged risky in audit',
+      body: "Verdict: yellow · score 6.5/10. Use with caution.",
+      link: "/skills/abc/audits?version=1.2.3",
+      data: {
+        skillGuid: "abc",
+        skillName: "Shared Skill",
+        version: "1.2.3",
+        verdict: "yellow",
+        overallScore: 6.5,
+      },
+    });
+  });
+
+  test("notifyQuotaCreditsGranted — with a note inlines the note in the body", async () => {
+    const { svc, notificationRepo } = makeService();
+    await svc.notifyQuotaCreditsGranted({
+      targetUserId: "user-1",
+      surface: "playground",
+      amount: 1500,
+      note: "Conference promo",
+      adminDisplayName: "Alice",
+    });
+    const sent = notificationRepo.created[0]!;
+    expect(sent.userId).toBe("user-1");
+    expect(sent.category).toBe("quota.credits_granted");
+    expect(sent.title).toBe("Admin granted you +1,500 playground credits");
+    expect(sent.body).toBe("Granted by Alice. Note: Conference promo");
+    // No deep link target for quota grants today.
+    expect(sent.link).toBeUndefined();
+    expect(sent.data).toEqual({
+      surface: "playground",
+      amount: 1500,
+      adminDisplayName: "Alice",
+    });
+  });
+
+  test("notifyQuotaCreditsGranted — without a note uses the default body", async () => {
+    const { svc, notificationRepo } = makeService();
+    await svc.notifyQuotaCreditsGranted({
+      targetUserId: "user-2",
+      surface: "skillGen",
+      amount: 50,
+      adminDisplayName: "Bob",
+    });
+    const sent = notificationRepo.created[0]!;
+    expect(sent.title).toBe("Admin granted you +50 skill-generation credits");
+    expect(sent.body).toBe(
+      "Granted by Bob. Credits never expire and stack on top of your monthly base.",
+    );
+  });
+
+  test("notifyQuotaModelChange pins the migration-notice payload", async () => {
+    // Live caller: scripts/migrate-quota-to-buckets.ts (Story 10.3) calls
+    // this with { targetUserId, monthMarker } for each migrated user.
+    const { svc, notificationRepo } = makeService();
+    await svc.notifyQuotaModelChange({
+      targetUserId: "user-3",
+      monthMarker: "2026-05",
+    });
+    const sent = notificationRepo.created[0]!;
+    expect(sent).toEqual({
+      userId: "user-3",
+      category: "quota.credits_granted",
+      title: "Quota model update — your existing credits expire at month end",
+      body:
+        "Your previously granted credits have been migrated to current-month-only credits " +
+        "ending 2026-05. Contact admin if you need them re-issued next month.",
+      data: { kind: "model_change", monthMarker: "2026-05" },
+    });
+  });
+
+  test("emit swallows a repo create rejection — caller never sees the error", async () => {
+    const { svc, notificationRepo } = makeService();
+    notificationRepo.createShouldReject = true;
+    // Must resolve (not reject) — notifications never block the caller.
+    await expect(
+      svc.notifyAuditCompleted({
+        ownerUserId: "owner-x",
+        skillGuid: "abc",
+        skillName: "S",
+        version: "1.0.0",
+        verdict: "green",
+        overallScore: 8,
+      }),
+    ).resolves.toBeUndefined();
+    expect(notificationRepo.created).toHaveLength(0);
+  });
+});
+
+describe("NotificationService — legacy list passthrough", () => {
+  test("list returns only per-user rows, honouring limit + unreadOnly", async () => {
+    const { svc, notificationRepo } = makeService();
+    notificationRepo.rows.push(
+      makeNotification({
+        _id: "n1",
+        userId: "u1",
+        createdAt: new Date("2026-05-01T00:00:00Z"),
+      }),
+      makeNotification({
+        _id: "n2",
+        userId: "u1",
+        readAt: new Date(),
+        createdAt: new Date("2026-05-02T00:00:00Z"),
+      }),
+      makeNotification({ _id: "n3", userId: "other" }),
+    );
+    const all = await svc.list("u1");
+    expect(all.map((n) => n._id)).toEqual(["n2", "n1"]);
+    const unread = await svc.list("u1", { unreadOnly: true });
+    expect(unread.map((n) => n._id)).toEqual(["n1"]);
+    const limited = await svc.list("u1", { limit: 1 });
+    expect(limited).toHaveLength(1);
   });
 });
