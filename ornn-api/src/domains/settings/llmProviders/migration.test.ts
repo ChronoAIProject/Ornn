@@ -225,6 +225,9 @@ describe("migrateModelCatalogIntoProviders", () => {
     expect(result.legacyCollectionDropped).toBe(false);
     // Collection deliberately left intact for manual review.
     expect(await legacyCollectionExists()).toBe(true);
+    // ...and not just present but unemptied — the row survives so the
+    // operator has the original data to reconcile by hand.
+    expect(await db.collection("models").countDocuments()).toBe(1);
   });
 
   test("empty legacy collection → dropped (clean handoff)", async () => {

@@ -136,7 +136,10 @@ describe("Settings admin routes", () => {
       body: JSON.stringify({ enabled: false, appPrivateKey: "new-secret" }),
     });
     expect(res.status).toBe(200);
-    const body = (await res.json()) as {
+    const text = await res.text();
+    // The just-submitted plaintext must never round-trip in the response.
+    expect(text.includes("new-secret")).toBe(false);
+    const body = JSON.parse(text) as {
       meta: { changedFields: string[] };
       data: { appPrivateKey: string };
     };

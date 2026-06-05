@@ -303,6 +303,70 @@ describe("LlmProviders admin routes", () => {
     const m = parsed.data.models.find((x) => x.id === "gpt-4o")!;
     expect(m.enabledForSkillGen).toBe(true);
   });
+
+  // The masking guard must hold for every auth kind, not just apiKey —
+  // service.maskAuth runs midMaskSecret over `clientSecret` (tokenUrl)
+  // and `password` (basic) too. POST a provider with each non-apiKey
+  // kind and assert the same strongest masking on the round-trip body:
+  // plaintext secret ABSENT, mid-mask sentinel form PRESENT.
+  it("POST tokenUrl auth: 201 mid-masks clientSecret, plaintext absent", async () => {
+    const { app } = makeApp();
+    const clientSecret = "cs-real-plaintext-secret-67890";
+    const res = await app.request("/api/v1/admin/settings/llm-providers", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(
+        providerBody({
+          name: "tokenurl-test",
+          auth: {
+            kind: "tokenUrl",
+            tokenUrl: "https://auth.example.com/oauth/token",
+            clientId: "client-abc",
+            clientSecret,
+          },
+        }),
+      ),
+    });
+    expect(res.status).toBe(201);
+    const text = await res.text();
+    expect(text.includes(clientSecret)).toBe(false);
+    const parsed = JSON.parse(text) as {
+      data: {
+        auth: { kind: string; clientId: string; clientSecret: string };
+      };
+    };
+    expect(parsed.data.auth.kind).toBe("tokenUrl");
+    // Non-secret fields pass through untouched.
+    expect(parsed.data.auth.clientId).toBe("client-abc");
+    expect(isMidMaskSentinel(parsed.data.auth.clientSecret)).toBe(true);
+    expect(parsed.data.auth.clientSecret).not.toBe(clientSecret);
+  });
+
+  it("POST basic auth: 201 mid-masks password, plaintext absent", async () => {
+    const { app } = makeApp();
+    const password = "pw-real-plaintext-secret-13579";
+    const res = await app.request("/api/v1/admin/settings/llm-providers", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(
+        providerBody({
+          name: "basic-test",
+          auth: { kind: "basic", username: "svc-user", password },
+        }),
+      ),
+    });
+    expect(res.status).toBe(201);
+    const text = await res.text();
+    expect(text.includes(password)).toBe(false);
+    const parsed = JSON.parse(text) as {
+      data: { auth: { kind: string; username: string; password: string } };
+    };
+    expect(parsed.data.auth.kind).toBe("basic");
+    // Non-secret field passes through untouched.
+    expect(parsed.data.auth.username).toBe("svc-user");
+    expect(isMidMaskSentinel(parsed.data.auth.password)).toBe(true);
+    expect(parsed.data.auth.password).not.toBe(password);
+  });
 });
 
 describe("LlmProviders picker route /me/models", () => {
