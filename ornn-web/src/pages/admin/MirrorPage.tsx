@@ -25,7 +25,7 @@
  * @module pages/admin/MirrorPage
  */
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { PageTransition } from "@/components/layout/PageTransition";
 import { Card } from "@/components/ui/Card";
@@ -125,17 +125,21 @@ export function MirrorPage() {
   const [installationId, setInstallationId] = useState("");
   const [appPrivateKey, setAppPrivateKey] = useState("");
 
-  useEffect(() => {
-    if (status) {
-      setEnabled(status.enabled);
-      setOwner(status.repo.owner);
-      setRepo(status.repo.repo);
-      setBranch(status.repo.branch);
-      setAppId(status.appId);
-      setInstallationId(status.installationId);
-      setAppPrivateKey(status.appPrivateKey);
-    }
-  }, [status]);
+  // Seed / re-seed both forms from `status` using the "adjust state
+  // during render" guard rather than an effect (avoids the extra commit
+  // + cascading render, #888). Tracks the server object identity so a
+  // refetch re-seeds — matching the prior `[status]` effect behaviour.
+  const [prevStatus, setPrevStatus] = useState(status);
+  if (status && status !== prevStatus) {
+    setPrevStatus(status);
+    setEnabled(status.enabled);
+    setOwner(status.repo.owner);
+    setRepo(status.repo.repo);
+    setBranch(status.repo.branch);
+    setAppId(status.appId);
+    setInstallationId(status.installationId);
+    setAppPrivateKey(status.appPrivateKey);
+  }
 
   const repoFormDirty =
     !!status &&
