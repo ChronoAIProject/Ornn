@@ -2,6 +2,13 @@ import { useEffect, useRef, useSyncExternalStore } from "react";
 import { useTranslation } from "react-i18next";
 import { EmberLink } from "./EmberButton";
 
+// Vite-managed (content-hashed) hero assets. Hashed URLs make every asset
+// swap self-cache-busting — nginx serves images/fonts with a 1y immutable
+// Cache-Control, so replacing bytes at a stable /public URL would leave
+// returning visitors on the stale file.
+import introPoster from "@/assets/ornn-intro-poster.jpg";
+import introVideo from "@/assets/ornn-intro.mp4";
+
 /**
  * Subscribe to the OS "reduce motion" preference and re-render on change.
  *
@@ -56,7 +63,7 @@ export function HeroVideo() {
     >
       {reduced ? (
         <img
-          src="/ornn-intro-poster.jpg"
+          src={introPoster}
           alt=""
           aria-hidden="true"
           className="absolute inset-0 h-full w-full object-cover"
@@ -69,11 +76,11 @@ export function HeroVideo() {
           loop
           playsInline
           preload="auto"
-          poster="/ornn-intro-poster.jpg"
+          poster={introPoster}
           aria-hidden="true"
           className="pointer-events-none absolute inset-0 h-full w-full object-cover"
         >
-          <source src="/ornn-intro.mp4" type="video/mp4" />
+          <source src={introVideo} type="video/mp4" />
         </video>
       )}
 
