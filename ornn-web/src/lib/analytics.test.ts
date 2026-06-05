@@ -62,6 +62,11 @@ async function freshModules() {
   return { consent, analytics };
 }
 
+// The frontend logger forwards `error` to `console.error` in the dev/test
+// branch (MODE !== "production"). Spy on it so swallow tests can assert the
+// failure was *logged with context*, not just silently absorbed.
+let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
+
 beforeEach(() => {
   captureMock.mockClear();
   identifyMock.mockClear();
@@ -71,9 +76,15 @@ beforeEach(() => {
   optOutMock.mockClear();
   startReplayMock.mockClear();
   stopReplayMock.mockClear();
+  consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 });
 
 afterEach(() => {
+  consoleErrorSpy.mockRestore();
+  // A test may have swapped the `@/config` mock via `vi.doMock` + a paired
+  // `vi.doUnmock`; the unmock only takes effect on the next module-registry
+  // reset, so flush it here to keep config state from leaking forward.
+  vi.resetModules();
   // Don't leak consent state into the next test file's localStorage.
   if (typeof window !== "undefined") {
     try {
@@ -157,6 +168,139 @@ describe("analytics wrapper", () => {
     expect(initMock).not.toHaveBeenCalled();
     expect(captureMock).not.toHaveBeenCalled();
 
-    vi.doUnmock("@/config");
+    // Restore the populated config mock. `vi.doUnmock` would unmask the real
+    // `@/config`, which reads empty runtime values under jsdom and leaks an
+    // unconfigured PostHog into later tests; re-`doMock` the configured one
+    // instead so ordering stays hermetic.
+    vi.doMock("@/config", () => ({
+      config: {
+        apiBaseUrl: "",
+        nyxidApiBaseUrl: "",
+        nyxidWebBaseUrl: "",
+        nyxidOauthAuthorizeUrl: "",
+        nyxidOauthTokenUrl: "",
+        nyxidOauthClientId: "",
+        nyxidOauthRedirectUri: "",
+        nyxidLogoutUrl: "",
+        nyxidSettingsUrl: "",
+        posthogApiKey: "phc_test_key",
+        posthogProjectId: "test-project",
+        posthogHost: "https://eu.i.posthog.com",
+      },
+    }));
+  });
+
+  it("swallows a throwing posthog.init without escaping", async () => {
+    initMock.mockImplementationOnce(() => {
+      throw new Error("init boom");
+    });
+    const { analytics } = await freshModules();
+    // The wrapper catches the init failure; nothing should propagate.
+    expect(() => analytics.initAnalytics()).not.toThrow();
+    expect(initMock).toHaveBeenCalledTimes(1);
+    // ...and the failure is logged with context (logger.error → console.error).
+    expect(consoleErrorSpy).toHaveBeenCalled();
+    expect(consoleErrorSpy.mock.calls.some((c) => String(c[0]).includes("init failed"))).toBe(true);
+  });
+
+  it("is a no-op on a second initAnalytics() call (initStarted guard)", async () => {
+    const { analytics } = await freshModules();
+    analytics.initAnalytics();
+    analytics.initAnalytics();
+    expect(initMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("swallows capture / identify / reset failures", async () => {
+    const { analytics, consent } = await freshModules();
+    analytics.initAnalytics();
+    consent.setConsent("granted");
+
+    captureMock.mockImplementationOnce(() => {
+      throw new Error("capture boom");
+    });
+    identifyMock.mockImplementationOnce(() => {
+      throw new Error("identify boom");
+    });
+    resetMock.mockImplementationOnce(() => {
+      throw new Error("reset boom");
+    });
+
+    expect(() => analytics.track("login.completed")).not.toThrow();
+    expect(() => analytics.identify("user-7")).not.toThrow();
+    expect(() => analytics.reset()).not.toThrow();
+
+    // Each swallow path logs its own contextual error message.
+    const messages = consoleErrorSpy.mock.calls.map((c) => String(c[0]));
+    expect(messages.some((m) => m.includes("capture failed"))).toBe(true);
+    expect(messages.some((m) => m.includes("identify failed"))).toBe(true);
+    expect(messages.some((m) => m.includes("reset failed"))).toBe(true);
+  });
+
+  it("emits reset directly once consent is granted", async () => {
+    const { analytics, consent } = await freshModules();
+    analytics.initAnalytics();
+    consent.setConsent("granted");
+    resetMock.mockClear();
+
+    analytics.reset();
+    expect(resetMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("buffers reset before consent, then flushes it on grant", async () => {
+    const { analytics, consent } = await freshModules();
+    analytics.initAnalytics();
+
+    // Pre-consent reset is buffered, not emitted.
+    analytics.reset();
+    expect(resetMock).not.toHaveBeenCalled();
+
+    consent.setConsent("granted");
+    // flushBuffer replays the buffered reset.
+    expect(resetMock).toHaveBeenCalled();
+  });
+
+  it("survives a replay failure while flushing the buffer", async () => {
+    const { analytics, consent } = await freshModules();
+    analytics.initAnalytics();
+
+    // Buffer a track call before consent.
+    analytics.track("login.completed", { provider: "nyxid" });
+    captureMock.mockImplementationOnce(() => {
+      throw new Error("replay boom");
+    });
+
+    // Granting consent flushes the buffer; the throwing replay is caught.
+    expect(() => consent.setConsent("granted")).not.toThrow();
+    // ...and the caught replay failure is logged with context.
+    expect(
+      consoleErrorSpy.mock.calls.some((c) =>
+        String(c[0]).includes("Buffered call replay failed"),
+      ),
+    ).toBe(true);
+  });
+
+  it("early-returns identify when userId is empty", async () => {
+    const { analytics, consent } = await freshModules();
+    analytics.initAnalytics();
+    consent.setConsent("granted");
+    identifyMock.mockClear();
+
+    analytics.identify("");
+    expect(identifyMock).not.toHaveBeenCalled();
+  });
+
+  it("stops recording, opts out, and resets on consent revoke", async () => {
+    const { analytics, consent } = await freshModules();
+    analytics.initAnalytics();
+    consent.setConsent("granted");
+
+    stopReplayMock.mockClear();
+    optOutMock.mockClear();
+    resetMock.mockClear();
+
+    consent.setConsent("denied");
+    expect(stopReplayMock).toHaveBeenCalledTimes(1);
+    expect(optOutMock).toHaveBeenCalledTimes(1);
+    expect(resetMock).toHaveBeenCalledTimes(1);
   });
 });
