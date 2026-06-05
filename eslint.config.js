@@ -19,7 +19,10 @@ export default tseslint.config(
       "react-hooks/set-state-in-effect": "warn",
       "react-hooks/static-components": "warn",
       "react-hooks/refs": "warn",
-      "react-hooks/preserve-manual-memoization": "warn",
+      // compiler-only advisory — re-enable when babel-plugin-react-compiler lands (#888, 2026-06-05)
+      "react-hooks/preserve-manual-memoization": "off",
+      // compiler-only advisory — re-enable when babel-plugin-react-compiler lands (#888, 2026-06-05)
+      "react-hooks/incompatible-library": "off",
     },
   },
   {
