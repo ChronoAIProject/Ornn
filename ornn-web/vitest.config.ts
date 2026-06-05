@@ -23,6 +23,8 @@ export default mergeConfig(
         ],
         reporter: ["text", "lcov", "json-summary"],
         reportsDirectory: "coverage",
+        // Floor only — measured 14.88% at introduction (#889). Raise deliberately, never auto-track.
+        thresholds: { lines: 12 },
       },
     },
   }),
