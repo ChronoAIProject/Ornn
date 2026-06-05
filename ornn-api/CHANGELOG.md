@@ -1,5 +1,47 @@
 # ornn-api
 
+## 0.10.0
+
+### Patch Changes
+
+- [#822](https://github.com/ChronoAIProject/Ornn/pull/822) [`b10cd71`](https://github.com/ChronoAIProject/Ornn/commit/b10cd719acdb3df1f3c1978c5a800a28de058a49) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Fix an authorization gap where the playground could load a private skill's full contents without checking the caller's read access. `getSkillJson` now requires a caller actor and enforces `canReadSkill` for both the `skillId` and `load_skill` paths, so a private skill is only readable by its owner, users/orgs it is shared with, or a platform admin.
+
+- [#824](https://github.com/ChronoAIProject/Ornn/pull/824) [`24adcea`](https://github.com/ChronoAIProject/Ornn/commit/24adceac97af3d23b6ad9221bfdccfec4782a310) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Reject path-traversal skill names on the `skip_validation` import path. The lenient frontmatter extractor now enforces the same kebab-case name rule as the strict path, and the GitHub-mirror folder builder refuses unsafe names, preventing a crafted skill name from writing outside its own folder in the public mirror.
+
+- [#825](https://github.com/ChronoAIProject/Ornn/pull/825) [`2111788`](https://github.com/ChronoAIProject/Ornn/commit/2111788dc5be9d4b45c627846eac599f63276db3) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Close a quota time-of-check/time-of-use race: the per-user/surface quota is now reserved atomically at check time (a conditional increment guarded by the cap) instead of being read first and charged after the LLM call, so concurrent requests can no longer exceed the cap. Failed or aborted calls release the reservation.
+
+- [#829](https://github.com/ChronoAIProject/Ornn/pull/829) [`4ecbb0c`](https://github.com/ChronoAIProject/Ornn/commit/4ecbb0c88d29d5163beb4dbbe5a879222745799a) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Add per-user rate limit (20/min) to POST /playground/chat ([#809](https://github.com/ChronoAIProject/Ornn/issues/809)).
+
+- [#830](https://github.com/ChronoAIProject/Ornn/pull/830) [`7056a91`](https://github.com/ChronoAIProject/Ornn/commit/7056a91a44cfa35431c082c3527c1a4d52bca396) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Bound unbounded MongoDB skip() pagination (CWE-770): page ceiling + maxTimeMS on public skill queries ([#810](https://github.com/ChronoAIProject/Ornn/issues/810)).
+
+- [#831](https://github.com/ChronoAIProject/Ornn/pull/831) [`94bdd35`](https://github.com/ChronoAIProject/Ornn/commit/94bdd356069451dd19967b04ade888bf54adcb52) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Close DNS-rebind SSRF gap: route chrono-storage, chrono-sandbox, and all NyxID/LLM-gateway outbound requests through a shared fetch-time assertPublicResolvedAddress preflight ([#811](https://github.com/ChronoAIProject/Ornn/issues/811)).
+
+- [#833](https://github.com/ChronoAIProject/Ornn/pull/833) [`75916db`](https://github.com/ChronoAIProject/Ornn/commit/75916dbe568e0e5bcab031e56cdcce634ba3940a) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Idempotency middleware skips capture for streaming (text/event-stream) responses so SSE streams are delivered unbuffered and never persisted ([#812](https://github.com/ChronoAIProject/Ornn/issues/812)).
+
+- [#835](https://github.com/ChronoAIProject/Ornn/pull/835) [`2f71b81`](https://github.com/ChronoAIProject/Ornn/commit/2f71b81c994dce66c49eb7e4a0122c518f2f86b9) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Rate-limit keys anonymous traffic on a trusted-position X-Forwarded-For hop (configurable via ORNN_TRUSTED_PROXY_HOPS), not the spoofable leftmost token ([#813](https://github.com/ChronoAIProject/Ornn/issues/813), CWE-348).
+
+- [#838](https://github.com/ChronoAIProject/Ornn/pull/838) [`a893541`](https://github.com/ChronoAIProject/Ornn/commit/a893541116eedb7305f0165c521cd1574f5a9deb) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Harden the rate limiter's single-replica by-design contract (code + deployment guard) and pin per-pod isolation under test; shared-store backing for multi-replica is tracked in [#837](https://github.com/ChronoAIProject/Ornn/issues/837) ([#814](https://github.com/ChronoAIProject/Ornn/issues/814)).
+
+- [#841](https://github.com/ChronoAIProject/Ornn/pull/841) [`5f3ce51`](https://github.com/ChronoAIProject/Ornn/commit/5f3ce512455cfbccc482d5010ec9e651ee392fa0) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Fix CWE-862 ([#815](https://github.com/ChronoAIProject/Ornn/issues/815)): PUT /skills/:id/permissions rejects sharing a skill into an org the caller is not a member of (403 not_org_member); platform admins exempt.
+
+- [#847](https://github.com/ChronoAIProject/Ornn/pull/847) [`d5dc629`](https://github.com/ChronoAIProject/Ornn/commit/d5dc629d2f89665fce1821f1fc63968748eaa872) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Harden log redaction: token, accessToken, userAccessToken, clientSecret and privateKey are now censored in all Pino logger roots (shared logger, bootstrap, entrypoint), sourced from a single exported REDACT_PATHS constant.
+
+- [#848](https://github.com/ChronoAIProject/Ornn/pull/848) [`da8d209`](https://github.com/ChronoAIProject/Ornn/commit/da8d20958b6437b876fbf7bdc0897da3e2cc729c) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Harden GitHub identifier validation: mirror settings owner/repo now enforce the same naming rules as the mirror routes (shared constants), and repo pull identifiers reject "." / ".." path-traversal segments.
+
+- [#849](https://github.com/ChronoAIProject/Ornn/pull/849) [`dfe3bd9`](https://github.com/ChronoAIProject/Ornn/commit/dfe3bd95f2d5f641161535e65f089244adfb9871) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Clamp the playground sandbox timeout_secs to the advertised 1-600 range and default non-numeric values to 60s.
+
+- [#850](https://github.com/ChronoAIProject/Ornn/pull/850) [`dc10df1`](https://github.com/ChronoAIProject/Ornn/commit/dc10df131b930a2d49e2308caf62df9c8e3fc2f1) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Remove the unused requireOwnerOrAdmin authz middleware (dead code; the live skill-ownership policy is canManageSkill).
+
+- [#851](https://github.com/ChronoAIProject/Ornn/pull/851) [`91aec31`](https://github.com/ChronoAIProject/Ornn/commit/91aec31ead219257f0f483edd73e4e4f10c11ff9) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Correct the SkillConfig.encryptionKey JSDoc to match the enforced contract (mandatory ≥32 chars, no dev fallback, fail-fast at boot) and add tests pinning loadConfig() ConfigError behavior.
+
+- [#852](https://github.com/ChronoAIProject/Ornn/pull/852) [`137df13`](https://github.com/ChronoAIProject/Ornn/commit/137df13866375ef33971c4be02b239ab84a8aa8a) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Require an explicit authorization actor on the playground chat path (drop the SYSTEM_ACTOR fallback) and de-duplicate the route-level actor builds behind a single buildActorContext helper so they cannot drift.
+
+- [#853](https://github.com/ChronoAIProject/Ornn/pull/853) [`0cf8f26`](https://github.com/ChronoAIProject/Ornn/commit/0cf8f269928eb56f5cd7a81402e86865b1fe6bae) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Thread the quota reservation timestamp through to charge-on-completion so per-model analytics reconcile against the reserved month bucket (fixes a benign month-boundary straddle). Add route-level integration tests covering model-resolution failure (used unchanged) and aborted/errored streams (slot released). Note for consumers: /me/quota remaining reflects in-flight reservations — used is bumped at reserve time and refunded on system-error/abort.
+
+- [#854](https://github.com/ChronoAIProject/Ornn/pull/854) [`fec8aed`](https://github.com/ChronoAIProject/Ornn/commit/fec8aede7877d9b328dce35d0dd6f136414535d8) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Close an SSRF redirect-hop bypass: safeFetch now follows redirects via a bounded manual loop that re-validates each hop's host against the public-address guard and strips cross-host credentials, instead of blindly following 3xx to unvalidated targets.
+
+- [#855](https://github.com/ChronoAIProject/Ornn/pull/855) [`595b883`](https://github.com/ChronoAIProject/Ornn/commit/595b883b66e0db7dae6985ec22479cd7d4a9aa07) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - setSkillPermissions now distinguishes an unresolved org-membership read (forwarded token absent or NyxID unreachable) from a confirmed non-membership: sharing a skill into an org while memberships are unresolved returns a retryable 503 org_membership_unavailable instead of a misleading 403 not_org_member. Confirmed non-members still get 403. Read-path visibility is unchanged (still fail-soft).
+
 ## 0.9.1
 
 ## 0.9.0
