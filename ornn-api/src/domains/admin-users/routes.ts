@@ -62,7 +62,7 @@ export function createAdminUsersRoutes(
           throw new AppError(
             400,
             "invalid_sort",
-            "sort must be one of: displayName, email, skillCount, lastActiveAt, activityCount, firstJoinedAt",
+            `sort must be one of: ${sortKeySchema.options.join(", ")}`,
           );
         }
         sortKey = sortParse.data;
