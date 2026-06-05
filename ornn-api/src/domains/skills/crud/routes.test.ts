@@ -28,7 +28,6 @@ import { Hono } from "hono";
 import JSZip from "jszip";
 import { createSkillRoutes, type SkillRoutesConfig } from "./routes";
 import {
-  AppError,
   buildProblemJsonBody,
   type SkillDetailResponse,
   type SkillDocument,
@@ -39,7 +38,6 @@ const CREATE = "ornn:skill:create";
 const READ = "ornn:skill:read";
 const UPDATE = "ornn:skill:update";
 const DELETE = "ornn:skill:delete";
-const ADMIN = "ornn:admin:skill";
 const OWNER = "owner-1";
 
 // ---- Fixtures --------------------------------------------------------
