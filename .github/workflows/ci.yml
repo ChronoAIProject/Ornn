@@ -29,18 +29,52 @@ jobs:
       - uses: oven-sh/setup-bun@v2
       - run: bun install --frozen-lockfile
       - run: bun run test:coverage
-      # Codecov upload (#471). No token needed for public repos.
-      # `directory: ./coverage` picks up the per-package lcov files
-      # that bun test --coverage writes into each workspace.
-      - name: Upload coverage to Codecov
+      # ornn-api line-coverage floor (#889). Bun's bunfig `coverageThreshold`
+      # is silently ignored on the pinned Bun (1.3.x) — it prints the table
+      # but never fails the run — so the floor is enforced here by summing
+      # LH/LF across the lcov that `test:coverage` just wrote. ornn-web's
+      # floor is enforced inside the run by vitest `thresholds.lines` in
+      # ornn-web/vitest.config.ts. Floor = operator's ≥75% gate; ratchet up
+      # in a reviewed one-line diff as real coverage rises (measured 96.6%).
+      - name: Enforce ornn-api line-coverage floor (>=75%)
+        run: |
+          awk -F: '
+            /^LF:/ { lf += $2 }
+            /^LH:/ { lh += $2 }
+            END {
+              if (lf == 0) { print "no lines found in lcov"; exit 1 }
+              pct = 100 * lh / lf
+              printf "ornn-api line coverage: %.2f%% (%d/%d), floor 75%%\n", pct, lh, lf
+              if (pct < 75) { print "::error::ornn-api line coverage below 75% floor"; exit 1 }
+            }
+          ' ornn-api/coverage/lcov.info
+      # Codecov upload (#471, #889). No token needed for public repos.
+      # The pooled `bun` flag was split per-package so each workspace's
+      # lcov is attributed to its own flag (`api` / `web` / `sdk-ts`) and
+      # judged on its own target in codecov.yml. One upload step per flag
+      # because a single codecov-action invocation applies one flag set to
+      # every file it uploads.
+      - name: Upload ornn-api coverage to Codecov
         uses: codecov/codecov-action@v4
         if: ${{ !cancelled() }}
         with:
-          flags: bun
+          flags: api
           fail_ci_if_error: false
-          # Per-package lcov files land under coverage/ in each
-          # workspace; codecov-action recurses by default.
-          files: ./ornn-api/coverage/lcov.info,./ornn-web/coverage/lcov.info,./sdk/typescript/coverage/lcov.info
+          files: ./ornn-api/coverage/lcov.info
+      - name: Upload ornn-web coverage to Codecov
+        uses: codecov/codecov-action@v4
+        if: ${{ !cancelled() }}
+        with:
+          flags: web
+          fail_ci_if_error: false
+          files: ./ornn-web/coverage/lcov.info
+      - name: Upload TS SDK coverage to Codecov
+        uses: codecov/codecov-action@v4
+        if: ${{ !cancelled() }}
+        with:
+          flags: sdk-ts
+          fail_ci_if_error: false
+          files: ./sdk/typescript/coverage/lcov.info
 
   python-sdk-test:
     runs-on: ubuntu-latest
