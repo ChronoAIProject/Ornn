@@ -1,5 +1,11 @@
 # ornn-web
 
+## 0.10.2
+
+### Patch Changes
+
+- [#898](https://github.com/ChronoAIProject/Ornn/pull/898) [`a88e866`](https://github.com/ChronoAIProject/Ornn/commit/a88e866d13b6bbee0622611b2a1e093964da09f2) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Landing hero video: re-render caption-free (pure animation, no burned-in text overlays), motion-interpolate 30 → 60 fps, and ship a true 16:9 1080p frame — the old 2.4:1 canvas baked blurred letterbox bars into the pixels, which read as empty side gutters on wide viewports. object-cover now always fills the screen with real content.
+
 ## 0.10.1
 
 ### Patch Changes
