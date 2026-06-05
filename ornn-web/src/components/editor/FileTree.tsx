@@ -5,7 +5,7 @@
  * @module components/editor/FileTree
  */
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -278,8 +278,13 @@ export function FileTree({
 }: FileTreeProps) {
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => computeInitialExpanded(files));
 
-  // Re-expand when files change (e.g., ZIP loads after initial render)
-  useEffect(() => {
+  // Re-expand when files change (e.g., ZIP loads after initial render).
+  // Uses the "adjust state during render" guard rather than an effect
+  // (avoids the extra commit + cascading render, #888). Purely additive,
+  // so folders the user manually collapsed stay collapsed.
+  const [prevFiles, setPrevFiles] = useState(files);
+  if (files !== prevFiles) {
+    setPrevFiles(files);
     setExpandedIds((prev) => {
       const next = new Set(prev);
       next.add("root");
@@ -288,7 +293,7 @@ export function FileTree({
       }
       return next;
     });
-  }, [files]);
+  }
   const [isCreating, setIsCreating] = useState<{
     type: "file" | "folder";
     parentId: string | null;
