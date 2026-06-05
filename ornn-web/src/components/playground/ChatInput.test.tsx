@@ -158,6 +158,40 @@ describe("ChatInput send + key handling", () => {
     fireEvent.keyDown(textarea, { key: "Enter" });
     expect(onSend).not.toHaveBeenCalled();
   });
+
+  it("invokes the latest onSend after a prop swap (#888 stale-closure guard)", () => {
+    // Before #888, handleSend's useCallback deps omitted onSend, so a
+    // parent that swapped the handler (e.g. a new conversation session)
+    // would keep firing the stale closure. The send must hit whatever
+    // onSend is current at click time.
+    const ref = createRef<ChatInputHandle>();
+    const first = vi.fn();
+    const second = vi.fn();
+    const { container, rerender } = render(
+      <ChatInput
+        ref={ref}
+        onSend={first}
+        onAbort={vi.fn()}
+        disabled={false}
+        isStreaming={false}
+      />,
+    );
+    const textarea = container.querySelector("textarea")!;
+    fireEvent.change(textarea, { target: { value: "first" } });
+    // Swap onSend while text is present but before sending.
+    rerender(
+      <ChatInput
+        ref={ref}
+        onSend={second}
+        onAbort={vi.fn()}
+        disabled={false}
+        isStreaming={false}
+      />,
+    );
+    fireEvent.keyDown(textarea, { key: "Enter" });
+    expect(first).not.toHaveBeenCalled();
+    expect(second).toHaveBeenCalledWith("first");
+  });
 });
 
 describe("ChatInput streaming + abort", () => {

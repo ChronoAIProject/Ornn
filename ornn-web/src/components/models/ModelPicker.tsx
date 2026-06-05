@@ -56,6 +56,21 @@ export function ModelPicker({
   const menuRef = useRef<HTMLDivElement>(null);
   const [activeIndex, setActiveIndex] = useState(-1);
 
+  // Reset/seed the highlighted option whenever the menu toggles, using
+  // the "adjust state during render" guard rather than a setState in the
+  // keyboard effect (avoids the cascading render, #888). On open, seed to
+  // the currently-selected option for smooth nav; on close, clear it.
+  const [prevOpen, setPrevOpen] = useState(open);
+  if (open !== prevOpen) {
+    setPrevOpen(open);
+    if (open) {
+      const selectedIdx = options.findIndex((o) => o.modelId === effectiveModelId);
+      setActiveIndex(selectedIdx >= 0 ? selectedIdx : 0);
+    } else {
+      setActiveIndex(-1);
+    }
+  }
+
   // Match the menu's `max-h-[20rem]` (320px) so the placement decision lines
   // up with the rendered ceiling. If you change one, change the other.
   const MENU_MAX_HEIGHT_PX = 320;
@@ -98,15 +113,11 @@ export function ModelPicker({
     return () => document.removeEventListener("mousedown", onDoc);
   }, [open]);
 
-  // Keyboard support: ESC closes, ↑/↓/Enter navigate options.
+  // Keyboard support: ESC closes, ↑/↓/Enter navigate options. The
+  // activeIndex seed/reset moved to the render-time guard above; this
+  // effect only owns the document-level key listener subscription.
   useEffect(() => {
-    if (!open) {
-      setActiveIndex(-1);
-      return;
-    }
-    // Seed activeIndex to the currently-selected option for smooth nav.
-    const selectedIdx = options.findIndex((o) => o.modelId === effectiveModelId);
-    setActiveIndex(selectedIdx >= 0 ? selectedIdx : 0);
+    if (!open) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         e.preventDefault();
@@ -130,7 +141,7 @@ export function ModelPicker({
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [open, options, effectiveModelId, activeIndex, setPreferred]);
+  }, [open, options, activeIndex, setPreferred]);
 
   const handlePick = useCallback(
     (modelId: string) => {

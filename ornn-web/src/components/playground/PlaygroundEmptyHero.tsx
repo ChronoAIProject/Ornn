@@ -15,7 +15,7 @@
  */
 
 import { useTranslation } from "react-i18next";
-import type { PromptStarter } from "./PlaygroundHelpers";
+import type { PromptStarter } from "./PlaygroundHelpers.helpers";
 
 export interface PlaygroundEmptyHeroProps {
   skillName: string | null;

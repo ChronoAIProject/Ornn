@@ -130,7 +130,7 @@ async function preflight(
  * (system_error — no charge).
  */
 async function streamGenerationEvents(
-  c: any,
+  c: Context,
   events: AsyncIterable<{ type: string; [key: string]: unknown }>,
   keepAliveIntervalMs: number,
   chargeAfter?: {

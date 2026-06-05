@@ -128,6 +128,17 @@ export function Navbar({ className = "", showGetStartedCta = false }: NavbarProp
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
 
+  // Close both menus on navigation. Using the "adjust state during
+  // render" pattern (tracking the previous pathname) rather than a
+  // route-change effect avoids the extra commit + cascading render that
+  // setState-in-effect causes (#888).
+  const [prevPath, setPrevPath] = useState(location.pathname);
+  if (location.pathname !== prevPath) {
+    setPrevPath(location.pathname);
+    setUserMenuOpen(false);
+    setMenuOpen(false);
+  }
+
   function renderDesktopItem(
     item: UserMenuItem,
     closeMenu: () => void,
@@ -220,11 +231,6 @@ export function Navbar({ className = "", showGetStartedCta = false }: NavbarProp
       document.removeEventListener("keydown", onKey);
     };
   }, [userMenuOpen]);
-
-  useEffect(() => {
-    setUserMenuOpen(false);
-    setMenuOpen(false);
-  }, [location.pathname]);
 
   useEffect(() => {
     document.body.style.overflow = menuOpen ? "hidden" : "";

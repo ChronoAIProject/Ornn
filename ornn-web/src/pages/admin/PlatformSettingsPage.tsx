@@ -9,7 +9,7 @@
  * @module pages/admin/PlatformSettingsPage
  */
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { PageTransition } from "@/components/layout/PageTransition";
 import { Card } from "@/components/ui/Card";
@@ -26,9 +26,16 @@ export function PlatformSettingsPage() {
 
   const [threshold, setThreshold] = useState<string>("");
 
-  useEffect(() => {
-    if (settings) setThreshold(String(settings.auditWaiverThreshold));
-  }, [settings]);
+  // Seed / re-seed the input from the loaded settings using the "adjust
+  // state during render" guard rather than an effect (avoids the extra
+  // commit + cascading render, #888). Tracks the server value so a later
+  // refetch with a different threshold re-seeds, but local edits in
+  // between are preserved until then.
+  const [prevSettings, setPrevSettings] = useState(settings);
+  if (settings && settings !== prevSettings) {
+    setPrevSettings(settings);
+    setThreshold(String(settings.auditWaiverThreshold));
+  }
 
   const parsed = Number(threshold);
   const valid =

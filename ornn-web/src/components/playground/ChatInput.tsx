@@ -107,7 +107,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
     if (!trimmed || disabled || trimmed.length > MAX_INPUT_CHARS) return;
     onSend(trimmed);
     setValue("");
-  }, [value, disabled]);
+  }, [value, disabled, onSend]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {

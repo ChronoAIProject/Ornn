@@ -19,7 +19,7 @@
  * @module components/skill/UsagePullsCard
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   LineChart,
@@ -219,11 +219,23 @@ export function UsagePullsCard({
     items: ReadonlyArray<PullBucketCount>;
   } | null>(null);
 
-  useEffect(() => {
-    if (isFetching) return; // wait for the new bucket's data to arrive
-    if (!items) return;
+  // Commit a new frame only once the query for the new bucket has
+  // settled, using the "adjust state during render" guard rather than an
+  // effect (#888). While `isFetching` the guard short-circuits, so the
+  // previously-committed frame keeps drawing — the chart never blanks
+  // mid-transition. The `items` identity guard prevents an infinite
+  // render loop (keepPreviousData keeps `items` stable across the swap).
+  if (
+    !isFetching &&
+    items &&
+    (frame === null ||
+      frame.items !== items ||
+      frame.bucket !== bucket ||
+      frame.from !== from ||
+      frame.to !== to)
+  ) {
     setFrame({ bucket, from, to, items });
-  }, [items, isFetching, bucket, from, to]);
+  }
 
   const rows = useMemo(
     () =>

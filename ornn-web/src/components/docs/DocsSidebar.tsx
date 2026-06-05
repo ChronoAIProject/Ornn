@@ -9,7 +9,7 @@
  * @module components/docs/DocsSidebar
  */
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { DocSection } from "@/lib/docsContent";
 
 function ChevronIcon({ open, className }: { open: boolean; className?: string }) {
@@ -43,12 +43,18 @@ export function DocsSidebar({ sections, activeId, onSelect }: DocsSidebarProps) 
     return initial;
   });
 
-  // When active doc changes, ensure its section is expanded
-  useEffect(() => {
+  // When the active doc changes, ensure its section is expanded. Uses
+  // the "adjust state during render" guard rather than an effect
+  // (avoids the extra commit + cascading render, #888). Purely additive
+  // — a section the user manually collapsed stays collapsed unless it
+  // becomes the active section again.
+  const [prevActiveSectionId, setPrevActiveSectionId] = useState(activeSectionId);
+  if (activeSectionId !== prevActiveSectionId) {
+    setPrevActiveSectionId(activeSectionId);
     if (activeSectionId && !expanded.has(activeSectionId)) {
       setExpanded((prev) => new Set(prev).add(activeSectionId));
     }
-  }, [activeSectionId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }
 
   const toggleSection = (sectionId: string) => {
     setExpanded((prev) => {
