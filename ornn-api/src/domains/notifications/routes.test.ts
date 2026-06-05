@@ -14,8 +14,11 @@
  *   - `toFeedDto` for BOTH variants — the user variant with and without
  *     the optional `body` / `link` (the exactOptionalPropertyTypes
  *     conditional spread, #657) and the broadcast variant;
- *   - the `?unread=true` discriminator and the `?limit=` clamp
- *     (below-min, in-range, above-max);
+ *   - the `?unread=true` discriminator and `?limit=` parsing: the
+ *     route forwards the parsed value RAW to the service (no clamp —
+ *     the service owns the clamp authority, #920), and drops a
+ *     malformed/empty `?limit=` to `undefined` so the service falls
+ *     back to its default page size;
  *   - the `{ data, error: null }` success envelope (CONVENTIONS);
  *   - markRead of an unknown id → service throws AppError.notFound →
  *     404 application/problem+json.
@@ -209,7 +212,10 @@ describe("notification routes — GET /notifications", () => {
     expect(received?.unreadOnly).toBe(true);
   });
 
-  test("?limit below the floor clamps up to 1", async () => {
+  // The route NO LONGER clamps (#920) — it forwards the parsed value
+  // raw and lets the service apply the floor/ceiling. These assertions
+  // pin the forwarding contract, not the clamp.
+  test("?limit=0 forwards 0 raw (service clamps, not the route)", async () => {
     let received: { limit?: number } | undefined;
     const app = mountApp(
       fakeService({
@@ -220,10 +226,10 @@ describe("notification routes — GET /notifications", () => {
       }),
     );
     await app.request("/notifications?limit=0");
-    expect(received?.limit).toBe(1);
+    expect(received?.limit).toBe(0);
   });
 
-  test("?limit in range passes through unchanged", async () => {
+  test("?limit in range forwards the value unchanged", async () => {
     let received: { limit?: number } | undefined;
     const app = mountApp(
       fakeService({
@@ -237,7 +243,7 @@ describe("notification routes — GET /notifications", () => {
     expect(received?.limit).toBe(25);
   });
 
-  test("?limit above the ceiling clamps down to 200", async () => {
+  test("?limit above the ceiling forwards 9999 raw (service clamps)", async () => {
     let received: { limit?: number } | undefined;
     const app = mountApp(
       fakeService({
@@ -248,7 +254,37 @@ describe("notification routes — GET /notifications", () => {
       }),
     );
     await app.request("/notifications?limit=9999");
-    expect(received?.limit).toBe(200);
+    expect(received?.limit).toBe(9999);
+  });
+
+  test("?limit=abc (malformed) → 200 + limit undefined (service defaults) (#920)", async () => {
+    let received: { limit?: number } | undefined;
+    const app = mountApp(
+      fakeService({
+        listFeedForUser: async (_userId: string, opts: typeof received) => {
+          received = opts;
+          return [];
+        },
+      }),
+    );
+    const res = await app.request("/notifications?limit=abc");
+    expect(res.status).toBe(200);
+    expect(received?.limit).toBeUndefined();
+  });
+
+  test("?limit= (empty) → 200 + limit undefined (service defaults) (#920)", async () => {
+    let received: { limit?: number } | undefined;
+    const app = mountApp(
+      fakeService({
+        listFeedForUser: async (_userId: string, opts: typeof received) => {
+          received = opts;
+          return [];
+        },
+      }),
+    );
+    const res = await app.request("/notifications?limit=");
+    expect(res.status).toBe(200);
+    expect(received?.limit).toBeUndefined();
   });
 });
 

@@ -41,6 +41,9 @@ class FakeNotificationRepo {
   created: CreateNotificationInput[] = [];
   /** When true, `create` rejects — exercises the emit swallow-on-reject path. */
   createShouldReject = false;
+  /** Captures the most recent `list` options so clamp tests can pin the
+   *  `limit` the service forwards to the repo (#920). */
+  lastListOptions: ListOptions | undefined;
 
   async create(input: CreateNotificationInput): Promise<NotificationDocument> {
     if (this.createShouldReject) {
@@ -63,6 +66,7 @@ class FakeNotificationRepo {
   }
 
   async list(userId: string, options: ListOptions = {}): Promise<NotificationDocument[]> {
+    this.lastListOptions = options;
     let out = this.rows.filter((r) => r.userId === userId);
     if (options.unreadOnly) out = out.filter((r) => !r.readAt);
     out = [...out].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
@@ -352,6 +356,61 @@ describe("NotificationService — merged feed (#500)", () => {
     expect(feed[0]?.source).toBe("user");
     expect(await svc.countUnread("u1")).toBe(1);
     expect(await svc.markAllRead("u1")).toBe(1);
+  });
+});
+
+describe("NotificationService — listFeedForUser limit clamp authority (#920)", () => {
+  // Mirror the (unexported) service constants so the assertions read
+  // intent-first. Keep in sync with service.ts.
+  const MERGED_FEED_LIMIT_DEFAULT = 50;
+  const MERGED_FEED_LIMIT_MAX = 200;
+
+  test("limit: NaN falls back to the default page size", async () => {
+    const { svc, notificationRepo } = makeService();
+    await svc.listFeedForUser("u1", { limit: NaN });
+    const captured = notificationRepo.lastListOptions?.limit;
+    expect(captured).toBe(MERGED_FEED_LIMIT_DEFAULT);
+    expect(Number.isFinite(captured)).toBe(true);
+  });
+
+  test("limit: undefined falls back to the default page size", async () => {
+    const { svc, notificationRepo } = makeService();
+    // Pass an explicit-`undefined` limit. The service signature uses
+    // exactOptionalPropertyTypes (no `undefined` in the value position),
+    // so the literal is funnelled through `unknown` at the call
+    // boundary — at runtime this exercises the same
+    // `options.limit === undefined` branch the route hits when it drops
+    // a malformed `?limit=` to undefined (#920).
+    const opts = { limit: undefined } as unknown as { limit?: number };
+    await svc.listFeedForUser("u1", opts);
+    const captured = notificationRepo.lastListOptions?.limit;
+    expect(captured).toBe(MERGED_FEED_LIMIT_DEFAULT);
+    expect(Number.isFinite(captured)).toBe(true);
+  });
+
+  test("limit: 0 clamps up to the floor (1)", async () => {
+    const { svc, notificationRepo } = makeService();
+    await svc.listFeedForUser("u1", { limit: 0 });
+    const captured = notificationRepo.lastListOptions?.limit;
+    expect(captured).toBe(1);
+    expect(Number.isFinite(captured)).toBe(true);
+  });
+
+  test("limit: 9999 clamps down to the ceiling", async () => {
+    const { svc, notificationRepo } = makeService();
+    await svc.listFeedForUser("u1", { limit: 9999 });
+    const captured = notificationRepo.lastListOptions?.limit;
+    expect(captured).toBe(MERGED_FEED_LIMIT_MAX);
+    expect(Number.isFinite(captured)).toBe(true);
+  });
+
+  test("limit: Infinity clamps down to the ceiling (finite guard)", async () => {
+    const { svc, notificationRepo } = makeService();
+    await svc.listFeedForUser("u1", { limit: Number.POSITIVE_INFINITY });
+    const captured = notificationRepo.lastListOptions?.limit;
+    // Infinity is not finite → defaults → still within [1, MAX].
+    expect(captured).toBe(MERGED_FEED_LIMIT_DEFAULT);
+    expect(Number.isFinite(captured)).toBe(true);
   });
 });
 
