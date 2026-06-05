@@ -17,14 +17,14 @@
  * download + extraction runs hermetically (no MinIO, no network).
  */
 
-import { describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it } from "bun:test";
 import JSZip from "jszip";
-import { SkillService } from "./service";
+import { SkillService, resolveDistTag, isValidTagName, type SkillServiceDeps } from "./service";
 import { SYSTEM_ACTOR, canReadSkill, type ActorContext } from "./authorize";
 import type { SkillRepository } from "./repository";
 import type { SkillVersionRepository } from "./skillVersionRepository";
 import type { IStorageClient } from "../../../clients/storageClient";
-import type { SkillDocument } from "../../../shared/types/index";
+import type { SkillDocument, SkillVersionDocument } from "../../../shared/types/index";
 import { AppError } from "../../../shared/types/index";
 
 const SECRET_BODY = "SECRET_FROM_PACKAGE_b91c";
@@ -457,5 +457,697 @@ describe("SkillService.setSkillPermissions — org-membership gate (#815)", () =
     expect(msg).not.toContain("org-A");
     // Atomic — no partial persistence of the member org.
     expect(state.updateCalled).toBe(false);
+  });
+});
+
+// ======================================================================
+// #874 — broad SkillService coverage via DI fakes (no memory-server).
+//
+// A `makeService(overrides)` builder hands back a service whose repo /
+// version-repo / storage are fully stubbable; un-stubbed methods are
+// either irrelevant to the path under test or supplied per-test. All
+// fakes are in-memory and hermetic.
+// ======================================================================
+
+interface FakeState {
+  skills: Map<string, SkillDocument>;
+  byName: Map<string, SkillDocument>;
+  versions: SkillVersionDocument[];
+  distTags: Map<string, Record<string, string>>;
+  uploads: Array<{ key: string; bytes: number }>;
+  deletes: string[];
+}
+
+function versionDoc(overrides: Partial<SkillVersionDocument> = {}): SkillVersionDocument {
+  return {
+    _id: "guid-1@1.0",
+    skillGuid: "guid-1",
+    version: "1.0",
+    majorVersion: 1,
+    minorVersion: 0,
+    storageKey: "skills/guid-1/1.0.zip",
+    skillHash: "hash-1",
+    metadata: { category: "plain" },
+    license: null,
+    compatibility: null,
+    createdBy: "owner-1",
+    createdOn: new Date("2026-01-01T00:00:00Z"),
+    ...overrides,
+  } as SkillVersionDocument;
+}
+
+/** Build a valid SKILL.md ZIP as raw bytes (for createSkill / updateSkill). */
+async function validSkillZip(opts: { name?: string; version?: string } = {}): Promise<Uint8Array> {
+  const { name = "demo-skill", version = "1.0" } = opts;
+  const zip = new JSZip();
+  const folder = zip.folder(name)!;
+  folder.file(
+    "SKILL.md",
+    [
+      "---",
+      `name: ${name}`,
+      "description: A demo skill used by service tests.",
+      "metadata:",
+      "  category: plain",
+      `version: "${version}"`,
+      "---",
+      `# ${name}`,
+    ].join("\n"),
+  );
+  return zip.generateAsync({ type: "uint8array" });
+}
+
+function makeFakeDeps(seed?: Partial<FakeState>): { deps: SkillServiceDeps; state: FakeState } {
+  const state: FakeState = {
+    skills: seed?.skills ?? new Map(),
+    byName: seed?.byName ?? new Map(),
+    versions: seed?.versions ?? [],
+    distTags: seed?.distTags ?? new Map(),
+    uploads: [],
+    deletes: [],
+  };
+
+  const skillRepo = {
+    findByGuid: async (guid: string) => state.skills.get(guid) ?? null,
+    findByName: async (name: string) => state.byName.get(name) ?? null,
+    create: async (data: { guid: string; name: string; latestVersion: string }) => {
+      const doc = makeSkillDoc({
+        guid: data.guid,
+        name: data.name,
+        latestVersion: data.latestVersion,
+        isPrivate: true,
+      });
+      state.skills.set(data.guid, doc);
+      state.byName.set(data.name, doc);
+      return doc;
+    },
+    update: async (guid: string, patch: Record<string, unknown>) => {
+      const cur = state.skills.get(guid)!;
+      const next = { ...cur, ...patch } as SkillDocument;
+      state.skills.set(guid, next);
+      state.byName.set(next.name, next);
+      return next;
+    },
+    setDistTag: async (guid: string, tag: string, version: string) => {
+      const tags = state.distTags.get(guid) ?? {};
+      tags[tag] = version;
+      state.distTags.set(guid, tags);
+      // Reflect on the stored doc so getDistTags (which re-reads the skill)
+      // sees the change — mirrors the real dotted-path $set.
+      const cur = state.skills.get(guid);
+      if (cur) state.skills.set(guid, { ...cur, distTags: { ...tags } } as SkillDocument);
+    },
+    deleteDistTag: async (guid: string, tag: string) => {
+      const tags = state.distTags.get(guid) ?? {};
+      delete tags[tag];
+      state.distTags.set(guid, tags);
+      const cur = state.skills.get(guid);
+      if (cur) state.skills.set(guid, { ...cur, distTags: { ...tags } } as SkillDocument);
+    },
+    clearSource: async (guid: string) => {
+      const cur = state.skills.get(guid);
+      if (!cur) return null;
+      const next = { ...cur, source: undefined } as SkillDocument;
+      state.skills.set(guid, next);
+      state.byName.set(next.name, next);
+      return next;
+    },
+    setNyxidService: async (guid: string, data: Record<string, unknown>) => {
+      const cur = state.skills.get(guid)!;
+      const next = { ...cur, ...data } as SkillDocument;
+      state.skills.set(guid, next);
+      return next;
+    },
+    hardDelete: async (guid: string) => {
+      const doc = state.skills.get(guid);
+      if (doc) state.byName.delete(doc.name);
+      state.skills.delete(guid);
+    },
+  } as unknown as SkillRepository;
+
+  const skillVersionRepo = {
+    create: async (data: { version: string; majorVersion: number; minorVersion: number }) => {
+      const v = versionDoc({
+        _id: `guid-1@${data.version}`,
+        version: data.version,
+        majorVersion: data.majorVersion,
+        minorVersion: data.minorVersion,
+      });
+      state.versions.push(v);
+      return v;
+    },
+    findBySkillAndVersion: async (guid: string, version: string) =>
+      state.versions.find((v) => v.skillGuid === guid && v.version === version) ?? null,
+    findLatestBySkill: async (guid: string) => {
+      const list = state.versions
+        .filter((v) => v.skillGuid === guid)
+        .sort((a, b) => b.majorVersion - a.majorVersion || b.minorVersion - a.minorVersion);
+      return list[0] ?? null;
+    },
+    listBySkill: async (guid: string) =>
+      state.versions
+        .filter((v) => v.skillGuid === guid)
+        .sort((a, b) => b.majorVersion - a.majorVersion || b.minorVersion - a.minorVersion),
+    deleteOne: async () => true,
+    deleteAllBySkill: async (guid: string) => {
+      const before = state.versions.length;
+      state.versions = state.versions.filter((v) => v.skillGuid !== guid);
+      return before - state.versions.length;
+    },
+    setDeprecation: async (
+      guid: string,
+      version: string,
+      isDeprecated: boolean,
+      note?: string | null,
+    ) => {
+      const v = state.versions.find((x) => x.skillGuid === guid && x.version === version);
+      if (!v) throw AppError.notFound("skill_version_not_found", "missing");
+      v.isDeprecated = isDeprecated;
+      v.deprecationNote = isDeprecated ? note ?? null : null;
+      return v;
+    },
+  } as unknown as SkillVersionRepository;
+
+  const storageClient = {
+    upload: async (_bucket: string, key: string, data: Uint8Array) => {
+      state.uploads.push({ key, bytes: data.byteLength });
+      return { url: `https://storage.test/${key}` };
+    },
+    delete: async (_bucket: string, key: string) => {
+      state.deletes.push(key);
+    },
+    getPresignedUrl: async () => ({ presignedUrl: "http://unused", expiresAt: "" }),
+  } as unknown as IStorageClient;
+
+  return {
+    deps: { skillRepo, skillVersionRepo, storageClient, storageBucketResolver: async () => "test-bucket" },
+    state,
+  };
+}
+
+describe("resolveDistTag / isValidTagName (#463)", () => {
+  it("isValidTagName accepts npm-style tags and rejects bad shapes", () => {
+    expect(isValidTagName("beta")).toBe(true);
+    expect(isValidTagName("rc-1")).toBe(true);
+    expect(isValidTagName("1beta")).toBe(false); // must start with a letter
+    expect(isValidTagName("Beta")).toBe(false); // uppercase
+    expect(isValidTagName("")).toBe(false);
+  });
+
+  it("returns undefined for empty input", () => {
+    expect(resolveDistTag(makeSkillDoc(), "")).toBeUndefined();
+  });
+
+  it("returns a literal version verbatim", () => {
+    expect(resolveDistTag(makeSkillDoc(), "1.2")).toBe("1.2");
+  });
+
+  it("resolves a known dist-tag", () => {
+    const skill = makeSkillDoc({ distTags: { beta: "1.1" } });
+    expect(resolveDistTag(skill, "@beta")).toBe("1.1");
+  });
+
+  it("falls back to latestVersion for @latest on a legacy skill", () => {
+    const skill = makeSkillDoc({ latestVersion: "2.0", distTags: undefined });
+    expect(resolveDistTag(skill, "@latest")).toBe("2.0");
+  });
+
+  it("throws 400 for an empty @-tag", () => {
+    let thrown: unknown;
+    try {
+      resolveDistTag(makeSkillDoc(), "@");
+    } catch (err) {
+      thrown = err;
+    }
+    expect((thrown as AppError).code).toBe("invalid_dist_tag");
+  });
+
+  it("throws 404 for an unknown tag", () => {
+    let thrown: unknown;
+    try {
+      resolveDistTag(makeSkillDoc(), "@nope");
+    } catch (err) {
+      thrown = err;
+    }
+    expect((thrown as AppError).code).toBe("skill_version_not_found");
+  });
+});
+
+describe("SkillService.createSkill", () => {
+  it("validates, uploads, persists, version-creates and seeds latest dist-tag", async () => {
+    const { deps, state } = makeFakeDeps();
+    const service = new SkillService(deps);
+    const { guid } = await service.createSkill(await validSkillZip(), "owner-1");
+    expect(guid).toBeTruthy();
+    // Uploaded a versioned blob + created a version row + latest tag.
+    expect(state.uploads).toHaveLength(1);
+    expect(state.versions).toHaveLength(1);
+    const created = [...state.skills.values()][0]!;
+    expect(state.distTags.get(created.guid)?.latest).toBe("1.0");
+  });
+
+  it("rejects a reserved-verb name", async () => {
+    const { deps } = makeFakeDeps();
+    const service = new SkillService(deps);
+    let thrown: unknown;
+    try {
+      await service.createSkill(await validSkillZip({ name: "search" }), "owner-1");
+    } catch (err) {
+      thrown = err;
+    }
+    expect(thrown).toBeInstanceOf(AppError);
+    expect((thrown as AppError).code).toBe("reserved_name");
+  });
+
+  it("rejects a name conflict", async () => {
+    const existing = makeSkillDoc({ guid: "other", name: "demo-skill" });
+    const { deps } = makeFakeDeps({ byName: new Map([["demo-skill", existing]]) });
+    const service = new SkillService(deps);
+    let thrown: unknown;
+    try {
+      await service.createSkill(await validSkillZip(), "owner-1");
+    } catch (err) {
+      thrown = err;
+    }
+    expect((thrown as AppError).code).toBe("skill_name_exists");
+  });
+});
+
+describe("SkillService.updateSkill", () => {
+  it("JSON visibility-only update touches the doc, not storage", async () => {
+    const skill = makeSkillDoc({ guid: "guid-1", isPrivate: true });
+    const { deps, state } = makeFakeDeps({
+      skills: new Map([["guid-1", skill]]),
+      byName: new Map([["demo-skill", skill]]),
+    });
+    const service = new SkillService(deps);
+    const updated = await service.updateSkill("guid-1", "owner-1", { isPrivate: false });
+    expect(updated.isPrivate).toBe(false);
+    expect(state.uploads).toHaveLength(0);
+  });
+
+  it("ZIP republish uploads a new version + bumps latest", async () => {
+    const skill = makeSkillDoc({ guid: "guid-1", isPrivate: false, latestVersion: "1.0" });
+    const { deps, state } = makeFakeDeps({
+      skills: new Map([["guid-1", skill]]),
+      byName: new Map([["demo-skill", skill]]),
+      versions: [versionDoc({ version: "1.0", majorVersion: 1, minorVersion: 0 })],
+    });
+    const service = new SkillService(deps);
+    await service.updateSkill("guid-1", "owner-1", { zipBuffer: await validSkillZip({ version: "1.1" }) });
+    expect(state.uploads).toHaveLength(1);
+    expect(state.versions.map((v) => v.version)).toContain("1.1");
+    expect(state.distTags.get("guid-1")?.latest).toBe("1.1");
+  });
+
+  it("rejects a non-incrementing version", async () => {
+    const skill = makeSkillDoc({ guid: "guid-1", latestVersion: "2.0" });
+    const { deps } = makeFakeDeps({
+      skills: new Map([["guid-1", skill]]),
+      byName: new Map([["demo-skill", skill]]),
+      versions: [versionDoc({ version: "2.0", majorVersion: 2, minorVersion: 0 })],
+    });
+    const service = new SkillService(deps);
+    let thrown: unknown;
+    try {
+      await service.updateSkill("guid-1", "owner-1", { zipBuffer: await validSkillZip({ version: "1.1" }) });
+    } catch (err) {
+      thrown = err;
+    }
+    expect((thrown as AppError).code).toBe("VERSION_NOT_INCREMENTED");
+  });
+
+  it("404 when the skill is unknown", async () => {
+    const { deps } = makeFakeDeps();
+    const service = new SkillService(deps);
+    let thrown: unknown;
+    try {
+      await service.updateSkill("nope", "owner-1", { isPrivate: false });
+    } catch (err) {
+      thrown = err;
+    }
+    expect((thrown as AppError).code).toBe("skill_not_found");
+  });
+});
+
+describe("SkillService.getSkill / dist-tags / versions", () => {
+  function seededService() {
+    const skill = makeSkillDoc({ guid: "guid-1", latestVersion: "1.0", distTags: { beta: "1.0" } });
+    const { deps } = makeFakeDeps({
+      skills: new Map([["guid-1", skill]]),
+      byName: new Map([["demo-skill", skill]]),
+      versions: [versionDoc({ version: "1.0", majorVersion: 1, minorVersion: 0 })],
+    });
+    return new SkillService(deps);
+  }
+
+  it("getSkill (latest) returns a detail response", async () => {
+    const res = await seededService().getSkill("guid-1");
+    expect(res.guid).toBe("guid-1");
+    expect(res.version).toBe("1.0");
+  });
+
+  it("getSkill (specific version) overlays that version", async () => {
+    const res = await seededService().getSkill("guid-1", "1.0");
+    expect(res.version).toBe("1.0");
+  });
+
+  it("getSkill 404 for an unknown version", async () => {
+    let thrown: unknown;
+    try {
+      await seededService().getSkill("guid-1", "9.9");
+    } catch (err) {
+      thrown = err;
+    }
+    expect((thrown as AppError).code).toBe("skill_version_not_found");
+  });
+
+  it("getDistTags always synthesizes latest", async () => {
+    const tags = await seededService().getDistTags("guid-1");
+    expect(tags.latest).toBe("1.0");
+    expect(tags.beta).toBe("1.0");
+  });
+
+  it("setDistTag rejects the immutable `latest`", async () => {
+    let thrown: unknown;
+    try {
+      await seededService().setDistTag("guid-1", "latest", "1.0");
+    } catch (err) {
+      thrown = err;
+    }
+    expect((thrown as AppError).code).toBe("dist_tag_immutable");
+  });
+
+  it("setDistTag rejects an invalid tag name", async () => {
+    let thrown: unknown;
+    try {
+      await seededService().setDistTag("guid-1", "Bad Tag", "1.0");
+    } catch (err) {
+      thrown = err;
+    }
+    expect((thrown as AppError).code).toBe("invalid_dist_tag");
+  });
+
+  it("setDistTag 404 when the target version is unknown", async () => {
+    let thrown: unknown;
+    try {
+      await seededService().setDistTag("guid-1", "beta", "9.9");
+    } catch (err) {
+      thrown = err;
+    }
+    expect((thrown as AppError).code).toBe("skill_version_not_found");
+  });
+
+  it("setDistTag persists a valid tag", async () => {
+    const svc = seededService();
+    const tags = await svc.setDistTag("guid-1", "stable", "1.0");
+    expect(tags.stable).toBe("1.0");
+  });
+
+  it("deleteDistTag rejects the immutable `latest`", async () => {
+    let thrown: unknown;
+    try {
+      await seededService().deleteDistTag("guid-1", "latest");
+    } catch (err) {
+      thrown = err;
+    }
+    expect((thrown as AppError).code).toBe("dist_tag_immutable");
+  });
+
+  it("listSkillVersions returns the integrity-augmented list", async () => {
+    const list = await seededService().listSkillVersions("guid-1");
+    expect(list).toHaveLength(1);
+    expect(list[0]!.version).toBe("1.0");
+    expect(list[0]!.integrity.startsWith("sha256-")).toBe(true);
+  });
+
+  it("setVersionDeprecation toggles the flag", async () => {
+    const res = await seededService().setVersionDeprecation("guid-1", "1.0", true, "deprecated");
+    expect(res.isDeprecated).toBe(true);
+    expect(res.deprecationNote).toBe("deprecated");
+  });
+});
+
+describe("SkillService.deleteVersion / deleteSkill", () => {
+  it("deleteSkill cascades version rows + storage cleanup", async () => {
+    const skill = makeSkillDoc({ guid: "guid-1" });
+    const { deps, state } = makeFakeDeps({
+      skills: new Map([["guid-1", skill]]),
+      byName: new Map([["demo-skill", skill]]),
+      versions: [versionDoc({ version: "1.0", majorVersion: 1, minorVersion: 0 })],
+    });
+    const service = new SkillService(deps);
+    await service.deleteSkill("guid-1");
+    expect(state.skills.has("guid-1")).toBe(false);
+    expect(state.versions).toHaveLength(0);
+    expect(state.deletes.length).toBeGreaterThan(0);
+  });
+
+  it("deleteVersion refuses the only remaining version", async () => {
+    const skill = makeSkillDoc({ guid: "guid-1", latestVersion: "1.0" });
+    const { deps } = makeFakeDeps({
+      skills: new Map([["guid-1", skill]]),
+      byName: new Map([["demo-skill", skill]]),
+      versions: [versionDoc({ version: "1.0", majorVersion: 1, minorVersion: 0 })],
+    });
+    const service = new SkillService(deps);
+    let thrown: unknown;
+    try {
+      await service.deleteVersion("guid-1", "1.0");
+    } catch (err) {
+      thrown = err;
+    }
+    expect((thrown as AppError).code).toBe("SKILL_VERSION_LAST");
+  });
+
+  it("deleteVersion refuses the current latest", async () => {
+    const skill = makeSkillDoc({ guid: "guid-1", latestVersion: "1.1" });
+    const { deps } = makeFakeDeps({
+      skills: new Map([["guid-1", skill]]),
+      byName: new Map([["demo-skill", skill]]),
+      versions: [
+        versionDoc({ version: "1.1", majorVersion: 1, minorVersion: 1 }),
+        versionDoc({ version: "1.0", majorVersion: 1, minorVersion: 0 }),
+      ],
+    });
+    const service = new SkillService(deps);
+    let thrown: unknown;
+    try {
+      await service.deleteVersion("guid-1", "1.1");
+    } catch (err) {
+      thrown = err;
+    }
+    expect((thrown as AppError).code).toBe("SKILL_VERSION_LATEST");
+  });
+
+  it("deleteVersion removes a non-latest version", async () => {
+    const skill = makeSkillDoc({ guid: "guid-1", latestVersion: "1.1" });
+    const { deps, state } = makeFakeDeps({
+      skills: new Map([["guid-1", skill]]),
+      byName: new Map([["demo-skill", skill]]),
+      versions: [
+        versionDoc({ version: "1.1", majorVersion: 1, minorVersion: 1 }),
+        versionDoc({ version: "1.0", majorVersion: 1, minorVersion: 0 }),
+      ],
+    });
+    const service = new SkillService(deps);
+    await service.deleteVersion("guid-1", "1.0");
+    expect(state.deletes.length).toBeGreaterThan(0);
+  });
+});
+
+describe("SkillService.tieToNyxidService", () => {
+  function tieService() {
+    const skill = makeSkillDoc({ guid: "guid-1", isPrivate: true });
+    const { deps } = makeFakeDeps({
+      skills: new Map([["guid-1", skill]]),
+      byName: new Map([["demo-skill", skill]]),
+      versions: [versionDoc()],
+    });
+    return new SkillService(deps);
+  }
+
+  it("untie (serviceId=null) clears the tie", async () => {
+    const res = await tieService().tieToNyxidService("guid-1", null, { userId: "owner-1", isPlatformAdmin: false }, async () => null);
+    expect(res.nyxidServiceId).toBeNull();
+  });
+
+  it("404 when the service lookup returns null", async () => {
+    let thrown: unknown;
+    try {
+      await tieService().tieToNyxidService("guid-1", "svc-1", { userId: "owner-1", isPlatformAdmin: false }, async () => null);
+    } catch (err) {
+      thrown = err;
+    }
+    expect((thrown as AppError).code).toBe("NYXID_SERVICE_NOT_FOUND");
+  });
+
+  it("ties to an admin service and forces public", async () => {
+    const res = await tieService().tieToNyxidService(
+      "guid-1",
+      "svc-1",
+      { userId: "owner-1", isPlatformAdmin: false },
+      async () => ({ id: "svc-1", slug: "svc-1", label: "Service 1", visibility: "public", createdBy: "x" }),
+    );
+    expect(res.isSystemSkill).toBe(true);
+    expect(res.isPrivate).toBe(false);
+  });
+
+  it("rejects tying to another user's personal service", async () => {
+    let thrown: unknown;
+    try {
+      await tieService().tieToNyxidService(
+        "guid-1",
+        "svc-1",
+        { userId: "owner-1", isPlatformAdmin: false },
+        async () => ({ id: "svc-1", slug: "svc-1", label: "Service 1", visibility: "private", createdBy: "other-user" }),
+      );
+    } catch (err) {
+      thrown = err;
+    }
+    expect((thrown as AppError).code).toBe("NYXID_SERVICE_NOT_ELIGIBLE");
+  });
+});
+
+describe("SkillService.diffVersions", () => {
+  it("rejects identical from/to versions", async () => {
+    const skill = makeSkillDoc({ guid: "guid-1" });
+    const { deps } = makeFakeDeps({
+      skills: new Map([["guid-1", skill]]),
+      byName: new Map([["demo-skill", skill]]),
+    });
+    const service = new SkillService(deps);
+    let thrown: unknown;
+    try {
+      await service.diffVersions("guid-1", "1.0", "1.0");
+    } catch (err) {
+      thrown = err;
+    }
+    expect((thrown as AppError).code).toBe("same_version");
+  });
+
+  it("404 when a version is unknown", async () => {
+    const skill = makeSkillDoc({ guid: "guid-1" });
+    const { deps } = makeFakeDeps({
+      skills: new Map([["guid-1", skill]]),
+      byName: new Map([["demo-skill", skill]]),
+      versions: [versionDoc({ version: "1.0", majorVersion: 1, minorVersion: 0 })],
+    });
+    const service = new SkillService(deps);
+    let thrown: unknown;
+    try {
+      await service.diffVersions("guid-1", "1.0", "9.9");
+    } catch (err) {
+      thrown = err;
+    }
+    expect((thrown as AppError).code).toBe("skill_version_not_found");
+  });
+});
+
+describe("SkillService.setSkillSource / refresh / preview (globalThis.fetch swap)", () => {
+  const realFetch = globalThis.fetch;
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+  });
+
+  it("setSkillSource(null) clears the source", async () => {
+    const skill = makeSkillDoc({
+      guid: "guid-1",
+      source: { type: "github", repo: "o/r", ref: "main", path: "" },
+    });
+    const { deps } = makeFakeDeps({
+      skills: new Map([["guid-1", skill]]),
+      byName: new Map([["demo-skill", skill]]),
+      versions: [versionDoc()],
+    });
+    const service = new SkillService(deps);
+    const res = await service.setSkillSource("guid-1", null, "owner-1");
+    expect(res.source).toBeUndefined();
+  });
+
+  it("setSkillSource parses a GitHub URL and stores the pointer", async () => {
+    const skill = makeSkillDoc({ guid: "guid-1" });
+    const { deps } = makeFakeDeps({
+      skills: new Map([["guid-1", skill]]),
+      byName: new Map([["demo-skill", skill]]),
+      versions: [versionDoc()],
+    });
+    const service = new SkillService(deps);
+    const res = await service.setSkillSource("guid-1", "https://github.com/owner/repo", "owner-1");
+    expect(res.source?.repo).toBe("owner/repo");
+  });
+
+  it("setSkillSource rejects a malformed GitHub URL", async () => {
+    const skill = makeSkillDoc({ guid: "guid-1" });
+    const { deps } = makeFakeDeps({
+      skills: new Map([["guid-1", skill]]),
+      byName: new Map([["demo-skill", skill]]),
+    });
+    const service = new SkillService(deps);
+    let thrown: unknown;
+    try {
+      await service.setSkillSource("guid-1", "not-a-github-url", "owner-1");
+    } catch (err) {
+      thrown = err;
+    }
+    expect((thrown as AppError).code).toBe("invalid_github_url");
+  });
+
+  it("refreshSkillFromSource rejects a skill with no source", async () => {
+    const skill = makeSkillDoc({ guid: "guid-1", source: undefined });
+    const { deps } = makeFakeDeps({
+      skills: new Map([["guid-1", skill]]),
+      byName: new Map([["demo-skill", skill]]),
+    });
+    const service = new SkillService(deps);
+    let thrown: unknown;
+    try {
+      await service.refreshSkillFromSource("guid-1", "owner-1");
+    } catch (err) {
+      thrown = err;
+    }
+    expect((thrown as AppError).code).toBe("NO_SOURCE");
+  });
+
+  it("previewRefreshFromSource rejects a skill with no source", async () => {
+    const skill = makeSkillDoc({ guid: "guid-1", source: undefined });
+    const { deps } = makeFakeDeps({
+      skills: new Map([["guid-1", skill]]),
+      byName: new Map([["demo-skill", skill]]),
+    });
+    const service = new SkillService(deps);
+    let thrown: unknown;
+    try {
+      await service.previewRefreshFromSource("guid-1");
+    } catch (err) {
+      thrown = err;
+    }
+    expect((thrown as AppError).code).toBe("NO_SOURCE");
+  });
+});
+
+describe("SkillService.validateZipFormat", () => {
+  it("flags a non-ZIP buffer", async () => {
+    const { deps } = makeFakeDeps();
+    const service = new SkillService(deps);
+    const violations = await service.validateZipFormat(new Uint8Array([1, 2, 3, 4]));
+    expect(violations.some((v) => v.rule === "valid-zip")).toBe(true);
+  });
+
+  it("passes a well-formed package with zero violations", async () => {
+    const { deps } = makeFakeDeps();
+    const service = new SkillService(deps);
+    const violations = await service.validateZipFormat(await validSkillZip());
+    expect(violations).toEqual([]);
+  });
+
+  it("flags a missing SKILL.md", async () => {
+    const zip = new JSZip();
+    zip.folder("demo-skill")!.file("notes.txt", "hi");
+    const buf = await zip.generateAsync({ type: "uint8array" });
+    const { deps } = makeFakeDeps();
+    const service = new SkillService(deps);
+    const violations = await service.validateZipFormat(buf);
+    expect(violations.some((v) => v.rule === "skill-md-exists" || v.rule === "allowed-root-items")).toBe(true);
   });
 });
