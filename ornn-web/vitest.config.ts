@@ -24,6 +24,7 @@ export default mergeConfig(
         reporter: ["text", "lcov", "json-summary"],
         reportsDirectory: "coverage",
         // Floor only — measured 14.88% at introduction (#889). Raise deliberately, never auto-track.
+      // NOTE: growing the exclude list above shrinks this denominator — exclude additions are review-gated (#884/#889).
         thresholds: { lines: 12 },
       },
     },
