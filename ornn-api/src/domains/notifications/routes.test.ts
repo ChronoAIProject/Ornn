@@ -30,9 +30,10 @@ import { describe, expect, test } from "bun:test";
 import { Hono } from "hono";
 import type { AuthVariables } from "../../middleware/nyxidAuth";
 import { AppError, buildProblemJsonBody } from "../../shared/types/index";
+import type { ListOptions, NotificationRepository } from "./repository";
 import { createNotificationRoutes } from "./routes";
-import type { NotificationService } from "./service";
-import type { FeedItem } from "./types";
+import { NotificationService } from "./service";
+import type { FeedItem, NotificationDocument } from "./types";
 
 const USER_ID = "u-router";
 
@@ -354,5 +355,89 @@ describe("notification routes — POST /notifications/mark-all-read", () => {
     const body = (await res.json()) as { data: { updated: number }; error: null };
     expect(body.data.updated).toBe(4);
     expect(body.error).toBeNull();
+  });
+});
+
+/**
+ * Wired end-to-end seam: HTTP route → REAL NotificationService → fake
+ * repo (#920). Every other test in this file stubs the service with a
+ * Proxy, so they pin only what the *route* forwards (`?limit=0` → raw
+ * 0, malformed → undefined) and the clamp lives unverified across the
+ * seam. The clamp itself is covered in service.test.ts at the service
+ * boundary. Neither side proves the *composition*: that the route's raw
+ * forward + the service's clamp actually meet on one request. These
+ * tests mount the route over a genuine `NotificationService` backed by
+ * a minimal repo that captures the `limit` the service ultimately hands
+ * the repo — pinning that `GET /notifications?limit=<x>` lands the
+ * expected clamped value at the persistence boundary, in one path.
+ *
+ * The fake repo only implements `list` (the sole method this seam
+ * touches) + captures `lastListOptions`; the rest throw if reached so
+ * the assertions stay honest about which repo calls the handler makes.
+ */
+class CapturingNotificationRepo {
+  /** Captures the `list` options the service forwards, so the seam test
+   *  can read the clamped `limit` at the persistence boundary. */
+  lastListOptions: ListOptions | undefined;
+
+  async list(_userId: string, options: ListOptions = {}): Promise<NotificationDocument[]> {
+    this.lastListOptions = options;
+    return [];
+  }
+
+  async create(): Promise<NotificationDocument> {
+    throw new Error("unexpected NotificationRepository.create call");
+  }
+
+  async countUnread(): Promise<number> {
+    throw new Error("unexpected NotificationRepository.countUnread call");
+  }
+
+  async markRead(): Promise<NotificationDocument | null> {
+    throw new Error("unexpected NotificationRepository.markRead call");
+  }
+
+  async markAllRead(): Promise<number> {
+    throw new Error("unexpected NotificationRepository.markAllRead call");
+  }
+}
+
+describe("notification routes — wired clamp seam (route → service → repo) (#920)", () => {
+  // Mirror the (unexported) service constant so the assertion reads
+  // intent-first. Keep in sync with service.ts MERGED_FEED_LIMIT_DEFAULT.
+  const MERGED_FEED_LIMIT_DEFAULT = 50;
+
+  function mountWired(): { app: Hono<{ Variables: AuthVariables }>; repo: CapturingNotificationRepo } {
+    const repo = new CapturingNotificationRepo();
+    // No broadcastRepo — the seam under test is the per-user `list`
+    // limit, which the service derives before touching either source.
+    const service = new NotificationService({
+      notificationRepo: repo as unknown as NotificationRepository,
+    });
+    return { app: mountApp(service), repo };
+  }
+
+  test("?limit=0 → 200 AND repo receives clamped limit 1 (route forwards raw 0, service floors)", async () => {
+    const { app, repo } = mountWired();
+    const res = await app.request("/notifications?limit=0");
+    expect(res.status).toBe(200);
+    // Route forwarded raw 0 → service clamped up to the floor (1).
+    expect(repo.lastListOptions?.limit).toBe(1);
+  });
+
+  test("?limit=-50 → 200 AND repo receives clamped limit 1 (negative-finite floor)", async () => {
+    const { app, repo } = mountWired();
+    const res = await app.request("/notifications?limit=-50");
+    expect(res.status).toBe(200);
+    // -50 is finite, so the route forwards it raw; the service floors it.
+    expect(repo.lastListOptions?.limit).toBe(1);
+  });
+
+  test("?limit=abc → 200 AND repo receives the default page size (route drops NaN → service default)", async () => {
+    const { app, repo } = mountWired();
+    const res = await app.request("/notifications?limit=abc");
+    expect(res.status).toBe(200);
+    // Malformed → route drops to undefined → service falls back to default.
+    expect(repo.lastListOptions?.limit).toBe(MERGED_FEED_LIMIT_DEFAULT);
   });
 });
