@@ -1,5 +1,17 @@
 # ornn-web
 
+## 0.10.0
+
+### Minor Changes
+
+- [#843](https://github.com/ChronoAIProject/Ornn/pull/843) [`866d809`](https://github.com/ChronoAIProject/Ornn/commit/866d809b872654d056d2fa0a342caa36ff6fa597) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Replace the scroll-scrub landing hero with a full-bleed, autoplaying, muted, looping background intro video (static poster under reduced-motion).
+
+### Patch Changes
+
+- [#861](https://github.com/ChronoAIProject/Ornn/pull/861) [`ac9fd33`](https://github.com/ChronoAIProject/Ornn/commit/ac9fd33ef0951c2c20cc127b7a49aa73ab7a65e3) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Fix landing hero text being clipped at short/wide viewport ratios: re-encode the intro video + poster to a 2.4:1 canvas (blurred-scene edge fill) so the burned-in captions survive object-cover cropping, and drop the min-height that forced the hero past the viewport. Video stays full-bleed.
+
+- [#863](https://github.com/ChronoAIProject/Ornn/pull/863) [`9016efb`](https://github.com/ChronoAIProject/Ornn/commit/9016efbe3bdec9434a55f23bed8fcf110ff1276f) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Upscale the landing hero intro video + poster to 4K (5184×2160, AI-upscaled from the 1080p master via Real-ESRGAN, ~64MB) for crisper rendering on retina/4K displays. No layout change — the 2.4:1 canvas + object-cover framing from the previous fix is preserved.
+
 ## 0.9.1
 
 ### Patch Changes
