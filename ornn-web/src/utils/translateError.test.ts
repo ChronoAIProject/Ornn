@@ -25,6 +25,14 @@ describe("translateError", () => {
     );
   });
 
+  it("translates a key-only payload via the params ?? {} branch", () => {
+    // No `params` field → source calls t(key, parsed.params ?? {}). The stub
+    // receives an empty object, whose Object.keys(...).length is 0, so it
+    // returns the bare key (its no-params arm).
+    const msg = encodeErrorPayload({ key: "errors.foo" });
+    expect(translateError(new Error(msg))).toBe("errors.foo");
+  });
+
   it("falls through to raw text for non-payload JSON objects", () => {
     // Valid JSON object but no `key` field → not an ErrorPayload, and the
     // raw text doesn't look like an i18n key → returned verbatim.

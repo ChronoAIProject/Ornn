@@ -30,6 +30,11 @@ describe("formatFileSize", () => {
     expect(formatFileSize(1)).toBe("1 B");
   });
 
+  it("stays in bytes at the B→KB rollover boundary", () => {
+    // 1023 < 1024 → log/log floors to i === 0, so still raw bytes.
+    expect(formatFileSize(1023)).toBe("1023 B");
+  });
+
   it("renders kilobytes with one decimal", () => {
     expect(formatFileSize(1024)).toBe("1.0 KB");
     expect(formatFileSize(1536)).toBe("1.5 KB");

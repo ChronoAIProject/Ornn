@@ -62,6 +62,11 @@ async function freshModules() {
   return { consent, analytics };
 }
 
+// The frontend logger forwards `error` to `console.error` in the dev/test
+// branch (MODE !== "production"). Spy on it so swallow tests can assert the
+// failure was *logged with context*, not just silently absorbed.
+let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
+
 beforeEach(() => {
   captureMock.mockClear();
   identifyMock.mockClear();
@@ -71,9 +76,11 @@ beforeEach(() => {
   optOutMock.mockClear();
   startReplayMock.mockClear();
   stopReplayMock.mockClear();
+  consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 });
 
 afterEach(() => {
+  consoleErrorSpy.mockRestore();
   // A test may have swapped the `@/config` mock via `vi.doMock` + a paired
   // `vi.doUnmock`; the unmock only takes effect on the next module-registry
   // reset, so flush it here to keep config state from leaking forward.
@@ -191,6 +198,9 @@ describe("analytics wrapper", () => {
     // The wrapper catches the init failure; nothing should propagate.
     expect(() => analytics.initAnalytics()).not.toThrow();
     expect(initMock).toHaveBeenCalledTimes(1);
+    // ...and the failure is logged with context (logger.error → console.error).
+    expect(consoleErrorSpy).toHaveBeenCalled();
+    expect(consoleErrorSpy.mock.calls.some((c) => String(c[0]).includes("init failed"))).toBe(true);
   });
 
   it("is a no-op on a second initAnalytics() call (initStarted guard)", async () => {
@@ -218,6 +228,12 @@ describe("analytics wrapper", () => {
     expect(() => analytics.track("login.completed")).not.toThrow();
     expect(() => analytics.identify("user-7")).not.toThrow();
     expect(() => analytics.reset()).not.toThrow();
+
+    // Each swallow path logs its own contextual error message.
+    const messages = consoleErrorSpy.mock.calls.map((c) => String(c[0]));
+    expect(messages.some((m) => m.includes("capture failed"))).toBe(true);
+    expect(messages.some((m) => m.includes("identify failed"))).toBe(true);
+    expect(messages.some((m) => m.includes("reset failed"))).toBe(true);
   });
 
   it("emits reset directly once consent is granted", async () => {
@@ -255,6 +271,12 @@ describe("analytics wrapper", () => {
 
     // Granting consent flushes the buffer; the throwing replay is caught.
     expect(() => consent.setConsent("granted")).not.toThrow();
+    // ...and the caught replay failure is logged with context.
+    expect(
+      consoleErrorSpy.mock.calls.some((c) =>
+        String(c[0]).includes("Buffered call replay failed"),
+      ),
+    ).toBe(true);
   });
 
   it("early-returns identify when userId is empty", async () => {
