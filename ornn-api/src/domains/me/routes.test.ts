@@ -55,6 +55,15 @@ let activityEvents: Array<{
 }>;
 let serviceCallTokens: string[];
 let directoryQueries: Array<readonly string[]>;
+/**
+ * Captures the `userOrgIds` (2nd) argument of every
+ * `aggregateSourcesForReader(userId, userOrgIds)` call. The route derives
+ * it from `readUserOrgIds(c)` (routes.ts:304-305) — projected from the
+ * mounted org-membership getter — so asserting it pins the scope-query
+ * bridge: when the getter is mounted the caller's org ids flow through,
+ * and when it's unmounted the route passes `[]` (fail-soft, no over-share).
+ */
+let sourcesReaderOrgIds: Array<readonly string[]>;
 /** Recorded fetch requests so we can assert the bearer was forwarded. */
 let fetchCalls: Array<{ url: string; authorization: string | null }>;
 
@@ -74,8 +83,9 @@ function makeSkillRepo(): SkillRepository {
       expect(userId).toBe("caller1");
       return grantsAgg;
     },
-    async aggregateSourcesForReader(userId: string) {
+    async aggregateSourcesForReader(userId: string, userOrgIds: readonly string[]) {
       expect(userId).toBe("caller1");
+      sourcesReaderOrgIds.push(userOrgIds);
       return sourcesAgg;
     },
   };
@@ -199,6 +209,7 @@ beforeEach(() => {
   activityEvents = [];
   serviceCallTokens = [];
   directoryQueries = [];
+  sourcesReaderOrgIds = [];
   fetchCalls = [];
   grantsAgg = { orgs: [], users: [] };
   sourcesAgg = { orgs: [], users: [] };
@@ -393,6 +404,19 @@ describe("GET /me/orgs/:orgId", () => {
     const json = (await res.json()) as { code: string };
     expect(json.code).toBe("NYXID_ORG_LOOKUP_FAILED");
   });
+
+  test("upstream 200 with malformed body → 500 internal_error", async () => {
+    // 2xx + non-JSON payload: `resp.ok` is true so the route skips the
+    // 404/403/!ok guards and reaches `await resp.json()` (routes.ts:206),
+    // which throws a SyntaxError. That bare error isn't an AppError, so the
+    // onError mapper falls back to its 500 / internal_error defaults.
+    withToken = true;
+    fetchResponder = () => new Response("<html>not json</html>", { status: 200 });
+    const res = await app.request("/me/orgs/org-x");
+    expect(res.status).toBe(500);
+    const json = (await res.json()) as { code: string };
+    expect(json.code).toBe("internal_error");
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -578,6 +602,10 @@ describe("GET /me/shared-skills/sources-summary", () => {
     expect(json.data.users).toEqual([
       { userId: "author1", email: "author@x.test", displayName: "Author One", skillCount: 5 },
     ]);
+    // Scope-query bridge: the mounted org getter's membership ids are
+    // projected by readUserOrgIds and forwarded as the 2nd arg so the
+    // aggregation includes skills shared into the caller's orgs.
+    expect(sourcesReaderOrgIds).toEqual([["bridge-org"]]);
   });
 
   test("no token + empty aggregation → empty buckets, no fetch", async () => {
@@ -591,5 +619,8 @@ describe("GET /me/shared-skills/sources-summary", () => {
     expect(json.data.users).toEqual([]);
     // findByUserIds still called with an empty list (helper always batches).
     expect(directoryQueries).toEqual([[]]);
+    // Org getter unmounted → readUserOrgIds fails soft to []; the route
+    // passes an empty scope so the aggregation never over-shares.
+    expect(sourcesReaderOrgIds).toEqual([[]]);
   });
 });
