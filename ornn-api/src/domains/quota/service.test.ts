@@ -9,10 +9,15 @@
  */
 
 import { describe, expect, test } from "bun:test";
+import { Hono } from "hono";
 import { QuotaService, type QuotaDefaults } from "./service";
+import { createQuotaRoutes, throwQuotaError } from "./routes";
+import type { AuthVariables } from "../../middleware/nyxidAuth";
+import { AppError, buildProblemJsonBody } from "../../shared/types/index";
 import {
   type QuotaBucketDoc,
   type QuotaGrantAuditDoc,
+  type QuotaSnapshot,
   type Surface,
   bucketId,
   monthBounds,
@@ -671,5 +676,92 @@ describe("bulk grant aggregates results", () => {
     });
     expect(r.length).toBe(3);
     expect(r.every((x) => x.ok)).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Route surface (#882) — GET /me/quota + throwQuotaError helper.
+//
+// Reuses the FakeRepo + FakeDefaults via `build()` — no second fake. The
+// route is mounted on a bare Hono app with an `x-test-perms` setup
+// middleware (#877 harness, cloned from admin/quota/routes.test.ts) so the
+// auth context the handler reads via `getAuth(c)` is populated.
+// ---------------------------------------------------------------------------
+
+function buildQuotaApp(opts: { defaultPg?: number; defaultSg?: number } = {}) {
+  const { service, repo } = build(opts);
+  const router = createQuotaRoutes({ quotaService: service });
+  const app = new Hono<{ Variables: AuthVariables }>();
+  app.use("*", async (c, next) => {
+    const permsHeader = c.req.header("x-test-perms") ?? "";
+    const permissions = permsHeader.length > 0 ? permsHeader.split(",") : [];
+    c.set("auth", {
+      userId: "u1",
+      email: "u1@x.test",
+      displayName: "U1",
+      roles: [],
+      permissions,
+    });
+    await next();
+  });
+  app.onError((err, c) => {
+    const e = err as { statusCode?: number; code?: string; message: string };
+    const statusCode = e.statusCode ?? 500;
+    const body = buildProblemJsonBody({
+      statusCode,
+      code: e.code ?? "internal_error",
+      message: e.message ?? "",
+      instance: c.req.path,
+      requestId: null,
+    });
+    return c.json(body, statusCode as never, {
+      "Content-Type": "application/problem+json",
+    });
+  });
+  app.route("/", router);
+  return { app, repo };
+}
+
+describe("GET /me/quota", () => {
+  test("returns the caller snapshot under { data }", async () => {
+    const { app } = buildQuotaApp();
+    const res = await app.request("/me/quota");
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as { data: QuotaSnapshot };
+    expect(json.data.playground.used).toBe(0);
+    expect(json.data.playground.defaultAllotment).toBe(100);
+    expect(json.data.playground.remaining).toBe(100);
+    expect(json.data.monthMarker).toMatch(/^\d{4}-\d{2}$/);
+    expect(json.data.isAdmin).toBe(false);
+  });
+
+  test("threads permissions through to getSnapshot (admin flag)", async () => {
+    const { app } = buildQuotaApp();
+    const res = await app.request("/me/quota", {
+      headers: { "x-test-perms": ADMIN_PERM },
+    });
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as { data: QuotaSnapshot };
+    expect(json.data.isAdmin).toBe(true);
+  });
+});
+
+describe("throwQuotaError", () => {
+  test("throws an AppError 429 quota_exceeded with the decision message", () => {
+    let caught: unknown;
+    try {
+      throwQuotaError({
+        allowed: false,
+        surface: "playground",
+        message: "playground quota exhausted",
+      });
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(AppError);
+    const e = caught as AppError;
+    expect(e.statusCode).toBe(429);
+    expect(e.code).toBe("quota_exceeded");
+    expect(e.message).toBe("playground quota exhausted");
   });
 });
