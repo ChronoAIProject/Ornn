@@ -11,6 +11,19 @@ export default mergeConfig(
       setupFiles: ["./src/test/setup.ts"],
       include: ["src/**/*.{test,spec}.{ts,tsx}"],
       css: false,
+      coverage: {
+        provider: "v8",
+        all: true,
+        include: ["src/**/*.{ts,tsx}"],
+        exclude: [
+          "src/test/**",
+          "src/**/*.{test,spec}.{ts,tsx}",
+          "src/**/*.d.ts",
+          "src/main.tsx",
+        ],
+        reporter: ["text", "lcov", "json-summary"],
+        reportsDirectory: "coverage",
+      },
     },
   }),
 );
