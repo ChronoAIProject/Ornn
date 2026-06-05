@@ -9,7 +9,7 @@
  * @module components/admin/quota/GrantQuotaModal
  */
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
@@ -43,19 +43,42 @@ export function GrantQuotaModal({
   onGranted,
 }: GrantQuotaModalProps) {
   const { t } = useTranslation();
+  return (
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title={`Grant ${SURFACE_LABEL[surface]} quota`}
+    >
+      {/* Keyed on `isOpen` so the form's internal state (amount / note /
+          error) resets by construction on each open — no reset effect,
+          no cascading render (#888). The outer Modal owns the open/close
+          animation, so its AnimatePresence stays stable. */}
+      <GrantQuotaForm
+        key={isOpen ? "open" : "closed"}
+        surface={surface}
+        user={user}
+        onClose={onClose}
+        onGranted={onGranted}
+        t={t}
+      />
+    </Modal>
+  );
+}
+
+interface GrantQuotaFormProps {
+  surface: Surface;
+  user: GrantQuotaModalProps["user"];
+  onClose: () => void;
+  onGranted?: (() => void) | undefined;
+  t: ReturnType<typeof useTranslation>["t"];
+}
+
+function GrantQuotaForm({ surface, user, onClose, onGranted, t }: GrantQuotaFormProps) {
   const [amountStr, setAmountStr] = useState("10");
   const [note, setNote] = useState("");
   const [error, setError] = useState<string | null>(null);
   const grant = useGrantQuota();
   const addToast = useToastStore((s) => s.addToast);
-
-  useEffect(() => {
-    if (isOpen) {
-      setAmountStr("10");
-      setNote("");
-      setError(null);
-    }
-  }, [isOpen]);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -89,12 +112,7 @@ export function GrantQuotaModal({
   };
 
   return (
-    <Modal
-      isOpen={isOpen}
-      onClose={onClose}
-      title={`Grant ${SURFACE_LABEL[surface]} quota`}
-    >
-      <form onSubmit={submit} className="space-y-4">
+    <form onSubmit={submit} className="space-y-4">
         {user && (
           <div className="rounded border border-subtle bg-elevated/40 p-3">
             <p className="font-text text-sm text-strong">
@@ -164,7 +182,6 @@ export function GrantQuotaModal({
             Grant
           </Button>
         </div>
-      </form>
-    </Modal>
+    </form>
   );
 }

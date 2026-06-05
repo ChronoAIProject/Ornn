@@ -51,34 +51,57 @@ function useDebouncedValue<T>(value: T, delayMs: number): T {
 
 export function PermissionsModal({ isOpen, onClose, skill }: PermissionsModalProps) {
   const { t } = useTranslation();
+  return (
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title={t("permissions.title", "Permissions") as string}
+      className="!max-w-3xl"
+    >
+      {/* Keyed on the skill's ACL signature (+ open) so the form's state
+          resets by construction whenever the modal reopens or the
+          underlying ACLs change — no synchronous reset effect, no
+          cascading render (#888). The outer Modal owns the open/close
+          animation, so its AnimatePresence stays stable. */}
+      <PermissionsForm
+        key={`${isOpen ? "open" : "closed"}:${skill.guid}:${skill.isPrivate}:${skill.sharedWithOrgs.join(",")}:${skill.sharedWithUsers.join(",")}`}
+        skill={skill}
+        onClose={onClose}
+        t={t}
+      />
+    </Modal>
+  );
+}
+
+interface PermissionsFormProps {
+  skill: SkillDetail;
+  onClose: () => void;
+  t: ReturnType<typeof useTranslation>["t"];
+}
+
+function PermissionsForm({ skill, onClose, t }: PermissionsFormProps) {
   const addToast = useToastStore((s) => s.addToast);
   const { data: myOrgs = [] } = useMyOrgs();
   const permissionsMutation = useUpdateSkillPermissions(skill.guid);
 
+  // Lazy init from the skill ACLs — the very first render is already in
+  // the reset state, so no synchronous setState-in-effect is needed.
+  // Re-open / ACL-change resets via the `key` at the call site.
   const [isPublic, setIsPublic] = useState<boolean>(!skill.isPrivate);
-  const [sharedUsers, setSharedUsers] = useState<UserDirectoryEntry[]>([]);
+  const [sharedUsers, setSharedUsers] = useState<UserDirectoryEntry[]>(() =>
+    skill.sharedWithUsers.map((id) => ({ userId: id, email: "", displayName: id })),
+  );
   const [sharedOrgIds, setSharedOrgIds] = useState<string[]>(skill.sharedWithOrgs);
   const [userQuery, setUserQuery] = useState("");
   const [userInputFocused, setUserInputFocused] = useState(false);
   const userInputRef = useRef<HTMLInputElement>(null);
 
-  // Reset form + resolve saved user_ids into email/displayName whenever
-  // the modal opens or the underlying skill ACLs change. The two used
-  // to be split across separate effects, but the resolve effect's
-  // closure captured `sharedUsers` from the render BEFORE the reset
-  // effect ran — so the resolved labels never landed on a re-open.
-  // Folding both into one effect closes that race: we always resolve
-  // against `skill.sharedWithUsers` directly, not the post-reset state.
+  // Resolve saved user_ids into email/displayName once the form mounts.
+  // This is a genuine external-system sync (user directory API) and only
+  // setStates from the async callback, never synchronously in the effect
+  // body — so it doesn't trip set-state-in-effect (#888).
   useEffect(() => {
-    if (!isOpen) return;
-    setIsPublic(!skill.isPrivate);
-    setSharedOrgIds(skill.sharedWithOrgs);
-    setUserQuery("");
     const ids = skill.sharedWithUsers;
-    setSharedUsers(
-      ids.map((id) => ({ userId: id, email: "", displayName: id })),
-    );
-
     if (ids.length === 0) return;
     let cancelled = false;
     (async () => {
@@ -92,7 +115,7 @@ export function PermissionsModal({ isOpen, onClose, skill }: PermissionsModalPro
     return () => {
       cancelled = true;
     };
-  }, [isOpen, skill]);
+  }, [skill]);
 
   const debouncedQuery = useDebouncedValue(userQuery.trim(), 200);
   const shouldSearch = !isPublic && (userInputFocused || debouncedQuery.length > 0);
@@ -124,7 +147,9 @@ export function PermissionsModal({ isOpen, onClose, skill }: PermissionsModalPro
           : { userId: orgId, displayName: orgId, avatarUrl: null, isUnresolved: true };
       });
     },
-    enabled: isOpen && unknownOrgIds.length > 0,
+    // The form only mounts while the modal is open (Modal renders its
+    // children conditionally), so the prior `isOpen &&` gate is implicit.
+    enabled: unknownOrgIds.length > 0,
     staleTime: 5 * 60_000,
   });
 
@@ -210,12 +235,7 @@ export function PermissionsModal({ isOpen, onClose, skill }: PermissionsModalPro
   };
 
   return (
-    <Modal
-      isOpen={isOpen}
-      onClose={onClose}
-      title={t("permissions.title", "Permissions") as string}
-      className="!max-w-3xl"
-    >
+    <>
       <div className="flex gap-4">
         <div className="flex flex-col items-center py-1 shrink-0" aria-hidden>
           <svg
@@ -469,7 +489,7 @@ export function PermissionsModal({ isOpen, onClose, skill }: PermissionsModalPro
           {t("common.save", "Save")}
         </Button>
       </div>
-    </Modal>
+    </>
   );
 }
 
