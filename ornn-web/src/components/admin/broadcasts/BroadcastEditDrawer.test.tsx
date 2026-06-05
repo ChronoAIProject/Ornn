@@ -81,6 +81,18 @@ const EDIT_BROADCAST: AdminBroadcast = {
   recipientUserIds: ["user-1", "user-2"],
 };
 
+const EDIT_BROADCAST_B: AdminBroadcast = {
+  id: "bc-456",
+  titleI18n: { en: "Second title", zh: "第二标题" },
+  bodyMarkdownI18n: { en: "Second body", zh: "第二正文" },
+  createdAt: "2026-05-02T00:00:00.000Z",
+  updatedAt: "2026-05-02T00:00:00.000Z",
+  createdBy: "admin-1",
+  updatedBy: "admin-1",
+  readCount: 0,
+  recipientUserIds: null,
+};
+
 function wrap(ui: ReactNode) {
   const qc = new QueryClient({
     defaultOptions: { queries: { retry: false, gcTime: 0 } },
@@ -411,5 +423,46 @@ describe("BroadcastEditDrawer — edit mode", () => {
       expect.objectContaining({ type: "success" }),
     );
     expect(onClose).toHaveBeenCalled();
+  });
+
+  it("resets the form when the open drawer switches to another broadcast", () => {
+    // Pins the `key={broadcast?.id ?? "new"}` remount on BroadcastEditForm
+    // (#888). The drawer never closes between the two broadcasts — only the
+    // `broadcast` prop changes — so without the key the lazy-initialised
+    // form state would survive and keep showing broadcast A's values.
+    const qc = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: 0 } },
+    });
+    const { rerender } = render(
+      <QueryClientProvider client={qc}>
+        <BroadcastEditDrawer isOpen onClose={() => {}} broadcast={EDIT_BROADCAST} />
+      </QueryClientProvider>,
+    );
+
+    const valuesA = (screen.getAllByRole("textbox") as HTMLInputElement[]).map(
+      (el) => el.value,
+    );
+    expect(valuesA).toContain("Existing title");
+    expect(valuesA).toContain("现有标题");
+
+    // Switch entity WITHOUT closing the drawer (isOpen stays true). The
+    // rerender keeps the same provider so the inner useQuery still resolves.
+    rerender(
+      <QueryClientProvider client={qc}>
+        <BroadcastEditDrawer isOpen onClose={() => {}} broadcast={EDIT_BROADCAST_B} />
+      </QueryClientProvider>,
+    );
+
+    const valuesB = (screen.getAllByRole("textbox") as HTMLInputElement[]).map(
+      (el) => el.value,
+    );
+    // B's values are shown…
+    expect(valuesB).toContain("Second title");
+    expect(valuesB).toContain("第二标题");
+    expect(valuesB).toContain("Second body");
+    expect(valuesB).toContain("第二正文");
+    // …and A's stale values are gone (the remount discarded them).
+    expect(valuesB).not.toContain("Existing title");
+    expect(valuesB).not.toContain("现有标题");
   });
 });
