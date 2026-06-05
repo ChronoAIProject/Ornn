@@ -60,6 +60,30 @@ export interface OrgMembershipFact {
   displayName: string;
 }
 
+/**
+ * First-class resolved/unresolved signal for the org-membership lookup (#842).
+ *
+ * The plain `getUserOrgMemberships` getter fails soft to `[]` for both
+ * "caller genuinely has no orgs" and "we couldn't ask NyxID" — fine for
+ * read visibility (a missed share just hides a skill), dangerous for the
+ * write gate (a missed lookup would look like "you're a member of nothing"
+ * and reject a legitimate share with a misleading 403). This discriminated
+ * union lets write paths distinguish the two:
+ *
+ *   - `resolved`   — NyxID answered (including a 200-empty list). The
+ *                    `memberships` array is authoritative.
+ *   - `unresolved` — we never got an authoritative answer: either no
+ *                    forwarded token (`no_token`) or the lookup threw
+ *                    (`lookup_failed`). `memberships` is always `[]` and
+ *                    MUST NOT be treated as "member of nothing".
+ *
+ * Note: a successful lookup that returns zero orgs is `resolved`, not
+ * `unresolved` — the caller really is a member of no org.
+ */
+export type OrgMembershipResolution =
+  | { status: "resolved"; memberships: OrgMembershipFact[] }
+  | { status: "unresolved"; reason: "no_token" | "lookup_failed"; memberships: [] };
+
 export type AuthVariables = {
   auth: AuthContext;
   /**
@@ -75,6 +99,14 @@ export type AuthVariables = {
    *     of a specific org.
    */
   getUserOrgMemberships?: () => Promise<OrgMembershipFact[]>;
+  /**
+   * Lazy getter for the same lookup as `getUserOrgMemberships`, but carrying
+   * the resolved/unresolved signal (#842). Shares the SAME memo cell and SAME
+   * single NyxID round-trip as `getUserOrgMemberships` — calling either getter
+   * (or both) hits NyxID at most once per request. Write gates that must not
+   * mistake an unresolved lookup for "member of nothing" read this one.
+   */
+  getUserOrgMembershipResolution?: () => Promise<OrgMembershipResolution>;
 };
 
 // ---------------------------------------------------------------------------
@@ -262,25 +294,6 @@ export function requirePermission(...required: string[]) {
 }
 
 /**
- * Allows access if user owns the resource or has ornn:admin:skill permission.
- */
-export function requireOwnerOrAdmin(getResourceOwnerId: (c: Context) => Promise<string>) {
-  return async (c: Context<{ Variables: AuthVariables }>, next: Next) => {
-    const auth = c.get("auth");
-    if (!auth) {
-      throw new AppError(401, "auth_missing", "Not authenticated");
-    }
-
-    const ownerId = await getResourceOwnerId(c);
-    if (auth.userId !== ownerId && !auth.permissions.includes("ornn:admin:skill")) {
-      throw new AppError(403, "forbidden", "You can only operate on your own resources");
-    }
-
-    await next();
-  };
-}
-
-/**
  * Helper to get auth context from request. Throws if not authenticated.
  */
 export function getAuth(c: Context<{ Variables: AuthVariables }>): AuthContext {
@@ -307,52 +320,84 @@ export interface OrgMembershipSource {
 }
 
 /**
- * Build a middleware that attaches a lazy `getUserOrgMemberships` getter to
- * the request context. The getter:
- *   - Memoizes within a single request so multiple downstream calls share
- *     one NyxID round-trip.
- *   - Returns `[]` for anonymous callers, callers without a forwarded
- *     access token, or when the NyxID call errors out (fail-soft).
- *   - Filters to admin + member roles only (viewers are non-members for Ornn).
+ * Build a middleware that attaches the lazy org-membership getters to the
+ * request context. Two getters share ONE memo cell and ONE NyxID round-trip:
+ *   - `getUserOrgMemberships` → fail-soft `OrgMembershipFact[]` (`[]` for
+ *     anonymous callers, no forwarded token, or a lookup error). The legacy
+ *     read API — unchanged signature, unchanged fail-soft behaviour.
+ *   - `getUserOrgMembershipResolution` → the same lookup carrying the
+ *     resolved/unresolved discriminant (#842) for write gates that must not
+ *     mistake an unresolved lookup for "member of nothing".
+ *
+ * The single resolve runs at most once per request and both getters await it.
+ *   - no forwarded token            → unresolved / `no_token`     / `[]`
+ *   - `listUserOrgs` throws         → unresolved / `lookup_failed`/ `[]`
+ *     (warn-logged, same as before)
+ *   - success (incl. 200-empty)     → resolved (filtered to admin + member)
  *
  * Mount this AFTER `proxyAuthSetup()` so `auth.userAccessToken` is populated.
  */
 export function nyxidOrgLookupMiddleware(orgs: OrgMembershipSource) {
   return createMiddleware<{ Variables: AuthVariables }>(async (c, next) => {
-    let cache: OrgMembershipFact[] | null = null;
-    c.set("getUserOrgMemberships", async () => {
+    // Single shared memo cell: the first getter to run resolves it, the
+    // second reuses it — so at most one NyxID round-trip per request even
+    // when both the read path and the write gate ask.
+    let cache: OrgMembershipResolution | null = null;
+    const resolve = async (): Promise<OrgMembershipResolution> => {
       if (cache) return cache;
       const auth = c.get("auth");
       const token = auth?.userAccessToken;
       if (!token) {
-        cache = [];
+        cache = { status: "unresolved", reason: "no_token", memberships: [] };
         return cache;
       }
       try {
         const raw = await orgs.listUserOrgs(token);
-        cache = raw
+        const memberships = raw
           .filter((m) => m.role === "admin" || m.role === "member")
           .map((m) => ({
             userId: m.userId,
             role: m.role as "admin" | "member",
             displayName: m.displayName,
           }));
+        // Resolved even when the filtered list is empty: NyxID answered
+        // authoritatively that the caller belongs to no (admin/member) org.
+        cache = { status: "resolved", memberships };
       } catch (err) {
         logger.warn(
           { err: (err as Error).message, userId: auth.userId },
           "Org lookup failed; treating user as no-org",
         );
-        cache = [];
+        cache = { status: "unresolved", reason: "lookup_failed", memberships: [] };
       }
       return cache;
-    });
+    };
+    c.set("getUserOrgMembershipResolution", resolve);
+    c.set("getUserOrgMemberships", async () => (await resolve()).memberships);
     await next();
   });
 }
 
 /**
+ * Resolution convenience helper (#842). Returns the resolved/unresolved
+ * signal. When the middleware wasn't mounted (tests that don't wire the
+ * getter) this returns `{ status: "resolved", memberships: [] }` so unrelated
+ * tests behave as a caller-with-no-orgs rather than flipping into the
+ * unresolved (503) branch.
+ */
+export async function readUserOrgMembershipResolution(
+  c: Context<{ Variables: AuthVariables }>,
+): Promise<OrgMembershipResolution> {
+  const getter = c.get("getUserOrgMembershipResolution");
+  if (!getter) return { status: "resolved", memberships: [] };
+  return getter();
+}
+
+/**
  * Memberships convenience helper — returns an empty array when the middleware
- * wasn't mounted (tests) or the caller has none.
+ * wasn't mounted (tests) or the caller has none. Fail-soft to `[]` in every
+ * case, including an unresolved lookup: the read path stays exactly as before
+ * (#842 only adds a separate resolution-aware helper for write gates).
  */
 export async function readUserOrgMemberships(
   c: Context<{ Variables: AuthVariables }>,

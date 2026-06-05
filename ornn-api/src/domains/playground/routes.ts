@@ -20,7 +20,9 @@ import {
   requirePermission,
   getAuth,
 } from "../../middleware/nyxidAuth";
+import { buildActorContext } from "../skills/crud/authorize";
 import { validateBody, getValidatedBody } from "../../middleware/validate";
+import { rateLimit } from "../../middleware/rateLimit";
 import { createLogger } from "../../shared/logger";
 const logger = createLogger("playgroundRoutes");
 
@@ -97,6 +99,11 @@ export function createPlaygroundRoutes(config: PlaygroundRoutesConfig): Hono<{ V
   app.post(
     "/playground/chat",
     requirePermission("ornn:playground:use"),
+    // Rate limit (#809): per-user 20/min, same cap as skills-generate
+    // (generation/routes.ts) — playground chat runs an LLM call per request,
+    // same cost class. Mounted before validateBody so a flood of malformed
+    // bodies still 429s before Zod (and before any LLM cost).
+    rateLimit({ windowMs: 60_000, max: 20, label: "playground-chat" }),
     validateBody(chatRequestSchema, "VALIDATION_ERROR"),
     async (c) => {
       const authCtx = getAuth(c);
@@ -104,18 +111,13 @@ export function createPlaygroundRoutes(config: PlaygroundRoutesConfig): Hono<{ V
 
       logger.info({ userId: authCtx.userId, messageCount: parsed.messages.length }, "Chat request");
 
-      // Quota check — rejects with 429 BEFORE any LLM cost is incurred.
-      // Admins bypass via permission inside the service.
-      const decision = await quotaService.checkAllowed({
-        userId: authCtx.userId,
-        permissions: authCtx.permissions,
-        surface: "playground",
-      });
-      if (!decision.allowed) throwQuotaError(decision);
-
       // Resolve the model — explicit `modelId` (validated against the
       // surface's enabled list) or the admin-set default. 503 when no
-      // models are enabled for the playground surface.
+      // models are enabled for the playground surface. This (and the
+      // org-membership read below) run BEFORE the quota reserve so a
+      // model/auth failure can't strand a reserved slot (#808) — both
+      // are pure reads that touch no LLM, so "429 before LLM cost" still
+      // holds.
       const resolution = await llmProvidersService.resolveModel({
         surface: "playground",
         // exactOptionalPropertyTypes (#657)
@@ -123,6 +125,36 @@ export function createPlaygroundRoutes(config: PlaygroundRoutesConfig): Hono<{ V
       });
       if (resolution.kind !== "ok") throwModelResolutionError(resolution);
       const resolvedModelId = resolution.modelId;
+
+      // #806 — build the caller's object-level authorization actor and
+      // thread it into the chat service. Depends on nyxidOrgLookupMiddleware
+      // being mounted in bootstrap.ts ahead of the playground routes so the
+      // helper can resolve the caller's org memberships. The chat service
+      // uses this single actor to gate BOTH skill bypass paths (the
+      // `skillId` injection and the `load_skill` tool).
+      const actor = await buildActorContext(c);
+
+      // Quota reserve — atomically claims a slot under the cap guard and
+      // rejects with 429 BEFORE any LLM cost is incurred (#808). Runs
+      // last among the pre-stream awaits: from here to the producer's
+      // `finally` (which always calls chargeOnCompletion) nothing can
+      // throw, so a reserved slot is always reconciled (committed on
+      // success, released on system_error/abort). Admins bypass inside
+      // the service and take no reservation.
+      // Capture the reservation instant so the eventual charge lands in
+      // the SAME calendar-month bucket the slot was reserved against
+      // (#827). Without this, a run that starts at 23:59:59 on the last
+      // day of a month and finishes after the UTC rollover would commit
+      // its per-model tally to the next month's bucket while `used` was
+      // bumped in the previous one — a benign but confusing straddle.
+      const reservedAt = new Date();
+      const decision = await quotaService.checkAllowed({
+        userId: authCtx.userId,
+        permissions: authCtx.permissions,
+        surface: "playground",
+        now: reservedAt,
+      });
+      if (!decision.allowed) throwQuotaError(decision);
 
       // Record a `playground` pull if the chat is bound to a skill. The
       // chat service loads the skill internally; we duplicate the lookup
@@ -227,6 +259,7 @@ export function createPlaygroundRoutes(config: PlaygroundRoutesConfig): Hono<{ V
         try {
           for await (const event of chatService.chat(authCtx.userId, chatRequest, signal, {
             modelId: resolvedModelId,
+            actor,
           })) {
             await writeEvent(event);
             if (event.type === "tool-result") outcome = "skill_error";
@@ -250,6 +283,10 @@ export function createPlaygroundRoutes(config: PlaygroundRoutesConfig): Hono<{ V
               surface: "playground",
               outcome,
               modelId: resolvedModelId,
+              // Reconcile against the reserved month bucket (#827), not
+              // wall-clock-now, so a month-boundary straddle commits/
+              // releases the slot it actually reserved.
+              now: reservedAt,
             })
             .catch((err) => {
               logger.warn(

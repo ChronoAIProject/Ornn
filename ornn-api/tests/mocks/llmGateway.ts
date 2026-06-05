@@ -31,6 +31,16 @@ export interface LlmGatewayMockOptions {
   modelId?: string;
   /** Optional text to emit as a single delta before the finish event. */
   text?: string;
+  /**
+   * Per-yield pause (ms) injected into `stream()` AFTER the opening
+   * `response.created` event and before each subsequent event. Gives the
+   * abort tests a deterministic window to cancel mid-stream by control
+   * flow rather than back-pressure luck: the producer parks on a real
+   * timer, so a `controller.abort()` fired after the first chunk always
+   * lands while the generator is suspended inside the stream. `0` (the
+   * default) still yields a macrotask boundary via `setTimeout(_, 0)`.
+   */
+  delayMs?: number;
 }
 
 export interface LlmGatewayMockHandle {
@@ -62,21 +72,31 @@ export function installLlmGatewayMock(
     if (cfg.outcome === "system_error") {
       throw new Error("LLM_TRANSPORT_FAIL: simulated upstream 5xx");
     }
+    // Awaitable inter-event pause. Defaults to a bare macrotask boundary
+    // (`setTimeout(_, 0)`) so every yield cooperatively suspends the
+    // generator; abort tests bump `delayMs` so the producer is reliably
+    // parked between `response.created` and `response.completed` when
+    // `controller.abort()` fires.
+    const pause = () =>
+      new Promise<void>((resolve) => setTimeout(resolve, cfg.delayMs ?? 0));
     yield {
       type: "response.created",
       response: { model: cfg.modelId ?? params.model },
     } as ResponsesApiStreamEvent;
+    await pause();
     if (cfg.text) {
       yield {
         type: "response.output_text.delta",
         delta: cfg.text,
       } as ResponsesApiStreamEvent;
+      await pause();
     }
     if (cfg.outcome === "skill_error") {
       yield {
         type: "response.error",
         error: { message: "simulated skill-side failure" },
       } as ResponsesApiStreamEvent;
+      await pause();
     }
     yield {
       type: "response.completed",

@@ -13,7 +13,9 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { createLogger } from "./logger";
+import { Writable } from "node:stream";
+import pino from "pino";
+import { createLogger, REDACT_PATHS } from "./logger";
 
 describe("createLogger (#575)", () => {
   test("returns a logger bound to the module name", () => {
@@ -61,5 +63,61 @@ describe("createLogger (#575)", () => {
     const child = parent.child({ requestId: "req_test" });
     expect(child).toBeDefined();
     expect(typeof child.info).toBe("function");
+  });
+
+  test("REDACT_PATHS censors token-family secrets at depth-2 (#817)", () => {
+    // Build our OWN pino instance from the exported constant + a
+    // minimal capture stream, deliberately avoiding pino-pretty and any
+    // env/import-order coupling. This makes the assertion fully
+    // order-independent — it behaves identically in a scoped `bun test
+    // src/shared/` run and in the single-process full suite (the trap
+    // that broke #816's CI).
+    //
+    // The `*.field` redaction wildcard matches EXACTLY one level, so we
+    // log a depth-2 object (`user.token`, ...). A depth-1 or depth-3
+    // payload would NOT match and the test would silently pass without
+    // proving anything.
+    const chunks: string[] = [];
+    const captureStream = new Writable({
+      write(chunk, _enc, cb) {
+        chunks.push(chunk.toString());
+        cb();
+      },
+    });
+    const logger = pino({ redact: { paths: REDACT_PATHS } }, captureStream);
+
+    logger.info(
+      {
+        user: {
+          token: "RAW_T",
+          accessToken: "RAW_AT",
+          userAccessToken: "RAW_UAT",
+          clientSecret: "RAW_CS",
+          privateKey: "RAW_PK",
+        },
+      },
+      "redaction check",
+    );
+
+    const serialized = chunks.join("");
+    const parsed = JSON.parse(serialized);
+
+    expect(parsed.user.token).toBe("[Redacted]");
+    expect(parsed.user.accessToken).toBe("[Redacted]");
+    expect(parsed.user.userAccessToken).toBe("[Redacted]");
+    expect(parsed.user.clientSecret).toBe("[Redacted]");
+    expect(parsed.user.privateKey).toBe("[Redacted]");
+
+    // Belt-and-braces: no raw secret value survives anywhere in the
+    // serialized line, not just under the expected keys.
+    for (const sentinel of [
+      "RAW_T",
+      "RAW_AT",
+      "RAW_UAT",
+      "RAW_CS",
+      "RAW_PK",
+    ]) {
+      expect(serialized).not.toContain(sentinel);
+    }
   });
 });

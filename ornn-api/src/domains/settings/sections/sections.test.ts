@@ -335,6 +335,35 @@ describe("section schemas", () => {
     expect(mirrorSection.defaults.reconcileSchedule).toBe("0 2 * * *");
   });
 
+  it("UT-SCHEMA-MIRROR-005: owner/repo enforce GitHub naming, empty stays valid (#818)", () => {
+    // Path-traversal / slash-bearing repo rejected by REPO_RE.
+    expect(
+      mirrorSection.schema.safeParse({
+        ...mirrorSection.defaults,
+        owner: "ChronoAIProject",
+        repo: "a/../b",
+      }).success,
+    ).toBe(false);
+    // Empty owner + empty repo = unset state, still valid.
+    expect(
+      mirrorSection.schema.safeParse({
+        ...mirrorSection.defaults,
+        owner: "",
+        repo: "",
+      }).success,
+    ).toBe(true);
+    // Dotted + dashed repo names are valid GitHub repos.
+    for (const repo of ["repo.name", "repo-1"]) {
+      expect(
+        mirrorSection.schema.safeParse({
+          ...mirrorSection.defaults,
+          owner: "ChronoAIProject",
+          repo,
+        }).success,
+      ).toBe(true);
+    }
+  });
+
   // -------- telemetry --------
   it("telemetry schema accepts placeholder defaults", () => {
     expect(

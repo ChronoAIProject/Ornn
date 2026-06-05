@@ -77,6 +77,12 @@ export interface SurfaceSnapshot {
   defaultAllotment: number;
   adminGrant: number;
   used: number;
+  /**
+   * Reflects in-flight reservations — `used` is bumped at reserve time
+   * (before the LLM call), so `remaining` already accounts for runs
+   * currently streaming. A run that ends in system_error/abort releases
+   * its slot, raising `remaining` back.
+   */
   remaining: number;
   warningThreshold: number;
   warning: boolean;

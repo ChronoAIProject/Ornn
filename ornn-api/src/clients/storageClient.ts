@@ -5,6 +5,7 @@
  */
 
 import { createLogger } from "../shared/logger";
+import { safeFetch } from "../infra/safeFetch";
 const logger = createLogger("storageClient");
 
 export interface IStorageClient {
@@ -67,7 +68,7 @@ export class StorageClient implements IStorageClient {
     const url = `${baseUrl}/api/buckets/${bucket}/objects?${params.toString()}`;
 
     const auth = await this.authHeaders();
-    const res = await fetch(url, {
+    const res = await safeFetch(url, {
       method: "POST",
       headers: { "Content-Type": contentType, ...auth },
       body: data as unknown as BodyInit,
@@ -90,7 +91,7 @@ export class StorageClient implements IStorageClient {
     const url = `${baseUrl}/api/buckets/${bucket}/objects?${params.toString()}`;
 
     const auth = await this.authHeaders();
-    const res = await fetch(url, { method: "DELETE", headers: auth });
+    const res = await safeFetch(url, { method: "DELETE", headers: auth });
 
     if (!res.ok) {
       const text = await res.text().catch(() => "");
@@ -114,7 +115,7 @@ export class StorageClient implements IStorageClient {
     const url = `${baseUrl}/api/buckets/${bucket}/presigned-url?${params.toString()}`;
 
     const auth = await this.authHeaders();
-    const res = await fetch(url, { method: "GET", headers: auth });
+    const res = await safeFetch(url, { method: "GET", headers: auth });
 
     if (!res.ok) {
       const text = await res.text().catch(() => "");
@@ -131,7 +132,7 @@ export class StorageClient implements IStorageClient {
     const url = `${baseUrl}/api/buckets/${bucket}/objects/copy`;
 
     const auth = await this.authHeaders();
-    const res = await fetch(url, {
+    const res = await safeFetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...auth },
       body: JSON.stringify({ sourceKey, destKey }),

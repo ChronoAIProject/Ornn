@@ -69,23 +69,30 @@ async function resolveKeepAliveMs(
 }
 
 /**
- * Run quota check + model resolution for a skill-gen request. Returns
+ * Run model resolution + quota reserve for a skill-gen request. Returns
  * the resolved model id; throws the appropriate AppError when either
- * gate fails (quota → 429, models → 503/4xx).
+ * gate fails (models → 503/4xx, quota → 429).
+ *
+ * Order is load-bearing (#808): model resolution runs FIRST so a
+ * resolution failure can't strand a reserved quota slot. `resolveModel`
+ * is a pure catalog read (no LLM), so reserving last still keeps the
+ * "429 before any LLM cost" guarantee. Once `checkAllowed` reserves,
+ * every caller threads the result straight into `streamGenerationEvents`,
+ * whose `finally` always reconciles the reservation (commit on success,
+ * release on system_error/abort).
  */
 async function preflight(
   c: Context<{ Variables: AuthVariables }>,
   quotaService: QuotaService,
   llmProvidersService: LlmProvidersService,
   requestedModelId: string | undefined,
-): Promise<{ modelId: string; userId: string; permissions: readonly string[] | undefined }> {
+): Promise<{
+  modelId: string;
+  userId: string;
+  permissions: readonly string[] | undefined;
+  reservedAt: Date;
+}> {
   const authCtx = getAuth(c);
-  const decision = await quotaService.checkAllowed({
-    userId: authCtx.userId,
-    permissions: authCtx.permissions,
-    surface: "skillGen",
-  });
-  if (!decision.allowed) throwQuotaError(decision);
 
   const resolution = await llmProvidersService.resolveModel({
     surface: "skillGen",
@@ -93,7 +100,25 @@ async function preflight(
     ...(requestedModelId !== undefined ? { requested: requestedModelId } : {}),
   });
   if (resolution.kind !== "ok") throwModelResolutionError(resolution);
-  return { modelId: resolution.modelId, userId: authCtx.userId, permissions: authCtx.permissions };
+
+  // Capture the reservation instant so the charge lands in the SAME
+  // month bucket the slot was reserved against (#827) — see the
+  // playground route for the boundary-straddle rationale.
+  const reservedAt = new Date();
+  const decision = await quotaService.checkAllowed({
+    userId: authCtx.userId,
+    permissions: authCtx.permissions,
+    surface: "skillGen",
+    now: reservedAt,
+  });
+  if (!decision.allowed) throwQuotaError(decision);
+
+  return {
+    modelId: resolution.modelId,
+    userId: authCtx.userId,
+    permissions: authCtx.permissions,
+    reservedAt,
+  };
 }
 
 /**
@@ -114,6 +139,12 @@ async function streamGenerationEvents(
     permissions: readonly string[] | undefined;
     /** Resolved model id used for the LLM call — flows into `usedByModel`. */
     modelId: string;
+    /**
+     * Reservation instant captured at `preflight` time (#827). Threaded
+     * into `chargeOnCompletion` as `now` so the commit/release reconciles
+     * against the month bucket the slot was reserved in, not wall-clock.
+     */
+    reservedAt: Date;
   },
 ) {
   c.header("Cache-Control", "no-cache");
@@ -148,6 +179,8 @@ async function streamGenerationEvents(
             surface: "skillGen",
             outcome,
             modelId: chargeAfter.modelId,
+            // Reconcile against the reserved month bucket (#827).
+            now: chargeAfter.reservedAt,
           })
           .catch((err) => {
             logger.warn(
@@ -301,7 +334,7 @@ export function createGenerationRoutes(config: GenerationRoutesConfig): Hono<{ V
               pf.modelId,
             ),
             keepAliveMs,
-            { quotaService, userId: pf.userId, permissions: pf.permissions, modelId: pf.modelId },
+            { quotaService, userId: pf.userId, permissions: pf.permissions, modelId: pf.modelId, reservedAt: pf.reservedAt },
           );
         }
 
@@ -334,7 +367,7 @@ export function createGenerationRoutes(config: GenerationRoutesConfig): Hono<{ V
         c,
         generationService.generateStream(query, signal, pf.modelId),
         keepAliveMs,
-        { quotaService, userId: pf.userId, permissions: pf.permissions, modelId: pf.modelId },
+        { quotaService, userId: pf.userId, permissions: pf.permissions, modelId: pf.modelId, reservedAt: pf.reservedAt },
       );
     },
   );
@@ -451,7 +484,7 @@ export function createGenerationRoutes(config: GenerationRoutesConfig): Hono<{ V
           pf.modelId,
         ),
         keepAliveMs,
-        { quotaService, userId: pf.userId, permissions: pf.permissions, modelId: pf.modelId },
+        { quotaService, userId: pf.userId, permissions: pf.permissions, modelId: pf.modelId, reservedAt: pf.reservedAt },
       );
     },
   );
@@ -506,7 +539,7 @@ export function createGenerationRoutes(config: GenerationRoutesConfig): Hono<{ V
           pf.modelId,
         ),
         keepAliveMs,
-        { quotaService, userId: pf.userId, permissions: pf.permissions, modelId: pf.modelId },
+        { quotaService, userId: pf.userId, permissions: pf.permissions, modelId: pf.modelId, reservedAt: pf.reservedAt },
       );
     },
   );
