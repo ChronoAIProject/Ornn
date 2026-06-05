@@ -136,6 +136,8 @@ jobs:
           deps += cfg['project']['optional-dependencies']['dev']
           subprocess.check_call([sys.executable, '-m', 'pip', 'install', *deps])
           "
+          # pip itself is in the audited env — keep it current (PYSEC-2026-196, #935)
+          python -m pip install --upgrade pip
           pip install pip-audit
       - name: Audit dependencies
         working-directory: sdk/python
