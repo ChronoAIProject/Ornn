@@ -183,6 +183,14 @@ export function createPlaygroundRoutes(config: PlaygroundRoutesConfig): Hono<{ V
       // safe fallback — only flips to `success` if the stream
       // completes cleanly.
       let outcome: ChargeOutcome = "system_error";
+      // Tracks whether the provider produced any genuinely billable
+      // output before the run terminated (#766). The LLM bills for
+      // tokens the moment they stream, so a client abort (or any error)
+      // AFTER billable output must NOT refund the reserved slot —
+      // otherwise an abort-after-first-token loop yields free usage.
+      // Flipped true on the first non-empty text delta / tool event in
+      // the consume loop; consulted once in `finally` before charging.
+      let chargeableStarted = false;
 
       const encoder = new TextEncoder();
       const signal = c.req.raw.signal;
@@ -262,6 +270,21 @@ export function createPlaygroundRoutes(config: PlaygroundRoutesConfig): Hono<{ V
             actor,
           })) {
             await writeEvent(event);
+            // #766 — mark the run billable on the first event that
+            // represents real provider output. A non-empty text delta
+            // means tokens were streamed (and billed); tool-call /
+            // tool-result / file-output mean the skill side actually
+            // ran. An empty text-delta is a no-op flush and stays
+            // refundable. Consulted in `finally` so an abort/error AFTER
+            // this point commits the slot instead of refunding it.
+            if (
+              (event.type === "text-delta" && event.delta.length > 0) ||
+              event.type === "tool-call" ||
+              event.type === "tool-result" ||
+              event.type === "file-output"
+            ) {
+              chargeableStarted = true;
+            }
             if (event.type === "tool-result") outcome = "skill_error";
             if (event.type === "finish") {
               const reason = (event as { finishReason?: string }).finishReason;
@@ -276,6 +299,13 @@ export function createPlaygroundRoutes(config: PlaygroundRoutesConfig): Hono<{ V
           signal.removeEventListener("abort", onAbort);
           clearInterval(keepAlive);
           await closeOnce();
+          if (chargeableStarted && outcome === "system_error") {
+            // Provider already produced billable output before the run
+            // aborted/errored; commit the reserved slot instead of
+            // refunding it (#766). The LLM bill is already incurred —
+            // a refund here would hand out free usage on abort-after-token.
+            outcome = "skill_error";
+          }
           await quotaService
             .chargeOnCompletion({
               userId: authCtx.userId,
