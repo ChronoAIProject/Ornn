@@ -67,7 +67,14 @@ export class OrnnClient {
     if (!options.baseUrl) {
       throw new Error("OrnnClient: baseUrl is required");
     }
-    this.baseUrl = options.baseUrl.replace(/\/+$/, "");
+    // Strip ALL trailing slashes with a linear loop rather than a regex
+    // (`/\/+$/`) — the regex backtracks polynomially on a pathological
+    // all-slashes input, a ReDoS vector. The loop is O(n) regardless.
+    let normalizedBaseUrl = options.baseUrl;
+    while (normalizedBaseUrl.endsWith("/")) {
+      normalizedBaseUrl = normalizedBaseUrl.slice(0, -1);
+    }
+    this.baseUrl = normalizedBaseUrl;
     this.staticToken = options.token;
     this.tokenResolver = options.getToken;
     this.fetchImpl = options.fetch ?? globalThis.fetch;
