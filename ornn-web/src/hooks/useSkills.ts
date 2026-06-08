@@ -409,6 +409,17 @@ export function useDeleteSkill(guid: string, idOrName: string) {
       queryClient.invalidateQueries({ queryKey: [SKILLS_KEY] });
       queryClient.invalidateQueries({ queryKey: [MY_SKILLS_KEY] });
       queryClient.invalidateQueries({ queryKey: [SKILL_COUNTS_KEY] });
+      // #941 — the My-Skills filter sidebar counts come from SEPARATE
+      // queries that #940's invalidations don't touch: the "mine" tag
+      // facet (useSkillTagFacets("mine")) and the grants summary
+      // (useMySkillGrantsSummary). Refresh exactly those two so the
+      // per-tag chips + per-grantee/org "shared with" counts stay
+      // consistent after a self-delete without a full-page refresh.
+      // Narrow literals on purpose: the broad ["skill-facets"] prefix
+      // would refetch the public/system facets a self-delete can't
+      // change, and broad ["me"] would refetch orgs/nyxid-services.
+      queryClient.invalidateQueries({ queryKey: ["skill-facets", "tags", "mine"] });
+      queryClient.invalidateQueries({ queryKey: ["me", "skills", "grants-summary"] });
     },
   });
 }
