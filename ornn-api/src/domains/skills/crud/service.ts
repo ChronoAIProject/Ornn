@@ -6,7 +6,7 @@
 
 import { createHash } from "node:crypto";
 import { randomUUID } from "node:crypto";
-import type { SkillRepository } from "./repository";
+import type { SkillRepository, UpdateSkillData } from "./repository";
 import type { SkillVersionRepository } from "./skillVersionRepository";
 import type { IStorageClient } from "../../../clients/storageClient";
 import type { SkillDocument, SkillMetadata, SkillDetailResponse, SkillVersionDocument, SkillSource } from "../../../shared/types/index";
@@ -580,7 +580,7 @@ export class SkillService {
       );
     }
 
-    const updateData: Record<string, unknown> = { updatedBy: userId };
+    const updateData: UpdateSkillData = { updatedBy: userId };
 
     if (options.zipBuffer) {
       if (!options.skipValidation) {
@@ -682,7 +682,7 @@ export class SkillService {
       updateData.source = options.source;
     }
 
-    const updated = await this.skillRepo.update(guid, updateData as any);
+    const updated = await this.skillRepo.update(guid, updateData);
     return this.buildDetailResponse(updated);
   }
 
@@ -1644,11 +1644,13 @@ export class SkillService {
     // identity fields (name, createdBy, isPrivate, ...) still come from the
     // skill doc.
     //
-    // For the latest-read path (no overlay), we do one extra lookup against
-    // `skill_versions` so the response can still surface `isDeprecated` /
-    // `deprecationNote` consistently with the versioned path. If this becomes
-    // a hot-path bottleneck we can denormalize those two fields onto the
-    // skill doc later (TODO).
+    // For the latest-read path (no overlay) we issue one indexed lookup against
+    // `skill_versions` so the response surfaces `isDeprecated` / `deprecationNote`
+    // consistently with the versioned path. Those fields live only on
+    // `skill_versions`, so this lookup is the single source of truth — it is not
+    // denormalized onto the skill doc on purpose: a copy would introduce a
+    // dual-write drift trap (cf. the `distTags.latest` concern). This runs
+    // per-detail-read, not as a list fan-out, so the indexed limit(1) is cheap.
     let effectiveOverlay = versionOverlay;
     if (!effectiveOverlay) {
       effectiveOverlay =

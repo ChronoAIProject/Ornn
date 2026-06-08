@@ -29,7 +29,7 @@ import { OverLimitPage } from "@/components/quota/OverLimitPage";
 import { QuotaInline } from "@/components/quota/QuotaInline";
 import { EnvIcon, PackageIcon } from "@/components/icons";
 import { useTranslation } from "react-i18next";
-import { defaultPromptStarters } from "@/components/playground/PlaygroundHelpers";
+import { defaultPromptStarters } from "@/components/playground/PlaygroundHelpers.helpers";
 import { PlaygroundEmptyHero } from "@/components/playground/PlaygroundEmptyHero";
 import { PlaygroundEnvDrawerBody } from "@/components/playground/PlaygroundEnvDrawerBody";
 import { PlaygroundPackageDrawerBody } from "@/components/playground/PlaygroundPackageDrawerBody";

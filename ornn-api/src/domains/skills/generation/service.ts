@@ -476,11 +476,11 @@ function extractTextFromEvent(event: ResponsesApiStreamEvent): string | null {
   const eventType = event.type;
 
   if (eventType === "response.output_text.delta") {
-    return (event as any).delta ?? null;
+    return (event.delta as string | undefined) ?? null;
   }
 
   if (eventType === "response.content_part.delta") {
-    const delta = (event as any).delta;
+    const delta = event.delta as { type?: unknown; text?: unknown } | undefined;
     if (delta && typeof delta === "object" && delta.type === "output_text" && typeof delta.text === "string") {
       return delta.text;
     }

@@ -140,12 +140,88 @@ export function BroadcastEditDrawer({
 }: BroadcastEditDrawerProps) {
   const { t } = useTranslation();
   const isEdit = broadcast !== null;
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [isOpen, onClose]);
+
+  return createPortal(
+    <AnimatePresence>
+      {isOpen && (
+        <div className="fixed inset-0 z-50">
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.18 }}
+            className="absolute inset-0 bg-black/55 backdrop-blur-[2px]"
+            onClick={onClose}
+          />
+          <motion.aside
+            initial={{ x: "100%" }}
+            animate={{ x: 0 }}
+            exit={{ x: "100%" }}
+            transition={{ type: "spring", stiffness: 240, damping: 28, mass: 0.9 }}
+            role="dialog"
+            aria-label={
+              isEdit
+                ? t("adminPages.broadcasts.drawer.editAria")
+                : t("adminPages.broadcasts.drawer.newAria")
+            }
+            className="card-impression absolute right-0 top-0 flex h-full w-full max-w-[720px] flex-col gap-5 overflow-y-auto border-l border-subtle bg-page p-6 sm:p-8"
+          >
+            {/* Keyed on the open broadcast (or "new") so the form's state
+                resets by construction whenever the drawer reopens or
+                switches entity — no reset effect, no cascading render
+                (#888). The outer AnimatePresence stays mounted, so the
+                slide-in/out animation is preserved. */}
+            <BroadcastEditForm
+              key={broadcast?.id ?? "new"}
+              isOpen={isOpen}
+              broadcast={broadcast}
+              isEdit={isEdit}
+              onClose={onClose}
+              t={t}
+            />
+          </motion.aside>
+        </div>
+      )}
+    </AnimatePresence>,
+    document.body,
+  );
+}
+
+interface BroadcastEditFormProps {
+  isOpen: boolean;
+  broadcast: AdminBroadcast | null;
+  isEdit: boolean;
+  onClose: () => void;
+  t: ReturnType<typeof useTranslation>["t"];
+}
+
+function BroadcastEditForm({
+  isOpen,
+  broadcast,
+  isEdit,
+  onClose,
+  t,
+}: BroadcastEditFormProps) {
   const addToast = useToastStore((s) => s.addToast);
   const createMut = useCreateBroadcast();
   const updateMut = useUpdateBroadcast();
   const saving = createMut.isPending || updateMut.isPending;
 
-  const [form, setForm] = useState<DrawerForm>(() => emptyForm());
+  // Lazy init from the prop so the very first render is already prefilled
+  // in edit mode (no post-mount setState). Re-open / entity-switch is
+  // handled by the `key` on the call site.
+  const [form, setForm] = useState<DrawerForm>(() =>
+    broadcast ? fromBroadcast(broadcast) : emptyForm(),
+  );
   const [errors, setErrors] = useState<FieldErrors>({});
 
   // Read-only edit mode resolves the locked recipient list to emails for
@@ -173,21 +249,6 @@ export function BroadcastEditDrawer({
     );
     return editRecipientsList.map((id) => cache.get(id) ?? id);
   }, [editRecipientsList, userLookupQuery.data]);
-
-  useEffect(() => {
-    if (!isOpen) return;
-    setForm(broadcast ? fromBroadcast(broadcast) : emptyForm());
-    setErrors({});
-  }, [isOpen, broadcast]);
-
-  useEffect(() => {
-    if (!isOpen) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [isOpen, onClose]);
 
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -243,31 +304,8 @@ export function BroadcastEditDrawer({
     }
   };
 
-  return createPortal(
-    <AnimatePresence>
-      {isOpen && (
-        <div className="fixed inset-0 z-50">
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.18 }}
-            className="absolute inset-0 bg-black/55 backdrop-blur-[2px]"
-            onClick={onClose}
-          />
-          <motion.aside
-            initial={{ x: "100%" }}
-            animate={{ x: 0 }}
-            exit={{ x: "100%" }}
-            transition={{ type: "spring", stiffness: 240, damping: 28, mass: 0.9 }}
-            role="dialog"
-            aria-label={
-              isEdit
-                ? t("adminPages.broadcasts.drawer.editAria")
-                : t("adminPages.broadcasts.drawer.newAria")
-            }
-            className="card-impression absolute right-0 top-0 flex h-full w-full max-w-[720px] flex-col gap-5 overflow-y-auto border-l border-subtle bg-page p-6 sm:p-8"
-          >
+  return (
+    <>
             <header className="flex items-baseline justify-between">
               <div>
                 <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-meta">
@@ -456,10 +494,6 @@ export function BroadcastEditDrawer({
                 </Button>
               </div>
             </form>
-          </motion.aside>
-        </div>
-      )}
-    </AnimatePresence>,
-    document.body,
+    </>
   );
 }

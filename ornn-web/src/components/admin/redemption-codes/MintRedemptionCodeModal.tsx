@@ -15,7 +15,7 @@
  * @module components/admin/redemption-codes/MintRedemptionCodeModal
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { useToastStore } from "@/stores/toastStore";
@@ -76,6 +76,24 @@ export function MintRedemptionCodeModal({
   isOpen,
   onClose,
 }: MintRedemptionCodeModalProps) {
+  // The form lives in a keyed inner component so its state resets by
+  // construction on each open — no reset effect, no cascading render
+  // (#888). The outer Modal owns the open/close animation, so its
+  // AnimatePresence stays stable. The heading (which depends on the
+  // minted result held inside the form) is rendered by the form itself,
+  // so no title state has to be lifted across the boundary.
+  return (
+    <Modal isOpen={isOpen} onClose={onClose}>
+      <MintRedemptionCodeForm key={isOpen ? "open" : "closed"} onClose={onClose} />
+    </Modal>
+  );
+}
+
+interface MintRedemptionCodeFormProps {
+  onClose: () => void;
+}
+
+function MintRedemptionCodeForm({ onClose }: MintRedemptionCodeFormProps) {
   const [grants, setGrants] = useState<GrantRow[]>([{ ...EMPTY_GRANT }]);
   const [note, setNote] = useState("");
   const [expiresLocal, setExpiresLocal] = useState<string>(
@@ -87,17 +105,6 @@ export function MintRedemptionCodeModal({
 
   const mint = useMintCode();
   const addToast = useToastStore((s) => s.addToast);
-
-  useEffect(() => {
-    if (isOpen) {
-      setGrants([{ ...EMPTY_GRANT }]);
-      setNote("");
-      setExpiresLocal(isoToLocalInputValue(daysFromNowIso(30)));
-      setError(null);
-      setMinted(null);
-      setCopied(false);
-    }
-  }, [isOpen]);
 
   const usedSurfaces = useMemo(
     () => new Set(grants.map((g) => g.surface).filter(Boolean) as Surface[]),
@@ -204,7 +211,12 @@ export function MintRedemptionCodeModal({
   const title = minted ? "Code minted" : "Mint redemption code";
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={title}>
+    <>
+      {/* Heading rendered here (not via Modal's `title` prop) so the
+          minted-state title lives with the form state it depends on. */}
+      <h2 className="mb-4 font-display text-xl font-semibold tracking-tight text-strong">
+        {title}
+      </h2>
       {minted ? (
         <div className="space-y-4">
           <div className="rounded border border-accent/40 bg-accent/5 p-4">
@@ -395,6 +407,6 @@ export function MintRedemptionCodeModal({
           </div>
         </form>
       )}
-    </Modal>
+    </>
   );
 }

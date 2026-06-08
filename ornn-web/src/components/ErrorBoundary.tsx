@@ -291,22 +291,5 @@ export function ErrorFallback({
   );
 }
 
-/**
- * Higher-order component to wrap components with error boundary.
- */
-export function withErrorBoundary<P extends object>(
-  Component: React.ComponentType<P>,
-  errorBoundaryProps?: Omit<ErrorBoundaryProps, "children">
-) {
-  const WrappedComponent = (props: P) => (
-    <ErrorBoundary {...errorBoundaryProps}>
-      <Component {...props} />
-    </ErrorBoundary>
-  );
-
-  WrappedComponent.displayName = `withErrorBoundary(${
-    Component.displayName || Component.name || "Component"
-  })`;
-
-  return WrappedComponent;
-}
+// `withErrorBoundary` HOC lives in the sibling `ErrorBoundary.helpers.ts`
+// so this file only exports components (react-refresh boundary, #888).

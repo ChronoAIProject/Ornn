@@ -62,7 +62,6 @@ export interface PosthogTrackerConfig {
  * checks in tests stay stable.
  */
 export class NoopTracker implements AnalyticsTracker {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   track(_userId: string | null, _event: string, _properties?: Readonly<Record<string, unknown>>): void {
     /* intentional no-op */
   }
@@ -99,7 +98,6 @@ export class PosthogTracker implements AnalyticsTracker {
     // posthog-node v5 emits an `error` event when the buffered transport
     // fails. Listen so we surface the failure on our logger instead of
     // letting it bubble into the Node EventEmitter.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (this.client as unknown as { on?: (e: string, fn: (err: unknown) => void) => void })
       .on?.("error", (err: unknown) => {
         this.logger.error({ err }, "PostHog transport error");

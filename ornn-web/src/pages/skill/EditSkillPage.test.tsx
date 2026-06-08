@@ -17,7 +17,13 @@
  */
 
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { render, cleanup } from "@testing-library/react";
+import {
+  render,
+  cleanup,
+  screen,
+  fireEvent,
+  waitFor,
+} from "@testing-library/react";
 import type { SkillDetail } from "@/services/skillApi";
 
 // react-router's `useParams` is what gives the page its URL `:id`,
@@ -37,33 +43,48 @@ vi.mock("react-i18next", () => ({
   initReactI18next: { type: "3rdParty", init: () => {} },
 }));
 
+// Mutable hook state — each test seeds these before render so we can
+// exercise loading / not-found / visibility / upload branches without
+// re-declaring the mock per case.
+const refetchSpy = vi.fn();
+const updateMutateAsync = vi.fn();
+const updatePkgMutateAsync = vi.fn();
+let skillState: {
+  data: Partial<SkillDetail> | null | undefined;
+  isLoading: boolean;
+};
+
 // Spies that capture the `id` argument each write hook receives.
 const updateSpy = vi.fn<(id: string) => unknown>();
 const updatePkgSpy = vi.fn<(id: string) => unknown>();
 
 vi.mock("@/hooks/useSkills", () => ({
   useSkill: () => ({
-    data: {
-      guid: "abc-123-guid",
-      name: "my-public-skill",
-      description: "...",
-      isPrivate: false,
-    } satisfies Partial<SkillDetail>,
-    isLoading: false,
-    refetch: vi.fn(),
+    data: skillState.data,
+    isLoading: skillState.isLoading,
+    refetch: refetchSpy,
   }),
   useUpdateSkill: (id: string) => {
     updateSpy(id);
-    return { mutateAsync: vi.fn(), isPending: false };
+    return { mutateAsync: updateMutateAsync, isPending: false };
   },
   useUpdateSkillPackage: (id: string) => {
     updatePkgSpy(id);
-    return { mutateAsync: vi.fn(), isPending: false };
+    return { mutateAsync: updatePkgMutateAsync, isPending: false };
   },
 }));
 
+const addToast = vi.fn();
 vi.mock("@/stores/toastStore", () => ({
-  useToastStore: () => vi.fn(),
+  useToastStore: <T,>(selector: (s: { addToast: typeof addToast }) => T) =>
+    selector({ addToast }),
+}));
+
+// translateError pulls in `@/i18n`; the page only uses it on the error
+// branch. Stub it to echo the fallback so error-toast assertions stay
+// independent of the i18n init chain.
+vi.mock("@/utils/translateError", () => ({
+  translateError: (_err: unknown, fallback?: string) => fallback ?? "error",
 }));
 
 // Layout / UI bits don't matter for the contract — stub them to keep
@@ -79,11 +100,34 @@ vi.mock("@/components/layout/BackLink", () => ({
 
 import { EditSkillPage } from "./EditSkillPage";
 
-describe("EditSkillPage — write mutations receive skill.guid (#565)", () => {
-  beforeEach(() => {
-    updateSpy.mockClear();
-    updatePkgSpy.mockClear();
+const PUBLIC_SKILL: Partial<SkillDetail> = {
+  guid: "abc-123-guid",
+  name: "my-public-skill",
+  description: "...",
+  isPrivate: false,
+};
+
+function resetState() {
+  updateSpy.mockClear();
+  updatePkgSpy.mockClear();
+  refetchSpy.mockReset();
+  updateMutateAsync.mockReset();
+  updatePkgMutateAsync.mockReset();
+  addToast.mockReset();
+  updateMutateAsync.mockResolvedValue(undefined);
+  updatePkgMutateAsync.mockResolvedValue(undefined);
+  skillState = { data: { ...PUBLIC_SKILL }, isLoading: false };
+}
+
+/** Build a fake .zip File for the upload-flow tests. */
+function makeZip(name = "skill.zip"): File {
+  return new File(["PK fake zip bytes"], name, {
+    type: "application/zip",
   });
+}
+
+describe("EditSkillPage — write mutations receive skill.guid (#565)", () => {
+  beforeEach(resetState);
   afterEach(() => cleanup());
 
   it("hands skill.guid (not the URL :id) to useUpdateSkill", () => {
@@ -101,5 +145,160 @@ describe("EditSkillPage — write mutations receive skill.guid (#565)", () => {
       updatePkgSpy.mock.calls[updatePkgSpy.mock.calls.length - 1]?.[0];
     expect(lastCall).toBe("abc-123-guid");
     expect(lastCall).not.toBe("my-public-skill");
+  });
+});
+
+describe("EditSkillPage — load states", () => {
+  beforeEach(resetState);
+  afterEach(() => cleanup());
+
+  it("renders the skeleton while the skill is loading", () => {
+    skillState = { data: undefined, isLoading: true };
+    const { container } = render(<EditSkillPage />);
+    // The Skeleton renders `lines` shimmer bars; no form headings yet.
+    expect(container.querySelector(".skeleton-shimmer")).toBeTruthy();
+    expect(screen.queryByText(/Visibility/i)).not.toBeInTheDocument();
+  });
+
+  it("renders the not-found message when the skill is missing", () => {
+    skillState = { data: null, isLoading: false };
+    render(<EditSkillPage />);
+    expect(screen.getByText(/Skill not found/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Update Package/i)).not.toBeInTheDocument();
+  });
+});
+
+describe("EditSkillPage — visibility toggle", () => {
+  beforeEach(resetState);
+  afterEach(() => cleanup());
+
+  it("toggles a public skill to private with a success toast + refetch", async () => {
+    skillState = { data: { ...PUBLIC_SKILL, isPrivate: false }, isLoading: false };
+    render(<EditSkillPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Make Private/i }));
+
+    await waitFor(() =>
+      expect(updateMutateAsync).toHaveBeenCalledWith({ isPrivate: true }),
+    );
+    expect(addToast).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "success",
+        message: expect.stringMatching(/private/i),
+      }),
+    );
+    expect(refetchSpy).toHaveBeenCalled();
+  });
+
+  it("toggles a private skill to public with the public-copy toast", async () => {
+    skillState = { data: { ...PUBLIC_SKILL, isPrivate: true }, isLoading: false };
+    render(<EditSkillPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Make Public/i }));
+
+    await waitFor(() =>
+      expect(updateMutateAsync).toHaveBeenCalledWith({ isPrivate: false }),
+    );
+    expect(addToast).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "success",
+        message: expect.stringMatching(/public/i),
+      }),
+    );
+  });
+
+  it("shows an error toast and skips refetch when the toggle rejects", async () => {
+    updateMutateAsync.mockRejectedValue(new Error("boom"));
+    render(<EditSkillPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Make Private/i }));
+
+    await waitFor(() =>
+      expect(addToast).toHaveBeenCalledWith(
+        expect.objectContaining({ type: "error" }),
+      ),
+    );
+    expect(refetchSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe("EditSkillPage — package upload", () => {
+  beforeEach(resetState);
+  afterEach(() => cleanup());
+
+  function selectZip(container: HTMLElement) {
+    const fileInput = container.querySelector(
+      'input[type="file"]',
+    ) as HTMLInputElement;
+    fireEvent.change(fileInput, { target: { files: [makeZip()] } });
+    return fileInput;
+  }
+
+  it("reveals the Upload button once a file is selected", () => {
+    const { container } = render(<EditSkillPage />);
+    expect(
+      screen.queryByRole("button", { name: /Upload Package/i }),
+    ).not.toBeInTheDocument();
+
+    selectZip(container);
+
+    expect(screen.getByText("skill.zip")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Upload Package/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("uploads, fires a success toast, clears the picker and refetches", async () => {
+    const { container } = render(<EditSkillPage />);
+    selectZip(container);
+
+    fireEvent.click(screen.getByRole("button", { name: /Upload Package/i }));
+
+    await waitFor(() =>
+      expect(updatePkgMutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({ zipFile: expect.any(File) }),
+      ),
+    );
+    expect(addToast).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "success" }),
+    );
+    expect(refetchSpy).toHaveBeenCalled();
+    // The picker clears — selected filename + Upload button gone.
+    await waitFor(() =>
+      expect(screen.queryByText("skill.zip")).not.toBeInTheDocument(),
+    );
+    expect(
+      screen.queryByRole("button", { name: /Upload Package/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows an error toast and keeps the file when the upload rejects", async () => {
+    updatePkgMutateAsync.mockRejectedValue(new Error("upload failed"));
+    const { container } = render(<EditSkillPage />);
+    selectZip(container);
+
+    fireEvent.click(screen.getByRole("button", { name: /Upload Package/i }));
+
+    await waitFor(() =>
+      expect(addToast).toHaveBeenCalledWith(
+        expect.objectContaining({ type: "error" }),
+      ),
+    );
+    expect(refetchSpy).not.toHaveBeenCalled();
+    // File stays selected so the user can retry.
+    expect(screen.getByText("skill.zip")).toBeInTheDocument();
+  });
+
+  it("clears the selected file via the Remove control", () => {
+    const { container } = render(<EditSkillPage />);
+    selectZip(container);
+    expect(screen.getByText("skill.zip")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Remove/i }));
+
+    expect(screen.queryByText("skill.zip")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Upload Package/i }),
+    ).not.toBeInTheDocument();
   });
 });

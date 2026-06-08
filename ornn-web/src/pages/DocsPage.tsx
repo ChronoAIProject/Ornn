@@ -12,10 +12,8 @@ import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
 import { PageTransition } from "@/components/layout/PageTransition";
 import { useTranslation } from "react-i18next";
-import {
-  markdownComponents,
-  slugify,
-} from "@/components/docs/DocsMarkdownComponents";
+import { markdownComponents } from "@/components/docs/DocsMarkdownComponents.map";
+import { slugify } from "@/components/docs/DocsMarkdownComponents.helpers";
 import {
   ReleaseAccordion,
   VersionBadge,

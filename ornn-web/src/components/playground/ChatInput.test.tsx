@@ -115,3 +115,141 @@ describe("ChatInput length cap (#654)", () => {
     expect(sendBtn!.disabled).toBe(true);
   });
 });
+
+describe("ChatInput send + key handling", () => {
+  it("sends trimmed content on Enter and clears the textarea", () => {
+    const { textarea, onSend } = setup();
+    fireEvent.change(textarea, { target: { value: "  hello world  " } });
+    fireEvent.keyDown(textarea, { key: "Enter" });
+    expect(onSend).toHaveBeenCalledTimes(1);
+    expect(onSend).toHaveBeenCalledWith("hello world");
+    expect(textarea.value).toBe("");
+  });
+
+  it("sends on a send-button click", () => {
+    const { textarea, sendBtn, onSend } = setup();
+    fireEvent.change(textarea, { target: { value: "ping" } });
+    fireEvent.click(sendBtn!);
+    expect(onSend).toHaveBeenCalledWith("ping");
+  });
+
+  it("inserts a newline on Shift+Enter without sending", () => {
+    const { textarea, onSend } = setup();
+    fireEvent.change(textarea, { target: { value: "line one" } });
+    fireEvent.keyDown(textarea, { key: "Enter", shiftKey: true });
+    expect(onSend).not.toHaveBeenCalled();
+    // The value is untouched — the browser would append the newline,
+    // and crucially we did not clear it.
+    expect(textarea.value).toBe("line one");
+  });
+
+  it("is a no-op for whitespace-only input", () => {
+    const { textarea, onSend, sendBtn } = setup();
+    fireEvent.change(textarea, { target: { value: "   \n  \t " } });
+    // Send button disabled and Enter does nothing.
+    expect(sendBtn!.disabled).toBe(true);
+    fireEvent.keyDown(textarea, { key: "Enter" });
+    expect(onSend).not.toHaveBeenCalled();
+  });
+
+  it("does not send when disabled", () => {
+    const { textarea, onSend } = setup({ disabled: true });
+    fireEvent.change(textarea, { target: { value: "blocked" } });
+    fireEvent.keyDown(textarea, { key: "Enter" });
+    expect(onSend).not.toHaveBeenCalled();
+  });
+
+  it("invokes the latest onSend after a prop swap (#888 stale-closure guard)", () => {
+    // Before #888, handleSend's useCallback deps omitted onSend, so a
+    // parent that swapped the handler (e.g. a new conversation session)
+    // would keep firing the stale closure. The send must hit whatever
+    // onSend is current at click time.
+    const ref = createRef<ChatInputHandle>();
+    const first = vi.fn();
+    const second = vi.fn();
+    const { container, rerender } = render(
+      <ChatInput
+        ref={ref}
+        onSend={first}
+        onAbort={vi.fn()}
+        disabled={false}
+        isStreaming={false}
+      />,
+    );
+    const textarea = container.querySelector("textarea")!;
+    fireEvent.change(textarea, { target: { value: "first" } });
+    // Swap onSend while text is present but before sending.
+    rerender(
+      <ChatInput
+        ref={ref}
+        onSend={second}
+        onAbort={vi.fn()}
+        disabled={false}
+        isStreaming={false}
+      />,
+    );
+    fireEvent.keyDown(textarea, { key: "Enter" });
+    expect(first).not.toHaveBeenCalled();
+    expect(second).toHaveBeenCalledWith("first");
+  });
+});
+
+describe("ChatInput streaming + abort", () => {
+  it("renders the stop button while streaming and fires onAbort", () => {
+    const { container, onAbort } = setup({ isStreaming: true, disabled: true });
+    // No send button in streaming mode.
+    expect(
+      container.querySelector('button[aria-label="chatInput.sendMessage"]'),
+    ).toBeNull();
+    const stopBtn = container.querySelector(
+      'button[aria-label="chatInput.stopGeneration"]',
+    ) as HTMLButtonElement;
+    expect(stopBtn).toBeTruthy();
+    fireEvent.click(stopBtn);
+    expect(onAbort).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("ChatInput placeholder branches", () => {
+  it("uses the generating placeholder when disabled + streaming", () => {
+    const { textarea } = setup({ disabled: true, isStreaming: true });
+    expect(textarea.placeholder).toBe("chatInput.generating");
+  });
+
+  it("uses the awaiting-tool placeholder when disabled + not streaming", () => {
+    const { textarea } = setup({ disabled: true, isStreaming: false });
+    expect(textarea.placeholder).toBe("chatInput.awaitingTool");
+  });
+
+  it("uses the default placeholder when active", () => {
+    const { textarea } = setup({ disabled: false });
+    expect(textarea.placeholder).toBe("chatInput.placeholder");
+  });
+
+  it("prefers a custom placeholder over the default branches", () => {
+    const { textarea } = setup({
+      disabled: true,
+      isStreaming: true,
+      placeholder: "Pick a tool first",
+    });
+    expect(textarea.placeholder).toBe("Pick a tool first");
+  });
+});
+
+describe("ChatInput imperative handle", () => {
+  it("focuses the textarea via the focus handle", () => {
+    const { ref, textarea } = setup();
+    act(() => {
+      ref.current!.focus();
+    });
+    expect(document.activeElement).toBe(textarea);
+  });
+
+  it("replaces the value via setValue", () => {
+    const { ref, textarea } = setup();
+    act(() => {
+      ref.current!.setValue("seeded prompt");
+    });
+    expect(textarea.value).toBe("seeded prompt");
+  });
+});
