@@ -14,8 +14,10 @@
  * the way in, so consumers (skill generation + playground) do not need
  * to branch on apiFormat (#574).
  *
- * Tool-call delta normalization for chat-completion is intentionally
- * out of scope here — tracked in #608.
+ * Chat-completion tool-call normalization is implemented: streamed
+ * `choices[].delta.tool_calls[]` fragments are accumulated and flushed
+ * as `response.output_item.done` function_call events, and non-streamed
+ * `choices[].message.tool_calls[]` map to `function_call` outputs (#608).
  *
  * Authenticates using a Service Account (SA) token obtained via
  * client_credentials grant when the resolved provider has no direct
@@ -186,21 +188,56 @@ async function* parseResponsesStream(
 }
 
 /**
- * Parse Chat Completions SSE and translate text deltas into
- * Responses-API event shape so consumers stay format-agnostic.
+ * Parse Chat Completions SSE and translate both text deltas and
+ * tool-call deltas into Responses-API event shape so consumers stay
+ * format-agnostic.
  *
- * For #574, only text deltas (`choices[].delta.content`) are
- * translated — emitted as `response.output_text.delta`. Tool-call
- * delta normalization is tracked in #608.
+ * Text deltas (`choices[].delta.content`) pass through as
+ * `response.output_text.delta`. Tool-call fragments
+ * (`choices[].delta.tool_calls[]`) arrive incrementally — `id`/`name`
+ * land on the first fragment, `function.arguments` streams across many
+ * — so we accumulate per `index` and flush each completed call as a
+ * single `response.output_item.done` function_call event (matching the
+ * Responses-API shape the playground consumer reads). We never parse the
+ * arguments mid-stream; the consumer parses the assembled JSON (#608).
  */
 async function* parseChatCompletionStream(
   response: Response,
 ): AsyncIterable<ResponsesApiStreamEvent> {
+  const toolCalls = new Map<number, { id: string; name: string; argsBuffer: string }>();
+  let flushed = false;
+
+  function* flush(): Generator<ResponsesApiStreamEvent> {
+    if (flushed) return;
+    flushed = true;
+    for (const index of [...toolCalls.keys()].sort((a, b) => a - b)) {
+      const call = toolCalls.get(index)!;
+      yield {
+        type: "response.output_item.done",
+        item: {
+          type: "function_call",
+          id: call.id,
+          call_id: call.id,
+          name: call.name,
+          arguments: call.argsBuffer,
+        },
+      };
+    }
+  }
+
   for await (const { data } of parseSSELines(response)) {
-    if (data === "[DONE]") return;
+    if (data === "[DONE]") break;
     let chunk: {
       choices?: Array<{
-        delta?: { content?: string | null };
+        delta?: {
+          content?: string | null;
+          tool_calls?: Array<{
+            index: number;
+            id?: string;
+            function?: { name?: string; arguments?: string };
+          }>;
+        };
+        finish_reason?: string;
       }>;
     };
     try {
@@ -209,10 +246,35 @@ async function* parseChatCompletionStream(
       logger.debug({ data: data.slice(0, 100) }, "Failed to parse chat-completion chunk");
       continue;
     }
-    const delta = chunk.choices?.[0]?.delta?.content;
-    if (typeof delta === "string" && delta.length > 0) {
-      yield { type: "response.output_text.delta", delta };
+
+    const choice = chunk.choices?.[0];
+    const textDelta = choice?.delta?.content;
+    if (typeof textDelta === "string" && textDelta.length > 0) {
+      yield { type: "response.output_text.delta", delta: textDelta };
     }
+
+    const fragments = choice?.delta?.tool_calls;
+    if (fragments) {
+      for (const frag of fragments) {
+        const existing = toolCalls.get(frag.index) ?? { id: "", name: "", argsBuffer: "" };
+        if (frag.id) existing.id = frag.id;
+        if (frag.function?.name) existing.name = frag.function.name;
+        if (typeof frag.function?.arguments === "string") {
+          existing.argsBuffer += frag.function.arguments;
+        }
+        toolCalls.set(frag.index, existing);
+      }
+    }
+
+    if (choice?.finish_reason === "tool_calls") {
+      yield* flush();
+    }
+  }
+
+  // Flush on stream end / [DONE] in case the upstream omitted the
+  // `finish_reason: "tool_calls"` chunk but still streamed tool calls.
+  if (toolCalls.size > 0) {
+    yield* flush();
   }
 }
 
@@ -268,6 +330,7 @@ function buildChatCompletionBody(
         parameters: t.parameters,
       },
     }));
+    body.tool_choice = "auto";
   }
   return body;
 }
@@ -443,12 +506,37 @@ export class NyxLlmClient {
 
     if (apiFormat === "chat-completion") {
       const result = (await response.json()) as {
-        choices?: Array<{ message?: { content?: string | null } }>;
+        choices?: Array<{
+          message?: {
+            content?: string | null;
+            tool_calls?: Array<{
+              id?: string;
+              function?: { name?: string; arguments?: string };
+            }>;
+          };
+        }>;
       };
-      const text = result.choices?.[0]?.message?.content ?? "";
-      return text
-        ? [{ type: "message", content: [{ type: "output_text", text }] }]
-        : [];
+      const message = result.choices?.[0]?.message;
+      const outputs: ResponsesApiOutput[] = [];
+
+      const text = message?.content ?? "";
+      if (text) {
+        outputs.push({ type: "message", content: [{ type: "output_text", text }] });
+      }
+
+      for (const call of message?.tool_calls ?? []) {
+        const id = call.id ?? "";
+        const fnCall: ResponsesApiOutput = {
+          type: "function_call",
+          id,
+          call_id: id,
+          name: call.function?.name ?? "",
+          arguments: call.function?.arguments ?? "",
+        };
+        outputs.push(fnCall);
+      }
+
+      return outputs;
     }
 
     const result = (await response.json()) as { output: ResponsesApiOutput[] };
