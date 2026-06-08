@@ -82,6 +82,15 @@ const STABLE_ITEMS: PullBucketCount[] = [
 ];
 
 beforeEach(() => {
+  // Pin the clock. UsagePullsCard derives its visible window from `now`
+  // (`rangeFor` → hour = last 24h), then `rowsFor` only sums fixture
+  // buckets that land inside that window. The fixtures below are dated
+  // 2026-06-05, so a real `now` walks them out of the 24h window within a
+  // day and every bucket pads to 0 — the totals strip reads 0/0/0 and the
+  // "api = 4" assertion fails. Faking only `Date` (timers stay real so
+  // React/recharts scheduling is untouched) keeps the window deterministic.
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-06-05T02:00:00.000Z"));
   useSkillPulls.mockClear();
   pullsState.data = undefined;
   pullsState.isLoading = false;
@@ -91,6 +100,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
 });
 
 describe("UsagePullsCard — frame-commit identity guard", () => {
