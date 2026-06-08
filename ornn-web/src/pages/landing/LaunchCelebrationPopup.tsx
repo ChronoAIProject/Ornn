@@ -75,21 +75,17 @@ export function LaunchCelebrationPopup() {
   return createPortal(
     <AnimatePresence>
       {open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
+        // Anchored to the top-right corner (below the 64px navbar) as a
+        // non-blocking notification card — no page-dimming backdrop, so the
+        // hero + lifecycle ring stay visible and interactive. Dismiss via the
+        // X / Dismiss buttons or Escape.
+        <div className="pointer-events-none fixed inset-0 z-50 flex items-start justify-end p-4 pt-20 sm:pr-6 sm:pt-24">
           <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.18 }}
-            className="absolute inset-0 bg-black/70 backdrop-blur-[2px]"
-            onClick={close}
-          />
-          <motion.div
-            initial={{ opacity: 0, y: 14, scale: 0.97 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 14, scale: 0.97 }}
-            transition={{ type: "spring", stiffness: 220, damping: 22, mass: 0.9 }}
-            className="relative z-10 mx-4 w-full max-w-2xl"
+            initial={{ opacity: 0, x: 28, scale: 0.98 }}
+            animate={{ opacity: 1, x: 0, scale: 1 }}
+            exit={{ opacity: 0, x: 28, scale: 0.98 }}
+            transition={{ type: "spring", stiffness: 240, damping: 24, mass: 0.9 }}
+            className="pointer-events-auto relative w-full max-w-md"
           >
             {/* Hard-offset letterpress plate in ember-deep (DESIGN.md
                 Material & Print vocabulary — card-shadow impression
@@ -107,12 +103,11 @@ export function LaunchCelebrationPopup() {
             />
           <div
             role="dialog"
-            aria-modal="true"
             aria-labelledby="launch-popup-title"
             className="
-              relative max-h-[88vh] overflow-y-auto
+              relative max-h-[64vh] overflow-y-auto
               rounded-[3px] border-2 border-accent bg-card
-              p-6 sm:p-9
+              p-5 sm:p-6
             "
           >
 
@@ -156,8 +151,8 @@ export function LaunchCelebrationPopup() {
             <h2
               id="launch-popup-title"
               className="
-                mt-5 font-display font-bold text-strong
-                text-[22px] sm:text-[26px] leading-[1.22] tracking-[-0.015em]
+                mt-4 font-display font-bold text-strong
+                text-[19px] sm:text-[22px] leading-[1.2] tracking-[-0.015em]
               "
             >
               {t("landing.launchPopup.title")}
@@ -165,7 +160,7 @@ export function LaunchCelebrationPopup() {
 
             {/* Welded-seam divider — hairline in strong-edge tone +
                 rivet pair in ember accent. */}
-            <div className="relative mt-6 mb-6 h-px w-full bg-strong-edge">
+            <div className="relative mt-4 mb-4 h-px w-full bg-strong-edge">
               <span
                 aria-hidden
                 className="absolute -top-[2.5px] left-[25%] h-[5px] w-[5px] rounded-full bg-accent"
@@ -183,7 +178,7 @@ export function LaunchCelebrationPopup() {
             <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.22em] text-meta">
               {t("landing.launchPopup.creditsLead")}
             </p>
-            <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="mt-2.5 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
               <OfferTile
                 count={t("landing.launchPopup.credit1Number")}
                 label={t("landing.launchPopup.credit1Title")}
@@ -198,10 +193,10 @@ export function LaunchCelebrationPopup() {
             </div>
 
             {/* Redemption block — section heading + numbered steps. */}
-            <h3 className="mt-7 font-display text-[16px] font-bold uppercase tracking-[-0.005em] text-strong">
+            <h3 className="mt-5 font-display text-[15px] font-bold uppercase tracking-[-0.005em] text-strong">
               {t("landing.launchPopup.conditionsHeading")}
             </h3>
-            <ol className="mt-4 space-y-3">
+            <ol className="mt-3 space-y-2.5">
               <li className="grid grid-cols-[auto_1fr] items-start gap-x-4">
                 <span className="font-mono text-[13px] font-semibold tabular-nums text-accent pt-[1px]">
                   01
@@ -238,7 +233,7 @@ export function LaunchCelebrationPopup() {
             {/* Invite-code chip — click-to-copy with mono molten-gold
                 code. Treated as a button (not a div) for keyboard
                 affordance + screen-reader semantics. */}
-            <div className="mt-6">
+            <div className="mt-5">
               <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.22em] text-meta">
                 {t("landing.launchPopup.inviteLabel")}
               </p>
@@ -269,7 +264,7 @@ export function LaunchCelebrationPopup() {
                   where the invite code is required on first visit before
                   the user can continue with GitHub. Without this, the
                   code chip reads as "magic value, purpose unknown". */}
-              <p className="mt-3 text-[12.5px] leading-[1.6] text-body">
+              <p className="mt-2 text-[12px] leading-[1.5] text-body">
                 {t("landing.launchPopup.inviteHelp")}
               </p>
             </div>
@@ -281,7 +276,7 @@ export function LaunchCelebrationPopup() {
                 link for support. Sibling block (not inside the invite-
                 code section) so the post-redemption flow doesn't read
                 as just another caption under the code chip. */}
-            <p className="mt-6 text-[12.5px] leading-[1.6] text-body">
+            <p className="mt-4 text-[12px] leading-[1.5] text-body">
               {t("landing.launchPopup.fulfillmentBefore")}{" "}
               <a
                 href={DISCUSSIONS_URL}
@@ -302,7 +297,7 @@ export function LaunchCelebrationPopup() {
 
             {/* Limited-slots warning — mono caption, italic, ember
                 triangle as a visual cue without saturating the row. */}
-            <p className="mt-5 flex items-start gap-2 font-mono text-[11px] italic uppercase tracking-[0.14em] text-meta">
+            <p className="mt-4 flex items-start gap-2 font-mono text-[11px] italic uppercase tracking-[0.14em] text-meta">
               <span aria-hidden className="text-accent not-italic">
                 ▲
               </span>
@@ -312,7 +307,7 @@ export function LaunchCelebrationPopup() {
             {/* CTAs — ghost Dismiss + primary STAR ON GITHUB. Both
                 ride `.cta-letterpress` for the canonical press-down +
                 shadow behavior, reduced-motion safe. */}
-            <div className="mt-7 flex flex-wrap items-center justify-end gap-3">
+            <div className="mt-5 flex flex-wrap items-center justify-end gap-3">
               <button
                 type="button"
                 onClick={close}
@@ -395,12 +390,12 @@ function OfferTile({
       : undefined;
   return (
     <div className="offer-tile-glow" style={styleVars}>
-      <div className="rounded-[2px] border border-subtle bg-elevated p-4 sm:p-5">
-        <p className="font-display text-[42px] sm:text-[48px] font-bold leading-none tracking-[-0.02em] text-accent">
+      <div className="rounded-[2px] border border-subtle bg-elevated p-3.5 sm:p-4">
+        <p className="font-display text-[30px] sm:text-[34px] font-bold leading-none tracking-[-0.02em] text-accent">
           {count}
         </p>
-        <div className="mt-3 h-px w-8 bg-accent-muted" aria-hidden />
-        <p className="mt-3 font-mono text-[12px] font-semibold uppercase tracking-[0.16em] text-strong">
+        <div className="mt-2 h-px w-8 bg-accent-muted" aria-hidden />
+        <p className="mt-2 font-mono text-[12px] font-semibold uppercase tracking-[0.16em] text-strong">
           {label}
         </p>
         <p className="mt-1 font-mono text-[11px] uppercase tracking-[0.12em] text-meta">
