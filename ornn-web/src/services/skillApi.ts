@@ -42,9 +42,15 @@ export async function fetchSkillVersionDiff(
   return res.data!;
 }
 
-/** Toggle the deprecation flag on a specific published version. */
+/**
+ * Toggle the deprecation flag on a specific published version.
+ *
+ * First arg MUST be the skill GUID — version-write routes are GUID-only
+ * (CONVENTIONS §2.2). A name passed here resolves via `findByGuid` on
+ * the backend and 404s (#750).
+ */
 export async function setSkillVersionDeprecation(
-  idOrName: string,
+  guid: string,
   version: string,
   // exactOptionalPropertyTypes (#657)
   body: { isDeprecated: boolean; deprecationNote?: string | undefined },
@@ -63,7 +69,7 @@ export async function setSkillVersionDeprecation(
     headers["Authorization"] = `Bearer ${token}`;
   }
   const response = await fetch(
-    `${API_BASE}/api/v1/skills/${encodeURIComponent(idOrName)}/versions/${encodeURIComponent(version)}`,
+    `${API_BASE}/api/v1/skills/${encodeURIComponent(guid)}/versions/${encodeURIComponent(version)}`,
     {
       method: "PATCH",
       headers,
@@ -181,13 +187,17 @@ export async function deleteSkill(id: string): Promise<void> {
  * Hard-delete one non-latest version of a skill. Backend forbids deleting
  * the only version (use `deleteSkill`) or the current latest (publish a
  * newer version first).
+ *
+ * First arg MUST be the skill GUID — version-write routes are GUID-only
+ * (CONVENTIONS §2.2). A name passed here resolves via `findByGuid` on
+ * the backend and 404s (#750).
  */
 export async function deleteSkillVersion(
-  idOrName: string,
+  guid: string,
   version: string,
 ): Promise<void> {
   await apiDelete(
-    `/api/v1/skills/${encodeURIComponent(idOrName)}/versions/${encodeURIComponent(version)}`,
+    `/api/v1/skills/${encodeURIComponent(guid)}/versions/${encodeURIComponent(version)}`,
   );
 }
 
