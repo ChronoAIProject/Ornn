@@ -6,6 +6,7 @@ import type { BadgeProps } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import type { SkillSearchResult } from "@/types/search";
 import { useMyOrgs } from "@/hooks/useMe";
+import { formatDateSGT } from "@/utils/formatters";
 
 const TAG_COLORS: NonNullable<BadgeProps["color"]>[] = ["cyan", "magenta", "yellow", "green"];
 
@@ -14,21 +15,6 @@ function getTagColor(tag: string): NonNullable<BadgeProps["color"]> {
   // `hash % TAG_COLORS.length` is always in-range for a non-empty
   // array. `!` is safe under noUncheckedIndexedAccess (#450).
   return TAG_COLORS[hash % TAG_COLORS.length]!;
-}
-
-/** Format a date string to exact SGT (Asia/Singapore) timestamp */
-function formatDateSGT(dateStr: string): string {
-  const date = new Date(dateStr);
-  return date.toLocaleString("en-SG", {
-    timeZone: "Asia/Singapore",
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-  });
 }
 
 export interface SkillCardProps {
@@ -81,7 +67,7 @@ export function SkillCard({
   className = "",
 }: SkillCardProps) {
   const navigate = useNavigate();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
 
   const isOwner = currentUserId && skill.createdBy === currentUserId;
 
@@ -197,7 +183,7 @@ export function SkillCard({
           )}
           <span className="truncate">{displayName}</span>
         </div>
-        <span className="shrink-0">{formatDateSGT(timestamp)}</span>
+        <span className="shrink-0">{formatDateSGT(timestamp, i18n.language, { withSeconds: true })}</span>
       </div>
 
       {showOwnerControls && isOwner && (
