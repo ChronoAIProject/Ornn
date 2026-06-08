@@ -40,7 +40,7 @@ vi.mock("@/stores/authStore", () => ({
   },
 }));
 
-import { useDeleteSkillVersion, useSetVersionDeprecation } from "./useSkills";
+import { useDeleteSkill, useDeleteSkillVersion, useSetVersionDeprecation } from "./useSkills";
 
 const GUID = "11111111-2222-3333-4444-555555555555";
 const NAME = "my-skill";
@@ -58,10 +58,32 @@ function makeWrapper() {
     defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false } },
   });
   const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
+  const removeSpy = vi.spyOn(queryClient, "removeQueries");
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
   );
-  return { wrapper, invalidateSpy };
+  return { wrapper, invalidateSpy, removeSpy, queryClient };
+}
+
+/**
+ * Did `removeQueries` fire with a predicate that matches this queryKey?
+ * #940 removes the deleted skill's caches with a predicate (covering both
+ * name- and guid-keyed entries), not a literal queryKey, so we exercise
+ * the predicate against a synthetic key.
+ */
+function removedKey(
+  spy: ReturnType<typeof vi.spyOn>,
+  key: readonly unknown[],
+): boolean {
+  return spy.mock.calls.some(
+    ([arg]) =>
+      arg != null &&
+      typeof arg === "object" &&
+      "predicate" in arg &&
+      (arg as { predicate: (q: { queryKey: readonly unknown[] }) => boolean }).predicate({
+        queryKey: key,
+      }),
+  );
 }
 
 /** Did `invalidateQueries` fire with exactly this queryKey? */
@@ -226,5 +248,72 @@ describe("useSetVersionDeprecation", () => {
     // Cache keys must never be the GUID when opened by name.
     expect(invalidatedKey(invalidateSpy, ["skills", GUID])).toBe(false);
     expect(invalidatedKey(invalidateSpy, ["skill-versions", GUID])).toBe(false);
+  });
+});
+
+describe("useDeleteSkill", () => {
+  // Backend DELETE returns 204; apiClient short-circuits on 204.
+  function stubDelete() {
+    return vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response(null, { status: 204 }));
+  }
+
+  it("removes the deleted skill's detail + versions cache so no refetch can 404 (#940)", async () => {
+    stubDelete();
+    const { wrapper, removeSpy, invalidateSpy, queryClient } = makeWrapper();
+
+    // Seed the still-mounted detail + versions cache, keyed on the NAME
+    // (the Skill Detail URL id). A broad invalidate would prefix-match
+    // these and refetch the just-deleted skill → 404.
+    queryClient.setQueryData(["skills", NAME, "latest"], { guid: GUID, name: NAME });
+    queryClient.setQueryData(["skill-versions", NAME], [{ version: VERSION }]);
+
+    const { result } = renderHook(() => useDeleteSkill(GUID, NAME), { wrapper });
+    await result.current.mutateAsync();
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    // (a) removeQueries fired for the detail + versions keys.
+    expect(removedKey(removeSpy, ["skills", NAME, "latest"])).toBe(true);
+    expect(removedKey(removeSpy, ["skill-versions", NAME])).toBe(true);
+
+    // (b) the detail entry is actually gone — nothing left to refetch.
+    expect(queryClient.getQueryData(["skills", NAME, "latest"])).toBeUndefined();
+    expect(queryClient.getQueryData(["skill-versions", NAME])).toBeUndefined();
+
+    // (c) lists + counts still invalidate to drop the deleted card.
+    expect(invalidatedKey(invalidateSpy, ["skills"])).toBe(true);
+    expect(invalidatedKey(invalidateSpy, ["my-skills"])).toBe(true);
+    expect(invalidatedKey(invalidateSpy, ["skill-counts"])).toBe(true);
+  });
+
+  it("removes a GUID-keyed detail entry too (predicate covers both keyings)", async () => {
+    stubDelete();
+    const { wrapper, removeSpy, queryClient } = makeWrapper();
+
+    // MySkillsPage passes the card's GUID as the cache-key id; a detail
+    // entry keyed by GUID must be removed just like the name-keyed one.
+    queryClient.setQueryData(["skills", GUID, "latest"], { guid: GUID, name: NAME });
+
+    const { result } = renderHook(() => useDeleteSkill(GUID, GUID), { wrapper });
+    await result.current.mutateAsync();
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(removedKey(removeSpy, ["skills", GUID, "latest"])).toBe(true);
+    expect(queryClient.getQueryData(["skills", GUID, "latest"])).toBeUndefined();
+  });
+
+  it("sends the GUID on the wire, not the cache id, when opened by name", async () => {
+    const fetchSpy = stubDelete();
+    const { wrapper } = makeWrapper();
+    const { result } = renderHook(() => useDeleteSkill(GUID, NAME), { wrapper });
+
+    await result.current.mutateAsync();
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    const url = fetchedUrl(fetchSpy);
+    expect(url).toContain(`/skills/${encodeURIComponent(GUID)}`);
+    expect(url).not.toContain(`/skills/${encodeURIComponent(NAME)}`);
+    expect(fetchSpy.mock.calls[0]?.[1]).toMatchObject({ method: "DELETE" });
   });
 });

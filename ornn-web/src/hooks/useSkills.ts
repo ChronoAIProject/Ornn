@@ -368,14 +368,47 @@ export function useTieSkillToNyxidService(idOrName: string) {
   });
 }
 
-/** Delete a skill */
-export function useDeleteSkill() {
+/**
+ * Delete an entire skill (every version).
+ *
+ * Two-id split (#750 shape): `guid` is the WIRE id — the delete route is
+ * GUID-only, so a name-opened Skill Detail must still send the GUID.
+ * `idOrName` is the CACHE-KEY id — the detail/versions read queries
+ * (`useSkill`, `useSkillVersions`) are keyed on `idOrName`, and callers
+ * pass either the GUID (MySkillsPage card) or a NAME (Skill Detail URL),
+ * so cache cleanup must cover BOTH keyings.
+ *
+ * #940 — onSuccess must REMOVE the deleted skill's detail + versions
+ * entries (not just invalidate). The detail query stays mounted through
+ * the delete (the `navigate("/registry")` in the caller runs AFTER this
+ * onSuccess, and RootLayout's breadcrumb re-subscribes), so a broad
+ * `invalidateQueries([SKILLS_KEY])` prefix-matches the still-mounted
+ * detail key and triggers a refetch of the just-deleted skill → 404.
+ * `removeQueries` drops the cache entry outright so nothing can refetch
+ * it; the list/count keys still invalidate to drop the deleted card.
+ * Removal is id-scoped (predicate on `guid`/`idOrName`) so only the
+ * deleted skill's caches are touched, never other skills'.
+ */
+export function useDeleteSkill(guid: string, idOrName: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => deleteSkill(id),
+    mutationFn: () => deleteSkill(guid),
     onSuccess: () => {
+      queryClient.removeQueries({
+        predicate: (q) =>
+          Array.isArray(q.queryKey) &&
+          q.queryKey[0] === SKILLS_KEY &&
+          (q.queryKey[1] === guid || q.queryKey[1] === idOrName),
+      });
+      queryClient.removeQueries({
+        predicate: (q) =>
+          Array.isArray(q.queryKey) &&
+          q.queryKey[0] === SKILL_VERSIONS_KEY &&
+          (q.queryKey[1] === guid || q.queryKey[1] === idOrName),
+      });
       queryClient.invalidateQueries({ queryKey: [SKILLS_KEY] });
       queryClient.invalidateQueries({ queryKey: [MY_SKILLS_KEY] });
+      queryClient.invalidateQueries({ queryKey: [SKILL_COUNTS_KEY] });
     },
   });
 }

@@ -73,7 +73,11 @@ export function useSkillDetail(idOrName: string | undefined) {
   const versionParam = searchParams.get("version") ?? undefined;
   const { data: skill, isLoading, error, refetch } = useSkill(idOrName ?? "", versionParam);
   const { data: versionList = [] } = useSkillVersions(idOrName ?? "");
-  const deleteMutation = useDeleteSkill();
+  // Two-id split (#940): wire the GUID (delete route is GUID-only) but
+  // pass the cache-key id (idOrName, often a NAME from the URL) so the
+  // deleted skill's detail/versions cache is removed before the broad
+  // list invalidation can refetch it → 404.
+  const deleteMutation = useDeleteSkill(skill?.guid ?? "", idOrName ?? "");
   const updatePackageMutation = useUpdateSkillPackage(skill?.guid ?? "");
   // Two-id split (#750): wire the GUID (version-write routes are GUID-only)
   // but keep the cache-key id (idOrName) for invalidation.
@@ -305,7 +309,7 @@ export function useSkillDetail(idOrName: string | undefined) {
   const handleDeleteConfirm = useCallback(async () => {
     if (!skill) return;
     try {
-      await deleteMutation.mutateAsync(skill.guid);
+      await deleteMutation.mutateAsync();
       addToast({ type: "success", message: t("skillDetail.deleteSuccess") });
       navigate("/registry");
     } catch {

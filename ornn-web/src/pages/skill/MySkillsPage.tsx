@@ -46,7 +46,13 @@ export function MySkillsPage() {
 
   const debouncedSearch = useDebounce(searchInput, 300);
 
-  const deleteMutation = useDeleteSkill();
+  // Two-id split (#940): the list has no URL idOrName, so pass the card's
+  // own ids — `guid` on the wire (delete route is GUID-only), `name` as
+  // the cache-key id so the deleted skill's detail cache (which other
+  // surfaces may have keyed by name) is removed, not refetched → 404.
+  // `skillToDelete` is set before the confirm; the closed-over ids are
+  // current at mutateAsync() time.
+  const deleteMutation = useDeleteSkill(skillToDelete?.guid ?? "", skillToDelete?.name ?? "");
 
   const { data, isLoading } = useMySkills({
     query: debouncedSearch || undefined,
@@ -63,7 +69,7 @@ export function MySkillsPage() {
   const handleDeleteConfirm = async () => {
     if (!skillToDelete) return;
     try {
-      await deleteMutation.mutateAsync(skillToDelete.guid);
+      await deleteMutation.mutateAsync();
       addToast({ type: "success", message: t("mySkills.deleteSuccess") });
     } catch {
       addToast({ type: "error", message: t("mySkills.deleteFailed") });
