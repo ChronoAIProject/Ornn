@@ -21,6 +21,7 @@
  */
 
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test";
+import JSZip from "jszip";
 import { startHarness, authHeaders, type Harness } from "./harness";
 
 const OWNER = "user_crud_owner";
@@ -151,5 +152,69 @@ describe("integration: skills CRUD lifecycle spine", () => {
     expect(delRes.status).toBe(200);
     const after = await harness.db.collection("skills").countDocuments({ _id: GUID as never });
     expect(after).toBe(0);
+  });
+});
+
+/**
+ * #632 — server-side zip-bomb guard at the ingestion chokepoint.
+ *
+ * The guard now lives inside `SkillService.createSkill`, so it covers the
+ * raw upload route (`POST /api/v1/skills`) AND the GitHub pull path that
+ * bypasses the route. These end-to-end cases POST real synthetic bombs
+ * through the actual route → service stack and assert the 413 RFC-7807
+ * problem body — without ever touching chrono-storage, because the guard
+ * short-circuits BEFORE the storage upload (the harness points
+ * chrono-storage at an unreachable URL).
+ *
+ * Both fixtures compress to a tiny payload (highly-compressible content),
+ * so the cheap route-level `maxFileSize` early-out (10 MiB compressed in
+ * the harness) is cleared and the UNCOMPRESSED-side guard is what fires.
+ */
+describe("integration: zip-bomb guard at POST /skills (#632)", () => {
+  const headers = authHeaders({
+    userId: "user_bomb",
+    email: "user_bomb@test.local",
+    permissions: ["ornn:skill:create"],
+  });
+  const zipHeaders = { ...headers, "content-type": "application/zip" };
+
+  test("a >50 MiB-uncompressed ZIP → 413 uncompressed_too_large", async () => {
+    // SKILL.md + one 60 MiB entry of NUL bytes. Deflates to a few KiB, so
+    // the compressed body clears the route's maxFileSize check; the 60 MiB
+    // uncompressed size trips the per-entry / cumulative cap (both surface
+    // the same `uncompressed_too_large` code).
+    const zip = new JSZip();
+    const folder = zip.folder("bomb-skill")!;
+    folder.file("SKILL.md", "---\nname: bomb-skill\n---\nbody");
+    folder.file("assets/zeros.bin", "\0".repeat(60 * 1024 * 1024));
+    const bytes = await zip.generateAsync({ type: "uint8array", compression: "DEFLATE" });
+
+    const res = await harness.app.request("/api/v1/skills", {
+      method: "POST",
+      headers: zipHeaders,
+      body: bytes,
+    });
+    expect(res.status).toBe(413);
+    const body = (await res.json()) as { code: string };
+    expect(body.code).toBe("uncompressed_too_large");
+  });
+
+  test("a >1000-entry ZIP → 413 too_many_files", async () => {
+    const zip = new JSZip();
+    const folder = zip.folder("many-files-skill")!;
+    folder.file("SKILL.md", "---\nname: many-files-skill\n---\nbody");
+    for (let i = 0; i < 1001; i++) {
+      folder.file(`assets/f${i}.txt`, `c${i}`);
+    }
+    const bytes = await zip.generateAsync({ type: "uint8array", compression: "DEFLATE" });
+
+    const res = await harness.app.request("/api/v1/skills", {
+      method: "POST",
+      headers: zipHeaders,
+      body: bytes,
+    });
+    expect(res.status).toBe(413);
+    const body = (await res.json()) as { code: string };
+    expect(body.code).toBe("too_many_files");
   });
 });

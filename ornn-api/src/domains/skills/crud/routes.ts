@@ -26,7 +26,6 @@ import { validateBody, getValidatedBody } from "../../../middleware/validate";
 import { AppError } from "../../../shared/types/index";
 import { canReadSkill, canManageSkill, buildActorContext } from "./authorize";
 import { parseGithubUrl } from "./utils/githubPull";
-import { enforceZipLimits } from "../../../shared/utils/zipLimits";
 import { rateLimit } from "../../../middleware/rateLimit";
 import { createLogger } from "../../../shared/logger";
 const deprecationPatchSchema = z.object({
@@ -282,12 +281,11 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
 
       const zipBuffer = new Uint8Array(body);
 
-      // Zip-bomb defense (#633). Walks the central directory without
-      // extracting; throws 413 (`uncompressed_too_large` / `too_many_files`
-      // / `invalid_zip`) before validateZipFormat / storage upload /
-      // AgentSeal subprocess. Cheap, runs ahead of every expensive
-      // side-effect.
-      await enforceZipLimits(zipBuffer);
+      // Zip-bomb defense (#632/#633) now runs at the service ingestion
+      // chokepoint (`createSkill`), so it also covers the GitHub pull
+      // path that bypasses this route. The cheap compressed-size early-out
+      // above (`body.byteLength > maxFileSize`) stays here to reject
+      // oversized payloads before we even allocate the buffer.
 
       const userEmail = authCtx.email || undefined;
       const userDisplayName = authCtx.displayName || undefined;
@@ -993,12 +991,10 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
         throw AppError.badRequest("no_update", "No update data provided. Send a ZIP file and/or isPrivate field.");
       }
 
-      // Zip-bomb defense (#633) — same gate as the create path. Only
-      // when a ZIP is actually being replaced; a privacy-only PUT
-      // doesn't hit this.
-      if (zipBuffer !== undefined) {
-        await enforceZipLimits(zipBuffer);
-      }
+      // Zip-bomb defense (#632/#633) now runs at the service chokepoint
+      // (`updateSkill`, only when a ZIP is actually being replaced), so it
+      // also covers the GitHub refresh path that bypasses this route. The
+      // cheap compressed-size early-out above stays here.
 
       logger.info({ guid, userId: authCtx.userId }, "Skill update via API");
       const result = await skillService.updateSkill(guid, authCtx.userId, {

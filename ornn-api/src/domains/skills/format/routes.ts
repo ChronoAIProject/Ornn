@@ -16,7 +16,6 @@ import {
 } from "../../../middleware/nyxidAuth";
 import { AppError } from "../../../shared/types/index";
 import { skillFrontmatterSchema } from "../../../shared/schemas/skillFrontmatter";
-import { enforceZipLimits } from "../../../shared/utils/zipLimits";
 
 /** Canonical skill format rules per the ornn platform spec. Updated with output-type. */
 export const SKILL_FORMAT_RULES = `# Ornn Skill Package Format Rules
@@ -146,11 +145,14 @@ export function createFormatRoutes(config: FormatRoutesConfig): Hono<{ Variables
 
       const zipBuffer = new Uint8Array(body);
 
-      // Zip-bomb defense (#633) — same gate as the publish path. The
+      // Zip-bomb defense (#632/#633) — same caps as the publish path. The
       // /skill-format/validate endpoint is authenticated but otherwise
       // unrestricted, so an attacker can still slow us down here with
-      // pathological ZIPs unless we cap before extraction.
-      await enforceZipLimits(zipBuffer);
+      // pathological ZIPs unless we cap before extraction. This is a
+      // standalone read path (no create/update service seam), so we call
+      // the service's public guard, which applies the SAME env-driven caps
+      // the ingestion chokepoint uses.
+      await skillService.enforceZipLimits(zipBuffer);
 
       // `validateZipFormat` returns the full list of rule violations.
       // An empty array means the package is valid; anything non-empty is what
