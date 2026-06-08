@@ -773,6 +773,7 @@
     "languageChinese": "中文",
     "launchPopup": {
       "eyebrow": "[§ LAUNCH — ORNN]",
+      "bannerTitle": "Free launch credits for early users",
       "date": "2026 · 05 · 13",
       "title": "To celebrate Ornn's official launch, we've set aside extra free credit for our users as a heartfelt thank-you.",
       "creditsLead": "First 500 users get",
@@ -1069,6 +1070,13 @@
     "noAnnouncements": "No announcements yet",
     "emptyHint": "Create the first announcement and visitors will see it on their next landing-page load.",
     "createBtn": "Create announcement"
+  },
+  "announcementBanner": {
+    "ariaLabel": "Announcements",
+    "eyebrow": "[§ ANNOUNCEMENTS]",
+    "dismissAria": "Dismiss announcement",
+    "moreCount": "+{{count}}",
+    "redeemLink": "How to redeem"
   },
   "aria": {
     "toggleLanguage": "Toggle language",

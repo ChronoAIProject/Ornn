@@ -773,6 +773,7 @@
     "languageChinese": "中文",
     "launchPopup": {
       "eyebrow": "[§ LAUNCH — ORNN]",
+      "bannerTitle": "早期用户专享上线额度",
       "date": "2026 · 05 · 13",
       "title": "为庆祝 Ornn 正式上线，我们特别为用户准备了额外的免费使用额度，以表达我们诚挚的感谢。",
       "creditsLead": "前 500 位用户可免费领取",
@@ -1069,6 +1070,13 @@
     "noAnnouncements": "暂无公告",
     "emptyHint": "创建第一条公告后，访客下次加载落地页时就会看到。",
     "createBtn": "创建公告"
+  },
+  "announcementBanner": {
+    "ariaLabel": "公告",
+    "eyebrow": "[§ 公告]",
+    "dismissAria": "忽略公告",
+    "moreCount": "+{{count}}",
+    "redeemLink": "如何兑换"
   },
   "aria": {
     "toggleLanguage": "切换语言",
