@@ -36,7 +36,7 @@ The pre-#585 `SCREAMING_SNAKE_CASE` shape (`SKILL_NOT_FOUND`, `INVALID_BODY`, �
 ## validation_error
 
 **HTTP:** `400 Bad Request`
-**Common subcodes (lowercase post-#585):** `invalid_body`, `invalid_query`, `invalid_params`, `invalid_*` (per-field), `empty_body`, `missing_*`, `frontmatter_validation_failed`, `invalid_permissions`, …
+**Common subcodes (lowercase post-#585):** `invalid_body`, `invalid_query`, `invalid_params`, `invalid_*` (per-field), `empty_body`, `missing_*`, `frontmatter_validation_failed`, `invalid_permissions`, `invalid_zip`, …
 
 Request body, query string, or path parameter failed validation. Per-field details are in `errors[]`.
 
@@ -58,6 +58,12 @@ Content-Type: application/problem+json
 ```
 
 **Client action:** fix the offending field(s) listed in `errors[]` and retry. Do not retry the same payload without changes.
+
+### invalid_zip
+
+The uploaded payload is not a parseable ZIP — a malformed or unreadable archive.
+
+**Client action:** re-create the ZIP and re-upload; do not retry the same bytes.
 
 ---
 
@@ -108,11 +114,23 @@ The request collides with current state — a duplicate skill name on create, a 
 ## payload_too_large
 
 **HTTP:** `413 Payload Too Large`
-**Common subcodes (lowercase post-#585):** `payload_too_large`
+**Common subcodes (lowercase post-#585):** `payload_too_large`, `uncompressed_too_large`, `too_many_files`
 
 The upload exceeds the per-endpoint size cap (currently 5 MB on `/skills` upload; see `ornn-api/src/middleware/uploadLimit.ts`).
 
 **Client action:** trim the payload (smaller ZIP, fewer attachments) or split into multiple requests where the endpoint supports it.
+
+### uncompressed_too_large
+
+The uploaded skill ZIP's cumulative or per-entry **uncompressed** size exceeds the server cap (`MAX_PACKAGE_UNCOMPRESSED_BYTES`, default 50 MiB / `MAX_ENTRY_UNCOMPRESSED_BYTES`, default 25 MiB), or its compression ratio exceeds `MAX_COMPRESSION_RATIO` (default 100×) — a zip-bomb guard.
+
+**Client action:** reduce the unpacked size of the archive contents; do not retry the same ZIP.
+
+### too_many_files
+
+The skill ZIP contains more entries than `MAX_PACKAGE_FILE_COUNT` (default 1000).
+
+**Client action:** prune unneeded files from the archive and re-upload.
 
 ---
 

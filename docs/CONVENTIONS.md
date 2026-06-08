@@ -88,8 +88,11 @@ Optional: `detail`, `errors[]`.
 | Code | HTTP | Meaning |
 |---|---|---|
 | `validation_error` | 400 | Body / query / path param validation failed — details in `errors[]` |
+| `invalid_zip` | 400 | Uploaded payload is not a parseable ZIP (malformed / unreadable) |
 | `unsupported_media_type` | 415 | Request `Content-Type` not accepted |
 | `payload_too_large` | 413 | Upload exceeds max size |
+| `uncompressed_too_large` | 413 | Uncompressed size or compression ratio of skill ZIP exceeds caps (zip-bomb guard) |
+| `too_many_files` | 413 | Skill ZIP entry count exceeds `MAX_PACKAGE_FILE_COUNT` |
 | `authentication_required` | 401 | No valid identity |
 | `permission_denied` | 403 | Authenticated but lacks required permission |
 | `resource_not_found` | 404 | Target resource does not exist or not visible to caller |
