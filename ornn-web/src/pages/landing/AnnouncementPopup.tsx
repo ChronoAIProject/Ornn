@@ -127,22 +127,17 @@ export function AnnouncementPopup() {
   return createPortal(
     <AnimatePresence>
       {open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
+        // Anchored to the top-right corner (below the 64px navbar) as a
+        // non-blocking notification card — no page-dimming backdrop, so the
+        // hero + lifecycle ring stay visible and interactive. Dismiss via the
+        // X / Dismiss buttons or Escape.
+        <div className="pointer-events-none fixed inset-0 z-50 flex items-start justify-end p-4 pt-20 sm:pr-6 sm:pt-24">
           <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.18 }}
-            className="absolute inset-0 bg-black/60 backdrop-blur-[2px]"
-            onClick={close}
-          />
-          <motion.div
-            initial={{ opacity: 0, y: 12, scale: 0.97 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 12, scale: 0.97 }}
-            transition={{ type: "spring", stiffness: 220, damping: 22, mass: 0.9 }}
+            initial={{ opacity: 0, x: 28, scale: 0.98 }}
+            animate={{ opacity: 1, x: 0, scale: 1 }}
+            exit={{ opacity: 0, x: 28, scale: 0.98 }}
+            transition={{ type: "spring", stiffness: 240, damping: 24, mass: 0.9 }}
             role="dialog"
-            aria-modal="true"
             aria-labelledby="announcement-title"
             // exactOptionalPropertyTypes (#657): framer-motion's
             // `MotionStyle` rejects React.CSSProperties under the
@@ -150,9 +145,9 @@ export function AnnouncementPopup() {
             // Cast to `never` to bridge — runtime shape is unchanged.
             style={INK_OVERRIDES as unknown as never}
             className="
-              relative z-10 mx-4 w-full max-w-lg max-h-[80vh] overflow-y-auto
+              pointer-events-auto relative w-full max-w-md max-h-[82vh] overflow-y-auto
               rounded-[3px] border border-[var(--color-ember-deep)] bg-accent
-              p-7 sm:p-8
+              p-6 sm:p-8
             "
             // Letterpress impression in ember-deep — DESIGN.md Material &
             // Print Vocabulary. Inline because the popup uses a one-off
