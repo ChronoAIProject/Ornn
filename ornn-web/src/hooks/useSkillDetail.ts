@@ -75,8 +75,10 @@ export function useSkillDetail(idOrName: string | undefined) {
   const { data: versionList = [] } = useSkillVersions(idOrName ?? "");
   const deleteMutation = useDeleteSkill();
   const updatePackageMutation = useUpdateSkillPackage(skill?.guid ?? "");
-  const deprecationMutation = useSetVersionDeprecation(idOrName ?? "");
-  const deleteVersionMutation = useDeleteSkillVersion(idOrName ?? "");
+  // Two-id split (#750): wire the GUID (version-write routes are GUID-only)
+  // but keep the cache-key id (idOrName) for invalidation.
+  const deprecationMutation = useSetVersionDeprecation(skill?.guid ?? "", idOrName ?? "");
+  const deleteVersionMutation = useDeleteSkillVersion(skill?.guid ?? "", idOrName ?? "");
   const { data: auditSummaryByVersion } = useAuditSummaryByVersion(idOrName);
   // History for the version currently being viewed, so the audit card
   // can detect an in-flight (status: running) audit and show a loading

@@ -207,8 +207,17 @@ export function useSkillVersionDiff(
   });
 }
 
-/** Toggle the deprecation flag on a specific published version. */
-export function useSetVersionDeprecation(idOrName: string) {
+/**
+ * Toggle the deprecation flag on a specific published version.
+ *
+ * Two-id split (#750): `guid` is the WIRE id — version-write routes are
+ * GUID-only (CONVENTIONS §2.2), so a name-opened Skill Detail must still
+ * send the GUID or the backend 404s. `idOrName` is the CACHE-KEY id —
+ * the read queries (`useSkill`, `useSkillVersions`) are keyed on
+ * `idOrName`, so invalidation MUST stay keyed on it (#699's All-versions
+ * modal refresh re-breaks otherwise).
+ */
+export function useSetVersionDeprecation(guid: string, idOrName: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({
@@ -220,7 +229,7 @@ export function useSetVersionDeprecation(idOrName: string) {
       isDeprecated: boolean;
       // exactOptionalPropertyTypes (#657)
       deprecationNote?: string | undefined;
-    }) => setSkillVersionDeprecation(idOrName, version, { isDeprecated, deprecationNote }),
+    }) => setSkillVersionDeprecation(guid, version, { isDeprecated, deprecationNote }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [SKILLS_KEY, idOrName] });
       queryClient.invalidateQueries({ queryKey: [SKILL_VERSIONS_KEY, idOrName] });
@@ -374,11 +383,17 @@ export function useDeleteSkill() {
 /**
  * Delete one non-latest version of a skill. Refreshes the skill itself,
  * its versions list, and the audit history (which is keyed per version).
+ *
+ * Two-id split (#750): `guid` is the WIRE id — version-write routes are
+ * GUID-only (CONVENTIONS §2.2), so a name-opened Skill Detail must still
+ * send the GUID or the backend 404s and the version is never deleted.
+ * `idOrName` is the CACHE-KEY id — ALL invalidation below stays keyed on
+ * it so the read queries (and #699's All-versions modal) refresh.
  */
-export function useDeleteSkillVersion(idOrName: string) {
+export function useDeleteSkillVersion(guid: string, idOrName: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (version: string) => deleteSkillVersion(idOrName, version),
+    mutationFn: (version: string) => deleteSkillVersion(guid, version),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [SKILLS_KEY, idOrName] });
       queryClient.invalidateQueries({ queryKey: [SKILLS_KEY] });
