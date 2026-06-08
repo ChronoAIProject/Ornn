@@ -43,25 +43,12 @@ import {
 import { SkillVersionsCard } from "@/components/skill/SkillVersionsCard";
 import { SkillVisibilityCard } from "@/components/skill/SkillVisibilityCard";
 import { useSkillDetail } from "@/hooks/useSkillDetail";
+import { formatDateSGT } from "@/utils/formatters";
 import { useTranslation } from "react-i18next";
-
-/** Format a date string to exact SGT (Asia/Singapore) timestamp. */
-function formatDateSGT(dateStr: string): string {
-  const date = new Date(dateStr);
-  return date.toLocaleString("en-SG", {
-    timeZone: "Asia/Singapore",
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  });
-}
 
 export function SkillDetailPage() {
   const { idOrName } = useParams<{ idOrName: string }>();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const addToast = useToastStore((s) => s.addToast);
   const detail = useSkillDetail(idOrName);
@@ -320,7 +307,7 @@ export function SkillDetailPage() {
                 {versionAuditRunning
                   ? t("skillDetail.auditRunningHint", "Scoring against the audit engine — this usually takes 30–60 seconds.")
                   : versionAudit?.completedAt
-                    ? t("skillDetail.auditLast", "Last audited {{date}}", { date: formatDateSGT(versionAudit.completedAt) })
+                    ? t("skillDetail.auditLast", "Last audited {{date}}", { date: formatDateSGT(versionAudit.completedAt, i18n.language) })
                     : t("skillDetail.auditNoneYet", "Not audited yet for this version.")}
               </p>
               <div className="mt-3.5 flex flex-col gap-2">
@@ -365,7 +352,7 @@ export function SkillDetailPage() {
             {versionList.length > 0 && (
               <SkillVersionsCard
                 currentVersion={skill.version}
-                publishedOnSGT={formatDateSGT(skill.createdOn)}
+                publishedOnSGT={formatDateSGT(skill.createdOn, i18n.language)}
                 totalVersions={versionList.length}
                 viewingLatest={Boolean(viewingLatest)}
                 onBrowseAll={() => setShowVersions(true)}
@@ -492,7 +479,7 @@ export function SkillDetailPage() {
                     {t("skillDetail.metaUpdated", "Updated")}
                   </dt>
                   <dd className="text-right font-mono text-xs text-strong">
-                    {formatDateSGT(skill.updatedOn)}
+                    {formatDateSGT(skill.updatedOn, i18n.language)}
                   </dd>
                 </div>
                 <div>
