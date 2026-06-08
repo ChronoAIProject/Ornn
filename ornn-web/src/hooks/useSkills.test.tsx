@@ -316,4 +316,25 @@ describe("useDeleteSkill", () => {
     expect(url).not.toContain(`/skills/${encodeURIComponent(NAME)}`);
     expect(fetchSpy.mock.calls[0]?.[1]).toMatchObject({ method: "DELETE" });
   });
+
+  it("refreshes the My-Skills sidebar facet + grants-summary counts (#941)", async () => {
+    stubDelete();
+    const { wrapper, invalidateSpy } = makeWrapper();
+    const { result } = renderHook(() => useDeleteSkill(GUID, NAME), { wrapper });
+
+    await result.current.mutateAsync();
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    // The sidebar counts come from queries no #940 invalidation touches:
+    // the "mine" tag facet and the grants summary. Both must refresh so
+    // the chip counts stay consistent after a self-delete.
+    expect(invalidatedKey(invalidateSpy, ["skill-facets", "tags", "mine"])).toBe(true);
+    expect(invalidatedKey(invalidateSpy, ["me", "skills", "grants-summary"])).toBe(true);
+
+    // Scope guard: stay narrow. A self-delete can't change the public
+    // tag facet, and the broad ["me"] prefix would needlessly refetch
+    // orgs / nyxid-services — neither must be invalidated as a literal.
+    expect(invalidatedKey(invalidateSpy, ["skill-facets", "tags", "public"])).toBe(false);
+    expect(invalidatedKey(invalidateSpy, ["me"])).toBe(false);
+  });
 });
