@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { Navbar } from "./Navbar";
 import { ToastContainer } from "@/components/ui/Toast";
 import { QuotaChip } from "@/components/quota/QuotaChip";
+import { AssistantWidget } from "@/components/assistant/AssistantWidget";
 import { useIsAuthenticated } from "@/stores/authStore";
 import { useSkill } from "@/hooks/useSkills";
 
@@ -173,6 +174,9 @@ export function RootLayout() {
         <Outlet />
       </main>
       <ToastContainer />
+      {/* Ornn Assistant — authed-only floating chatbot (#970). Renders its
+          own launcher + slide-in panel via a portal; self-guards on auth. */}
+      {isAuthenticated && <AssistantWidget />}
     </div>
   );
 }
