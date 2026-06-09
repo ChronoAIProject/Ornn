@@ -1,5 +1,50 @@
 # ornn-web
 
+## 0.11.0
+
+### Minor Changes
+
+- [#950](https://github.com/ChronoAIProject/Ornn/pull/950) [`7186430`](https://github.com/ChronoAIProject/Ornn/commit/71864301b7abe40b03f5c4307eabca6d69426622) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - feat(web): interactive skill-lifecycle orbital ring on the landing hero
+
+  Overlay an orbital "skill lifecycle" ring on the looping hero video: eight
+  agent-facing stages (search → preview → audit → install → execute → build →
+  publish → share, and back to search) around a hairline circle, with an ember
+  comet orbiting clockwise to signal the loop. Hovering / focusing / tapping a
+  stage ignites the node, draws a connector to the centre, and morphs the hub
+  into a detail card (agent-API hint + CTA) for that stage. Dark + light themes,
+  reduced-motion fallback, mobile tap support, and EN + ZH copy.
+
+  Also replace the two centred landing announcement modals with a single global
+  announcement banner: a collapsed top-right headline pill that expands on hover
+  into a dismissable stack, aggregating the hardcoded launch announcement and the
+  dynamic announcements, shown on every page.
+
+### Patch Changes
+
+- [#933](https://github.com/ChronoAIProject/Ornn/pull/933) [`cb2a3b5`](https://github.com/ChronoAIProject/Ornn/commit/cb2a3b544b9a9ba230a3eb8a2c686ee70bcf3715) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Enforce per-package line-coverage floors (api 75%, web 12% ratchet) and split the pooled Codecov flag ([#889](https://github.com/ChronoAIProject/Ornn/issues/889))
+
+- [#955](https://github.com/ChronoAIProject/Ornn/pull/955) [`523e247`](https://github.com/ChronoAIProject/Ornn/commit/523e247bcba32240c34213af575b06c8dbd38f55) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Fix version delete/deprecation 404 when Skill Detail is opened by name: the GUID-only version-write routes now always receive the skill GUID on the wire while cache invalidation stays keyed on idOrName ([#750](https://github.com/ChronoAIProject/Ornn/issues/750))
+
+- [#956](https://github.com/ChronoAIProject/Ornn/pull/956) [`c287305`](https://github.com/ChronoAIProject/Ornn/commit/c287305054b745e6510c808bd78e257bcaa06a0f) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Notification bell dropdown now refetches the list when opened, so a new broadcast reflected in the badge also appears in the list without a manual refresh ([#751](https://github.com/ChronoAIProject/Ornn/issues/751))
+
+- [#959](https://github.com/ChronoAIProject/Ornn/pull/959) [`7d89852`](https://github.com/ChronoAIProject/Ornn/commit/7d89852e289f4a8b9663d023d06472c4dc4c8716) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - skill timestamps (registry card, version list, detail page) now follow the active UI language — Chinese mode no longer shows English month names ([#752](https://github.com/ChronoAIProject/Ornn/issues/752))
+
+- [#932](https://github.com/ChronoAIProject/Ornn/pull/932) [`92b5622`](https://github.com/ChronoAIProject/Ornn/commit/92b56227d05ccc292bfe5570420ddf0a0e596119) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Resolve all 65 ESLint warnings with proper type/effect/ref fixes; compiler-only rules off pending react-compiler ([#888](https://github.com/ChronoAIProject/Ornn/issues/888))
+
+- [#957](https://github.com/ChronoAIProject/Ornn/pull/957) [`72b14b5`](https://github.com/ChronoAIProject/Ornn/commit/72b14b562ee7f06c94723bc3b1b33661816a1180) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Deleting a skill now removes its detail/versions cache (predicate covers name- and guid-keyed entries) so the page no longer refetches the deleted skill → 404 ([#940](https://github.com/ChronoAIProject/Ornn/issues/940))
+
+- [#958](https://github.com/ChronoAIProject/Ornn/pull/958) [`7e64cc9`](https://github.com/ChronoAIProject/Ornn/commit/7e64cc993d9d83ad612d8eb35032604715ed97c7) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Deleting a skill now also refreshes the My-Skills filter-sidebar facet + grants-summary counts so they stay consistent without a full-page refresh ([#941](https://github.com/ChronoAIProject/Ornn/issues/941))
+
+- [#927](https://github.com/ChronoAIProject/Ornn/pull/927) [`8d99819`](https://github.com/ChronoAIProject/Ornn/commit/8d9981909609601223ea4dc55ccd86a62e542679) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Honest vitest coverage config: v8 provider, all-files reporting over src/\*\* with justified excludes ([#884](https://github.com/ChronoAIProject/Ornn/issues/884))
+
+- [#928](https://github.com/ChronoAIProject/Ornn/pull/928) [`55187a3`](https://github.com/ChronoAIProject/Ornn/commit/55187a3317153a3130a51aa8de48ff4317260f8a) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Cover web utils and lib modules; drop two dead formatter exports ([#885](https://github.com/ChronoAIProject/Ornn/issues/885))
+
+- [#929](https://github.com/ChronoAIProject/Ornn/pull/929) [`f288580`](https://github.com/ChronoAIProject/Ornn/commit/f2885806d59e809a97b6677b6b9a5d6872188ad2) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Cover form and skeleton components; remove dead FileUpload and unused skeleton variants ([#886](https://github.com/ChronoAIProject/Ornn/issues/886))
+
+- [#930](https://github.com/ChronoAIProject/Ornn/pull/930) [`80ed642`](https://github.com/ChronoAIProject/Ornn/commit/80ed6424d405b1c7df93582274e1103f54dbd5db) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Raise page/feature component coverage; drop a dead type re-export ([#887](https://github.com/ChronoAIProject/Ornn/issues/887))
+
+- [#939](https://github.com/ChronoAIProject/Ornn/pull/939) [`5e61028`](https://github.com/ChronoAIProject/Ornn/commit/5e61028db5a79bf47eec6ed47fa05c252c44e99f) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Backfill per-component reset/derivation tests for the [#888](https://github.com/ChronoAIProject/Ornn/issues/888) effect refactors ([#931](https://github.com/ChronoAIProject/Ornn/issues/931))
+
 ## 0.10.2
 
 ### Patch Changes
