@@ -61,8 +61,10 @@ function model(
     displayName: id,
     enabledForPlayground: false,
     enabledForSkillGen: false,
+    enabledForAssistant: false,
     defaultForPlayground: false,
     defaultForSkillGen: false,
+    defaultForAssistant: false,
     removed: false,
     firstSeenAt: NOW,
     lastSyncedAt: NOW,
@@ -245,6 +247,10 @@ describe("LlmProvidersRepository.normalizeModel (read shim)", () => {
     expect(m.enabledForSkillGen).toBe(true);
     expect(m.defaultForPlayground).toBe(false);
     expect(m.defaultForSkillGen).toBe(false);
+    // #970 — a legacy doc predating the assistant surface reads back
+    // with both assistant flags defaulted to false (never auto-routes).
+    expect(m.enabledForAssistant).toBe(false);
+    expect(m.defaultForAssistant).toBe(false);
     expect(m.removed).toBe(false);
   });
 
