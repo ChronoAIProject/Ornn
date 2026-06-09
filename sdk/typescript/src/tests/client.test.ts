@@ -255,6 +255,87 @@ describe("OrnnClient", () => {
     expect(err.code).toBe("resource_not_found");
   });
 
+  test("resolveClosure(): parses the topo-ordered items envelope (#968)", async () => {
+    let capturedUrl = "";
+    const fetchMock = mockFetch((url) => {
+      capturedUrl = url;
+      return jsonResponse(200, {
+        data: {
+          items: [
+            { guid: "g-c", name: "c", version: "1.0", skillHash: "h-c", depth: 1 },
+            { guid: "g-b", name: "b", version: "1.0", skillHash: "h-b", depth: 0 },
+          ],
+        },
+        error: null,
+      });
+    });
+    const client = new OrnnClient({ baseUrl: "https://x", fetch: fetchMock });
+    const result = await client.resolveClosure("report-gen", { version: "1.0" });
+    expect(capturedUrl).toBe("https://x/api/v1/skills/report-gen/closure?version=1.0");
+    expect(result.items.map((i) => i.name)).toEqual(["c", "b"]);
+    expect(result.items[0]!.depth).toBe(1);
+  });
+
+  test("resolveClosure(): omits the version query when not provided", async () => {
+    let capturedUrl = "";
+    const fetchMock = mockFetch((url) => {
+      capturedUrl = url;
+      return jsonResponse(200, { data: { items: [] }, error: null });
+    });
+    const client = new OrnnClient({ baseUrl: "https://x", fetch: fetchMock });
+    await client.resolveClosure("report-gen");
+    expect(capturedUrl).toBe("https://x/api/v1/skills/report-gen/closure");
+  });
+
+  test("resolveClosure(): throws OrnnError on dependency_cycle (409)", async () => {
+    const fetchMock = mockFetch(() =>
+      jsonResponse(409, {
+        type: "https://github.com/.../ERRORS.md#resource_conflict",
+        title: "Conflict",
+        status: 409,
+        code: "dependency_cycle",
+        detail: "cycle at a@1.0",
+      }),
+    );
+    const client = new OrnnClient({ baseUrl: "https://x", fetch: fetchMock });
+    const err = (await client.resolveClosure("a").catch((e) => e)) as OrnnError;
+    expect(err).toBeInstanceOf(OrnnError);
+    expect(err.status).toBe(409);
+    expect(err.code).toBe("dependency_cycle");
+  });
+
+  test("pullClosure(): downloads each package in topological order (#968)", async () => {
+    const downloadOrder: string[] = [];
+    const fetchMock = mockFetch((url) => {
+      if (url.includes("/closure")) {
+        return jsonResponse(200, {
+          data: {
+            items: [
+              { guid: "g-c", name: "c", version: "1.0", skillHash: "h-c", depth: 1 },
+              { guid: "g-b", name: "b", version: "1.0", skillHash: "h-b", depth: 0 },
+            ],
+          },
+          error: null,
+        });
+      }
+      // download path: /skills/:guid/versions/:version/download
+      const match = url.match(/\/skills\/([^/]+)\/versions\//);
+      downloadOrder.push(match?.[1] ?? "?");
+      return new Response(new Uint8Array([80, 75, 3, 4]), {
+        status: 200,
+        headers: { "Content-Type": "application/zip" },
+      });
+    });
+    const client = new OrnnClient({ baseUrl: "https://x", fetch: fetchMock });
+    const { closure, packages } = await client.pullClosure("report-gen");
+    expect(closure.items).toHaveLength(2);
+    // Downloads follow the closure order — c (deps-first) before b.
+    expect(downloadOrder).toEqual(["g-c", "g-b"]);
+    expect(packages).toHaveLength(2);
+    expect(packages[0]!.node.name).toBe("c");
+    expect(packages[0]!.bytes.byteLength).toBe(4);
+  });
+
   test("update() with metadata sends JSON body", async () => {
     let captured: { contentType: string; body: string } = { contentType: "", body: "" };
     const fetchMock = mockFetch((_url, init) => {

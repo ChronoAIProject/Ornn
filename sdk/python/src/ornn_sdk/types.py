@@ -146,6 +146,44 @@ class SkillSearchResult:
 
 
 @dataclass
+class ClosureNode:
+    """One node in a resolved dependency closure (#968).
+
+    Mirrors the items returned by
+    ``GET /api/v1/skills/{id_or_name}/closure``. Nodes arrive in
+    deps-first topological order — every dependency precedes the
+    dependents that pin it.
+    """
+
+    guid: str
+    name: str
+    version: str
+    depth: int
+    skill_hash: str | None = None
+
+    @classmethod
+    def from_dict(cls, raw: dict[str, Any]) -> ClosureNode:
+        return cls(
+            guid=raw.get("guid", ""),
+            name=raw["name"],
+            version=raw["version"],
+            depth=int(raw.get("depth", 0)),
+            skill_hash=raw.get("skillHash"),
+        )
+
+
+@dataclass
+class ClosureResult:
+    """Result of :meth:`OrnnClient.resolve_closure` — the ordered closure."""
+
+    items: list[ClosureNode]
+
+    @classmethod
+    def from_dict(cls, raw: dict[str, Any]) -> ClosureResult:
+        return cls(items=[ClosureNode.from_dict(i) for i in raw.get("items") or []])
+
+
+@dataclass
 class UpdateSkillMetadata:
     """Partial metadata update payload. Omit fields you don't want to change."""
 

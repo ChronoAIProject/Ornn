@@ -22,6 +22,8 @@
 export { OrnnClient, type OrnnClientOptions } from "./client";
 export { OrnnError, type OrnnErrorPayload } from "./errors";
 export type {
+  ClosureNode,
+  ClosureResult,
   PublishOptions,
   SearchScope,
   SkillDetail,

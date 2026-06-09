@@ -88,6 +88,26 @@ export interface SkillSearchResult {
   };
 }
 
+/**
+ * One node in a resolved dependency closure (#968). Mirrors the items
+ * returned by `GET /api/v1/skills/:idOrName/closure`. Nodes arrive in
+ * deps-first topological order — every dependency precedes the
+ * dependents that pin it, so installing in array order is always safe.
+ */
+export interface ClosureNode {
+  readonly guid: string;
+  readonly name: string;
+  readonly version: string;
+  readonly skillHash?: string;
+  /** 0 for the skill's direct dependencies; deeper for transitive deps. */
+  readonly depth: number;
+}
+
+/** Result of {@link OrnnClient.resolveClosure} — the ordered closure. */
+export interface ClosureResult {
+  readonly items: readonly ClosureNode[];
+}
+
 export interface UpdateSkillMetadata {
   readonly name?: string;
   readonly description?: string;
