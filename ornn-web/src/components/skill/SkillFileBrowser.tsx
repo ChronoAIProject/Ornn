@@ -5,7 +5,7 @@
  * @module components/skill/SkillFileBrowser
  */
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { FileTree, type FileNode } from "@/components/editor/FileTree";
@@ -112,23 +112,27 @@ export function SkillFileBrowser({ skillId, version, isOwner }: SkillFileBrowser
   const { data, isLoading, error } = useFileTree(skillId, version);
   const updateFile = useUpdateFile(skillId, version);
 
-  const [selectedFileId, setSelectedFileId] = useState<string | undefined>();
+  // `undefined` = no explicit user pick yet → fall back to the default
+  // file derived from the tree. A user click sets it explicitly.
+  const [userSelectedFileId, setUserSelectedFileId] = useState<string | undefined>();
   const [editedContent, setEditedContent] = useState<string | null>(null);
 
   const treeNodes = data ? buildFileTreeFromEntries(data.tree) : [];
   const contents = data?.contents ?? {};
 
-  // Select default file when data loads
-  useEffect(() => {
-    if (treeNodes.length > 0 && !selectedFileId) {
-      setSelectedFileId(findDefaultFile(treeNodes));
-    }
-  }, [data]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Derived selection — the user's explicit pick, else the default file
+  // for the loaded tree. Derive-during-render rather than seeding via an
+  // effect avoids the cascading render (#888).
+  const selectedFileId =
+    userSelectedFileId ?? (treeNodes.length > 0 ? findDefaultFile(treeNodes) : undefined);
 
-  // Reset edited content when switching files
-  useEffect(() => {
+  // Reset edited content when switching files, using the "adjust state
+  // during render" guard rather than an effect (#888).
+  const [prevSelectedFileId, setPrevSelectedFileId] = useState(selectedFileId);
+  if (selectedFileId !== prevSelectedFileId) {
+    setPrevSelectedFileId(selectedFileId);
     setEditedContent(null);
-  }, [selectedFileId]);
+  }
 
   const isViewable = selectedFileId ? selectedFileId in contents : false;
   const isEditable = isOwner && selectedFileId ? isEditablePath(selectedFileId) : false;
@@ -138,7 +142,7 @@ export function SkillFileBrowser({ skillId, version, isOwner }: SkillFileBrowser
 
   const handleFileSelect = useCallback((node: FileNode) => {
     if (node.type === "file") {
-      setSelectedFileId(node.id);
+      setUserSelectedFileId(node.id);
     }
   }, []);
 

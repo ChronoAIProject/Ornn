@@ -773,6 +773,7 @@
     "languageChinese": "中文",
     "launchPopup": {
       "eyebrow": "[§ LAUNCH — ORNN]",
+      "bannerTitle": "Free launch credits for early users",
       "date": "2026 · 05 · 13",
       "title": "To celebrate Ornn's official launch, we've set aside extra free credit for our users as a heartfelt thank-you.",
       "creditsLead": "First 500 users get",
@@ -808,6 +809,71 @@
       "subheadStatic": "The skill life-cycle manager for AI agents — search, install, build, publish, audit. One platform, every runtime.",
       "finalLine1": "Your product. Your agent.",
       "finalLine2": "Fully equipped."
+    },
+    "lifecycle": {
+      "ariaRing": "Skill lifecycle — eight stages from search to share",
+      "ariaNode": "{{index}} {{name}} — show details",
+      "hubTitle": "Skill lifecycle",
+      "hubSubtitle": "One agent-facing API, from first search to shared skill — every runtime.",
+      "hubHint": "Hover or tap a stage",
+      "stages": {
+        "search": {
+          "name": "Search",
+          "title": "Find the right skill",
+          "body": "Your agent queries the registry by capability, tag, or natural language — and finds the skill before writing a line of glue code.",
+          "hint": "GET /api/v1/skills?q=pdf-export",
+          "cta": "Browse the registry"
+        },
+        "preview": {
+          "name": "Preview",
+          "title": "Inspect before you commit",
+          "body": "Read the SKILL.md, manifest, versions, and examples up front — know exactly what will run, no install required.",
+          "hint": "GET /api/v1/skills/:id",
+          "cta": "See an example"
+        },
+        "audit": {
+          "name": "Audit",
+          "title": "Versioned & audited",
+          "body": "Every release carries provenance, declared permissions, and a reviewable diff — so your agent only pulls what you trust.",
+          "hint": "GET /api/v1/skills/:id/audit",
+          "cta": "How auditing works"
+        },
+        "install": {
+          "name": "Install",
+          "title": "Pull on demand",
+          "body": "Install a pinned, reproducible skill straight into your agent — model-agnostic, with no lock-in and no copy-paste.",
+          "hint": "POST /api/v1/installs",
+          "cta": "Read the install guide"
+        },
+        "execute": {
+          "name": "Execute",
+          "title": "Run in a sandbox",
+          "body": "Execute the skill in an isolated runtime (Node + Python), NyxID-gated for anything that needs credentials.",
+          "hint": "POST /api/v1/execute",
+          "cta": "Open the playground"
+        },
+        "build": {
+          "name": "Build",
+          "title": "Generate from a prompt",
+          "body": "Describe a skill in plain English; ornn-build drafts a working SKILL.md you can iterate on and sandbox.",
+          "hint": "POST /api/v1/skills/generate",
+          "cta": "Build a skill"
+        },
+        "publish": {
+          "name": "Publish",
+          "title": "Publish in seconds",
+          "body": "Push to the registry and it goes live — versioned, audited, and ready for any agent to pull.",
+          "hint": "POST /api/v1/skills",
+          "cta": "Start publishing"
+        },
+        "share": {
+          "name": "Share",
+          "title": "Share anywhere",
+          "body": "Hand it to your team or the world. The open skill format travels across Claude, GPT, Gemini, and custom agents.",
+          "hint": "skill · open format · any agent",
+          "cta": "Browse shared skills"
+        }
+      }
     },
     "why": {
       "headlineLine1": "Stop copy-pasting prompts.",
@@ -1004,6 +1070,13 @@
     "noAnnouncements": "No announcements yet",
     "emptyHint": "Create the first announcement and visitors will see it on their next landing-page load.",
     "createBtn": "Create announcement"
+  },
+  "announcementBanner": {
+    "ariaLabel": "Announcements",
+    "eyebrow": "[§ ANNOUNCEMENTS]",
+    "dismissAria": "Dismiss announcement",
+    "moreCount": "+{{count}}",
+    "redeemLink": "How to redeem"
   },
   "aria": {
     "toggleLanguage": "Toggle language",

@@ -14,6 +14,7 @@ import { describe, expect, test } from "bun:test";
 import JSZip from "jszip";
 import { AppError } from "../types/index";
 import {
+  DEFAULT_MAX_COMPRESSION_RATIO,
   DEFAULT_MAX_TOTAL_UNCOMPRESSED_BYTES,
   enforceZipLimits,
 } from "./zipLimits";
@@ -165,5 +166,36 @@ describe("enforceZipLimits (#633)", () => {
   test("defaults: 50 MiB / 25 MiB / 1000 files — sanity check the constants", async () => {
     // Verify the exported constant is what the issue scope said.
     expect(DEFAULT_MAX_TOTAL_UNCOMPRESSED_BYTES).toBe(50 * 1024 * 1024);
+  });
+
+  test("default compression ratio is 100 (#632 regression guard)", () => {
+    // #632 bumped the no-arg fallback 50→100 to match criterion #4
+    // (">100 flags"). Lock it so a future tweak to the constant is a
+    // deliberate, test-breaking change rather than a silent drift.
+    expect(DEFAULT_MAX_COMPRESSION_RATIO).toBe(100);
+  });
+
+  test("a >100× synthetic bomb trips with NO cfg (default ratio fires)", async () => {
+    // 8 MiB of zeros deflates to ~8 KiB (~1000× on its own — deflate's
+    // per-block ceiling is ~1032:1). 5 KiB of random filler can't be
+    // compressed, so it pushes the total compressed buffer comfortably
+    // past the 4 KiB ratio-check floor while barely denting the aggregate
+    // ratio (still well above 100×). Caps are left at defaults (no cfg
+    // arg) so this asserts the baked-in fallback — not a passed-in
+    // override — catches the bomb. 8 MiB stays under the 50 MiB / 25 MiB
+    // size caps so the RATIO check is what fires, not the size caps.
+    const zeros = new Uint8Array(8 * 1024 * 1024);
+    const filler = new Uint8Array(5 * 1024);
+    crypto.getRandomValues(filler);
+    const zip = await buildZip({
+      "skill/SKILL.md": "tiny",
+      "skill/assets/zeros.bin": zeros,
+      "skill/assets/filler.bin": filler,
+    });
+    await expectAppError(enforceZipLimits(zip), {
+      status: 413,
+      code: "uncompressed_too_large",
+      messagePattern: /compression ratio.*exceeds 100.*zip-bomb signature/,
+    });
   });
 });

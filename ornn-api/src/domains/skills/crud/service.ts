@@ -6,7 +6,7 @@
 
 import { createHash } from "node:crypto";
 import { randomUUID } from "node:crypto";
-import type { SkillRepository } from "./repository";
+import type { SkillRepository, UpdateSkillData } from "./repository";
 import type { SkillVersionRepository } from "./skillVersionRepository";
 import type { IStorageClient } from "../../../clients/storageClient";
 import type { SkillDocument, SkillMetadata, SkillDetailResponse, SkillVersionDocument, SkillSource } from "../../../shared/types/index";
@@ -36,6 +36,7 @@ import {
   SKILL_NAME_MAX,
 } from "../../../shared/schemas/skillFrontmatter";
 import { resolveZipRoot } from "../../../shared/utils/zip";
+import { enforceZipLimits, type ZipLimitsConfig } from "../../../shared/utils/zipLimits";
 import { parseVersion, isGreater } from "./version";
 import { diffSkillInterface, type InterfaceChange } from "./interfaceDiff";
 import type { AnalyticsEmitter } from "../../../infra/analytics";
@@ -127,6 +128,17 @@ export interface SkillServiceDeps {
    * never block the publish path.
    */
   agentsealScanner?: IAgentSealScanner;
+
+  // ---- Zip-bomb defense caps (#632) — env-overridable. ----
+  // Threaded down from `loadConfig()` so the ingestion chokepoint
+  // (`createSkill` / `updateSkill`, which every upload + GitHub
+  // pull/refresh funnels through) enforces the same caps the route layer
+  // used to. All optional (exactOptionalPropertyTypes): when omitted the
+  // guard falls back to the baked-in defaults in `zipLimits.ts`.
+  maxPackageUncompressedBytes?: number;
+  maxEntryUncompressedBytes?: number;
+  maxPackageFileCount?: number;
+  maxCompressionRatio?: number;
 }
 
 export class SkillService {
@@ -137,6 +149,11 @@ export class SkillService {
   // exactOptionalPropertyTypes (#657): widen to `T | undefined`.
   private readonly analyticsEmitter: AnalyticsEmitter | undefined;
   private readonly agentsealScanner: IAgentSealScanner | undefined;
+  // Zip-bomb caps (#632) — undefined means "use zipLimits.ts defaults".
+  private readonly maxPackageUncompressedBytes: number | undefined;
+  private readonly maxEntryUncompressedBytes: number | undefined;
+  private readonly maxPackageFileCount: number | undefined;
+  private readonly maxCompressionRatio: number | undefined;
 
   constructor(deps: SkillServiceDeps) {
     this.skillRepo = deps.skillRepo;
@@ -145,6 +162,50 @@ export class SkillService {
     this.storageBucketResolver = deps.storageBucketResolver;
     this.analyticsEmitter = deps.analyticsEmitter;
     this.agentsealScanner = deps.agentsealScanner;
+    this.maxPackageUncompressedBytes = deps.maxPackageUncompressedBytes;
+    this.maxEntryUncompressedBytes = deps.maxEntryUncompressedBytes;
+    this.maxPackageFileCount = deps.maxPackageFileCount;
+    this.maxCompressionRatio = deps.maxCompressionRatio;
+  }
+
+  /**
+   * Map the configured caps onto the `ZipLimitsConfig` shape consumed by
+   * `enforceZipLimits`. Any cap left undefined falls through to the
+   * baked-in default inside `zipLimits.ts` (50 MiB / 25 MiB / 1000 / 100×).
+   *
+   * exactOptionalPropertyTypes (#657): build the object conditionally so
+   * we never assign `undefined` to an optional field — `enforceZipLimits`
+   * already `?? DEFAULT`s any missing key.
+   */
+  private zipLimitsConfig(): ZipLimitsConfig {
+    const cfg: ZipLimitsConfig = {};
+    if (this.maxPackageUncompressedBytes !== undefined) {
+      cfg.maxTotalUncompressedBytes = this.maxPackageUncompressedBytes;
+    }
+    if (this.maxEntryUncompressedBytes !== undefined) {
+      cfg.maxEntryUncompressedBytes = this.maxEntryUncompressedBytes;
+    }
+    if (this.maxPackageFileCount !== undefined) {
+      cfg.maxFileCount = this.maxPackageFileCount;
+    }
+    if (this.maxCompressionRatio !== undefined) {
+      cfg.maxCompressionRatio = this.maxCompressionRatio;
+    }
+    return cfg;
+  }
+
+  /**
+   * Public zip-bomb guard for standalone read paths that don't flow
+   * through `createSkill`/`updateSkill` — today only the
+   * `POST /skill-format/validate` endpoint, which parses a ZIP without
+   * persisting it. Delegates to {@link enforceZipLimits} with the same
+   * env-driven caps the ingestion chokepoint uses, so the validate path
+   * can't be slowed down by a pathological ZIP that the publish path
+   * would reject. Throws `AppError.payloadTooLarge` (413) on any
+   * violation; `invalid_zip` (400) on an unparseable buffer.
+   */
+  async enforceZipLimits(zipBuffer: Uint8Array): Promise<void> {
+    await enforceZipLimits(zipBuffer, this.zipLimitsConfig());
   }
 
   async createSkill(
@@ -160,6 +221,16 @@ export class SkillService {
       source?: import("../../../shared/types/index").SkillSource | undefined;
     },
   ): Promise<{ guid: string }> {
+    // 0. Zip-bomb defense (#632) — the ingestion chokepoint. EVERY upload
+    //    AND every GitHub pull (`createSkillFromGitHub` → here) funnels
+    //    through this method, so enforcing the caps here closes the
+    //    route-layer bypass. Runs REGARDLESS of skipValidation: it's a
+    //    DoS guard, not format validation, so an "import as-is" toggle
+    //    must not disarm it. Walks the central directory without
+    //    extracting; throws 413 before any storage upload / AgentSeal
+    //    subprocess. We never log payload bytes.
+    await enforceZipLimits(zipBuffer, this.zipLimitsConfig());
+
     // 1. Validate ZIP format rules
     if (!options?.skipValidation) {
       const violations = await this.validateZipFormat(zipBuffer);
@@ -580,9 +651,17 @@ export class SkillService {
       );
     }
 
-    const updateData: Record<string, unknown> = { updatedBy: userId };
+    const updateData: UpdateSkillData = { updatedBy: userId };
 
     if (options.zipBuffer) {
+      // Zip-bomb defense (#632) — same chokepoint guard as createSkill.
+      // The GitHub refresh path (`refreshSkillFromSource` → here) and
+      // admin re-upload both land here, so the route-layer bypass is
+      // closed for updates too. Runs REGARDLESS of skipValidation
+      // (DoS guard, not format validation), ahead of storage upload /
+      // AgentSeal. No payload bytes are logged.
+      await enforceZipLimits(options.zipBuffer, this.zipLimitsConfig());
+
       if (!options.skipValidation) {
         const violations = await this.validateZipFormat(options.zipBuffer);
         if (violations.length > 0) {
@@ -682,7 +761,7 @@ export class SkillService {
       updateData.source = options.source;
     }
 
-    const updated = await this.skillRepo.update(guid, updateData as any);
+    const updated = await this.skillRepo.update(guid, updateData);
     return this.buildDetailResponse(updated);
   }
 
@@ -1644,11 +1723,13 @@ export class SkillService {
     // identity fields (name, createdBy, isPrivate, ...) still come from the
     // skill doc.
     //
-    // For the latest-read path (no overlay), we do one extra lookup against
-    // `skill_versions` so the response can still surface `isDeprecated` /
-    // `deprecationNote` consistently with the versioned path. If this becomes
-    // a hot-path bottleneck we can denormalize those two fields onto the
-    // skill doc later (TODO).
+    // For the latest-read path (no overlay) we issue one indexed lookup against
+    // `skill_versions` so the response surfaces `isDeprecated` / `deprecationNote`
+    // consistently with the versioned path. Those fields live only on
+    // `skill_versions`, so this lookup is the single source of truth — it is not
+    // denormalized onto the skill doc on purpose: a copy would introduce a
+    // dual-write drift trap (cf. the `distTags.latest` concern). This runs
+    // per-detail-read, not as a list fan-out, so the indexed limit(1) is cheap.
     let effectiveOverlay = versionOverlay;
     if (!effectiveOverlay) {
       effectiveOverlay =

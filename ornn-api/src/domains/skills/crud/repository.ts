@@ -206,8 +206,8 @@ export class SkillRepository {
     try {
       await this.collection.insertOne(doc);
       logger.info({ guid: data.guid, name: data.name }, "Skill created");
-    } catch (err: any) {
-      if (err?.code === 11000) {
+    } catch (err) {
+      if (typeof err === "object" && err !== null && "code" in err && err.code === 11000) {
         throw AppError.conflict("skill_name_exists", `Skill '${data.name}' already exists`);
       }
       throw err;
@@ -826,7 +826,7 @@ export class SkillRepository {
     const matchStage: Record<string, unknown> = {};
     applyScope(matchStage, scope, currentUserId, userOrgIds);
     // Scope resolved to "match nothing" — short-circuit.
-    if ((matchStage._id as any)?.$in?.length === 0) return 0;
+    if ((matchStage._id as { $in?: unknown[] } | undefined)?.$in?.length === 0) return 0;
     return this.collection.countDocuments(matchStage);
   }
 }

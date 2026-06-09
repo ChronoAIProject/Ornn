@@ -1,6 +1,7 @@
 import { useEffect, useRef, useSyncExternalStore } from "react";
 import { useTranslation } from "react-i18next";
 import { EmberLink } from "./EmberButton";
+import { LifecycleRing } from "./LifecycleRing";
 
 // Vite-managed (content-hashed) hero assets. Hashed URLs make every asset
 // swap self-cache-busting — nginx serves images/fonts with a 1y immutable
@@ -103,6 +104,11 @@ export function HeroVideo() {
           {t("landing.publishYours")}
         </EmberLink>
       </div>
+
+      {/* Skill-lifecycle orbital ring — interactive layer over the video.
+          Itself pointer-events-none except its nodes/card, so the looping
+          video and the CTA plate above stay fully interactive. */}
+      <LifecycleRing />
     </section>
   );
 }

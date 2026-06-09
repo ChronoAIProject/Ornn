@@ -22,7 +22,7 @@
  * @module components/skill/VersionDiffModal
  */
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Modal } from "@/components/ui/Modal";
 import { VersionDiffView } from "@/components/skill/VersionDiffView";
@@ -53,6 +53,45 @@ export function VersionDiffModal({
   // Latest is the first row (versions are newest-first).
   const latestVersion = versions[0]?.version ?? "";
 
+  return (
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title={t("versionDiff.title", "Compare versions") as string}
+      className="!max-w-4xl"
+    >
+      {/* Keyed on the current/latest version so the picker defaults
+          re-seed by construction when the modal reopens after the page
+          moved to a different version — no snap-on-close effect, no
+          cascading render (#888). The outer Modal owns the open/close
+          animation. */}
+      <VersionDiffBody
+        key={`${currentVersion}:${latestVersion}`}
+        idOrName={idOrName}
+        versions={versions}
+        currentVersion={currentVersion}
+        latestVersion={latestVersion}
+        t={t}
+      />
+    </Modal>
+  );
+}
+
+interface VersionDiffBodyProps {
+  idOrName: string;
+  versions: VersionDiffModalProps["versions"];
+  currentVersion: string;
+  latestVersion: string;
+  t: ReturnType<typeof useTranslation>["t"];
+}
+
+function VersionDiffBody({
+  idOrName,
+  versions,
+  currentVersion,
+  latestVersion,
+  t,
+}: VersionDiffBodyProps) {
   // Default `from` = current; `to` = latest. If the user is already on
   // latest, default `from` to the second-newest so the picker isn't
   // pointing at the same row on both sides.
@@ -61,20 +100,6 @@ export function VersionDiffModal({
     return versions[1]?.version ?? currentVersion ?? "";
   });
   const [toVersion, setToVersion] = useState<string>(latestVersion);
-
-  // If the user reopens the modal after viewing a different version, snap
-  // the defaults to the new `currentVersion`. Skipped while open so manual
-  // picks aren't trampled mid-session.
-  useEffect(() => {
-    if (!isOpen) {
-      const nextFrom =
-        currentVersion && currentVersion !== latestVersion
-          ? currentVersion
-          : versions[1]?.version ?? currentVersion ?? "";
-      setFromVersion(nextFrom);
-      setToVersion(latestVersion);
-    }
-  }, [isOpen, currentVersion, latestVersion, versions]);
 
   const sameVersion = fromVersion && toVersion && fromVersion === toVersion;
   const enoughVersions = versions.length >= 2;
@@ -86,12 +111,7 @@ export function VersionDiffModal({
   );
 
   return (
-    <Modal
-      isOpen={isOpen}
-      onClose={onClose}
-      title={t("versionDiff.title", "Compare versions") as string}
-      className="!max-w-4xl"
-    >
+    <>
       {!enoughVersions ? (
         <p className="font-text text-sm text-meta">
           {t(
@@ -175,6 +195,6 @@ export function VersionDiffModal({
           {!sameVersion && data && <VersionDiffView diff={data.diff} showSummary />}
         </div>
       )}
-    </Modal>
+    </>
   );
 }

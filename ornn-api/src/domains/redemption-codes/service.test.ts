@@ -81,6 +81,35 @@ describe("RedemptionCodeService.mint", () => {
     expect(doc.createdBy).toEqual(ADMIN);
   });
 
+  // Codes are generated char-by-char with crypto.randomInt, which
+  // rejection-samples to a uniform index over the alphabet — no modulo
+  // bias (clears CodeQL js/biased-cryptographic-random, #757). We can't
+  // assert a flake-free statistical distribution, but over a large
+  // sample every char must be in-alphabet AND the observed glyphs must
+  // span almost the whole 31-char alphabet (a `% 256`-style truncation
+  // bug would still pass charset but a stuck/biased generator would
+  // collapse the distinct-glyph count).
+  test("draws code chars uniformly across the full alphabet", async () => {
+    const alphabet = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+    const charRe = /^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]$/;
+    const seen = new Set<string>();
+    for (let i = 0; i < 200; i++) {
+      const doc = await service.mint({
+        admin: ADMIN,
+        grants: [{ surface: "playground", amount: 1 }],
+        expiresAt: plusDays(7),
+      });
+      for (const ch of doc.code) {
+        expect(charRe.test(ch)).toBe(true);
+        seen.add(ch);
+      }
+    }
+    // 200 codes × 16 chars = 3200 draws over 31 glyphs; seeing < 28
+    // distinct would imply a badly skewed generator, not sampling noise.
+    expect(seen.size).toBeGreaterThanOrEqual(28);
+    expect(alphabet.length).toBe(31);
+  });
+
   test("rejects duplicate surface in grants", async () => {
     await expect(
       service.mint({

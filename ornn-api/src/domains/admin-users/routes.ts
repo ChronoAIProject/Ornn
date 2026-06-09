@@ -55,11 +55,27 @@ export function createAdminUsersRoutes(
       const pageSize = Math.min(200, Math.max(1, Number(c.req.query("pageSize")) || 20));
       const q = (c.req.query("q") ?? "").trim() || undefined;
       const sortRaw = c.req.query("sort");
-      const sortKey: SortKey | undefined = sortRaw
-        ? sortKeySchema.parse(sortRaw)
-        : undefined;
+      let sortKey: SortKey | undefined;
+      if (sortRaw !== undefined) {
+        const sortParse = sortKeySchema.safeParse(sortRaw);
+        if (!sortParse.success) {
+          throw new AppError(
+            400,
+            "invalid_sort",
+            `sort must be one of: ${sortKeySchema.options.join(", ")}`,
+          );
+        }
+        sortKey = sortParse.data;
+      }
       const dirRaw = c.req.query("dir");
-      const dir: SortDir | undefined = dirRaw ? dirSchema.parse(dirRaw) : undefined;
+      let dir: SortDir | undefined;
+      if (dirRaw !== undefined) {
+        const dirParse = dirSchema.safeParse(dirRaw);
+        if (!dirParse.success) {
+          throw new AppError(400, "invalid_dir", "dir must be 'asc' or 'desc'");
+        }
+        dir = dirParse.data;
+      }
 
       // exactOptionalPropertyTypes (#657): conditional spread on the
       // optional inputs so we don't pass `{ q: undefined }` to a

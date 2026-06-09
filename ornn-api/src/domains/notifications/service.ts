@@ -97,10 +97,16 @@ export class NotificationService {
     userId: string,
     options: { limit?: number; unreadOnly?: boolean } = {},
   ): Promise<FeedItem[]> {
-    const limit = Math.max(
-      1,
-      Math.min(MERGED_FEED_LIMIT_MAX, options.limit ?? MERGED_FEED_LIMIT_DEFAULT),
-    );
+    // Single clamp authority for the merged feed (#920). The route only
+    // parses + finite-validates; everything else — missing, NaN, ±Inf,
+    // below floor, above ceiling — is normalised here so every caller
+    // (route, MCP, internal) gets the same guardrails.
+    const requested = options.limit;
+    const safe =
+      typeof requested === "number" && Number.isFinite(requested)
+        ? requested
+        : MERGED_FEED_LIMIT_DEFAULT;
+    const limit = Math.max(1, Math.min(MERGED_FEED_LIMIT_MAX, safe));
     // Pull `limit` from each source, then take the top `limit` after
     // merging — guarantees we don't drop a newer item from one source
     // because the other source had `limit` older items.

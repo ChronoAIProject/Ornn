@@ -17,7 +17,7 @@
  *   - per-entry uncompressed size (default 25 MiB)
  *   - file count (default 1000)
  *
- * Plus a compression-ratio sanity check (50:1) — the classic zip-bomb
+ * Plus a compression-ratio sanity check (100:1) — the classic zip-bomb
  * signature catches things the per-entry cap would miss when an
  * attacker spreads payload across many entries.
  *
@@ -37,13 +37,13 @@ export const DEFAULT_MAX_ENTRY_UNCOMPRESSED_BYTES = 25 * 1024 * 1024;
 export const DEFAULT_MAX_FILE_COUNT = 1000;
 
 /**
- * Compression-ratio sanity cap. `uncompressed / compressed > 50` is
+ * Compression-ratio sanity cap. `uncompressed / compressed > 100` is
  * the classic zip-bomb signature — legitimate text/code packages
- * compress around 3–10×, never 50×. Set high enough that a tiny
+ * compress around 3–10×, never 100×. Set high enough that a tiny
  * package with one near-empty entry doesn't false-positive (the
  * compressed lower bound below also gates this).
  */
-export const DEFAULT_MAX_COMPRESSION_RATIO = 50;
+export const DEFAULT_MAX_COMPRESSION_RATIO = 100;
 
 /**
  * Don't bother running the ratio check when the compressed payload

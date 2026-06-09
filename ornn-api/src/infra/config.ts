@@ -38,6 +38,19 @@ export interface SkillConfig {
   // Skill package upload limit (image-baked operational constant).
   readonly maxPackageSizeBytes: number;
 
+  // Zip-bomb defense caps (#632/#633). Bound what an uploaded/pulled ZIP
+  // is allowed to uncompress to BEFORE extraction, so a tiny compressed
+  // payload can't be coerced into exhausting memory/disk in an extraction
+  // loop or AgentSeal subprocess. Env-overridable operational constants.
+  /** Cumulative uncompressed size cap across all entries (default 50 MiB). */
+  readonly maxPackageUncompressedBytes: number;
+  /** Per-entry uncompressed size cap (default 25 MiB). */
+  readonly maxEntryUncompressedBytes: number;
+  /** Maximum number of files an uploaded ZIP may contain (default 1000). */
+  readonly maxPackageFileCount: number;
+  /** Compression-ratio sanity cap — classic zip-bomb signature (default 100×). */
+  readonly maxCompressionRatio: number;
+
   // CORS
   /**
    * Allow-listed origins for cross-origin requests with credentials.
@@ -96,6 +109,14 @@ const envSchema = z.object({
   MONGODB_DB: z.string().min(1).default("ornn"),
 
   MAX_PACKAGE_SIZE_BYTES: z.coerce.number().int().positive().default(52428800),
+
+  // ---- Zip-bomb defense caps (#632/#633) — env-overridable. ----
+  // Defaults mirror the constants baked into `shared/utils/zipLimits.ts`
+  // (50 MiB cumulative / 25 MiB per-entry / 1000 files / 100× ratio).
+  MAX_PACKAGE_UNCOMPRESSED_BYTES: z.coerce.number().int().positive().default(52428800),
+  MAX_ENTRY_UNCOMPRESSED_BYTES: z.coerce.number().int().positive().default(26214400),
+  MAX_PACKAGE_FILE_COUNT: z.coerce.number().int().positive().default(1000),
+  MAX_COMPRESSION_RATIO: z.coerce.number().positive().default(100),
 
   /**
    * Comma-separated list of origins permitted for cross-origin requests
@@ -180,6 +201,11 @@ export function loadConfig(): SkillConfig {
     mongodbDb: env.MONGODB_DB,
 
     maxPackageSizeBytes: env.MAX_PACKAGE_SIZE_BYTES,
+
+    maxPackageUncompressedBytes: env.MAX_PACKAGE_UNCOMPRESSED_BYTES,
+    maxEntryUncompressedBytes: env.MAX_ENTRY_UNCOMPRESSED_BYTES,
+    maxPackageFileCount: env.MAX_PACKAGE_FILE_COUNT,
+    maxCompressionRatio: env.MAX_COMPRESSION_RATIO,
 
     allowedOrigins: env.ALLOWED_ORIGINS
       .split(",")

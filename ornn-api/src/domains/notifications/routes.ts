@@ -89,8 +89,14 @@ export function createNotificationRoutes(
   app.get("/notifications", auth, async (c) => {
     const authCtx = getAuth(c);
     const unreadOnly = c.req.query("unread") === "true";
+    // Parse + finite-validate only. The clamp authority lives in the
+    // service (single source of truth) — a malformed/empty `?limit=`
+    // (e.g. `abc`, ``) yields NaN here, which we drop to `undefined` so
+    // the service falls back to its default page size instead of
+    // erroring (#920).
     const limitParam = c.req.query("limit");
-    const limit = limitParam ? Math.max(1, Math.min(200, Number.parseInt(limitParam, 10))) : undefined;
+    const parsed = limitParam !== undefined ? Number.parseInt(limitParam, 10) : NaN;
+    const limit = Number.isFinite(parsed) ? parsed : undefined;
     const items = await notificationService.listFeedForUser(authCtx.userId, {
       unreadOnly,
       // exactOptionalPropertyTypes (#657)

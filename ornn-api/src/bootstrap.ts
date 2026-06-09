@@ -6,7 +6,7 @@
  * @module bootstrap
  */
 
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { cors } from "hono/cors";
 import { join } from "node:path";
@@ -470,6 +470,12 @@ export async function bootstrap(
       (await settingsService.getNyxid()).chronoStorageBucket,
     analyticsEmitter,
     agentsealScanner,
+    // Zip-bomb caps (#632) — env-driven, enforced at the ingestion
+    // chokepoint so upload + GitHub pull/refresh share the same limits.
+    maxPackageUncompressedBytes: config.maxPackageUncompressedBytes,
+    maxEntryUncompressedBytes: config.maxEntryUncompressedBytes,
+    maxPackageFileCount: config.maxPackageFileCount,
+    maxCompressionRatio: config.maxCompressionRatio,
   });
 
   // ---- Domain: Notifications + Broadcasts ----
@@ -941,7 +947,7 @@ export async function bootstrap(
   // Kubernetes liveness probe — process is alive. No dependency checks.
   // `/health` kept as an alias for backward compatibility; K8s manifests
   // should migrate to `/livez`.
-  const livenessHandler = (c: any) =>
+  const livenessHandler = (c: Context) =>
     c.json({
       status: "ok",
       service: "ornn-api",

@@ -98,4 +98,54 @@ describe("parseAuditJson", () => {
   test("returns null on non-JSON garbage", () => {
     expect(parseAuditJson("sorry, I cannot produce JSON today")).toBeNull();
   });
+
+  test("returns null on a bare number with no JSON object braces", () => {
+    // No `{`/`}` → the brace scan bails before JSON.parse runs.
+    expect(parseAuditJson("123")).toBeNull();
+  });
+
+  test("returns null on a bare null with no JSON object braces", () => {
+    expect(parseAuditJson("null")).toBeNull();
+  });
+
+  test("returns null when an object lacks a scores key", () => {
+    // Parses to an object, but `scores` is undefined → not an array → null.
+    expect(parseAuditJson('{ "x": 1 }')).toBeNull();
+  });
+
+  test("returns null when scores is not an array", () => {
+    const raw = JSON.stringify({ scores: { nope: true }, findings: [] });
+    expect(parseAuditJson(raw)).toBeNull();
+  });
+
+  test("skips score entries with a NaN score", () => {
+    const raw = JSON.stringify({
+      scores: [
+        { dimension: "security", score: "not-a-number", rationale: "" }, // NaN → skipped
+        { dimension: "code_quality", score: 8, rationale: "" },
+        { dimension: "documentation", score: 8, rationale: "" },
+        { dimension: "reliability", score: 8, rationale: "" },
+        { dimension: "permission_scope", score: 8, rationale: "" },
+      ],
+      findings: [],
+    });
+    // security got skipped (NaN) → a required dimension is missing → null.
+    expect(parseAuditJson(raw)).toBeNull();
+  });
+
+  test("treats a non-array findings field as empty", () => {
+    const raw = JSON.stringify({
+      scores: [
+        { dimension: "security", score: 8, rationale: "" },
+        { dimension: "code_quality", score: 8, rationale: "" },
+        { dimension: "documentation", score: 8, rationale: "" },
+        { dimension: "reliability", score: 8, rationale: "" },
+        { dimension: "permission_scope", score: 8, rationale: "" },
+      ],
+      findings: "oops not an array",
+    });
+    const parsed = parseAuditJson(raw)!;
+    expect(parsed).not.toBeNull();
+    expect(parsed.findings).toEqual([]);
+  });
 });
