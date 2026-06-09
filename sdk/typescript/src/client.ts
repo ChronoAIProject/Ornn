@@ -25,6 +25,7 @@ import type {
   SkillDetail,
   SkillSearchParams,
   SkillSearchResult,
+  SkillsetClosureResult,
   SkillsetDetail,
   SkillsetPermissionsInput,
   SkillsetSearchParams,
@@ -342,18 +343,19 @@ export class OrnnClient {
   /**
    * Resolve a skillset's full delivery closure (#969): the union of all
    * member skills PLUS each member's #968 dependency closure, deduplicated
-   * and topo-sorted (deps-first). Throws `OrnnError` with code
+   * and topo-sorted (deps-first), PLUS the version's master prompt (#978,
+   * as a root sibling `instructions`). Throws `OrnnError` with code
    * `dependency_cycle` / `dependency_conflict` / `skill_dependency_not_found`
    * when the graph can't be resolved.
    */
   async getSkillsetClosure(
     guidOrName: string,
     options: { version?: string } = {},
-  ): Promise<ClosureResult> {
+  ): Promise<SkillsetClosureResult> {
     const suffix = options.version
       ? `?version=${encodeURIComponent(options.version)}`
       : "";
-    return this.request<ClosureResult>(
+    return this.request<SkillsetClosureResult>(
       "GET",
       `/skillsets/${encodeURIComponent(guidOrName)}/closure${suffix}`,
     );

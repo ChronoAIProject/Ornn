@@ -394,14 +394,17 @@ describe("OrnnClient — skillsets", () => {
     const result = await client.createSkillset({
       name: "review-set",
       description: "d",
+      instructions: "Run a, then feed its output to b.",
       members: ["a@1.0", "b@1.0"],
     });
     expect(captured.method).toBe("POST");
     expect(captured.url).toBe("https://x/api/v1/skillsets");
     expect(captured.ct).toBe("application/json");
+    // The master prompt (#978) is sent on the wire.
     expect(JSON.parse(captured.body)).toEqual({
       name: "review-set",
       description: "d",
+      instructions: "Run a, then feed its output to b.",
       members: ["a@1.0", "b@1.0"],
     });
     expect(result.guid).toBe("ss-1");
@@ -418,19 +421,22 @@ describe("OrnnClient — skillsets", () => {
     expect(capturedUrl).toBe("https://x/api/v1/skillsets/review%20set?version=1.1");
   });
 
-  test("publishSkillset(): PUTs JSON to /skillsets/:id", async () => {
-    let captured = { method: "", url: "" };
+  test("publishSkillset(): PUTs JSON to /skillsets/:id with instructions", async () => {
+    let captured = { method: "", url: "", body: "" };
     const fetchMock = mockFetch((url, init) => {
-      captured = { method: init.method ?? "", url };
+      captured = { method: init.method ?? "", url, body: init.body as string };
       return jsonResponse(200, { data: { guid: "ss-1", version: "1.1" }, error: null });
     });
     const client = new OrnnClient({ baseUrl: "https://x", fetch: fetchMock });
     const res = await client.publishSkillset("ss-1", {
+      instructions: "v1.1 prompt: b first this time",
       members: ["a@1.0", "b@1.0"],
       version: "1.1",
     });
     expect(captured.method).toBe("PUT");
     expect(captured.url).toBe("https://x/api/v1/skillsets/ss-1");
+    // The master prompt (#978) is sent on publish too (no carry-forward).
+    expect(JSON.parse(captured.body).instructions).toBe("v1.1 prompt: b first this time");
     expect(res.version).toBe("1.1");
   });
 
@@ -459,12 +465,13 @@ describe("OrnnClient — skillsets", () => {
     expect(captured.url).toBe("https://x/api/v1/skillsets/ss-1");
   });
 
-  test("getSkillsetClosure(): hits /skillsets/:id/closure and parses items", async () => {
+  test("getSkillsetClosure(): hits /skillsets/:id/closure and parses items + instructions", async () => {
     let capturedUrl = "";
     const fetchMock = mockFetch((url) => {
       capturedUrl = url;
       return jsonResponse(200, {
         data: {
+          instructions: "master prompt: leaf-d feeds pdf-tools",
           items: [
             { guid: "g-d", name: "leaf-d", version: "1.0", depth: 1 },
             { guid: "g-a", name: "pdf-tools", version: "1.0", depth: 0 },
@@ -477,6 +484,8 @@ describe("OrnnClient — skillsets", () => {
     const result = await client.getSkillsetClosure("review-set", { version: "1.0" });
     expect(capturedUrl).toBe("https://x/api/v1/skillsets/review-set/closure?version=1.0");
     expect(result.items.map((i) => i.name)).toEqual(["leaf-d", "pdf-tools"]);
+    // The master prompt (#978) parses as a root sibling of items.
+    expect(result.instructions).toBe("master prompt: leaf-d feeds pdf-tools");
   });
 
   test("getSkillsetClosure(): throws OrnnError on dependency_conflict (409)", async () => {

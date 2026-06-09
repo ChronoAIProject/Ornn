@@ -85,6 +85,37 @@ const memberRefSchema = z
       "member refs must be `<name-or-guid>@<major.minor>` or `<name>@<dist-tag>` (no semver ranges like ^1.0 or 1.2.3)",
   });
 
+/** Upper bound on the master-prompt body. Generous — a master prompt is a
+ * full set of usage instructions for agents (HOW to use the set), not a
+ * one-line blurb. 8 KB comfortably holds a structured prompt while still
+ * guarding against a pathological multi-megabyte publish. Deliberately far
+ * larger than `description`'s 1024 (a short human-readable summary). */
+export const SKILLSET_INSTRUCTIONS_MAX = 8000;
+
+/**
+ * The skillset **master prompt** (#978) — a REQUIRED markdown body telling
+ * an agent HOW to use the set (orchestration, ordering, when to pick which
+ * member). Stored opaque (no rendering / sanitization / templating /
+ * linting / search-indexing) and surfaced verbatim on detail + closure.
+ *
+ * Trimmed-then-bounded so leading/trailing whitespace never satisfies the
+ * non-empty requirement: a whitespace-only body trims to `""` and fails
+ * `.min(1)`. Distinct from `description` (short summary, 1024) — this is the
+ * long-form operating manual.
+ *
+ * REQUIRED on BOTH create and publish with NO carry-forward: each version
+ * explicitly carries its own prompt (unlike `description`, which a publish
+ * may omit to inherit the prior value).
+ */
+export const instructionsSchema = z
+  .string()
+  .trim()
+  .min(1, "instructions (master prompt) must not be empty")
+  .max(
+    SKILLSET_INSTRUCTIONS_MAX,
+    `instructions (master prompt) must be at most ${SKILLSET_INSTRUCTIONS_MAX} characters`,
+  );
+
 /**
  * Body schema for `POST /skillsets` (create) — the initial, version 1.0
  * payload. `version` is validated on publish; create seeds the first
@@ -97,6 +128,8 @@ export const createSkillsetSchema = z.object({
     .max(SKILL_NAME_MAX)
     .regex(SKILL_NAME_REGEX, "Name must be kebab-case"),
   description: z.string().min(1).max(1024),
+  /** Master prompt (#978) — REQUIRED, no carry-forward. */
+  instructions: instructionsSchema,
   kind: z.enum(SKILLSET_KINDS).default("generic"),
   tags: z.array(z.string().min(1).max(30).regex(/^[a-z0-9-]+$/)).max(20).default([]),
   members: z
@@ -116,6 +149,12 @@ export const createSkillsetSchema = z.object({
  */
 export const publishSkillsetSchema = z.object({
   description: z.string().min(1).max(1024).optional(),
+  /**
+   * Master prompt (#978) — REQUIRED on publish too, with NO carry-forward.
+   * Unlike `description` (optional here; inherits the prior value when
+   * omitted), every published version explicitly states its own prompt.
+   */
+  instructions: instructionsSchema,
   kind: z.enum(SKILLSET_KINDS).optional(),
   tags: z.array(z.string().min(1).max(30).regex(/^[a-z0-9-]+$/)).max(20).optional(),
   members: z
@@ -187,6 +226,8 @@ export interface SkillsetVersionDocument {
   minorVersion: number;
   kind: SkillsetKind;
   description: string;
+  /** Master prompt (#978) — per-version, immutable, surfaced verbatim. */
+  instructions: string;
   tags: string[];
   /** Member skill refs (`<name-or-guid>@<major.minor>` or `<name>@<dist-tag>`). */
   members: string[];
@@ -201,6 +242,8 @@ export interface SkillsetDetailResponse {
   guid: string;
   name: string;
   description: string;
+  /** Master prompt (#978) — the per-version usage instructions for agents. */
+  instructions: string;
   kind: SkillsetKind;
   tags: string[];
   members: string[];
