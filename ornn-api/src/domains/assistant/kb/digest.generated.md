@@ -3,13 +3,13 @@
   Produced by ornn-api/scripts/build-assistant-kb.ts (#970).
   Re-run: `bun run scripts/build-assistant-kb.ts` from ornn-api/.
   budgetTokens: 18000
-  estimatedTokens: 12433
+  estimatedTokens: 10761
   sources:
   - readme: ~1883 tok
   - claude-positioning: ~272 tok
-  - architecture: ~1659 tok
+  - architecture: ~219 tok
   - agent-manual-http: ~5486 tok (clipped)
-  - conventions: ~2598 tok (clipped)
+  - conventions: ~2366 tok
   - design-overview: ~487 tok
 -->
 
@@ -189,10 +189,6 @@ Implications when proposing or building features:
 
 ## Architecture
 
-# Architecture — chrono-ornn
-
-> For API v1 and architecture conventions, see [`CONVENTIONS.md`](./CONVENTIONS.md). Active refactor work is tracked under the [`Refactor` milestone](https://github.com/ChronoAIProject/Ornn/milestone/6).
-
 ## Project Overview
 
 chrono-ornn is an AI skill platform. Users create, publish, search, and execute AI skills (packaged prompts + scripts) via a web UI or API. Authentication and LLM calls go through NyxID. Script execution runs in chrono-sandbox.
@@ -211,117 +207,6 @@ chrono-ornn is an AI skill platform. Users create, publish, search, and execute 
 - Frontmatter field for dependencies: `runtime-dependency`
 - Category types: `plain`, `tool-based`, `runtime-based`, `mixed`
 - Output types: `text` (stdout), `file` (generated files retrieved via glob)
-
-## Audit + analytics (PostHog)
-
-Issue #271 collapsed every observability surface in Ornn — the
-universal API audit middleware (#245), the `activities` Mongo
-collection, and the OpenTelemetry placeholder section — into a single
-PostHog-driven pipeline. There is **no custom audit code** in Ornn
-anymore; everything flows through the `posthog-node` SDK and is
-viewed in the PostHog dashboard.
-
-### Event taxonomy
-
-Backend events (server-emitted, every event carries `source: "api"`
-so dashboards can disambiguate from frontend events of the same name):
-
-| event | when | properties |
-|---|---|---|
-| `api.request` | every authenticated `/api/v1/*` request | `userId`, `callerType`, `method`, `path`, `routePattern`, `status`, `durationMs`, `sourceIp` (truncated /24 IPv4, /48 IPv6), `requestId` |
-| `api.error` | sampled 5xx responses | `statusCode`, `errorCode`, `method`, `path`, `requestId` |
-| `api.skill.pull` | every skill package materialization | `callerType`, `skillId`, `skillName`, `skillVersion` |
-| `api.skill.published` | skill create + version publish | `skillId`, `skillVersion`, `isNewSkill` |
-| `user.login` / `user.logout` | session open / close | — |
-| `skill.created` / `.updated` / `.deleted` / `.version_deleted` | mutation routes | `skillId`, `skillName`, `version`, `adminAction?` |
-| `skill.visibility_changed` / `.permissions_changed` | visibility + sharing flips | `skillId`, `isPrivate`, `sharedWithUsers`, `sharedWithOrgs` |
-| `skill.refresh` / `.source_linked` / `.source_unlinked` | source-pointer ops | `skillId`, `repo`, `ref`, `commit` |
-| `skill.nyxid_service_tied` / `.agentseal_rescanned` | tie + admin-rescan | `skillId`, `isSystemSkill`, `score` |
-| `settings.exported` / `.imported` | settings IO | `schemaVersion`, `aggregateStatus`, `dryRun`, `sections` |
-
-Frontend events (browser SDK — `ornn-web/src/lib/analytics.ts`) carry
-auto-pageview + cookie-consent state and the typed event union in
-that file. Identity is set via `posthog.identify(userId, traits)` on
-every NyxID login.
-
-### Caller-type detection
-
-`api.request` is emitted from `apiRequestTrackingMiddleware` mounted
-on `/api/v1/*` AFTER `proxyAuthSetup`. `callerType` derives from auth
-shape:
-
-| auth shape | `X-Ornn-Caller` | `callerType` |
-|---|---|---|
-| browser session (NyxID OAuth cookie / browser-scope Bearer) | — | `web` |
-| NyxID forwarded user-access token (agent via NyxID proxy) | — | `api` |
-| anonymous | `system` / `playground` | matches header |
-| anonymous | other | `web` |
-
-The header is informational only. Source IP is read from
-`X-Forwarded-For` (first hop), falls back to `X-Real-IP`, then
-truncated to /24 (IPv4) or /48 (IPv6) before emit.
-
-### Configuration
-
-PostHog config lives in the admin `telemetry` settings section.
-Backend reads it once at boot (`bootstrap.ts`) and falls back to env
-vars when the DB section has no API key set:
-
-| field | env fallback | meaning |
-|---|---|---|
-| `postHogEnabled` | `POSTHOG_ENABLED` | master switch — off forces NoopTracker even with a key |
-| `postHogApiKey` | `POSTHOG_API_KEY` | public project key (`phc_…`); empty disables |
-| `postHogHost` | `POSTHOG_HOST` | ingest host (e.g. `https://eu.i.posthog.com`) |
-| `postHogProjectId` | `POSTHOG_PROJECT_ID` | informational, surfaced in log lines |
-| `postHogErrorSampleRate` | `POSTHOG_ERROR_SAMPLE_RATE` | `[0,1]` sampling for `api.error` |
-
-Admin DB is canonical: a non-empty `postHogApiKey` in the section
-makes the entire DB record authoritative; otherwise env wins.
-Restart-required for changes to apply (the SDK is initialized once
-at boot).
-
-### Failure modes accepted
-
-- **No body archive.** Request/response bodies are not captured.
-  Forensic body-replay post-incident is not possible. The previous
-  MinIO-offload pipeline (#245) was removed.
-- **Audit retention = PostHog retention.** Cloud free tier is
-  approximately 1 year of events; paid extends. Self-hosted PostHog
-  retains as long as the storage volume allows.
-- **PostHog-side outages** drop events that miss the in-process
-  buffer. The drain on `shutdown()` flushes the buffer; sigterm
-  during a backlog can lose tail events.
-
-### Viewing data
-
-There is **no in-Ornn activity feed UI**. Admins use the PostHog
-dashboard for the full event explorer, funnels, retention, and SQL
-queries. The Ornn admin dashboard at `/admin` deep-links to the
-PostHog Activity / Insights views via
-`ornn-web/src/lib/postHogLinks.ts`, which translates the configured
-ingest host (`<region>.i.posthog.com`) into the matching dashboard
-host (`<region>.posthog.com`).
-
-### What about OpenTelemetry?
-
-Considered and deferred (issue #271 discussion). For Ornn's current
-single-service architecture and the requirements covered here
-(per-request audit, user activity, who-called-what), PostHog alone
-is sufficient. OpenTelemetry's value (distributed tracing, metrics
-histograms) doesn't justify standing up a collector + Tempo / Loki /
-Jaeger today. Reopen as a separate issue if/when the architecture
-splits across services or a concrete tracing pain point appears.
-
-### User directory
-
-The unified `users` Mongo collection (built in #271, replaces
-`activities` + `admin_users` + `users_meta`) is fed lazily by
-`proxyAuthSetup.onAuthSeen` on every authenticated request. It is
-NOT audit data — it's an identity cache backing the skill-permissions
-typeahead, the admin user list, and the dashboard role partition.
-NyxID stays authoritative for permission checks; this collection is
-display + indexing only. See
-`ornn-api/src/domains/users/repository.ts`.
 
 ---
 
@@ -698,31 +583,6 @@ curl -X PUT \
 
 ## API Conventions
 
-# ornn API & Architecture Conventions
-
-The contract every `/api/v1/*` endpoint and every `ornn-api` module must follow. All future endpoints and modules MUST conform. Changes that violate a convention are blocked at review.
-
-This document is normative. It is the authoritative source for decisions that would otherwise be re-litigated per PR. When in doubt, this file wins.
-
----
-
-## Table of Contents
-
-1. [Response & error format](#1-response--error-format)
-2. [URL structure](#2-url-structure)
-3. [HTTP semantics](#3-http-semantics)
-4. [Query parameters](#4-query-parameters)
-5. [Authentication & authorization](#5-authentication--authorization)
-6. [SSE streaming](#6-sse-streaming)
-7. [Deprecation](#7-deprecation)
-8. [Caching](#8-caching)
-9. [Observability headers](#9-observability-headers)
-10. [OpenAPI](#10-openapi)
-11. [Architecture conventions](#11-architecture-conventions)
-12. [Every new `/v1/` endpoint checklist](#12-every-new-v1-endpoint-checklist)
-
----
-
 ## 1. Response & error format
 
 ### 1.1 Success — single resource
@@ -965,36 +825,44 @@ Endpoint-specific. Rules:
 
 ---
 
-## 5. Authentication & authorization
+## 6. SSE streaming
 
-### 5.1 Transport
+### 6.1 Event naming
 
-- `Authorization: Bearer <jwt>` between client and the NyxID proxy.
-- `X-NyxID-Identity-Token` and `X-NyxID-*` headers between proxy and `ornn-api` (internal).
-- OpenAPI declares one `bearerAuth` scheme; `X-NyxID-*` is not part of the public contract.
+Format: `<resource>_<event>`, snake_case.
 
-### 5.2 Permission strings
+Shared event vocabulary across endpoints:
 
-Format: `ornn:<resource>:<action>`.
-
-Actions: `read`, `write`, `admin`, plus resource-specific high-cost actions when needed.
-
-| Permission | Grants |
+| Suffix | Meaning |
 |---|---|
-| `ornn:skill:read` | Read skills (respects visibility) |
-| `ornn:skill:write` | Create, update, delete own skills |
-| `ornn:skill:admin` | Manage any skill (override ownership); delete any skill |
-| `ornn:skill:generate` | Invoke skill generation endpoints (high LLM cost) |
-| `ornn:skill:execute` | Invoke playground chat (runs user code) |
-| `ornn:category:read` | List categories |
-| `ornn:category:admin` | Manage categories |
-| `ornn:tag:read` | List tags |
-| `ornn:tag:admin` | Manage tags |
-| `ornn:user:admin` | User dashboard (list users, aggregate stats per user) |
-| `ornn:activity:read` | Platform activity log read access |
-| `ornn:stats:read` | Platform-wide dashboard aggregates |
+| `_start` | Stream opened |
+| `_text_delta` | Incremental text content |
+| `_tool_call` | Model requests tool invocation |
+| `_tool_result` | Tool output |
+| `_file_output` | File produced during run |
+| `_validation_error` | Recoverable validation failure |
+| `_error` | Terminal error |
+| `_complete` / `_finish` | Stream ended normally |
 
-NyxID composes a **"Platform Admin"** role that grants all `*:admin` + `*:read` permissions above; current platform admins inherit this role with zero UX change. Sub-admin roles (content moderator, tag curator, support) can be
+Endpoints pick a subset and MAY add endpoint-specific events with the same prefix.
+
+### 6.2 Current endpoint mapping
+
+| Endpoint | Events |
+|---|---|
+| `POST /v1/skills/generate` | `generation_start`, `generation_delta`, `generation_validation_error`, `generation_error`, `generation_complete` |
+| `POST /v1/playground/chat` | `chat_start`, `chat_text_delta`, `chat_tool_call`, `chat_tool_result`, `chat_file_output`, `chat_error`, `chat_finish` |
+| `POST /v1/assistant/chat` | `chat_start`, `chat_text_delta`, `chat_error`, `chat_finish` |
+
+### 6.3 Transport rules
+
+- `Content-Type: text/event-stream`
+- Each event has a `type` field in the JSON payload plus SSE-native `event:` line set to the same value
+- Keep-alive events every `config.sseKeepAliveIntervalMs` milliseconds (JSON `{ type: "keepalive" }`)
+- Clients abort via `AbortSignal` / closing the connection
+- `Last-Event-ID` reconnection: **not supported** in v1; clients start over on reconnect
+
+---
 
 ---
 

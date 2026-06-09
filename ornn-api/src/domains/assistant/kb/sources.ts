@@ -55,11 +55,18 @@ export const KB_SOURCE_MANIFEST: ReadonlyArray<KbSourceSpec> = [
     headings: ["Product Positioning"],
   },
   {
-    // External services + skill format + observability pipeline.
+    // User-relevant architecture only: what Ornn is, the high-level
+    // external-service overview, and the skill format. The internal infra
+    // sections (PostHog/telemetry internals, env-var catalogs, internal
+    // request-header names like X-NyxID-*/X-Ornn-Caller-*, the user
+    // directory) are EXCLUDED via this allow-list — they're needless
+    // internal-recon surface for an assistant any authenticated user can
+    // query (security review #970, finding #1).
     id: "architecture",
     title: "Architecture",
     repoRelPath: "docs/ARCHITECTURE.md",
-    maxTokens: 2_400,
+    maxTokens: 1_800,
+    headings: ["Project Overview", "External Services", "Skill Format"],
   },
   {
     // The authoritative agent contract: search → pull → execute → build →
@@ -71,11 +78,25 @@ export const KB_SOURCE_MANIFEST: ReadonlyArray<KbSourceSpec> = [
     maxTokens: 5_500,
   },
   {
-    // Normative /api/v1 contract — envelope, errors, paths, auth.
+    // User-relevant /api/v1 contract sections only: response/error
+    // envelope, URL structure, HTTP semantics, query params, SSE. The
+    // §5 Authentication section carries an INTERNAL transport note
+    // (`X-NyxID-*` proxy headers, "not part of the public contract"), and
+    // §7–§12 are deprecation/caching/observability/architecture
+    // internals — all EXCLUDED via this allow-list so the same internal
+    // header names the architecture source dropped don't re-enter the
+    // digest here (security review #970, finding #1).
     id: "conventions",
     title: "API Conventions",
     repoRelPath: "docs/CONVENTIONS.md",
     maxTokens: 2_600,
+    headings: [
+      "1. Response & error format",
+      "2. URL structure",
+      "3. HTTP semantics",
+      "4. Query parameters",
+      "6. SSE streaming",
+    ],
   },
   {
     // Visual spec is mostly irrelevant to Q&A; keep only the opening
