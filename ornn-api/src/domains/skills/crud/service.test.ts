@@ -1126,6 +1126,100 @@ describe("SkillService.setSkillSource / refresh / preview (globalThis.fetch swap
   });
 });
 
+// ======================================================================
+// #632 — zip-bomb guard is enforced at the SkillService ingestion
+// chokepoint (`createSkill` / `updateSkill`), NOT only at the route
+// layer. The GitHub pull path (`createSkillFromGitHub` → `createSkill`)
+// and refresh path (`refreshSkillFromSource` → `updateSkill`) used to
+// bypass the route-layer guard entirely. These seam-lock tests prove
+// the bypass is closed by hammering the service methods directly.
+//
+// The guard is a DoS defense, not format validation, so it MUST fire
+// even when `skipValidation: true` (the "import as-is" toggle). The
+// tests assert exactly that — skipValidation does NOT disarm the guard.
+//
+// A >1000-entry ZIP trips `too_many_files` against the baked-in default
+// file-count cap (the fake deps pass no caps, so defaults apply). Tiny
+// entries keep the fixture fast and deterministic — no multi-MiB
+// allocation needed to exercise the seam.
+// ======================================================================
+
+/** Build a ZIP whose entry count exceeds the default 1000-file cap. */
+async function buildTooManyFilesZip(): Promise<Uint8Array> {
+  const zip = new JSZip();
+  const folder = zip.folder("demo-skill")!;
+  folder.file("SKILL.md", "---\nname: demo-skill\n---\nbody");
+  for (let i = 0; i < 1001; i++) {
+    folder.file(`assets/f${i}.txt`, `c${i}`);
+  }
+  return zip.generateAsync({ type: "uint8array" });
+}
+
+describe("SkillService zip-bomb chokepoint (#632)", () => {
+  it("createSkill throws 413 too_many_files even with skipValidation=true", async () => {
+    const { deps, state } = makeFakeDeps();
+    const service = new SkillService(deps);
+    let thrown: unknown;
+    try {
+      await service.createSkill(await buildTooManyFilesZip(), "owner-1", {
+        skipValidation: true,
+      });
+    } catch (err) {
+      thrown = err;
+    }
+    expect(thrown).toBeInstanceOf(AppError);
+    expect((thrown as AppError).statusCode).toBe(413);
+    expect((thrown as AppError).code).toBe("too_many_files");
+    // Guard fires BEFORE storage upload — nothing was persisted.
+    expect(state.uploads).toHaveLength(0);
+    expect(state.versions).toHaveLength(0);
+  });
+
+  it("updateSkill (refresh seam) throws 413 too_many_files even with skipValidation=true", async () => {
+    const skill = makeSkillDoc({ guid: "guid-1", isPrivate: false, latestVersion: "1.0" });
+    const { deps, state } = makeFakeDeps({
+      skills: new Map([["guid-1", skill]]),
+      byName: new Map([["demo-skill", skill]]),
+      versions: [versionDoc({ version: "1.0", majorVersion: 1, minorVersion: 0 })],
+    });
+    const service = new SkillService(deps);
+    let thrown: unknown;
+    try {
+      await service.updateSkill("guid-1", "owner-1", {
+        zipBuffer: await buildTooManyFilesZip(),
+        skipValidation: true,
+      });
+    } catch (err) {
+      thrown = err;
+    }
+    expect(thrown).toBeInstanceOf(AppError);
+    expect((thrown as AppError).statusCode).toBe(413);
+    expect((thrown as AppError).code).toBe("too_many_files");
+    // No new version blob uploaded — the guard short-circuited the seam.
+    expect(state.uploads).toHaveLength(0);
+  });
+
+  it("env-driven caps override the defaults at the chokepoint", async () => {
+    // Wire a tight 5-file cap through the deps (mirrors what bootstrap
+    // threads from config). A 6-entry ZIP that would pass the default
+    // 1000-file cap now trips — proving the deps are honored.
+    const { deps } = makeFakeDeps();
+    const service = new SkillService({ ...deps, maxPackageFileCount: 5 });
+    const zip = new JSZip();
+    const folder = zip.folder("demo-skill")!;
+    folder.file("SKILL.md", "---\nname: demo-skill\n---\nbody");
+    for (let i = 0; i < 6; i++) folder.file(`assets/f${i}.txt`, `c${i}`);
+    let thrown: unknown;
+    try {
+      await service.createSkill(await zip.generateAsync({ type: "uint8array" }), "owner-1");
+    } catch (err) {
+      thrown = err;
+    }
+    expect((thrown as AppError).code).toBe("too_many_files");
+    expect((thrown as AppError).message).toContain("limit is 5");
+  });
+});
+
 describe("SkillService.validateZipFormat", () => {
   it("flags a non-ZIP buffer", async () => {
     const { deps } = makeFakeDeps();

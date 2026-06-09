@@ -207,8 +207,17 @@ export function useSkillVersionDiff(
   });
 }
 
-/** Toggle the deprecation flag on a specific published version. */
-export function useSetVersionDeprecation(idOrName: string) {
+/**
+ * Toggle the deprecation flag on a specific published version.
+ *
+ * Two-id split (#750): `guid` is the WIRE id — version-write routes are
+ * GUID-only (CONVENTIONS §2.2), so a name-opened Skill Detail must still
+ * send the GUID or the backend 404s. `idOrName` is the CACHE-KEY id —
+ * the read queries (`useSkill`, `useSkillVersions`) are keyed on
+ * `idOrName`, so invalidation MUST stay keyed on it (#699's All-versions
+ * modal refresh re-breaks otherwise).
+ */
+export function useSetVersionDeprecation(guid: string, idOrName: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({
@@ -220,7 +229,7 @@ export function useSetVersionDeprecation(idOrName: string) {
       isDeprecated: boolean;
       // exactOptionalPropertyTypes (#657)
       deprecationNote?: string | undefined;
-    }) => setSkillVersionDeprecation(idOrName, version, { isDeprecated, deprecationNote }),
+    }) => setSkillVersionDeprecation(guid, version, { isDeprecated, deprecationNote }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [SKILLS_KEY, idOrName] });
       queryClient.invalidateQueries({ queryKey: [SKILL_VERSIONS_KEY, idOrName] });
@@ -359,14 +368,58 @@ export function useTieSkillToNyxidService(idOrName: string) {
   });
 }
 
-/** Delete a skill */
-export function useDeleteSkill() {
+/**
+ * Delete an entire skill (every version).
+ *
+ * Two-id split (#750 shape): `guid` is the WIRE id — the delete route is
+ * GUID-only, so a name-opened Skill Detail must still send the GUID.
+ * `idOrName` is the CACHE-KEY id — the detail/versions read queries
+ * (`useSkill`, `useSkillVersions`) are keyed on `idOrName`, and callers
+ * pass either the GUID (MySkillsPage card) or a NAME (Skill Detail URL),
+ * so cache cleanup must cover BOTH keyings.
+ *
+ * #940 — onSuccess must REMOVE the deleted skill's detail + versions
+ * entries (not just invalidate). The detail query stays mounted through
+ * the delete (the `navigate("/registry")` in the caller runs AFTER this
+ * onSuccess, and RootLayout's breadcrumb re-subscribes), so a broad
+ * `invalidateQueries([SKILLS_KEY])` prefix-matches the still-mounted
+ * detail key and triggers a refetch of the just-deleted skill → 404.
+ * `removeQueries` drops the cache entry outright so nothing can refetch
+ * it; the list/count keys still invalidate to drop the deleted card.
+ * Removal is id-scoped (predicate on `guid`/`idOrName`) so only the
+ * deleted skill's caches are touched, never other skills'.
+ */
+export function useDeleteSkill(guid: string, idOrName: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => deleteSkill(id),
+    mutationFn: () => deleteSkill(guid),
     onSuccess: () => {
+      queryClient.removeQueries({
+        predicate: (q) =>
+          Array.isArray(q.queryKey) &&
+          q.queryKey[0] === SKILLS_KEY &&
+          (q.queryKey[1] === guid || q.queryKey[1] === idOrName),
+      });
+      queryClient.removeQueries({
+        predicate: (q) =>
+          Array.isArray(q.queryKey) &&
+          q.queryKey[0] === SKILL_VERSIONS_KEY &&
+          (q.queryKey[1] === guid || q.queryKey[1] === idOrName),
+      });
       queryClient.invalidateQueries({ queryKey: [SKILLS_KEY] });
       queryClient.invalidateQueries({ queryKey: [MY_SKILLS_KEY] });
+      queryClient.invalidateQueries({ queryKey: [SKILL_COUNTS_KEY] });
+      // #941 — the My-Skills filter sidebar counts come from SEPARATE
+      // queries that #940's invalidations don't touch: the "mine" tag
+      // facet (useSkillTagFacets("mine")) and the grants summary
+      // (useMySkillGrantsSummary). Refresh exactly those two so the
+      // per-tag chips + per-grantee/org "shared with" counts stay
+      // consistent after a self-delete without a full-page refresh.
+      // Narrow literals on purpose: the broad ["skill-facets"] prefix
+      // would refetch the public/system facets a self-delete can't
+      // change, and broad ["me"] would refetch orgs/nyxid-services.
+      queryClient.invalidateQueries({ queryKey: ["skill-facets", "tags", "mine"] });
+      queryClient.invalidateQueries({ queryKey: ["me", "skills", "grants-summary"] });
     },
   });
 }
@@ -374,11 +427,17 @@ export function useDeleteSkill() {
 /**
  * Delete one non-latest version of a skill. Refreshes the skill itself,
  * its versions list, and the audit history (which is keyed per version).
+ *
+ * Two-id split (#750): `guid` is the WIRE id — version-write routes are
+ * GUID-only (CONVENTIONS §2.2), so a name-opened Skill Detail must still
+ * send the GUID or the backend 404s and the version is never deleted.
+ * `idOrName` is the CACHE-KEY id — ALL invalidation below stays keyed on
+ * it so the read queries (and #699's All-versions modal) refresh.
  */
-export function useDeleteSkillVersion(idOrName: string) {
+export function useDeleteSkillVersion(guid: string, idOrName: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (version: string) => deleteSkillVersion(idOrName, version),
+    mutationFn: (version: string) => deleteSkillVersion(guid, version),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [SKILLS_KEY, idOrName] });
       queryClient.invalidateQueries({ queryKey: [SKILLS_KEY] });

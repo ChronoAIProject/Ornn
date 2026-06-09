@@ -5,20 +5,7 @@ import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import type { SkillVersionEntry } from "@/types/domain";
 import type { AuditRecord, AuditVerdict } from "@/types/audit";
-
-/** Format a date string to exact SGT (Asia/Singapore) timestamp. */
-function formatDateSGT(dateStr: string): string {
-  const date = new Date(dateStr);
-  return date.toLocaleString("en-SG", {
-    timeZone: "Asia/Singapore",
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  });
-}
+import { formatDateSGT } from "@/utils/formatters";
 
 export interface SkillVersionListProps {
   versions: SkillVersionEntry[];
@@ -99,7 +86,7 @@ export function SkillVersionList({
   auditSummary,
   className = "",
 }: SkillVersionListProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [modalTarget, setModalTarget] = useState<SkillVersionEntry | null>(null);
   const [noteDraft, setNoteDraft] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<SkillVersionEntry | null>(null);
@@ -187,7 +174,7 @@ export function SkillVersionList({
                     )}
                   </div>
                   <div className="mt-0.5 font-text text-xs text-meta truncate">
-                    {formatDateSGT(v.createdOn)}
+                    {formatDateSGT(v.createdOn, i18n.language)}
                     {v.createdByDisplayName ? ` · ${v.createdByDisplayName}` : ""}
                   </div>
                 </button>
