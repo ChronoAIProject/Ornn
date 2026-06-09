@@ -18,6 +18,7 @@ Visibility = Literal["public", "private"]
 SearchScope = Literal["public", "private", "mine", "mixed", "shared-with-me"]
 SearchMode = Literal["keyword", "semantic", "hybrid"]
 SystemFilter = Literal["any", "only", "exclude"]
+SkillsetKind = Literal["generic", "consensus-supported"]
 
 
 @dataclass
@@ -203,3 +204,104 @@ class UpdateSkillMetadata:
         if self.metadata is not None:
             out["metadata"] = self.metadata
         return out
+
+
+# ---------------------------------------------------------------------------
+# Skillsets (#969)
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class SkillsetDetail:
+    """Full skillset detail returned by single-skillset reads.
+
+    A ``consensus-supported`` skillset is an author CLAIM that the members
+    are an independent, comparable set suitable for agent-side consensus —
+    not a guarantee. ``generic`` is a plain curated bundle.
+    """
+
+    guid: str
+    name: str
+    description: str
+    kind: SkillsetKind
+    version: str
+    latest_version: str
+    is_private: bool
+    created_by: str
+    tags: list[str] = field(default_factory=list)
+    members: list[str] = field(default_factory=list)
+    shared_with_users: list[str] = field(default_factory=list)
+    shared_with_orgs: list[str] = field(default_factory=list)
+    created_on: str = ""
+    updated_on: str = ""
+
+    @classmethod
+    def from_dict(cls, raw: dict[str, Any]) -> SkillsetDetail:
+        return cls(
+            guid=raw.get("guid", ""),
+            name=raw["name"],
+            description=raw.get("description", ""),
+            kind=raw.get("kind", "generic"),
+            version=raw.get("version", ""),
+            latest_version=raw.get("latestVersion", ""),
+            is_private=bool(raw.get("isPrivate", False)),
+            created_by=raw.get("createdBy", ""),
+            tags=list(raw.get("tags") or []),
+            members=list(raw.get("members") or []),
+            shared_with_users=list(raw.get("sharedWithUsers") or []),
+            shared_with_orgs=list(raw.get("sharedWithOrgs") or []),
+            created_on=raw.get("createdOn", ""),
+            updated_on=raw.get("updatedOn", ""),
+        )
+
+
+@dataclass
+class SkillsetSummary:
+    """Lighter skillset summary returned by search."""
+
+    guid: str
+    name: str
+    description: str
+    kind: SkillsetKind
+    member_count: int
+    latest_version: str
+    is_private: bool
+    created_by: str
+    tags: list[str] = field(default_factory=list)
+    created_on: str = ""
+    updated_on: str = ""
+
+    @classmethod
+    def from_dict(cls, raw: dict[str, Any]) -> SkillsetSummary:
+        return cls(
+            guid=raw.get("guid", ""),
+            name=raw["name"],
+            description=raw.get("description", ""),
+            kind=raw.get("kind", "generic"),
+            member_count=int(raw.get("memberCount", 0)),
+            latest_version=raw.get("latestVersion", ""),
+            is_private=bool(raw.get("isPrivate", False)),
+            created_by=raw.get("createdBy", ""),
+            tags=list(raw.get("tags") or []),
+            created_on=raw.get("createdOn", ""),
+            updated_on=raw.get("updatedOn", ""),
+        )
+
+
+@dataclass
+class SkillsetSearchResult:
+    items: list[SkillsetSummary]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
+
+    @classmethod
+    def from_dict(cls, raw: dict[str, Any]) -> SkillsetSearchResult:
+        return cls(
+            items=[SkillsetSummary.from_dict(i) for i in raw.get("items") or []],
+            total=int(raw.get("total", 0)),
+            page=int(raw.get("page", 1)),
+            page_size=int(raw.get("pageSize", 0)),
+            total_pages=int(raw.get("totalPages", 0)),
+        )

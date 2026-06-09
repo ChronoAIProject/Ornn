@@ -19,10 +19,16 @@ import { OrnnError, type OrnnErrorPayload } from "./errors";
 import type {
   ClosureNode,
   ClosureResult,
+  CreateSkillsetInput,
   PublishOptions,
+  PublishSkillsetInput,
   SkillDetail,
   SkillSearchParams,
   SkillSearchResult,
+  SkillsetDetail,
+  SkillsetPermissionsInput,
+  SkillsetSearchParams,
+  SkillsetSearchResult,
   SkillVersionEntry,
   UpdateSkillMetadata,
 } from "./types";
@@ -275,6 +281,101 @@ export class OrnnClient {
   /** Delete a skill by ID. */
   async delete(id: string): Promise<void> {
     await this.request<{ success: boolean }>("DELETE", `/skills/${encodeURIComponent(id)}`);
+  }
+
+  // ---- Skillsets (#969) ----
+
+  /**
+   * Create a skillset — a curated, versioned meta-package over N member
+   * skills (private by default, like skills). Member refs are validated
+   * server-side at publish time: every member must resolve to a readable
+   * skill version, and the union dependency closure must be conflict-free.
+   */
+  async createSkillset(input: CreateSkillsetInput): Promise<SkillsetDetail> {
+    return this.request<SkillsetDetail>("POST", "/skillsets", {
+      body: JSON.stringify(input),
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  /** Fetch a single skillset by GUID or name. */
+  async getSkillset(guidOrName: string, version?: string): Promise<SkillsetDetail> {
+    const suffix = version ? `?version=${encodeURIComponent(version)}` : "";
+    return this.request<SkillsetDetail>(
+      "GET",
+      `/skillsets/${encodeURIComponent(guidOrName)}${suffix}`,
+    );
+  }
+
+  /** Publish a new immutable version of an existing skillset. */
+  async publishSkillset(id: string, input: PublishSkillsetInput): Promise<SkillsetDetail> {
+    return this.request<SkillsetDetail>("PUT", `/skillsets/${encodeURIComponent(id)}`, {
+      body: JSON.stringify(input),
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  /** Update a skillset's visibility / sharing lists. */
+  async setSkillsetPermissions(
+    id: string,
+    input: SkillsetPermissionsInput,
+  ): Promise<SkillsetDetail> {
+    const res = await this.request<{ skillset: SkillsetDetail }>(
+      "PUT",
+      `/skillsets/${encodeURIComponent(id)}/permissions`,
+      {
+        body: JSON.stringify(input),
+        headers: { "Content-Type": "application/json" },
+      },
+    );
+    return res.skillset;
+  }
+
+  /** Delete a skillset (and all its versions) by ID. */
+  async deleteSkillset(id: string): Promise<void> {
+    await this.request<{ success: boolean }>(
+      "DELETE",
+      `/skillsets/${encodeURIComponent(id)}`,
+    );
+  }
+
+  /**
+   * Resolve a skillset's full delivery closure (#969): the union of all
+   * member skills PLUS each member's #968 dependency closure, deduplicated
+   * and topo-sorted (deps-first). Throws `OrnnError` with code
+   * `dependency_cycle` / `dependency_conflict` / `skill_dependency_not_found`
+   * when the graph can't be resolved.
+   */
+  async getSkillsetClosure(
+    guidOrName: string,
+    options: { version?: string } = {},
+  ): Promise<ClosureResult> {
+    const suffix = options.version
+      ? `?version=${encodeURIComponent(options.version)}`
+      : "";
+    return this.request<ClosureResult>(
+      "GET",
+      `/skillsets/${encodeURIComponent(guidOrName)}/closure${suffix}`,
+    );
+  }
+
+  /** Discover skillsets by kind / tag / scope. Returns one page. */
+  async searchSkillsets(
+    params: SkillsetSearchParams & { cursor?: string; limit?: number } = {},
+  ): Promise<SkillsetSearchResult> {
+    const query = new URLSearchParams();
+    if (params.kind) query.set("kind", params.kind);
+    if (params.scope) query.set("scope", params.scope);
+    if (params.tag) query.set("tags", params.tag);
+    if (params.cursor !== undefined) query.set("cursor", params.cursor);
+    if (params.limit !== undefined) query.set("limit", String(params.limit));
+    if (params.page !== undefined) query.set("page", String(params.page));
+    if (params.pageSize !== undefined) query.set("pageSize", String(params.pageSize));
+    const qs = query.toString();
+    return this.request<SkillsetSearchResult>(
+      "GET",
+      `/skillset-search${qs ? `?${qs}` : ""}`,
+    );
   }
 
   // ---- Plumbing ----

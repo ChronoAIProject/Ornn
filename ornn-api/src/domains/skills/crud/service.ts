@@ -1512,8 +1512,15 @@ export class SkillService {
    * depends on a PRIVATE skill gets `null` for that node, surfaced as
    * `skill_dependency_not_found` — existence isn't leaked. Trusted
    * callers (publish-time validation) pass `SYSTEM_ACTOR`.
+   *
+   * PUBLIC (#969): the skillsets service injects `SkillService` and
+   * reuses this loader to resolve a skillset's member refs against the
+   * live skill graph — a skillset member is just a skill ref. Promoting
+   * the loader from `private` to a public method means the closure walk
+   * stays single-sourced; both surfaces resolve refs (and apply the
+   * per-node `canReadSkill` visibility gate) identically.
    */
-  private buildVersionLoader(actor: ActorContext): LoadVersion {
+  createVersionLoader(actor: ActorContext): LoadVersion {
     return async (ref: string): Promise<ResolvedVersion | null> => {
       const at = ref.lastIndexOf("@");
       if (at <= 0 || at === ref.length - 1) return null;
@@ -1612,7 +1619,7 @@ export class SkillService {
     }
 
     const closure = await resolveClosure(roots, {
-      loadVersion: this.buildVersionLoader(actor),
+      loadVersion: this.createVersionLoader(actor),
     });
     logger.info(
       { idOrName, version: resolvedVersion, nodeCount: closure.length },
@@ -1643,7 +1650,7 @@ export class SkillService {
     const roots = metadata.dependsOn ?? [];
     if (roots.length === 0) return;
     await resolveClosure(roots, {
-      loadVersion: this.buildVersionLoader(SYSTEM_ACTOR),
+      loadVersion: this.createVersionLoader(SYSTEM_ACTOR),
     });
     logger.info(
       { name: context.name, version: context.version, depCount: roots.length },

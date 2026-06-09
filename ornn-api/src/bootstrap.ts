@@ -59,6 +59,9 @@ import { SkillVersionRepository } from "./domains/skills/crud/skillVersionReposi
 import { SkillService } from "./domains/skills/crud/service";
 import { createSkillRoutes } from "./domains/skills/crud/routes";
 
+// Domain: Skillsets (#969)
+import { wireSkillsets } from "./domains/skillsets/bootstrap";
+
 // Domain: Skill Audit
 import { AuditRepository } from "./domains/skills/audit/repository";
 import { AuditService } from "./domains/skills/audit/service";
@@ -743,6 +746,13 @@ export async function bootstrap(
     getSaAccessToken,
   });
 
+  // ---- Domain: Skillsets (#969) ----
+  // A skillset is a curated, versioned meta-package over N member skills.
+  // The service injects `skillService` so member resolution + the #968
+  // closure walk stay single-sourced.
+  const skillsets = wireSkillsets({ db, skillService });
+  await skillsets.ensureIndexes();
+
   // ---- Domain: Skill Generation ----
   const { service: generationService, routes: generationRoutes } =
     wireSkillGeneration({
@@ -926,6 +936,8 @@ export async function bootstrap(
     quotaRoutes: adminQuotaRoutes,
   } = wireAdmin({ db, userDirectoryRepo, quotaService });
   apiApp.route("/", skillRoutes);
+  apiApp.route("/", skillsets.routes);
+  apiApp.route("/", skillsets.searchRoutes);
   apiApp.route("/", mirrorRoutes);
   apiApp.route("/", auditRoutes);
   apiApp.route("/", notificationRoutes);
