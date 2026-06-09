@@ -152,6 +152,30 @@ function AssistantPanel({ isOpen, onClose }: { isOpen: boolean; onClose: () => v
     inputRef.current?.setValue(text);
   };
 
+  // Focus trap — keep Tab / Shift+Tab cycling inside the dialog so focus
+  // can't escape to the backdrop'd page behind it. Paired with the
+  // focus-in-on-open / restore-on-close effects above. Scoped to the
+  // panel via currentTarget so no ref threading is needed.
+  const handlePanelKeyDown = (e: React.KeyboardEvent<HTMLElement>) => {
+    if (e.key !== "Tab") return;
+    const focusables = e.currentTarget.querySelectorAll<HTMLElement>(
+      'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    );
+    if (focusables.length === 0) return;
+    const first = focusables[0]!;
+    const last = focusables[focusables.length - 1]!;
+    const active = document.activeElement;
+    if (e.shiftKey) {
+      if (active === first || !e.currentTarget.contains(active)) {
+        e.preventDefault();
+        last.focus();
+      }
+    } else if (active === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  };
+
   return createPortal(
     <AnimatePresence>
       {isOpen && (
@@ -172,6 +196,7 @@ function AssistantPanel({ isOpen, onClose }: { isOpen: boolean; onClose: () => v
             role="dialog"
             aria-modal="true"
             aria-label={t("assistant.title")}
+            onKeyDown={handlePanelKeyDown}
             initial={
               reduceMotion ? { opacity: 0 } : { opacity: 0, y: 16, scale: 0.98 }
             }
@@ -353,7 +378,8 @@ function IconButton({
       onClick={onClick}
       aria-label={label}
       title={label}
-      className="inline-flex h-8 w-8 items-center justify-center rounded-sm text-meta transition-colors hover:bg-elevated hover:text-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+      // h-11 w-11 = 44px min touch target (docs/DESIGN.md a11y guideline).
+      className="inline-flex h-11 w-11 items-center justify-center rounded-sm text-meta transition-colors hover:bg-elevated hover:text-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
     >
       {children}
     </button>

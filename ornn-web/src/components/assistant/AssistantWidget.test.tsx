@@ -134,4 +134,35 @@ describe("AssistantWidget", () => {
     fireEvent.click(screen.getByLabelText("Close assistant"));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
+
+  it("traps Tab focus inside the dialog", () => {
+    render(<AssistantWidget />);
+    openPanel();
+    const dialog = screen.getByRole("dialog");
+    const focusables = dialog.querySelectorAll<HTMLElement>(
+      'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    );
+    expect(focusables.length).toBeGreaterThan(1);
+    const first = focusables[0]!;
+    const last = focusables[focusables.length - 1]!;
+
+    // Tab off the last element wraps to the first.
+    last.focus();
+    fireEvent.keyDown(dialog, { key: "Tab" });
+    expect(document.activeElement).toBe(first);
+
+    // Shift+Tab off the first element wraps to the last.
+    first.focus();
+    fireEvent.keyDown(dialog, { key: "Tab", shiftKey: true });
+    expect(document.activeElement).toBe(last);
+  });
+
+  it("gives the close control a >=44px touch target", () => {
+    render(<AssistantWidget />);
+    openPanel();
+    const close = screen.getByLabelText("Close assistant");
+    // h-11 w-11 = 44px (docs/DESIGN.md mobile touch-target guideline).
+    expect(close.className).toContain("h-11");
+    expect(close.className).toContain("w-11");
+  });
 });
