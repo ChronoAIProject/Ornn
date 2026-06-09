@@ -695,6 +695,8 @@
     "close": "关闭助手",
     "clear": "清空对话",
     "thinking": "思考中……",
+    "mascotAlt": "Ornn 吉祥物",
+    "greeting": "你好，我是 Ornn 👋",
     "empty": {
       "title": "向 Ornn 提问",
       "subtitle": "基于代码库回答关于 Ornn 是什么、如何运作，以及哪些技能适合你的智能体。",
@@ -704,6 +706,12 @@
       "what": "Ornn 是什么？",
       "different": "Ornn 有何不同？",
       "findSkill": "找一个能做某事的技能"
+    },
+    "signIn": {
+      "title": "登录后与 Ornn 对话",
+      "body": "Ornn 基于代码库的回答仅向已登录的开发者开放。登录即可开始对话。",
+      "cta": "登录",
+      "dismiss": "以后再说"
     }
   },
   "chatInput": {
