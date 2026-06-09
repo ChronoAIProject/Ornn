@@ -159,6 +159,36 @@ Reserved action verbs per resource documented in `ornn-api/src/shared/reservedVe
 
 Both return the same collection shape (`{ items, meta }`).
 
+### 2.5 Skill dependency closure (#968)
+
+```
+GET /v1/skills/{idOrName}/closure[?version=<major.minor>|<dist-tag>]
+```
+
+Resolves the full **transitive** dependency closure of a skill version. A skill declares its direct dependencies in SKILL.md frontmatter via `metadata.depends-on` — an array of `<name-or-guid>@<major.minor>` or `<name>@<dist-tag>` refs (no semver ranges). The endpoint walks that graph and returns every transitive dependency.
+
+- **Auth:** optional. Anonymous callers resolve against public skills only; a public skill that transitively depends on a private skill the caller can't read surfaces that node as `skill_dependency_not_found` (existence not leaked).
+- **Order:** items are returned in deps-first **topological order** — every dependency precedes the dependents that pin it, so installing in array order is always safe. Shared nodes (diamonds) appear exactly once.
+- **Response:** standard collection envelope.
+
+```json
+{
+  "data": {
+    "items": [
+      { "guid": "…", "name": "pdf-tools", "version": "1.0", "skillHash": "…", "depth": 1 },
+      { "guid": "…", "name": "report-gen", "version": "2.3", "skillHash": "…", "depth": 0 }
+    ]
+  },
+  "error": null
+}
+```
+
+- **Errors:** `dependency_cycle` (409) when the graph loops; `dependency_conflict` (409) when one skill is pinned to two versions in the same closure; `skill_dependency_not_found` (404) when a ref doesn't resolve or isn't visible. See `docs/ERRORS.md`.
+
+The same closure is validated at **publish time**: declaring a `depends-on` ref that can't be resolved, forms a cycle, or conflicts fails the create/update before the version is committed.
+
+SDK helpers: `client.resolveClosure(idOrName, { version })` / `client.pullClosure(...)` (TypeScript), `client.resolve_closure(...)` / `client.pull_closure(...)` (Python).
+
 ---
 
 ## 3. HTTP semantics
