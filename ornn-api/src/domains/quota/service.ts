@@ -24,6 +24,7 @@ import type { QuotaRepository } from "./repository";
 import {
   DEFAULT_WARNING_THRESHOLD,
   type ChargeOutcome,
+  type GrantableSurface,
   type QuotaBucketDoc,
   type QuotaDecision,
   type QuotaSnapshot,
@@ -38,6 +39,14 @@ const logger = createLogger("quotaService");
 export interface QuotaDefaults {
   defaultPlaygroundMonthly: number;
   defaultSkillGenMonthly: number;
+  /**
+   * Ornn Assistant monthly default (#970). Optional so existing
+   * `QuotaDefaultsResolver` mocks keep compiling; the production resolver
+   * always supplies it from `assistant.defaultMonthlyQuota`. When absent,
+   * the assistant surface resolves to a 0 allotment (fail-closed: every
+   * non-admin assistant call is denied until the default is wired).
+   */
+  defaultAssistantMonthly?: number;
 }
 
 export interface QuotaDefaultsResolver {
@@ -75,9 +84,14 @@ export class QuotaService {
 
   private async resolveDefault(surface: Surface): Promise<number> {
     const def = await this.defaults.getQuotaDefaults();
-    return surface === "playground"
-      ? def.defaultPlaygroundMonthly
-      : def.defaultSkillGenMonthly;
+    switch (surface) {
+      case "playground":
+        return def.defaultPlaygroundMonthly;
+      case "skillGen":
+        return def.defaultSkillGenMonthly;
+      case "assistant":
+        return def.defaultAssistantMonthly ?? 0;
+    }
   }
 
   /**
@@ -193,7 +207,7 @@ export class QuotaService {
   async grant(params: {
     admin: { userId: string; email: string; displayName: string };
     targetUserId: string;
-    surface: Surface;
+    surface: GrantableSurface;
     amount: number;
     note?: string;
     now?: Date;
@@ -264,7 +278,7 @@ export class QuotaService {
   async bulkGrant(params: {
     admin: { userId: string; email: string; displayName: string };
     targetUserIds: readonly string[];
-    surface: Surface;
+    surface: GrantableSurface;
     amount: number;
     note?: string;
     now?: Date;
@@ -363,6 +377,11 @@ export class QuotaService {
 }
 
 function buildOverLimitMessage(surface: Surface): string {
-  const surfaceLabel = surface === "playground" ? "playground" : "skill-generation";
+  const surfaceLabel =
+    surface === "playground"
+      ? "playground"
+      : surface === "skillGen"
+        ? "skill-generation"
+        : "assistant";
   return `You've hit your monthly ${surfaceLabel} limit — contact admin for credits, or upgrade when paid plans launch.`;
 }
