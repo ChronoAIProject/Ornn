@@ -48,7 +48,7 @@ function installFakeLocalStorage() {
 installFakeLocalStorage();
 
 // jsdom doesn't implement HTMLMediaElement playback — guard play/pause so
-// the launcher's forge <video> (autoPlay) never throws "Not implemented".
+// the panel's forge-hero <video> (autoPlay) never throws "Not implemented".
 if (typeof window !== "undefined" && window.HTMLMediaElement) {
   window.HTMLMediaElement.prototype.play = vi.fn().mockResolvedValue(undefined);
   window.HTMLMediaElement.prototype.pause = vi.fn();
