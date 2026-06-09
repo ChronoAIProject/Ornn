@@ -1223,6 +1223,7 @@ A **skillset** is a named, versioned, owned, visibility-scoped meta-package that
 
 - `kind` enum: `generic` (default) | `consensus-supported`. The latter is an author **claim** that the members are an independent, comparable set — not a guarantee. Ornn delivers the set; the agent runs any consensus in its own runtime.
 - `members`: 2..N skill refs, each `<name-or-guid>@<major.minor>` or `<name>@<dist-tag>` (same grammar as `depends-on`). No nested skillsets. Validated on publish (each must resolve to a readable skill version; union closure conflict-free).
+- `instructions` (master prompt, #978): **REQUIRED**, versioned markdown telling an agent **HOW** to use the set (orchestration, ordering, which member to pick when). 1..8000 chars (trimmed; whitespace-only rejected). Distinct from `description` (short ≤1024 summary). **Required on BOTH create and publish, with NO carry-forward** — unlike `description`/`kind`/`tags` (a publish may omit them to inherit the prior version), every version must restate its own master prompt. Stored opaque (no rendering / sanitization / templating / linting / search-indexing). Surfaced verbatim on the detail read and as a root field on `/closure`.
 
 ### 5a.1 Create skillset — `POST /api/v1/skillsets`
 
@@ -1232,6 +1233,7 @@ Requires `ornn:skill:create`. Created **private** by default. JSON body:
 {
   "name": "review-set",
   "description": "A curated comparison set.",
+  "instructions": "Run pdf-tools first, then feed its output to csv-tools…",  // REQUIRED, 1..8000 chars
   "kind": "consensus-supported",   // optional, default "generic"
   "tags": ["review"],              // optional
   "members": ["pdf-tools@1.0", "csv-tools@2.1"],   // 2..N
@@ -1239,11 +1241,11 @@ Requires `ornn:skill:create`. Created **private** by default. JSON body:
 }
 ```
 
-Response 201 + `Location: /api/v1/skillsets/:guid`. Member validation runs before any write — a missing member → `skill_dependency_not_found` (404), a conflicting union closure → `dependency_conflict` (409). Duplicate name → `skillset_name_exists` (409).
+Response 201 + `Location: /api/v1/skillsets/:guid`. Member validation runs before any write — a missing member → `skill_dependency_not_found` (404), a conflicting union closure → `dependency_conflict` (409). Duplicate name → `skillset_name_exists` (409). A missing/empty/whitespace-only `instructions` → `400` validation error.
 
 ### 5a.2 Get skillset — `GET /api/v1/skillsets/:idOrName`
 
-**Auth: optional** (anon sees public only; private → `skillset_not_found`). Query `version` (optional). Returns `{ guid, name, description, kind, tags, members, version, latestVersion, isPrivate, createdBy, sharedWithUsers, sharedWithOrgs, createdOn, updatedOn }`.
+**Auth: optional** (anon sees public only; private → `skillset_not_found`). Query `version` (optional). Returns `{ guid, name, description, instructions, kind, tags, members, version, latestVersion, isPrivate, createdBy, sharedWithUsers, sharedWithOrgs, createdOn, updatedOn }` — `instructions` is the version's master prompt.
 
 ### 5a.3 List versions — `GET /api/v1/skillsets/:idOrName/versions`
 
@@ -1251,11 +1253,11 @@ Response 201 + `Location: /api/v1/skillsets/:guid`. Member validation runs befor
 
 ### 5a.4 Resolve closure — `GET /api/v1/skillsets/:idOrName/closure`
 
-**Auth: optional.** One-call resolve: the union of all member skills **plus** each member's transitive dependency closure (§3.6a), deduplicated and topo-sorted (deps-first). Query `version` (optional). Same response envelope and the same error codes as §3.6a: `dependency_cycle` / `dependency_conflict` (409), `skill_dependency_not_found` (404), plus `skillset_not_found` (404) for an unknown/invisible root. A public skillset whose member transitively pins a private skill surfaces `skill_dependency_not_found` for that node to anonymous callers (no leak).
+**Auth: optional.** One-call resolve: the union of all member skills **plus** each member's transitive dependency closure (§3.6a), deduplicated and topo-sorted (deps-first). Query `version` (optional). The success body carries the version's master prompt as a **root sibling** of `items`: `{ "data": { "instructions": "…", "items": [ … ] }, "error": null }` (the skill `/skills/:id/closure` body stays `{ items }`, unchanged). Same error codes as §3.6a: `dependency_cycle` / `dependency_conflict` (409), `skill_dependency_not_found` (404), plus `skillset_not_found` (404) for an unknown/invisible root. A public skillset whose member transitively pins a private skill surfaces `skill_dependency_not_found` for that node to anonymous callers (no leak).
 
 ### 5a.5 Publish new version — `PUT /api/v1/skillsets/:id`
 
-Requires `ornn:skill:update` + author/admin. JSON body `{ members, version, description?, kind?, tags? }`. Appends an immutable `guid@version` and advances `latestVersion`; prior versions never mutate. Re-publishing an existing version → `skillset_version_exists` (409).
+Requires `ornn:skill:update` + author/admin. JSON body `{ members, version, instructions, description?, kind?, tags? }` — `instructions` is **REQUIRED** here too (no carry-forward; each version restates its own master prompt). Appends an immutable `guid@version` and advances `latestVersion`; prior versions never mutate. Re-publishing an existing version → `skillset_version_exists` (409).
 
 ### 5a.6 Replace permissions — `PUT /api/v1/skillsets/:id/permissions`
 
