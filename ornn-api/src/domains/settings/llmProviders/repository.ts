@@ -45,7 +45,7 @@ export interface StoredProvider {
 }
 
 /** Surface key — must match the in-store field naming convention. */
-export type SurfaceKey = "Playground" | "SkillGen";
+export type SurfaceKey = "Playground" | "SkillGen" | "Assistant";
 
 export class LlmProvidersRepository {
   private readonly collection: Collection<Document>;
@@ -172,8 +172,13 @@ function normalizeModel(raw: LlmProviderModel & { enabled?: boolean }): LlmProvi
       typeof raw.enabledForSkillGen === "boolean"
         ? raw.enabledForSkillGen
         : raw.enabled === true,
+    // #970 — assistant is a net-new surface; pre-#970 docs lack the
+    // flag entirely. Default `false` so an existing model never
+    // auto-routes to the assistant until an admin opts it in.
+    enabledForAssistant: raw.enabledForAssistant === true,
     defaultForPlayground: raw.defaultForPlayground === true,
     defaultForSkillGen: raw.defaultForSkillGen === true,
+    defaultForAssistant: raw.defaultForAssistant === true,
     removed: raw.removed === true,
     firstSeenAt: raw.firstSeenAt instanceof Date ? raw.firstSeenAt : new Date(raw.firstSeenAt),
     lastSyncedAt: raw.lastSyncedAt instanceof Date ? raw.lastSyncedAt : new Date(raw.lastSyncedAt),

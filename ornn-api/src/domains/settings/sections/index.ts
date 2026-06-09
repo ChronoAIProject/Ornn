@@ -9,6 +9,7 @@
  * @module domains/settings/sections
  */
 
+import { assistantSection, type AssistantSection } from "./assistant";
 import { mirrorSection, type MirrorSection } from "./mirror";
 import { nyxidSection, type NyxidSection } from "./nyxid";
 import { playgroundSection, type PlaygroundSection } from "./playground";
@@ -18,6 +19,7 @@ import { telemetrySection, type TelemetrySection } from "./telemetry";
 import { extrasSection, type ExtrasSection } from "./extras";
 
 export {
+  assistantSection,
   mirrorSection,
   nyxidSection,
   playgroundSection,
@@ -28,6 +30,7 @@ export {
 };
 
 export type {
+  AssistantSection,
   MirrorSection,
   NyxidSection,
   PlaygroundSection,
@@ -40,6 +43,7 @@ export type {
 export type SectionId =
   | "playground"
   | "skillGen"
+  | "assistant"
   | "mirror"
   | "nyxid"
   | "skillAudit"
@@ -62,6 +66,7 @@ export interface SectionMeta<T> {
 export const sections = {
   playground: playgroundSection,
   skillGen: skillGenSection,
+  assistant: assistantSection,
   mirror: mirrorSection,
   nyxid: nyxidSection,
   skillAudit: skillAuditSection,

@@ -38,11 +38,10 @@ class FakeRepo {
     return this.rows.delete(id);
   }
   async clearDefaultsForSurfaceExcept(
-    surface: "Playground" | "SkillGen",
+    surface: "Playground" | "SkillGen" | "Assistant",
     keep: { providerId: string; modelId: string } | null,
   ): Promise<void> {
-    const defKey =
-      surface === "Playground" ? "defaultForPlayground" : "defaultForSkillGen";
+    const defKey = `defaultFor${surface}` as const;
     for (const [id, doc] of this.rows) {
       const isKeeper = keep && id === keep.providerId;
       const nextModels = doc.models.map((m) => {
@@ -414,6 +413,146 @@ describe("LlmProvidersService", () => {
     if (masked?.auth.kind !== "apiKey") throw new Error("kind");
     expect(masked.auth.apiKey).not.toBe("sk-aabbccdd1122");
     expect(isMidMaskSentinel(masked.auth.apiKey)).toBe(true);
+  });
+
+  // ──────────────── #970 — assistant surface ────────────────
+
+  it("UT-LLM-ASST-001: resolveModel(assistant) → no-models-enabled until a model opts in", async () => {
+    // baseInput enables gpt-4o for playground + skillGen but NOT for the
+    // assistant — a brand-new surface must start with zero routable
+    // models so it never silently borrows another surface's default.
+    const { svc } = makeService();
+    await svc.create(
+      { ...baseInput, auth: { kind: "apiKey", apiKey: "k" } },
+      ACTOR,
+    );
+    const resolution = await svc.resolveModel({ surface: "assistant" });
+    expect(resolution.kind).toBe("no-models-enabled");
+  });
+
+  it("UT-LLM-ASST-002: patchModel(defaultForAssistant) auto-enables + resolveModel picks it", async () => {
+    const { svc } = makeService();
+    const created = await svc.create(
+      { ...baseInput, auth: { kind: "apiKey", apiKey: "k" } },
+      ACTOR,
+    );
+    const after = await svc.patchModel(
+      created._id,
+      "gpt-4o",
+      { defaultForAssistant: true },
+      ACTOR,
+    );
+    const gpt4o = after.models.find((m) => m.id === "gpt-4o")!;
+    expect(gpt4o.defaultForAssistant).toBe(true);
+    expect(gpt4o.enabledForAssistant).toBe(true);
+
+    const resolution = await svc.resolveModel({ surface: "assistant" });
+    expect(resolution.kind).toBe("ok");
+    if (resolution.kind === "ok") expect(resolution.modelId).toBe("gpt-4o");
+  });
+
+  it("UT-LLM-ASST-003: resolveModel(assistant) prefers default over first-enabled", async () => {
+    const { svc } = makeService();
+    await svc.create(
+      {
+        ...baseInput,
+        name: "asst",
+        auth: { kind: "apiKey", apiKey: "k" },
+        models: [
+          {
+            id: "alpha",
+            displayName: "Alpha",
+            enabledForAssistant: true,
+          },
+          {
+            id: "bravo",
+            displayName: "Bravo",
+            enabledForAssistant: true,
+            defaultForAssistant: true,
+          },
+        ],
+      },
+      ACTOR,
+    );
+    const resolution = await svc.resolveModel({ surface: "assistant" });
+    expect(resolution.kind).toBe("ok");
+    // bravo is the surface default even though alpha sorts first by name.
+    if (resolution.kind === "ok") expect(resolution.modelId).toBe("bravo");
+  });
+
+  it("UT-LLM-ASST-004: requested model not enabled for assistant → not-enabled", async () => {
+    const { svc } = makeService();
+    await svc.create(
+      { ...baseInput, auth: { kind: "apiKey", apiKey: "k" } },
+      ACTOR,
+    );
+    // gpt-4o is enabled for playground/skillGen but not assistant.
+    const resolution = await svc.resolveModel({
+      surface: "assistant",
+      requested: "gpt-4o",
+    });
+    expect(resolution.kind).toBe("not-enabled");
+  });
+
+  it("UT-LLM-ASST-005: assistant default flip is surface-isolated (#970)", async () => {
+    // baseInput marks gpt-4o as the playground AND skillGen default.
+    // Setting gpt-3.5 as the assistant default must NOT disturb either
+    // of gpt-4o's other-surface defaults — surfaces are independent.
+    const { svc } = makeService();
+    const created = await svc.create(
+      { ...baseInput, auth: { kind: "apiKey", apiKey: "k" } },
+      ACTOR,
+    );
+    const after = await svc.patchModel(
+      created._id,
+      "gpt-3.5",
+      { defaultForAssistant: true },
+      ACTOR,
+    );
+    const gpt4o = after.models.find((m) => m.id === "gpt-4o")!;
+    expect(gpt4o.defaultForPlayground).toBe(true);
+    expect(gpt4o.defaultForSkillGen).toBe(true);
+    expect(gpt4o.defaultForAssistant).toBe(false);
+    const gpt35 = after.models.find((m) => m.id === "gpt-3.5")!;
+    expect(gpt35.defaultForAssistant).toBe(true);
+    expect(gpt35.enabledForAssistant).toBe(true);
+  });
+
+  it("UT-LLM-ASST-006: assistant default is at-most-one across providers (#970)", async () => {
+    const { svc } = makeService();
+    const a = await svc.create(
+      {
+        ...baseInput,
+        name: "alpha",
+        auth: { kind: "apiKey", apiKey: "k1" },
+        models: [
+          {
+            id: "m-a",
+            displayName: "M-A",
+            enabledForAssistant: true,
+            defaultForAssistant: true,
+          },
+        ],
+      },
+      ACTOR,
+    );
+    const b = await svc.create(
+      {
+        ...baseInput,
+        name: "beta",
+        auth: { kind: "apiKey", apiKey: "k2" },
+        models: [{ id: "m-b", displayName: "M-B", enabledForAssistant: true }],
+      },
+      ACTOR,
+    );
+    // Promote m-b on provider beta → m-a's default must clear.
+    await svc.patchModel(b._id, "m-b", { defaultForAssistant: true }, ACTOR);
+    const alpha = await svc.get(a._id);
+    const mA = alpha!.models.find((m) => m.id === "m-a")!;
+    expect(mA.defaultForAssistant).toBe(false);
+    const beta = await svc.get(b._id);
+    const mB = beta!.models.find((m) => m.id === "m-b")!;
+    expect(mB.defaultForAssistant).toBe(true);
   });
 
   it("UT-LLM-013: sentinel apiKey on update preserves DB value", async () => {

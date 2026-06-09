@@ -687,6 +687,25 @@
     "nowPublic": "技能已设为公开，所有用户都能看到。",
     "failed": "更新可见范围失败"
   },
+  "assistant": {
+    "launch": "问问 Ornn",
+    "title": "Ornn 助手",
+    "subtitle": "基于代码库的回答",
+    "placeholder": "向 Ornn 提问……",
+    "close": "关闭助手",
+    "clear": "清空对话",
+    "thinking": "思考中……",
+    "empty": {
+      "title": "向 Ornn 提问",
+      "subtitle": "基于代码库回答关于 Ornn 是什么、如何运作，以及哪些技能适合你的智能体。",
+      "hint": "试着问问"
+    },
+    "suggestions": {
+      "what": "Ornn 是什么？",
+      "different": "Ornn 有何不同？",
+      "findSkill": "找一个能做某事的技能"
+    }
+  },
   "chatInput": {
     "model": "模型",
     "generating": "正在生成回复…",
@@ -1547,7 +1566,7 @@
           "models": "模型",
           "actions": "操作"
         },
-        "modelCounts": "{{playground}} playground · {{skillGen}} skillGen · 共 {{total}}",
+        "modelCounts": "{{playground}} playground · {{skillGen}} skillGen · {{assistant}} assistant · 共 {{total}}",
         "archivedCount": "已归档 {{count}}",
         "toast": {
           "synced": "已同步 {{name}}：新增 +{{added}}，更新 {{updated}}，移除 {{removed}}。",

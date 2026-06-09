@@ -687,6 +687,25 @@
     "nowPublic": "Skill is now public. All users can view it.",
     "failed": "Failed to update skill visibility"
   },
+  "assistant": {
+    "launch": "Ask Ornn",
+    "title": "Ornn Assistant",
+    "subtitle": "Repo-aware answers",
+    "placeholder": "Ask about Ornn…",
+    "close": "Close assistant",
+    "clear": "Clear conversation",
+    "thinking": "Thinking…",
+    "empty": {
+      "title": "Ask Ornn anything",
+      "subtitle": "Repo-aware answers about what Ornn is, how it works, and which skills fit your agent.",
+      "hint": "Try asking"
+    },
+    "suggestions": {
+      "what": "What is Ornn?",
+      "different": "How is Ornn different?",
+      "findSkill": "Find a skill that does X"
+    }
+  },
   "chatInput": {
     "model": "Model",
     "generating": "Generating response...",
@@ -1547,7 +1566,7 @@
           "models": "Models",
           "actions": "Actions"
         },
-        "modelCounts": "{{playground}} playground · {{skillGen}} skillGen · {{total}} total",
+        "modelCounts": "{{playground}} playground · {{skillGen}} skillGen · {{assistant}} assistant · {{total}} total",
         "archivedCount": "{{count}} archived",
         "toast": {
           "synced": "Synced {{name}}: +{{added}} added, {{updated}} updated, {{removed}} removed.",

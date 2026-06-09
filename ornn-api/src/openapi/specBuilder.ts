@@ -303,6 +303,29 @@ function playgroundChatPath(): PathItem {
   };
 }
 
+function assistantChatPath(): PathItem {
+  return {
+    post: {
+      summary: "Ornn Assistant — repo-aware Q&A chat (SSE stream)",
+      description:
+        "Pure, non-agentic Q&A about Ornn and the skills the caller may see. Grounds answers in a curated knowledge-base digest plus a visibility-scoped skill retrieval (SAFE fields only). SSE event types: 'chat_start', 'chat_text_delta', 'chat_error', 'chat_finish' (+ keepalive comment frames). No tools / no execution.",
+      operationId: "assistantChat",
+      tags: ["Assistant"],
+      security: bearerAuth(),
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": { schema: toSchema(S.assistantChatRequestBodySchema) },
+        },
+      },
+      responses: {
+        ...sseResponse("SSE stream of assistant chat events"),
+        ...errorResponses(400, 401, 429, 503),
+      },
+    },
+  };
+}
+
 function categoriesListCreatePath(): PathItem {
   return {
     get: {
@@ -444,6 +467,8 @@ export function buildSpec(): OpenApiSpec {
       [`${prefix}/skill-manifest-schema.json`]: formatSchemaPath(),
       // Playground
       [`${prefix}/playground/chat`]: playgroundChatPath(),
+      // Assistant (#970)
+      [`${prefix}/assistant/chat`]: assistantChatPath(),
       // Admin
       [`${prefix}/admin/categories`]: categoriesListCreatePath(),
       [`${prefix}/admin/categories/{id}`]: categoryUpdateDeletePath(),
