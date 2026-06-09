@@ -232,15 +232,18 @@ function AssistantLauncher({ isOpen, onOpen }: { isOpen: boolean; onOpen: () => 
             exit={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.6 }}
             transition={{ type: "spring", stiffness: 320, damping: 24, mass: 0.7 }}
             style={{ x, y, width: LAUNCHER_W, height: LAUNCHER_H }}
-            className="pointer-events-auto absolute left-0 top-0 flex cursor-grab touch-none items-end justify-center rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-page"
+            className="group pointer-events-auto absolute left-0 top-0 flex cursor-grab touch-none items-end justify-center rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-page"
           >
-            {/* Ambient ember/arc glow behind the mascot — accent halo only. */}
+            {/* Quiet ember aura behind the mascot — ember-only, static at
+                rest, and only intensifying on hover/focus/active so the
+                glow signals interaction rather than baseline bloom. No
+                perpetual pulse, no arc-blue wash (docs/DESIGN.md). */}
             <span
               aria-hidden="true"
-              className="pointer-events-none absolute inset-x-1 bottom-0 top-2 -z-10 rounded-full opacity-70 blur-xl motion-safe:animate-pulse"
+              className="pointer-events-none absolute inset-x-2 bottom-1 top-3 -z-10 rounded-full opacity-25 blur-lg motion-safe:transition-opacity motion-safe:duration-200 group-hover:opacity-60 group-focus-visible:opacity-60 group-active:opacity-75"
               style={{
                 background:
-                  "radial-gradient(circle at 50% 60%, var(--color-ember-glow), var(--color-arc-soft) 55%, transparent 72%)",
+                  "radial-gradient(circle at 50% 60%, var(--color-ember-glow), transparent 70%)",
               }}
             />
             {/* Idle bob — gentle vertical float; static under reduced motion. */}
