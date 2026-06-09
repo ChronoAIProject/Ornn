@@ -45,11 +45,13 @@ describe("assistant SSE event union", () => {
   it("accepts chat_finish with usage and tolerates extra usage keys", () => {
     const r = assistantChatEventSchema.safeParse({
       type: "chat_finish",
-      usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15, costUsd: 0.01 },
+      usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15, costUsd: 0.01 },
     });
     expect(r.success).toBe(true);
     if (r.success && r.data.type === "chat_finish") {
       expect(r.data.usage?.totalTokens).toBe(15);
+      expect(r.data.usage?.inputTokens).toBe(10);
+      expect(r.data.usage?.outputTokens).toBe(5);
       // Forward-compatible extra key is stripped, not retained.
       expect(r.data.usage).not.toHaveProperty("costUsd");
     }

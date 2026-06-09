@@ -63,14 +63,16 @@ export const assistantChatErrorSchema = z.object({
 });
 
 /**
- * Usage accounting attached to `chat_finish`. Shape is advisory — the
+ * Usage accounting attached to `chat_finish`. Field names mirror the
+ * backend AssistantUsage contract (ornn-api domains/assistant/types.ts):
+ * inputTokens / outputTokens / totalTokens. Shape is advisory — the
  * backend may add fields, so unknown keys are tolerated (Zod strips them)
  * and every known field is optional.
  */
 export const assistantUsageSchema = z
   .object({
-    promptTokens: z.number().optional(),
-    completionTokens: z.number().optional(),
+    inputTokens: z.number().optional(),
+    outputTokens: z.number().optional(),
     totalTokens: z.number().optional(),
   })
   .optional();
