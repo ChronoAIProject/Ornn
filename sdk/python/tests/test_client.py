@@ -294,8 +294,20 @@ class TestClosure:
             json={
                 "data": {
                     "items": [
-                        {"guid": "g-c", "name": "c", "version": "1.0", "skillHash": "h-c", "depth": 1},
-                        {"guid": "g-b", "name": "b", "version": "1.0", "skillHash": "h-b", "depth": 0},
+                        {
+                            "guid": "g-c",
+                            "name": "c",
+                            "version": "1.0",
+                            "skillHash": "h-c",
+                            "depth": 1,
+                        },
+                        {
+                            "guid": "g-b",
+                            "name": "b",
+                            "version": "1.0",
+                            "skillHash": "h-b",
+                            "depth": 0,
+                        },
                     ],
                 },
                 "error": None,
@@ -343,8 +355,20 @@ class TestClosure:
             json={
                 "data": {
                     "items": [
-                        {"guid": "g-c", "name": "c", "version": "1.0", "skillHash": "h-c", "depth": 1},
-                        {"guid": "g-b", "name": "b", "version": "1.0", "skillHash": "h-b", "depth": 0},
+                        {
+                            "guid": "g-c",
+                            "name": "c",
+                            "version": "1.0",
+                            "skillHash": "h-c",
+                            "depth": 1,
+                        },
+                        {
+                            "guid": "g-b",
+                            "name": "b",
+                            "version": "1.0",
+                            "skillHash": "h-b",
+                            "depth": 0,
+                        },
                     ],
                 },
                 "error": None,

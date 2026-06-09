@@ -150,9 +150,7 @@ class OrnnClient:
         # happy without disabling the rule.
         return bytes(res.content)
 
-    def resolve_closure(
-        self, guid_or_name: str, *, version: str | None = None
-    ) -> ClosureResult:
+    def resolve_closure(self, guid_or_name: str, *, version: str | None = None) -> ClosureResult:
         """Resolve the full transitive dependency closure of a skill (#968).
 
         Returns the closure in deps-first topological order — every
@@ -161,11 +159,7 @@ class OrnnClient:
         ``dependency_conflict`` / ``skill_dependency_not_found`` when the
         graph can't be resolved.
         """
-        suffix = (
-            f"?version={httpx.QueryParams({'version': version})['version']}"
-            if version
-            else ""
-        )
+        suffix = f"?version={httpx.QueryParams({'version': version})['version']}" if version else ""
         data = self.request("GET", f"/skills/{_quote(guid_or_name)}/closure{suffix}")
         return ClosureResult.from_dict(data)
 
