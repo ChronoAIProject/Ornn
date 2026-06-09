@@ -17,6 +17,10 @@
 
 export const RESERVED_VERBS = {
   skill: ["format", "validate", "search", "counts", "generate", "lookup"],
+  // Skillset sub-resource segments the router gives priority over the
+  // `:idOrName` capture (#969) — a skillset named the same would shadow
+  // them and become unreachable via its canonical read.
+  skillset: ["closure", "permissions", "versions"],
   category: [] as string[],
   tag: [] as string[],
 } as const satisfies Record<string, readonly string[]>;
