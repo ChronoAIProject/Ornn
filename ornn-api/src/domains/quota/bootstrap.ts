@@ -45,13 +45,15 @@ export function wireQuota(deps: {
       // inside QuotaService; this resolver just hands it the current
       // section values whenever it asks.
       getQuotaDefaults: async () => {
-        const [pg, sg] = await Promise.all([
+        const [pg, sg, asst] = await Promise.all([
           deps.settingsService.getPlayground(),
           deps.settingsService.getSkillGen(),
+          deps.settingsService.getAssistant(),
         ]);
         return {
           defaultPlaygroundMonthly: pg.defaultMonthlyQuota,
           defaultSkillGenMonthly: sg.defaultMonthlyQuota,
+          defaultAssistantMonthly: asst.defaultMonthlyQuota,
         };
       },
     },

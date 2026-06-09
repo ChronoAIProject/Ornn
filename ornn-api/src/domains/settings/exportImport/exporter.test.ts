@@ -58,8 +58,10 @@ function fakeSettingsService(): SettingsService {
           displayName: "GPT-4o",
           enabledForPlayground: true,
           enabledForSkillGen: true,
+          enabledForAssistant: false,
           defaultForPlayground: true,
           defaultForSkillGen: false,
+          defaultForAssistant: false,
           removed: false,
           firstSeenAt: new Date("2026-01-01"),
           lastSyncedAt: new Date("2026-04-01"),
@@ -79,6 +81,7 @@ function fakeSettingsService(): SettingsService {
   return {
     getPlayground: () => make("playground"),
     getSkillGen: () => make("skillGen"),
+    getAssistant: () => make("assistant"),
     getMirror: () => make("mirror"),
     getNyxid: () => make("nyxid"),
     getSkillAudit: () => make("skillAudit"),

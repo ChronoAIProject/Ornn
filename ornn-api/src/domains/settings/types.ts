@@ -13,6 +13,7 @@
  */
 
 import type {
+  AssistantSection,
   ExtrasSection,
   MirrorSection,
   NyxidSection,
@@ -51,6 +52,7 @@ export interface SettingsService {
   // ---- Per-section typed accessors ----
   getPlayground(): Promise<PlaygroundSection>;
   getSkillGen(): Promise<SkillGenSection>;
+  getAssistant(): Promise<AssistantSection>;
   getMirror(): Promise<MirrorSection>;
   getNyxid(): Promise<NyxidSection>;
   getSkillAudit(): Promise<SkillAuditSection>;

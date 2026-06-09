@@ -687,6 +687,25 @@
     "nowPublic": "技能已设为公开，所有用户都能看到。",
     "failed": "更新可见范围失败"
   },
+  "assistant": {
+    "launch": "问问 Ornn",
+    "title": "Ornn 助手",
+    "subtitle": "基于代码库的回答",
+    "placeholder": "向 Ornn 提问……",
+    "close": "关闭助手",
+    "clear": "清空对话",
+    "thinking": "思考中……",
+    "empty": {
+      "title": "向 Ornn 提问",
+      "subtitle": "基于代码库回答关于 Ornn 是什么、如何运作，以及哪些技能适合你的智能体。",
+      "hint": "试着问问"
+    },
+    "suggestions": {
+      "what": "Ornn 是什么？",
+      "different": "Ornn 有何不同？",
+      "findSkill": "找一个能做某事的技能"
+    }
+  },
   "chatInput": {
     "model": "模型",
     "generating": "正在生成回复…",
@@ -773,6 +792,7 @@
     "languageChinese": "中文",
     "launchPopup": {
       "eyebrow": "[§ LAUNCH — ORNN]",
+      "bannerTitle": "早期用户专享上线额度",
       "date": "2026 · 05 · 13",
       "title": "为庆祝 Ornn 正式上线，我们特别为用户准备了额外的免费使用额度，以表达我们诚挚的感谢。",
       "creditsLead": "前 500 位用户可免费领取",
@@ -808,6 +828,71 @@
       "subheadStatic": "为 AI 代理打造的技能全生命周期管理平台 —— 检索、安装、构建、发布、审计。一个平台,任意运行时。",
       "finalLine1": "你的产品。你的 Agent。",
       "finalLine2": "全副武装。"
+    },
+    "lifecycle": {
+      "ariaRing": "技能生命周期 —— 从检索到分享的八个阶段",
+      "ariaNode": "{{index}} {{name}} —— 查看详情",
+      "hubTitle": "技能生命周期",
+      "hubSubtitle": "一套面向 Agent 的 API,从首次检索到技能分享 —— 适配任意运行时。",
+      "hubHint": "悬停或点击任一阶段",
+      "stages": {
+        "search": {
+          "name": "检索",
+          "title": "找到合适的技能",
+          "body": "你的 Agent 可按能力、标签或自然语言检索注册表,在写下任何胶水代码之前先找到所需技能。",
+          "hint": "GET /api/v1/skills?q=pdf-export",
+          "cta": "浏览注册表"
+        },
+        "preview": {
+          "name": "预览",
+          "title": "安装前先审视",
+          "body": "提前阅读 SKILL.md、清单、版本与示例 —— 无需安装即可清楚了解将要运行的内容。",
+          "hint": "GET /api/v1/skills/:id",
+          "cta": "查看示例"
+        },
+        "audit": {
+          "name": "审计",
+          "title": "版本化且经审计",
+          "body": "每个版本都带有来源、声明权限与可审阅的差异 —— 让你的 Agent 只拉取你信任的内容。",
+          "hint": "GET /api/v1/skills/:id/audit",
+          "cta": "了解审计机制"
+        },
+        "install": {
+          "name": "安装",
+          "title": "按需拉取",
+          "body": "将锁定版本、可复现的技能直接安装进 Agent —— 模型无关、无锁定,也无需复制粘贴。",
+          "hint": "POST /api/v1/installs",
+          "cta": "阅读安装指南"
+        },
+        "execute": {
+          "name": "运行",
+          "title": "在沙箱中运行",
+          "body": "在隔离运行时(Node + Python)中执行技能,任何需要凭据的操作均由 NyxID 把关。",
+          "hint": "POST /api/v1/execute",
+          "cta": "打开 Playground"
+        },
+        "build": {
+          "name": "构建",
+          "title": "从提示词生成",
+          "body": "用自然语言描述技能,ornn-build 会起草一份可用的 SKILL.md,供你迭代与沙箱测试。",
+          "hint": "POST /api/v1/skills/generate",
+          "cta": "构建技能"
+        },
+        "publish": {
+          "name": "发布",
+          "title": "数秒内发布",
+          "body": "推送到注册表即刻上线 —— 版本化、经审计,任意 Agent 都能拉取。",
+          "hint": "POST /api/v1/skills",
+          "cta": "开始发布"
+        },
+        "share": {
+          "name": "分享",
+          "title": "随处分享",
+          "body": "分享给团队或全世界。开放的技能格式可在 Claude、GPT、Gemini 及自定义 Agent 间通用。",
+          "hint": "skill · 开放格式 · 任意 Agent",
+          "cta": "浏览共享技能"
+        }
+      }
     },
     "why": {
       "headlineLine1": "停止复制粘贴 prompt。",
@@ -1004,6 +1089,13 @@
     "noAnnouncements": "暂无公告",
     "emptyHint": "创建第一条公告后，访客下次加载落地页时就会看到。",
     "createBtn": "创建公告"
+  },
+  "announcementBanner": {
+    "ariaLabel": "公告",
+    "eyebrow": "[§ 公告]",
+    "dismissAria": "忽略公告",
+    "moreCount": "+{{count}}",
+    "redeemLink": "如何兑换"
   },
   "aria": {
     "toggleLanguage": "切换语言",
@@ -1474,7 +1566,7 @@
           "models": "模型",
           "actions": "操作"
         },
-        "modelCounts": "{{playground}} playground · {{skillGen}} skillGen · 共 {{total}}",
+        "modelCounts": "{{playground}} playground · {{skillGen}} skillGen · {{assistant}} assistant · 共 {{total}}",
         "archivedCount": "已归档 {{count}}",
         "toast": {
           "synced": "已同步 {{name}}：新增 +{{added}}，更新 {{updated}}，移除 {{removed}}。",

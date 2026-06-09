@@ -22,8 +22,6 @@ import { Navbar } from "@/components/layout/Navbar";
 import { HeroVideo } from "@/pages/landing/HeroVideo";
 import { LandingFooter } from "@/pages/landing/LandingFooter";
 import { LandingChrome } from "@/pages/landing/LandingChrome";
-import { AnnouncementPopup } from "@/pages/landing/AnnouncementPopup";
-import { LaunchCelebrationPopup } from "@/pages/landing/LaunchCelebrationPopup";
 
 export function LandingPage() {
   return (
@@ -39,8 +37,6 @@ export function LandingPage() {
         <HeroVideo />
       </main>
       <LandingFooter />
-      <AnnouncementPopup />
-      <LaunchCelebrationPopup />
     </div>
   );
 }

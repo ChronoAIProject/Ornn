@@ -55,11 +55,10 @@ class FakeRepo {
   // patchModel needs this when a default flag is flipped on (matches the
   // in-memory implementation used by service.test.ts).
   async clearDefaultsForSurfaceExcept(
-    surface: "Playground" | "SkillGen",
+    surface: "Playground" | "SkillGen" | "Assistant",
     keep: { providerId: string; modelId: string } | null,
   ): Promise<void> {
-    const defKey =
-      surface === "Playground" ? "defaultForPlayground" : "defaultForSkillGen";
+    const defKey = `defaultFor${surface}` as const;
     for (const [id, doc] of this.rows) {
       const isKeeper = keep && id === keep.providerId;
       const nextModels = doc.models.map((m) => {

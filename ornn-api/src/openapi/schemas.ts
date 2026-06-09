@@ -184,6 +184,39 @@ export const playgroundChatEventSchema = z.discriminatedUnion("type", [
 ]);
 
 // ---------------------------------------------------------------------------
+// Assistant (#970) — repo-aware Q&A chatbot
+// ---------------------------------------------------------------------------
+
+export const assistantChatRequestBodySchema = z.object({
+  messages: z
+    .array(
+      z.object({
+        role: z.enum(["user", "assistant"]),
+        content: z.string(),
+      }),
+    )
+    .min(1)
+    .max(100),
+  modelId: z.string().optional(),
+});
+
+export const assistantChatEventSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("chat_start"), model: z.string() }),
+  z.object({ type: z.literal("chat_text_delta"), delta: z.string() }),
+  z.object({ type: z.literal("chat_error"), code: z.string(), message: z.string() }),
+  z.object({
+    type: z.literal("chat_finish"),
+    usage: z
+      .object({
+        inputTokens: z.number().optional(),
+        outputTokens: z.number().optional(),
+        totalTokens: z.number().optional(),
+      })
+      .optional(),
+  }),
+]);
+
+// ---------------------------------------------------------------------------
 // Admin
 // ---------------------------------------------------------------------------
 

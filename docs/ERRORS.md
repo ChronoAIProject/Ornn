@@ -194,6 +194,10 @@ A dependency Ornn relies on (NyxID, OpenSandbox, LLM provider, mirror target, �
 
 **Client action:** retry with exponential backoff. If the failure persists, check [status.chrono-ai.fun](https://status.chrono-ai.fun) (when published) or [Discussions → Q&A](https://github.com/ChronoAIProject/Ornn/discussions/categories/q-a).
 
+### chat_error (SSE) — `/assistant/chat`
+
+`POST /v1/assistant/chat` (SSE; see [`docs/CONVENTIONS.md`](CONVENTIONS.md) §6.2) introduces **no new error codes** — it reuses the existing catalog. Failures before the stream opens use the normal `application/problem+json` envelope: `validation_error` (400, bad body), `authentication_required` (401), `rate_limited` (429), and — only when the caller supplies an explicit `modelId` — `MODEL_NOT_ENABLED` / `MODEL_NOT_FOUND` (400, from the per-surface model resolver). Once the stream is open, an in-stream LLM failure is delivered as an SSE `chat_error` event with `code: "upstream_unavailable"` and no terminal `chat_finish`, mirroring this section's parent code.
+
 ---
 
 ## Appendix: pre-#585 migration map

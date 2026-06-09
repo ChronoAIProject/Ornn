@@ -92,6 +92,9 @@ import { wireSkillGeneration } from "./domains/skills/generation/bootstrap";
 // Domain: Playground
 import { wirePlayground } from "./domains/playground/bootstrap";
 
+// Domain: Assistant (#970 — repo-aware Q&A chatbot)
+import { wireAssistant } from "./domains/assistant/bootstrap";
+
 // Domain: Admin
 import { createAdminRoutes } from "./domains/admin/routes";
 
@@ -335,12 +338,14 @@ export async function bootstrap(
   // shape stays narrow — the empty `gatewayUrl` is what triggers the
   // fail-closed branch downstream.
   const resolveLlmProviderForSurface = async (
-    surface: "playground" | "skillGen",
+    surface: "playground" | "skillGen" | "assistant",
   ): Promise<{ gatewayUrl: string; apiKey: string; apiFormat: ApiFormat }> => {
     const sec =
       surface === "playground"
         ? await settingsService.getPlayground()
-        : await settingsService.getSkillGen();
+        : surface === "skillGen"
+          ? await settingsService.getSkillGen()
+          : await settingsService.getAssistant();
     if (!sec.defaultProviderId) {
       return { gatewayUrl: "", apiKey: "", apiFormat: "responses" };
     }
@@ -365,12 +370,14 @@ export async function bootstrap(
   // override for callers that want to pin a specific model regardless
   // of the cross-provider default.
   const resolveSurfaceDefaults = async (
-    surface: "playground" | "skillGen",
+    surface: "playground" | "skillGen" | "assistant",
   ): Promise<{ model: string; maxOutputTokens: number; temperature: number }> => {
     const sec =
       surface === "playground"
         ? await settingsService.getPlayground()
-        : await settingsService.getSkillGen();
+        : surface === "skillGen"
+          ? await settingsService.getSkillGen()
+          : await settingsService.getAssistant();
     let model = sec.defaultModelId ?? "";
     if (!model) {
       const resolution = await llmProvidersService.resolveModel({ surface });
@@ -770,6 +777,20 @@ export async function bootstrap(
     llmProvidersService,
   });
 
+  // ---- Domain: Assistant (#970) ----
+  // Repo-aware Q&A chatbot. Reuses the shared NyxLlmClient, the assistant
+  // LLM surface (resolver + quota), and a visibility-scoped retrieval over
+  // the same SkillRepository. Pure Q&A — no agentic tool loop.
+  const { routes: assistantRoutes } = wireAssistant({
+    llmClient: nyxLlmClient,
+    skillRepo,
+    quotaService,
+    llmProvidersService,
+    defaultsResolver: async () => resolveSurfaceDefaults("assistant"),
+    keepAliveIntervalMsResolver: async () =>
+      (await settingsService.getAssistant()).sseKeepAliveMs,
+  });
+
   // ---- Domain: Admin ----
   const adminRoutes = createAdminRoutes({
     analyticsEmitter,
@@ -926,6 +947,7 @@ export async function bootstrap(
   apiApp.route("/", searchRoutes);
   apiApp.route("/", generationRoutes);
   apiApp.route("/", playgroundRoutes);
+  apiApp.route("/", assistantRoutes);
   apiApp.route("/", adminRoutes);
   apiApp.route("/", adminDashboardRoutes);
   apiApp.route("/", adminUsersRoutes);

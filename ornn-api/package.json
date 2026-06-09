@@ -1,6 +1,6 @@
 {
   "name": "ornn-api",
-  "version": "0.10.2",
+  "version": "0.11.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -10,7 +10,8 @@
     "migrate:versions": "bun run scripts/migrate-skill-versions.ts",
     "migrate:ownership": "bun run scripts/migrate-skill-ownership.ts",
     "migrate:drop-topics": "bun run scripts/drop-topics.ts",
-    "audit:reserved-verbs": "bun run scripts/audit-reserved-verbs.ts"
+    "audit:reserved-verbs": "bun run scripts/audit-reserved-verbs.ts",
+    "build:assistant-kb": "bun run scripts/build-assistant-kb.ts"
   },
   "dependencies": {
     "@agendajs/mongo-backend": "^4.0.2",

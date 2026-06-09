@@ -62,12 +62,22 @@ import type {
 const logger = createLogger("llmProvidersService");
 
 /** Surfaces the picker / resolver care about. Mirror of `quota/types.ts:Surface`. */
-export type Surface = "playground" | "skillGen";
+export type Surface = "playground" | "skillGen" | "assistant";
 
 const SURFACE_KEY: Record<Surface, SurfaceKey> = {
   playground: "Playground",
   skillGen: "SkillGen",
+  assistant: "Assistant",
 };
+
+/**
+ * Canonical surface list. Loops that must touch every surface (model
+ * coherence rules, default-clearing) iterate this so adding a surface
+ * is a single-line change to `SURFACE_KEY` + this array.
+ */
+export const ALL_SURFACES: ReadonlyArray<Surface> = Object.keys(
+  SURFACE_KEY,
+) as Surface[];
 
 // ---------------------------------------------------------------------------
 // Input schemas
@@ -109,8 +119,10 @@ const modelInputSchema = z.object({
   displayName: z.string().min(1),
   enabledForPlayground: z.boolean().optional(),
   enabledForSkillGen: z.boolean().optional(),
+  enabledForAssistant: z.boolean().optional(),
   defaultForPlayground: z.boolean().optional(),
   defaultForSkillGen: z.boolean().optional(),
+  defaultForAssistant: z.boolean().optional(),
   removed: z.boolean().optional(),
 });
 
@@ -150,8 +162,10 @@ export const modelFlagsPatchSchema = z
   .object({
     enabledForPlayground: z.boolean().optional(),
     enabledForSkillGen: z.boolean().optional(),
+    enabledForAssistant: z.boolean().optional(),
     defaultForPlayground: z.boolean().optional(),
     defaultForSkillGen: z.boolean().optional(),
+    defaultForAssistant: z.boolean().optional(),
   })
   .refine((v) => Object.keys(v).length > 0, {
     message: "At least one flag must be provided",
@@ -399,8 +413,10 @@ export class LlmProvidersService {
         displayName: m.displayName,
         enabledForPlayground: m.enabledForPlayground === true,
         enabledForSkillGen: m.enabledForSkillGen === true,
+        enabledForAssistant: m.enabledForAssistant === true,
         defaultForPlayground: m.defaultForPlayground === true,
         defaultForSkillGen: m.defaultForSkillGen === true,
+        defaultForAssistant: m.defaultForAssistant === true,
         removed: m.removed === true,
         firstSeenAt: now,
         lastSyncedAt: now,
@@ -449,10 +465,14 @@ export class LlmProvidersService {
             m.enabledForPlayground ?? prev?.enabledForPlayground ?? false,
           enabledForSkillGen:
             m.enabledForSkillGen ?? prev?.enabledForSkillGen ?? false,
+          enabledForAssistant:
+            m.enabledForAssistant ?? prev?.enabledForAssistant ?? false,
           defaultForPlayground:
             m.defaultForPlayground ?? prev?.defaultForPlayground ?? false,
           defaultForSkillGen:
             m.defaultForSkillGen ?? prev?.defaultForSkillGen ?? false,
+          defaultForAssistant:
+            m.defaultForAssistant ?? prev?.defaultForAssistant ?? false,
           removed: m.removed ?? prev?.removed ?? false,
           firstSeenAt: prev?.firstSeenAt ?? now,
           lastSyncedAt: prev?.lastSyncedAt ?? now,
@@ -532,7 +552,7 @@ export class LlmProvidersService {
     // Compute the new flags, applying coherence rules.
     let next: LlmProviderModel = { ...current };
 
-    for (const surface of ["playground", "skillGen"] as const) {
+    for (const surface of ALL_SURFACES) {
       const enKey = enabledFieldFor(surface);
       const defKey = defaultFieldFor(surface);
       if (flags[enKey] !== undefined) {
@@ -554,7 +574,7 @@ export class LlmProvidersService {
 
     // Cross-provider clears: for each surface where this row is now
     // the default, blow away the flag on every other model first.
-    for (const surface of ["playground", "skillGen"] as const) {
+    for (const surface of ALL_SURFACES) {
       const defKey = defaultFieldFor(surface);
       if (next[defKey] === true) {
         await this.repo.clearDefaultsForSurfaceExcept(SURFACE_KEY[surface], {
@@ -574,8 +594,10 @@ export class LlmProvidersService {
             ...m,
             enabledForPlayground: next.enabledForPlayground,
             enabledForSkillGen: next.enabledForSkillGen,
+            enabledForAssistant: next.enabledForAssistant,
             defaultForPlayground: next.defaultForPlayground,
             defaultForSkillGen: next.defaultForSkillGen,
+            defaultForAssistant: next.defaultForAssistant,
           }
         : m,
     );
@@ -640,8 +662,10 @@ export class LlmProvidersService {
           displayName: u.displayName,
           enabledForPlayground: false,
           enabledForSkillGen: false,
+          enabledForAssistant: false,
           defaultForPlayground: false,
           defaultForSkillGen: false,
+          defaultForAssistant: false,
           removed: false,
           firstSeenAt: now,
           lastSyncedAt: now,
@@ -657,8 +681,10 @@ export class LlmProvidersService {
         displayName: u.displayName,
         enabledForPlayground: prev.enabledForPlayground,
         enabledForSkillGen: prev.enabledForSkillGen,
+        enabledForAssistant: prev.enabledForAssistant,
         defaultForPlayground: prev.defaultForPlayground,
         defaultForSkillGen: prev.defaultForSkillGen,
+        defaultForAssistant: prev.defaultForAssistant,
         removed: false,
         firstSeenAt: prev.firstSeenAt,
         lastSyncedAt: now,
@@ -675,6 +701,7 @@ export class LlmProvidersService {
         removed: true,
         defaultForPlayground: false,
         defaultForSkillGen: false,
+        defaultForAssistant: false,
         lastSyncedAt: now,
       });
       if (!wasRemoved) removed += 1;
@@ -804,12 +831,12 @@ export class LlmProvidersService {
 // Helpers
 // ---------------------------------------------------------------------------
 
-export function enabledFieldFor(surface: Surface): "enabledForPlayground" | "enabledForSkillGen" {
-  return surface === "playground" ? "enabledForPlayground" : "enabledForSkillGen";
+export function enabledFieldFor(surface: Surface): `enabledFor${SurfaceKey}` {
+  return `enabledFor${SURFACE_KEY[surface]}`;
 }
 
-export function defaultFieldFor(surface: Surface): "defaultForPlayground" | "defaultForSkillGen" {
-  return surface === "playground" ? "defaultForPlayground" : "defaultForSkillGen";
+export function defaultFieldFor(surface: Surface): `defaultFor${SurfaceKey}` {
+  return `defaultFor${SURFACE_KEY[surface]}`;
 }
 
 function safeDecrypt(blob: string, key: string): string {

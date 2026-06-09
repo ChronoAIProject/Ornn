@@ -1,5 +1,49 @@
 # ornn-api
 
+## 0.11.0
+
+### Patch Changes
+
+- [#933](https://github.com/ChronoAIProject/Ornn/pull/933) [`cb2a3b5`](https://github.com/ChronoAIProject/Ornn/commit/cb2a3b544b9a9ba230a3eb8a2c686ee70bcf3715) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Enforce per-package line-coverage floors (api 75%, web 12% ratchet) and split the pooled Codecov flag ([#889](https://github.com/ChronoAIProject/Ornn/issues/889))
+
+- [#954](https://github.com/ChronoAIProject/Ornn/pull/954) [`dcd90db`](https://github.com/ChronoAIProject/Ornn/commit/dcd90dbad9433c435a37491bb4f8bc4500df22f2) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Chat-completion providers now surface structured `execute_in_sandbox` tool calls in the Playground. `parseChatCompletionStream` accumulates streamed `choices[].delta.tool_calls[]` fragments per index and flushes each completed call as a `response.output_item.done` function_call event (the shape the playground consumer reads); the non-streamed `complete()` path maps `message.tool_calls[]` the same way; and the chat-completion request body now sends `tool_choice: "auto"` whenever tools are supplied. Previously tool calls were silently dropped so the sandbox never ran for `apiFormat=chat-completion` providers ([#608](https://github.com/ChronoAIProject/Ornn/issues/608))
+
+- [#951](https://github.com/ChronoAIProject/Ornn/pull/951) [`476b2e8`](https://github.com/ChronoAIProject/Ornn/commit/476b2e868754fcce74bb2faf53f63e9f52e25f09) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Server-side ZIP-bomb guards (cumulative/per-entry uncompressed caps, file-count, compression-ratio) are now enforced at the skill-ingestion chokepoint — covering both direct upload and the GitHub pull/refresh paths that previously bypassed the route-layer guard. Caps are env-overridable ([#632](https://github.com/ChronoAIProject/Ornn/issues/632))
+
+- [#952](https://github.com/ChronoAIProject/Ornn/pull/952) [`d41c1b0`](https://github.com/ChronoAIProject/Ornn/commit/d41c1b0affa9e349f7bd747bfc7553c62497dfe7) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Redemption-code generation now draws each character with crypto.randomInt for an unbiased uniform draw over the alphabet, clearing CodeQL js/biased-cryptographic-random ([#757](https://github.com/ChronoAIProject/Ornn/issues/757))
+
+- [#953](https://github.com/ChronoAIProject/Ornn/pull/953) [`4c57c88`](https://github.com/ChronoAIProject/Ornn/commit/4c57c885b1d409904869028bcf188320a52cc509) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Playground chat: a client abort (or error) after billable output now commits the reserved quota slot instead of refunding it, closing the abort-after-first-token free-usage path ([#766](https://github.com/ChronoAIProject/Ornn/issues/766))
+
+- [#932](https://github.com/ChronoAIProject/Ornn/pull/932) [`92b5622`](https://github.com/ChronoAIProject/Ornn/commit/92b56227d05ccc292bfe5570420ddf0a0e596119) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Resolve all 65 ESLint warnings with proper type/effect/ref fixes; compiler-only rules off pending react-compiler ([#888](https://github.com/ChronoAIProject/Ornn/issues/888))
+
+- [#937](https://github.com/ChronoAIProject/Ornn/pull/937) [`eb93d06`](https://github.com/ChronoAIProject/Ornn/commit/eb93d06b5dc8f45fb95a8b92b1684aed343d94d9) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Admin users list: invalid sort/dir query params now return 400 invalid_sort/invalid_dir instead of 500 ([#908](https://github.com/ChronoAIProject/Ornn/issues/908))
+
+- [#938](https://github.com/ChronoAIProject/Ornn/pull/938) [`3360954`](https://github.com/ChronoAIProject/Ornn/commit/3360954d3ac3fd5c29da0412504fc2bbd98cd2bf) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Malformed or empty ?limit on the notifications feed now falls back to the default page size instead of erroring ([#920](https://github.com/ChronoAIProject/Ornn/issues/920))
+
+- [#895](https://github.com/ChronoAIProject/Ornn/pull/895) [`a4d02a4`](https://github.com/ChronoAIProject/Ornn/commit/a4d02a4545acd5edddb97f4861630152527ec82b) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Add unit test coverage for the GitHub mirror auth, REST client, and admin routes ([#872](https://github.com/ChronoAIProject/Ornn/issues/872))
+
+- [#897](https://github.com/ChronoAIProject/Ornn/pull/897) [`6bdad30`](https://github.com/ChronoAIProject/Ornn/commit/6bdad30332d7411f25ea61c1c258202bd69b6093) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Add unit test coverage for the skill-audit module (prompts, repository, service, routes) ([#873](https://github.com/ChronoAIProject/Ornn/issues/873))
+
+- [#899](https://github.com/ChronoAIProject/Ornn/pull/899) [`19e3cc3`](https://github.com/ChronoAIProject/Ornn/commit/19e3cc352ce1031e72953d2cecca4f107ce2598d) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Add unit + integration test coverage for the skills CRUD module (repositories, routes, service) ([#874](https://github.com/ChronoAIProject/Ornn/issues/874))
+
+- [#906](https://github.com/ChronoAIProject/Ornn/pull/906) [`76cb49a`](https://github.com/ChronoAIProject/Ornn/commit/76cb49a739a666a4bfc1cd8306fc9fa959f48753) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Add unit test coverage for the skill-generation module (prompts, service, routes) ([#875](https://github.com/ChronoAIProject/Ornn/issues/875))
+
+- [#907](https://github.com/ChronoAIProject/Ornn/pull/907) [`b4f7465`](https://github.com/ChronoAIProject/Ornn/commit/b4f7465f52e34995dd83c4de265c1e36df7417a6) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Add test coverage for the skills search module and remove a dead search type ([#876](https://github.com/ChronoAIProject/Ornn/issues/876))
+
+- [#909](https://github.com/ChronoAIProject/Ornn/pull/909) [`f880fe4`](https://github.com/ChronoAIProject/Ornn/commit/f880fe484217a7d94304973f76bb2e7c78b8022d) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Add route test coverage for admin skills, platform settings, and admin users ([#877](https://github.com/ChronoAIProject/Ornn/issues/877))
+
+- [#919](https://github.com/ChronoAIProject/Ornn/pull/919) [`e86f76a`](https://github.com/ChronoAIProject/Ornn/commit/e86f76a8205b8959806b42d3a3569bebb8b98d64) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Add route test coverage for /me and /users surfaces ([#878](https://github.com/ChronoAIProject/Ornn/issues/878))
+
+- [#921](https://github.com/ChronoAIProject/Ornn/pull/921) [`fdfda6d`](https://github.com/ChronoAIProject/Ornn/commit/fdfda6dade0c33a7d406df487cd7ab22a54fccf1) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Add notifications test coverage (routes, service emitters, migration, bootstrap) and remove a dead test mock ([#879](https://github.com/ChronoAIProject/Ornn/issues/879))
+
+- [#922](https://github.com/ChronoAIProject/Ornn/pull/922) [`b562205`](https://github.com/ChronoAIProject/Ornn/commit/b562205b040cbaec1b910692081045cab0fc7d3b) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Add analytics test coverage (service pass-through, route validation, PostHog tracker fail-open) ([#880](https://github.com/ChronoAIProject/Ornn/issues/880))
+
+- [#923](https://github.com/ChronoAIProject/Ornn/pull/923) [`e649628`](https://github.com/ChronoAIProject/Ornn/commit/e649628ed521f531e8538d7a9816dd6187c334e0) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Add settings + LLM-provider test coverage (migration, repositories, routes) ([#881](https://github.com/ChronoAIProject/Ornn/issues/881))
+
+- [#924](https://github.com/ChronoAIProject/Ornn/pull/924) [`cad5be2`](https://github.com/ChronoAIProject/Ornn/commit/cad5be23046129f8c30f3a1517a8aaf4d0f379e6) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Add broadcasts, announcements, and quota route/bootstrap/migration test coverage ([#882](https://github.com/ChronoAIProject/Ornn/issues/882))
+
+- [#926](https://github.com/ChronoAIProject/Ornn/pull/926) [`6afeb4c`](https://github.com/ChronoAIProject/Ornn/commit/6afeb4cd82e11cdd5d3921c04e60a16d127f9d18) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Add client and infra test coverage (LLM model-list client, sandbox client, Mongo connect) ([#883](https://github.com/ChronoAIProject/Ornn/issues/883))
+
 ## 0.10.2
 
 ## 0.10.1
