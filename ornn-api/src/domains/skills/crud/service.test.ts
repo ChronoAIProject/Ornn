@@ -497,18 +497,24 @@ function versionDoc(overrides: Partial<SkillVersionDocument> = {}): SkillVersion
 }
 
 /** Build a valid SKILL.md ZIP as raw bytes (for createSkill / updateSkill). */
-async function validSkillZip(opts: { name?: string; version?: string } = {}): Promise<Uint8Array> {
-  const { name = "demo-skill", version = "1.0" } = opts;
+async function validSkillZip(
+  opts: { name?: string; version?: string; dependsOn?: string[] } = {},
+): Promise<Uint8Array> {
+  const { name = "demo-skill", version = "1.0", dependsOn } = opts;
   const zip = new JSZip();
   const folder = zip.folder(name)!;
+  const metaLines = ["metadata:", "  category: plain"];
+  if (dependsOn && dependsOn.length > 0) {
+    metaLines.push("  depends-on:");
+    for (const dep of dependsOn) metaLines.push(`    - ${dep}`);
+  }
   folder.file(
     "SKILL.md",
     [
       "---",
       `name: ${name}`,
       "description: A demo skill used by service tests.",
-      "metadata:",
-      "  category: plain",
+      ...metaLines,
       `version: "${version}"`,
       "---",
       `# ${name}`,
@@ -586,12 +592,22 @@ function makeFakeDeps(seed?: Partial<FakeState>): { deps: SkillServiceDeps; stat
   } as unknown as SkillRepository;
 
   const skillVersionRepo = {
-    create: async (data: { version: string; majorVersion: number; minorVersion: number }) => {
+    create: async (data: {
+      skillGuid?: string;
+      version: string;
+      majorVersion: number;
+      minorVersion: number;
+      metadata?: SkillVersionDocument["metadata"];
+    }) => {
       const v = versionDoc({
-        _id: `guid-1@${data.version}`,
+        _id: `${data.skillGuid ?? "guid-1"}@${data.version}`,
+        ...(data.skillGuid ? { skillGuid: data.skillGuid } : {}),
         version: data.version,
         majorVersion: data.majorVersion,
         minorVersion: data.minorVersion,
+        // Capture the metadata the service passed so dependsOn round-trips
+        // (#968) — the previous fake discarded it.
+        ...(data.metadata ? { metadata: data.metadata } : {}),
       });
       state.versions.push(v);
       return v;
@@ -787,6 +803,322 @@ describe("SkillService.updateSkill", () => {
       thrown = err;
     }
     expect((thrown as AppError).code).toBe("skill_not_found");
+  });
+});
+
+describe("SkillService skill dependencies — persistence + publish validation (#968)", () => {
+  /**
+   * Seed an already-published dependency skill `pdf-tools@1.0` so the
+   * closure loader can resolve refs against it. Returns the seed maps for
+   * `makeFakeDeps`.
+   */
+  function seedDep(opts: { dependsOn?: string[]; isPrivate?: boolean } = {}) {
+    const depSkill = makeSkillDoc({
+      guid: "dep-guid",
+      name: "pdf-tools",
+      latestVersion: "1.0",
+      isPrivate: opts.isPrivate ?? false,
+    });
+    const depVersion = versionDoc({
+      _id: "dep-guid@1.0",
+      skillGuid: "dep-guid",
+      version: "1.0",
+      majorVersion: 1,
+      minorVersion: 0,
+      metadata: { category: "plain", ...(opts.dependsOn ? { dependsOn: opts.dependsOn } : {}) },
+    });
+    return {
+      skills: new Map([["dep-guid", depSkill]]),
+      byName: new Map([["pdf-tools", depSkill]]),
+      versions: [depVersion],
+    };
+  }
+
+  it("round-trips depends-on from frontmatter into the persisted version metadata", async () => {
+    const { deps, state } = makeFakeDeps(seedDep());
+    const service = new SkillService(deps);
+    await service.createSkill(
+      await validSkillZip({ name: "report-gen", dependsOn: ["pdf-tools@1.0"] }),
+      "owner-1",
+    );
+    const created = state.versions.find((v) => v.skillGuid !== "dep-guid");
+    expect(created?.metadata.dependsOn).toEqual(["pdf-tools@1.0"]);
+  });
+
+  it("a version published without deps reads back with dependsOn absent (legacy-clean)", async () => {
+    const { deps, state } = makeFakeDeps();
+    const service = new SkillService(deps);
+    await service.createSkill(await validSkillZip({ name: "no-deps" }), "owner-1");
+    const created = state.versions[0]!;
+    expect(created.metadata.dependsOn).toBeUndefined();
+  });
+
+  it("createSkill succeeds for a valid single dependency", async () => {
+    const { deps } = makeFakeDeps(seedDep());
+    const service = new SkillService(deps);
+    const { guid } = await service.createSkill(
+      await validSkillZip({ name: "report-gen", dependsOn: ["pdf-tools@1.0"] }),
+      "owner-1",
+    );
+    expect(guid).toBeTruthy();
+  });
+
+  it("createSkill throws skill_dependency_not_found for a missing dependency", async () => {
+    const { deps, state } = makeFakeDeps();
+    const service = new SkillService(deps);
+    let thrown: unknown;
+    try {
+      await service.createSkill(
+        await validSkillZip({ name: "report-gen", dependsOn: ["ghost-skill@1.0"] }),
+        "owner-1",
+      );
+    } catch (err) {
+      thrown = err;
+    }
+    expect(thrown).toBeInstanceOf(AppError);
+    expect((thrown as AppError).code).toBe("skill_dependency_not_found");
+    // Failed before any storage write.
+    expect(state.uploads).toHaveLength(0);
+  });
+
+  it("createSkill throws dependency_cycle when a transitive dep loops back", async () => {
+    // The seeded dependency `pdf-tools@1.0` itself depends on
+    // `report-gen@1.0`. report-gen isn't published yet, but the closure
+    // resolver walks pdf-tools' declared deps and `report-gen@1.0` can't
+    // be loaded — so this actually surfaces as skill_dependency_not_found,
+    // NOT a cycle, because report-gen has no published version yet.
+    //
+    // To exercise a real cycle we seed two mutually-dependent PUBLISHED
+    // skills and resolve a NEW skill that depends on one of them.
+    const aSkill = makeSkillDoc({ guid: "a-guid", name: "skill-a", latestVersion: "1.0" });
+    const bSkill = makeSkillDoc({ guid: "b-guid", name: "skill-b", latestVersion: "1.0" });
+    const aVersion = versionDoc({
+      _id: "a-guid@1.0",
+      skillGuid: "a-guid",
+      version: "1.0",
+      metadata: { category: "plain", dependsOn: ["skill-b@1.0"] },
+    });
+    const bVersion = versionDoc({
+      _id: "b-guid@1.0",
+      skillGuid: "b-guid",
+      version: "1.0",
+      metadata: { category: "plain", dependsOn: ["skill-a@1.0"] },
+    });
+    const { deps } = makeFakeDeps({
+      skills: new Map([
+        ["a-guid", aSkill],
+        ["b-guid", bSkill],
+      ]),
+      byName: new Map([
+        ["skill-a", aSkill],
+        ["skill-b", bSkill],
+      ]),
+      versions: [aVersion, bVersion],
+    });
+    const service = new SkillService(deps);
+    let thrown: unknown;
+    try {
+      await service.createSkill(
+        await validSkillZip({ name: "consumer", dependsOn: ["skill-a@1.0"] }),
+        "owner-1",
+      );
+    } catch (err) {
+      thrown = err;
+    }
+    expect(thrown).toBeInstanceOf(AppError);
+    expect((thrown as AppError).code).toBe("dependency_cycle");
+    expect((thrown as AppError).statusCode).toBe(409);
+  });
+
+  it("createSkill succeeds for a valid diamond closure", async () => {
+    // d (leaf) ← b, c ← consumer(root via b@1.0, c@1.0).
+    const dSkill = makeSkillDoc({ guid: "d-guid", name: "leaf-d", latestVersion: "1.0" });
+    const bSkill = makeSkillDoc({ guid: "b-guid", name: "mid-b", latestVersion: "1.0" });
+    const cSkill = makeSkillDoc({ guid: "c-guid", name: "mid-c", latestVersion: "1.0" });
+    const dVersion = versionDoc({
+      _id: "d-guid@1.0",
+      skillGuid: "d-guid",
+      version: "1.0",
+      metadata: { category: "plain" },
+    });
+    const bVersion = versionDoc({
+      _id: "b-guid@1.0",
+      skillGuid: "b-guid",
+      version: "1.0",
+      metadata: { category: "plain", dependsOn: ["leaf-d@1.0"] },
+    });
+    const cVersion = versionDoc({
+      _id: "c-guid@1.0",
+      skillGuid: "c-guid",
+      version: "1.0",
+      metadata: { category: "plain", dependsOn: ["leaf-d@1.0"] },
+    });
+    const { deps } = makeFakeDeps({
+      skills: new Map([
+        ["d-guid", dSkill],
+        ["b-guid", bSkill],
+        ["c-guid", cSkill],
+      ]),
+      byName: new Map([
+        ["leaf-d", dSkill],
+        ["mid-b", bSkill],
+        ["mid-c", cSkill],
+      ]),
+      versions: [dVersion, bVersion, cVersion],
+    });
+    const service = new SkillService(deps);
+    const { guid } = await service.createSkill(
+      await validSkillZip({ name: "diamond-root", dependsOn: ["mid-b@1.0", "mid-c@1.0"] }),
+      "owner-1",
+    );
+    expect(guid).toBeTruthy();
+  });
+
+  it("resolveSkillClosure returns the topo-ordered closure for a published skill", async () => {
+    const { deps } = makeFakeDeps(seedDep());
+    const service = new SkillService(deps);
+    await service.createSkill(
+      await validSkillZip({ name: "report-gen", dependsOn: ["pdf-tools@1.0"] }),
+      "owner-1",
+    );
+    const closure = await service.resolveSkillClosure("report-gen", SYSTEM_ACTOR);
+    expect(closure.map((n) => n.name)).toEqual(["pdf-tools"]);
+    // The closure excludes the skill itself; its direct dependencies are
+    // the roots of the walk → depth 0.
+    expect(closure[0]!.depth).toBe(0);
+    expect(closure[0]!.guid).toBe("dep-guid");
+  });
+
+  // ==========================================================================
+  // Per-node visibility gate in buildVersionLoader (#806/#968).
+  //
+  // A PUBLIC skill may transitively depend on a PRIVATE skill. When an
+  // anonymous / under-privileged caller resolves the public root's closure,
+  // the private node MUST NOT leak. The loader (service.ts buildVersionLoader)
+  // returns `null` for an unreadable node; the resolver (closure/resolver.ts
+  // `resolve()`) turns a null load into a hard `skill_dependency_not_found`
+  // (404) — existence is never disclosed. These two tests lock that branch:
+  // an unauthorized caller hits the error, an authorized caller still sees
+  // the node. Delete the `canReadSkill` guard and the negative test breaks
+  // (the closure would resolve successfully and leak the private dep).
+  // ==========================================================================
+
+  /**
+   * Seed a PUBLIC root `report-gen@1.0` that depends on a PRIVATE
+   * `pdf-tools@1.0`, both already published. Returns the seed maps for
+   * `makeFakeDeps` so the closure loader resolves real docs (no createSkill
+   * round-trip — the root must be public, which the fake's create() isn't).
+   */
+  function seedPublicRootPrivateDep() {
+    const rootSkill = makeSkillDoc({
+      guid: "root-guid",
+      name: "report-gen",
+      latestVersion: "1.0",
+      isPrivate: false,
+      createdBy: "owner-1",
+    });
+    const privateDep = makeSkillDoc({
+      guid: "dep-guid",
+      name: "pdf-tools",
+      latestVersion: "1.0",
+      isPrivate: true,
+      createdBy: "owner-1",
+    });
+    const rootVersion = versionDoc({
+      _id: "root-guid@1.0",
+      skillGuid: "root-guid",
+      version: "1.0",
+      metadata: { category: "plain", dependsOn: ["pdf-tools@1.0"] },
+    });
+    const depVersion = versionDoc({
+      _id: "dep-guid@1.0",
+      skillGuid: "dep-guid",
+      version: "1.0",
+      metadata: { category: "plain" },
+    });
+    return {
+      skills: new Map([
+        ["root-guid", rootSkill],
+        ["dep-guid", privateDep],
+      ]),
+      byName: new Map([
+        ["report-gen", rootSkill],
+        ["pdf-tools", privateDep],
+      ]),
+      versions: [rootVersion, depVersion],
+    };
+  }
+
+  // Anonymous caller: a logged-out request. `userId: ""` matches neither the
+  // private dep's `createdBy` ("owner-1") nor its (empty) ACLs, and is not a
+  // platform admin → cannot read pdf-tools.
+  const ANON: ActorContext = {
+    userId: "",
+    memberships: [],
+    isPlatformAdmin: false,
+    membershipsResolved: true,
+  };
+
+  it("resolveSkillClosure hides a private transitive dep from an anonymous caller (skill_dependency_not_found)", async () => {
+    const { deps } = makeFakeDeps(seedPublicRootPrivateDep());
+    const service = new SkillService(deps);
+    // The PUBLIC root passes resolveSkillClosure's own entry gate; the walk
+    // then reaches the PRIVATE pdf-tools, whose loader returns null for an
+    // unreadable node → resolver throws skill_dependency_not_found. The
+    // private skill's existence is never disclosed.
+    let thrown: unknown;
+    try {
+      await service.resolveSkillClosure("report-gen", ANON);
+    } catch (err) {
+      thrown = err;
+    }
+    expect(thrown).toBeInstanceOf(AppError);
+    expect((thrown as AppError).code).toBe("skill_dependency_not_found");
+    expect((thrown as AppError).statusCode).toBe(404);
+  });
+
+  it("resolveSkillClosure hides a private transitive dep from a non-owner non-admin caller", async () => {
+    const { deps } = makeFakeDeps(seedPublicRootPrivateDep());
+    const service = new SkillService(deps);
+    // A different authenticated user who is neither the author, on the ACL,
+    // nor a platform admin — same outcome as anonymous.
+    const stranger: ActorContext = {
+      userId: "intruder-9",
+      memberships: [],
+      isPlatformAdmin: false,
+      membershipsResolved: true,
+    };
+    let thrown: unknown;
+    try {
+      await service.resolveSkillClosure("report-gen", stranger);
+    } catch (err) {
+      thrown = err;
+    }
+    expect(thrown).toBeInstanceOf(AppError);
+    expect((thrown as AppError).code).toBe("skill_dependency_not_found");
+    expect((thrown as AppError).statusCode).toBe(404);
+  });
+
+  it("resolveSkillClosure exposes the same private transitive dep to an authorized caller", async () => {
+    const { deps } = makeFakeDeps(seedPublicRootPrivateDep());
+    const service = new SkillService(deps);
+    // SYSTEM_ACTOR (and equivalently the owner / platform admin) CAN read the
+    // private dep, so the gate hides it only from unauthorized callers — no
+    // over-correction. The closure resolves and includes pdf-tools.
+    const closure = await service.resolveSkillClosure("report-gen", SYSTEM_ACTOR);
+    expect(closure.map((n) => n.name)).toEqual(["pdf-tools"]);
+    expect(closure[0]!.guid).toBe("dep-guid");
+
+    // The owning author sees it too (the gate keys on identity, not just the
+    // SYSTEM bypass).
+    const owner: ActorContext = {
+      userId: "owner-1",
+      memberships: [],
+      isPlatformAdmin: false,
+      membershipsResolved: true,
+    };
+    const ownerClosure = await service.resolveSkillClosure("report-gen", owner);
+    expect(ownerClosure.map((n) => n.name)).toEqual(["pdf-tools"]);
   });
 });
 

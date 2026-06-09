@@ -502,6 +502,124 @@ describe("GET /skills/:idOrName/versions", () => {
 });
 
 // ======================================================================
+// GET /skills/:idOrName/closure (#968)
+// ======================================================================
+
+describe("GET /skills/:idOrName/closure", () => {
+  const linear = [
+    { guid: "g-c", name: "c", version: "1.0", skillHash: "h-c", depth: 1 },
+    { guid: "g-b", name: "b", version: "1.0", skillHash: "h-b", depth: 0 },
+  ];
+
+  test("200 returns the topo-ordered items envelope (linear chain)", async () => {
+    const captured: { idOrName: string | undefined; version: string | undefined; anon: boolean | undefined } = {
+      idOrName: undefined,
+      version: undefined,
+      anon: undefined,
+    };
+    const app = buildApp({
+      authenticated: true,
+      permissions: [READ],
+      service: {
+        resolveSkillClosure: async (...args: unknown[]) => {
+          captured.idOrName = args[0] as string;
+          captured.version = args[2] as string | undefined;
+          captured.anon = (args[1] as { userId: string }).userId === "";
+          return linear;
+        },
+      },
+    });
+    const res = await app.request("/api/v1/skills/demo-skill/closure?version=1.0");
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { data: { items: typeof linear }; error: null };
+    expect(body.error).toBeNull();
+    expect(body.data.items.map((i) => i.name)).toEqual(["c", "b"]);
+    expect(captured.idOrName).toBe("demo-skill");
+    expect(captured.version).toBe("1.0");
+    expect(captured.anon).toBe(false);
+  });
+
+  test("200 with a deduped diamond closure", async () => {
+    const diamond = [
+      { guid: "g-d", name: "d", version: "1.0", skillHash: "h-d", depth: 2 },
+      { guid: "g-b", name: "b", version: "1.0", skillHash: "h-b", depth: 1 },
+      { guid: "g-c", name: "c", version: "1.0", skillHash: "h-c", depth: 1 },
+    ];
+    const app = buildApp({
+      authenticated: false,
+      service: { resolveSkillClosure: async () => diamond },
+    });
+    const res = await app.request("/api/v1/skills/demo-skill/closure");
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { data: { items: typeof diamond } };
+    // d (the shared leaf) appears once and sorts before its dependents.
+    expect(body.data.items.filter((i) => i.name === "d")).toHaveLength(1);
+    expect(body.data.items.map((i) => i.name).indexOf("d")).toBe(0);
+  });
+
+  test("passes an anonymous actor (userId='') when unauthenticated", async () => {
+    let anon: boolean | undefined;
+    const app = buildApp({
+      authenticated: false,
+      service: {
+        resolveSkillClosure: async (...args: unknown[]) => {
+          anon = (args[1] as { userId: string }).userId === "";
+          return [];
+        },
+      },
+    });
+    const res = await app.request("/api/v1/skills/public-skill/closure");
+    expect(res.status).toBe(200);
+    expect(anon).toBe(true);
+  });
+
+  test("409 dependency_cycle propagates from the service", async () => {
+    const { AppError } = await import("../../../shared/types/index");
+    const app = buildApp({
+      authenticated: false,
+      service: {
+        resolveSkillClosure: async () => {
+          throw AppError.conflict("dependency_cycle", "cycle at a@1.0");
+        },
+      },
+    });
+    const res = await app.request("/api/v1/skills/demo-skill/closure");
+    expect(res.status).toBe(409);
+    expect(((await res.json()) as { code: string }).code).toBe("dependency_cycle");
+  });
+
+  test("409 dependency_conflict propagates from the service", async () => {
+    const { AppError } = await import("../../../shared/types/index");
+    const app = buildApp({
+      authenticated: false,
+      service: {
+        resolveSkillClosure: async () => {
+          throw AppError.conflict("dependency_conflict", "b pinned to 1.0 and 2.0");
+        },
+      },
+    });
+    const res = await app.request("/api/v1/skills/demo-skill/closure");
+    expect(res.status).toBe(409);
+    expect(((await res.json()) as { code: string }).code).toBe("dependency_conflict");
+  });
+
+  test("404 skill_dependency_not_found propagates from the service", async () => {
+    const { AppError } = await import("../../../shared/types/index");
+    const app = buildApp({
+      authenticated: false,
+      service: {
+        resolveSkillClosure: async () => {
+          throw AppError.notFound("skill_dependency_not_found", "missing dep");
+        },
+      },
+    });
+    const res = await app.request("/api/v1/skills/demo-skill/closure");
+    expect(res.status).toBe(404);
+    expect(((await res.json()) as { code: string }).code).toBe("skill_dependency_not_found");
+  });
+});
+
+// ======================================================================
 // GET /skills/:idOrName/versions/:from/diff/:to
 // ======================================================================
 
