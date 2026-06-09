@@ -48,7 +48,11 @@ import { useAssistantStore } from "@/stores/assistantStore";
 import { useIsAuthenticated, useAuthStore } from "@/stores/authStore";
 import { createLogger } from "@/lib/logger";
 import type { AssistantMessage } from "@/types/assistant";
-import mascotUrl from "@/assets/ornn-mascot.webp";
+// Forge assets, cut from the brand intro (full rendered scene → zero
+// transparency). Vite-managed (content-hashed) so swaps self-cache-bust.
+import forgeVideo from "@/assets/ornn-forge.mp4";
+import forgePoster from "@/assets/ornn-forge-poster.jpg";
+import forgeGreet from "@/assets/ornn-forge-greet.jpg";
 
 const logger = createLogger("AssistantWidget");
 
@@ -66,9 +70,9 @@ const POS_KEY = "ornn:assistant:launcher-pos";
 /** Delay before the first-visit auto-open, for a smooth reveal. */
 const AUTO_OPEN_DELAY_MS = 700;
 
-/** Draggable launcher box, matching the mascot's 502×640 aspect. */
-const LAUNCHER_W = 88;
-const LAUNCHER_H = 112;
+/** Draggable launcher box — a square "forge window" video card. */
+const LAUNCHER_W = 132;
+const LAUNCHER_H = 132;
 /** Keep the launcher at least this far from any viewport edge. */
 const EDGE_MARGIN = 20;
 
@@ -165,6 +169,16 @@ function AssistantLauncher({ isOpen, onOpen }: { isOpen: boolean; onOpen: () => 
   // Set while a real drag is in progress so the trailing click doesn't open.
   const draggedRef = useRef(false);
   const [showBubble, setShowBubble] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  // Defensive (mirrors HeroVideo): some browsers ignore the `muted`
+  // attribute on hydration and then refuse to autoplay — force the
+  // property so the forge clip autoplays. Re-runs whenever the video
+  // (re)mounts: it only exists when motion is allowed AND the launcher is
+  // visible (panel closed), so it stops on its own when hidden.
+  useEffect(() => {
+    if (videoRef.current) videoRef.current.muted = true;
+  }, [reduceMotion, isOpen]);
 
   const persistPos = useCallback(() => {
     try {
@@ -234,35 +248,58 @@ function AssistantLauncher({ isOpen, onOpen }: { isOpen: boolean; onOpen: () => 
             style={{ x, y, width: LAUNCHER_W, height: LAUNCHER_H }}
             className="group pointer-events-auto absolute left-0 top-0 flex cursor-grab touch-none items-end justify-center rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-page"
           >
-            {/* Quiet ember aura behind the mascot — ember-only, static at
-                rest, and only intensifying on hover/focus/active so the
-                glow signals interaction rather than baseline bloom. No
-                perpetual pulse, no arc-blue wash (docs/DESIGN.md). */}
+            {/* Quiet ember aura behind the forge window — ember-only, static
+                at rest, intensifying only on hover/focus/active so the glow
+                signals interaction rather than baseline bloom (no perpetual
+                pulse, no arc-blue wash — docs/DESIGN.md). */}
             <span
               aria-hidden="true"
-              className="pointer-events-none absolute inset-x-2 bottom-1 top-3 -z-10 rounded-full opacity-25 blur-lg motion-safe:transition-opacity motion-safe:duration-200 group-hover:opacity-60 group-focus-visible:opacity-60 group-active:opacity-75"
+              className="pointer-events-none absolute -inset-1 -z-10 rounded-[1.4rem] opacity-25 blur-lg motion-safe:transition-opacity motion-safe:duration-200 group-hover:opacity-55 group-focus-visible:opacity-55 group-active:opacity-70"
               style={{
                 background:
-                  "radial-gradient(circle at 50% 60%, var(--color-ember-glow), transparent 70%)",
+                  "radial-gradient(circle at 50% 55%, var(--color-ember-glow), transparent 70%)",
               }}
             />
             {/* Idle bob — gentle vertical float; static under reduced motion. */}
             <motion.span
-              className="relative flex h-full w-full items-end justify-center"
+              className="relative flex h-full w-full items-center justify-center"
               {...(reduceMotion
                 ? {}
                 : {
-                    animate: { y: [0, -7, 0] },
-                    transition: { duration: 3.4, repeat: Infinity, ease: "easeInOut" as const },
+                    animate: { y: [0, -6, 0] },
+                    transition: { duration: 3.6, repeat: Infinity, ease: "easeInOut" as const },
                   })}
             >
-              <img
-                src={mascotUrl}
-                alt=""
-                aria-hidden="true"
-                draggable={false}
-                className="h-full w-full select-none object-contain"
-              />
+              {/* Forge window — a framed video card (border + letterpress,
+                  no soft drop shadow). Reduced motion swaps the looping clip
+                  for the static strike-frame poster (mirrors HeroVideo). The
+                  video only mounts while the launcher is visible, so it stops
+                  on its own when the panel opens. */}
+              <span className="card-impression relative block h-full w-full overflow-hidden rounded-2xl border border-subtle bg-page">
+                {reduceMotion ? (
+                  <img
+                    src={forgePoster}
+                    alt=""
+                    aria-hidden="true"
+                    draggable={false}
+                    className="pointer-events-none h-full w-full select-none object-cover"
+                  />
+                ) : (
+                  <video
+                    ref={videoRef}
+                    autoPlay
+                    muted
+                    loop
+                    playsInline
+                    preload="metadata"
+                    poster={forgePoster}
+                    aria-hidden="true"
+                    className="forge-loop-mask pointer-events-none h-full w-full object-cover"
+                  >
+                    <source src={forgeVideo} type="video/mp4" />
+                  </video>
+                )}
+              </span>
             </motion.span>
 
             {/* "Ask Ornn" speech bubble — hover/focus hint (desktop). */}
@@ -500,12 +537,14 @@ function PanelHeader({
   return (
     <header className="flex items-center justify-between gap-3 border-b border-subtle bg-card px-4 py-3">
       <div className="flex items-center gap-2.5">
-        <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border border-accent/30 bg-warning-soft">
+        <span className="inline-flex h-9 w-9 shrink-0 overflow-hidden rounded-full border border-accent/30 bg-warning-soft">
+          {/* Circular crop of the forge-greet still, framed on Ornn's face. */}
           <img
-            src={mascotUrl}
+            src={forgeGreet}
             alt=""
             aria-hidden="true"
-            className="h-8 w-8 object-contain object-top"
+            className="h-full w-full object-cover"
+            style={{ objectPosition: "50% 28%" }}
           />
         </span>
         <div className="leading-tight">
@@ -548,30 +587,21 @@ function AssistantEmptyState({ onSuggestion }: { onSuggestion: (text: string) =>
   const itemProps = reduceMotion
     ? {}
     : { variants: { hidden: { opacity: 0, y: 8 }, show: { opacity: 1, y: 0 } } };
-  const waveProps = reduceMotion
-    ? {}
-    : {
-        animate: { rotate: [0, -7, 6, -7, 0] },
-        transition: { duration: 2.6, repeat: Infinity, repeatDelay: 1.6, ease: "easeInOut" as const },
-      };
 
   return (
     <div className="flex h-full flex-col items-center justify-center py-6">
       <motion.div className="w-full space-y-5 text-center" {...groupProps}>
         <motion.div className="space-y-2" {...itemProps}>
-          {/* Mascot waves hello in place of the old abstract spark. */}
-          <motion.div
-            className="mx-auto h-24 w-[76px]"
-            style={{ transformOrigin: "bottom center" }}
-            {...waveProps}
-          >
+          {/* Forge-greet hero — Ornn at the anvil holding a glowing ingot.
+              Framed (border + letterpress, no soft drop shadow). */}
+          <div className="card-impression mx-auto aspect-[16/10] w-full max-w-[15rem] overflow-hidden rounded border border-subtle">
             <img
-              src={mascotUrl}
+              src={forgeGreet}
               alt={t("assistant.mascotAlt")}
               draggable={false}
-              className="h-full w-full select-none object-contain"
+              className="h-full w-full select-none object-cover"
             />
-          </motion.div>
+          </div>
           <h2 className="font-display text-xl font-semibold leading-tight tracking-tight text-strong">
             {t("assistant.greeting")}
           </h2>
@@ -625,13 +655,14 @@ function AssistantSignInPrompt({
         transition={{ type: "spring", stiffness: 280, damping: 26 }}
         className="card-impression w-full max-w-[20rem] space-y-4 rounded border border-subtle bg-card px-5 py-6 text-center"
       >
-        <span className="mx-auto block h-16 w-[50px]">
+        <span className="mx-auto block h-16 w-16 overflow-hidden rounded-full border border-subtle">
           <img
-            src={mascotUrl}
+            src={forgeGreet}
             alt=""
             aria-hidden="true"
             draggable={false}
-            className="h-full w-full select-none object-contain"
+            className="h-full w-full select-none object-cover"
+            style={{ objectPosition: "50% 28%" }}
           />
         </span>
         <div className="space-y-1.5">

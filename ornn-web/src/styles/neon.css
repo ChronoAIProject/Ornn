@@ -908,6 +908,30 @@ html {
   border-radius: 2px;
 }
 
+/* Assistant launcher — forge-clip loop-seam mask (#976). The ~2.4s clip
+   pans slightly, so the hard `loop` cut is visible; a brief opacity dip
+   timed near the boundary softens the seam into a quiet crossfade. The
+   animation period tracks the clip length and starts with it on mount, so
+   the dip lands at the cut. motion-safe only — reduced-motion renders the
+   static poster instead of the video, so this never runs there. */
+@media (prefers-reduced-motion: no-preference) {
+  .forge-loop-mask {
+    animation: forge-loop-dip 2.4s linear infinite;
+  }
+}
+@keyframes forge-loop-dip {
+  0%,
+  88% {
+    opacity: 1;
+  }
+  95% {
+    opacity: 0.5;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
 /* ───────────────────────────────────────────────────────────────────────
    Skill-lifecycle orbital ring (landing hero overlay).
    Geometry is unit/polar (a square sizing box → percentage coordinates) so
