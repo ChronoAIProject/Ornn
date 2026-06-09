@@ -28,6 +28,7 @@ from .types import (
     SearchScope,
     SkillDetail,
     SkillSearchResult,
+    SkillsetClosureResult,
     SkillsetDetail,
     SkillsetKind,
     SkillsetSearchResult,
@@ -245,6 +246,7 @@ class OrnnClient:
         *,
         name: str,
         description: str,
+        instructions: str,
         members: list[str],
         kind: SkillsetKind | None = None,
         tags: list[str] | None = None,
@@ -256,10 +258,15 @@ class OrnnClient:
         server-side at publish time: every member must resolve to a
         readable skill version, and the union dependency closure must be
         conflict-free.
+
+        ``instructions`` is the REQUIRED master prompt (#978) — a markdown
+        body telling agents HOW to use the set (1..8000 chars, trimmed
+        server-side).
         """
         payload: dict[str, Any] = {
             "name": name,
             "description": description,
+            "instructions": instructions,
             "members": members,
         }
         if kind is not None:
@@ -283,12 +290,22 @@ class OrnnClient:
         *,
         members: list[str],
         version: str,
+        instructions: str,
         description: str | None = None,
         kind: SkillsetKind | None = None,
         tags: list[str] | None = None,
     ) -> SkillsetDetail:
-        """Publish a new immutable version of an existing skillset."""
-        payload: dict[str, Any] = {"members": members, "version": version}
+        """Publish a new immutable version of an existing skillset.
+
+        ``instructions`` is the REQUIRED master prompt (#978) — REQUIRED on
+        publish too, with NO carry-forward: each version explicitly carries
+        its own prompt (unlike ``description``, which inherits when omitted).
+        """
+        payload: dict[str, Any] = {
+            "members": members,
+            "version": version,
+            "instructions": instructions,
+        }
         if description is not None:
             payload["description"] = description
         if kind is not None:
@@ -321,18 +338,19 @@ class OrnnClient:
 
     def resolve_skillset_closure(
         self, guid_or_name: str, *, version: str | None = None
-    ) -> ClosureResult:
+    ) -> SkillsetClosureResult:
         """Resolve a skillset's full delivery closure (#969).
 
         The union of all member skills PLUS each member's #968 dependency
-        closure, deduplicated and topo-sorted (deps-first). Raises
-        :class:`OrnnError` with code ``dependency_cycle`` /
+        closure, deduplicated and topo-sorted (deps-first), PLUS the
+        version's master prompt (#978, as a root sibling ``instructions``).
+        Raises :class:`OrnnError` with code ``dependency_cycle`` /
         ``dependency_conflict`` / ``skill_dependency_not_found`` when the
         graph can't be resolved.
         """
         suffix = f"?version={httpx.QueryParams({'version': version})['version']}" if version else ""
         data = self.request("GET", f"/skillsets/{_quote(guid_or_name)}/closure{suffix}")
-        return ClosureResult.from_dict(data)
+        return SkillsetClosureResult.from_dict(data)
 
     def search_skillsets(
         self,

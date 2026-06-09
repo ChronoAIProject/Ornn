@@ -228,6 +228,8 @@ class SkillsetDetail:
     latest_version: str
     is_private: bool
     created_by: str
+    # Master prompt (#978) — the per-version usage instructions for agents.
+    instructions: str = ""
     tags: list[str] = field(default_factory=list)
     members: list[str] = field(default_factory=list)
     shared_with_users: list[str] = field(default_factory=list)
@@ -246,6 +248,7 @@ class SkillsetDetail:
             latest_version=raw.get("latestVersion", ""),
             is_private=bool(raw.get("isPrivate", False)),
             created_by=raw.get("createdBy", ""),
+            instructions=raw.get("instructions", ""),
             tags=list(raw.get("tags") or []),
             members=list(raw.get("members") or []),
             shared_with_users=list(raw.get("sharedWithUsers") or []),
@@ -304,4 +307,25 @@ class SkillsetSearchResult:
             page=int(raw.get("page", 1)),
             page_size=int(raw.get("pageSize", 0)),
             total_pages=int(raw.get("totalPages", 0)),
+        )
+
+
+@dataclass
+class SkillsetClosureResult:
+    """Result of :meth:`OrnnClient.resolve_skillset_closure` (#978).
+
+    The resolved delivery closure PLUS the version's master prompt. A
+    dedicated type (NOT the shared :class:`ClosureResult`): the skillset
+    closure carries ``instructions`` as a root sibling of ``items``, while
+    the skill closure (#968) stays ``{items}``.
+    """
+
+    instructions: str
+    items: list[ClosureNode]
+
+    @classmethod
+    def from_dict(cls, raw: dict[str, Any]) -> SkillsetClosureResult:
+        return cls(
+            instructions=raw.get("instructions", ""),
+            items=[ClosureNode.from_dict(i) for i in raw.get("items") or []],
         )

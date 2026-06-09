@@ -131,6 +131,12 @@ export interface SkillsetDetail {
   readonly guid: string;
   readonly name: string;
   readonly description: string;
+  /**
+   * The skillset **master prompt** (#978) — a markdown body telling an
+   * agent HOW to use the set (orchestration, ordering, which member to
+   * pick when). Per-version and surfaced verbatim.
+   */
+  readonly instructions: string;
   readonly kind: SkillsetKind;
   readonly tags: readonly string[];
   /** Member skill refs (`<name-or-guid>@<major.minor>` or `<name>@<dist-tag>`). */
@@ -164,6 +170,11 @@ export interface SkillsetSummary {
 export interface CreateSkillsetInput {
   readonly name: string;
   readonly description: string;
+  /**
+   * Master prompt (#978) — REQUIRED. A markdown body telling agents HOW to
+   * use the set. 1..8000 chars (trimmed server-side).
+   */
+  readonly instructions: string;
   /** Defaults to `generic` server-side when omitted. */
   readonly kind?: SkillsetKind;
   readonly tags?: readonly string[];
@@ -176,10 +187,31 @@ export interface CreateSkillsetInput {
 /** Payload for `client.publishSkillset(id, ...)` — a new immutable version. */
 export interface PublishSkillsetInput {
   readonly description?: string;
+  /**
+   * Master prompt (#978) — REQUIRED on publish too, with NO carry-forward.
+   * Each version explicitly carries its own prompt (unlike `description`,
+   * which inherits the prior value when omitted).
+   */
+  readonly instructions: string;
   readonly kind?: SkillsetKind;
   readonly tags?: readonly string[];
   readonly members: readonly string[];
   readonly version: string;
+}
+
+/**
+ * Result of {@link OrnnClient.getSkillsetClosure} (#978) — the resolved
+ * delivery closure PLUS the version's master prompt.
+ *
+ * A dedicated type (NOT the shared {@link ClosureResult}): the skillset
+ * closure carries `instructions` as a root sibling of `items`, while the
+ * skill closure (#968) stays `{ items }`.
+ */
+export interface SkillsetClosureResult {
+  /** The version's master prompt (#978) — surfaced verbatim. */
+  readonly instructions: string;
+  /** Deps-first topo-sorted closure (the shared #968 node shape). */
+  readonly items: readonly ClosureNode[];
 }
 
 /** Payload for `client.setSkillsetPermissions(id, ...)`. */
