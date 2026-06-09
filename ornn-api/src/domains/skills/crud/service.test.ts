@@ -1120,6 +1120,24 @@ describe("SkillService skill dependencies — persistence + publish validation (
     const ownerClosure = await service.resolveSkillClosure("report-gen", owner);
     expect(ownerClosure.map((n) => n.name)).toEqual(["pdf-tools"]);
   });
+
+  // createVersionLoader was promoted from private `buildVersionLoader` to a
+  // public method (#969) so the skillsets service can reuse it to resolve
+  // member refs against the live skill graph. This pins the public surface:
+  // SYSTEM_ACTOR resolves a known published ref to a canonical node.
+  it("createVersionLoader(SYSTEM_ACTOR) resolves a known published ref", async () => {
+    const { deps } = makeFakeDeps(seedDep());
+    const service = new SkillService(deps);
+    const load = service.createVersionLoader(SYSTEM_ACTOR);
+    const node = await load("pdf-tools@1.0");
+    expect(node).not.toBeNull();
+    expect(node!.ref).toBe("pdf-tools@1.0");
+    expect(node!.name).toBe("pdf-tools");
+    expect(node!.version).toBe("1.0");
+    expect(node!.guid).toBe("dep-guid");
+    // An unknown ref resolves to null (surfaced as not-found by callers).
+    expect(await load("ghost-skill@1.0")).toBeNull();
+  });
 });
 
 describe("SkillService.getSkill / dist-tags / versions", () => {

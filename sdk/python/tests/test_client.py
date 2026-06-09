@@ -501,3 +501,171 @@ class TestDelete:
             ornn.delete("abc")
         assert route.called
         assert route.calls.last.request.method == "DELETE"
+
+
+def _skillset_data(**overrides: object) -> dict[str, object]:
+    base: dict[str, object] = {
+        "guid": "ss-1",
+        "name": "review-set",
+        "description": "a set",
+        "kind": "generic",
+        "tags": [],
+        "members": ["a@1.0", "b@1.0"],
+        "version": "1.0",
+        "latestVersion": "1.0",
+        "isPrivate": False,
+        "createdBy": "owner-1",
+        "sharedWithUsers": [],
+        "sharedWithOrgs": [],
+        "createdOn": "2026-01-01T00:00:00Z",
+        "updatedOn": "2026-01-01T00:00:00Z",
+    }
+    base.update(overrides)
+    return base
+
+
+class TestSkillsets:
+    @respx.mock
+    def test_create_skillset_posts_json(self) -> None:
+        route = respx.post(f"{BASE}/api/v1/skillsets").respond(
+            201, json={"data": _skillset_data(guid="ss-new"), "error": None}
+        )
+        with make_client() as ornn:
+            result = ornn.create_skillset(
+                name="review-set",
+                description="d",
+                members=["a@1.0", "b@1.0"],
+                kind="consensus-supported",
+            )
+        assert route.called
+        assert route.calls.last.request.method == "POST"
+        import json as _json
+
+        sent = _json.loads(route.calls.last.request.content)
+        assert sent["members"] == ["a@1.0", "b@1.0"]
+        assert sent["kind"] == "consensus-supported"
+        assert result.guid == "ss-new"
+
+    @respx.mock
+    def test_get_skillset_url_encodes_and_forwards_version(self) -> None:
+        route = respx.get(f"{BASE}/api/v1/skillsets/review%20set").respond(
+            200, json={"data": _skillset_data(), "error": None}
+        )
+        with make_client() as ornn:
+            result = ornn.get_skillset("review set", version="1.1")
+        assert route.called
+        assert route.calls.last.request.url.params["version"] == "1.1"
+        assert result.name == "review-set"
+
+    @respx.mock
+    def test_get_skillset_raises_on_404(self) -> None:
+        respx.get(f"{BASE}/api/v1/skillsets/ghost").respond(
+            404,
+            json={"status": 404, "code": "skillset_not_found", "detail": "nope"},
+        )
+        with make_client() as ornn:
+            with pytest.raises(OrnnError) as excinfo:
+                ornn.get_skillset("ghost")
+        assert excinfo.value.status == 404
+        assert excinfo.value.code == "skillset_not_found"
+
+    @respx.mock
+    def test_publish_skillset_puts_json(self) -> None:
+        route = respx.put(f"{BASE}/api/v1/skillsets/ss-1").respond(
+            200, json={"data": _skillset_data(version="1.1", latestVersion="1.1"), "error": None}
+        )
+        with make_client() as ornn:
+            result = ornn.publish_skillset("ss-1", members=["a@1.0", "b@1.0"], version="1.1")
+        assert route.called
+        assert route.calls.last.request.method == "PUT"
+        assert result.version == "1.1"
+
+    @respx.mock
+    def test_set_skillset_permissions_unwraps_envelope(self) -> None:
+        respx.put(f"{BASE}/api/v1/skillsets/ss-1/permissions").respond(
+            200,
+            json={"data": {"skillset": _skillset_data(isPrivate=False)}, "error": None},
+        )
+        with make_client() as ornn:
+            result = ornn.set_skillset_permissions("ss-1", is_private=False)
+        assert result.guid == "ss-1"
+        assert result.is_private is False
+
+    @respx.mock
+    def test_delete_skillset_fires_delete(self) -> None:
+        route = respx.delete(f"{BASE}/api/v1/skillsets/ss-1").respond(
+            200, json={"data": {"success": True}, "error": None}
+        )
+        with make_client() as ornn:
+            ornn.delete_skillset("ss-1")
+        assert route.called
+        assert route.calls.last.request.method == "DELETE"
+
+    @respx.mock
+    def test_resolve_skillset_closure_parses_items(self) -> None:
+        route = respx.get(f"{BASE}/api/v1/skillsets/review-set/closure").respond(
+            200,
+            json={
+                "data": {
+                    "items": [
+                        {"guid": "g-d", "name": "leaf-d", "version": "1.0", "depth": 1},
+                        {"guid": "g-a", "name": "pdf-tools", "version": "1.0", "depth": 0},
+                    ],
+                },
+                "error": None,
+            },
+        )
+        with make_client() as ornn:
+            result = ornn.resolve_skillset_closure("review-set", version="1.0")
+        assert [n.name for n in result.items] == ["leaf-d", "pdf-tools"]
+        assert route.calls.last.request.url.params["version"] == "1.0"
+
+    @respx.mock
+    def test_resolve_skillset_closure_raises_on_conflict(self) -> None:
+        respx.get(f"{BASE}/api/v1/skillsets/ss-1/closure").respond(
+            409,
+            json={"status": 409, "code": "dependency_conflict", "detail": "two versions"},
+        )
+        with make_client() as ornn:
+            with pytest.raises(OrnnError) as excinfo:
+                ornn.resolve_skillset_closure("ss-1")
+        assert excinfo.value.status == 409
+        assert excinfo.value.code == "dependency_conflict"
+
+    @respx.mock
+    def test_search_skillsets_forwards_kind_and_tags(self) -> None:
+        route = respx.get(f"{BASE}/api/v1/skillset-search").respond(
+            200,
+            json={
+                "data": {
+                    "items": [
+                        {
+                            "guid": "ss-1",
+                            "name": "review-set",
+                            "description": "d",
+                            "kind": "consensus-supported",
+                            "tags": ["alpha"],
+                            "memberCount": 2,
+                            "latestVersion": "1.0",
+                            "isPrivate": False,
+                            "createdBy": "owner-1",
+                            "createdOn": "2026-01-01T00:00:00Z",
+                            "updatedOn": "2026-01-01T00:00:00Z",
+                        }
+                    ],
+                    "total": 1,
+                    "page": 1,
+                    "pageSize": 20,
+                    "totalPages": 1,
+                },
+                "error": None,
+            },
+        )
+        with make_client() as ornn:
+            result = ornn.search_skillsets(kind="consensus-supported", tag="alpha", scope="public")
+        params = route.calls.last.request.url.params
+        assert params["kind"] == "consensus-supported"
+        assert params["tags"] == "alpha"
+        assert params["scope"] == "public"
+        assert result.items[0].kind == "consensus-supported"
+        assert result.items[0].member_count == 2

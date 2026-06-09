@@ -115,6 +115,104 @@ export interface UpdateSkillMetadata {
   readonly metadata?: Record<string, unknown>;
 }
 
+// ---------------------------------------------------------------------------
+// Skillsets (#969)
+// ---------------------------------------------------------------------------
+
+/**
+ * Skillset kind. A `consensus-supported` skillset is an author CLAIM that
+ * the members are an independent, comparable set suitable for agent-side
+ * consensus — not a guarantee. `generic` is a plain curated bundle.
+ */
+export type SkillsetKind = "generic" | "consensus-supported";
+
+/** Full skillset detail returned by single-skillset reads. */
+export interface SkillsetDetail {
+  readonly guid: string;
+  readonly name: string;
+  readonly description: string;
+  readonly kind: SkillsetKind;
+  readonly tags: readonly string[];
+  /** Member skill refs (`<name-or-guid>@<major.minor>` or `<name>@<dist-tag>`). */
+  readonly members: readonly string[];
+  readonly version: string;
+  readonly latestVersion: string;
+  readonly isPrivate: boolean;
+  readonly createdBy: string;
+  readonly sharedWithUsers?: readonly string[];
+  readonly sharedWithOrgs?: readonly string[];
+  readonly createdOn: string;
+  readonly updatedOn: string;
+}
+
+/** Lighter skillset summary returned by search. */
+export interface SkillsetSummary {
+  readonly guid: string;
+  readonly name: string;
+  readonly description: string;
+  readonly kind: SkillsetKind;
+  readonly tags: readonly string[];
+  readonly memberCount: number;
+  readonly latestVersion: string;
+  readonly isPrivate: boolean;
+  readonly createdBy: string;
+  readonly createdOn: string;
+  readonly updatedOn: string;
+}
+
+/** Payload for `client.createSkillset(...)`. */
+export interface CreateSkillsetInput {
+  readonly name: string;
+  readonly description: string;
+  /** Defaults to `generic` server-side when omitted. */
+  readonly kind?: SkillsetKind;
+  readonly tags?: readonly string[];
+  /** 2..N member skill refs. */
+  readonly members: readonly string[];
+  /** Initial version (`<major>.<minor>`). Defaults to `1.0` server-side. */
+  readonly version?: string;
+}
+
+/** Payload for `client.publishSkillset(id, ...)` — a new immutable version. */
+export interface PublishSkillsetInput {
+  readonly description?: string;
+  readonly kind?: SkillsetKind;
+  readonly tags?: readonly string[];
+  readonly members: readonly string[];
+  readonly version: string;
+}
+
+/** Payload for `client.setSkillsetPermissions(id, ...)`. */
+export interface SkillsetPermissionsInput {
+  readonly isPrivate: boolean;
+  readonly sharedWithUsers?: readonly string[];
+  readonly sharedWithOrgs?: readonly string[];
+}
+
+export interface SkillsetSearchParams {
+  /** Filter by kind (e.g. `consensus-supported`). */
+  readonly kind?: SkillsetKind;
+  /** Which skillsets to consider — same scopes as skill search. */
+  readonly scope?: SearchScope;
+  /** Filter by tag(s) — server matches ALL listed tags. */
+  readonly tag?: string;
+  readonly page?: number;
+  readonly pageSize?: number;
+}
+
+export interface SkillsetSearchResult {
+  readonly items: readonly SkillsetSummary[];
+  readonly total: number;
+  readonly page: number;
+  readonly pageSize: number;
+  readonly totalPages: number;
+  readonly meta?: {
+    readonly limit: number;
+    readonly hasMore: boolean;
+    readonly nextCursor?: string;
+  };
+}
+
 export interface PublishOptions {
   /** Bypass format validation. Admin-only. */
   readonly skipValidation?: boolean;

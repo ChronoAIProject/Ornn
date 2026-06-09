@@ -365,3 +365,158 @@ describe("OrnnClient", () => {
     expect(capturedUrl).toBe("https://x/api/v1/skills/abc");
   });
 });
+
+// ======================================================================
+// Skillsets (#969)
+// ======================================================================
+
+describe("OrnnClient — skillsets", () => {
+  test("createSkillset(): POSTs JSON to /skillsets", async () => {
+    let captured: { method: string; url: string; body: string; ct: string } = {
+      method: "",
+      url: "",
+      body: "",
+      ct: "",
+    };
+    const fetchMock = mockFetch((url, init) => {
+      captured = {
+        method: init.method ?? "",
+        url,
+        body: init.body as string,
+        ct: (init.headers as Record<string, string>)["Content-Type"] ?? "",
+      };
+      return jsonResponse(201, {
+        data: { guid: "ss-1", name: "review-set", kind: "generic", members: ["a@1.0", "b@1.0"] },
+        error: null,
+      });
+    });
+    const client = new OrnnClient({ baseUrl: "https://x", fetch: fetchMock });
+    const result = await client.createSkillset({
+      name: "review-set",
+      description: "d",
+      members: ["a@1.0", "b@1.0"],
+    });
+    expect(captured.method).toBe("POST");
+    expect(captured.url).toBe("https://x/api/v1/skillsets");
+    expect(captured.ct).toBe("application/json");
+    expect(JSON.parse(captured.body)).toEqual({
+      name: "review-set",
+      description: "d",
+      members: ["a@1.0", "b@1.0"],
+    });
+    expect(result.guid).toBe("ss-1");
+  });
+
+  test("getSkillset(): URL-encodes the id and appends version", async () => {
+    let capturedUrl = "";
+    const fetchMock = mockFetch((url) => {
+      capturedUrl = url;
+      return jsonResponse(200, { data: { guid: "ss-1", name: "review-set" }, error: null });
+    });
+    const client = new OrnnClient({ baseUrl: "https://x", fetch: fetchMock });
+    await client.getSkillset("review set", "1.1");
+    expect(capturedUrl).toBe("https://x/api/v1/skillsets/review%20set?version=1.1");
+  });
+
+  test("publishSkillset(): PUTs JSON to /skillsets/:id", async () => {
+    let captured = { method: "", url: "" };
+    const fetchMock = mockFetch((url, init) => {
+      captured = { method: init.method ?? "", url };
+      return jsonResponse(200, { data: { guid: "ss-1", version: "1.1" }, error: null });
+    });
+    const client = new OrnnClient({ baseUrl: "https://x", fetch: fetchMock });
+    const res = await client.publishSkillset("ss-1", {
+      members: ["a@1.0", "b@1.0"],
+      version: "1.1",
+    });
+    expect(captured.method).toBe("PUT");
+    expect(captured.url).toBe("https://x/api/v1/skillsets/ss-1");
+    expect(res.version).toBe("1.1");
+  });
+
+  test("setSkillsetPermissions(): unwraps the { skillset } envelope", async () => {
+    const fetchMock = mockFetch(() =>
+      jsonResponse(200, {
+        data: { skillset: { guid: "ss-1", isPrivate: false } },
+        error: null,
+      }),
+    );
+    const client = new OrnnClient({ baseUrl: "https://x", fetch: fetchMock });
+    const res = await client.setSkillsetPermissions("ss-1", { isPrivate: false });
+    expect(res.guid).toBe("ss-1");
+    expect(res.isPrivate).toBe(false);
+  });
+
+  test("deleteSkillset(): fires DELETE to /skillsets/:id", async () => {
+    let captured = { method: "", url: "" };
+    const fetchMock = mockFetch((url, init) => {
+      captured = { method: init.method ?? "", url };
+      return jsonResponse(200, { data: { success: true }, error: null });
+    });
+    const client = new OrnnClient({ baseUrl: "https://x", fetch: fetchMock });
+    await client.deleteSkillset("ss-1");
+    expect(captured.method).toBe("DELETE");
+    expect(captured.url).toBe("https://x/api/v1/skillsets/ss-1");
+  });
+
+  test("getSkillsetClosure(): hits /skillsets/:id/closure and parses items", async () => {
+    let capturedUrl = "";
+    const fetchMock = mockFetch((url) => {
+      capturedUrl = url;
+      return jsonResponse(200, {
+        data: {
+          items: [
+            { guid: "g-d", name: "leaf-d", version: "1.0", depth: 1 },
+            { guid: "g-a", name: "pdf-tools", version: "1.0", depth: 0 },
+          ],
+        },
+        error: null,
+      });
+    });
+    const client = new OrnnClient({ baseUrl: "https://x", fetch: fetchMock });
+    const result = await client.getSkillsetClosure("review-set", { version: "1.0" });
+    expect(capturedUrl).toBe("https://x/api/v1/skillsets/review-set/closure?version=1.0");
+    expect(result.items.map((i) => i.name)).toEqual(["leaf-d", "pdf-tools"]);
+  });
+
+  test("getSkillsetClosure(): throws OrnnError on dependency_conflict (409)", async () => {
+    const fetchMock = mockFetch(() =>
+      jsonResponse(409, {
+        status: 409,
+        code: "dependency_conflict",
+        detail: "two versions of x",
+      }),
+    );
+    const client = new OrnnClient({ baseUrl: "https://x", fetch: fetchMock });
+    const err = (await client.getSkillsetClosure("ss-1").catch((e) => e)) as OrnnError;
+    expect(err).toBeInstanceOf(OrnnError);
+    expect(err.status).toBe(409);
+    expect(err.code).toBe("dependency_conflict");
+  });
+
+  test("getSkillset(): throws OrnnError on 404", async () => {
+    const fetchMock = mockFetch(() =>
+      jsonResponse(404, { status: 404, code: "skillset_not_found", detail: "nope" }),
+    );
+    const client = new OrnnClient({ baseUrl: "https://x", fetch: fetchMock });
+    const err = (await client.getSkillset("ghost").catch((e) => e)) as OrnnError;
+    expect(err.status).toBe(404);
+    expect(err.code).toBe("skillset_not_found");
+  });
+
+  test("searchSkillsets(): forwards kind + tags + scope as query params", async () => {
+    let capturedUrl = "";
+    const fetchMock = mockFetch((url) => {
+      capturedUrl = url;
+      return jsonResponse(200, {
+        data: { items: [], total: 0, page: 1, pageSize: 20, totalPages: 0 },
+        error: null,
+      });
+    });
+    const client = new OrnnClient({ baseUrl: "https://x", fetch: fetchMock });
+    await client.searchSkillsets({ kind: "consensus-supported", tag: "alpha", scope: "public" });
+    expect(capturedUrl).toContain("kind=consensus-supported");
+    expect(capturedUrl).toContain("tags=alpha");
+    expect(capturedUrl).toContain("scope=public");
+  });
+});
