@@ -537,6 +537,11 @@ describe("GET /skills/:idOrName/closure", () => {
     expect(captured.idOrName).toBe("demo-skill");
     expect(captured.version).toBe("1.0");
     expect(captured.anon).toBe(false);
+    // Regression guard (#978): the skillset master prompt is a SKILLSET
+    // concept only — the shared skill closure envelope stays `{ items }`,
+    // with NO `instructions` key leaking onto this path.
+    expect("instructions" in body.data).toBe(false);
+    expect(Object.keys(body.data)).toEqual(["items"]);
   });
 
   test("200 with a deduped diamond closure", async () => {
