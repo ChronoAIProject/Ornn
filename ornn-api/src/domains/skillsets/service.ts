@@ -46,6 +46,21 @@ import type {
 
 const logger = createLogger("skillsetService");
 
+/**
+ * Result of {@link SkillsetService.resolveClosure} (#978) — the resolved
+ * delivery closure PLUS the version's master prompt.
+ *
+ * `instructions` is a ROOT sibling of `items` (NOT folded into the shared
+ * `ClosureNode[]` — that resolver + the skill `/skills/:id/closure` path
+ * stay clean). Sourced from the already-loaded skillset version document.
+ */
+export interface SkillsetClosureResult {
+  /** The version's master prompt (#978) — surfaced verbatim. */
+  instructions: string;
+  /** Deps-first topo-sorted closure (the shared #968 node shape). */
+  items: ClosureNode[];
+}
+
 export interface SkillsetServiceDeps {
   skillsetRepo: SkillsetRepository;
   skillsetVersionRepo: SkillsetVersionRepository;
@@ -113,6 +128,8 @@ export class SkillsetService {
       minorVersion: parsed.minor,
       kind: input.kind,
       description: input.description,
+      // Master prompt (#978) — straight from input, no carry-forward.
+      instructions: input.instructions,
       tags: input.tags,
       members: input.members,
       createdBy: actor.userId,
@@ -180,6 +197,10 @@ export class SkillsetService {
       minorVersion: parsed.minor,
       kind,
       description,
+      // Master prompt (#978) — REQUIRED on publish, NO carry-forward: each
+      // version explicitly carries its own prompt straight from input
+      // (unlike `description`/`kind`/`tags`, which inherit when omitted).
+      instructions: input.instructions,
       tags,
       members,
       createdBy: actor.userId,
@@ -317,7 +338,8 @@ export class SkillsetService {
   /**
    * Resolve the full delivery closure of a skillset version (#969): the
    * union of all member skills PLUS each member's #968 dependency closure,
-   * deduplicated + topo-sorted (deps-first).
+   * deduplicated + topo-sorted (deps-first), PLUS the version's master
+   * prompt (#978).
    *
    * Reuses the #968 resolver directly — `roots = members`, walked through
    * the injected `SkillService.createVersionLoader(actor)`. The loader's
@@ -325,12 +347,18 @@ export class SkillsetService {
    * PUBLIC skillset whose member transitively pins a PRIVATE skill gets
    * `skill_dependency_not_found` (no leak), inheriting the exact codes the
    * skill closure uses.
+   *
+   * The master prompt is sourced from the SAME already-loaded `versionDoc`
+   * — no extra read — and returned alongside `items` so the route can emit
+   * it as a root sibling. This is the SKILLSET closure result type; the
+   * shared `ClosureNode[]`/`resolveClosure` resolver and the skill
+   * `/skills/:id/closure` path stay untouched (#978).
    */
   async resolveClosure(
     idOrName: string,
     actor: ActorContext,
     version?: string,
-  ): Promise<ClosureNode[]> {
+  ): Promise<SkillsetClosureResult> {
     const skillset = await this.findByIdOrName(idOrName);
     if (!canReadSkill(skillset, actor)) {
       throw AppError.notFound("skillset_not_found", `Skillset '${idOrName}' not found`);
@@ -352,14 +380,14 @@ export class SkillsetService {
     }
 
     const roots = versionDoc.members;
-    const closure = await resolveClosure(roots, {
+    const items = await resolveClosure(roots, {
       loadVersion: this.skillService.createVersionLoader(actor),
     });
     logger.info(
-      { idOrName, version: resolvedVersion, memberCount: roots.length, nodeCount: closure.length },
+      { idOrName, version: resolvedVersion, memberCount: roots.length, nodeCount: items.length },
       "Skillset closure resolved",
     );
-    return closure;
+    return { instructions: versionDoc.instructions, items };
   }
 
   // ==========================================================================
@@ -412,6 +440,8 @@ function toDetail(
     guid: skillset.guid,
     name: skillset.name,
     description: versionDoc.description,
+    // Master prompt (#978) — surfaced verbatim from the loaded version.
+    instructions: versionDoc.instructions,
     kind: versionDoc.kind,
     tags: versionDoc.tags,
     members: versionDoc.members,

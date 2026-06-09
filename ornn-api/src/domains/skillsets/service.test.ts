@@ -176,6 +176,7 @@ function makeSkillsetDeps(skillService: SkillService) {
       minorVersion: number;
       kind: SkillsetDocument["kind"];
       description: string;
+      instructions: string;
       tags: string[];
       members: string[];
       createdBy: string;
@@ -192,6 +193,7 @@ function makeSkillsetDeps(skillService: SkillService) {
         minorVersion: data.minorVersion,
         kind: data.kind,
         description: data.description,
+        instructions: data.instructions,
         tags: data.tags,
         members: data.members,
         createdBy: data.createdBy,
@@ -248,6 +250,7 @@ describe("SkillsetService — create / publish (immutable versioning)", () => {
       {
         name: "review-set",
         description: "v1",
+        instructions: "prompt-v1: run pdf-tools then csv-tools",
         kind: "generic",
         tags: ["t"],
         members: ["pdf-tools@1.0", "csv-tools@1.0"],
@@ -257,12 +260,14 @@ describe("SkillsetService — create / publish (immutable versioning)", () => {
     );
     expect(created.version).toBe("1.0");
     expect(created.isPrivate).toBe(true);
+    expect(created.instructions).toBe("prompt-v1: run pdf-tools then csv-tools");
 
     const guid = created.guid;
     await service.publishVersion(
       guid,
       {
         description: "v2",
+        instructions: "prompt-v2: csv-tools first this time",
         members: ["pdf-tools@1.0", "csv-tools@1.0"],
         version: "1.1",
       },
@@ -274,11 +279,15 @@ describe("SkillsetService — create / publish (immutable versioning)", () => {
     expect(latest.version).toBe("1.1");
     expect(latest.latestVersion).toBe("1.1");
     expect(latest.description).toBe("v2");
+    // Master prompt comes straight from THIS publish (no carry-forward).
+    expect(latest.instructions).toBe("prompt-v2: csv-tools first this time");
 
-    // The prior 1.0 version still reads back unchanged (immutable).
+    // The prior 1.0 version still reads back unchanged (immutable) — its
+    // own prompt is untouched by the v1.1 publish (per-version immutability).
     const v1 = await service.getSkillset(guid, "1.0");
     expect(v1.version).toBe("1.0");
     expect(v1.description).toBe("v1");
+    expect(v1.instructions).toBe("prompt-v1: run pdf-tools then csv-tools");
     expect(state.versions).toHaveLength(2);
   });
 
@@ -295,6 +304,7 @@ describe("SkillsetService — create / publish (immutable versioning)", () => {
       {
         name: "review-set",
         description: "v1",
+        instructions: "p",
         kind: "generic",
         tags: [],
         members: ["pdf-tools@1.0", "csv-tools@1.0"],
@@ -306,7 +316,7 @@ describe("SkillsetService — create / publish (immutable versioning)", () => {
     try {
       await service.publishVersion(
         created.guid,
-        { members: ["pdf-tools@1.0", "csv-tools@1.0"], version: "1.0" },
+        { instructions: "p", members: ["pdf-tools@1.0", "csv-tools@1.0"], version: "1.0" },
         OWNER,
       );
     } catch (err) {
@@ -326,18 +336,26 @@ describe("SkillsetService — create / publish (immutable versioning)", () => {
     const members = ["pdf-tools@1.0", "csv-tools@1.0"];
 
     const created = await service.createSkillset(
-      { name: "review-set", description: "v1", kind: "generic", tags: [], members, version: "1.0" },
+      {
+        name: "review-set",
+        description: "v1",
+        instructions: "p",
+        kind: "generic",
+        tags: [],
+        members,
+        version: "1.0",
+      },
       { userId: "owner-1" },
     );
     const guid = created.guid;
-    await service.publishVersion(guid, { members, version: "1.1" }, OWNER);
-    await service.publishVersion(guid, { members, version: "2.0" }, OWNER);
+    await service.publishVersion(guid, { instructions: "p", members, version: "1.1" }, OWNER);
+    await service.publishVersion(guid, { instructions: "p", members, version: "2.0" }, OWNER);
     expect((await service.getSkillset(guid)).latestVersion).toBe("2.0");
 
     // (a) lower version is rejected with the version-not-incremented code.
     let code = "";
     try {
-      await service.publishVersion(guid, { members, version: "1.5" }, OWNER);
+      await service.publishVersion(guid, { instructions: "p", members, version: "1.5" }, OWNER);
     } catch (err) {
       code = (err as AppError).code;
     }
@@ -356,6 +374,7 @@ describe("SkillsetService — create / publish (immutable versioning)", () => {
     const input = {
       name: "dup-set",
       description: "d",
+      instructions: "p",
       kind: "generic" as const,
       tags: [],
       members: ["pdf-tools@1.0", "csv-tools@1.0"],
@@ -382,6 +401,7 @@ describe("SkillsetService — visibility transitions (mirror skills)", () => {
       {
         name: "review-set",
         description: "d",
+        instructions: "p",
         kind: "generic",
         tags: [],
         members: ["pdf-tools@1.0", "csv-tools@1.0"],
@@ -407,6 +427,7 @@ describe("SkillsetService — visibility transitions (mirror skills)", () => {
       {
         name: "review-set",
         description: "d",
+        instructions: "p",
         kind: "generic",
         tags: [],
         members: ["pdf-tools@1.0", "csv-tools@1.0"],
@@ -446,6 +467,7 @@ describe("SkillsetService — publish member validation (#969)", () => {
         {
           name: "review-set",
           description: "d",
+          instructions: "p",
           kind: "generic",
           tags: [],
           members: ["pdf-tools@1.0", "ghost-tools@1.0"],
@@ -494,6 +516,7 @@ describe("SkillsetService — publish member validation (#969)", () => {
         {
           name: "conflict-set",
           description: "d",
+          instructions: "p",
           kind: "consensus-supported",
           tags: [],
           members: ["member-a@1.0", "member-b@1.0"],
@@ -534,6 +557,7 @@ describe("SkillsetService — resolveClosure (roots = members)", () => {
       {
         name: "review-set",
         description: "d",
+        instructions: "closure-master-prompt: orchestrate the set",
         kind: "generic",
         tags: [],
         members: ["pdf-tools@1.0", "csv-tools@1.0"],
@@ -542,12 +566,15 @@ describe("SkillsetService — resolveClosure (roots = members)", () => {
       { userId: "owner-1" },
     );
     const closure = await service.resolveClosure("review-set", SYSTEM_ACTOR);
-    const names = closure.map((n) => n.name);
+    const names = closure.items.map((n) => n.name);
     // leaf-d must precede pdf-tools (its dependent).
     expect(names).toContain("leaf-d");
     expect(names).toContain("pdf-tools");
     expect(names).toContain("csv-tools");
     expect(names.indexOf("leaf-d")).toBeLessThan(names.indexOf("pdf-tools"));
+    // The master prompt (#978) rides alongside items as a root sibling,
+    // sourced from the resolved version (no extra read).
+    expect(closure.instructions).toBe("closure-master-prompt: orchestrate the set");
   });
 
   it("hides a private member dep from an anonymous caller (no leak)", async () => {
@@ -576,6 +603,7 @@ describe("SkillsetService — resolveClosure (roots = members)", () => {
       {
         name: "review-set",
         description: "d",
+        instructions: "p",
         kind: "generic",
         tags: [],
         members: ["pdf-tools@1.0", "csv-tools@1.0"],
@@ -600,7 +628,7 @@ describe("SkillsetService — resolveClosure (roots = members)", () => {
 
     // SYSTEM (and the owner) CAN see it — the gate keys on identity.
     const sys = await service.resolveClosure("review-set", SYSTEM_ACTOR);
-    expect(sys.map((n) => n.name)).toContain("secret-lib");
+    expect(sys.items.map((n) => n.name)).toContain("secret-lib");
   });
 
   it("404s an anonymous caller on a PRIVATE skillset (entry gate)", async () => {
@@ -612,6 +640,7 @@ describe("SkillsetService — resolveClosure (roots = members)", () => {
       {
         name: "secret-set",
         description: "d",
+        instructions: "p",
         kind: "generic",
         tags: [],
         members: ["pdf-tools@1.0", "csv-tools@1.0"],

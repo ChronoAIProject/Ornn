@@ -31,6 +31,7 @@ export type {
   SkillDetail,
   SkillSearchParams,
   SkillSearchResult,
+  SkillsetClosureResult,
   SkillsetDetail,
   SkillsetKind,
   SkillsetPermissionsInput,

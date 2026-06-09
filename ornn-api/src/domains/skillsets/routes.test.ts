@@ -28,6 +28,7 @@ function detail(overrides: Record<string, unknown> = {}) {
     guid: "ss-1",
     name: "review-set",
     description: "a set",
+    instructions: "Run member a, then feed its output to member b.",
     kind: "generic",
     tags: [],
     members: ["a@1.0", "b@1.0"],
@@ -108,7 +109,10 @@ describe("GET /skillsets/:idOrName/closure", () => {
       service: {
         resolveClosure: async () => {
           calls.push("resolveClosure");
-          return [{ guid: "g-a", name: "a", version: "1.0", depth: 0 }];
+          return {
+            instructions: "master prompt for the set",
+            items: [{ guid: "g-a", name: "a", version: "1.0", depth: 0 }],
+          };
         },
         getSkillset: async () => {
           calls.push("getSkillset");
@@ -118,8 +122,10 @@ describe("GET /skillsets/:idOrName/closure", () => {
     });
     const res = await app.request("/api/v1/skillsets/review-set/closure");
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { data: { items: unknown[] } };
+    const body = (await res.json()) as { data: { instructions: string; items: unknown[] } };
     expect(body.data.items).toHaveLength(1);
+    // The master prompt (#978) rides as a ROOT sibling of items.
+    expect(body.data.instructions).toBe("master prompt for the set");
     // Only resolveClosure ran — :idOrName's getSkillset was NOT reached.
     expect(calls).toEqual(["resolveClosure"]);
   });
@@ -208,6 +214,7 @@ describe("POST /skillsets — scope reuse + gating", () => {
       body: JSON.stringify({
         name: "review-set",
         description: "d",
+        instructions: "Use a, then b.",
         members: ["a@1.0", "b@1.0"],
       }),
     });
@@ -245,7 +252,11 @@ describe("PUT/DELETE /skillsets/:id — scope gating", () => {
     const res = await app.request("/api/v1/skillsets/ss-1", {
       method: "PUT",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ version: "1.1", members: ["a@1.0", "b@1.0"] }),
+      body: JSON.stringify({
+        version: "1.1",
+        instructions: "Use a, then b.",
+        members: ["a@1.0", "b@1.0"],
+      }),
     });
     expect(res.status).toBe(200);
     expect(((await res.json()) as { data: { version: string } }).data.version).toBe("1.1");

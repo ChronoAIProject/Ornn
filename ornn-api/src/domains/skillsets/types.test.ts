@@ -12,6 +12,7 @@ import { describe, expect, it } from "bun:test";
 import {
   createSkillsetSchema,
   publishSkillsetSchema,
+  SKILLSET_INSTRUCTIONS_MAX,
   SKILLSET_KINDS,
 } from "./types";
 
@@ -19,6 +20,7 @@ function baseCreate(overrides: Record<string, unknown> = {}) {
   return {
     name: "review-set",
     description: "A curated comparison set.",
+    instructions: "Run pdf-tools first, then feed its output to csv-tools.",
     members: ["pdf-tools@1.0", "csv-tools@2.1"],
     ...overrides,
   };
@@ -120,22 +122,102 @@ describe("createSkillsetSchema — member ref grammar (#969)", () => {
   });
 });
 
+function basePublish(overrides: Record<string, unknown> = {}) {
+  return {
+    version: "1.1",
+    instructions: "Use member-a, then member-b for the comparison.",
+    members: ["a@1.0", "b@1.0"],
+    ...overrides,
+  };
+}
+
 describe("publishSkillsetSchema (#969)", () => {
   it("requires version + members", () => {
     expect(
-      publishSkillsetSchema.safeParse({ members: ["a@1.0", "b@1.0"] }).success,
+      publishSkillsetSchema.safeParse(basePublish({ version: undefined })).success,
     ).toBe(false); // missing version
     expect(
-      publishSkillsetSchema.safeParse({ version: "1.1" }).success,
+      publishSkillsetSchema.safeParse(basePublish({ members: undefined })).success,
     ).toBe(false); // missing members
-    expect(
-      publishSkillsetSchema.safeParse({ version: "1.1", members: ["a@1.0", "b@1.0"] }).success,
-    ).toBe(true);
+    expect(publishSkillsetSchema.safeParse(basePublish()).success).toBe(true);
   });
 
   it("rejects a malformed version", () => {
     expect(
-      publishSkillsetSchema.safeParse({ version: "1.2.3", members: ["a@1.0", "b@1.0"] }).success,
+      publishSkillsetSchema.safeParse(basePublish({ version: "1.2.3" })).success,
     ).toBe(false);
+  });
+});
+
+describe("instructions master prompt — REQUIRED on both schemas (#978)", () => {
+  const longPrompt = "Step-by-step orchestration guide for the set. ".repeat(20);
+  const tooLong = "x".repeat(SKILLSET_INSTRUCTIONS_MAX + 1);
+
+  it("create accepts a valid, trimmed prompt (whitespace stripped)", () => {
+    const parsed = createSkillsetSchema.safeParse(
+      baseCreate({ instructions: `  ${longPrompt}  ` }),
+    );
+    expect(parsed.success).toBe(true);
+    if (parsed.success) expect(parsed.data.instructions).toBe(longPrompt.trim());
+  });
+
+  it("publish accepts a valid, trimmed prompt (whitespace stripped)", () => {
+    const parsed = publishSkillsetSchema.safeParse(
+      basePublish({ instructions: `\n${longPrompt}\n` }),
+    );
+    expect(parsed.success).toBe(true);
+    if (parsed.success) expect(parsed.data.instructions).toBe(longPrompt.trim());
+  });
+
+  it("create rejects a missing prompt", () => {
+    expect(createSkillsetSchema.safeParse(baseCreate({ instructions: undefined })).success).toBe(
+      false,
+    );
+  });
+
+  it("publish rejects a missing prompt", () => {
+    expect(publishSkillsetSchema.safeParse(basePublish({ instructions: undefined })).success).toBe(
+      false,
+    );
+  });
+
+  it("create rejects an empty prompt", () => {
+    expect(createSkillsetSchema.safeParse(baseCreate({ instructions: "" })).success).toBe(false);
+  });
+
+  it("publish rejects an empty prompt", () => {
+    expect(publishSkillsetSchema.safeParse(basePublish({ instructions: "" })).success).toBe(false);
+  });
+
+  it("create rejects a whitespace-only prompt (trims to empty)", () => {
+    expect(createSkillsetSchema.safeParse(baseCreate({ instructions: "   \n\t  " })).success).toBe(
+      false,
+    );
+  });
+
+  it("publish rejects a whitespace-only prompt (trims to empty)", () => {
+    expect(publishSkillsetSchema.safeParse(basePublish({ instructions: "   \n\t  " })).success).toBe(
+      false,
+    );
+  });
+
+  it(`create rejects a prompt over ${SKILLSET_INSTRUCTIONS_MAX} chars`, () => {
+    expect(createSkillsetSchema.safeParse(baseCreate({ instructions: tooLong })).success).toBe(
+      false,
+    );
+  });
+
+  it(`publish rejects a prompt over ${SKILLSET_INSTRUCTIONS_MAX} chars`, () => {
+    expect(publishSkillsetSchema.safeParse(basePublish({ instructions: tooLong })).success).toBe(
+      false,
+    );
+  });
+
+  it(`accepts a prompt of exactly ${SKILLSET_INSTRUCTIONS_MAX} chars`, () => {
+    const exact = "y".repeat(SKILLSET_INSTRUCTIONS_MAX);
+    expect(createSkillsetSchema.safeParse(baseCreate({ instructions: exact })).success).toBe(true);
+    expect(publishSkillsetSchema.safeParse(basePublish({ instructions: exact })).success).toBe(
+      true,
+    );
   });
 });

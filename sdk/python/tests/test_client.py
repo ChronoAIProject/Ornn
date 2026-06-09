@@ -508,6 +508,7 @@ def _skillset_data(**overrides: object) -> dict[str, object]:
         "guid": "ss-1",
         "name": "review-set",
         "description": "a set",
+        "instructions": "Run a, then feed its output to b.",
         "kind": "generic",
         "tags": [],
         "members": ["a@1.0", "b@1.0"],
@@ -534,6 +535,7 @@ class TestSkillsets:
             result = ornn.create_skillset(
                 name="review-set",
                 description="d",
+                instructions="Run a, then feed its output to b.",
                 members=["a@1.0", "b@1.0"],
                 kind="consensus-supported",
             )
@@ -544,7 +546,10 @@ class TestSkillsets:
         sent = _json.loads(route.calls.last.request.content)
         assert sent["members"] == ["a@1.0", "b@1.0"]
         assert sent["kind"] == "consensus-supported"
+        # The master prompt (#978) is sent on the wire.
+        assert sent["instructions"] == "Run a, then feed its output to b."
         assert result.guid == "ss-new"
+        assert result.instructions == "Run a, then feed its output to b."
 
     @respx.mock
     def test_get_skillset_url_encodes_and_forwards_version(self) -> None:
@@ -575,9 +580,19 @@ class TestSkillsets:
             200, json={"data": _skillset_data(version="1.1", latestVersion="1.1"), "error": None}
         )
         with make_client() as ornn:
-            result = ornn.publish_skillset("ss-1", members=["a@1.0", "b@1.0"], version="1.1")
+            result = ornn.publish_skillset(
+                "ss-1",
+                members=["a@1.0", "b@1.0"],
+                version="1.1",
+                instructions="v1.1 prompt: b first this time",
+            )
         assert route.called
         assert route.calls.last.request.method == "PUT"
+        import json as _json
+
+        sent = _json.loads(route.calls.last.request.content)
+        # The master prompt (#978) is sent on publish too (no carry-forward).
+        assert sent["instructions"] == "v1.1 prompt: b first this time"
         assert result.version == "1.1"
 
     @respx.mock
@@ -607,6 +622,7 @@ class TestSkillsets:
             200,
             json={
                 "data": {
+                    "instructions": "master prompt: leaf-d feeds pdf-tools",
                     "items": [
                         {"guid": "g-d", "name": "leaf-d", "version": "1.0", "depth": 1},
                         {"guid": "g-a", "name": "pdf-tools", "version": "1.0", "depth": 0},
@@ -618,6 +634,8 @@ class TestSkillsets:
         with make_client() as ornn:
             result = ornn.resolve_skillset_closure("review-set", version="1.0")
         assert [n.name for n in result.items] == ["leaf-d", "pdf-tools"]
+        # The master prompt (#978) parses as a root sibling of items.
+        assert result.instructions == "master prompt: leaf-d feeds pdf-tools"
         assert route.calls.last.request.url.params["version"] == "1.0"
 
     @respx.mock

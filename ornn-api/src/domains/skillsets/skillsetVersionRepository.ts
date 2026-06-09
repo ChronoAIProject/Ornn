@@ -27,6 +27,8 @@ export interface CreateSkillsetVersionData {
   minorVersion: number;
   kind: SkillsetKind;
   description: string;
+  /** Master prompt (#978) — per-version, immutable. */
+  instructions: string;
   tags: string[];
   members: string[];
   createdBy: string;
@@ -61,6 +63,7 @@ export class SkillsetVersionRepository {
       minorVersion: data.minorVersion,
       kind: data.kind,
       description: data.description,
+      instructions: data.instructions,
       tags: data.tags,
       members: data.members,
       createdBy: data.createdBy,
@@ -132,6 +135,9 @@ function mapDoc(doc: Document | null): SkillsetVersionDocument | null {
     minorVersion: doc.minorVersion,
     kind: (doc.kind as SkillsetKind) ?? "generic",
     description: doc.description ?? "",
+    // `?? ""` tolerates a pre-#978 version row that predates the required
+    // master prompt — the surface stays well-typed (never `undefined`).
+    instructions: doc.instructions ?? "",
     tags: Array.isArray(doc.tags) ? (doc.tags as string[]) : [],
     members: Array.isArray(doc.members) ? (doc.members as string[]) : [],
     createdBy: doc.createdBy,

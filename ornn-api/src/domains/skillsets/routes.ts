@@ -108,8 +108,10 @@ export function createSkillsetRoutes(
       { idOrName, version: version ?? null, anon: !authCtx },
       "Skillset closure request",
     );
-    const items = await skillsetService.resolveClosure(idOrName, actor, version);
-    return c.json({ data: { items }, error: null });
+    // `instructions` (the master prompt, #978) is a ROOT sibling of `items`
+    // — sourced from the same loaded version the resolver read.
+    const { instructions, items } = await skillsetService.resolveClosure(idOrName, actor, version);
+    return c.json({ data: { instructions, items }, error: null });
   });
 
   /**
