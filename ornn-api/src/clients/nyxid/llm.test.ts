@@ -4,8 +4,10 @@
  * body, `chat-completion` hits `/chat/completions` with translated
  * body and normalizes text deltas back into Responses-API event shape.
  *
- * Tool-call delta normalization for chat-completion is out of scope here
- * (tracked in #608).
+ * #608: chat-completion tool-call normalization — streamed
+ * `delta.tool_calls[]` fragments accumulate into a single
+ * `response.output_item.done` function_call event, and the request body
+ * carries `tool_choice: "auto"` whenever tools are supplied.
  */
 
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
@@ -222,6 +224,206 @@ describe("NyxLlmClient.stream() routing on apiFormat", () => {
     ]);
   });
 
+  it("chat-completion sets tool_choice:auto when tools supplied", async () => {
+    fetchHandler = () => sseResponse([]);
+    const client = new NyxLlmClient({
+      resolver: makeResolver({
+        gatewayUrl: "https://api.example.com",
+        apiKey: "sk-x",
+        apiFormat: "chat-completion",
+      }),
+      saTokenProvider: STUB_SA_TOKEN,
+    });
+
+    const events: ResponsesApiStreamEvent[] = [];
+    for await (const e of client.stream({
+      model: "m",
+      input: [{ role: "user", content: "go" }],
+      tools: [
+        {
+          type: "function",
+          name: "do_thing",
+          description: "does the thing",
+          parameters: { type: "object", properties: {} },
+        },
+      ],
+    })) events.push(e);
+
+    expect((capturedRequests[0]!.body as Record<string, unknown>).tool_choice).toBe("auto");
+  });
+
+  it("chat-completion omits tool_choice when no tools supplied", async () => {
+    fetchHandler = () => sseResponse([]);
+    const client = new NyxLlmClient({
+      resolver: makeResolver({
+        gatewayUrl: "https://api.example.com",
+        apiKey: "sk-x",
+        apiFormat: "chat-completion",
+      }),
+      saTokenProvider: STUB_SA_TOKEN,
+    });
+
+    const events: ResponsesApiStreamEvent[] = [];
+    for await (const e of client.stream({
+      model: "m",
+      input: [{ role: "user", content: "go" }],
+    })) events.push(e);
+
+    expect((capturedRequests[0]!.body as Record<string, unknown>).tool_choice).toBeUndefined();
+  });
+
+  it("chat-completion accumulates streamed tool_calls into one output_item.done", async () => {
+    fetchHandler = () =>
+      sseResponse([
+        JSON.stringify({
+          choices: [
+            {
+              delta: {
+                tool_calls: [
+                  {
+                    index: 0,
+                    id: "call_1",
+                    function: { name: "execute_in_sandbox", arguments: '{"sc' },
+                  },
+                ],
+              },
+            },
+          ],
+        }),
+        JSON.stringify({
+          choices: [
+            { delta: { tool_calls: [{ index: 0, function: { arguments: 'ript":"x"}' } }] } },
+          ],
+        }),
+        JSON.stringify({ choices: [{ delta: {}, finish_reason: "tool_calls" }] }),
+      ]);
+
+    const client = new NyxLlmClient({
+      resolver: makeResolver({
+        gatewayUrl: "https://api.example.com",
+        apiKey: "sk-x",
+        apiFormat: "chat-completion",
+      }),
+      saTokenProvider: STUB_SA_TOKEN,
+    });
+
+    const events: ResponsesApiStreamEvent[] = [];
+    for await (const e of client.stream({
+      model: "m",
+      input: [{ role: "user", content: "run it" }],
+    })) events.push(e);
+
+    const itemDone = events.filter((e) => e.type === "response.output_item.done");
+    expect(itemDone).toHaveLength(1);
+    expect(itemDone[0]).toEqual({
+      type: "response.output_item.done",
+      item: {
+        type: "function_call",
+        id: "call_1",
+        call_id: "call_1",
+        name: "execute_in_sandbox",
+        arguments: '{"script":"x"}',
+      },
+    });
+  });
+
+  it("chat-completion still emits text deltas when interleaved with tool_calls", async () => {
+    fetchHandler = () =>
+      sseResponse([
+        JSON.stringify({ choices: [{ delta: { content: "thinking " } }] }),
+        JSON.stringify({
+          choices: [
+            {
+              delta: {
+                tool_calls: [
+                  {
+                    index: 0,
+                    id: "call_2",
+                    function: { name: "execute_in_sandbox", arguments: "{}" },
+                  },
+                ],
+              },
+            },
+          ],
+        }),
+        JSON.stringify({ choices: [{ delta: { content: "more" } }] }),
+        JSON.stringify({ choices: [{ delta: {}, finish_reason: "tool_calls" }] }),
+      ]);
+
+    const client = new NyxLlmClient({
+      resolver: makeResolver({
+        gatewayUrl: "https://api.example.com",
+        apiKey: "sk-x",
+        apiFormat: "chat-completion",
+      }),
+      saTokenProvider: STUB_SA_TOKEN,
+    });
+
+    const events: ResponsesApiStreamEvent[] = [];
+    for await (const e of client.stream({
+      model: "m",
+      input: [{ role: "user", content: "run it" }],
+    })) events.push(e);
+
+    const textDeltas = events.filter((e) => e.type === "response.output_text.delta");
+    expect(textDeltas).toEqual([
+      { type: "response.output_text.delta", delta: "thinking " },
+      { type: "response.output_text.delta", delta: "more" },
+    ]);
+    const itemDone = events.filter((e) => e.type === "response.output_item.done");
+    expect(itemDone).toHaveLength(1);
+    expect((itemDone[0]!.item as { call_id: string }).call_id).toBe("call_2");
+  });
+
+  it("chat-completion flushes accumulated tool_calls on stream end without finish_reason", async () => {
+    fetchHandler = () =>
+      sseResponse([
+        JSON.stringify({
+          choices: [
+            {
+              delta: {
+                tool_calls: [
+                  {
+                    index: 0,
+                    id: "call_3",
+                    function: { name: "execute_in_sandbox", arguments: '{"a":1}' },
+                  },
+                ],
+              },
+            },
+          ],
+        }),
+      ]);
+
+    const client = new NyxLlmClient({
+      resolver: makeResolver({
+        gatewayUrl: "https://api.example.com",
+        apiKey: "sk-x",
+        apiFormat: "chat-completion",
+      }),
+      saTokenProvider: STUB_SA_TOKEN,
+    });
+
+    const events: ResponsesApiStreamEvent[] = [];
+    for await (const e of client.stream({
+      model: "m",
+      input: [{ role: "user", content: "run it" }],
+    })) events.push(e);
+
+    const itemDone = events.filter((e) => e.type === "response.output_item.done");
+    expect(itemDone).toHaveLength(1);
+    expect(itemDone[0]).toEqual({
+      type: "response.output_item.done",
+      item: {
+        type: "function_call",
+        id: "call_3",
+        call_id: "call_3",
+        name: "execute_in_sandbox",
+        arguments: '{"a":1}',
+      },
+    });
+  });
+
   it("flattens Responses-API content parts into a string for chat-completion", async () => {
     fetchHandler = () => sseResponse([]);
     const client = new NyxLlmClient({
@@ -398,5 +600,47 @@ describe("NyxLlmClient.complete() routing on apiFormat", () => {
       input: [{ role: "user", content: "say nothing" }],
     });
     expect(out).toEqual([]);
+  });
+
+  it("chat-completion maps message.tool_calls to function_call outputs", async () => {
+    fetchHandler = () =>
+      jsonResponse({
+        choices: [
+          {
+            message: {
+              role: "assistant",
+              content: "calling tool",
+              tool_calls: [
+                {
+                  id: "call_9",
+                  function: { name: "execute_in_sandbox", arguments: '{"script":"x"}' },
+                },
+              ],
+            },
+          },
+        ],
+      });
+    const client = new NyxLlmClient({
+      resolver: makeResolver({
+        gatewayUrl: "https://api.example.com",
+        apiKey: "sk-x",
+        apiFormat: "chat-completion",
+      }),
+      saTokenProvider: STUB_SA_TOKEN,
+    });
+    const out = await client.complete({
+      model: "m",
+      input: [{ role: "user", content: "run it" }],
+    });
+    expect(out).toEqual([
+      { type: "message", content: [{ type: "output_text", text: "calling tool" }] },
+      {
+        type: "function_call",
+        id: "call_9",
+        call_id: "call_9",
+        name: "execute_in_sandbox",
+        arguments: '{"script":"x"}',
+      },
+    ]);
   });
 });

@@ -470,6 +470,12 @@ export async function bootstrap(
       (await settingsService.getNyxid()).chronoStorageBucket,
     analyticsEmitter,
     agentsealScanner,
+    // Zip-bomb caps (#632) — env-driven, enforced at the ingestion
+    // chokepoint so upload + GitHub pull/refresh share the same limits.
+    maxPackageUncompressedBytes: config.maxPackageUncompressedBytes,
+    maxEntryUncompressedBytes: config.maxEntryUncompressedBytes,
+    maxPackageFileCount: config.maxPackageFileCount,
+    maxCompressionRatio: config.maxCompressionRatio,
   });
 
   // ---- Domain: Notifications + Broadcasts ----

@@ -112,6 +112,12 @@ export async function startHarness(
     mongodbUri: mongoUri,
     mongodbDb: "ornn-test",
     maxPackageSizeBytes: 10 * 1024 * 1024,
+    // Zip-bomb caps (#632) — mirror the production defaults so the
+    // ingestion-chokepoint guard behaves the same under integration.
+    maxPackageUncompressedBytes: 50 * 1024 * 1024,
+    maxEntryUncompressedBytes: 25 * 1024 * 1024,
+    maxPackageFileCount: 1000,
+    maxCompressionRatio: 100,
     allowedOrigins: [],
     ornnPublicOrigin: "http://test.invalid",
     encryptionKey: "test-encryption-key-32-chars-min-12345",

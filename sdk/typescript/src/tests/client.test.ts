@@ -31,6 +31,23 @@ describe("OrnnClient", () => {
       .toBe("https://ornn.example.com/api/v1/ping");
   });
 
+  test("strips a pathological run of trailing slashes without ReDoS (#757)", async () => {
+    let capturedUrl = "";
+    const fetchMock = mockFetch((url) => {
+      capturedUrl = url;
+      return jsonResponse(200, { data: [], error: null });
+    });
+    // 100k trailing slashes would backtrack polynomially under a
+    // `/\/+$/` regex; the linear strip handles it in O(n). The test
+    // returning promptly (no timeout) is the assertion that matters.
+    const client = new OrnnClient({
+      baseUrl: "https://x" + "/".repeat(100_000),
+      fetch: fetchMock,
+    });
+    await client.request("GET", "/ping");
+    expect(capturedUrl).toBe("https://x/api/v1/ping");
+  });
+
   test("injects Bearer token from static option", async () => {
     let captured: Record<string, string> = {};
     const fetchMock = mockFetch((_url, init) => {

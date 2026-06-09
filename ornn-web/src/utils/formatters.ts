@@ -13,3 +13,18 @@ export function formatFileSize(bytes: number): string {
   const value = bytes / Math.pow(1024, i);
   return `${value.toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
 }
+
+/** Format an ISO date to an exact Asia/Singapore timestamp in the active UI locale (#752). */
+export function formatDateSGT(dateStr: string, lang?: string, opts?: { withSeconds?: boolean }): string {
+  const locale = lang === "zh" ? "zh-CN" : "en-SG"; // zh→zh-CN (NewsPage precedent); en→en-SG preserves current output
+  return new Date(dateStr).toLocaleString(locale, {
+    timeZone: "Asia/Singapore",
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    ...(opts?.withSeconds ? { second: "2-digit" as const } : {}),
+    hour12: false,
+  });
+}
