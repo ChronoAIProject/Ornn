@@ -22,6 +22,8 @@ import httpx
 
 from .errors import OrnnError
 from .types import (
+    ClosureNode,
+    ClosureResult,
     SearchMode,
     SearchScope,
     SkillDetail,
@@ -147,6 +149,45 @@ class OrnnClient:
         # stub annotates it as Any. Cast explicitly so strict mypy is
         # happy without disabling the rule.
         return bytes(res.content)
+
+    def resolve_closure(
+        self, guid_or_name: str, *, version: str | None = None
+    ) -> ClosureResult:
+        """Resolve the full transitive dependency closure of a skill (#968).
+
+        Returns the closure in deps-first topological order — every
+        dependency precedes the dependents that pin it. Raises
+        :class:`OrnnError` with code ``dependency_cycle`` /
+        ``dependency_conflict`` / ``skill_dependency_not_found`` when the
+        graph can't be resolved.
+        """
+        suffix = (
+            f"?version={httpx.QueryParams({'version': version})['version']}"
+            if version
+            else ""
+        )
+        data = self.request("GET", f"/skills/{_quote(guid_or_name)}/closure{suffix}")
+        return ClosureResult.from_dict(data)
+
+    def pull_closure(
+        self, guid_or_name: str, *, version: str | None = None
+    ) -> tuple[ClosureResult, list[tuple[ClosureNode, bytes]]]:
+        """Resolve a skill's closure and download every package (#968).
+
+        Convenience over :meth:`resolve_closure` + :meth:`download_package`:
+        downloads in the closure's topological order (dependencies first)
+        so a caller can install each ZIP as it arrives. Does NOT include
+        the root skill itself.
+
+        Returns ``(closure, packages)`` where ``packages`` is a list of
+        ``(node, zip_bytes)`` pairs in topological order.
+        """
+        closure = self.resolve_closure(guid_or_name, version=version)
+        packages: list[tuple[ClosureNode, bytes]] = []
+        for node in closure.items:
+            data = self.download_package(node.guid, node.version)
+            packages.append((node, data))
+        return closure, packages
 
     def publish(self, zip_bytes: bytes, *, skip_validation: bool = False) -> SkillDetail:
         """Publish a new skill from a ZIP package (raw bytes)."""

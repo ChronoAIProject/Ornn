@@ -286,6 +286,85 @@ class TestDownload:
         assert excinfo.value.code == "resource_not_found"
 
 
+class TestClosure:
+    @respx.mock
+    def test_resolve_closure_parses_topo_items(self) -> None:
+        route = respx.get(f"{BASE}/api/v1/skills/report-gen/closure").respond(
+            200,
+            json={
+                "data": {
+                    "items": [
+                        {"guid": "g-c", "name": "c", "version": "1.0", "skillHash": "h-c", "depth": 1},
+                        {"guid": "g-b", "name": "b", "version": "1.0", "skillHash": "h-b", "depth": 0},
+                    ],
+                },
+                "error": None,
+            },
+        )
+        with make_client() as ornn:
+            result = ornn.resolve_closure("report-gen", version="1.0")
+        assert [n.name for n in result.items] == ["c", "b"]
+        assert result.items[0].depth == 1
+        assert result.items[0].guid == "g-c"
+        # version query is forwarded.
+        assert route.calls.last.request.url.params["version"] == "1.0"
+
+    @respx.mock
+    def test_resolve_closure_omits_version_when_absent(self) -> None:
+        route = respx.get(f"{BASE}/api/v1/skills/report-gen/closure").respond(
+            200, json={"data": {"items": []}, "error": None}
+        )
+        with make_client() as ornn:
+            ornn.resolve_closure("report-gen")
+        assert "version" not in route.calls.last.request.url.params
+
+    @respx.mock
+    def test_resolve_closure_raises_on_dependency_cycle(self) -> None:
+        respx.get(f"{BASE}/api/v1/skills/a/closure").respond(
+            409,
+            json={
+                "type": "https://github.com/.../ERRORS.md#resource_conflict",
+                "title": "Conflict",
+                "status": 409,
+                "code": "dependency_cycle",
+                "detail": "cycle at a@1.0",
+            },
+        )
+        with make_client() as ornn:
+            with pytest.raises(OrnnError) as excinfo:
+                ornn.resolve_closure("a")
+        assert excinfo.value.status == 409
+        assert excinfo.value.code == "dependency_cycle"
+
+    @respx.mock
+    def test_pull_closure_downloads_in_topo_order(self) -> None:
+        respx.get(f"{BASE}/api/v1/skills/report-gen/closure").respond(
+            200,
+            json={
+                "data": {
+                    "items": [
+                        {"guid": "g-c", "name": "c", "version": "1.0", "skillHash": "h-c", "depth": 1},
+                        {"guid": "g-b", "name": "b", "version": "1.0", "skillHash": "h-b", "depth": 0},
+                    ],
+                },
+                "error": None,
+            },
+        )
+        dl_c = respx.get(f"{BASE}/api/v1/skills/g-c/versions/1.0/download").respond(
+            200, content=b"PKc", headers={"Content-Type": "application/zip"}
+        )
+        dl_b = respx.get(f"{BASE}/api/v1/skills/g-b/versions/1.0/download").respond(
+            200, content=b"PKb", headers={"Content-Type": "application/zip"}
+        )
+        with make_client() as ornn:
+            closure, packages = ornn.pull_closure("report-gen")
+        assert [n.name for n in closure.items] == ["c", "b"]
+        # Downloads follow the closure order — c (deps-first) before b.
+        assert [node.name for node, _ in packages] == ["c", "b"]
+        assert packages[0][1] == b"PKc"
+        assert dl_c.called and dl_b.called
+
+
 class TestPublish:
     @respx.mock
     def test_publish_sends_zip_bytes(self) -> None:
