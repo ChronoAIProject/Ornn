@@ -1547,7 +1547,7 @@
           "models": "模型",
           "actions": "操作"
         },
-        "modelCounts": "{{playground}} playground · {{skillGen}} skillGen · 共 {{total}}",
+        "modelCounts": "{{playground}} playground · {{skillGen}} skillGen · {{assistant}} assistant · 共 {{total}}",
         "archivedCount": "已归档 {{count}}",
         "toast": {
           "synced": "已同步 {{name}}：新增 +{{added}}，更新 {{updated}}，移除 {{removed}}。",

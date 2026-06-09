@@ -1547,7 +1547,7 @@
           "models": "Models",
           "actions": "Actions"
         },
-        "modelCounts": "{{playground}} playground · {{skillGen}} skillGen · {{total}} total",
+        "modelCounts": "{{playground}} playground · {{skillGen}} skillGen · {{assistant}} assistant · {{total}} total",
         "archivedCount": "{{count}} archived",
         "toast": {
           "synced": "Synced {{name}}: +{{added}} added, {{updated}} updated, {{removed}} removed.",
