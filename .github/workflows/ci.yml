@@ -22,6 +22,26 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bun run typecheck
 
+  # Assistant KB freshness (#970, MAJOR-1). The grounding digest
+  # (digest.generated.md) is a committed build artifact distilled from the
+  # repo docs by scripts/build-assistant-kb.ts. If a source doc or the
+  # source manifest changes but the digest isn't regenerated, the assistant
+  # ships stale grounding. Rebuild it here and fail if the committed copy
+  # differs — the build is deterministic, so a clean tree means in-sync.
+  assistant-kb-freshness:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - name: Rebuild assistant KB digest
+        working-directory: ornn-api
+        run: bun run build:assistant-kb
+      - name: Fail if the committed digest is stale
+        run: |
+          git diff --exit-code -- ornn-api/src/domains/assistant/kb/digest.generated.md \
+            || { echo "::error::assistant KB digest is stale — run 'bun run build:assistant-kb' in ornn-api/ and commit the result"; exit 1; }
+
   test:
     runs-on: ubuntu-latest
     steps:
