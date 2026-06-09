@@ -189,6 +189,38 @@ The same closure is validated at **publish time**: declaring a `depends-on` ref 
 
 SDK helpers: `client.resolveClosure(idOrName, { version })` / `client.pullClosure(...)` (TypeScript), `client.resolve_closure(...)` / `client.pull_closure(...)` (Python).
 
+### 2.6 Skillsets (#969)
+
+A **skillset** is a named, versioned, owned, visibility-scoped meta-package that references N member skills and carries a `kind`. One call resolves + delivers the whole set — including each member's dependency closure (§2.5). The ownership / visibility / immutable-versioning model mirrors skills verbatim; permission scopes **reuse** the existing `ornn:skill:{create,read,update,delete}` (see §5.2 — a dedicated `ornn:skillset:*` scope split is a tracked follow-up).
+
+```
+POST   /v1/skillsets                       — create (ornn:skill:create; private by default)
+GET    /v1/skillsets/{idOrName}            — read   (optional auth; anon sees public only)
+GET    /v1/skillsets/{idOrName}/versions   — list versions (optional auth)
+GET    /v1/skillsets/{idOrName}/closure    — one-call resolve (optional auth)
+PUT    /v1/skillsets/{id}                  — publish a new immutable version (ornn:skill:update)
+PUT    /v1/skillsets/{id}/permissions      — visibility / sharing (ornn:skill:update)
+DELETE /v1/skillsets/{id}                  — delete + cascade versions (ornn:skill:delete)
+GET    /v1/skillset-search                 — discovery by kind / tags / scope (optional auth)
+```
+
+- **`kind`:** enum, v1 `{ "generic", "consensus-supported" }` (extensible). Default `generic`. `consensus-supported` is an author **claim** that the members are an independent, comparable set suitable for agent-side consensus — **not a guarantee** (stated honestly; Ornn packages + delivers the set, the agent runs any consensus in its own runtime).
+- **`members`:** 2..N skill refs, each `<name-or-guid>@<major.minor>` or `<name>@<dist-tag>` (the **same** grammar as `depends-on`, §2.5). No nested skillsets in v1 — a skillset references skills only. Validated on publish: every member must resolve to a readable skill version, and the union dependency closure must be conflict-free.
+- **Create / publish bodies (JSON):**
+
+```json
+POST /v1/skillsets
+{ "name": "review-set", "description": "…", "kind": "consensus-supported",
+  "tags": ["review"], "members": ["pdf-tools@1.0", "csv-tools@2.1"], "version": "1.0" }
+```
+
+- **Closure:** `GET /v1/skillsets/{idOrName}/closure` resolves `roots = members` through the **same** §2.5 resolver — the union of all members plus each member's transitive dependency closure, deduplicated and topo-sorted (deps-first). Same response envelope and the same error codes as §2.5: `dependency_cycle` (409), `dependency_conflict` (409), `skill_dependency_not_found` (404). Anonymous callers resolving a public skillset whose member transitively pins a private skill get `skill_dependency_not_found` for that node — existence is not leaked.
+- **Search:** `GET /v1/skillset-search?kind=…&tags=a,b&scope=…` — plain keyword/filter discovery (no semantic / LLM ranking, no facets, no popularity ranking). Cursor pagination per §4.3.
+
+SDK helpers: `client.createSkillset(...)` / `getSkillset(...)` / `publishSkillset(...)` / `setSkillsetPermissions(...)` / `deleteSkillset(...)` / `getSkillsetClosure(...)` / `searchSkillsets(...)` (TypeScript); `client.create_skillset(...)` / `get_skillset(...)` / `publish_skillset(...)` / `set_skillset_permissions(...)` / `delete_skillset(...)` / `resolve_skillset_closure(...)` / `search_skillsets(...)` (Python).
+
+> **Scope follow-up:** skillset endpoints intentionally reuse the `ornn:skill:*` permission scopes in v1 (a skillset is a skill-lifecycle resource). Splitting them into dedicated `ornn:skillset:{create,read,update,delete}` scopes is a tracked follow-up; callers should not assume the reuse is permanent.
+
 ---
 
 ## 3. HTTP semantics
