@@ -1,5 +1,11 @@
 # @chronoai/ornn-sdk
 
+## 0.3.1
+
+### Patch Changes
+
+- [#952](https://github.com/ChronoAIProject/Ornn/pull/952) [`d41c1b0`](https://github.com/ChronoAIProject/Ornn/commit/d41c1b0affa9e349f7bd747bfc7553c62497dfe7) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - TS SDK baseUrl normalization strips trailing slashes with a linear loop instead of a regex, removing a polynomial ReDoS vector on pathological all-slash inputs ([#757](https://github.com/ChronoAIProject/Ornn/issues/757))
+
 ## 0.3.0
 
 ### Minor Changes

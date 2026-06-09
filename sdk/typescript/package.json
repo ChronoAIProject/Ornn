@@ -1,6 +1,6 @@
 {
   "name": "@chronoai/ornn-sdk",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "private": true,
   "description": "TypeScript client for Ornn — the end-to-end skill life-cycle manager for AI agents",
   "keywords": [
