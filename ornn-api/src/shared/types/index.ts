@@ -294,6 +294,16 @@ export interface SkillMetadata {
     "mcp-servers"?: Array<{ mcp: string; version: string }>;
   }>;
   tags?: string[];
+  /**
+   * Skill dependencies (#968). Each entry pins another skill by
+   * `<name-or-guid>@<major.minor>` or `<name>@<dist-tag>` (the
+   * `metadata.depends-on` frontmatter field, kebab→camel mapped on
+   * extract). Persisted per immutable version inside
+   * `SkillVersionDocument.metadata`, so no new version-doc field or
+   * migration is needed — a version published before #968 simply reads
+   * back with `dependsOn` absent. Empty/omitted = no dependencies.
+   */
+  dependsOn?: string[];
 }
 
 export interface SkillDetailResponse {

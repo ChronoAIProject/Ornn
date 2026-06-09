@@ -17,6 +17,8 @@
 
 import { OrnnError, type OrnnErrorPayload } from "./errors";
 import type {
+  ClosureNode,
+  ClosureResult,
   PublishOptions,
   SkillDetail,
   SkillSearchParams,
@@ -178,6 +180,56 @@ export class OrnnClient {
       throw await parseError(res);
     }
     return res.arrayBuffer();
+  }
+
+  /**
+   * Resolve the full transitive dependency closure of a skill (#968).
+   *
+   * Returns the closure in deps-first topological order — every
+   * dependency precedes the dependents that pin it, so iterating the
+   * `items` array installs in a safe order. Throws `OrnnError` with code
+   * `dependency_cycle` / `dependency_conflict` / `skill_dependency_not_found`
+   * when the graph can't be resolved.
+   */
+  async resolveClosure(
+    guidOrName: string,
+    options: { version?: string } = {},
+  ): Promise<ClosureResult> {
+    const suffix = options.version
+      ? `?version=${encodeURIComponent(options.version)}`
+      : "";
+    return this.request<ClosureResult>(
+      "GET",
+      `/skills/${encodeURIComponent(guidOrName)}/closure${suffix}`,
+    );
+  }
+
+  /**
+   * Resolve a skill's dependency closure and download every package in
+   * the closure (#968). Convenience over {@link resolveClosure} +
+   * {@link downloadPackage}: downloads in the closure's topological order
+   * (dependencies first) so a caller can install each ZIP as it arrives.
+   *
+   * Returns the ordered closure plus the downloaded bytes per node,
+   * keyed by `<name>@<version>`. Does NOT include the root skill itself —
+   * pull that separately via {@link downloadPackage} if needed.
+   */
+  async pullClosure(
+    guidOrName: string,
+    options: { version?: string } = {},
+  ): Promise<{
+    closure: ClosureResult;
+    packages: Array<{ node: ClosureNode; bytes: ArrayBuffer }>;
+  }> {
+    const closure = await this.resolveClosure(guidOrName, options);
+    const packages: Array<{ node: ClosureNode; bytes: ArrayBuffer }> = [];
+    // Sequential, in topo order — dependencies download before their
+    // dependents so a consumer can install incrementally.
+    for (const node of closure.items) {
+      const bytes = await this.downloadPackage(node.guid, node.version);
+      packages.push({ node, bytes });
+    }
+    return { closure, packages };
   }
 
   /** Publish a new skill from a ZIP package. */

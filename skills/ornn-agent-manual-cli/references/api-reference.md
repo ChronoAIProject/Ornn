@@ -162,6 +162,9 @@ The codes below appear across many endpoints. Per-endpoint sections list any add
 | `AUDIT_NOT_FOUND` | 404 | No audit has been run for the requested skill / version. |
 | `ORG_NOT_FOUND` | 404 | Org id does not resolve, or NyxID will not return it to the caller. |
 | `SKILL_VERSION_NOT_FOUND` | 404 | Version string does not exist on the skill. |
+| `skill_dependency_not_found` | 404 | A `depends-on` ref in a dependency closure doesn't resolve or isn't visible (#968). |
+| `dependency_cycle` | 409 | The dependency closure graph loops back on itself (#968). |
+| `dependency_conflict` | 409 | One skill is pinned to two versions within the same closure (#968). |
 | `SAME_VERSION` | 400 | `from` and `to` parameters in a diff are identical. |
 | `INVALID_CONTENT_TYPE` | 400 | Endpoint expected `application/zip` (or `application/octet-stream`) and got something else. |
 | `EMPTY_BODY` | 400 | Request body was zero-length when the endpoint required bytes. |
@@ -520,6 +523,41 @@ Response 200:
 | Code | Status | Cause |
 |---|---|---|
 | `SKILL_NOT_FOUND` | 404 | Same as §3.4. |
+
+### 3.6a Resolve dependency closure — `GET /api/v1/skills/:idOrName/closure`
+
+Resolve the full **transitive** dependency closure of a skill version (#968). A skill declares direct dependencies in SKILL.md frontmatter under `metadata.depends-on` (an array of `<name-or-guid>@<major.minor>` or `<name>@<dist-tag>` refs — no semver ranges, no self-references). This endpoint walks that graph and returns every transitive dependency.
+
+**Auth: optional.** Anonymous callers resolve against public skills only; a public skill that transitively depends on a private skill you can't read surfaces that node as `skill_dependency_not_found` (existence is not leaked).
+
+Path param: `:idOrName`. Query param: `version` (optional) — literal `<major>.<minor>` or a dist-tag; defaults to the skill's latest.
+
+Items come back in **deps-first topological order** — every dependency precedes the dependents that pin it, so installing in array order is always safe. Shared nodes (diamonds) appear exactly once.
+
+Response 200:
+
+```jsonc
+{
+  "data": {
+    "items": [
+      { "guid": "skl_...", "name": "pdf-tools",  "version": "1.0", "skillHash": "sha256:...", "depth": 1 },
+      { "guid": "skl_...", "name": "report-base", "version": "2.3", "skillHash": "sha256:...", "depth": 0 }
+    ]
+  },
+  "error": null
+}
+```
+
+| Code | Status | Cause |
+|---|---|---|
+| `dependency_cycle` | 409 | The dependency graph loops back on itself. |
+| `dependency_conflict` | 409 | One skill is pinned to two versions within the closure. |
+| `skill_dependency_not_found` | 404 | A dependency ref doesn't resolve or isn't visible. |
+| `skill_not_found` | 404 | The root skill / version is unknown (or not visible). |
+
+The same closure is validated at **publish time** (`POST /skills`, `PUT /skills/:id`): a `depends-on` ref that won't resolve, forms a cycle, or conflicts fails the publish before the version is committed.
+
+SDK: `client.resolveClosure(idOrName, { version })` and `client.pullClosure(idOrName, { version })` (TypeScript); `client.resolve_closure(...)` and `client.pull_closure(...)` (Python). `pullClosure` / `pull_closure` resolves the closure and downloads each package in topological order.
 
 ### 3.7 Diff versions — `GET /api/v1/skills/:idOrName/versions/:fromVersion/diff/:toVersion`
 
