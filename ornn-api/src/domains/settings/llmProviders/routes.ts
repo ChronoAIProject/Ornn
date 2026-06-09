@@ -37,7 +37,14 @@ import { validateBody, getValidatedBody } from "../../../middleware/validate";
 import type { SettingsActor } from "../types";
 import type { LlmProvidersService, ModelResolution, Surface } from "./service";
 
-const surfaceSchema = z.enum(["playground", "skillGen"]);
+const surfaceSchema = z.enum(["playground", "skillGen", "assistant"]);
+
+/** Human-facing surface labels for resolution-error messages. */
+const SURFACE_LABEL: Record<Surface, string> = {
+  playground: "playground",
+  skillGen: "skill-generation",
+  assistant: "assistant",
+};
 
 /**
  * Translate a `ModelResolution` failure into an HTTP error. Shared
@@ -49,8 +56,7 @@ export function throwModelResolutionError(resolution: ModelResolution): never {
     throw new Error("throwModelResolutionError called on ok resolution");
   }
   if (resolution.kind === "no-models-enabled") {
-    const surfaceLabel =
-      resolution.surface === "playground" ? "playground" : "skill-generation";
+    const surfaceLabel = SURFACE_LABEL[resolution.surface];
     throw AppError.serviceUnavailable(
       "MODEL_UNAVAILABLE",
       `${surfaceLabel} is temporarily unavailable — contact admin to enable a model.`,
@@ -201,7 +207,7 @@ export function createLlmPickerRoutes(
     if (!parsed.success) {
       throw AppError.badRequest(
         "invalid_surface",
-        "Query param 'surface' must be 'playground' or 'skillGen'",
+        "Query param 'surface' must be 'playground', 'skillGen', or 'assistant'",
       );
     }
     const surface: Surface = parsed.data;

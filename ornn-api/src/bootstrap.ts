@@ -332,12 +332,14 @@ export async function bootstrap(
   // shape stays narrow — the empty `gatewayUrl` is what triggers the
   // fail-closed branch downstream.
   const resolveLlmProviderForSurface = async (
-    surface: "playground" | "skillGen",
+    surface: "playground" | "skillGen" | "assistant",
   ): Promise<{ gatewayUrl: string; apiKey: string; apiFormat: ApiFormat }> => {
     const sec =
       surface === "playground"
         ? await settingsService.getPlayground()
-        : await settingsService.getSkillGen();
+        : surface === "skillGen"
+          ? await settingsService.getSkillGen()
+          : await settingsService.getAssistant();
     if (!sec.defaultProviderId) {
       return { gatewayUrl: "", apiKey: "", apiFormat: "responses" };
     }
@@ -362,12 +364,14 @@ export async function bootstrap(
   // override for callers that want to pin a specific model regardless
   // of the cross-provider default.
   const resolveSurfaceDefaults = async (
-    surface: "playground" | "skillGen",
+    surface: "playground" | "skillGen" | "assistant",
   ): Promise<{ model: string; maxOutputTokens: number; temperature: number }> => {
     const sec =
       surface === "playground"
         ? await settingsService.getPlayground()
-        : await settingsService.getSkillGen();
+        : surface === "skillGen"
+          ? await settingsService.getSkillGen()
+          : await settingsService.getAssistant();
     let model = sec.defaultModelId ?? "";
     if (!model) {
       const resolution = await llmProvidersService.resolveModel({ surface });
