@@ -21,10 +21,17 @@ All requests go through ``/api/v1/*``. Errors raise :class:`OrnnError`.
 from .client import OrnnClient
 from .errors import OrnnError
 from .types import (
+    ClosureNode,
+    ClosureResult,
     SearchMode,
     SearchScope,
     SkillDetail,
     SkillSearchResult,
+    SkillsetClosureResult,
+    SkillsetDetail,
+    SkillsetKind,
+    SkillsetSearchResult,
+    SkillsetSummary,
     SkillSummary,
     SkillVersionEntry,
     SystemFilter,
@@ -33,12 +40,19 @@ from .types import (
 )
 
 __all__ = [
+    "ClosureNode",
+    "ClosureResult",
     "OrnnClient",
     "OrnnError",
     "SearchMode",
     "SearchScope",
     "SkillDetail",
     "SkillSearchResult",
+    "SkillsetClosureResult",
+    "SkillsetDetail",
+    "SkillsetKind",
+    "SkillsetSearchResult",
+    "SkillsetSummary",
     "SkillSummary",
     "SkillVersionEntry",
     "SystemFilter",

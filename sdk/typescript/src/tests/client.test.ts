@@ -255,6 +255,87 @@ describe("OrnnClient", () => {
     expect(err.code).toBe("resource_not_found");
   });
 
+  test("resolveClosure(): parses the topo-ordered items envelope (#968)", async () => {
+    let capturedUrl = "";
+    const fetchMock = mockFetch((url) => {
+      capturedUrl = url;
+      return jsonResponse(200, {
+        data: {
+          items: [
+            { guid: "g-c", name: "c", version: "1.0", skillHash: "h-c", depth: 1 },
+            { guid: "g-b", name: "b", version: "1.0", skillHash: "h-b", depth: 0 },
+          ],
+        },
+        error: null,
+      });
+    });
+    const client = new OrnnClient({ baseUrl: "https://x", fetch: fetchMock });
+    const result = await client.resolveClosure("report-gen", { version: "1.0" });
+    expect(capturedUrl).toBe("https://x/api/v1/skills/report-gen/closure?version=1.0");
+    expect(result.items.map((i) => i.name)).toEqual(["c", "b"]);
+    expect(result.items[0]!.depth).toBe(1);
+  });
+
+  test("resolveClosure(): omits the version query when not provided", async () => {
+    let capturedUrl = "";
+    const fetchMock = mockFetch((url) => {
+      capturedUrl = url;
+      return jsonResponse(200, { data: { items: [] }, error: null });
+    });
+    const client = new OrnnClient({ baseUrl: "https://x", fetch: fetchMock });
+    await client.resolveClosure("report-gen");
+    expect(capturedUrl).toBe("https://x/api/v1/skills/report-gen/closure");
+  });
+
+  test("resolveClosure(): throws OrnnError on dependency_cycle (409)", async () => {
+    const fetchMock = mockFetch(() =>
+      jsonResponse(409, {
+        type: "https://github.com/.../ERRORS.md#resource_conflict",
+        title: "Conflict",
+        status: 409,
+        code: "dependency_cycle",
+        detail: "cycle at a@1.0",
+      }),
+    );
+    const client = new OrnnClient({ baseUrl: "https://x", fetch: fetchMock });
+    const err = (await client.resolveClosure("a").catch((e) => e)) as OrnnError;
+    expect(err).toBeInstanceOf(OrnnError);
+    expect(err.status).toBe(409);
+    expect(err.code).toBe("dependency_cycle");
+  });
+
+  test("pullClosure(): downloads each package in topological order (#968)", async () => {
+    const downloadOrder: string[] = [];
+    const fetchMock = mockFetch((url) => {
+      if (url.includes("/closure")) {
+        return jsonResponse(200, {
+          data: {
+            items: [
+              { guid: "g-c", name: "c", version: "1.0", skillHash: "h-c", depth: 1 },
+              { guid: "g-b", name: "b", version: "1.0", skillHash: "h-b", depth: 0 },
+            ],
+          },
+          error: null,
+        });
+      }
+      // download path: /skills/:guid/versions/:version/download
+      const match = url.match(/\/skills\/([^/]+)\/versions\//);
+      downloadOrder.push(match?.[1] ?? "?");
+      return new Response(new Uint8Array([80, 75, 3, 4]), {
+        status: 200,
+        headers: { "Content-Type": "application/zip" },
+      });
+    });
+    const client = new OrnnClient({ baseUrl: "https://x", fetch: fetchMock });
+    const { closure, packages } = await client.pullClosure("report-gen");
+    expect(closure.items).toHaveLength(2);
+    // Downloads follow the closure order — c (deps-first) before b.
+    expect(downloadOrder).toEqual(["g-c", "g-b"]);
+    expect(packages).toHaveLength(2);
+    expect(packages[0]!.node.name).toBe("c");
+    expect(packages[0]!.bytes.byteLength).toBe(4);
+  });
+
   test("update() with metadata sends JSON body", async () => {
     let captured: { contentType: string; body: string } = { contentType: "", body: "" };
     const fetchMock = mockFetch((_url, init) => {
@@ -282,5 +363,169 @@ describe("OrnnClient", () => {
     await client.delete("abc");
     expect(capturedMethod).toBe("DELETE");
     expect(capturedUrl).toBe("https://x/api/v1/skills/abc");
+  });
+});
+
+// ======================================================================
+// Skillsets (#969)
+// ======================================================================
+
+describe("OrnnClient — skillsets", () => {
+  test("createSkillset(): POSTs JSON to /skillsets", async () => {
+    let captured: { method: string; url: string; body: string; ct: string } = {
+      method: "",
+      url: "",
+      body: "",
+      ct: "",
+    };
+    const fetchMock = mockFetch((url, init) => {
+      captured = {
+        method: init.method ?? "",
+        url,
+        body: init.body as string,
+        ct: (init.headers as Record<string, string>)["Content-Type"] ?? "",
+      };
+      return jsonResponse(201, {
+        data: { guid: "ss-1", name: "review-set", kind: "generic", members: ["a@1.0", "b@1.0"] },
+        error: null,
+      });
+    });
+    const client = new OrnnClient({ baseUrl: "https://x", fetch: fetchMock });
+    const result = await client.createSkillset({
+      name: "review-set",
+      description: "d",
+      instructions: "Run a, then feed its output to b.",
+      members: ["a@1.0", "b@1.0"],
+    });
+    expect(captured.method).toBe("POST");
+    expect(captured.url).toBe("https://x/api/v1/skillsets");
+    expect(captured.ct).toBe("application/json");
+    // The master prompt (#978) is sent on the wire.
+    expect(JSON.parse(captured.body)).toEqual({
+      name: "review-set",
+      description: "d",
+      instructions: "Run a, then feed its output to b.",
+      members: ["a@1.0", "b@1.0"],
+    });
+    expect(result.guid).toBe("ss-1");
+  });
+
+  test("getSkillset(): URL-encodes the id and appends version", async () => {
+    let capturedUrl = "";
+    const fetchMock = mockFetch((url) => {
+      capturedUrl = url;
+      return jsonResponse(200, { data: { guid: "ss-1", name: "review-set" }, error: null });
+    });
+    const client = new OrnnClient({ baseUrl: "https://x", fetch: fetchMock });
+    await client.getSkillset("review set", "1.1");
+    expect(capturedUrl).toBe("https://x/api/v1/skillsets/review%20set?version=1.1");
+  });
+
+  test("publishSkillset(): PUTs JSON to /skillsets/:id with instructions", async () => {
+    let captured = { method: "", url: "", body: "" };
+    const fetchMock = mockFetch((url, init) => {
+      captured = { method: init.method ?? "", url, body: init.body as string };
+      return jsonResponse(200, { data: { guid: "ss-1", version: "1.1" }, error: null });
+    });
+    const client = new OrnnClient({ baseUrl: "https://x", fetch: fetchMock });
+    const res = await client.publishSkillset("ss-1", {
+      instructions: "v1.1 prompt: b first this time",
+      members: ["a@1.0", "b@1.0"],
+      version: "1.1",
+    });
+    expect(captured.method).toBe("PUT");
+    expect(captured.url).toBe("https://x/api/v1/skillsets/ss-1");
+    // The master prompt (#978) is sent on publish too (no carry-forward).
+    expect(JSON.parse(captured.body).instructions).toBe("v1.1 prompt: b first this time");
+    expect(res.version).toBe("1.1");
+  });
+
+  test("setSkillsetPermissions(): unwraps the { skillset } envelope", async () => {
+    const fetchMock = mockFetch(() =>
+      jsonResponse(200, {
+        data: { skillset: { guid: "ss-1", isPrivate: false } },
+        error: null,
+      }),
+    );
+    const client = new OrnnClient({ baseUrl: "https://x", fetch: fetchMock });
+    const res = await client.setSkillsetPermissions("ss-1", { isPrivate: false });
+    expect(res.guid).toBe("ss-1");
+    expect(res.isPrivate).toBe(false);
+  });
+
+  test("deleteSkillset(): fires DELETE to /skillsets/:id", async () => {
+    let captured = { method: "", url: "" };
+    const fetchMock = mockFetch((url, init) => {
+      captured = { method: init.method ?? "", url };
+      return jsonResponse(200, { data: { success: true }, error: null });
+    });
+    const client = new OrnnClient({ baseUrl: "https://x", fetch: fetchMock });
+    await client.deleteSkillset("ss-1");
+    expect(captured.method).toBe("DELETE");
+    expect(captured.url).toBe("https://x/api/v1/skillsets/ss-1");
+  });
+
+  test("getSkillsetClosure(): hits /skillsets/:id/closure and parses items + instructions", async () => {
+    let capturedUrl = "";
+    const fetchMock = mockFetch((url) => {
+      capturedUrl = url;
+      return jsonResponse(200, {
+        data: {
+          instructions: "master prompt: leaf-d feeds pdf-tools",
+          items: [
+            { guid: "g-d", name: "leaf-d", version: "1.0", depth: 1 },
+            { guid: "g-a", name: "pdf-tools", version: "1.0", depth: 0 },
+          ],
+        },
+        error: null,
+      });
+    });
+    const client = new OrnnClient({ baseUrl: "https://x", fetch: fetchMock });
+    const result = await client.getSkillsetClosure("review-set", { version: "1.0" });
+    expect(capturedUrl).toBe("https://x/api/v1/skillsets/review-set/closure?version=1.0");
+    expect(result.items.map((i) => i.name)).toEqual(["leaf-d", "pdf-tools"]);
+    // The master prompt (#978) parses as a root sibling of items.
+    expect(result.instructions).toBe("master prompt: leaf-d feeds pdf-tools");
+  });
+
+  test("getSkillsetClosure(): throws OrnnError on dependency_conflict (409)", async () => {
+    const fetchMock = mockFetch(() =>
+      jsonResponse(409, {
+        status: 409,
+        code: "dependency_conflict",
+        detail: "two versions of x",
+      }),
+    );
+    const client = new OrnnClient({ baseUrl: "https://x", fetch: fetchMock });
+    const err = (await client.getSkillsetClosure("ss-1").catch((e) => e)) as OrnnError;
+    expect(err).toBeInstanceOf(OrnnError);
+    expect(err.status).toBe(409);
+    expect(err.code).toBe("dependency_conflict");
+  });
+
+  test("getSkillset(): throws OrnnError on 404", async () => {
+    const fetchMock = mockFetch(() =>
+      jsonResponse(404, { status: 404, code: "skillset_not_found", detail: "nope" }),
+    );
+    const client = new OrnnClient({ baseUrl: "https://x", fetch: fetchMock });
+    const err = (await client.getSkillset("ghost").catch((e) => e)) as OrnnError;
+    expect(err.status).toBe(404);
+    expect(err.code).toBe("skillset_not_found");
+  });
+
+  test("searchSkillsets(): forwards kind + tags + scope as query params", async () => {
+    let capturedUrl = "";
+    const fetchMock = mockFetch((url) => {
+      capturedUrl = url;
+      return jsonResponse(200, {
+        data: { items: [], total: 0, page: 1, pageSize: 20, totalPages: 0 },
+        error: null,
+      });
+    });
+    const client = new OrnnClient({ baseUrl: "https://x", fetch: fetchMock });
+    await client.searchSkillsets({ kind: "consensus-supported", tag: "alpha", scope: "public" });
+    expect(capturedUrl).toContain("kind=consensus-supported");
+    expect(capturedUrl).toContain("tags=alpha");
+    expect(capturedUrl).toContain("scope=public");
   });
 });

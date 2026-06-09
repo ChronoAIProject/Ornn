@@ -70,6 +70,45 @@ const dependencyItemSchema = z
   .min(1, "runtime-dependency entries must not be empty")
   .max(200, "runtime-dependency entries must be at most 200 characters");
 
+// Skill-dependency item (#968).
+//
+// Grammar: `<name-or-guid>@<major.minor>` OR `<name>@<dist-tag>`. No semver
+// ranges, no `^`/`~`/`>=` — a dependency pins to one concrete published
+// surface (a literal version) or to a moving dist-tag the owner controls.
+//
+// The three alternatives below reuse the canonical regex *bodies* so the
+// dependency grammar can never drift from the name / version rules enforced
+// elsewhere:
+//   1. `<name>@<major.minor>`  — kebab name + 2-digit version
+//   2. `<guid>@<major.minor>`  — UUID v4 + 2-digit version
+//   3. `<name|guid>@<dist-tag>` — kebab name OR UUID + npm-style dist-tag
+//      (lowercase, leading letter, hyphens; same rule as DIST_TAG_NAME_RE in
+//      the CRUD service). The leading-letter rule keeps a dist-tag from
+//      looking like a version number, so the literal-version and dist-tag
+//      forms never collide.
+const DEPENDS_ON_NAME_BODY = "[a-z0-9][a-z0-9-]*";
+const DEPENDS_ON_GUID_BODY =
+  "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
+const DEPENDS_ON_VERSION_BODY = "(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*)";
+const DEPENDS_ON_DIST_TAG_BODY = "[a-z][a-z0-9-]{0,49}";
+export const DEPENDS_ON_REF_REGEX = new RegExp(
+  `^(?:${DEPENDS_ON_NAME_BODY}|${DEPENDS_ON_GUID_BODY})@(?:${DEPENDS_ON_VERSION_BODY}|${DEPENDS_ON_DIST_TAG_BODY})$`,
+);
+
+const dependsOnItemSchema = z
+  .string({
+    error: (issue) =>
+      issue.code === "invalid_type"
+        ? 'depends-on entries must be non-empty strings of the form `<name-or-guid>@<major.minor>` or `<name>@<dist-tag>`, e.g. `depends-on: [pdf-tools@1.0]` — an empty `- ` line in YAML parses as `null`.'
+        : undefined,
+  })
+  .min(1, "depends-on entries must not be empty")
+  .max(115, "depends-on entries must be at most 115 characters")
+  .regex(
+    DEPENDS_ON_REF_REGEX,
+    "depends-on entries must be `<name-or-guid>@<major.minor>` or `<name>@<dist-tag>` (no semver ranges like ^1.0 or 1.2.3)",
+  );
+
 // Metadata sub-schema (base, before refinement)
 export const metadataSchema = z.object({
   category: z.enum(FRONTMATTER_CATEGORIES),
@@ -79,6 +118,13 @@ export const metadataSchema = z.object({
   "runtime-env-var": z.array(envVarItemSchema).max(30).default([]),
   "tool-list": z.array(toolItemSchema).max(50).default([]),
   tag: z.array(tagItemSchema).max(10).default([]),
+  // Skill dependencies (#968). Each entry pins another skill by
+  // `<name-or-guid>@<major.minor>` or `<name>@<dist-tag>`. Capped at 50
+  // direct deps per version — the transitive closure can be much larger,
+  // but a single SKILL.md declaring >50 direct deps is almost certainly a
+  // mistake. Self-references are rejected at the top-level schema (where
+  // the skill's own `name` is in scope).
+  "depends-on": z.array(dependsOnItemSchema).max(50).default([]),
 });
 
 export type MetadataInput = z.input<typeof metadataSchema>;
@@ -173,8 +219,8 @@ export const SKILL_VERSION_REGEX = /^(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 export const SKILL_NAME_REGEX = /^[a-z0-9][a-z0-9-]*$/;
 export const SKILL_NAME_MAX = 64;
 
-// Full frontmatter schema
-export const skillFrontmatterSchema = z.object({
+// Full frontmatter schema (base, before the top-level refinement).
+const baseSkillFrontmatterSchema = z.object({
   name: z.string().min(1).max(SKILL_NAME_MAX).regex(SKILL_NAME_REGEX, "Name must be kebab-case"),
   description: z.string().min(1).max(1024),
   // YAML parses `version: 0.1` (unquoted) as a float and `1.0` as an
@@ -210,6 +256,34 @@ export const skillFrontmatterSchema = z.object({
   agent: z.string().max(100).optional(),
   "argument-hint": z.string().max(500).optional(),
   hooks: z.record(z.string(), z.unknown()).optional(),
+});
+
+/**
+ * Top-level frontmatter schema. Wraps the base object with a
+ * `superRefine` that enforces cross-field rules where both the skill's
+ * own `name` and `metadata.depends-on` are in scope.
+ *
+ * Self-reference (#968): a skill MUST NOT depend on itself. We reject any
+ * `depends-on` entry whose `<name-or-guid>` segment equals the skill's
+ * own `name`. (GUID-form self-refs can't be detected here — the skill's
+ * GUID isn't known at frontmatter-parse time — so they're caught later by
+ * the closure resolver's cycle check at publish time.)
+ */
+export const skillFrontmatterSchema = baseSkillFrontmatterSchema.superRefine((data, ctx) => {
+  const dependsOn = data.metadata?.["depends-on"] ?? [];
+  for (let i = 0; i < dependsOn.length; i++) {
+    const ref = dependsOn[i];
+    if (typeof ref !== "string") continue;
+    const at = ref.indexOf("@");
+    const target = at === -1 ? ref : ref.slice(0, at);
+    if (target === data.name) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["metadata", "depends-on", i],
+        message: `A skill cannot depend on itself ('${data.name}'). Remove the self-reference '${ref}'.`,
+      });
+    }
+  }
 });
 
 export type SkillFrontmatterInput = z.input<typeof skillFrontmatterSchema>;
