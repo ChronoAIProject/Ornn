@@ -300,10 +300,12 @@ function AssistantPanel({ isOpen, onClose }: { isOpen: boolean; onClose: () => v
   const {
     messages,
     isStreaming,
+    error,
     currentAssistantContent,
     sendMessage,
     abort,
     clearChat,
+    retry,
   } = useAssistantChat();
 
   const inputRef = useRef<ChatInputHandle>(null);
@@ -439,7 +441,7 @@ function AssistantPanel({ isOpen, onClose }: { isOpen: boolean; onClose: () => v
                   onSignIn={loginWithNyxID}
                   onDismiss={() => setSignInPrompt(false)}
                 />
-              ) : hasConversation ? (
+              ) : hasConversation || error ? (
                 <>
                   {messages.map((m: AssistantMessage) => (
                     <ChatMessage key={m.id} message={m} toolCallStatuses={{}} />
@@ -456,6 +458,12 @@ function AssistantPanel({ isOpen, onClose }: { isOpen: boolean; onClose: () => v
                     />
                   )}
                   {showThinking && <ThinkingIndicator label={t("assistant.thinking")} />}
+                  {/* Inline error — the source of truth (the global toast
+                      container isn't mounted on the landing page, where the
+                      widget now also lives). */}
+                  {error && !isStreaming && (
+                    <AssistantErrorState message={error} onRetry={retry} />
+                  )}
                 </>
               ) : (
                 <AssistantEmptyState onSuggestion={handleSuggestion} />
@@ -655,6 +663,36 @@ function AssistantSignInPrompt({
   );
 }
 
+function AssistantErrorState({
+  message,
+  onRetry,
+}: {
+  message: string;
+  onRetry: () => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    // role="alert" announces the failure to assistive tech without needing
+    // focus. No motion — readable + announced regardless of motion prefs.
+    <div role="alert" className="flex justify-start">
+      <div className="w-full space-y-2 rounded border border-danger/40 bg-danger/10 px-3 py-2.5">
+        <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-danger/80">
+          {t("assistant.errorTitle")}
+        </p>
+        <p className="font-text text-[13px] leading-relaxed text-danger">{message}</p>
+        <button
+          type="button"
+          onClick={onRetry}
+          className="focus-ring-ember inline-flex items-center gap-1.5 rounded-sm font-mono text-[11px] font-semibold uppercase tracking-[0.12em] text-danger transition-colors hover:text-strong"
+        >
+          <RetryIcon className="h-3.5 w-3.5" />
+          {t("assistant.retry")}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function ThinkingIndicator({ label }: { label: string }) {
   return (
     <div className="flex justify-start" role="status" aria-label={label}>
@@ -756,6 +794,24 @@ function ArrowIcon({ className }: { className?: string }) {
     >
       <line x1="5" y1="12" x2="19" y2="12" />
       <polyline points="12 5 19 12 12 19" />
+    </svg>
+  );
+}
+
+function RetryIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M21 12a9 9 0 11-3.5-7.1" />
+      <polyline points="21 3 21 9 15 9" />
     </svg>
   );
 }

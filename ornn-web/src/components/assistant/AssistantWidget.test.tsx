@@ -48,9 +48,11 @@ function installFakeLocalStorage() {
 installFakeLocalStorage();
 
 let isAuthed = true;
+let chatError: string | null = null;
 const sendMessage = vi.fn();
 const abort = vi.fn();
 const clearChat = vi.fn();
+const retry = vi.fn();
 const loginWithNyxID = vi.fn();
 
 vi.mock("framer-motion", () => {
@@ -130,11 +132,12 @@ vi.mock("@/hooks/useAssistantChat", () => ({
   useAssistantChat: () => ({
     messages: [],
     isStreaming: false,
-    error: null,
+    error: chatError,
     currentAssistantContent: "",
     sendMessage,
     abort,
     clearChat,
+    retry,
   }),
 }));
 
@@ -143,9 +146,11 @@ import { useAssistantStore } from "@/stores/assistantStore";
 
 beforeEach(() => {
   isAuthed = true;
+  chatError = null;
   sendMessage.mockReset();
   abort.mockReset();
   clearChat.mockReset();
+  retry.mockReset();
   loginWithNyxID.mockReset();
   localStorage.clear();
   useAssistantStore.setState({
@@ -242,6 +247,20 @@ describe("AssistantWidget", () => {
     expect(screen.queryByText("Sign in to chat with Ornn")).not.toBeInTheDocument();
     // Back to the empty state with its suggestions.
     expect(screen.getByText("What is Ornn?")).toBeInTheDocument();
+  });
+
+  it("renders a chat error inline in the panel with a working retry control", () => {
+    chatError = "MODEL_UNAVAILABLE: no assistant model is enabled";
+    render(<AssistantWidget />);
+    openPanel();
+
+    // Visible + announced (role=alert), independent of any ToastContainer.
+    const alert = screen.getByRole("alert");
+    expect(alert).toHaveTextContent("MODEL_UNAVAILABLE: no assistant model is enabled");
+
+    // The retry affordance re-sends the last turn via the hook.
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(retry).toHaveBeenCalledTimes(1);
   });
 
   it("auto-opens the panel once on a first-ever visit", () => {

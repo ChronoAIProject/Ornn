@@ -695,6 +695,8 @@
     "close": "Close assistant",
     "clear": "Clear conversation",
     "thinking": "Thinking…",
+    "retry": "Try again",
+    "errorTitle": "Something went wrong",
     "mascotAlt": "Ornn mascot",
     "greeting": "Hi, I'm Ornn 👋",
     "empty": {

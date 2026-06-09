@@ -695,6 +695,8 @@
     "close": "关闭助手",
     "clear": "清空对话",
     "thinking": "思考中……",
+    "retry": "重试",
+    "errorTitle": "出错了",
     "mascotAlt": "Ornn 吉祥物",
     "greeting": "你好，我是 Ornn 👋",
     "empty": {
