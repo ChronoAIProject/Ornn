@@ -331,6 +331,7 @@ Endpoints pick a subset and MAY add endpoint-specific events with the same prefi
 |---|---|
 | `POST /v1/skills/generate` | `generation_start`, `generation_delta`, `generation_validation_error`, `generation_error`, `generation_complete` |
 | `POST /v1/playground/chat` | `chat_start`, `chat_text_delta`, `chat_tool_call`, `chat_tool_result`, `chat_file_output`, `chat_error`, `chat_finish` |
+| `POST /v1/assistant/chat` | `chat_start`, `chat_text_delta`, `chat_error`, `chat_finish` |
 
 ### 6.3 Transport rules
 
