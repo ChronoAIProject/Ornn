@@ -196,8 +196,12 @@ export interface LlmProviderModel {
    * `defaultFor<Surface>` invariant across every provider. */
   enabledForPlayground: boolean;
   enabledForSkillGen: boolean;
+  /** #970 — Ornn Assistant surface (repo-aware Q&A chatbot). */
+  enabledForAssistant: boolean;
   defaultForPlayground: boolean;
   defaultForSkillGen: boolean;
+  /** #970 — Ornn Assistant surface default. */
+  defaultForAssistant: boolean;
   removed: boolean;
   firstSeenAt?: string;
   lastSyncedAt?: string;
@@ -231,8 +235,10 @@ export interface LlmProviderInput {
 export interface ModelFlagsPatchInput {
   enabledForPlayground?: boolean;
   enabledForSkillGen?: boolean;
+  enabledForAssistant?: boolean;
   defaultForPlayground?: boolean;
   defaultForSkillGen?: boolean;
+  defaultForAssistant?: boolean;
 }
 
 export async function listLlmProviders(): Promise<LlmProvider[]> {
