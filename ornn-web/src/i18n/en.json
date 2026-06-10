@@ -114,7 +114,11 @@
     "admin": "admin",
     "categories": "categories",
     "tags": "tags",
-    "auditHistory": "Audit history"
+    "auditHistory": "Audit history",
+    "skillsets": "skillsets",
+    "mySkillsets": "my skillsets",
+    "newSkillset": "new skillset",
+    "editSkillset": "edit skillset"
   },
   "explore": {
     "semanticQueryRequiredTitle": "Enter a search description",
