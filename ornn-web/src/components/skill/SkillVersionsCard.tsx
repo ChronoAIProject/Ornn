@@ -10,6 +10,7 @@
  */
 
 import { useTranslation } from "react-i18next";
+import { RailCard } from "@/components/detail/RailCard";
 
 export interface SkillVersionsCardProps {
   currentVersion: string;
@@ -28,15 +29,16 @@ export function SkillVersionsCard({
 }: SkillVersionsCardProps) {
   const { t } = useTranslation();
   return (
-    <section className="rounded-md border border-subtle bg-card p-5 card-impression">
-      <h3 className="mb-3.5 flex items-center gap-2 border-b border-dashed border-subtle pb-3 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-meta">
+    <RailCard
+      title={t("skillDetail.cardVersions", "Versions")}
+      icon={
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
           <path d="M21 16V8a2 2 0 0 0-1-1.7l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.7l7 4a2 2 0 0 0 2 0l7-4a2 2 0 0 0 1-1.7z" />
           <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
           <line x1="12" y1="22.08" x2="12" y2="12" />
         </svg>
-        {t("skillDetail.cardVersions", "Versions")}
-      </h3>
+      }
+    >
       <div className="mb-1.5 flex items-baseline gap-2">
         <span className="font-display text-2xl font-semibold tracking-tight text-strong">
           {currentVersion}
@@ -65,6 +67,6 @@ export function SkillVersionsCard({
           {t("skillDetail.browseVersions", "Browse all versions")} →
         </button>
       </div>
-    </section>
+    </RailCard>
   );
 }
