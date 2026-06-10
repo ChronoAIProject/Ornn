@@ -697,6 +697,10 @@
     "close": "Close assistant",
     "clear": "Clear conversation",
     "thinking": "Thinking…",
+    "retry": "Try again",
+    "errorTitle": "Something went wrong",
+    "mascotAlt": "Ornn mascot",
+    "greeting": "Hi, I'm Ornn 👋",
     "empty": {
       "title": "Ask Ornn anything",
       "subtitle": "Repo-aware answers about what Ornn is, how it works, and which skills fit your agent.",
@@ -706,6 +710,12 @@
       "what": "What is Ornn?",
       "different": "How is Ornn different?",
       "findSkill": "Find a skill that does X"
+    },
+    "signIn": {
+      "title": "Sign in to chat with Ornn",
+      "body": "Ornn's repo-aware answers are for signed-in builders. Sign in to start the conversation.",
+      "cta": "Sign in",
+      "dismiss": "Maybe later"
     }
   },
   "chatInput": {

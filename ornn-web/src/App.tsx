@@ -21,6 +21,7 @@ import {
   Outlet,
   Route,
   RouterProvider,
+  useLocation,
 } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { RootLayout } from "@/components/layout/RootLayout";
@@ -33,14 +34,22 @@ import { HighlighterMarkFilter } from "@/pages/landing/HighlighterMark";
 import { VersionUpdateBanner } from "@/components/layout/VersionUpdateBanner";
 import { PostHogProvider } from "@/components/analytics/PostHogProvider";
 import { CookieConsentBanner } from "@/components/analytics/CookieConsentBanner";
+import { AssistantWidget } from "@/components/assistant/AssistantWidget";
 
 /**
  * Top-level wrapper rendered as the root route's element. Lives INSIDE
  * the router tree so child analytics hooks (`useLocation`) work, and
  * renders the consent banner above every page. PostHogProvider has no
  * DOM output — it just wires init / identify / pageview tracking.
+ *
+ * The Ornn Assistant mounts here (not RootLayout) so its mascot launcher
+ * floats over EVERY page — including the landing page and for anonymous
+ * visitors (#976). Suppressed only on the auth handshake routes
+ * (`/login`, `/oauth/*`) where a floating chatbot would be noise.
  */
 function AnalyticsRoot() {
+  const { pathname } = useLocation();
+  const hideAssistant = pathname === "/login" || pathname.startsWith("/oauth");
   return (
     <>
       <PostHogProvider />
@@ -48,6 +57,7 @@ function AnalyticsRoot() {
       <CookieConsentBanner />
       {/* Global announcement surface — top-right headline pill on every page. */}
       <AnnouncementBanner />
+      {!hideAssistant && <AssistantWidget />}
     </>
   );
 }

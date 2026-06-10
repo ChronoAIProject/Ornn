@@ -1,40 +1,62 @@
 /**
- * AssistantWidget — the Ornn Assistant launcher + slide-in chat panel (#970).
+ * AssistantWidget — the Ornn Assistant mascot launcher + slide-in chat
+ * panel (#970, redesigned #976).
  *
- * A floating launcher (bottom-right) opens a corner chat panel that
- * streams repo-aware answers about Ornn. Reuses the Playground chat
- * primitives (`ChatMessage`, `ChatInput`) and the assistant data layer
- * (`useAssistantChat` + `useAssistantStore`).
+ * A draggable Ornn-mascot launcher floats over every page (anonymous +
+ * authenticated) and opens a corner chat panel that streams repo-aware
+ * answers. Reuses the Playground chat primitives (`ChatMessage`,
+ * `ChatInput`) and the assistant data layer (`useAssistantChat` +
+ * `useAssistantStore`).
+ *
+ * Behavior (#976):
+ *   - Anonymous visitors see the launcher + panel, but a send attempt is
+ *     intercepted with an inline sign-in prompt instead of hitting the
+ *     authed-only backend. Authenticated send is unchanged.
+ *   - The launcher is the Ornn mascot — draggable anywhere in the
+ *     viewport, position persisted to localStorage, click-vs-drag
+ *     disambiguated so a drag never opens the panel.
+ *   - On a visitor's FIRST ever load the panel auto-expands once
+ *     (localStorage-gated); later visits start collapsed.
  *
  * Forge Workshop language (docs/DESIGN.md):
  *   - semantic Tailwind tokens only (bg-page / bg-card / text-strong /
  *     text-accent / border-subtle …)
  *   - letterpress impression shadows via `cta-letterpress` /
- *     `card-impression` utilities — no soft drop shadows
- *   - press-DOWN hover on the launcher (never lift)
- *   - Framer Motion panel reveal at motion-medium cadence; respects
- *     prefers-reduced-motion (transforms collapse, content still appears)
+ *     `card-impression` utilities — no soft drop shadows on cards/CTAs
+ *   - press-DOWN feedback (never lift)
+ *   - Framer Motion reveals respect prefers-reduced-motion — transforms
+ *     collapse, content still fully appears.
  *
  * a11y: launcher + panel are keyboard operable, ESC and backdrop close,
  * focus moves into the composer on open and returns to the launcher on
- * close, every control carries a focus-visible ember ring + label.
+ * close, every control carries a focus-visible ember ring + label. Drag
+ * is a pointer-only enhancement; keyboard users just activate to open.
  *
- * Mounted once in the authed app shell (RootLayout); renders nothing for
- * signed-out visitors.
+ * Mounted once globally (App.tsx → AnalyticsRoot) via a portal.
  *
  * @module components/assistant/AssistantWidget
  */
 
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useRef, useState, useCallback, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { AnimatePresence, motion, useReducedMotion, useMotionValue } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import { ChatMessage } from "@/components/playground/ChatMessage";
 import { ChatInput, type ChatInputHandle } from "@/components/playground/ChatInput";
 import { useAssistantChat } from "@/hooks/useAssistantChat";
 import { useAssistantStore } from "@/stores/assistantStore";
-import { useIsAuthenticated } from "@/stores/authStore";
+import { useIsAuthenticated, useAuthStore } from "@/stores/authStore";
+import { createLogger } from "@/lib/logger";
 import type { AssistantMessage } from "@/types/assistant";
+// Launcher = the floating Ornn character (clean transparent cutout, forge
+// pose). The forge video + stills live in the PANEL. Vite-managed
+// (content-hashed) so asset swaps self-cache-bust.
+import ornnMascot from "@/assets/ornn-mascot.webp";
+import forgeVideo from "@/assets/ornn-forge.mp4";
+import forgePoster from "@/assets/ornn-forge-poster.jpg";
+import forgeGreet from "@/assets/ornn-forge-greet.jpg";
+
+const logger = createLogger("AssistantWidget");
 
 /** Example questions shown in the empty state (i18n keys). */
 const SUGGESTION_KEYS = [
@@ -43,14 +65,83 @@ const SUGGESTION_KEYS = [
   "assistant.suggestions.findSkill",
 ] as const;
 
+/** localStorage key — set once we auto-open the panel on first visit. */
+const AUTO_OPENED_KEY = "ornn:assistant:auto-opened";
+/** localStorage key — persisted launcher resting position `{x, y}`. */
+const POS_KEY = "ornn:assistant:launcher-pos";
+/** Delay before the first-visit auto-open, for a smooth reveal. */
+const AUTO_OPEN_DELAY_MS = 700;
+
+/** Draggable launcher box — the floating figure (≈476×600 at 116px tall). */
+const LAUNCHER_W = 92;
+const LAUNCHER_H = 116;
+/** Keep the launcher at least this far from any viewport edge. */
+const EDGE_MARGIN = 20;
+
+type Point = { x: number; y: number };
+
+/** Clamp a launcher position so the whole box stays inside the viewport. */
+function clampLauncherPos(pos: Point, w = LAUNCHER_W, h = LAUNCHER_H): Point {
+  if (typeof window === "undefined") return pos;
+  const maxX = Math.max(EDGE_MARGIN, window.innerWidth - w - EDGE_MARGIN);
+  const maxY = Math.max(EDGE_MARGIN, window.innerHeight - h - EDGE_MARGIN);
+  return {
+    x: Math.min(Math.max(EDGE_MARGIN, pos.x), maxX),
+    y: Math.min(Math.max(EDGE_MARGIN, pos.y), maxY),
+  };
+}
+
+/** Default resting position — bottom-right corner. */
+function defaultLauncherPos(): Point {
+  if (typeof window === "undefined") return { x: 0, y: 0 };
+  return clampLauncherPos({
+    x: window.innerWidth - LAUNCHER_W - EDGE_MARGIN,
+    y: window.innerHeight - LAUNCHER_H - EDGE_MARGIN,
+  });
+}
+
+/** Restore the persisted position (clamped into the current viewport). */
+function loadLauncherPos(): Point {
+  try {
+    const raw = localStorage.getItem(POS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as Partial<Point>;
+      if (typeof parsed?.x === "number" && typeof parsed?.y === "number") {
+        return clampLauncherPos({ x: parsed.x, y: parsed.y });
+      }
+    }
+  } catch {
+    // localStorage unavailable / malformed — fall through to default.
+  }
+  return defaultLauncherPos();
+}
+
 export function AssistantWidget() {
-  const isAuthenticated = useIsAuthenticated();
   const isOpen = useAssistantStore((s) => s.isOpen);
   const openPanel = useAssistantStore((s) => s.openPanel);
   const closePanel = useAssistantStore((s) => s.closePanel);
 
-  // Authed-only surface — never mount for signed-out visitors.
-  if (!isAuthenticated) return null;
+  // First-visit auto-open. Runs once on first ever load: opens the panel
+  // after a short delay, then sets the flag so later visits/reloads start
+  // collapsed. Reads the action via getState() so this effect has no deps
+  // and never re-schedules.
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      if (!localStorage.getItem(AUTO_OPENED_KEY)) {
+        localStorage.setItem(AUTO_OPENED_KEY, "1");
+        logger.debug("first-visit detected — scheduling assistant auto-open");
+        timer = setTimeout(() => {
+          useAssistantStore.getState().openPanel();
+        }, AUTO_OPEN_DELAY_MS);
+      }
+    } catch {
+      // localStorage unavailable (private mode / SSR) — skip auto-open.
+    }
+    return () => {
+      if (timer) clearTimeout(timer);
+    };
+  }, []);
 
   return createPortal(
     <>
@@ -62,34 +153,167 @@ export function AssistantWidget() {
 }
 
 // ---------------------------------------------------------------------------
-// Launcher
+// Launcher — draggable Ornn mascot
 // ---------------------------------------------------------------------------
 
 function AssistantLauncher({ isOpen, onOpen }: { isOpen: boolean; onOpen: () => void }) {
   const { t } = useTranslation();
   const reduceMotion = useReducedMotion();
 
+  // Full-screen, click-through constraints box — bounds the drag to the
+  // viewport (Framer keeps the element inside this ref's rect).
+  const constraintsRef = useRef<HTMLDivElement>(null);
+  // Position lives in motion values so dragging never re-renders React.
+  // Computed once via lazy init from the persisted/clamped position.
+  const [initialPos] = useState(loadLauncherPos);
+  const x = useMotionValue(initialPos.x);
+  const y = useMotionValue(initialPos.y);
+  // Set while a real drag is in progress so the trailing click doesn't open.
+  const draggedRef = useRef(false);
+  const [showBubble, setShowBubble] = useState(false);
+
+  const persistPos = useCallback(() => {
+    try {
+      const clamped = clampLauncherPos({ x: x.get(), y: y.get() });
+      x.set(clamped.x);
+      y.set(clamped.y);
+      localStorage.setItem(POS_KEY, JSON.stringify(clamped));
+      logger.debug("assistant launcher position persisted", clamped);
+    } catch {
+      // Non-fatal — position just won't survive reload.
+    }
+  }, [x, y]);
+
+  // Re-clamp into the viewport on resize so the launcher can't end up
+  // stranded off-screen after a window/orientation change.
+  useEffect(() => {
+    const onResize = () => {
+      const clamped = clampLauncherPos({ x: x.get(), y: y.get() });
+      x.set(clamped.x);
+      y.set(clamped.y);
+    };
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [x, y]);
+
   return (
-    <AnimatePresence>
-      {!isOpen && (
-        <motion.button
-          type="button"
-          onClick={onOpen}
-          aria-label={t("assistant.launch")}
-          aria-haspopup="dialog"
-          initial={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.9, y: 8 }}
-          animate={reduceMotion ? { opacity: 1 } : { opacity: 1, scale: 1, y: 0 }}
-          exit={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.9, y: 8 }}
-          transition={{ type: "spring", stiffness: 320, damping: 26, mass: 0.7 }}
-          className="cta-letterpress fixed bottom-5 right-5 z-40 inline-flex h-12 items-center gap-2 rounded-full border border-accent-muted bg-accent px-4 text-page sm:bottom-6 sm:right-6"
-        >
-          <SparkIcon className="h-5 w-5 shrink-0" />
-          <span className="hidden font-mono text-[12px] font-semibold uppercase tracking-[0.12em] sm:inline">
-            {t("assistant.launch")}
-          </span>
-        </motion.button>
-      )}
-    </AnimatePresence>
+    <motion.div
+      ref={constraintsRef}
+      aria-hidden={isOpen}
+      className="pointer-events-none fixed inset-0 z-40"
+    >
+      <AnimatePresence>
+        {!isOpen && (
+          <motion.button
+            type="button"
+            aria-label={t("assistant.launch")}
+            aria-haspopup="dialog"
+            drag
+            dragConstraints={constraintsRef}
+            dragMomentum={false}
+            dragElastic={0}
+            onDragStart={() => {
+              draggedRef.current = true;
+            }}
+            onDragEnd={() => {
+              persistPos();
+              // Clear AFTER the synthetic click that follows pointerup, so
+              // a drag-release never falls through to onOpen.
+              setTimeout(() => {
+                draggedRef.current = false;
+              }, 0);
+            }}
+            onClick={() => {
+              if (draggedRef.current) return;
+              onOpen();
+            }}
+            onMouseEnter={() => setShowBubble(true)}
+            onMouseLeave={() => setShowBubble(false)}
+            onFocus={() => setShowBubble(true)}
+            onBlur={() => setShowBubble(false)}
+            {...(reduceMotion ? {} : { whileTap: { scale: 0.93 } })}
+            whileDrag={{ cursor: "grabbing" }}
+            initial={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.6 }}
+            animate={reduceMotion ? { opacity: 1 } : { opacity: 1, scale: 1 }}
+            exit={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.6 }}
+            transition={{ type: "spring", stiffness: 320, damping: 24, mass: 0.7 }}
+            style={{ x, y }}
+            className="group pointer-events-auto absolute left-0 top-0 inline-flex cursor-grab touch-none items-end justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-page"
+          >
+            {/* Ember ground-glow ellipse beneath the figure — ember-only,
+                toned (like the hero floor glow), static at rest and brighter
+                on hover/focus/active so it signals interaction. No card, no
+                soft drop shadow (docs/DESIGN.md). */}
+            <span
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-x-0 -bottom-1 -z-10 mx-auto h-5 w-[78%] rounded-[50%] opacity-30 blur-md motion-safe:transition-opacity motion-safe:duration-200 group-hover:opacity-60 group-focus-visible:opacity-60 group-active:opacity-75"
+              style={{
+                background:
+                  "radial-gradient(ellipse 50% 50% at 50% 50%, var(--color-ember-glow), transparent 72%)",
+              }}
+            />
+            {/* Idle bob — gentle vertical float; static under reduced motion. */}
+            <motion.span
+              className="relative block"
+              {...(reduceMotion
+                ? {}
+                : {
+                    animate: { y: [0, -6, 0] },
+                    transition: { duration: 3.6, repeat: Infinity, ease: "easeInOut" as const },
+                  })}
+            >
+              {/* Floating Ornn — forge pose, transparent cutout (no frame). */}
+              <img
+                src={ornnMascot}
+                alt=""
+                aria-hidden="true"
+                draggable={false}
+                className="block h-[116px] w-auto select-none"
+              />
+              {/* Ember sparks near the hammer/anvil — a subtle nod to
+                  forging. Motion-only: omitted entirely under reduced
+                  motion. Decorative (aria-hidden). */}
+              {!reduceMotion && (
+                <span aria-hidden="true" className="pointer-events-none absolute inset-0">
+                  {[0, 1, 2].map((i) => (
+                    <motion.span
+                      key={i}
+                      className="absolute h-1 w-1 rounded-full bg-accent"
+                      style={{ left: `${46 + i * 9}%`, bottom: "22%" }}
+                      initial={{ opacity: 0 }}
+                      animate={{ y: [2, -16, -24], opacity: [0, 0.85, 0], scale: [0.5, 1, 0.4] }}
+                      transition={{
+                        duration: 1.7,
+                        repeat: Infinity,
+                        delay: i * 0.55,
+                        ease: "easeOut" as const,
+                      }}
+                    />
+                  ))}
+                </span>
+              )}
+            </motion.span>
+
+            {/* "Ask Ornn" speech bubble — hover/focus hint (desktop). */}
+            <span className="pointer-events-none absolute right-full top-1/2 mr-1 hidden -translate-y-1/2 sm:block">
+              <AnimatePresence>
+                {showBubble && !isOpen && (
+                  <motion.span
+                    initial={reduceMotion ? { opacity: 0 } : { opacity: 0, x: 6, scale: 0.96 }}
+                    animate={reduceMotion ? { opacity: 1 } : { opacity: 1, x: 0, scale: 1 }}
+                    exit={reduceMotion ? { opacity: 0 } : { opacity: 0, x: 6, scale: 0.96 }}
+                    transition={{ duration: 0.16 }}
+                    className="card-impression block whitespace-nowrap rounded border border-subtle bg-card px-2.5 py-1.5 font-mono text-[11px] font-semibold uppercase tracking-[0.12em] text-strong"
+                  >
+                    {t("assistant.launch")}
+                  </motion.span>
+                )}
+              </AnimatePresence>
+            </span>
+          </motion.button>
+        )}
+      </AnimatePresence>
+    </motion.div>
   );
 }
 
@@ -100,19 +324,33 @@ function AssistantLauncher({ isOpen, onOpen }: { isOpen: boolean; onOpen: () => 
 function AssistantPanel({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
   const { t } = useTranslation();
   const reduceMotion = useReducedMotion();
+  const isAuthenticated = useIsAuthenticated();
+  const loginWithNyxID = useAuthStore((s) => s.loginWithNyxID);
   const {
     messages,
     isStreaming,
+    error,
     currentAssistantContent,
     sendMessage,
     abort,
     clearChat,
+    retry,
   } = useAssistantChat();
 
   const inputRef = useRef<ChatInputHandle>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   // Remember what had focus before opening so we can restore it on close.
   const restoreFocusRef = useRef<HTMLElement | null>(null);
+  // Anonymous send → inline sign-in prompt instead of hitting the backend.
+  const [signInPrompt, setSignInPrompt] = useState(false);
+  // Reset the sign-in prompt the moment the panel closes, so a reopen
+  // starts from the clean empty state. Done as a render-time adjustment
+  // (React's blessed pattern) rather than an effect — no extra commit.
+  const [wasOpen, setWasOpen] = useState(isOpen);
+  if (wasOpen !== isOpen) {
+    setWasOpen(isOpen);
+    if (!isOpen && signInPrompt) setSignInPrompt(false);
+  }
 
   // ESC closes; capture the previously-focused element on open.
   useEffect(() => {
@@ -152,6 +390,20 @@ function AssistantPanel({ isOpen, onClose }: { isOpen: boolean; onClose: () => v
     inputRef.current?.setValue(text);
   };
 
+  // Intercept send for signed-out visitors: surface the sign-in prompt and
+  // never call the authed-only chat backend. Authenticated send unchanged.
+  const handleSend = useCallback(
+    (content: string) => {
+      if (!isAuthenticated) {
+        logger.info("assistant send intercepted — visitor signed out, prompting sign-in");
+        setSignInPrompt(true);
+        return;
+      }
+      sendMessage(content);
+    },
+    [isAuthenticated, sendMessage],
+  );
+
   // Focus trap — keep Tab / Shift+Tab cycling inside the dialog so focus
   // can't escape to the backdrop'd page behind it. Paired with the
   // focus-in-on-open / restore-on-close effects above. Scoped to the
@@ -176,7 +428,7 @@ function AssistantPanel({ isOpen, onClose }: { isOpen: boolean; onClose: () => v
     }
   };
 
-  return createPortal(
+  return (
     <AnimatePresence>
       {isOpen && (
         <div className="fixed inset-0 z-50">
@@ -197,11 +449,9 @@ function AssistantPanel({ isOpen, onClose }: { isOpen: boolean; onClose: () => v
             aria-modal="true"
             aria-label={t("assistant.title")}
             onKeyDown={handlePanelKeyDown}
-            initial={
-              reduceMotion ? { opacity: 0 } : { opacity: 0, y: 16, scale: 0.98 }
-            }
+            initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 24, scale: 0.96 }}
             animate={reduceMotion ? { opacity: 1 } : { opacity: 1, y: 0, scale: 1 }}
-            exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 16, scale: 0.98 }}
+            exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 24, scale: 0.96 }}
             transition={{ type: "spring", stiffness: 260, damping: 26, mass: 0.8 }}
             className="card-impression absolute bottom-0 right-0 flex h-[100dvh] w-full flex-col overflow-hidden border border-subtle bg-page sm:bottom-6 sm:right-6 sm:h-[min(620px,calc(100dvh-7rem))] sm:w-[400px] sm:rounded"
           >
@@ -215,7 +465,12 @@ function AssistantPanel({ isOpen, onClose }: { isOpen: boolean; onClose: () => v
               ref={scrollRef}
               className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4"
             >
-              {hasConversation ? (
+              {signInPrompt ? (
+                <AssistantSignInPrompt
+                  onSignIn={loginWithNyxID}
+                  onDismiss={() => setSignInPrompt(false)}
+                />
+              ) : hasConversation || error ? (
                 <>
                   {messages.map((m: AssistantMessage) => (
                     <ChatMessage key={m.id} message={m} toolCallStatuses={{}} />
@@ -232,6 +487,12 @@ function AssistantPanel({ isOpen, onClose }: { isOpen: boolean; onClose: () => v
                     />
                   )}
                   {showThinking && <ThinkingIndicator label={t("assistant.thinking")} />}
+                  {/* Inline error — the source of truth (the global toast
+                      container isn't mounted on the landing page, where the
+                      widget now also lives). */}
+                  {error && !isStreaming && (
+                    <AssistantErrorState message={error} onRetry={retry} />
+                  )}
                 </>
               ) : (
                 <AssistantEmptyState onSuggestion={handleSuggestion} />
@@ -241,7 +502,7 @@ function AssistantPanel({ isOpen, onClose }: { isOpen: boolean; onClose: () => v
             <div className="border-t border-subtle px-2">
               <ChatInput
                 ref={inputRef}
-                onSend={(content) => sendMessage(content)}
+                onSend={handleSend}
                 onAbort={abort}
                 disabled={isStreaming}
                 isStreaming={isStreaming}
@@ -251,8 +512,7 @@ function AssistantPanel({ isOpen, onClose }: { isOpen: boolean; onClose: () => v
           </motion.section>
         </div>
       )}
-    </AnimatePresence>,
-    document.body,
+    </AnimatePresence>
   );
 }
 
@@ -269,8 +529,15 @@ function PanelHeader({
   return (
     <header className="flex items-center justify-between gap-3 border-b border-subtle bg-card px-4 py-3">
       <div className="flex items-center gap-2.5">
-        <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-accent/30 bg-warning-soft text-accent">
-          <SparkIcon className="h-4 w-4" />
+        <span className="inline-flex h-9 w-9 shrink-0 overflow-hidden rounded-full border border-accent/30 bg-warning-soft">
+          {/* Circular crop of the forge-greet still, framed on Ornn's face. */}
+          <img
+            src={forgeGreet}
+            alt=""
+            aria-hidden="true"
+            className="h-full w-full object-cover"
+            style={{ objectPosition: "50% 28%" }}
+          />
         </span>
         <div className="leading-tight">
           <p className="font-display text-sm font-semibold tracking-tight text-strong">
@@ -297,22 +564,70 @@ function PanelHeader({
 
 function AssistantEmptyState({ onSuggestion }: { onSuggestion: (text: string) => void }) {
   const { t } = useTranslation();
+  const reduceMotion = useReducedMotion();
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  // Defensive (mirrors HeroVideo): force `muted` so the forge hero clip
+  // autoplays even if a browser ignored the attribute.
+  useEffect(() => {
+    if (videoRef.current) videoRef.current.muted = true;
+  }, [reduceMotion]);
+
+  // Conditionally-applied motion props — omitted entirely under reduced
+  // motion so content appears statically (and to satisfy
+  // exactOptionalPropertyTypes, which forbids passing `undefined`).
+  const groupProps = reduceMotion
+    ? {}
+    : {
+        variants: { hidden: {}, show: { transition: { staggerChildren: 0.07, delayChildren: 0.04 } } },
+        initial: "hidden" as const,
+        animate: "show" as const,
+      };
+  const itemProps = reduceMotion
+    ? {}
+    : { variants: { hidden: { opacity: 0, y: 8 }, show: { opacity: 1, y: 0 } } };
+
   return (
     <div className="flex h-full flex-col items-center justify-center py-6">
-      <div className="w-full space-y-5 text-center">
-        <div className="space-y-2">
-          <span className="mx-auto inline-flex h-11 w-11 items-center justify-center rounded-full border border-accent/30 bg-warning-soft text-accent">
-            <SparkIcon className="h-5 w-5" />
-          </span>
+      <motion.div className="w-full space-y-5 text-center" {...groupProps}>
+        <motion.div className="space-y-2" {...itemProps}>
+          {/* Forge hero — the hammering clip lives here in the panel. Framed
+              (border + letterpress, no soft drop shadow). Reduced motion
+              swaps the loop for the static strike-frame poster (HeroVideo
+              pattern). */}
+          <div className="card-impression mx-auto aspect-[16/10] w-full max-w-[15rem] overflow-hidden rounded border border-subtle bg-page">
+            {reduceMotion ? (
+              <img
+                src={forgePoster}
+                alt={t("assistant.mascotAlt")}
+                draggable={false}
+                className="h-full w-full select-none object-cover"
+              />
+            ) : (
+              <video
+                ref={videoRef}
+                autoPlay
+                muted
+                loop
+                playsInline
+                preload="metadata"
+                poster={forgePoster}
+                aria-label={t("assistant.mascotAlt")}
+                className="forge-loop-mask h-full w-full object-cover"
+              >
+                <source src={forgeVideo} type="video/mp4" />
+              </video>
+            )}
+          </div>
           <h2 className="font-display text-xl font-semibold leading-tight tracking-tight text-strong">
-            {t("assistant.empty.title")}
+            {t("assistant.greeting")}
           </h2>
           <p className="mx-auto max-w-[18rem] font-text text-[13px] leading-relaxed text-body">
             {t("assistant.empty.subtitle")}
           </p>
-        </div>
+        </motion.div>
 
-        <div className="space-y-2">
+        <motion.div className="space-y-2" {...itemProps}>
           <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-meta/80">
             {t("assistant.empty.hint")}
           </p>
@@ -334,7 +649,93 @@ function AssistantEmptyState({ onSuggestion }: { onSuggestion: (text: string) =>
               );
             })}
           </div>
+        </motion.div>
+      </motion.div>
+    </div>
+  );
+}
+
+function AssistantSignInPrompt({
+  onSignIn,
+  onDismiss,
+}: {
+  onSignIn: () => void;
+  onDismiss: () => void;
+}) {
+  const { t } = useTranslation();
+  const reduceMotion = useReducedMotion();
+  return (
+    <div className="flex h-full flex-col items-center justify-center py-6">
+      <motion.div
+        initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 10, scale: 0.98 }}
+        animate={reduceMotion ? { opacity: 1 } : { opacity: 1, y: 0, scale: 1 }}
+        transition={{ type: "spring", stiffness: 280, damping: 26 }}
+        className="card-impression w-full max-w-[20rem] space-y-4 rounded border border-subtle bg-card px-5 py-6 text-center"
+      >
+        <span className="mx-auto block h-16 w-16 overflow-hidden rounded-full border border-subtle">
+          <img
+            src={forgeGreet}
+            alt=""
+            aria-hidden="true"
+            draggable={false}
+            className="h-full w-full select-none object-cover"
+            style={{ objectPosition: "50% 28%" }}
+          />
+        </span>
+        <div className="space-y-1.5">
+          <h2 className="font-display text-base font-semibold tracking-tight text-strong">
+            {t("assistant.signIn.title")}
+          </h2>
+          <p className="font-text text-[13px] leading-relaxed text-body">
+            {t("assistant.signIn.body")}
+          </p>
         </div>
+        <div className="space-y-2">
+          <button
+            type="button"
+            onClick={onSignIn}
+            className="cta-letterpress inline-flex h-11 w-full items-center justify-center rounded-sm border border-accent-muted bg-accent font-mono text-[12px] font-semibold uppercase tracking-[0.12em] text-page"
+          >
+            {t("assistant.signIn.cta")}
+          </button>
+          <button
+            type="button"
+            onClick={onDismiss}
+            className="focus-ring-ember inline-flex h-9 w-full items-center justify-center rounded-sm font-mono text-[11px] uppercase tracking-[0.12em] text-meta transition-colors hover:text-strong"
+          >
+            {t("assistant.signIn.dismiss")}
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+function AssistantErrorState({
+  message,
+  onRetry,
+}: {
+  message: string;
+  onRetry: () => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    // role="alert" announces the failure to assistive tech without needing
+    // focus. No motion — readable + announced regardless of motion prefs.
+    <div role="alert" className="flex justify-start">
+      <div className="w-full space-y-2 rounded border border-danger/40 bg-danger/10 px-3 py-2.5">
+        <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-danger/80">
+          {t("assistant.errorTitle")}
+        </p>
+        <p className="font-text text-[13px] leading-relaxed text-danger">{message}</p>
+        <button
+          type="button"
+          onClick={onRetry}
+          className="focus-ring-ember inline-flex items-center gap-1.5 rounded-sm font-mono text-[11px] font-semibold uppercase tracking-[0.12em] text-danger transition-colors hover:text-strong"
+        >
+          <RetryIcon className="h-3.5 w-3.5" />
+          {t("assistant.retry")}
+        </button>
       </div>
     </div>
   );
@@ -390,15 +791,6 @@ function IconButton({
 // Icons (inline — no external icon dependency)
 // ---------------------------------------------------------------------------
 
-function SparkIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-      <path d="M12 2l1.9 5.6L19.5 9.5l-5.6 1.9L12 17l-1.9-5.6L4.5 9.5l5.6-1.9L12 2z" />
-      <path d="M18.5 14l.8 2.3 2.2.8-2.2.8-.8 2.3-.8-2.3-2.2-.8 2.2-.8.8-2.3z" opacity="0.7" />
-    </svg>
-  );
-}
-
 function CloseIcon({ className }: { className?: string }) {
   return (
     <svg
@@ -450,6 +842,24 @@ function ArrowIcon({ className }: { className?: string }) {
     >
       <line x1="5" y1="12" x2="19" y2="12" />
       <polyline points="12 5 19 12 12 19" />
+    </svg>
+  );
+}
+
+function RetryIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M21 12a9 9 0 11-3.5-7.1" />
+      <polyline points="21 3 21 9 15 9" />
     </svg>
   );
 }
