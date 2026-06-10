@@ -77,6 +77,7 @@
     "home": "首页",
     "registry": "技能库",
     "build": "构建",
+    "skillsets": "技能集",
     "docs": "文档",
     "news": "动态",
     "contact": "联系",
@@ -90,6 +91,7 @@
     "lightMode": "浅色模式",
     "darkMode": "深色模式",
     "myProfile": "个人资料",
+    "mySkillsets": "我的技能集",
     "myOrgs": "我的组织",
     "myServices": "我的服务",
     "adminServices": "平台服务",
@@ -1661,6 +1663,115 @@
     "fieldPrivateKey": "App 私钥 (PEM)",
     "confirmTitle": "确认：放弃当前镜像仓库",
     "confirmConfirm": "是，更换仓库"
+  },
+  "skillsetKind": {
+    "generic": "组合",
+    "genericLong": "通用组合",
+    "consensusSupported": "共识",
+    "consensusSupportedLong": "支持共识"
+  },
+  "skillsetExplore": {
+    "publicTab": "公开",
+    "mineTab": "我的",
+    "sharedTab": "共享给我",
+    "kindLabel": "类型",
+    "kindAll": "全部类型",
+    "tagsLabel": "标签",
+    "addTag": "添加标签…",
+    "create": "新建技能集",
+    "nonePublic": "没有匹配的公开技能集",
+    "noneMine": "你还没有创建任何技能集",
+    "noneShared": "还没有人向你共享任何内容",
+    "tryAdjusting": "尝试调整类型或标签筛选。",
+    "createFirst": "将两个或更多技能组合成你的第一个技能集。",
+    "sharedIntro": "当有人授予你访问某个私有技能集的权限时，它会显示在这里。"
+  },
+  "skillsetDetail": {
+    "notFoundTitle": "未找到技能集",
+    "notFoundDesc": "它可能已被删除，或你没有访问权限。",
+    "backToRegistry": "返回技能集",
+    "consensusNote": "作者声明这些成员是一组独立、可比较、适合代理端共识的技能集。这是作者声明，并非平台保证。",
+    "managePermissions": "权限",
+    "masterPrompt": "主提示词",
+    "noPrompt": "此版本没有主提示词。",
+    "resolvedClosure": "解析闭包",
+    "members": "成员",
+    "metadata": "元数据",
+    "version": "版本",
+    "latest": "最新",
+    "versionsCount": "版本数",
+    "updated": "更新于",
+    "guid": "GUID",
+    "guidCopied": "已复制 GUID",
+    "visibility": "可见性",
+    "visPublic": "公开",
+    "visPrivate": "私有",
+    "sharedWith": "已共享给 {{users}} 位用户 · {{orgs}} 个组织",
+    "dangerZone": "危险区",
+    "dangerExplain": "永久删除此技能集及其所有版本。此操作无法撤销。",
+    "deleteSkillset": "删除技能集",
+    "deleteTitle": "删除此技能集？",
+    "deleteConfirm": "这将永久删除 {{name}} 及其所有版本。",
+    "deleteSuccess": "技能集已删除"
+  },
+  "skillsetForm": {
+    "name": "名称",
+    "nameLocked": "已锁定",
+    "nameError": "名称必须为短横线格式（a-z、0-9、连字符）。",
+    "description": "描述",
+    "descriptionPlaceholder": "简短的可读摘要",
+    "descriptionError": "描述为必填项（1–1024 个字符）。",
+    "kind": "类型",
+    "tags": "标签",
+    "addTag": "添加标签…",
+    "membersError": "至少添加 {{min}} 个成员。",
+    "promptError": "主提示词为必填项。",
+    "version": "版本",
+    "versionError": "版本必须为 <主>.<次>（例如 1.0）。",
+    "versionBumpError": "发布需要一个新的、递增的版本（例如 1.1）。",
+    "editHint": "发布会创建一个新的不可变版本。名称不可更改。",
+    "createSubmit": "创建技能集",
+    "publishSubmit": "发布版本"
+  },
+  "skillsetNew": {
+    "title": "新建技能集",
+    "subtitle": "将两个或更多技能与一段主提示词组合，告诉代理如何协同使用它们。",
+    "created": "技能集已创建"
+  },
+  "skillsetEdit": {
+    "title": "编辑技能集",
+    "subtitle": "修改成员、提示词、类型或标签，并发布新版本。",
+    "published": "新版本已发布"
+  },
+  "skillsetMembers": {
+    "label": "成员",
+    "count": "{{count}} / {{max}}",
+    "empty": "暂无成员。请至少添加 {{min}} 个技能。",
+    "placeholder": "搜索技能，或输入 name@1.0 后回车",
+    "remove": "移除 {{ref}}",
+    "errorEmpty": "请输入技能引用。",
+    "errorNested": "技能集不能引用另一个技能集。请移除 skillset: 前缀。",
+    "errorSelf": "技能集不能将自身作为成员。",
+    "errorNoVersion": "请带上版本号，例如 name@1.0。",
+    "errorDuplicate": "该成员已添加。",
+    "errorMax": "技能集最多可包含 {{max}} 个成员。"
+  },
+  "skillsetPrompt": {
+    "label": "主提示词",
+    "count": "{{count}} / {{max}}",
+    "help": "必填。告诉代理如何使用这组技能——编排、顺序，以及何时选用哪个成员。",
+    "placeholder": "# 如何使用这组技能\n\n1. 首先 ...",
+    "errorTooLong": "主提示词最多 {{max}} 个字符。"
+  },
+  "skillsetClosure": {
+    "empty": "尚无解析成员。",
+    "member": "成员",
+    "dependency": "依赖"
+  },
+  "skillsetPermissions": {
+    "publicDesc": "Ornn 上的任何人（包括未登录访客）都可以发现并使用此技能集。",
+    "orgsDesc": "已勾选组织的每位管理员和成员都可以查看并使用此技能集。",
+    "privateDesc": "仅你和平台管理员可以查看此技能集。当上方均未设置时生效。"
   },
   "errors": {
     "generic": {

@@ -22,11 +22,22 @@
 export { OrnnClient, type OrnnClientOptions } from "./client";
 export { OrnnError, type OrnnErrorPayload } from "./errors";
 export type {
+  ClosureNode,
+  ClosureResult,
+  CreateSkillsetInput,
   PublishOptions,
+  PublishSkillsetInput,
   SearchScope,
   SkillDetail,
   SkillSearchParams,
   SkillSearchResult,
+  SkillsetClosureResult,
+  SkillsetDetail,
+  SkillsetKind,
+  SkillsetPermissionsInput,
+  SkillsetSearchParams,
+  SkillsetSearchResult,
+  SkillsetSummary,
   SkillSummary,
   SkillVersionEntry,
   UpdateSkillMetadata,

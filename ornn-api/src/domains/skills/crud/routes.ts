@@ -674,6 +674,54 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
   );
 
   /**
+   * GET /skills/:idOrName/closure — Resolve the full transitive
+   * dependency closure of a skill version (#968).
+   *
+   * Query params:
+   *   - `version` (optional) — literal `<major>.<minor>` or a dist-tag.
+   *     When omitted, the skill's latest version is used.
+   *
+   * Returns the closure in deps-first topological order:
+   *   `{ data: { items: [{ guid, name, version, skillHash, depth }] }, error: null }`
+   *
+   * Auth: Optional. Anonymous callers resolve against public skills only —
+   * a public skill that transitively depends on a PRIVATE skill surfaces
+   * that node as `skill_dependency_not_found` rather than leaking it.
+   *
+   * Errors: `dependency_cycle` (409), `dependency_conflict` (409),
+   * `skill_dependency_not_found` (404), `skill_not_found` (404).
+   *
+   * Registered ABOVE `/skills/:idOrName` so the literal `/closure` segment
+   * wins the route match (mirrors `/skills/:idOrName/versions`).
+   */
+  app.get(
+    "/skills/:idOrName/closure",
+    optionalAuth,
+    async (c) => {
+      const idOrName = c.req.param("idOrName");
+      const version = c.req.query("version") || undefined;
+      const authCtx = c.get("auth");
+
+      // Build the visibility-scoped actor. Authenticated callers get their
+      // full org/admin context; anonymous callers get a read-only actor
+      // that can see public skills only.
+      const actor = authCtx
+        ? await buildActorContext(c)
+        : {
+            userId: "",
+            memberships: [],
+            isPlatformAdmin: false,
+            membershipsResolved: true,
+          };
+
+      logger.info({ idOrName, version: version ?? null, anon: !authCtx }, "Skill closure request");
+
+      const items = await skillService.resolveSkillClosure(idOrName, actor, version);
+      return c.json({ data: { items }, error: null });
+    },
+  );
+
+  /**
    * GET /skills/:idOrName — Read a skill by GUID or name.
    * Query params:
    *   - version: optional `<major>.<minor>` — when set, return that version's

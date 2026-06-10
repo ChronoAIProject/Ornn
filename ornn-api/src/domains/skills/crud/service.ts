@@ -14,7 +14,13 @@ import { AppError } from "../../../shared/types/index";
 import { fetchSkillFromGitHub, parseGithubUrl, type GitHubPullInput } from "./utils/githubPull";
 import { computeVersionDiff, type VersionDiffResult } from "./utils/versionDiff";
 import { isReservedVerb } from "../../../shared/reservedVerbs";
-import { canReadSkill, isMemberOfOrg, type ActorContext } from "./authorize";
+import { canReadSkill, isMemberOfOrg, SYSTEM_ACTOR, type ActorContext } from "./authorize";
+import {
+  resolveClosure,
+  type LoadVersion,
+  type ResolvedVersion,
+  type ClosureNode,
+} from "../closure/resolver";
 
 /**
  * Convert the stored hex `skillHash` into npm-style Subresource Integrity
@@ -34,6 +40,8 @@ import {
   validateSkillFrontmatter,
   SKILL_NAME_REGEX,
   SKILL_NAME_MAX,
+  SKILL_VERSION_REGEX,
+  DEPENDS_ON_REF_REGEX,
 } from "../../../shared/schemas/skillFrontmatter";
 import { resolveZipRoot } from "../../../shared/utils/zip";
 import { enforceZipLimits, type ZipLimitsConfig } from "../../../shared/utils/zipLimits";
@@ -265,6 +273,12 @@ export class SkillService {
     if (existing) {
       throw AppError.conflict("skill_name_exists", `Skill '${name}' already exists`);
     }
+
+    // 3c. Skill-dependency validation (#968). Resolve the closure of the
+    //     declared `depends-on` refs BEFORE any storage write so a missing
+    //     dependency / cycle / version conflict fails the publish early.
+    //     No-op when the skill declares no dependencies.
+    await this.validatePublishDependencies(metadata, { name, version });
 
     // 4. Generate GUID and hash
     const guid = randomUUID();
@@ -699,6 +713,11 @@ export class SkillService {
           );
         }
       }
+
+      // Skill-dependency validation (#968) — same gate as createSkill,
+      // applied to the new version's declared deps before any storage
+      // write. No-op when the version declares no dependencies.
+      await this.validatePublishDependencies(metadata, { name, version });
 
       const skillHash = createHash("sha256").update(options.zipBuffer).digest("hex");
 
@@ -1478,6 +1497,168 @@ export class SkillService {
   }
 
   // ==========================================================================
+  // Dependency closure (#968)
+  // ==========================================================================
+
+  /**
+   * Build a {@link LoadVersion} loader over the live skill collections,
+   * scoped to what `actor` may read. Resolves a dependency ref
+   * (`<name-or-guid>@<major.minor>` or `<name>@<dist-tag>`) into a
+   * {@link ResolvedVersion} the closure resolver can walk, or `null` when
+   * the skill / version doesn't exist OR isn't visible to the actor.
+   *
+   * Per-node `canReadSkill` (#806/#968): an anonymous or under-privileged
+   * caller resolving the closure of a public skill that transitively
+   * depends on a PRIVATE skill gets `null` for that node, surfaced as
+   * `skill_dependency_not_found` — existence isn't leaked. Trusted
+   * callers (publish-time validation) pass `SYSTEM_ACTOR`.
+   *
+   * PUBLIC (#969): the skillsets service injects `SkillService` and
+   * reuses this loader to resolve a skillset's member refs against the
+   * live skill graph — a skillset member is just a skill ref. Promoting
+   * the loader from `private` to a public method means the closure walk
+   * stays single-sourced; both surfaces resolve refs (and apply the
+   * per-node `canReadSkill` visibility gate) identically.
+   */
+  createVersionLoader(actor: ActorContext): LoadVersion {
+    return async (ref: string): Promise<ResolvedVersion | null> => {
+      const at = ref.lastIndexOf("@");
+      if (at <= 0 || at === ref.length - 1) return null;
+      const idOrName = ref.slice(0, at);
+      const versionOrTag = ref.slice(at + 1);
+
+      const skill =
+        (await this.skillRepo.findByGuid(idOrName)) ??
+        (await this.skillRepo.findByName(idOrName));
+      if (!skill) return null;
+
+      // Visibility gate (#806) — a node the actor cannot read is invisible
+      // (returns null), not a hard error, so the closure of a public skill
+      // never leaks the existence of a private dependency.
+      if (!canReadSkill(skill, actor)) return null;
+
+      // Resolve a dist-tag to a literal version; a literal passes through.
+      // Dist-tag refs use the `<name>@<tag>` grammar; map them via the
+      // skill's distTags. `resolveDistTag` expects an `@`-prefixed tag, so
+      // detect the literal-version shape first.
+      let literalVersion: string;
+      if (SKILL_VERSION_REGEX.test(versionOrTag)) {
+        literalVersion = versionOrTag;
+      } else {
+        const resolved = skill.distTags?.[versionOrTag];
+        if (resolved) {
+          literalVersion = resolved;
+        } else if (versionOrTag === "latest") {
+          literalVersion = skill.latestVersion;
+        } else {
+          return null;
+        }
+      }
+
+      const versionDoc = await this.skillVersionRepo.findBySkillAndVersion(
+        skill.guid,
+        literalVersion,
+      );
+      if (!versionDoc) return null;
+
+      const node: ResolvedVersion = {
+        ref: `${skill.name}@${versionDoc.version}`,
+        name: skill.name,
+        version: versionDoc.version,
+        guid: skill.guid,
+        skillHash: versionDoc.skillHash,
+        dependsOn: versionDoc.metadata?.dependsOn ?? [],
+      };
+      return node;
+    };
+  }
+
+  /**
+   * Resolve the full transitive dependency closure of a skill version,
+   * scoped to what `actor` may read (#968).
+   *
+   * The roots are the skill's own direct `depends-on` refs at the
+   * requested version (NOT the skill itself — the closure describes what
+   * the skill *needs*). Returns nodes in deps-first topological order.
+   *
+   * Throws `skill_not_found` (404) when the root skill / version is
+   * unknown, and `dependency_cycle` / `dependency_conflict` /
+   * `skill_dependency_not_found` from the resolver.
+   */
+  async resolveSkillClosure(
+    idOrName: string,
+    actor: ActorContext,
+    version?: string,
+  ): Promise<ClosureNode[]> {
+    const skill = await this.findSkillByIdOrName(idOrName);
+    if (!canReadSkill(skill, actor)) {
+      throw AppError.notFound("skill_not_found", `Skill '${idOrName}' not found`);
+    }
+
+    const resolvedVersion =
+      version === undefined || version.length === 0
+        ? skill.latestVersion
+        : resolveDistTag(skill, version) ?? skill.latestVersion;
+    parseVersion(resolvedVersion);
+
+    const versionDoc = await this.skillVersionRepo.findBySkillAndVersion(
+      skill.guid,
+      resolvedVersion,
+    );
+    if (!versionDoc) {
+      throw AppError.notFound(
+        "skill_version_not_found",
+        `Version '${resolvedVersion}' not found for skill '${skill.name}'`,
+      );
+    }
+
+    const roots = versionDoc.metadata?.dependsOn ?? [];
+    if (roots.length === 0) {
+      logger.info({ idOrName, version: resolvedVersion }, "Closure resolved: no dependencies");
+      return [];
+    }
+
+    const closure = await resolveClosure(roots, {
+      loadVersion: this.createVersionLoader(actor),
+    });
+    logger.info(
+      { idOrName, version: resolvedVersion, nodeCount: closure.length },
+      "Skill dependency closure resolved",
+    );
+    return closure;
+  }
+
+  /**
+   * Publish-time dependency validation (#968). Walks the closure of the
+   * just-extracted `dependsOn` refs to guarantee, BEFORE the version is
+   * committed, that every dependency exists, is readable to the author,
+   * the graph is acyclic, and no two versions of one skill collide.
+   *
+   * Runs as `SYSTEM_ACTOR` deliberately: the author may legitimately
+   * depend on a private skill they own / were granted; the closure is
+   * computed over the full graph and the route layer does NOT expose
+   * these results — it only gates the publish. A missing / unresolvable
+   * dependency surfaces as `skill_dependency_not_found`, a cycle as
+   * `dependency_cycle`, a conflict as `dependency_conflict`.
+   *
+   * No-op when the new version declares no dependencies.
+   */
+  private async validatePublishDependencies(
+    metadata: SkillMetadata,
+    context: { name: string; version: string },
+  ): Promise<void> {
+    const roots = metadata.dependsOn ?? [];
+    if (roots.length === 0) return;
+    await resolveClosure(roots, {
+      loadVersion: this.createVersionLoader(SYSTEM_ACTOR),
+    });
+    logger.info(
+      { name: context.name, version: context.version, depCount: roots.length },
+      "Publish-time dependencies validated",
+    );
+  }
+
+  // ==========================================================================
   // Private helpers
   // ==========================================================================
 
@@ -1592,6 +1773,15 @@ export class SkillService {
       metadata.tags = rawMeta.tag;
     }
 
+    // Skill dependencies (#968). Map the kebab `depends-on` frontmatter
+    // field onto the camelCase `dependsOn` metadata field. The Zod schema
+    // already validated grammar + self-ref + the 50-entry cap, so this is
+    // a straight copy. Only set the key when non-empty so legacy / no-dep
+    // versions read back clean (absent, not `[]`).
+    if (rawMeta["depends-on"].length > 0) {
+      metadata.dependsOn = rawMeta["depends-on"];
+    }
+
     // Author-supplied changelog lives next to the formal frontmatter but isn't
     // part of the Zod schema — kept permissive so missing/older SKILL.md files
     // just report null instead of hard-failing. Accepts either `release-notes`
@@ -1696,6 +1886,30 @@ export class SkillService {
 
     const metadata: SkillMetadata = { category };
     if (tags && tags.length > 0) metadata.tags = tags;
+
+    // Skill dependencies (#968) under skipValidation. The strict Zod
+    // schema was bypassed, so we re-apply the grammar regex here and keep
+    // only well-formed refs (self-refs by name dropped too). A malformed
+    // ref is silently discarded rather than failing the import — same
+    // best-effort posture as `tags` above. This keeps the closure
+    // resolver's input invariant ("every persisted ref parses") even on
+    // the lenient path; the dropped refs are logged for diagnosis.
+    if (Array.isArray(rawMeta["depends-on"])) {
+      const validDeps = (rawMeta["depends-on"] as unknown[]).filter(
+        (d): d is string =>
+          typeof d === "string" &&
+          DEPENDS_ON_REF_REGEX.test(d) &&
+          d.slice(0, d.indexOf("@")) !== name,
+      );
+      const dropped = (rawMeta["depends-on"] as unknown[]).length - validDeps.length;
+      if (dropped > 0) {
+        logger.info(
+          { name, dropped },
+          "skipValidation: dropped malformed/self depends-on entries",
+        );
+      }
+      if (validDeps.length > 0) metadata.dependsOn = validDeps.slice(0, 50);
+    }
 
     const rawReleaseNotes = raw["release-notes"] ?? raw["releaseNotes"];
     let releaseNotes: string | null = null;

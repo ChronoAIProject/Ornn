@@ -92,22 +92,40 @@ The caller is authenticated but lacks the permission required for this resource 
 ## resource_not_found
 
 **HTTP:** `404 Not Found`
-**Common subcodes (lowercase post-#585):** `skill_not_found`, `skill_version_not_found`, `org_not_found`, `provider_not_found`, `announcement_not_found`, `broadcast_not_found`, `notification_not_found`, `audit_not_found`, `redemption_code_not_found`, …
+**Common subcodes (lowercase post-#585):** `skill_not_found`, `skill_version_not_found`, `skill_dependency_not_found`, `skillset_not_found`, `skillset_version_not_found`, `org_not_found`, `provider_not_found`, `announcement_not_found`, `broadcast_not_found`, `notification_not_found`, `audit_not_found`, `redemption_code_not_found`, …
 
 The target resource does not exist, **or** it exists but is not visible to the caller (private skill outside their access scope). The two cases are intentionally not distinguished — disclosing existence is itself information.
 
 **Client action:** for known-good identifiers, this likely means a visibility issue. For typed identifiers, verify the GUID / name.
+
+### skill_dependency_not_found
+
+A skill in a dependency closure (#968) could not be resolved — either the referenced `<name-or-guid>@<version>` / `<name>@<dist-tag>` does not exist, or it is a private skill the caller cannot read. Surfaced at publish time (a new version declares a `depends-on` ref that won't resolve) and from `GET /api/v1/skills/{id}/closure`. The **skillset** closure + publish paths (#969) reuse this code verbatim — a skillset member ref, or a member's transitive dependency, that won't resolve surfaces here too. As with every `resource_not_found`, "missing" and "not visible" are intentionally indistinguishable.
+
+**Client action:** verify each `depends-on` ref points at a published, readable skill version. Publish or share the dependency first, then retry.
 
 ---
 
 ## resource_conflict
 
 **HTTP:** `409 Conflict`
-**Common subcodes (lowercase post-#585):** `skill_name_exists`, `reconcile_already_running`, `redemption_code_expired`, `redemption_code_already_redeemed`, `redemption_code_already_invalidated`, `old_repo_not_confirmed`, …
+**Common subcodes (lowercase post-#585):** `skill_name_exists`, `skillset_name_exists`, `skillset_version_exists`, `dependency_cycle`, `dependency_conflict`, `reconcile_already_running`, `redemption_code_expired`, `redemption_code_already_redeemed`, `redemption_code_already_invalidated`, `old_repo_not_confirmed`, …
 
 The request collides with current state — a duplicate skill name on create, a concurrent modification, a job that's already running, etc.
 
 **Client action:** read `detail` to decide. For duplicates, prompt the user for a different value. For concurrent modifications, refetch and retry.
+
+### dependency_cycle
+
+The skill dependency graph (#968) contains a cycle — following `depends-on` refs eventually loops back to a skill already on the path. A closure with a cycle cannot be installed in any order. Surfaced at publish time and from `GET /api/v1/skills/{id}/closure`, and identically from the skillset closure/publish paths (#969).
+
+**Client action:** break the cycle by removing one of the offending `depends-on` refs. The `detail` names a skill involved in the loop.
+
+### dependency_conflict
+
+Two different versions of the **same** skill appear in one dependency closure (#968) — e.g. `a` depends on `b@1.0` while `a`'s other dependency `c` depends on `b@2.0`. Only one version of a given skill can be installed in a closure. The skillset closure (#969) reuses this verbatim: two members (or their transitive deps) that pin the same skill to different versions collide here.
+
+**Client action:** align the conflicting pins so every path resolves the skill to the same `<major.minor>` version, then retry.
 
 ---
 
@@ -220,6 +238,9 @@ Clients pinned to the old `SCREAMING_SNAKE_CASE` codes need to switch to the low
 | `SKILL_NAME_EXISTS` | 409 | `skill_name_exists` | `resource_conflict` |
 | `SKILL_NOT_FOUND` | 404 | `skill_not_found` | `resource_not_found` |
 | `SKILL_VERSION_NOT_FOUND` | 404 | `skill_version_not_found` | `resource_not_found` |
+| _(new in #968)_ | 404 | `skill_dependency_not_found` | `resource_not_found` |
+| _(new in #968)_ | 409 | `dependency_cycle` | `resource_conflict` |
+| _(new in #968)_ | 409 | `dependency_conflict` | `resource_conflict` |
 | `UPSTREAM_DOWN` | 502 | `upstream_down` | `upstream_unavailable` |
 
 Format rule for future codes: lowercase ASCII, words joined by `_`, no leading/trailing `_`. Pick from the parent §1.4 vocabulary when generic; add a specific subcode only when the caller needs to branch on it.

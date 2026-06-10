@@ -101,9 +101,9 @@ Permissions are issued by NyxID as part of the proxy-forwarded identity. Roles m
 | Permission | Typical role | Endpoints it unlocks |
 |---|---|---|
 | `ornn:skill:read` | `ornn-user` | `GET /skills/:idOrName/json`, `POST /skill-format/validate` |
-| `ornn:skill:create` | `ornn-user` | `POST /skills`, `POST /skills/pull` |
-| `ornn:skill:update` | `ornn-user` | `PUT /skills/:id`, `PUT /skills/:id/permissions`, `POST /skills/:id/refresh`, `PATCH /skills/:idOrName/versions/:version` |
-| `ornn:skill:delete` | `ornn-user` | `DELETE /skills/:id`, `DELETE /skills/:idOrName/versions/:version` |
+| `ornn:skill:create` | `ornn-user` | `POST /skills`, `POST /skills/pull`, `POST /skillsets` |
+| `ornn:skill:update` | `ornn-user` | `PUT /skills/:id`, `PUT /skills/:id/permissions`, `POST /skills/:id/refresh`, `PATCH /skills/:idOrName/versions/:version`, `PUT /skillsets/:id`, `PUT /skillsets/:id/permissions` |
+| `ornn:skill:delete` | `ornn-user` | `DELETE /skills/:id`, `DELETE /skills/:idOrName/versions/:version`, `DELETE /skillsets/:id` |
 | `ornn:skill:build` | `ornn-user` | `POST /skills/generate`, `POST /skills/generate/from-source`, `POST /skills/generate/from-openapi` |
 | `ornn:playground:use` | `ornn-user` | `POST /playground/chat` |
 | `ornn:admin:skill` | `ornn-admin` | All `/admin/*` skill-scoped routes; admin force-audit; sectioned platform settings; mirror config; announcements / broadcasts |
@@ -162,6 +162,9 @@ The codes below appear across many endpoints. Per-endpoint sections list any add
 | `AUDIT_NOT_FOUND` | 404 | No audit has been run for the requested skill / version. |
 | `ORG_NOT_FOUND` | 404 | Org id does not resolve, or NyxID will not return it to the caller. |
 | `SKILL_VERSION_NOT_FOUND` | 404 | Version string does not exist on the skill. |
+| `skill_dependency_not_found` | 404 | A `depends-on` ref in a dependency closure doesn't resolve or isn't visible (#968). |
+| `dependency_cycle` | 409 | The dependency closure graph loops back on itself (#968). |
+| `dependency_conflict` | 409 | One skill is pinned to two versions within the same closure (#968). |
 | `SAME_VERSION` | 400 | `from` and `to` parameters in a diff are identical. |
 | `INVALID_CONTENT_TYPE` | 400 | Endpoint expected `application/zip` (or `application/octet-stream`) and got something else. |
 | `EMPTY_BODY` | 400 | Request body was zero-length when the endpoint required bytes. |
@@ -520,6 +523,41 @@ Response 200:
 | Code | Status | Cause |
 |---|---|---|
 | `SKILL_NOT_FOUND` | 404 | Same as §3.4. |
+
+### 3.6a Resolve dependency closure — `GET /api/v1/skills/:idOrName/closure`
+
+Resolve the full **transitive** dependency closure of a skill version (#968). A skill declares direct dependencies in SKILL.md frontmatter under `metadata.depends-on` (an array of `<name-or-guid>@<major.minor>` or `<name>@<dist-tag>` refs — no semver ranges, no self-references). This endpoint walks that graph and returns every transitive dependency.
+
+**Auth: optional.** Anonymous callers resolve against public skills only; a public skill that transitively depends on a private skill you can't read surfaces that node as `skill_dependency_not_found` (existence is not leaked).
+
+Path param: `:idOrName`. Query param: `version` (optional) — literal `<major>.<minor>` or a dist-tag; defaults to the skill's latest.
+
+Items come back in **deps-first topological order** — every dependency precedes the dependents that pin it, so installing in array order is always safe. Shared nodes (diamonds) appear exactly once.
+
+Response 200:
+
+```jsonc
+{
+  "data": {
+    "items": [
+      { "guid": "skl_...", "name": "pdf-tools",  "version": "1.0", "skillHash": "sha256:...", "depth": 1 },
+      { "guid": "skl_...", "name": "report-base", "version": "2.3", "skillHash": "sha256:...", "depth": 0 }
+    ]
+  },
+  "error": null
+}
+```
+
+| Code | Status | Cause |
+|---|---|---|
+| `dependency_cycle` | 409 | The dependency graph loops back on itself. |
+| `dependency_conflict` | 409 | One skill is pinned to two versions within the closure. |
+| `skill_dependency_not_found` | 404 | A dependency ref doesn't resolve or isn't visible. |
+| `skill_not_found` | 404 | The root skill / version is unknown (or not visible). |
+
+The same closure is validated at **publish time** (`POST /skills`, `PUT /skills/:id`): a `depends-on` ref that won't resolve, forms a cycle, or conflicts fails the publish before the version is committed.
+
+SDK: `client.resolveClosure(idOrName, { version })` and `client.pullClosure(idOrName, { version })` (TypeScript); `client.resolve_closure(...)` and `client.pull_closure(...)` (Python). `pullClosure` / `pull_closure` resolves the closure and downloads each package in topological order.
 
 ### 3.7 Diff versions — `GET /api/v1/skills/:idOrName/versions/:fromVersion/diff/:toVersion`
 
@@ -1186,6 +1224,64 @@ Response 200:
 ```
 
 The path is intentionally outside `/skills/` so it does not collide with `GET /skills/:id`. No errors specific to this endpoint.
+
+---
+
+## 5a. Skillsets (#969)
+
+A **skillset** is a named, versioned, owned, visibility-scoped meta-package that references N member skills and carries a `kind`. One call (`/closure`) resolves + delivers the whole set — including each member's dependency closure (§3.6a). Ownership / visibility / immutable-versioning mirror skills; permission scopes **reuse** `ornn:skill:{create,read,update,delete}` (a dedicated `ornn:skillset:*` split is a tracked follow-up).
+
+- `kind` enum: `generic` (default) | `consensus-supported`. The latter is an author **claim** that the members are an independent, comparable set — not a guarantee. Ornn delivers the set; the agent runs any consensus in its own runtime.
+- `members`: 2..N skill refs, each `<name-or-guid>@<major.minor>` or `<name>@<dist-tag>` (same grammar as `depends-on`). No nested skillsets. Validated on publish (each must resolve to a readable skill version; union closure conflict-free).
+- `instructions` (master prompt, #978): **REQUIRED**, versioned markdown telling an agent **HOW** to use the set (orchestration, ordering, which member to pick when). 1..8000 chars (trimmed; whitespace-only rejected). Distinct from `description` (short ≤1024 summary). **Required on BOTH create and publish, with NO carry-forward** — unlike `description`/`kind`/`tags` (a publish may omit them to inherit the prior version), every version must restate its own master prompt. Stored opaque (no rendering / sanitization / templating / linting / search-indexing). Surfaced verbatim on the detail read and as a root field on `/closure`.
+
+### 5a.1 Create skillset — `POST /api/v1/skillsets`
+
+Requires `ornn:skill:create`. Created **private** by default. JSON body:
+
+```jsonc
+{
+  "name": "review-set",
+  "description": "A curated comparison set.",
+  "instructions": "Run pdf-tools first, then feed its output to csv-tools…",  // REQUIRED, 1..8000 chars
+  "kind": "consensus-supported",   // optional, default "generic"
+  "tags": ["review"],              // optional
+  "members": ["pdf-tools@1.0", "csv-tools@2.1"],   // 2..N
+  "version": "1.0"                 // optional, default "1.0"
+}
+```
+
+Response 201 + `Location: /api/v1/skillsets/:guid`. Member validation runs before any write — a missing member → `skill_dependency_not_found` (404), a conflicting union closure → `dependency_conflict` (409). Duplicate name → `skillset_name_exists` (409). A missing/empty/whitespace-only `instructions` → `400` validation error.
+
+### 5a.2 Get skillset — `GET /api/v1/skillsets/:idOrName`
+
+**Auth: optional** (anon sees public only; private → `skillset_not_found`). Query `version` (optional). Returns `{ guid, name, description, instructions, kind, tags, members, version, latestVersion, isPrivate, createdBy, sharedWithUsers, sharedWithOrgs, createdOn, updatedOn }` — `instructions` is the version's master prompt.
+
+### 5a.3 List versions — `GET /api/v1/skillsets/:idOrName/versions`
+
+**Auth: optional** (visibility matches the detail read). Returns `{ items: [{ version, kind, memberCount, createdBy, createdOn }] }`, newest first.
+
+### 5a.4 Resolve closure — `GET /api/v1/skillsets/:idOrName/closure`
+
+**Auth: optional.** One-call resolve: the union of all member skills **plus** each member's transitive dependency closure (§3.6a), deduplicated and topo-sorted (deps-first). Query `version` (optional). The success body carries the version's master prompt as a **root sibling** of `items`: `{ "data": { "instructions": "…", "items": [ … ] }, "error": null }` (the skill `/skills/:id/closure` body stays `{ items }`, unchanged). Same error codes as §3.6a: `dependency_cycle` / `dependency_conflict` (409), `skill_dependency_not_found` (404), plus `skillset_not_found` (404) for an unknown/invisible root. A public skillset whose member transitively pins a private skill surfaces `skill_dependency_not_found` for that node to anonymous callers (no leak).
+
+### 5a.5 Publish new version — `PUT /api/v1/skillsets/:id`
+
+Requires `ornn:skill:update` + author/admin. JSON body `{ members, version, instructions, description?, kind?, tags? }` — `instructions` is **REQUIRED** here too (no carry-forward; each version restates its own master prompt). Appends an immutable `guid@version` and advances `latestVersion`; prior versions never mutate. Re-publishing an existing version → `skillset_version_exists` (409).
+
+### 5a.6 Replace permissions — `PUT /api/v1/skillsets/:id/permissions`
+
+Requires `ornn:skill:update` + author/admin. JSON body `{ isPrivate, sharedWithUsers, sharedWithOrgs }` (same shape as skills). An owner may only share into orgs they belong to.
+
+### 5a.7 Delete skillset — `DELETE /api/v1/skillsets/:id`
+
+Requires `ornn:skill:delete` + author/admin. Cascades all versions. Returns `{ data: { success: true } }`.
+
+### 5a.8 Search skillsets — `GET /api/v1/skillset-search`
+
+**Auth: optional** (anon → public scope). Query: `kind`, `scope`, `tags` (CSV, AND-match), `page`/`pageSize` or `cursor`/`limit`. Plain keyword/filter discovery — no semantic ranking, no facets, no popularity ranking. Cursor pagination per §1.10.
+
+SDK: `client.createSkillset` / `getSkillset` / `publishSkillset` / `setSkillsetPermissions` / `deleteSkillset` / `getSkillsetClosure` / `searchSkillsets` (TypeScript); `create_skillset` / `get_skillset` / `publish_skillset` / `set_skillset_permissions` / `delete_skillset` / `resolve_skillset_closure` / `search_skillsets` (Python).
 
 ---
 
