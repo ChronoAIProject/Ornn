@@ -1768,6 +1768,17 @@
     "member": "member",
     "dependency": "dep"
   },
+  "skillsetGraph": {
+    "sectionTitle": "Member dependencies",
+    "label": "Dependency graph",
+    "help": "Optional. Click a member, then another, to declare “runs before”. Edges are stored inside the master prompt — no skill is modified.",
+    "needMembers": "Add at least two members to draw dependencies.",
+    "pickTarget": "Pick a target for {{ref}}…",
+    "removeEdge": "Remove edge {{from}} → {{to}}",
+    "cycleWarning": "Members form a cycle — order is advisory.",
+    "emptyReadonly": "No members to graph.",
+    "emptyDeps": "No dependencies declared between members."
+  },
   "skillsetPermissions": {
     "publicDesc": "Anyone on Ornn can find and use this skillset, including unauthenticated visitors.",
     "orgsDesc": "Every admin and member of a checked org can see and use this skillset.",

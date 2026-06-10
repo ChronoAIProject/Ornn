@@ -24,7 +24,9 @@ import { ReadmeViewer } from "@/components/skill/ReadmeViewer";
 import { VersionPicker } from "@/components/skill/VersionPicker";
 import { KindBadge } from "@/components/skillset/KindBadge";
 import { SkillsetClosureViewer } from "@/components/skillset/SkillsetClosureViewer";
+import { SkillsetDependencyGraph } from "@/components/skillset/SkillsetDependencyGraph";
 import { SkillsetPermissionsModal } from "@/components/skillset/SkillsetPermissionsModal";
+import { parseDeps } from "@/lib/skillsetDeps";
 import { useToastStore } from "@/stores/toastStore";
 import { useCurrentUser } from "@/stores/authStore";
 import {
@@ -93,6 +95,10 @@ export function SkillsetDetailPage() {
 
   const isOwner = !!user && skillset.createdBy === user.id;
   const latestVersion = versions[0]?.version ?? skillset.latestVersion;
+
+  // Dependency edges are a PROJECTION of the master prompt (#1064) — parsed
+  // read-only here; no write path, no new API call.
+  const depEdges = parseDeps(skillset.instructions).edges;
 
   function handleVersionChange(versionOrLatest: string | null) {
     const next = new URLSearchParams(searchParams);
@@ -202,6 +208,15 @@ export function SkillsetDetailPage() {
                     {t("skillsetDetail.noPrompt", "No master prompt for this version.")}
                   </p>
                 )}
+              </section>
+
+              {/* Member-dependency graph (#1064) — read-only projection of the
+                  master prompt's managed deps block. No write path. */}
+              <section className="card-impression rounded border border-subtle bg-card p-6 min-w-0">
+                <h2 className="mb-3 flex items-center gap-2 border-b border-dashed border-subtle pb-3 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-meta">
+                  {t("skillsetGraph.sectionTitle", "Member dependencies")}
+                </h2>
+                <SkillsetDependencyGraph readOnly members={skillset.members} edges={depEdges} />
               </section>
 
               {/* Resolved closure — flat depth-indented list. */}

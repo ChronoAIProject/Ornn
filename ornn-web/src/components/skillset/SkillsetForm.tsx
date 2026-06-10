@@ -24,6 +24,8 @@ import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { SkillsetMemberPicker } from "@/components/skillset/SkillsetMemberPicker";
 import { MasterPromptEditor } from "@/components/skillset/MasterPromptEditor";
+import { SkillsetDependencyGraph } from "@/components/skillset/SkillsetDependencyGraph";
+import { parseDeps, serializeDeps, pruneEdges, type Edge } from "@/lib/skillsetDeps";
 import {
   SKILLSET_KINDS,
   SKILLSET_MIN_MEMBERS,
@@ -74,11 +76,36 @@ export function SkillsetForm({
   const [instructions, setInstructions] = useState(initial?.instructions ?? "");
   const [kind, setKind] = useState<SkillsetKind>(initial?.kind ?? "generic");
   const [tags, setTags] = useState<string[]>(initial?.tags ?? []);
-  const [members, setMembers] = useState<string[]>(initial?.members ?? []);
+  const [members, setMembersRaw] = useState<string[]>(initial?.members ?? []);
   const [version, setVersion] = useState(initial?.version ?? (mode === "create" ? "1.0" : ""));
   const [submitted, setSubmitted] = useState(false);
 
-  const promptError = validateMasterPrompt(instructions);
+  // Dependency edges are a PROJECTION of the single `instructions` state — the
+  // master prompt carries them inside one managed block (#1064). Never a
+  // parallel state copy: we re-derive on every render and re-serialize on edit.
+  const { edges, promptBody } = parseDeps(instructions);
+
+  /** Re-serialize the prompt with a new edge set, keeping the prose body. */
+  function setEdges(nextEdges: Edge[]) {
+    setInstructions(serializeDeps(promptBody, pruneEdges(nextEdges, members)));
+  }
+
+  /** The MasterPromptEditor edits the PROSE BODY; the managed block is
+   * preserved by re-serializing the current edges around the new body. */
+  function setPromptBody(nextBody: string) {
+    setInstructions(serializeDeps(nextBody, edges));
+  }
+
+  /** Wrap setMembers so removing a member re-prunes its edges from the prompt.
+   * `edges` / `promptBody` are the projection of the current `instructions`. */
+  function setMembers(nextMembers: string[]) {
+    setMembersRaw(nextMembers);
+    setInstructions(serializeDeps(promptBody, pruneEdges(edges, nextMembers)));
+  }
+
+  // Validate the PROSE body, not the serialized block — the required master
+  // prompt is the author's prose, the managed block is machinery.
+  const promptError = validateMasterPrompt(promptBody);
 
   const nameValid = mode === "edit" || NAME_REGEX.test(name.trim());
   const descriptionValid = description.trim().length > 0 && description.trim().length <= 1024;
@@ -242,10 +269,19 @@ export function SkillsetForm({
         }
       />
 
-      {/* Master prompt. */}
+      {/* Dependency graph (#1064) — edges live inside the master prompt; this
+          editor never mutates a member skill. */}
+      <SkillsetDependencyGraph
+        members={members}
+        edges={edges}
+        onEdgesChange={setEdges}
+      />
+
+      {/* Master prompt — edits the PROSE BODY; the managed deps block round-trips
+          through the codec untouched. */}
       <MasterPromptEditor
-        value={instructions}
-        onChange={setInstructions}
+        value={promptBody}
+        onChange={setPromptBody}
         error={
           submitted && !promptValid
             ? (t("skillsetForm.promptError", "A master prompt is required.") as string)
