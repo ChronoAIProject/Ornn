@@ -43,6 +43,11 @@ vi.mock("@/components/skillset/SkillsetPermissionsModal", () => ({
 vi.mock("@/components/skill/ReadmeViewer", () => ({
   ReadmeViewer: ({ content }: { content: string }) => <div data-testid="readme">{content}</div>,
 }));
+// Stub the Mermaid renderer (heavy in jsdom) so the read-only graph renders a
+// marker we can assert on.
+vi.mock("@/components/docs/DocsMermaid", () => ({
+  MermaidBlock: ({ chart }: { chart: string }) => <div data-testid="mermaid">{chart}</div>,
+}));
 
 import { SkillsetDetailPage } from "./SkillsetDetailPage";
 import type { SkillsetDetail } from "@/types/skillset";
@@ -137,5 +142,37 @@ describe("SkillsetDetailPage", () => {
     useSkillset.mockReturnValue({ data: undefined, isLoading: false, error: new Error("404") });
     renderAt("/skillsets/missing");
     expect(screen.getByText("Skillset not found")).toBeInTheDocument();
+  });
+
+  it("shows the read-only dependency graph when the prompt carries a deps block", () => {
+    useSkillset.mockReturnValue({
+      data: {
+        ...DETAIL,
+        instructions: [
+          "Run A, then B.",
+          "",
+          "<!-- ornn:deps:start -->",
+          "```mermaid",
+          "flowchart TD",
+          '  n0["a@1.0"] --> n1["b@1.0"]',
+          "```",
+          "<!-- ornn:deps:end -->",
+        ].join("\n"),
+      },
+      isLoading: false,
+      error: null,
+    });
+    renderAt("/skillsets/research-bundle");
+    expect(screen.getByText("Member dependencies")).toBeInTheDocument();
+    // The graph renders the flowchart via the stubbed MermaidBlock.
+    expect(screen.getByTestId("mermaid")).toHaveTextContent("flowchart TD");
+  });
+
+  it("shows the empty graph state when the prompt has no deps block", () => {
+    // DETAIL.instructions has no managed block → empty-deps state, no mermaid.
+    renderAt("/skillsets/research-bundle");
+    expect(screen.getByText("Member dependencies")).toBeInTheDocument();
+    expect(screen.getByText(/No dependencies declared/)).toBeInTheDocument();
+    expect(screen.queryByTestId("mermaid")).not.toBeInTheDocument();
   });
 });
