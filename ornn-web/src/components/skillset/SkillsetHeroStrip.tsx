@@ -29,6 +29,15 @@ export interface SkillsetHeroStripProps {
   onManagePermissions?: (() => void) | undefined;
 }
 
+/** Format a date in the user's locale, abbreviated. Returns ISO on parse
+ * failure. Mirrors SkillHeroStrip so both hero footers read identically. */
+function formatShortDate(iso: string | undefined): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+}
+
 export function SkillsetHeroStrip({
   skillset,
   isOwner,
@@ -46,6 +55,9 @@ export function SkillsetHeroStrip({
   const visibilityLabel = skillset.isPrivate
     ? t("common.private", "Private")
     : t("common.public", "Public");
+
+  const ownerName =
+    skillset.createdByDisplayName || skillset.createdByEmail || skillset.createdBy;
 
   return (
     <DetailHeroStrip
@@ -71,8 +83,10 @@ export function SkillsetHeroStrip({
       }
       pills={
         <>
-          {/* Kind */}
-          <span className="inline-flex items-center gap-1.5 rounded-sm border border-info/40 bg-info-soft px-2.5 py-1 font-mono text-[11px] uppercase tracking-wider text-info">
+          {/* Kind — neutral metal pill so the trio reads kind·visibility·version
+              instead of two identical info-soft pills (the skill hero varies its
+              pills the same way). */}
+          <span className="inline-flex items-center gap-1.5 rounded-sm border border-strong-edge px-2.5 py-1 font-mono text-[11px] uppercase tracking-wider text-strong">
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
               <rect x="3" y="3" width="7" height="7" rx="1" />
               <rect x="14" y="14" width="7" height="7" rx="1" />
@@ -94,6 +108,24 @@ export function SkillsetHeroStrip({
           <span className="inline-flex items-center gap-1.5 rounded-sm border border-strong-edge px-2.5 py-1 font-mono text-[11px] uppercase tracking-wider text-strong">
             v{skillset.version}
           </span>
+        </>
+      }
+      footer={
+        <>
+          <span className="inline-flex h-[18px] w-[18px] items-center justify-center rounded-full bg-accent text-page text-[10px] font-bold font-text">
+            {ownerName.charAt(0).toUpperCase()}
+          </span>
+          <span className="text-body">
+            <strong className="font-medium">{ownerName}</strong>
+          </span>
+          <span className="opacity-50">·</span>
+          <span>{t("skillDetail.heroPublishedOn", "Published {{date}}", { date: formatShortDate(skillset.createdOn) })}</span>
+          {skillset.updatedOn && skillset.updatedOn !== skillset.createdOn && (
+            <>
+              <span className="opacity-50">·</span>
+              <span>{t("skillDetail.heroUpdatedOn", "Updated {{date}}", { date: formatShortDate(skillset.updatedOn) })}</span>
+            </>
+          )}
         </>
       }
       actions={

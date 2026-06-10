@@ -153,14 +153,28 @@ export function SkillsetDetailPage() {
             </p>
           )}
 
-          {/* Main grid: left = master prompt + closure; right = members + meta. */}
-          <main className="grid gap-4 lg:grid-cols-[1fr_320px]">
-            <div className="flex flex-col gap-4 min-w-0">
-              {/* Master prompt (#978) — rendered markdown. */}
-              <section className="card-impression rounded border border-subtle bg-card p-6 min-w-0">
-                <h2 className="mb-3 flex items-center gap-2 border-b border-dashed border-subtle pb-3 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-meta">
-                  {t("skillsetDetail.masterPrompt", "Master prompt")}
-                </h2>
+          {/* Main grid: left = master prompt + deps + closure; right = members +
+              meta. Mirrors SkillDetailPage — on lg+ the grid is locked to a
+              viewport-relative height so each column scrolls its own long
+              content (master prompt / closure can grow) instead of growing the
+              page; on mobile it falls back to natural page flow. */}
+          <main className="flex flex-col gap-4 lg:flex-row lg:items-stretch lg:h-[calc(100vh-280px)] lg:min-h-[480px]">
+            <div className="flex flex-col gap-4 min-w-0 lg:flex-1 lg:min-h-0 lg:overflow-y-auto lg:pr-1">
+              {/* Master prompt (#978) — rendered markdown. Shared RailCard
+                  chrome so the left column reads identically to the skill
+                  detail's section cards (#1067 reuse mandate). */}
+              <RailCard
+                className="min-w-0"
+                title={t("skillsetDetail.masterPrompt", "Master prompt")}
+                icon={
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <polyline points="14 2 14 8 20 8" />
+                    <line x1="8" y1="13" x2="16" y2="13" />
+                    <line x1="8" y1="17" x2="13" y2="17" />
+                  </svg>
+                }
+              >
                 {skillset.instructions ? (
                   <ReadmeViewer content={skillset.instructions} />
                 ) : (
@@ -168,27 +182,45 @@ export function SkillsetDetailPage() {
                     {t("skillsetDetail.noPrompt", "No master prompt for this version.")}
                   </p>
                 )}
-              </section>
+              </RailCard>
 
               {/* Member-dependency graph (#1064) — read-only projection of the
                   master prompt's managed deps block. No write path. */}
-              <section className="card-impression rounded border border-subtle bg-card p-6 min-w-0">
-                <h2 className="mb-3 flex items-center gap-2 border-b border-dashed border-subtle pb-3 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-meta">
-                  {t("skillsetGraph.sectionTitle", "Member dependencies")}
-                </h2>
+              <RailCard
+                className="min-w-0"
+                title={t("skillsetGraph.sectionTitle", "Member dependencies")}
+                icon={
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                    <circle cx="6" cy="6" r="2.5" />
+                    <circle cx="18" cy="6" r="2.5" />
+                    <circle cx="12" cy="18" r="2.5" />
+                    <path d="M7.7 7.7 10.6 16M16.3 7.7 13.4 16" />
+                  </svg>
+                }
+              >
                 <SkillsetDependencyGraph readOnly members={skillset.members} edges={depEdges} />
-              </section>
+              </RailCard>
 
               {/* Resolved closure — flat depth-indented list. */}
-              <section className="card-impression rounded border border-subtle bg-card p-6 min-w-0">
-                <h2 className="mb-3 flex items-center gap-2 border-b border-dashed border-subtle pb-3 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-meta">
-                  {t("skillsetDetail.resolvedClosure", "Resolved closure")}
-                </h2>
+              <RailCard
+                className="min-w-0"
+                title={t("skillsetDetail.resolvedClosure", "Resolved closure")}
+                icon={
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                    <line x1="8" y1="6" x2="21" y2="6" />
+                    <line x1="8" y1="12" x2="21" y2="12" />
+                    <line x1="8" y1="18" x2="21" y2="18" />
+                    <line x1="3" y1="6" x2="3.01" y2="6" />
+                    <line x1="3" y1="12" x2="3.01" y2="12" />
+                    <line x1="3" y1="18" x2="3.01" y2="18" />
+                  </svg>
+                }
+              >
                 <SkillsetClosureViewer items={closure?.items ?? []} />
-              </section>
+              </RailCard>
             </div>
 
-            <aside className="flex flex-col gap-4">
+            <aside className="flex flex-col gap-4 lg:w-[320px] lg:shrink-0 lg:min-h-0 lg:overflow-y-auto">
               {/* Members. */}
               <RailCard
                 title={t("skillsetDetail.members", "Members")}
