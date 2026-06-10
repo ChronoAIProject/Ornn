@@ -370,6 +370,10 @@ export function SkillsetDependencyGraphCanvas({
           connectionRadius={30}
           connectionMode={ConnectionMode.Loose}
           deleteKeyCode={DELETE_KEYS}
+          // The canvas is embedded in a scrolling form — let a plain wheel
+          // scroll the PAGE (don't trap it as graph zoom). Zoom stays available
+          // via the Controls buttons, pinch, and ⌘/ctrl+wheel (#1074).
+          preventScrolling={false}
           proOptions={PRO_OPTIONS}
         >
           <Background variant={BackgroundVariant.Dots} gap={20} size={1} />
