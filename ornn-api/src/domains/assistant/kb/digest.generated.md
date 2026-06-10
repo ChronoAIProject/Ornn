@@ -3,13 +3,13 @@
   Produced by ornn-api/scripts/build-assistant-kb.ts (#970).
   Re-run: `bun run scripts/build-assistant-kb.ts` from ornn-api/.
   budgetTokens: 18000
-  estimatedTokens: 10761
+  estimatedTokens: 10994
   sources:
   - readme: ~1883 tok
   - claude-positioning: ~272 tok
   - architecture: ~219 tok
   - agent-manual-http: ~5486 tok (clipped)
-  - conventions: ~2366 tok
+  - conventions: ~2599 tok (clipped)
   - design-overview: ~487 tok
 -->
 
@@ -719,150 +719,67 @@ Reserved action verbs per resource documented in `ornn-api/src/shared/reservedVe
 
 Both return the same collection shape (`{ items, meta }`).
 
----
-
-## 3. HTTP semantics
-
-### 3.1 Methods
-
-| Method | Semantics |
-|---|---|
-| `GET` | Safe, idempotent read |
-| `POST` | Create, or custom action |
-| `PUT` | Full replace of a resource (idempotent) |
-| `PATCH` | Partial update |
-| `DELETE` | Remove (idempotent) |
-
-Partial updates MUST use `PATCH`. `PUT` MUST accept a complete representation.
-
-### 3.2 Status codes
-
-| Code | Use |
-|---|---|
-| `200 OK` | Successful read / update returning a body |
-| `201 Created` | Successful create. MUST include `Location: /v1/{resource}/{id}` header |
-| `202 Accepted` | Async job accepted (not currently used) |
-| `204 No Content` | Successful delete, or update with no body to return |
-| `400` | `validation_error` |
-| `401` | `authentication_required` |
-| `403` | `permission_denied` |
-| `404` | `resource_not_found` |
-| `409` | `resource_conflict` |
-| `413` | `payload_too_large` |
-| `415` | `unsupported_media_type` |
-| `429` | `rate_limited` |
-| `500` | `internal_error` |
-| `502` / `503` | `upstream_unavailable` |
-
-### 3.3 Content negotiation
-
-When a resource has multiple representations, select via `Accept`:
+### 2.5 Skill dependency closure (#968)
 
 ```
-GET /v1/skills/abc
-Accept: application/json           → JSON metadata + file contents
-Accept: application/zip            → raw ZIP package
+GET /v1/skills/{idOrName}/closure[?version=<major.minor>|<dist-tag>]
 ```
 
-Do not encode representation in the URL path (no `/skills/:id/json`).
+Resolves the full **transitive** dependency closure of a skill version. A skill declares its direct dependencies in SKILL.md frontmatter via `metadata.depends-on` — an array of `<name-or-guid>@<major.minor>` or `<name>@<dist-tag>` refs (no semver ranges). The endpoint walks that graph and returns every transitive dependency.
 
-### 3.4 Idempotency
+- **Auth:** optional. Anonymous callers resolve against public skills only; a public skill that transitively depends on a private skill the caller can't read surfaces that node as `skill_dependency_not_found` (existence not leaked).
+- **Order:** items are returned in deps-first **topological order** — every dependency precedes the dependents that pin it, so installing in array order is always safe. Shared nodes (diamonds) appear exactly once.
+- **Response:** standard collection envelope.
 
-`POST` creates accept optional `Idempotency-Key: <uuid>` header. Server persists the key + response for 24h and returns the cached response on retry. Implementation: middleware layer in `ornn-api/src/middleware/idempotency.ts`.
-
-### 3.5 Bulk operations
-
-Bulk-capable endpoints are symmetric:
-
-```
-POST   /v1/{parent}/{id}/{child}  { <child>Ids: [...] }   # add
-DELETE /v1/{parent}/{id}/{child}  { <child>Ids: [...] }   # remove (body)
-```
-
-Single-item convenience endpoints MAY exist alongside.
-
----
-
-## 4. Query parameters
-
-### 4.1 Naming
-
-- `camelCase` everywhere (matches JSON body convention).
-- Search query param is `q` (never `query`).
-- Booleans are `true` / `false` — omit for "any".
-
-### 4.2 Arrays — repeated keys
-
-```
-?sharedWithOrgs=a&sharedWithOrgs=b&sharedWithOrgs=c
+```json
+{
+  "data": {
+    "items": [
+      { "guid": "…", "name": "pdf-tools", "version": "1.0", "skillHash": "…", "depth": 1 },
+      { "guid": "…", "name": "report-gen", "version": "2.3", "skillHash": "…", "depth": 0 }
+    ]
+  },
+  "error": null
+}
 ```
 
-Never CSV. Never bracket notation. Handler: `c.req.queries('sharedWithOrgs')` returns `string[]`.
+- **Errors:** `dependency_cycle` (409) when the graph loops; `dependency_conflict` (409) when one skill is pinned to two versions in the same closure; `skill_dependency_not_found` (404) when a ref doesn't resolve or isn't visible. See `docs/ERRORS.md`.
 
-### 4.3 Pagination — cursor-only
+The same closure is validated at **publish time**: declaring a `depends-on` ref that can't be resolved, forms a cycle, or conflicts fails the create/update before the version is committed.
+
+SDK helpers: `client.resolveClosure(idOrName, { version })` / `client.pullClosure(...)` (TypeScript), `client.resolve_closure(...)` / `client.pull_closure(...)` (Python).
+
+### 2.6 Skillsets (#969)
+
+A **skillset** is a named, versioned, owned, visibility-scoped meta-package that references N member skills and carries a `kind`. One call resolves + delivers the whole set — including each member's dependency closure (§2.5). The ownership / visibility / immutable-versioning model mirrors skills verbatim; permission scopes **reuse** the existing `ornn:skill:{create,read,update,delete}` (see §5.2 — a dedicated `ornn:skillset:*` scope split is a tracked follow-up).
 
 ```
-?cursor=<opaque>&limit=<1-100>
+POST   /v1/skillsets                       — create (ornn:skill:create; private by default)
+GET    /v1/skillsets/{idOrName}            — read   (optional auth; anon sees public only)
+GET    /v1/skillsets/{idOrName}/versions   — list versions (optional auth)
+GET    /v1/skillsets/{idOrName}/closure    — one-call resolve (optional auth)
+PUT    /v1/skillsets/{id}                  — publish a new immutable version (ornn:skill:update)
+PUT    /v1/skillsets/{id}/permissions      — visibility / sharing (ornn:skill:update)
+DELETE /v1/skillsets/{id}                  — delete + cascade versions (ornn:skill:delete)
+GET    /v1/skillset-search                 — discovery by kind / tags / scope (optional auth)
 ```
 
-- `cursor` is opaque (base64-encoded server-chosen payload). Clients MUST NOT parse.
-- `limit` defaults per-endpoint (typically 20), max 100.
-- Absence of `cursor` = first page.
-- Response `meta.nextCursor` feeds the next request.
-- **Total counts** are NOT part of pagination. Endpoints needing a count expose a sibling (e.g. `GET /v1/skills/counts`) or fold the count into list `meta`.
+- **`kind`:** enum, v1 `{ "generic", "consensus-supported" }` (extensible). Default `generic`. `consensus-supported` is an author **claim** that the members are an independent, comparable set suitable for agent-side consensus — **not a guarantee** (stated honestly; Ornn packages + delivers the set, the agent runs any consensus in its own runtime).
+- **`members`:** 2..N skill refs, each `<name-or-guid>@<major.minor>` or `<name>@<dist-tag>` (the **same** grammar as `depends-on`, §2.5). No nested skillsets in v1 — a skillset references skills only. Validated on publish: every member must resolve to a readable skill version, and the union dependency closure must be conflict-free.
+- **`instructions` (master prompt, #978):** a **REQUIRED**, versioned markdown body telling an agent **HOW** to use the set (orchestration, ordering, which member to pick when). 1..8000 chars (trimmed server-side; a whitespace-only body is rejected). Distinct from `description` (a short ≤1024-char human summary). **Required on BOTH create and publish, with NO carry-forward** — unlike `description`/`kind`/`tags` (which a publish may omit to inherit the prior version's value), every published version must explicitly state its own master prompt. Stored opaque — Ornn does not render, sanitize, template, lint, or search-index it. Surfaced verbatim on `GET /v1/skillsets/{idOrName}` and as a root field on `/closure`.
+- **Create / publish bodies (JSON):**
 
-### 4.4 Filters
+```json
+POST /v1/skillsets
+{ "name": "review-set", "description": "…",
+  "instructions": "Run pdf-tools first, then feed its output to csv-tools…",
+  "kind": "consensus-supported",
+  "tags": ["review"], "members": ["pdf-tools@1.0", "csv-tools@2.1"], "version": "1.0" }
+```
 
-Endpoint-specific. Rules:
+`GET /v1/skillsets/{idOrName}` returns the detail object including the version's `instructions`.
 
-- Orthogonal filters are separate params. Do NOT overload (avoid `scope=shared-with-me|mine|...`).
-- Booleans instead of tri-state enums when possible.
-- For `/v1/skills`:
-  - `visibility` — `public | private` (omit for "any" within caller's reach)
-  - `owner` — `me | others` (omit for "any")
-  - `sharedWith` — `me` (filters to skills shared with caller)
-  - `isSystem` — boolean (omit for "any")
-
----
-
-## 6. SSE streaming
-
-### 6.1 Event naming
-
-Format: `<resource>_<event>`, snake_case.
-
-Shared event vocabulary across endpoints:
-
-| Suffix | Meaning |
-|---|---|
-| `_start` | Stream opened |
-| `_text_delta` | Incremental text content |
-| `_tool_call` | Model requests tool invocation |
-| `_tool_result` | Tool output |
-| `_file_output` | File produced during run |
-| `_validation_error` | Recoverable validation failure |
-| `_error` | Terminal error |
-| `_complete` / `_finish` | Stream ended normally |
-
-Endpoints pick a subset and MAY add endpoint-specific events with the same prefix.
-
-### 6.2 Current endpoint mapping
-
-| Endpoint | Events |
-|---|---|
-| `POST /v1/skills/generate` | `generation_start`, `generation_delta`, `generation_validation_error`, `generation_error`, `generation_complete` |
-| `POST /v1/playground/chat` | `chat_start`, `chat_text_delta`, `chat_tool_call`, `chat_tool_result`, `chat_file_output`, `chat_error`, `chat_finish` |
-| `POST /v1/assistant/chat` | `chat_start`, `chat_text_delta`, `chat_error`, `chat_finish` |
-
-### 6.3 Transport rules
-
-- `Content-Type: text/event-stream`
-- Each event has a `type` field in the JSON payload plus SSE-native `event:` line set to the same value
-- Keep-alive events every `config.sseKeepAliveIntervalMs` milliseconds (JSON `{ type: "keepalive" }`)
-- Clients abort via `AbortSignal` / closing the connection
-- `Last-Event-ID` reconnection: **not supported** in v1; clients start over on reconnect
-
----
+- **Closure:** `GET /v1/skillsets/{idOrName}/closure` resolves `roots = members` through the **same** §2.5 resolver — the union of all members plus each member's transitive dependency closure, deduplicated and topo-sorted (deps-first). The success body carries the version's master prompt as a **root sibling** of `items`: `{ "data": { "instructions": "…", "items": [ … ] }, "error": null }` (the skill `/skills/:id/closure` envelope stays `{ items }`, unchanged). Same error codes as §2.5: `dependency_cycle` (409), `dependency_conflict` (409), `skill_dependency_not_found` (404). Anonymous callers resolving a public skillset whose member transitively pins a private skill get `skill_dependency_not_found`
 
 ---
 
