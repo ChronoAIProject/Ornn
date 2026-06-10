@@ -124,6 +124,21 @@ const PlaygroundPage = lazy(() =>
 const MySkillsPage = lazy(() =>
   import("@/pages/skill/MySkillsPage").then((m) => ({ default: m.MySkillsPage })),
 );
+const SkillsetExplorePage = lazy(() =>
+  import("@/pages/SkillsetExplorePage").then((m) => ({ default: m.SkillsetExplorePage })),
+);
+const SkillsetDetailPage = lazy(() =>
+  import("@/pages/SkillsetDetailPage").then((m) => ({ default: m.SkillsetDetailPage })),
+);
+const SkillsetNewPage = lazy(() =>
+  import("@/pages/SkillsetNewPage").then((m) => ({ default: m.SkillsetNewPage })),
+);
+const SkillsetEditPage = lazy(() =>
+  import("@/pages/SkillsetEditPage").then((m) => ({ default: m.SkillsetEditPage })),
+);
+const MySkillsetsPage = lazy(() =>
+  import("@/pages/MySkillsetsPage").then((m) => ({ default: m.MySkillsetsPage })),
+);
 const ServiceDetailPage = lazy(() =>
   import("@/pages/ServiceDetailPage").then((m) => ({ default: m.ServiceDetailPage })),
 );
@@ -259,6 +274,11 @@ const router = createBrowserRouter(
           path="/skills/:idOrName/audits"
           element={<SkillAuditHistoryPage />}
         />
+        {/* Skillsets registry (#1059). `/skillsets/new` + `/skillsets/:id/edit`
+            are auth-guarded below; static segments win the match over the
+            `:idOrName` capture regardless of declaration group. */}
+        <Route path="/skillsets" element={<SkillsetExplorePage />} />
+        <Route path="/skillsets/:idOrName" element={<SkillsetDetailPage />} />
       </Route>
 
       {/* Protected routes */}
@@ -273,6 +293,12 @@ const router = createBrowserRouter(
           <Route path="/playground" element={<PlaygroundPage />} />
 
           <Route path="/my-skills" element={<MySkillsPage />} />
+
+          {/* Skillsets create/edit/mine (#1059) — auth-guarded. */}
+          <Route path="/skillsets/new" element={<SkillsetNewPage />} />
+          <Route path="/skillsets/:id/edit" element={<SkillsetEditPage />} />
+          <Route path="/my-skillsets" element={<MySkillsetsPage />} />
+
           <Route path="/services/:id" element={<ServiceDetailPage />} />
           <Route path="/notifications" element={<NotificationsPage />} />
           <Route path="/settings" element={<SettingsPage />} />

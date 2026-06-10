@@ -77,6 +77,7 @@
     "home": "Home",
     "registry": "Registry",
     "build": "Build",
+    "skillsets": "Skillsets",
     "docs": "Docs",
     "news": "News",
     "contact": "Contact",
@@ -90,6 +91,7 @@
     "lightMode": "Light Mode",
     "darkMode": "Dark Mode",
     "myProfile": "My Profile",
+    "mySkillsets": "My Skillsets",
     "myOrgs": "My Organizations",
     "myServices": "My Services",
     "adminServices": "Admin Services",
@@ -1651,6 +1653,115 @@
     "fieldPrivateKey": "App private key (PEM)",
     "confirmTitle": "Confirm: abandon current mirror repo",
     "confirmConfirm": "Yes, change repo"
+  },
+  "skillsetKind": {
+    "generic": "Bundle",
+    "genericLong": "Generic bundle",
+    "consensusSupported": "Consensus",
+    "consensusSupportedLong": "Consensus-supported"
+  },
+  "skillsetExplore": {
+    "publicTab": "Public",
+    "mineTab": "Mine",
+    "sharedTab": "Shared with me",
+    "kindLabel": "Kind",
+    "kindAll": "All kinds",
+    "tagsLabel": "Tags",
+    "addTag": "add tag…",
+    "create": "New skillset",
+    "nonePublic": "No public skillsets match",
+    "noneMine": "You haven't created any skillsets yet",
+    "noneShared": "Nothing has been shared with you yet",
+    "tryAdjusting": "Try adjusting the kind or tag filters.",
+    "createFirst": "Bundle two or more skills into your first skillset.",
+    "sharedIntro": "When someone grants you access to a private skillset, it shows up here."
+  },
+  "skillsetDetail": {
+    "notFoundTitle": "Skillset not found",
+    "notFoundDesc": "It may have been deleted, or you may not have access to it.",
+    "backToRegistry": "Back to skillsets",
+    "consensusNote": "The author asserts these members are an independent, comparable set suitable for agent-side consensus. This is a claim, not a platform guarantee.",
+    "managePermissions": "Permissions",
+    "masterPrompt": "Master prompt",
+    "noPrompt": "No master prompt for this version.",
+    "resolvedClosure": "Resolved closure",
+    "members": "Members",
+    "metadata": "Metadata",
+    "version": "Version",
+    "latest": "latest",
+    "versionsCount": "Versions",
+    "updated": "Updated",
+    "guid": "GUID",
+    "guidCopied": "GUID copied",
+    "visibility": "Visibility",
+    "visPublic": "Public",
+    "visPrivate": "Private",
+    "sharedWith": "Shared with {{users}} users · {{orgs}} orgs",
+    "dangerZone": "Danger zone",
+    "dangerExplain": "Permanently delete this skillset and every version. This cannot be undone.",
+    "deleteSkillset": "Delete skillset",
+    "deleteTitle": "Delete this skillset?",
+    "deleteConfirm": "This permanently deletes {{name}} and all its versions.",
+    "deleteSuccess": "Skillset deleted"
+  },
+  "skillsetForm": {
+    "name": "Name",
+    "nameLocked": "locked",
+    "nameError": "Name must be kebab-case (a-z, 0-9, hyphens).",
+    "description": "Description",
+    "descriptionPlaceholder": "A short, human-readable summary",
+    "descriptionError": "Description is required (1–1024 chars).",
+    "kind": "Kind",
+    "tags": "Tags",
+    "addTag": "add tag…",
+    "membersError": "Add at least {{min}} members.",
+    "promptError": "A master prompt is required.",
+    "version": "Version",
+    "versionError": "Version must be <major>.<minor> (e.g. 1.0).",
+    "versionBumpError": "Publish requires a new, bumped version (e.g. 1.1).",
+    "editHint": "Publishing creates a new immutable version. The name cannot change.",
+    "createSubmit": "Create skillset",
+    "publishSubmit": "Publish version"
+  },
+  "skillsetNew": {
+    "title": "New skillset",
+    "subtitle": "Bundle two or more skills with a master prompt that tells agents how to use them together.",
+    "created": "Skillset created"
+  },
+  "skillsetEdit": {
+    "title": "Edit skillset",
+    "subtitle": "Revise the members, prompt, kind, or tags and publish a new version.",
+    "published": "New version published"
+  },
+  "skillsetMembers": {
+    "label": "Members",
+    "count": "{{count}} / {{max}}",
+    "empty": "No members yet. Add at least {{min}} skills.",
+    "placeholder": "search a skill, or type name@1.0 then Enter",
+    "remove": "Remove {{ref}}",
+    "errorEmpty": "Enter a skill ref.",
+    "errorNested": "A skillset cannot reference another skillset. Remove the skillset: prefix.",
+    "errorSelf": "A skillset cannot include itself as a member.",
+    "errorNoVersion": "Include a version, e.g. name@1.0.",
+    "errorDuplicate": "That member is already added.",
+    "errorMax": "A skillset may have at most {{max}} members."
+  },
+  "skillsetPrompt": {
+    "label": "Master prompt",
+    "count": "{{count}} / {{max}}",
+    "help": "Required. Tell an agent how to use this set — orchestration, ordering, and when to pick which member.",
+    "placeholder": "# How to use this set\n\n1. Start with ...",
+    "errorTooLong": "Master prompt must be at most {{max}} characters."
+  },
+  "skillsetClosure": {
+    "empty": "No resolved members yet.",
+    "member": "member",
+    "dependency": "dep"
+  },
+  "skillsetPermissions": {
+    "publicDesc": "Anyone on Ornn can find and use this skillset, including unauthenticated visitors.",
+    "orgsDesc": "Every admin and member of a checked org can see and use this skillset.",
+    "privateDesc": "Only you and platform admins can see this skillset. Active when nothing above is set."
   },
   "errors": {
     "generic": {
