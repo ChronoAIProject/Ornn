@@ -53,6 +53,15 @@ vi.mock("@xyflow/react", () => {
     ReactFlow,
     Background: () => null,
     BackgroundVariant: { Dots: "dots" },
+    Controls: () => null,
+    Position: { Left: "left", Right: "right", Top: "top", Bottom: "bottom" },
+    MarkerType: { ArrowClosed: "arrowclosed" },
+    ConnectionLineType: { SmoothStep: "smoothstep", Bezier: "default" },
+    ConnectionMode: { Loose: "loose", Strict: "strict" },
+    // Faithful [state, setState, onChange] 3-tuple — destructuring it in the
+    // component must not throw. State is the initial nodes; setState/onChange
+    // are inert no-ops (jsdom can't measure layout, so positions are untested).
+    useNodesState: (init: unknown) => [init ?? [], vi.fn(), vi.fn()],
   };
 });
 
@@ -125,6 +134,45 @@ describe("SkillsetDependencyGraphCanvas — react-flow wiring", () => {
     fireEvent.click(screen.getByTestId("rf-delete-a-b"));
     expect(onEdgesChange).toHaveBeenCalledTimes(1);
     expect(onEdgesChange.mock.calls[0]?.[0]).toEqual([{ from: "b@1.0", to: "c@1.0" }]);
+  });
+});
+
+describe("SkillsetDependencyGraphCanvas — smoothness pass (#1071)", () => {
+  it("a node connection emits ONLY {from,to} — node positions never leak upward", () => {
+    // Positions live in session-local useNodesState and are presentation-only;
+    // the sole upward emit is onEdgesChange(Edge[]). An exact-shape assertion
+    // guards that no x/y ever rides along to the backend.
+    const onEdgesChange = vi.fn();
+    render(
+      <SkillsetDependencyGraphCanvas members={MEMBERS} edges={[]} onEdgesChange={onEdgesChange} />,
+    );
+    fireEvent.click(screen.getByTestId("rf-connect-a-b"));
+    const emitted = onEdgesChange.mock.calls[0]?.[0] as Edge[];
+    expect(emitted).toEqual([{ from: "a@1.0", to: "b@1.0" }]);
+    for (const e of emitted) {
+      expect(Object.keys(e).sort()).toEqual(["from", "to"]);
+    }
+  });
+
+  it("Tidy re-layouts node positions WITHOUT touching edges (no upward emit)", () => {
+    // Tidy is the only path that repositions existing nodes; positions are
+    // local, so it must never call onEdgesChange.
+    const onEdgesChange = vi.fn();
+    const edges: Edge[] = [{ from: "a@1.0", to: "b@1.0" }];
+    render(
+      <SkillsetDependencyGraphCanvas members={MEMBERS} edges={edges} onEdgesChange={onEdgesChange} />,
+    );
+    const tidy = screen.getByTestId("graph-tidy");
+    expect(tidy).toBeInTheDocument();
+    fireEvent.click(tidy);
+    expect(onEdgesChange).not.toHaveBeenCalled();
+  });
+
+  it("the canvas reserves a generous editing height (#1071)", () => {
+    render(
+      <SkillsetDependencyGraphCanvas members={MEMBERS} edges={[]} onEdgesChange={vi.fn()} />,
+    );
+    expect(screen.getByTestId("graph-canvas")).toHaveClass("h-[460px]");
   });
 });
 
