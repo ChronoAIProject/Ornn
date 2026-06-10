@@ -28,6 +28,7 @@ const SKILLSET_NAMESPACES = [
   "skillsetMembers",
   "skillsetPrompt",
   "skillsetClosure",
+  "skillsetGraph",
   "skillsetPermissions",
 ] as const;
 
