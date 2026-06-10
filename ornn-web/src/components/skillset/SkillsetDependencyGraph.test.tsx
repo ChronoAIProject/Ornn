@@ -1,9 +1,13 @@
 /**
- * SkillsetDependencyGraph — editor interactions + the #1064 no-mutation guard.
+ * SkillsetDependencyGraph — the read-only Mermaid path, the lazy editor mount,
+ * and the #1064 / #1067 no-mutation grep-guard (now covering BOTH the graph
+ * dispatcher and its react-flow canvas child).
  *
  * The Mermaid renderer is heavy (pulls real `mermaid` into jsdom), so we stub
- * `<MermaidBlock>` to a marker div — these tests are about the editor wiring
- * and the contract, not diagram rendering.
+ * `<MermaidBlock>` to a marker div. The editor branch lazy-loads the real
+ * react-flow canvas; its interaction wiring (onConnect / onEdgesDelete /
+ * click-to-connect) is asserted in SkillsetDependencyGraphCanvas.test — here we
+ * only assert the lazy surface mounts.
  *
  * @module components/skillset/SkillsetDependencyGraph.test
  */
@@ -11,7 +15,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 
 vi.mock("@/components/docs/DocsMermaid", () => ({
   MermaidBlock: ({ chart }: { chart: string }) => (
@@ -20,7 +24,6 @@ vi.mock("@/components/docs/DocsMermaid", () => ({
 }));
 
 import { SkillsetDependencyGraph } from "./SkillsetDependencyGraph";
-import type { Edge } from "@/lib/skillsetDeps";
 
 afterEach(() => {
   cleanup();
@@ -29,76 +32,23 @@ afterEach(() => {
 
 const MEMBERS = ["a@1.0", "b@1.0", "c@1.0"];
 
-/** Click the node button whose label starts with `name`. */
-function clickNode(name: string) {
-  const btn = screen
-    .getByTestId("graph-columns")
-    .querySelectorAll("button");
-  const target = [...btn].find((b) => b.textContent?.startsWith(name));
-  if (!target) throw new Error(`node ${name} not found`);
-  fireEvent.click(target);
-}
-
-describe("SkillsetDependencyGraph — editor", () => {
-  it("click source then target emits onEdgesChange with the new edge", () => {
-    const onEdgesChange = vi.fn();
+describe("SkillsetDependencyGraph — editor mount", () => {
+  it("lazy-loads the react-flow canvas when given ≥2 members + a handler", async () => {
     render(
-      <SkillsetDependencyGraph members={MEMBERS} edges={[]} onEdgesChange={onEdgesChange} />,
+      <SkillsetDependencyGraph members={MEMBERS} edges={[]} onEdgesChange={vi.fn()} />,
     );
-    clickNode("a");
-    clickNode("b");
-    expect(onEdgesChange).toHaveBeenCalledTimes(1);
-    expect(onEdgesChange.mock.calls[0]?.[0]).toEqual([{ from: "a@1.0", to: "b@1.0" }]);
+    // The canvas is React.lazy — its click-to-connect grid appears after the
+    // dynamic import resolves.
+    expect(await screen.findByTestId("graph-columns")).toBeInTheDocument();
+    expect(await screen.findByTestId("graph-canvas")).toBeInTheDocument();
   });
 
-  it("self-click is a no-op (no edge emitted)", () => {
-    const onEdgesChange = vi.fn();
+  it("shows the needs-members hint with fewer than two members", () => {
     render(
-      <SkillsetDependencyGraph members={MEMBERS} edges={[]} onEdgesChange={onEdgesChange} />,
+      <SkillsetDependencyGraph members={["a@1.0"]} edges={[]} onEdgesChange={vi.fn()} />,
     );
-    clickNode("a");
-    clickNode("a");
-    expect(onEdgesChange).not.toHaveBeenCalled();
-  });
-
-  it("removing an edge chip emits the edge set without it", () => {
-    const onEdgesChange = vi.fn();
-    const edges: Edge[] = [
-      { from: "a@1.0", to: "b@1.0" },
-      { from: "b@1.0", to: "c@1.0" },
-    ];
-    render(
-      <SkillsetDependencyGraph members={MEMBERS} edges={edges} onEdgesChange={onEdgesChange} />,
-    );
-    fireEvent.click(
-      screen.getByRole("button", { name: /Remove edge a@1.0 → b@1.0/ }),
-    );
-    expect(onEdgesChange).toHaveBeenCalledTimes(1);
-    expect(onEdgesChange.mock.calls[0]?.[0]).toEqual([{ from: "b@1.0", to: "c@1.0" }]);
-  });
-
-  it("a cyclic edge set shows the advisory chip but never disables anything", () => {
-    const edges: Edge[] = [
-      { from: "a@1.0", to: "b@1.0" },
-      { from: "b@1.0", to: "a@1.0" }, // cycle
-    ];
-    render(
-      <SkillsetDependencyGraph members={MEMBERS} edges={edges} onEdgesChange={vi.fn()} />,
-    );
-    expect(screen.getByTestId("cycle-warning")).toBeInTheDocument();
-    // Editing still works — clicking nodes is unaffected by the cycle.
-    expect(screen.getByTestId("graph-columns")).toBeInTheDocument();
-  });
-
-  it("does not re-add a duplicate edge", () => {
-    const onEdgesChange = vi.fn();
-    const edges: Edge[] = [{ from: "a@1.0", to: "b@1.0" }];
-    render(
-      <SkillsetDependencyGraph members={MEMBERS} edges={edges} onEdgesChange={onEdgesChange} />,
-    );
-    clickNode("a");
-    clickNode("b");
-    expect(onEdgesChange).not.toHaveBeenCalled();
+    expect(screen.getByText(/Add at least two members/)).toBeInTheDocument();
+    expect(screen.queryByTestId("graph-canvas")).not.toBeInTheDocument();
   });
 });
 
@@ -119,40 +69,55 @@ describe("SkillsetDependencyGraph — read-only", () => {
     expect(screen.queryByTestId("mermaid")).not.toBeInTheDocument();
     expect(screen.getByText(/No dependencies declared/)).toBeInTheDocument();
   });
+
+  it("does NOT load react-flow on the read path (no canvas)", () => {
+    render(
+      <SkillsetDependencyGraph
+        readOnly
+        members={MEMBERS}
+        edges={[{ from: "a@1.0", to: "b@1.0" }]}
+      />,
+    );
+    expect(screen.queryByTestId("graph-canvas")).not.toBeInTheDocument();
+  });
 });
 
 describe("#1064 contract: no skill-mutation / closure import in the graph path", () => {
-  it("the component source imports no skill-mutation or closure hook", () => {
-    const raw = readFileSync(
-      join(__dirname, "SkillsetDependencyGraph.tsx"),
-      "utf8",
-    );
-    // Strip comments first so the contract prose ("imports NO closure hook")
-    // doesn't trip the scanner — we assert against the actual CODE only.
-    const src = raw
+  /** Comments are stripped so contract prose doesn't trip the scanner. */
+  function strip(raw: string): string {
+    return raw
       .replace(/\/\*[\s\S]*?\*\//g, "")
       .replace(/(^|[^:])\/\/.*$/gm, "$1");
-    // No skill-mutation hooks (create/update/publish/closure/upload) and no
-    // closure-endpoint hook (#968 — kept strictly separate).
-    const FORBIDDEN = [
-      /useCreateSkill\b/,
-      /useUpdateSkill\b/,
-      /usePublishSkill\b/,
-      /useUploadSkill\b/,
-      /useDeleteSkill\b/,
-      /useCreateSkillset\b/,
-      /usePublishSkillset\b/,
-      /useUpdateSkillset\b/,
-      /useDeleteSkillset\b/,
-      /useSkillsetClosure\b/,
-      /useSkillClosure\b/,
-      /useSkillDependencies\b/,
-      /from\s+["']@\/hooks\/useSkills["']/,
-      /from\s+["']@\/hooks\/useSkillsets["']/,
-      /\bclosure\b/i,
-    ];
-    for (const re of FORBIDDEN) {
-      expect(re.test(src), `forbidden token ${re} present`).toBe(false);
-    }
-  });
+  }
+
+  const FORBIDDEN = [
+    /useCreateSkill\b/,
+    /useUpdateSkill\b/,
+    /usePublishSkill\b/,
+    /useUploadSkill\b/,
+    /useDeleteSkill\b/,
+    /useCreateSkillset\b/,
+    /usePublishSkillset\b/,
+    /useUpdateSkillset\b/,
+    /useDeleteSkillset\b/,
+    /useSkillsetClosure\b/,
+    /useSkillClosure\b/,
+    /useSkillDependencies\b/,
+    /from\s+["']@\/hooks\/useSkills["']/,
+    /from\s+["']@\/hooks\/useSkillsets["']/,
+    /\bclosure\b/i,
+  ];
+
+  // Both the dispatcher AND its lazy react-flow canvas must be clean (#1067).
+  for (const file of [
+    "SkillsetDependencyGraph.tsx",
+    "SkillsetDependencyGraphCanvas.tsx",
+  ]) {
+    it(`${file} imports no skill-mutation or closure hook`, () => {
+      const src = strip(readFileSync(join(__dirname, file), "utf8"));
+      for (const re of FORBIDDEN) {
+        expect(re.test(src), `forbidden token ${re} present in ${file}`).toBe(false);
+      }
+    });
+  }
 });

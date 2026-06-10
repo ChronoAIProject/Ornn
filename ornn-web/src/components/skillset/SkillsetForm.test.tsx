@@ -35,6 +35,49 @@ vi.mock("@/components/docs/DocsMermaid", () => ({
   MermaidBlock: ({ chart }: { chart: string }) => <div data-testid="mermaid">{chart}</div>,
 }));
 
+// The graph editor lazy-loads the react-flow canvas (#1067). For the form's
+// codec/pruning wiring tests we stub the canvas with a SYNCHRONOUS
+// click-to-connect mirror that drives the SAME `onEdgesChange` contract — the
+// real react-flow wiring (onConnect / onEdgesDelete) is covered by
+// SkillsetDependencyGraphCanvas.test. This keeps the form tests synchronous and
+// off react-flow's jsdom-hostile measured layout.
+vi.mock("@/components/skillset/SkillsetDependencyGraphCanvas", () => ({
+  SkillsetDependencyGraphCanvas: ({
+    members,
+    edges,
+    onEdgesChange,
+  }: {
+    members: string[];
+    edges: { from: string; to: string }[];
+    onEdgesChange: (e: { from: string; to: string }[]) => void;
+  }) => {
+    let source: string | null = null;
+    function click(ref: string) {
+      if (source === null) {
+        source = ref;
+        return;
+      }
+      if (source === ref) {
+        source = null;
+        return;
+      }
+      if (!edges.some((e) => e.from === source && e.to === ref)) {
+        onEdgesChange([...edges, { from: source, to: ref }]);
+      }
+      source = null;
+    }
+    return (
+      <div data-testid="graph-columns">
+        {members.map((ref) => (
+          <button key={ref} type="button" onClick={() => click(ref)}>
+            {ref}
+          </button>
+        ))}
+      </div>
+    );
+  },
+}));
+
 import { SkillsetForm } from "./SkillsetForm";
 
 function wrap(node: ReactNode) {
