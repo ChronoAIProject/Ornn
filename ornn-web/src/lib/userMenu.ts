@@ -91,6 +91,12 @@ export function useUserMenuGroups(user: AuthUser | null): UserMenuGroup[] {
         label: t("nav.myOrgs"),
       },
       {
+        key: "my-skillsets",
+        kind: "internal",
+        to: "/my-skillsets",
+        label: t("nav.mySkillsets"),
+      },
+      {
         key: "redeem",
         kind: "internal",
         to: "/settings",
