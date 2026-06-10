@@ -17,12 +17,12 @@ import { useTranslation } from "react-i18next";
 import { PageTransition } from "@/components/layout/PageTransition";
 import { BackLink } from "@/components/layout/BackLink";
 import { Button } from "@/components/ui/Button";
-import { Badge } from "@/components/ui/Badge";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { RailCard } from "@/components/detail/RailCard";
 import { ReadmeViewer } from "@/components/skill/ReadmeViewer";
 import { VersionPicker } from "@/components/skill/VersionPicker";
-import { KindBadge } from "@/components/skillset/KindBadge";
+import { SkillsetHeroStrip } from "@/components/skillset/SkillsetHeroStrip";
 import { SkillsetClosureViewer } from "@/components/skillset/SkillsetClosureViewer";
 import { SkillsetDependencyGraph } from "@/components/skillset/SkillsetDependencyGraph";
 import { SkillsetPermissionsModal } from "@/components/skillset/SkillsetPermissionsModal";
@@ -127,71 +127,31 @@ export function SkillsetDetailPage() {
           </nav>
 
           {/* Hero — name, kind, visibility, version picker, owner actions. */}
-          <section className="card-impression rounded border border-subtle bg-card p-6">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-              <div className="min-w-0">
-                <div className="mb-2 flex flex-wrap items-center gap-2">
-                  <KindBadge kind={skillset.kind} />
-                  {skillset.isPrivate ? (
-                    <Badge color="cyan">🔒 {t("common.private")}</Badge>
-                  ) : (
-                    <Badge color="green">🌐 {t("common.public")}</Badge>
-                  )}
-                </div>
-                <h1 className="font-display text-2xl font-semibold text-strong break-words">
-                  {skillset.name}
-                </h1>
-                <p className="mt-2 max-w-2xl font-text text-sm leading-relaxed text-meta break-words">
-                  {skillset.description}
-                </p>
-                {skillset.kind === "consensus-supported" && (
-                  <p className="mt-3 rounded-sm border border-info/40 bg-info-soft px-3 py-2 font-text text-xs text-info">
-                    {t(
-                      "skillsetDetail.consensusNote",
-                      "The author asserts these members are an independent, comparable set suitable for agent-side consensus. This is a claim, not a platform guarantee.",
-                    )}
-                  </p>
-                )}
-              </div>
+          <SkillsetHeroStrip
+            skillset={skillset}
+            isOwner={isOwner}
+            versionPicker={
+              versions.length > 0 ? (
+                <VersionPicker
+                  versions={versions}
+                  currentVersion={skillset.version}
+                  onChange={handleVersionChange}
+                />
+              ) : undefined
+            }
+            onEdit={isOwner ? () => navigate(`/skillsets/${skillset.guid}/edit`) : undefined}
+            onManagePermissions={isOwner ? () => setShowPermissions(true) : undefined}
+          />
 
-              <div className="flex shrink-0 flex-col items-stretch gap-3 lg:items-end">
-                {versions.length > 0 && (
-                  <VersionPicker
-                    versions={versions}
-                    currentVersion={skillset.version}
-                    onChange={handleVersionChange}
-                  />
-                )}
-                {isOwner && (
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      size="sm"
-                      onClick={() => navigate(`/skillsets/${skillset.guid}/edit`)}
-                    >
-                      {t("common.edit")}
-                    </Button>
-                    <Button variant="secondary" size="sm" onClick={() => setShowPermissions(true)}>
-                      {t("skillsetDetail.managePermissions", "Permissions")}
-                    </Button>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Tags. */}
-            {skillset.tags.length > 0 && (
-              <div className="mt-4 flex flex-wrap gap-1.5">
-                {skillset.tags.map((tag) => (
-                  <span
-                    key={tag}
-                    className="inline-flex items-center rounded-sm border border-subtle bg-elevated px-1.5 py-0.5 font-mono text-[10px] tracking-wider text-body"
-                  >
-                    {tag}
-                  </span>
-                ))}
-              </div>
-            )}
-          </section>
+          {/* Consensus claim disclaimer (consensus-supported kind only). */}
+          {skillset.kind === "consensus-supported" && (
+            <p className="rounded-sm border border-info/40 bg-info-soft px-3 py-2 font-text text-xs text-info">
+              {t(
+                "skillsetDetail.consensusNote",
+                "The author asserts these members are an independent, comparable set suitable for agent-side consensus. This is a claim, not a platform guarantee.",
+              )}
+            </p>
+          )}
 
           {/* Main grid: left = master prompt + closure; right = members + meta. */}
           <main className="grid gap-4 lg:grid-cols-[1fr_320px]">
@@ -230,11 +190,10 @@ export function SkillsetDetailPage() {
 
             <aside className="flex flex-col gap-4">
               {/* Members. */}
-              <section className="card-impression rounded border border-subtle bg-card p-5">
-                <h3 className="mb-3 flex items-center justify-between gap-2 border-b border-dashed border-subtle pb-3 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-meta">
-                  <span>{t("skillsetDetail.members", "Members")}</span>
-                  <span className="text-strong">{skillset.members.length}</span>
-                </h3>
+              <RailCard
+                title={t("skillsetDetail.members", "Members")}
+                headerRight={<span className="text-strong">{skillset.members.length}</span>}
+              >
                 <ul className="space-y-1.5">
                   {skillset.members.map((ref) => {
                     const { name, version } = parseMemberRef(ref);
@@ -251,13 +210,10 @@ export function SkillsetDetailPage() {
                     );
                   })}
                 </ul>
-              </section>
+              </RailCard>
 
               {/* Metadata. */}
-              <section className="card-impression rounded border border-subtle bg-card p-5">
-                <h3 className="mb-3 border-b border-dashed border-subtle pb-3 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-meta">
-                  {t("skillsetDetail.metadata", "Metadata")}
-                </h3>
+              <RailCard title={t("skillsetDetail.metadata", "Metadata")}>
                 <dl className="space-y-2.5 font-text text-sm text-body">
                   <div className="flex items-baseline justify-between gap-2">
                     <dt className="font-mono text-[10px] uppercase tracking-widest text-meta">
@@ -308,13 +264,10 @@ export function SkillsetDetailPage() {
                     </dd>
                   </div>
                 </dl>
-              </section>
+              </RailCard>
 
               {/* Visibility — owner sees grant counts + manage. */}
-              <section className="card-impression rounded border border-subtle bg-card p-5">
-                <h3 className="mb-3 border-b border-dashed border-subtle pb-3 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-meta">
-                  {t("skillsetDetail.visibility", "Visibility")}
-                </h3>
+              <RailCard title={t("skillsetDetail.visibility", "Visibility")}>
                 <p className="font-text text-sm text-body">
                   {skillset.isPrivate
                     ? t("skillsetDetail.visPrivate", "Private")
@@ -338,14 +291,11 @@ export function SkillsetDetailPage() {
                     {t("skillsetDetail.managePermissions", "Permissions")}
                   </Button>
                 )}
-              </section>
+              </RailCard>
 
               {/* Danger zone (owner only). */}
               {isOwner && (
-                <section className="card-impression rounded border border-subtle bg-card p-5">
-                  <h3 className="mb-3 border-b border-dashed border-danger/30 pb-3 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-danger">
-                    {t("skillsetDetail.dangerZone", "Danger zone")}
-                  </h3>
+                <RailCard title={t("skillsetDetail.dangerZone", "Danger zone")} tone="danger">
                   <p className="mb-3 font-mono text-[11px] leading-relaxed text-meta">
                     {t(
                       "skillsetDetail.dangerExplain",
@@ -360,7 +310,7 @@ export function SkillsetDetailPage() {
                   >
                     {t("skillsetDetail.deleteSkillset", "Delete skillset")}
                   </Button>
-                </section>
+                </RailCard>
               )}
             </aside>
           </main>

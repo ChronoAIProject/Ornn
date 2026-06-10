@@ -6,6 +6,10 @@
  * whose results render, (b) switching tabs via the tab buttons rewrites the
  * `?scope` URL param, and (c) the kind filter passes through to the hook.
  *
+ * #1067 — the page now wears the shared registry shell: a `RegistrySidebar`
+ * aside (Kind chip section + Tags input) and a `RegistryGrid` body. It mounts
+ * NO keyword `SearchBar` because the skillset-search backend has no `q` param.
+ *
  * @module pages/SkillsetExplorePage.test
  */
 
@@ -109,6 +113,43 @@ describe("SkillsetExplorePage tabs + filters", () => {
     expect(publicHook).toHaveBeenCalledWith(
       expect.objectContaining({ tags: ["research", "rag"] }),
     );
+  });
+
+  it("renders the Kind + Tags sidebar sections", () => {
+    renderAt("/skillsets");
+    expect(screen.getByRole("heading", { name: "Kind" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Tags" })).toBeInTheDocument();
+    // Kind chips for All / Bundle / Consensus.
+    expect(screen.getByRole("button", { name: "All kinds" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Bundle" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Consensus" })).toBeInTheDocument();
+    // The tag input is the ONLY text field — there is no keyword SearchBar.
+    const textboxes = screen.getAllByRole("textbox");
+    expect(textboxes).toHaveLength(1);
+    expect(textboxes[0]).toHaveAttribute("placeholder", "add tag…");
+  });
+
+  it("toggles the kind filter via the sidebar chip and updates the URL/hook", () => {
+    renderAt("/skillsets");
+    fireEvent.click(screen.getByRole("button", { name: "Consensus" }));
+    expect(publicHook).toHaveBeenLastCalledWith(
+      expect.objectContaining({ kind: "consensus-supported" }),
+    );
+  });
+
+  it("adds a tag from the sidebar input and passes it to the active hook", () => {
+    renderAt("/skillsets");
+    const input = screen.getByRole("textbox");
+    fireEvent.change(input, { target: { value: "research" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(publicHook).toHaveBeenLastCalledWith(
+      expect.objectContaining({ tags: ["research"] }),
+    );
+  });
+
+  it("renders the grid cards for the active scope", () => {
+    renderAt("/skillsets");
+    expect(screen.getByText("public-set")).toBeInTheDocument();
   });
 
   it("respects a pinned scope and hides the tab strip (My Skillsets wrapper)", () => {
