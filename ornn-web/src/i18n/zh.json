@@ -1758,6 +1758,17 @@
     "member": "成员",
     "dependency": "依赖"
   },
+  "skillsetGraph": {
+    "sectionTitle": "成员依赖关系",
+    "label": "依赖关系图",
+    "help": "可选。先点击一个成员，再点击另一个，以声明“先执行”关系。依赖边存储在主提示词内——不会修改任何技能。",
+    "needMembers": "至少添加两个成员才能绘制依赖关系。",
+    "pickTarget": "为 {{ref}} 选择目标…",
+    "removeEdge": "移除依赖边 {{from}} → {{to}}",
+    "cycleWarning": "成员之间形成了环——执行顺序仅供参考。",
+    "emptyReadonly": "没有可绘制的成员。",
+    "emptyDeps": "成员之间未声明依赖关系。"
+  },
   "skillsetPermissions": {
     "publicDesc": "Ornn 上的任何人（包括未登录访客）都可以发现并使用此技能集。",
     "orgsDesc": "已勾选组织的每位管理员和成员都可以查看并使用此技能集。",
