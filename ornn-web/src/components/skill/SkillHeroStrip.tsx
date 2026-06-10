@@ -1,11 +1,12 @@
 /**
  * SkillHeroStrip — top-of-page identity strip on the Skill Detail Page.
  *
- * One card with everything a visitor needs to answer "what is this / can I
- * use it / should I trust it" in a single glance: icon, name, description,
- * category + tag row, status pill row (visibility / version / audit verdict
- * / pulls count), owner line, and a primary CTA + kebab menu for secondary
- * actions.
+ * Thin adapter over the shared `<DetailHeroStrip>` shell (#1067): it supplies
+ * the skill-specific icon, the category + tag row, the status pill row
+ * (visibility / version / audit verdict / pulls count), the owner / published
+ * footer line, and the action cluster (GitHub link, edit, download, Try in
+ * Playground). The card chrome, layout, and slot composition live in
+ * `DetailHeroStrip`.
  *
  * Styled in the Forge Workshop language (DESIGN.md): Space Grotesk display,
  * Inter body, JetBrains Mono pills, ember accent, hairline borders, 2-4px radii.
@@ -14,6 +15,7 @@
  */
 
 import { useTranslation } from "react-i18next";
+import { DetailHeroStrip } from "@/components/detail/DetailHeroStrip";
 import type { SkillDetail } from "@/types/domain";
 import type { AuditRecord } from "@/types/audit";
 
@@ -97,113 +99,92 @@ export function SkillHeroStrip({
   const visibilityLabel = skill.isPrivate
     ? t("common.private", "Private")
     : t("common.public", "Public");
-  const visibilityTone = skill.isPrivate
-    ? "text-info border-info/40 bg-info-soft"
-    : "text-info border-info/40 bg-info-soft";
+  const visibilityTone = "text-info border-info/40 bg-info-soft";
 
   const tags = skill.tags ?? [];
   const tagsToShow = tags.slice(0, 4);
   const tagsExtra = tags.length > tagsToShow.length ? tags.length - tagsToShow.length : 0;
 
+  const hasActions = isAuthenticated || (skill.source && skill.source.type === "github");
+
   return (
-    <section
-      className="rounded-md border border-subtle bg-card p-6 card-impression"
-      aria-labelledby="skill-hero-name"
-    >
-      <div className="grid gap-6 md:grid-cols-[auto_1fr_auto] md:items-start">
-        {/* Icon */}
-        <div
-          className="flex h-14 w-14 shrink-0 items-center justify-center rounded-sm border border-strong-edge bg-warning-soft text-accent"
-          aria-hidden
-        >
-          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="16 18 22 12 16 6" />
-            <polyline points="8 6 2 12 8 18" />
-          </svg>
-        </div>
-
-        {/* Body */}
-        <div className="min-w-0">
-          <h1
-            id="skill-hero-name"
-            className="font-display text-3xl font-semibold leading-tight text-strong tracking-tight"
-          >
-            {skill.name}
-          </h1>
-          {skill.description && (
-            <p className="mt-2 max-w-[64ch] font-text text-sm leading-relaxed text-body">
-              {skill.description}
-            </p>
+    <DetailHeroStrip
+      titleId="skill-hero-name"
+      title={skill.name}
+      description={skill.description}
+      icon={
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="16 18 22 12 16 6" />
+          <polyline points="8 6 2 12 8 18" />
+        </svg>
+      }
+      tagRow={
+        <>
+          {typeof skill.metadata?.category === "string" && skill.metadata.category && (
+            <span className="inline-flex items-center gap-1.5 rounded-sm border border-strong-edge bg-elevated px-2 py-0.5 text-strong tracking-widest uppercase">
+              <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden />
+              {skill.metadata.category}
+            </span>
           )}
-
-          {/* Tag row */}
-          <div className="mt-3 flex flex-wrap items-center gap-x-2.5 gap-y-1.5 font-mono text-[11px] text-meta">
-            {typeof skill.metadata?.category === "string" && skill.metadata.category && (
-              <span className="inline-flex items-center gap-1.5 rounded-sm border border-strong-edge bg-elevated px-2 py-0.5 text-strong tracking-widest uppercase">
-                <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden />
-                {skill.metadata.category}
-              </span>
-            )}
-            {tagsToShow.map((tag) => (
-              <span key={tag} className="text-meta">
-                #{tag}
-              </span>
-            ))}
-            {tagsExtra > 0 && (
-              <span className="text-meta">
-                {t("skillDetail.heroTagsMore", "+{{n}} more", { n: tagsExtra })}
-              </span>
-            )}
-          </div>
-
-          {/* Status pill row */}
-          <div className="mt-3 flex flex-wrap gap-2">
-            <span className={`inline-flex items-center gap-1.5 rounded-sm border px-2.5 py-1 font-mono text-[11px] uppercase tracking-wider ${visibilityTone}`}>
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                {skill.isPrivate
-                  ? <path d="M12 2a5 5 0 0 0-5 5v3H5a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2h-2V7a5 5 0 0 0-5-5z" />
-                  : <><circle cx="12" cy="12" r="9" /><path d="M3 12h18" /></>}
-              </svg>
-              {visibilityLabel}
+          {tagsToShow.map((tag) => (
+            <span key={tag} className="text-meta">
+              #{tag}
             </span>
-            <span className="inline-flex items-center gap-1.5 rounded-sm border border-strong-edge px-2.5 py-1 font-mono text-[11px] uppercase tracking-wider text-strong">
-              v{skill.version}
+          ))}
+          {tagsExtra > 0 && (
+            <span className="text-meta">
+              {t("skillDetail.heroTagsMore", "+{{n}} more", { n: tagsExtra })}
             </span>
-            <AuditPill audit={versionAudit} t={t as never} />
-            {pullCount7d !== undefined && (
-              <span className="inline-flex items-center gap-1.5 rounded-sm border border-strong-edge px-2.5 py-1 font-mono text-[11px] uppercase tracking-wider text-meta">
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
-                {t("skillDetail.heroPulls7d", "{{n}} pulls · 7d", { n: pullCount7d })}
-              </span>
-            )}
-          </div>
-
-          {/* Owner row */}
-          <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[11px] text-meta">
-            {ownerAvatarUrl ? (
-              <img src={ownerAvatarUrl} alt="" className="h-[18px] w-[18px] rounded-full object-cover" />
-            ) : (
-              <span className="inline-flex h-[18px] w-[18px] items-center justify-center rounded-full bg-accent text-page text-[10px] font-bold font-text">
-                {ownerDisplayName.charAt(0).toUpperCase()}
-              </span>
-            )}
-            <span className="text-body">
-              <strong className="font-medium">{ownerDisplayName}</strong>
+          )}
+        </>
+      }
+      pills={
+        <>
+          <span className={`inline-flex items-center gap-1.5 rounded-sm border px-2.5 py-1 font-mono text-[11px] uppercase tracking-wider ${visibilityTone}`}>
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              {skill.isPrivate
+                ? <path d="M12 2a5 5 0 0 0-5 5v3H5a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2h-2V7a5 5 0 0 0-5-5z" />
+                : <><circle cx="12" cy="12" r="9" /><path d="M3 12h18" /></>}
+            </svg>
+            {visibilityLabel}
+          </span>
+          <span className="inline-flex items-center gap-1.5 rounded-sm border border-strong-edge px-2.5 py-1 font-mono text-[11px] uppercase tracking-wider text-strong">
+            v{skill.version}
+          </span>
+          <AuditPill audit={versionAudit} t={t as never} />
+          {pullCount7d !== undefined && (
+            <span className="inline-flex items-center gap-1.5 rounded-sm border border-strong-edge px-2.5 py-1 font-mono text-[11px] uppercase tracking-wider text-meta">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
+              {t("skillDetail.heroPulls7d", "{{n}} pulls · 7d", { n: pullCount7d })}
             </span>
-            <span className="opacity-50">·</span>
-            <span>{t("skillDetail.heroPublishedOn", "Published {{date}}", { date: formatShortDate(skill.createdOn) })}</span>
-            {skill.updatedOn && skill.updatedOn !== skill.createdOn && (
-              <>
-                <span className="opacity-50">·</span>
-                <span>{t("skillDetail.heroUpdatedOn", "Updated {{date}}", { date: formatShortDate(skill.updatedOn) })}</span>
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* Actions */}
-        {(isAuthenticated || (skill.source && skill.source.type === "github")) && (
-          <div className="flex shrink-0 items-center gap-2">
+          )}
+        </>
+      }
+      footer={
+        <>
+          {ownerAvatarUrl ? (
+            <img src={ownerAvatarUrl} alt="" className="h-[18px] w-[18px] rounded-full object-cover" />
+          ) : (
+            <span className="inline-flex h-[18px] w-[18px] items-center justify-center rounded-full bg-accent text-page text-[10px] font-bold font-text">
+              {ownerDisplayName.charAt(0).toUpperCase()}
+            </span>
+          )}
+          <span className="text-body">
+            <strong className="font-medium">{ownerDisplayName}</strong>
+          </span>
+          <span className="opacity-50">·</span>
+          <span>{t("skillDetail.heroPublishedOn", "Published {{date}}", { date: formatShortDate(skill.createdOn) })}</span>
+          {skill.updatedOn && skill.updatedOn !== skill.createdOn && (
+            <>
+              <span className="opacity-50">·</span>
+              <span>{t("skillDetail.heroUpdatedOn", "Updated {{date}}", { date: formatShortDate(skill.updatedOn) })}</span>
+            </>
+          )}
+        </>
+      }
+      actions={
+        hasActions ? (
+          <>
             {skill.source && skill.source.type === "github" && (
               <a
                 href={buildGithubFolderUrl(skill.source)}
@@ -261,10 +242,10 @@ export function SkillHeroStrip({
                 {t("skillDetail.heroTryPlayground", "Try in Playground")}
               </button>
             )}
-          </div>
-        )}
-      </div>
-    </section>
+          </>
+        ) : undefined
+      }
+    />
   );
 }
 
@@ -279,4 +260,3 @@ function buildGithubFolderUrl(source: NonNullable<SkillDetail["source"]>): strin
   const pathSuffix = source.path ? `/${source.path.replace(/^\/+/, "")}` : "";
   return `https://github.com/${source.repo}/tree/${treeRef}${pathSuffix}`;
 }
-
