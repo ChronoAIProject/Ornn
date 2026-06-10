@@ -18,15 +18,16 @@
  * @module components/skillset/SkillsetForm
  */
 
-import { useMemo, useState } from "react";
+import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { SkillsetMemberPicker } from "@/components/skillset/SkillsetMemberPicker";
-import { MasterPromptEditor, validateMasterPrompt } from "@/components/skillset/MasterPromptEditor";
+import { MasterPromptEditor } from "@/components/skillset/MasterPromptEditor";
 import {
   SKILLSET_KINDS,
   SKILLSET_MIN_MEMBERS,
+  validateMasterPrompt,
   type CreateSkillsetInput,
   type PublishSkillsetInput,
   type SkillsetKind,
@@ -91,7 +92,7 @@ export function SkillsetForm({
   const canSubmit =
     nameValid && descriptionValid && membersValid && promptValid && versionValid && !submitting;
 
-  const tagInputId = useMemo(() => `skillset-tag-${Math.random().toString(36).slice(2)}`, []);
+  const tagInputId = useId();
 
   function addTag(raw: string) {
     const tag = raw.trim().toLowerCase();

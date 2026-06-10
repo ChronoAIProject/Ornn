@@ -32,6 +32,21 @@ export const SKILLSET_MAX_MEMBERS = 100;
 /** Upper bound on the master-prompt body (the per-version usage instructions). */
 export const SKILLSET_INSTRUCTIONS_MAX = 8000;
 
+/** Why a master-prompt body is invalid. `null` = valid. */
+export type MasterPromptRejection = "empty" | "tooLong" | null;
+
+/**
+ * Validate a master-prompt body against the #978 contract. Returns `null` when
+ * valid, else a reason key. Trim-then-bound so whitespace-only never satisfies
+ * the non-empty requirement.
+ */
+export function validateMasterPrompt(value: string): MasterPromptRejection {
+  const trimmed = value.trim();
+  if (trimmed.length === 0) return "empty";
+  if (trimmed.length > SKILLSET_INSTRUCTIONS_MAX) return "tooLong";
+  return null;
+}
+
 /**
  * The one explicit way an author might try to nest a skillset — a
  * `skillset:`-prefixed member ref. Rejected client-side with a clear message

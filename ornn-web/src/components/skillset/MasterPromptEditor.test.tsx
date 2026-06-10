@@ -11,8 +11,8 @@
 
 import { describe, it, expect, afterEach } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
-import { MasterPromptEditor, validateMasterPrompt } from "./MasterPromptEditor";
-import { SKILLSET_INSTRUCTIONS_MAX } from "@/types/skillset";
+import { MasterPromptEditor } from "./MasterPromptEditor";
+import { SKILLSET_INSTRUCTIONS_MAX, validateMasterPrompt } from "@/types/skillset";
 
 afterEach(() => cleanup());
 

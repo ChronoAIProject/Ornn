@@ -22,18 +22,6 @@ export interface MasterPromptEditorProps {
   className?: string | undefined;
 }
 
-/**
- * Validate a master-prompt body against the #978 contract. Returns `null` when
- * valid, else a reason key. Trim-then-bound so whitespace-only never satisfies
- * the non-empty requirement.
- */
-export function validateMasterPrompt(value: string): "empty" | "tooLong" | null {
-  const trimmed = value.trim();
-  if (trimmed.length === 0) return "empty";
-  if (trimmed.length > SKILLSET_INSTRUCTIONS_MAX) return "tooLong";
-  return null;
-}
-
 export function MasterPromptEditor({
   value,
   onChange,
