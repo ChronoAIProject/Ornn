@@ -114,7 +114,11 @@
     "admin": "管理",
     "categories": "分类",
     "tags": "标签",
-    "auditHistory": "审计历史"
+    "auditHistory": "审计历史",
+    "skillsets": "技能集",
+    "mySkillsets": "我的技能集",
+    "newSkillset": "新建技能集",
+    "editSkillset": "编辑技能集"
   },
   "explore": {
     "semanticQueryRequiredTitle": "请输入搜索描述",
