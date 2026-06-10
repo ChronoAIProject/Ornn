@@ -79,31 +79,35 @@ export function SkillsetEditPage() {
 
   return (
     <PageTransition>
-      <div className="mx-auto max-w-3xl px-4 py-4 pb-16 sm:px-6 lg:px-8">
-        <nav className="mb-4">
-          <BackLink label={t("common.back", "Back")} />
-        </nav>
-        <h1 className="mb-2 font-display text-2xl font-semibold text-strong">
-          {t("skillsetEdit.title", "Edit skillset")}
-        </h1>
-        <p className="mb-6 font-text text-sm text-meta">
-          {t("skillsetEdit.subtitle", "Revise the members, prompt, kind, or tags and publish a new version.")}
-        </p>
-        <SkillsetForm
-          mode="edit"
-          initial={{
-            name: skillset.name,
-            description: skillset.description,
-            instructions: skillset.instructions,
-            kind: skillset.kind,
-            tags: skillset.tags,
-            members: skillset.members,
-            version: skillset.version,
-          }}
-          onPublish={handlePublish}
-          submitting={publishMutation.isPending}
-          onCancel={() => navigate(`/skillsets/${skillset.name}`)}
-        />
+      {/* RootLayout's <main> is overflow-hidden — each page owns its own scroll
+          container (mirrors SkillsetDetailPage), else a tall form is clipped. */}
+      <div className="h-full overflow-y-auto">
+        <div className="mx-auto max-w-3xl px-4 py-4 pb-16 sm:px-6 lg:px-8">
+          <nav className="mb-4">
+            <BackLink label={t("common.back", "Back")} />
+          </nav>
+          <h1 className="mb-2 font-display text-2xl font-semibold text-strong">
+            {t("skillsetEdit.title", "Edit skillset")}
+          </h1>
+          <p className="mb-6 font-text text-sm text-meta">
+            {t("skillsetEdit.subtitle", "Revise the members, prompt, kind, or tags and publish a new version.")}
+          </p>
+          <SkillsetForm
+            mode="edit"
+            initial={{
+              name: skillset.name,
+              description: skillset.description,
+              instructions: skillset.instructions,
+              kind: skillset.kind,
+              tags: skillset.tags,
+              members: skillset.members,
+              version: skillset.version,
+            }}
+            onPublish={handlePublish}
+            submitting={publishMutation.isPending}
+            onCancel={() => navigate(`/skillsets/${skillset.name}`)}
+          />
+        </div>
       </div>
     </PageTransition>
   );
