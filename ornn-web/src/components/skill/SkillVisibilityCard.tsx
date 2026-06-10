@@ -16,6 +16,7 @@
 
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/Button";
+import { RailCard } from "@/components/detail/RailCard";
 
 type Tier = "public" | "limited" | "private";
 
@@ -50,14 +51,15 @@ export function SkillVisibilityCard({
   };
 
   return (
-    <section className="rounded-md border border-subtle bg-card p-5 card-impression">
-      <h3 className="mb-3.5 flex items-center gap-2 border-b border-dashed border-subtle pb-3 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-meta">
+    <RailCard
+      title={t("skillDetail.cardVisibility", "Visibility")}
+      icon={
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
           <circle cx="12" cy="12" r="9" /><line x1="3" y1="12" x2="21" y2="12" />
           <path d="M12 3a14 14 0 0 1 4 9 14 14 0 0 1-4 9 14 14 0 0 1-4-9 14 14 0 0 1 4-9z" />
         </svg>
-        {t("skillDetail.cardVisibility", "Visibility")}
-      </h3>
+      }
+    >
       <span
         className={`mb-3 inline-flex items-center gap-1.5 rounded-sm border px-2.5 py-1 font-mono text-[11px] uppercase tracking-wider ${tierClass[tier]}`}
       >
@@ -108,6 +110,6 @@ export function SkillVisibilityCard({
           </Button>
         </div>
       )}
-    </section>
+    </RailCard>
   );
 }

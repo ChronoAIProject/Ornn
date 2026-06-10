@@ -1761,8 +1761,9 @@
   "skillsetGraph": {
     "sectionTitle": "Member dependencies",
     "label": "Dependency graph",
-    "help": "Optional. Click a member, then another, to declare “runs before”. Edges are stored inside the master prompt — no skill is modified.",
+    "help": "Optional. Drag between members (or click a member, then another) to declare “runs before”. Edges are stored inside the master prompt — no skill is modified.",
     "needMembers": "Add at least two members to draw dependencies.",
+    "loadingCanvas": "Loading graph editor…",
     "pickTarget": "Pick a target for {{ref}}…",
     "removeEdge": "Remove edge {{from}} → {{to}}",
     "cycleWarning": "Members form a cycle — order is advisory.",

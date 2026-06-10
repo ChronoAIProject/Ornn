@@ -1,0 +1,35 @@
+/**
+ * Forge-palette overrides for the react-flow dependency-graph editor (#1067).
+ *
+ * `@xyflow/react/dist/style.css` ships a stock palette (node fill #fff /
+ * #1e1e1e, edges/handles #b1b1b7, selection ring #1a192b, connecting-line
+ * blue). On a design-parity surface that reads as off-brand react-flow blue.
+ *
+ * We re-point react-flow's own `--xy-*` CSS variables at the Editorial Forge
+ * semantic tokens (defined in styles/neon.css) so nodes, edges, handles, and
+ * the selection ring cascade to the SAME palette the click-to-connect node
+ * chips in this component already use. No custom `nodeTypes`, no internal
+ * re-theming — token re-pointing only. Tokens resolve per-theme automatically
+ * (light/dark) because the semantic tokens are theme-scoped upstream.
+ *
+ *   diagrammatic edges / handles / connecting line → arc-blue secondary accent
+ *   selected edge + node selection ring            → ember primary accent
+ *   node fill / border / text                      → card / border / text-strong
+ */
+.skillset-depgraph-canvas .react-flow {
+  /* Diagrammatic wiring — arc-blue secondary accent (restricted role). */
+  --xy-edge-stroke: var(--color-accent-secondary);
+  --xy-connectionline-stroke: var(--color-accent-secondary);
+  --xy-handle-background-color: var(--color-accent-secondary);
+  --xy-handle-border-color: var(--color-card);
+
+  /* Active / selected — ember primary accent. */
+  --xy-edge-stroke-selected: var(--color-accent);
+  --xy-node-boxshadow-selected: 0 0 0 1.5px var(--color-accent);
+
+  /* Nodes — match the click-to-connect chips: card fill, subtle border,
+     strong ink text. */
+  --xy-node-background-color: var(--color-card);
+  --xy-node-border: 1px solid var(--color-border-subtle);
+  --xy-node-color: var(--color-strong);
+}
