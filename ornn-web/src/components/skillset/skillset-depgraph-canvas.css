@@ -33,3 +33,64 @@
   --xy-node-border: 1px solid var(--color-border-subtle);
   --xy-node-color: var(--color-strong);
 }
+
+/*
+ * Smoothness pass (#1071). Everything below is sizing / motion / on-brand
+ * chrome — no off-brand react-flow stock palette is reintroduced. Every
+ * var() is a token defined in styles/neon.css (both themes); the token-guard
+ * test enforces this.
+ */
+
+/* Silky motion: programmatic moves (Tidy / member reconcile) tween, but the
+   node being dragged tracks the pointer 1:1 (no transition while dragging).
+   Couples to react-flow v12 applying the inline `transform` to the
+   `.react-flow__node` wrapper (not the viewport) and adding `.dragging` to that
+   same element during a drag — re-verify the drag feel on any @xyflow upgrade. */
+.skillset-depgraph-canvas .react-flow__node {
+  transition: transform 180ms ease;
+}
+.skillset-depgraph-canvas .react-flow__node.dragging {
+  transition: none;
+}
+
+/* Enlarged handles — a bigger visible dot plus a transparent hit pad (~23px)
+   so drag-to-connect lands first try instead of missing the default ~6px dot. */
+.skillset-depgraph-canvas .react-flow__handle {
+  width: 11px;
+  height: 11px;
+}
+.skillset-depgraph-canvas .react-flow__handle::after {
+  content: "";
+  position: absolute;
+  inset: -6px;
+  border-radius: 9999px;
+}
+
+/* Directed-edge arrowhead color is set via markerEnd.color in the component
+   (v12 paints it as an inline fill that beats CSS), so no rule is needed here. */
+
+/* Subtle node hover — ember outline, no layout shift. */
+.skillset-depgraph-canvas .react-flow__node:hover {
+  box-shadow: 0 0 0 1px var(--color-accent);
+}
+
+/* Edge hover thickening — the only edge motion (no animated dashes). */
+.skillset-depgraph-canvas .react-flow__edge:hover .react-flow__edge-path {
+  stroke-width: 2.5px;
+}
+
+/* Controls skin — on-brand, zero stock blue. */
+.skillset-depgraph-canvas .react-flow__controls {
+  background: var(--color-card);
+  border: 1px solid var(--color-border-subtle);
+}
+.skillset-depgraph-canvas .react-flow__controls-button {
+  background: var(--color-card);
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+.skillset-depgraph-canvas .react-flow__controls-button:hover {
+  background: var(--color-elevated);
+}
+.skillset-depgraph-canvas .react-flow__controls-button svg {
+  fill: var(--color-strong);
+}
