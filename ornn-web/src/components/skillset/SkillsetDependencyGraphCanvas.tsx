@@ -268,7 +268,7 @@ export function SkillsetDependencyGraphCanvas({
       [edges]
     );
     return (
-      <div className="skillset-depgraph-canvas h-full overflow-hidden rounded-sm border border-subtle bg-elevated/30">
+      <div className="skillset-depgraph-canvas h-full min-h-[200px] overflow-hidden rounded-sm border border-subtle bg-elevated/30">
         <ReactFlow
           nodes={staticNodes}
           edges={flowEdges}
