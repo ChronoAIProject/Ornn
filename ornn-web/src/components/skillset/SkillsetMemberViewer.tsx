@@ -111,7 +111,11 @@ export function SkillsetMemberViewer({ members }: SkillsetMemberViewerProps) {
             {t("skillsetDetail.memberPackageError", "Couldn't load this skill's files.")}
           </p>
         ) : files.length > 0 ? (
+          // key on the member ref so switching remounts the preview — avoids a
+          // one-frame flash of the previous member's files while the new
+          // package effect kicks in.
           <SkillPackagePreview
+            key={activeRef}
             files={files}
             fileContents={fileContents}
             metadata={null}

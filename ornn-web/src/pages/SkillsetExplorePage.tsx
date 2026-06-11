@@ -214,12 +214,11 @@ export function SkillsetExplorePage({ pinScope }: SkillsetExplorePageProps = {})
             no semantic mode, so this is a plain input, not the skill SearchBar. */}
         <div className="relative shrink-0">
           <svg
-            className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-meta"
-            width="16" height="16" viewBox="0 0 24 24" fill="none"
-            stroke="currentColor" strokeWidth="2" aria-hidden
+            className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-accent/50"
+            viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden
           >
-            <circle cx="11" cy="11" r="8" />
-            <path d="m21 21-4.3-4.3" />
+            <circle cx="11" cy="11" r="8" strokeWidth="1.5" />
+            <path d="M21 21l-4.35-4.35" strokeWidth="1.5" strokeLinecap="round" />
           </svg>
           <input
             type="text"

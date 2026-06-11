@@ -153,11 +153,12 @@ export function SkillsetDetailPage() {
             </p>
           )}
 
-          {/* Main grid: left = master prompt + deps + closure; right = members +
-              meta. Mirrors SkillDetailPage — on lg+ the grid is locked to a
-              viewport-relative height so each column scrolls its own long
-              content (master prompt / closure can grow) instead of growing the
-              page; on mobile it falls back to natural page flow. */}
+          {/* Two-pane workshop (#1080): left = member skill-package viewer
+              (click a member to view its files); right rail = metadata (leading
+              with the master prompt) + member dependencies + resolved closure +
+              visibility + danger. Mirrors SkillDetailPage — on lg+ the grid is
+              locked to a viewport-relative height so each pane scrolls its own
+              content; on mobile it falls back to natural page flow. */}
           <main className="flex flex-col gap-4 lg:flex-row lg:items-stretch lg:h-[calc(100vh-280px)] lg:min-h-[480px]">
             {/* Left pane: member skill-package viewer (#1080) — click a member
                 to view its files, like the skill detail page. The master prompt
