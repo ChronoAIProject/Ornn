@@ -20,6 +20,7 @@
 
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Link } from "react-router-dom";
 import { SkillPackagePreview } from "@/components/skill/SkillPackagePreview";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { useSkill } from "@/hooks/useSkills";
@@ -84,7 +85,13 @@ export function SkillsetMemberViewer({ members }: SkillsetMemberViewerProps) {
                   : "border-transparent text-meta hover:border-subtle hover:text-strong"
               }`}
             >
-              <span className="block truncate">{name}</span>
+              <Link
+                to={`/skills/${encodeURIComponent(name)}`}
+                onClick={(e) => e.stopPropagation()}
+                className="block truncate hover:underline"
+              >
+                {name}
+              </Link>
               {version && <span className="text-[10px] text-meta">@{version}</span>}
             </button>
           );
