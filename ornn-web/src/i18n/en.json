@@ -1682,6 +1682,8 @@
     "kindAll": "All kinds",
     "tagsLabel": "Tags",
     "addTag": "add tag…",
+    "searchPlaceholder": "Search skillsets by name or description...",
+    "searchAria": "Search skillsets",
     "create": "New skillset",
     "nonePublic": "No public skillsets match",
     "noneMine": "You haven't created any skillsets yet",

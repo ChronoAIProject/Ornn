@@ -44,6 +44,7 @@ export async function searchSkillsets(
     page: params.page,
     pageSize: params.pageSize,
     tags: params.tags?.length ? params.tags.join(",") : undefined,
+    q: params.q?.trim() ? params.q.trim() : undefined,
   };
   const res = await apiGet<SkillsetSearchResponse>(
     "/api/v1/skillset-search",

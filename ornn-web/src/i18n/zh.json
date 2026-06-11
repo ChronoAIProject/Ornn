@@ -1682,6 +1682,8 @@
     "kindAll": "全部类型",
     "tagsLabel": "标签",
     "addTag": "添加标签…",
+    "searchPlaceholder": "按名称或描述搜索技能集…",
+    "searchAria": "搜索技能集",
     "create": "新建技能集",
     "nonePublic": "没有匹配的公开技能集",
     "noneMine": "你还没有创建任何技能集",
