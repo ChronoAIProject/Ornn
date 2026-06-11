@@ -229,8 +229,8 @@ export function SkillsetDetailPage() {
                   <div
                     className="fixed z-[100] w-[460px] max-h-[420px] overflow-auto rounded-md border border-subtle bg-card card-impression p-3 text-sm shadow-xl"
                     style={{
-                      left: hoveredPos.clientX + 18,
-                      top: hoveredPos.clientY + 8,
+                      left: (hoveredPos.clientX ?? 0) + 18,
+                      top: (hoveredPos.clientY ?? 0) + 8,
                     }}
                     onMouseLeave={() => {
                       setHoveredMemberRef(null);

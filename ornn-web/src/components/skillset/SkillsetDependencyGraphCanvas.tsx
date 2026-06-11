@@ -273,8 +273,11 @@ export function SkillsetDependencyGraphCanvas({
           nodes={staticNodes}
           edges={flowEdges}
           onNodeMouseEnter={(event, node) => {
-            if (onHoverMember) {
-              onHoverMember(node.id, { clientX: event.clientX, clientY: event.clientY });
+            if (onHoverMember && node?.id) {
+              const pos = event && typeof event.clientX === 'number' 
+                ? { clientX: event.clientX, clientY: event.clientY } 
+                : undefined;
+              onHoverMember(node.id, pos);
             }
           }}
           onNodeMouseLeave={() => onHoverMember?.(null)}
