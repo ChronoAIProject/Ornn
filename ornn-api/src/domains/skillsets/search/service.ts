@@ -42,6 +42,7 @@ export class SkillsetSearchService {
     // exactOptionalPropertyTypes (#657)
     kind?: SkillsetKind | undefined;
     tagsAll?: string[] | undefined;
+    q?: string | undefined;
   }): Promise<SkillsetSearchResponse> {
     const { scope, currentUserId, userOrgIds, page, pageSize } = params;
     const start = Date.now();
@@ -54,10 +55,11 @@ export class SkillsetSearchService {
       {
         kind: params.kind,
         tagsAll: params.tagsAll,
+        q: params.q,
       },
     );
     logger.info(
-      { scope, kind: params.kind ?? null, total, queryTimeMs: Date.now() - start },
+      { scope, kind: params.kind ?? null, q: params.q ?? null, total, queryTimeMs: Date.now() - start },
       "Skillset search completed",
     );
     return {
