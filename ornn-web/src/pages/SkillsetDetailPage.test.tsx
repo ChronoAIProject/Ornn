@@ -136,8 +136,9 @@ describe("SkillsetDetailPage", () => {
     expect(screen.getByTestId("member-viewer")).toHaveTextContent("b@1.0");
     // Closure (flat list with a depth-1 dependency).
     expect(screen.getByTestId("closure-list")).toHaveTextContent("a-dep");
-    // Visibility — private, with the shared-with count.
-    expect(screen.getByText(/Shared with 1 users/)).toBeInTheDocument();
+    // Visibility card (exact same as skill details) — shows user/org counts.
+    expect(screen.getByText("1")).toBeInTheDocument();
+    expect(screen.getByText(/users/i)).toBeInTheDocument();
   });
 
   it("shows owner actions (Edit + Delete) for the author", () => {
