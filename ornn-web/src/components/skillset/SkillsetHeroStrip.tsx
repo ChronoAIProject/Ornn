@@ -14,7 +14,6 @@
  * @module components/skillset/SkillsetHeroStrip
  */
 
-import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { DetailHeroStrip } from "@/components/detail/DetailHeroStrip";
 import { Button } from "@/components/ui/Button";
