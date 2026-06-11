@@ -4,9 +4,9 @@
  *
  * Thin adapter over the shared `<DetailHeroStrip>` shell, mirroring
  * `SkillHeroStrip`. It supplies the skillset-specific icon, the tag row, the
- * status pill row (kind / visibility / version), and the action cluster
- * (version picker + owner Edit / Permissions). The card chrome and layout live
- * in `DetailHeroStrip` so both detail surfaces read identically.
+ * status pill row (kind / visibility), and the action cluster (owner Edit only).
+ * Version is now a right-rail card (matching skill details). The card chrome
+ * and layout live in `DetailHeroStrip` so both detail surfaces read identically.
  *
  * Styled in the Forge Workshop language (DESIGN.md): Space Grotesk display,
  * Inter body, JetBrains Mono pills, ember accent, hairline borders, 2-4px radii.
@@ -14,7 +14,6 @@
  * @module components/skillset/SkillsetHeroStrip
  */
 
-import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { DetailHeroStrip } from "@/components/detail/DetailHeroStrip";
 import { Button } from "@/components/ui/Button";
@@ -23,10 +22,7 @@ import type { SkillsetDetail } from "@/types/skillset";
 export interface SkillsetHeroStripProps {
   skillset: SkillsetDetail;
   isOwner: boolean;
-  /** Rendered into the actions cluster (the version popover). */
-  versionPicker?: ReactNode;
   onEdit?: (() => void) | undefined;
-  onManagePermissions?: (() => void) | undefined;
 }
 
 /** Format a date in the user's locale, abbreviated. Returns ISO on parse
@@ -41,9 +37,7 @@ function formatShortDate(iso: string | undefined): string {
 export function SkillsetHeroStrip({
   skillset,
   isOwner,
-  versionPicker,
   onEdit,
-  onManagePermissions,
 }: SkillsetHeroStripProps) {
   const { t } = useTranslation();
 
@@ -104,10 +98,6 @@ export function SkillsetHeroStrip({
             </svg>
             {visibilityLabel}
           </span>
-          {/* Version */}
-          <span className="inline-flex items-center gap-1.5 rounded-sm border border-strong-edge px-2.5 py-1 font-mono text-[11px] uppercase tracking-wider text-strong">
-            v{skillset.version}
-          </span>
         </>
       }
       footer={
@@ -129,22 +119,12 @@ export function SkillsetHeroStrip({
         </>
       }
       actions={
-        versionPicker || (isOwner && (onEdit || onManagePermissions)) ? (
+        isOwner && onEdit ? (
           <div className="flex flex-col items-stretch gap-3 lg:items-end">
-            {versionPicker}
-            {isOwner && (onEdit || onManagePermissions) && (
-              <div className="flex flex-wrap gap-2">
-                {onEdit && (
-                  <Button size="sm" onClick={onEdit}>
-                    {t("common.edit")}
-                  </Button>
-                )}
-                {onManagePermissions && (
-                  <Button variant="secondary" size="sm" onClick={onManagePermissions}>
-                    {t("skillsetDetail.managePermissions", "Permissions")}
-                  </Button>
-                )}
-              </div>
+            {onEdit && (
+              <Button size="sm" onClick={onEdit}>
+                {t("common.edit")}
+              </Button>
             )}
           </div>
         ) : undefined

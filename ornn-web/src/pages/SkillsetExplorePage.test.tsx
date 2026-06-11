@@ -171,8 +171,8 @@ describe("SkillsetExplorePage tabs + filters", () => {
       </MemoryRouter>,
     );
     expect(screen.getByText("mine-set")).toBeInTheDocument();
-    // No "Public" tab button when pinned.
-    expect(screen.queryByRole("button", { name: "Public" })).not.toBeInTheDocument();
+    // No "Public Skillsets" tab button when pinned.
+    expect(screen.queryByRole("button", { name: "Public Skillsets" })).not.toBeInTheDocument();
     expect(mineHook).toHaveBeenCalledWith(expect.objectContaining({ enabled: true }));
   });
 });

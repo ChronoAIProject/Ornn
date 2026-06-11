@@ -12,6 +12,7 @@
  */
 
 import { useTranslation } from "react-i18next";
+import { Link } from "react-router-dom";
 import type { SkillsetClosureItem } from "@/types/skillset";
 
 export interface SkillsetClosureViewerProps {
@@ -54,7 +55,12 @@ export function SkillsetClosureViewer({ items, className = "" }: SkillsetClosure
               ? t("skillsetClosure.member", "member")
               : t("skillsetClosure.dependency", "dep")}
           </span>
-          <span className="min-w-0 truncate font-mono text-sm text-strong">{item.name}</span>
+          <Link
+            to={`/skills/${encodeURIComponent(item.name)}?version=${item.version}`}
+            className="min-w-0 truncate font-mono text-xs text-strong hover:underline hover:text-accent"
+          >
+            {item.name}
+          </Link>
           <span className="shrink-0 font-mono text-xs text-meta">v{item.version}</span>
         </li>
       ))}

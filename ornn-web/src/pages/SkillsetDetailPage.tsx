@@ -21,6 +21,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { RailCard } from "@/components/detail/RailCard";
 import { ReadmeViewer } from "@/components/skill/ReadmeViewer";
+import { SkillVisibilityCard } from "@/components/skill/SkillVisibilityCard";
 import { VersionPicker } from "@/components/skill/VersionPicker";
 import { SkillsetHeroStrip } from "@/components/skillset/SkillsetHeroStrip";
 import { SkillsetClosureViewer } from "@/components/skillset/SkillsetClosureViewer";
@@ -126,21 +127,11 @@ export function SkillsetDetailPage() {
             <BackLink label={t("common.back", "Back")} />
           </nav>
 
-          {/* Hero — name, kind, visibility, version picker, owner actions. */}
+          {/* Hero — name, kind, visibility, owner actions (edit only; version moved to right rail card). */}
           <SkillsetHeroStrip
             skillset={skillset}
             isOwner={isOwner}
-            versionPicker={
-              versions.length > 0 ? (
-                <VersionPicker
-                  versions={versions}
-                  currentVersion={skillset.version}
-                  onChange={handleVersionChange}
-                />
-              ) : undefined
-            }
             onEdit={isOwner ? () => navigate(`/skillsets/${skillset.guid}/edit`) : undefined}
-            onManagePermissions={isOwner ? () => setShowPermissions(true) : undefined}
           />
 
           {/* Consensus claim disclaimer (consensus-supported kind only). */}
@@ -167,7 +158,7 @@ export function SkillsetDetailPage() {
             }
           >
             {skillset.instructions ? (
-              <div className="max-h-64 overflow-y-auto">
+              <div className="max-h-64 overflow-y-auto text-[13px] leading-[1.55]">
                 <ReadmeViewer content={skillset.instructions} />
               </div>
             ) : (
@@ -206,8 +197,17 @@ export function SkillsetDetailPage() {
             </div>
 
             <aside className="flex flex-col gap-4 lg:w-[320px] lg:shrink-0">
-              {/* Metadata. */}
-              <RailCard title={t("skillsetDetail.metadata", "Metadata")}>
+              {/* ── Metadata card ── matches skill details page styling/structure */}
+              <section className="rounded-md border border-subtle bg-card p-5 card-impression">
+                <h3 className="mb-3.5 flex items-center gap-2 border-b border-dashed border-subtle pb-3 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-meta">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                    <line x1="3" y1="6" x2="21" y2="6" />
+                    <line x1="3" y1="12" x2="21" y2="12" />
+                    <line x1="3" y1="18" x2="21" y2="18" />
+                  </svg>
+                  {t("skillsetDetail.metadata", "Metadata")}
+                </h3>
+
                 <dl className="space-y-2.5 font-text text-sm text-body">
                   <div className="flex items-baseline justify-between gap-2">
                     <dt className="font-mono text-[10px] uppercase tracking-widest text-meta">
@@ -264,11 +264,54 @@ export function SkillsetDetailPage() {
                     </dd>
                   </div>
                 </dl>
-              </RailCard>
+              </section>
 
-              {/* Resolved closure — flat depth-indented list. */}
+              {/* ── Versions card ── exact visual match to skill details page's SkillVersionsCard */}
+              {versions.length > 0 && (
+                <RailCard
+                  title={t("skillDetail.cardVersions", "Versions")}
+                  icon={
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                      <path d="M21 16V8a2 2 0 0 0-1-1.7l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.7l7 4a2 2 0 0 0 2 0l7-4a2 2 0 0 0 1-1.7z" />
+                      <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
+                      <line x1="12" y1="22.08" x2="12" y2="12" />
+                    </svg>
+                  }
+                >
+                  <div className="mb-1.5 flex items-baseline gap-2">
+                    <span className="font-display text-2xl font-semibold tracking-tight text-strong">
+                      {skillset.version}
+                    </span>
+                    {skillset.version === latestVersion && (
+                      <span className="rounded-sm border border-accent/40 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.16em] text-accent">
+                        {t("skillDetail.latest", "latest")}
+                      </span>
+                    )}
+                  </div>
+                  <p className="font-mono text-[11px] leading-relaxed tracking-wide text-meta">
+                    {t("skillDetail.heroPublishedOn", "Published {{date}}", { date: formatDateSGT(skillset.createdOn, i18n.language) })}
+                    {versions.length > 1 && (
+                      <>
+                        {" · "}
+                        {t("skillDetail.versionsTotal", "{{n}} versions total", { n: versions.length })}
+                      </>
+                    )}
+                  </p>
+                  <div className="mt-3.5 flex flex-col gap-2">
+                    <VersionPicker
+                      versions={versions}
+                      currentVersion={skillset.version}
+                      onChange={handleVersionChange}
+                    />
+                  </div>
+                </RailCard>
+              )}
+
+              {/* Closure (renamed from "Resolved closure") — the complete flattened list of
+                  direct members + all their transitive dependencies (topo-sorted for install).
+                  "Closure" is the standard term for the fully expanded dependency set. */}
               <RailCard
-                title={t("skillsetDetail.resolvedClosure", "Resolved closure")}
+                title={t("skillsetDetail.resolvedClosure", "Closure")}
                 icon={
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
                     <line x1="8" y1="6" x2="21" y2="6" />
@@ -283,36 +326,26 @@ export function SkillsetDetailPage() {
                 <SkillsetClosureViewer items={closure?.items ?? []} />
               </RailCard>
 
-              {/* Visibility — owner sees grant counts + manage. */}
-              <RailCard title={t("skillsetDetail.visibility", "Visibility")}>
-                <p className="font-text text-sm text-body">
-                  {skillset.isPrivate
-                    ? t("skillsetDetail.visPrivate", "Private")
-                    : t("skillsetDetail.visPublic", "Public")}
-                </p>
-                {skillset.isPrivate && (
-                  <p className="mt-1 font-mono text-[11px] text-meta">
-                    {t("skillsetDetail.sharedWith", "Shared with {{users}} users · {{orgs}} orgs", {
-                      users: skillset.sharedWithUsers.length,
-                      orgs: skillset.sharedWithOrgs.length,
-                    })}
-                  </p>
-                )}
-                {isOwner && (
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    className="mt-3 w-full"
-                    onClick={() => setShowPermissions(true)}
-                  >
-                    {t("skillsetDetail.managePermissions", "Permissions")}
-                  </Button>
-                )}
-              </RailCard>
+              {/* ── Visibility card ── use the exact same component as skill details for visual parity */}
+              <SkillVisibilityCard
+                isPrivate={skillset.isPrivate}
+                sharedWithUsersCount={skillset.sharedWithUsers.length}
+                sharedWithOrgsCount={skillset.sharedWithOrgs.length}
+                isOwner={isOwner}
+                onManagePermissions={() => setShowPermissions(true)}
+              />
 
-              {/* Danger zone (owner only). */}
+              {/* ── Danger zone (owner only) ── matches skill details page exactly in structure/styling */}
               {isOwner && (
-                <RailCard title={t("skillsetDetail.dangerZone", "Danger zone")} tone="danger">
+                <section className="rounded-md border border-subtle bg-card p-5 card-impression">
+                  <h3 className="mb-3.5 flex items-center gap-2 border-b border-dashed border-danger/30 pb-3 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-danger">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                      <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                      <line x1="12" y1="9" x2="12" y2="13" />
+                      <line x1="12" y1="17" x2="12.01" y2="17" />
+                    </svg>
+                    {t("skillsetDetail.dangerZone", "Danger zone")}
+                  </h3>
                   <p className="mb-3 font-mono text-[11px] leading-relaxed text-meta">
                     {t(
                       "skillsetDetail.dangerExplain",
@@ -327,7 +360,7 @@ export function SkillsetDetailPage() {
                   >
                     {t("skillsetDetail.deleteSkillset", "Delete skillset")}
                   </Button>
-                </RailCard>
+                </section>
               )}
             </aside>
           </main>

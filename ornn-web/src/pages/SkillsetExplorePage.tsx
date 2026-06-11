@@ -5,15 +5,15 @@
  * a left filter `aside` built from `RegistrySidebar` primitives, and the shared
  * `RegistryGrid` for the cards + pagination.
  *
- * Three tabs via `?scope`: Public · Mine · Shared with me. A keyword box (`?q`,
+ * Three tabs via `?scope`: Public Skillsets · My Skillsets · Shared with me. A keyword box (`?q`,
  * case-insensitive substring on name + description — keyword-only, no semantic
  * mode) sits above a Kind + Tags filter sidebar. Kind is a chip section; Tags
  * are typed inline and shown as removable chips. Everything is URL-encoded so a
  * filtered view is copy-pasteable.
  *
- *   Public         → anyone (anon + authed)
- *   Mine           → authed only
- *   Shared with me → authed only
+ *   Public Skillsets → anyone (anon + authed)
+ *   My Skillsets     → authed only
+ *   Shared with me   → authed only
  *
  * When `pinScope` is set (the /my-skillsets wrapper passes "mine"), the tab
  * strip is hidden and the page renders that single scope.
@@ -117,10 +117,10 @@ export function SkillsetExplorePage({ pinScope }: SkillsetExplorePageProps = {})
   // auth. No counts — the skillset search surface doesn't return per-scope
   // totals the way the skill counts endpoint does.
   const tabs: RegistryTab[] = [
-    { id: "public", label: t("skillsetExplore.publicTab", "Public") },
+    { id: "public", label: t("skillsetExplore.publicTab", "Public Skillsets") },
     ...(isAuthenticated
       ? [
-          { id: "mine", label: t("skillsetExplore.mineTab", "Mine") },
+          { id: "mine", label: t("skillsetExplore.mineTab", "My Skillsets") },
           {
             id: "shared-with-me",
             label: t("skillsetExplore.sharedTab", "Shared with me"),
