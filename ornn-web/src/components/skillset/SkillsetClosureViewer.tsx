@@ -54,7 +54,7 @@ export function SkillsetClosureViewer({ items, className = "" }: SkillsetClosure
               ? t("skillsetClosure.member", "member")
               : t("skillsetClosure.dependency", "dep")}
           </span>
-          <span className="min-w-0 truncate font-mono text-sm text-strong">{item.name}</span>
+          <span className="min-w-0 truncate font-mono text-xs text-strong">{item.name}</span>
           <span className="shrink-0 font-mono text-xs text-meta">v{item.version}</span>
         </li>
       ))}

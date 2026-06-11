@@ -1675,8 +1675,8 @@
     "consensusSupportedLong": "Consensus-supported"
   },
   "skillsetExplore": {
-    "publicTab": "Public",
-    "mineTab": "Mine",
+    "publicTab": "Public Skillsets",
+    "mineTab": "My Skillsets",
     "sharedTab": "Shared with me",
     "kindLabel": "Kind",
     "kindAll": "All kinds",
@@ -1700,7 +1700,7 @@
     "managePermissions": "Permissions",
     "masterPrompt": "Master prompt",
     "noPrompt": "No master prompt for this version.",
-    "resolvedClosure": "Resolved closure",
+    "resolvedClosure": "Closure",
     "members": "Members",
     "membersLabel": "Members",
     "noMembers": "This skillset has no members.",
