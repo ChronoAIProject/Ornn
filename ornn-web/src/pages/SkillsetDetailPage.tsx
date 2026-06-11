@@ -209,7 +209,7 @@ export function SkillsetDetailPage() {
                     preview path of SkillsetMemberViewer. */}
                 {hoveredMemberRef && (
                   <div
-                    className="absolute top-2 right-2 z-50 w-[320px] max-h-[300px] overflow-auto rounded border border-subtle bg-card card-impression p-2 text-xs"
+                    className="absolute top-2 right-2 z-50 w-[420px] max-h-[380px] overflow-auto rounded border border-subtle bg-card card-impression p-3 text-sm shadow-lg"
                     onMouseLeave={() => setHoveredMemberRef(null)}
                   >
                     <div className="mb-1 flex items-center justify-between font-mono text-[10px] text-meta">

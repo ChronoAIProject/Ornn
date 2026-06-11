@@ -3,13 +3,11 @@
  * (#1064, #1067).
  *
  * Two modes, one component:
- *   - read-only (`readOnly`): renders the member graph as a Mermaid
- *     `flowchart TD` via the shared `<MermaidBlock>` (pan / zoom / lightbox come
- *     for free). Used on the skillset detail page. The read path NEVER pulls in
- *     react-flow — it stays Mermaid.
- *   - editor: a lazy-loaded `<SkillsetDependencyGraphCanvas>` built on
- *     `@xyflow/react` (#1067). The ~150 KB react-flow chunk is fetched ONLY
- *     when this editor mounts (create/edit form), never on detail/read.
+ *   - read-only (`readOnly`): renders using the react-flow canvas (proper canvas
+ *     engine with topo layout, pan/zoom, hover). Used on detail page for full
+ *     space utilization and hover-to-preview. Lazy loaded.
+ *   - editor: same canvas (with drag/connect). The ~150 KB chunk is fetched when
+ *     the form mounts.
  *
  * CONTRACT (AC-enforced, #1064 / #1067):
  *   - This component (and its lazy canvas child) edit NOTHING but their own
@@ -24,10 +22,9 @@
  * @module components/skillset/SkillsetDependencyGraph
  */
 
-import { Suspense, lazy, useMemo } from "react";
+import { Suspense, lazy } from "react";
 import { useTranslation } from "react-i18next";
-import { MermaidBlock } from "@/components/docs/DocsMermaid";
-import { renderFlowchart, type Edge } from "@/lib/skillsetDeps";
+import type { Edge } from "@/lib/skillsetDeps";
 
 // Lazy so the heavy @xyflow/react chunk only loads on the editor path.
 const SkillsetDependencyGraphCanvas = lazy(() =>
@@ -60,15 +57,10 @@ export function SkillsetDependencyGraph({
 }: SkillsetDependencyGraphProps) {
   const { t } = useTranslation();
 
-  const chart = useMemo(() => renderFlowchart(members, edges), [members, edges]);
-
-  // ── read-only: just the rendered graph (pan/zoom/lightbox via MermaidBlock).
-  // Caller (SkillsetDetailPage) wires the RailCard with `flex flex-col` + passes
-  // `flex-1 min-h-0` as className so this root claims all space *after* the
-  // card's h3 header. We forward a tight className to MermaidBlock to nuke its
-  // default my-4/p-4/minHeight/rounded/bg-page (the source of the "small diagram
-  // in lots of wasted chrome" complaint). The SandboxedSvg + 100% svg then
-  // spans nearly the entire allocated height/width of the member deps area.
+  // ── read-only: use the proper react-flow canvas (same as editor but non-interactive
+  // display). This gives a real canvas with better space utilization, node layout,
+  // hover support, pan/zoom etc. (Mermaid was replaced per request for a "proper
+  // canvas"). The chunk is still lazy, now loaded on detail too.
   if (readOnly) {
     return (
       <div className={className}>
@@ -84,24 +76,21 @@ export function SkillsetDependencyGraph({
             )}
           </p>
         ) : (
-          <MermaidBlock
-            chart={chart}
-            direct
-            onNodeHover={(label) => {
-              if (!onHoverMember) return;
-              if (!label) {
-                onHoverMember(null);
-                return;
-              }
-              const clean = label.replace(/["\s]/g, '');
-              const matched = members.find((m) => {
-                const mclean = m.replace(/["\s]/g, '');
-                return clean === mclean || clean.includes(mclean) || mclean.includes(clean);
-              });
-              onHoverMember(matched || null);
-            }}
-            className="my-0 !p-1 min-h-0 h-full bg-transparent"
-          />
+          <Suspense
+            fallback={
+              <p className="font-text text-xs text-meta italic" role="status">
+                {t("skillsetGraph.loadingCanvas", "Loading graph…")}
+              </p>
+            }
+          >
+            <SkillsetDependencyGraphCanvas
+              members={members}
+              edges={edges}
+              onEdgesChange={() => {}}
+              readOnly
+              onHoverMember={onHoverMember}
+            />
+          </Suspense>
         )}
       </div>
     );

@@ -65,8 +65,12 @@ export interface SkillsetDependencyGraphCanvasProps {
   members: string[];
   /** Current dependency edges (a projection of `instructions`). */
   edges: Edge[];
-  /** Emitted with the next edge set on every editor mutation. */
+  /** Emitted with the next edge set on every editor mutation. (ignored in readOnly) */
   onEdgesChange: (edges: Edge[]) => void;
+  /** Display-only mode for detail page (no drag/connect/edit). */
+  readOnly?: boolean | undefined;
+  /** Hover callback for nodes (used by detail page for package preview dialog). */
+  onHoverMember?: ((ref: string | null) => void) | undefined;
 }
 
 /** Has edge `from → to` already (exact ref match)? */
@@ -230,12 +234,60 @@ export function SkillsetDependencyGraphCanvas({
   members,
   edges,
   onEdgesChange,
+  readOnly = false,
+  onHoverMember,
 }: SkillsetDependencyGraphCanvasProps) {
   const { t } = useTranslation();
   const [source, setSource] = useState<string | null>(null);
 
   const cyclic = useMemo(() => hasCycle(members, edges), [members, edges]);
   const columns = useMemo(() => topoColumns(members, edges), [members, edges]);
+
+  if (readOnly) {
+    // Read-only display for detail page: static topo layout, no editing, hover support
+    // for the package preview dialog. Uses the same canvas engine for consistent
+    // "proper canvas" rendering and space utilization.
+    const staticNodes = useMemo(
+      () =>
+        buildNodes(members, columns).map((n) => ({
+          ...n,
+          draggable: false,
+          connectable: false,
+          selectable: false,
+        })),
+      [members, columns]
+    );
+    const flowEdges: FlowEdge[] = useMemo(
+      () =>
+        edges.map((e) => ({
+          id: `${e.from}->${e.to}`,
+          source: e.from,
+          target: e.to,
+        })),
+      [edges]
+    );
+    return (
+      <div className="skillset-depgraph-canvas h-full overflow-hidden rounded-sm border border-subtle bg-elevated/30">
+        <ReactFlow
+          nodes={staticNodes}
+          edges={flowEdges}
+          onNodeMouseEnter={(_, node) => onHoverMember?.(node.id)}
+          onNodeMouseLeave={() => onHoverMember?.(null)}
+          fitView
+          fitViewOptions={FIT_VIEW_OPTIONS}
+          proOptions={PRO_OPTIONS}
+          nodesDraggable={false}
+          nodesConnectable={false}
+          elementsSelectable={false}
+          panOnDrag
+          zoomOnScroll
+          preventScrolling={false}
+        >
+          <Background variant={BackgroundVariant.Dots} />
+        </ReactFlow>
+      </div>
+    );
+  }
 
   // Seed react-flow node positions ONCE from the deterministic topo columns.
   // After mount, positions are owned by the user's drags (and the Tidy button),

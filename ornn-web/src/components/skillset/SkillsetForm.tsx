@@ -93,7 +93,7 @@ export function SkillsetForm({
   const [version, setVersion] = useState(() => {
     if (mode === "create") return "1.0";
     const cur = initial?.version?.trim() ?? "";
-    return cur ? bumpVersion(cur) : "1.0";
+    return cur ? bumpVersion(cur, "minor") : "1.0";
   });
   const [submitted, setSubmitted] = useState(false);
 
@@ -227,7 +227,7 @@ export function SkillsetForm({
               <span className="font-mono text-[9px] uppercase tracking-[0.16em] text-meta">
                 from {initial?.version ?? "?"}
               </span>
-              {(["patch", "minor", "major"] as const).map((level) => (
+              {(["minor", "major"] as const).map((level) => (
                 <button
                   key={level}
                   type="button"
