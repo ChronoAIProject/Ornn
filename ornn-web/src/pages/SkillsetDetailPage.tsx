@@ -172,8 +172,8 @@ export function SkillsetDetailPage() {
               slimmer package viewer (below); right rail = metadata + resolved
               closure + visibility + danger. Natural page scroll (no viewport
               lock) — the viewer has its own fixed height. */}
-          <main className="flex flex-col gap-4 lg:flex-row lg:items-start">
-            <div className="flex min-w-0 flex-col gap-4 lg:flex-1">
+          <main className="flex flex-col gap-4 lg:flex-row lg:items-stretch lg:h-[calc(100vh-280px)] lg:min-h-[480px]">
+            <div className="flex min-w-0 flex-col gap-4 lg:flex-1 lg:min-h-0 lg:min-w-0">
               {/* Member-dependency graph (#1064) — read-only projection of the
                   master prompt's managed deps block. Now above the package
                   viewer in the left column (#1082); gets full width here. */}
@@ -192,11 +192,11 @@ export function SkillsetDetailPage() {
               </RailCard>
 
               {/* Package viewer — pick a member skill (left column), view its
-                  files. Slimmer than before (fixed height inside the viewer). */}
+                  files. Fixed height to match equal-height layout like skill details. */}
               <SkillsetMemberViewer members={skillset.members} />
             </div>
 
-            <aside className="flex flex-col gap-4 lg:w-[320px] lg:shrink-0">
+            <aside className="flex flex-col gap-4 lg:w-[320px] lg:shrink-0 lg:h-full lg:overflow-y-auto">
               {/* ── Metadata card ── matches skill details page styling/structure */}
               <section className="rounded-md border border-subtle bg-card p-5 card-impression">
                 <h3 className="mb-3.5 flex items-center gap-2 border-b border-dashed border-subtle pb-3 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-meta">
@@ -266,10 +266,10 @@ export function SkillsetDetailPage() {
                 </dl>
               </section>
 
-              {/* Versions card in right rail (moved from top hero, matching skill details page) */}
+              {/* ── Versions card ── exact same structure as SkillVersionsCard in skill details page */}
               {versions.length > 0 && (
                 <RailCard
-                  title={t("skillsetDetail.versionsCount", "Versions")}
+                  title={t("skillDetail.cardVersions", "Versions")}
                   icon={
                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
                       <path d="M21 16V8a2 2 0 0 0-1-1.7l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.7l7 4a2 2 0 0 0 2 0l7-4a2 2 0 0 0 1-1.7z" />
@@ -278,11 +278,32 @@ export function SkillsetDetailPage() {
                     </svg>
                   }
                 >
-                  <VersionPicker
-                    versions={versions}
-                    currentVersion={skillset.version}
-                    onChange={handleVersionChange}
-                  />
+                  <div className="mb-1.5 flex items-baseline gap-2">
+                    <span className="font-display text-2xl font-semibold tracking-tight text-strong">
+                      {skillset.version}
+                    </span>
+                    {skillset.version === latestVersion && (
+                      <span className="rounded-sm border border-accent/40 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.16em] text-accent">
+                        {t("skillDetail.latest", "latest")}
+                      </span>
+                    )}
+                  </div>
+                  <p className="font-mono text-[11px] leading-relaxed tracking-wide text-meta">
+                    {t("skillDetail.heroPublishedOn", "Published {{date}}", { date: formatDateSGT(skillset.createdOn, i18n.language) })}
+                    {versions.length > 1 && (
+                      <>
+                        {" · "}
+                        {t("skillDetail.versionsTotal", "{{n}} versions total", { n: versions.length })}
+                      </>
+                    )}
+                  </p>
+                  <div className="mt-3.5 flex flex-col gap-2">
+                    <VersionPicker
+                      versions={versions}
+                      currentVersion={skillset.version}
+                      onChange={handleVersionChange}
+                    />
+                  </div>
                 </RailCard>
               )}
 
