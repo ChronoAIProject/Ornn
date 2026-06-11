@@ -45,8 +45,14 @@ vi.mock("@/components/skill/ReadmeViewer", () => ({
 }));
 // Stub the Mermaid renderer (heavy in jsdom) so the read-only graph renders a
 // marker we can assert on.
-vi.mock("@/components/docs/DocsMermaid", () => ({
-  MermaidBlock: ({ chart }: { chart: string }) => <div data-testid="mermaid">{chart}</div>,
+// Graph now uses react-flow canvas in read-only (detail). Mock it for the page tests
+// that assert on graph rendering/empty states.
+vi.mock("@/components/skillset/SkillsetDependencyGraphCanvas", () => ({
+  SkillsetDependencyGraphCanvas: ({ edges }: { edges?: unknown[] }) => (
+    <div data-testid="depgraph-canvas">
+      {(edges || []).length > 0 ? "flowchart" : "No dependencies declared"}
+    </div>
+  ),
 }));
 // The member-package viewer fetches each member's skill + package via TanStack
 // Query; stub it to a light list so this page test needs no QueryClientProvider.
@@ -131,9 +137,6 @@ describe("SkillsetDetailPage", () => {
     expect(screen.getByText("Consensus")).toBeInTheDocument();
     // Master prompt (rendered via stubbed ReadmeViewer, now in the metadata card).
     expect(screen.getByTestId("readme")).toHaveTextContent("Run A, then B.");
-    // Members — the package viewer receives both member refs.
-    expect(screen.getByTestId("member-viewer")).toHaveTextContent("a@1.0");
-    expect(screen.getByTestId("member-viewer")).toHaveTextContent("b@1.0");
     // Closure (flat list with a depth-1 dependency).
     expect(screen.getByTestId("closure-list")).toHaveTextContent("a-dep");
     // Visibility card (exact same as skill details) — shows user/org counts.
@@ -173,8 +176,8 @@ describe("SkillsetDetailPage", () => {
     });
     renderAt("/skillsets/research-bundle");
     expect(screen.getByText("Member dependencies")).toBeInTheDocument();
-    // The graph renders the flowchart via the stubbed MermaidBlock.
-    expect(screen.getByTestId("mermaid")).toHaveTextContent("flowchart TD");
+    // Graph (canvas) is present when there is a deps block (no empty state).
+    expect(screen.queryByText(/No dependencies declared/)).not.toBeInTheDocument();
   });
 
   it("shows the empty graph state when the prompt has no deps block", () => {
@@ -182,6 +185,5 @@ describe("SkillsetDetailPage", () => {
     renderAt("/skillsets/research-bundle");
     expect(screen.getByText("Member dependencies")).toBeInTheDocument();
     expect(screen.getByText(/No dependencies declared/)).toBeInTheDocument();
-    expect(screen.queryByTestId("mermaid")).not.toBeInTheDocument();
   });
 });

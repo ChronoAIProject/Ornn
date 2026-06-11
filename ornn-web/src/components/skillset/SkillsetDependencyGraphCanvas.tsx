@@ -65,8 +65,13 @@ export interface SkillsetDependencyGraphCanvasProps {
   members: string[];
   /** Current dependency edges (a projection of `instructions`). */
   edges: Edge[];
-  /** Emitted with the next edge set on every editor mutation. */
+  /** Emitted with the next edge set on every editor mutation. (ignored in readOnly) */
   onEdgesChange: (edges: Edge[]) => void;
+  /** Display-only mode for detail page (no drag/connect/edit). */
+  readOnly?: boolean | undefined;
+  /** Hover callback for nodes (used by detail page for package preview dialog).
+   *  Second arg is mouse position for cursor-follow popup. */
+  onHoverMember?: ((ref: string | null, pos?: { clientX: number; clientY: number }) => void) | undefined;
 }
 
 /** Has edge `from → to` already (exact ref match)? */
@@ -230,6 +235,8 @@ export function SkillsetDependencyGraphCanvas({
   members,
   edges,
   onEdgesChange,
+  readOnly = false,
+  onHoverMember,
 }: SkillsetDependencyGraphCanvasProps) {
   const { t } = useTranslation();
   const [source, setSource] = useState<string | null>(null);
@@ -237,21 +244,14 @@ export function SkillsetDependencyGraphCanvas({
   const cyclic = useMemo(() => hasCycle(members, edges), [members, edges]);
   const columns = useMemo(() => topoColumns(members, edges), [members, edges]);
 
-  // Seed react-flow node positions ONCE from the deterministic topo columns.
-  // After mount, positions are owned by the user's drags (and the Tidy button),
-  // NOT by re-solving topology — so drawing an edge never teleports a node.
-  // Positions are presentation only and never reach the backend.
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- mount seed only; later positions come from drags/Tidy.
-  const initialNodes = useMemo<Node[]>(() => buildNodes(members, topoColumns(members, edges)), []);
+  // Editor hooks are declared unconditionally (required by Rules of Hooks).
+  // They run for both read-only and editor paths (extra work in read-only is harmless).
+  const initialNodes = useMemo<Node[]>(() => buildNodes(members, topoColumns(members, edges)), [members]);
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>(initialNodes);
 
-  // Reconcile positions only when MEMBERS change (add/remove). `edges` is read
-  // for a new member's initial column but is deliberately NOT a dependency —
-  // re-seeding on edge edits is exactly the teleport bug we removed.
   const membersKey = members.join("|");
   useEffect(() => {
     setNodes((prev) => reconcileNodes(prev, members, topoColumns(members, edges)));
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- seed from members only; edges feed a new node's slot but must not re-seed.
   }, [membersKey]);
 
   const flowEdges: FlowEdge[] = useMemo(
@@ -264,20 +264,18 @@ export function SkillsetDependencyGraphCanvas({
     [edges],
   );
 
-  // ── react-flow: a dragged connection adds an edge.
   const onConnect = useCallback(
     (conn: Connection) => {
       const from = conn.source;
       const to = conn.target;
       if (!from || !to) return;
-      if (from === to) return; // self-loop — a node can't depend on itself.
-      if (hasEdge(edges, from, to)) return; // dedup.
+      if (from === to) return;
+      if (hasEdge(edges, from, to)) return;
       onEdgesChange([...edges, { from, to }]);
     },
     [edges, onEdgesChange],
   );
 
-  // ── react-flow: deleting edge(s) on the canvas removes them.
   const onEdgesDelete = useCallback(
     (deleted: FlowEdge[]) => {
       const drop = new Set(deleted.map((d) => `${d.source}->${d.target}`));
@@ -286,10 +284,6 @@ export function SkillsetDependencyGraphCanvas({
     [edges, onEdgesChange],
   );
 
-  // ── Tidy: the ONLY path that re-arranges EXISTING nodes — re-run the topo
-  // layout and snap every node to its column slot. Node ids persist, so the
-  // scoped `transform` transition tweens them into place. Never fires
-  // automatically; touches no edges (positions stay local, never emitted).
   const tidy = useCallback(() => {
     const cols = topoColumns(members, edges);
     setNodes((prev) => {
@@ -305,6 +299,60 @@ export function SkillsetDependencyGraphCanvas({
       });
     });
   }, [members, edges, setNodes]);
+
+  // Read-only specific memos (also unconditional hooks for consistent hook order).
+  const staticNodes = useMemo(
+    () =>
+      buildNodes(members, columns).map((n) => ({
+        ...n,
+        draggable: false,
+        connectable: false,
+        selectable: false,
+      })),
+    [members, columns]
+  );
+  const readOnlyFlowEdges: FlowEdge[] = useMemo(
+    () =>
+      edges.map((e) => ({
+        id: `${e.from}->${e.to}`,
+        source: e.from,
+        target: e.to,
+      })),
+    [edges]
+  );
+
+  if (readOnly) {
+    // Read-only display for detail page: static topo layout, no editing, hover support
+    // for the package preview dialog.
+    return (
+      <div className="skillset-depgraph-canvas h-full min-h-[200px] overflow-hidden rounded-sm border border-subtle bg-elevated/30">
+        <ReactFlow
+          nodes={staticNodes}
+          edges={readOnlyFlowEdges}
+          onNodeMouseEnter={(event, node) => {
+            if (onHoverMember && node?.id) {
+              const pos = event && typeof event.clientX === 'number' 
+                ? { clientX: event.clientX, clientY: event.clientY } 
+                : undefined;
+              onHoverMember(node.id, pos);
+            }
+          }}
+          onNodeMouseLeave={() => onHoverMember?.(null)}
+          fitView
+          fitViewOptions={FIT_VIEW_OPTIONS}
+          proOptions={PRO_OPTIONS}
+          nodesDraggable={false}
+          nodesConnectable={false}
+          elementsSelectable={false}
+          panOnDrag
+          zoomOnScroll
+          preventScrolling={false}
+        >
+          <Background variant={BackgroundVariant.Dots} />
+        </ReactFlow>
+      </div>
+    );
+  }
 
   // ── click-to-connect mirror (keyboard-accessible + jsdom-testable).
   function clickNode(ref: string) {
@@ -327,6 +375,7 @@ export function SkillsetDependencyGraphCanvas({
   }
 
   // Group members into ordered columns for the click-to-connect grid.
+  // (columns and source are declared at top level for hook consistency)
   const maxCol = members.reduce((m, ref) => Math.max(m, columns.get(ref) ?? 0), 0);
   const grid: string[][] = Array.from({ length: maxCol + 1 }, () => []);
   for (const ref of members) {

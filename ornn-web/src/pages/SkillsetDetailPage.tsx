@@ -11,7 +11,7 @@
  * @module pages/SkillsetDetailPage
  */
 
-import { useState } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { PageTransition } from "@/components/layout/PageTransition";
@@ -56,8 +56,24 @@ export function SkillsetDetailPage() {
   const { data: versions = [] } = useSkillsetVersions(id);
   const { data: closure } = useSkillsetClosure(id, versionParam);
 
+  // Stabilize graph data for memoized canvas (prevents re-renders on hover state).
+  // Must be before any early returns to satisfy Rules of Hooks.
+  const depEdges = useMemo(() => (skillset?.instructions ? parseDeps(skillset.instructions).edges : []), [skillset?.instructions]);
+  const graphMembers = useMemo(() => skillset?.members ?? [], [skillset?.members]);
+
   const [showPermissions, setShowPermissions] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
+
+  // Hover state for graph nodes (now canvas-based). Shows floating preview dialog.
+  // Position tracks cursor for "beside my cursor" placement.
+  const [hoveredMemberRef, setHoveredMemberRef] = useState<string | null>(null);
+  const [hoveredPos, setHoveredPos] = useState<{ clientX: number; clientY: number } | null>(null);
+
+  // Stable callback so memoized graph doesn't re-render on every hover (prevents node blinking/flash).
+  const handleHoverMember = useCallback((ref: string | null, pos?: { clientX: number; clientY: number }) => {
+    setHoveredMemberRef(ref);
+    setHoveredPos(pos || null);
+  }, []);
 
   // Two-id split: delete is GUID-only on the wire; cache cleanup keys on the
   // URL idOrName so the still-mounted detail page doesn't refetch → 404 (#940).
@@ -96,10 +112,6 @@ export function SkillsetDetailPage() {
 
   const isOwner = !!user && skillset.createdBy === user.id;
   const latestVersion = versions[0]?.version ?? skillset.latestVersion;
-
-  // Dependency edges are a PROJECTION of the master prompt (#1064) — parsed
-  // read-only here; no write path, no new API call.
-  const depEdges = parseDeps(skillset.instructions).edges;
 
   function handleVersionChange(versionOrLatest: string | null) {
     const next = new URLSearchParams(searchParams);
@@ -168,15 +180,17 @@ export function SkillsetDetailPage() {
             )}
           </RailCard>
 
-          {/* Workshop (#1082): left column = member-dependency graph (top) + a
-              slimmer package viewer (below); right rail = metadata + resolved
-              closure + visibility + danger. Natural page scroll (no viewport
-              lock) — the viewer has its own fixed height. */}
-          <main className="flex flex-col gap-4 lg:flex-row lg:items-start">
-            <div className="flex min-w-0 flex-col gap-4 lg:flex-1">
-              {/* Member-dependency graph (#1064) — read-only projection of the
-                  master prompt's managed deps block. Now above the package
-                  viewer in the left column (#1082); gets full width here. */}
+          {/* Workshop: left column is now *only* the member-dependency graph (full height,
+              no permanent package viewer below it). The graph uses the entire vertical
+              space in the equal-height left column. Package preview for a member appears
+              as a floating dialog on hover over a node in the graph (see onHoverMember). */}
+          <main className="flex flex-col gap-4 lg:flex-row lg:items-stretch lg:h-[calc(100vh-280px)] lg:min-h-[480px]">
+            <div className="flex min-w-0 flex-col lg:flex-1 lg:min-h-0 lg:min-w-0">
+              {/* Member-dependency graph (#1064) — read-only Mermaid projection of the
+                  master prompt's managed deps. Takes the *full* left column height now
+                  (previous package viewer below was removed per feedback to let the
+                  diagram utilize the canvas). Hover a node to see its package in a
+                  floating dialog. */}
               <RailCard
                 title={t("skillsetGraph.sectionTitle", "Member dependencies")}
                 icon={
@@ -187,16 +201,57 @@ export function SkillsetDetailPage() {
                     <path d="M7.7 7.7 10.6 16M16.3 7.7 13.4 16" />
                   </svg>
                 }
+                className="flex-1 min-h-0 !p-2 flex flex-col relative"
               >
-                <SkillsetDependencyGraph readOnly members={skillset.members} edges={depEdges} />
-              </RailCard>
+                <SkillsetDependencyGraph
+                  readOnly
+                  members={graphMembers}
+                  edges={depEdges}
+                  className="h-full"
+                  onHoverMember={handleHoverMember}
+                />
 
-              {/* Package viewer — pick a member skill (left column), view its
-                  files. Slimmer than before (fixed height inside the viewer). */}
-              <SkillsetMemberViewer members={skillset.members} />
+                {/* Floating package preview dialog for the hovered graph node.
+                    Positioned fixed beside the cursor (offset right+down) so it appears
+                    "right beside my cursor". Larger size for better readability of the
+                    package tree + content. Uses canvas node hover (no more blinking from
+                    SVG/Mermaid). Dismiss on mouseleave of the popup. */}
+                {hoveredMemberRef && hoveredPos && (
+                  <div
+                    className="fixed z-[100] w-[460px] max-h-[420px] overflow-auto rounded-md border border-subtle bg-card card-impression p-3 text-sm shadow-xl"
+                    style={{
+                      left: (hoveredPos.clientX ?? 0) + 18,
+                      top: (hoveredPos.clientY ?? 0) + 8,
+                    }}
+                    onMouseLeave={() => {
+                      setHoveredMemberRef(null);
+                      setHoveredPos(null);
+                    }}
+                  >
+                    <div className="mb-1.5 flex items-center justify-between font-mono text-[10px] text-meta">
+                      <span className="truncate font-medium">{hoveredMemberRef}</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setHoveredMemberRef(null);
+                          setHoveredPos(null);
+                        }}
+                        className="text-meta hover:text-danger"
+                        aria-label="Close preview"
+                      >
+                        ×
+                      </button>
+                    </div>
+                    <SkillsetMemberViewer
+                      members={skillset.members}
+                      previewRef={hoveredMemberRef}
+                    />
+                  </div>
+                )}
+              </RailCard>
             </div>
 
-            <aside className="flex flex-col gap-4 lg:w-[320px] lg:shrink-0">
+            <aside className="flex flex-col gap-4 lg:w-[320px] lg:shrink-0 lg:h-full lg:overflow-y-auto">
               {/* ── Metadata card ── matches skill details page styling/structure */}
               <section className="rounded-md border border-subtle bg-card p-5 card-impression">
                 <h3 className="mb-3.5 flex items-center gap-2 border-b border-dashed border-subtle pb-3 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-meta">
@@ -266,7 +321,7 @@ export function SkillsetDetailPage() {
                 </dl>
               </section>
 
-              {/* ── Versions card ── exact visual match to skill details page's SkillVersionsCard */}
+              {/* ── Versions card ── exact same structure as SkillVersionsCard in skill details page */}
               {versions.length > 0 && (
                 <RailCard
                   title={t("skillDetail.cardVersions", "Versions")}

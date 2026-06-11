@@ -34,11 +34,11 @@ afterEach(() => {
 });
 
 describe("SkillsetHeroStrip", () => {
-  it("renders the name, description, kind/visibility pills, and tags (version pill moved to right rail)", () => {
+  it("renders the name, description, kind/visibility pills, and tags", () => {
     render(<SkillsetHeroStrip skillset={DETAIL} isOwner={false} />);
     expect(screen.getByRole("heading", { name: "research-bundle" })).toBeInTheDocument();
     expect(screen.getByText("A curated comparison set")).toBeInTheDocument();
-    // Pills (no version pill in hero anymore).
+    // Pills (version pill moved to right-rail Versions card).
     expect(screen.getByText("Consensus")).toBeInTheDocument();
     expect(screen.getByText("Private")).toBeInTheDocument();
     // Tags.
@@ -57,7 +57,7 @@ describe("SkillsetHeroStrip", () => {
     expect(screen.getByText("Public")).toBeInTheDocument();
   });
 
-  it("shows only Edit action for the owner (Permissions moved to Visibility card)", () => {
+  it("shows Edit action for the owner and wires the callback (permissions moved to visibility card)", () => {
     const onEdit = vi.fn();
     render(
       <SkillsetHeroStrip
@@ -68,7 +68,6 @@ describe("SkillsetHeroStrip", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
     expect(onEdit).toHaveBeenCalledTimes(1);
-    expect(screen.queryByRole("button", { name: "Permissions" })).not.toBeInTheDocument();
   });
 
   it("hides owner actions for non-owners", () => {
@@ -76,11 +75,8 @@ describe("SkillsetHeroStrip", () => {
       <SkillsetHeroStrip
         skillset={DETAIL}
         isOwner={false}
-        onEdit={vi.fn()}
       />,
     );
     expect(screen.queryByRole("button", { name: "Edit" })).not.toBeInTheDocument();
   });
-
-  // versionPicker support was removed from the hero (moved to right-rail Versions card to match skill details page layout)
 });

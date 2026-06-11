@@ -1,15 +1,17 @@
 /**
  * SkillsetMemberPicker — add/remove member skill refs for a skillset.
  *
- * A skill typeahead (`searchSkills`) feeds a ref builder: pick a skill, the
- * picker appends a `name@<latest-major.minor>` ref (the version defaults to
- * the skill's `latestVersion` when known, else `latest`). The author can also
- * type a raw ref (`name@1.0` / `name@tag`) and press Enter.
+ * Typeahead via `searchSkills` (public skills) lets the author discover a skill
+ * by name. Clicking a suggestion selects the skill and surfaces its published
+ * versions (via `useSkillVersions`); the author must explicitly pick one to form
+ * the pinned `name@ver` combination. Raw entry of `name@1.0` (or dist-tag) + Enter
+ * is still supported for power users / tags.
  *
  * Client-side rejections mirror the backend v1 rules:
  *   - `skillset:`-prefixed refs (no nested skillsets)
  *   - a ref pointing at the skillset being edited (a set can't contain itself)
  *   - empty / duplicate refs
+ *   - (raw path) missing version after @
  *
  * Members render as removable chips. The 2–100 count bound is enforced at the
  * form level (publish disabled out of range) and surfaced here as a count hint.
@@ -22,6 +24,7 @@ import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
 import { searchSkills } from "@/services/searchApi";
 import { useDebounce } from "@/hooks/useDebounce";
+import { useSkillVersions } from "@/hooks/useSkills";
 import {
   SKILLSET_MAX_MEMBERS,
   SKILLSET_MIN_MEMBERS,
@@ -50,6 +53,9 @@ export function SkillsetMemberPicker({
   const [query, setQuery] = useState("");
   const [focused, setFocused] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
+  /** When a skill is picked from the name suggestions, we fetch its concrete
+   * published versions and let the user choose the exact `name@ver` combo. */
+  const [selectedSkill, setSelectedSkill] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const debounced = useDebounce(query.trim(), 200);
@@ -61,6 +67,12 @@ export function SkillsetMemberPicker({
     staleTime: 10_000,
   });
   const suggestions = results?.items ?? [];
+
+  // Versions for the skill chosen from the typeahead (only when selectedSkill is set).
+  // This forces an explicit skill+version combination instead of "just the name".
+  const versionsQ = useSkillVersions(selectedSkill ?? "");
+  const skillVersions = versionsQ.data ?? [];
+  const versionsLoading = versionsQ.isLoading;
 
   function tryAdd(ref: string) {
     const trimmed = ref.trim();
@@ -106,12 +118,8 @@ export function SkillsetMemberPicker({
     onChange([...members, trimmed]);
     setQuery("");
     setFocused(false);
+    setSelectedSkill(null);
     inputRef.current?.blur();
-  }
-
-  function addFromSkill(name: string, latestVersion?: string) {
-    const version = latestVersion && latestVersion.length > 0 ? latestVersion : "latest";
-    tryAdd(`${name}@${version}`);
   }
 
   function removeMember(ref: string) {
@@ -178,8 +186,12 @@ export function SkillsetMemberPicker({
           type="text"
           value={query}
           onChange={(e) => {
-            setQuery(e.target.value);
+            const val = e.target.value;
+            setQuery(val);
             if (localError) setLocalError(null);
+            if (selectedSkill && !val.startsWith(selectedSkill)) {
+              setSelectedSkill(null);
+            }
           }}
           onFocus={() => setFocused(true)}
           onBlur={() => setTimeout(() => setFocused(false), 150)}
@@ -194,7 +206,7 @@ export function SkillsetMemberPicker({
           }
           className="w-full rounded-sm border border-subtle bg-elevated/40 px-3 py-2 font-text text-sm text-strong placeholder:text-meta/70 focus:border-accent focus:bg-card focus:outline-none"
         />
-        {focused && suggestions.length > 0 && (
+        {focused && suggestions.length > 0 && !selectedSkill && (
           <div className="absolute left-0 right-0 top-full mt-1 z-10 max-h-52 overflow-y-auto rounded-sm border border-subtle bg-card card-impression">
             {suggestions.map((s) => (
               <button
@@ -202,7 +214,10 @@ export function SkillsetMemberPicker({
                 type="button"
                 onMouseDown={(e) => {
                   e.preventDefault();
-                  addFromSkill(s.name);
+                  const name = s.name;
+                  setSelectedSkill(name);
+                  setQuery(name);
+                  setFocused(false);
                 }}
                 className="flex w-full items-center gap-2 px-3 py-2 text-left font-text text-sm hover:bg-accent/10 cursor-pointer"
               >
@@ -214,6 +229,64 @@ export function SkillsetMemberPicker({
                 </span>
               </button>
             ))}
+          </div>
+        )}
+
+        {/* After picking a skill name from suggestions, show its published versions
+            so the user selects an explicit skill+version combination (not just name + implicit latest). */}
+        {selectedSkill && (
+          <div className="absolute left-0 right-0 top-full mt-1 z-10 max-h-60 overflow-y-auto rounded-sm border border-subtle bg-card card-impression">
+            <div className="px-3 py-1.5 font-mono text-[10px] text-meta border-b border-subtle flex items-center justify-between">
+              <span>
+                {t("skillsetMembers.pickVersion", "Select version for {{name}}", { name: selectedSkill })}
+              </span>
+              <button
+                type="button"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  setSelectedSkill(null);
+                  setQuery("");
+                }}
+                className="text-[10px] text-meta hover:text-strong"
+              >
+                {t("common.cancel", "Cancel")}
+              </button>
+            </div>
+
+            {versionsLoading ? (
+              <div className="px-3 py-2 font-text text-sm text-meta italic">
+                {t("skillsetMembers.loadingVersions", "Loading versions…")}
+              </div>
+            ) : skillVersions.length === 0 ? (
+              <div className="px-3 py-2 font-text text-sm text-meta italic">
+                {t("skillsetMembers.noVersions", "No published versions found for this skill.")}
+              </div>
+            ) : (
+              skillVersions.slice(0, 8).map((v) => {
+                const isLatest = v.version === skillVersions[0]?.version;
+                const ref = `${selectedSkill}@${v.version}`;
+                return (
+                  <button
+                    key={v.version}
+                    type="button"
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      tryAdd(ref);
+                    }}
+                    className="flex w-full items-center gap-2 px-3 py-2 text-left font-text text-sm hover:bg-accent/10 cursor-pointer"
+                  >
+                    <span className="truncate text-strong font-mono">
+                      {selectedSkill}@{v.version}
+                    </span>
+                    {isLatest && (
+                      <span className="ml-auto shrink-0 rounded-sm border border-accent/40 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.16em] text-accent">
+                        {t("skillDetail.latest", "latest")}
+                      </span>
+                    )}
+                  </button>
+                );
+              })
+            )}
           </div>
         )}
       </div>

@@ -25,12 +25,12 @@
 
   /* Active / selected — ember primary accent. */
   --xy-edge-stroke-selected: var(--color-accent);
-  --xy-node-boxshadow-selected: 0 0 0 1.5px var(--color-accent);
+  --xy-node-boxshadow-selected: 0 0 0 2px var(--color-accent);
 
-  /* Nodes — match the click-to-connect chips: card fill, subtle border,
-     strong ink text. */
+  /* Nodes — modern card-like with Forge tokens: subtle letterpress shadow,
+     tighter border, better contrast. */
   --xy-node-background-color: var(--color-card);
-  --xy-node-border: 1px solid var(--color-border-subtle);
+  --xy-node-border: 1.5px solid var(--color-border-subtle);
   --xy-node-color: var(--color-strong);
 }
 
@@ -69,14 +69,33 @@
 /* Directed-edge arrowhead color is set via markerEnd.color in the component
    (v12 paints it as an inline fill that beats CSS), so no rule is needed here. */
 
-/* Subtle node hover — ember outline, no layout shift. */
-.skillset-depgraph-canvas .react-flow__node:hover {
-  box-shadow: 0 0 0 1px var(--color-accent);
+/* Modern nodes: rounded card with letterpress impression (per DESIGN.md),
+   smooth hover without blink/shift. Use hard offset shadow for "pressed" feel.
+   Larger effective size via padding on inner content. */
+.skillset-depgraph-canvas .react-flow__node {
+  border-radius: 6px;
+  box-shadow: 2px 2px 0 0 var(--color-shadow-press);
+  transition: box-shadow 120ms ease, border-color 120ms ease;
+  font-size: 12px;
+  line-height: 1.3;
 }
 
-/* Edge hover thickening — the only edge motion (no animated dashes). */
+/* Stronger, attractive hover: ember glow ring + slight lift, no layout shift. */
+.skillset-depgraph-canvas .react-flow__node:hover {
+  box-shadow: 0 0 0 2px var(--color-accent), 3px 3px 0 0 var(--color-shadow-press);
+  border-color: var(--color-accent);
+}
+
+/* Edges: thicker base for presence, arc color, smooth hover thicken.
+   Rounded caps for modern feel. */
+.skillset-depgraph-canvas .react-flow__edge-path {
+  stroke-width: 2.25;
+  stroke-linecap: round;
+  transition: stroke-width 100ms ease;
+}
+
 .skillset-depgraph-canvas .react-flow__edge:hover .react-flow__edge-path {
-  stroke-width: 2.5px;
+  stroke-width: 3;
 }
 
 /* Controls skin — on-brand, zero stock blue. */
