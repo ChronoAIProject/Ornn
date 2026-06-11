@@ -11,7 +11,7 @@
  * @module pages/SkillsetDetailPage
  */
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { PageTransition } from "@/components/layout/PageTransition";
@@ -63,6 +63,12 @@ export function SkillsetDetailPage() {
   // Position tracks cursor for "beside my cursor" placement.
   const [hoveredMemberRef, setHoveredMemberRef] = useState<string | null>(null);
   const [hoveredPos, setHoveredPos] = useState<{ clientX: number; clientY: number } | null>(null);
+
+  // Stable callback so memoized graph doesn't re-render on every hover (prevents node blinking/flash).
+  const handleHoverMember = useCallback((ref: string | null, pos?: { clientX: number; clientY: number }) => {
+    setHoveredMemberRef(ref);
+    setHoveredPos(pos || null);
+  }, []);
 
   // Two-id split: delete is GUID-only on the wire; cache cleanup keys on the
   // URL idOrName so the still-mounted detail page doesn't refetch → 404 (#940).
@@ -201,10 +207,7 @@ export function SkillsetDetailPage() {
                   members={skillset.members}
                   edges={depEdges}
                   className="h-full"
-                  onHoverMember={(ref, pos) => {
-                    setHoveredMemberRef(ref);
-                    setHoveredPos(pos || null);
-                  }}
+                  onHoverMember={handleHoverMember}
                 />
 
                 {/* Floating package preview dialog for the hovered graph node.

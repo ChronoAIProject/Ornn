@@ -22,7 +22,7 @@
  * @module components/skillset/SkillsetDependencyGraph
  */
 
-import { Suspense, lazy } from "react";
+import { Suspense, lazy, memo } from "react";
 import { useTranslation } from "react-i18next";
 import type { Edge } from "@/lib/skillsetDeps";
 
@@ -48,7 +48,7 @@ export interface SkillsetDependencyGraphProps {
   onHoverMember?: ((ref: string | null, pos?: { clientX: number; clientY: number }) => void) | undefined;
 }
 
-export function SkillsetDependencyGraph({
+export const SkillsetDependencyGraph = memo(function SkillsetDependencyGraph({
   members,
   edges,
   onEdgesChange,
@@ -135,4 +135,4 @@ export function SkillsetDependencyGraph({
       )}
     </div>
   );
-}
+});
