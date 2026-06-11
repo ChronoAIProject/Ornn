@@ -206,7 +206,7 @@ function MermaidLightbox({ svg, onClose }: { svg: string; onClose: () => void })
 
 let mermaidCounter = 0;
 
-export function MermaidBlock({ chart }: { chart: string }) {
+export function MermaidBlock({ chart, className = "" }: { chart: string; className?: string }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [svg, setSvg] = useState<string>("");
   const [lightboxOpen, setLightboxOpen] = useState(false);
@@ -232,7 +232,7 @@ export function MermaidBlock({ chart }: { chart: string }) {
     <>
       <div
         ref={containerRef}
-        className="mermaid-container group relative my-4 overflow-x-auto rounded border border-accent/10 bg-page p-4 cursor-pointer"
+        className={`mermaid-container group relative my-4 overflow-x-auto rounded border border-accent/10 bg-page p-4 cursor-pointer ${className}`}
         onClick={() => setLightboxOpen(true)}
         style={{ minHeight: svg ? "240px" : undefined }}
       >

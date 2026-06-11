@@ -60,6 +60,12 @@ export function SkillsetDependencyGraph({
   const chart = useMemo(() => renderFlowchart(members, edges), [members, edges]);
 
   // ── read-only: just the rendered graph (pan/zoom/lightbox via MermaidBlock).
+  // Caller (SkillsetDetailPage) wires the RailCard with `flex flex-col` + passes
+  // `flex-1 min-h-0` as className so this root claims all space *after* the
+  // card's h3 header. We forward a tight className to MermaidBlock to nuke its
+  // default my-4/p-4/minHeight/rounded/bg-page (the source of the "small diagram
+  // in lots of wasted chrome" complaint). The SandboxedSvg + 100% svg then
+  // spans nearly the entire allocated height/width of the member deps area.
   if (readOnly) {
     return (
       <div className={className}>
@@ -75,7 +81,10 @@ export function SkillsetDependencyGraph({
             )}
           </p>
         ) : (
-          <MermaidBlock chart={chart} />
+          <MermaidBlock
+            chart={chart}
+            className="my-0 !p-1 min-h-0 h-full bg-transparent"
+          />
         )}
       </div>
     );

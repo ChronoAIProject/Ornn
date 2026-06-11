@@ -189,9 +189,9 @@ export function SkillsetDetailPage() {
                     <path d="M7.7 7.7 10.6 16M16.3 7.7 13.4 16" />
                   </svg>
                 }
-                className="flex-1 min-h-0 !p-2"
+                className="flex-1 min-h-0 !p-2 flex flex-col"
               >
-                <SkillsetDependencyGraph readOnly members={skillset.members} edges={depEdges} className="h-full" />
+                <SkillsetDependencyGraph readOnly members={skillset.members} edges={depEdges} className="flex-1 min-h-0" />
               </RailCard>
 
               {/* Package viewer — pick a member skill (left column), view its

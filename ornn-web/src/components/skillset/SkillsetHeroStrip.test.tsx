@@ -34,14 +34,13 @@ afterEach(() => {
 });
 
 describe("SkillsetHeroStrip", () => {
-  it("renders the name, description, kind/visibility/version pills, and tags", () => {
+  it("renders the name, description, kind/visibility pills, and tags", () => {
     render(<SkillsetHeroStrip skillset={DETAIL} isOwner={false} />);
     expect(screen.getByRole("heading", { name: "research-bundle" })).toBeInTheDocument();
     expect(screen.getByText("A curated comparison set")).toBeInTheDocument();
-    // Pills.
+    // Pills (version pill moved to right-rail Versions card).
     expect(screen.getByText("Consensus")).toBeInTheDocument();
     expect(screen.getByText("Private")).toBeInTheDocument();
-    expect(screen.getByText("v1.1")).toBeInTheDocument();
     // Tags.
     expect(screen.getByText("#research")).toBeInTheDocument();
     expect(screen.getByText("#rag")).toBeInTheDocument();
@@ -58,21 +57,17 @@ describe("SkillsetHeroStrip", () => {
     expect(screen.getByText("Public")).toBeInTheDocument();
   });
 
-  it("shows Edit + Permissions actions for the owner and wires the callbacks", () => {
+  it("shows Edit action for the owner and wires the callback (permissions moved to visibility card)", () => {
     const onEdit = vi.fn();
-    const onManagePermissions = vi.fn();
     render(
       <SkillsetHeroStrip
         skillset={DETAIL}
         isOwner
         onEdit={onEdit}
-        onManagePermissions={onManagePermissions}
       />,
     );
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
-    fireEvent.click(screen.getByRole("button", { name: "Permissions" }));
     expect(onEdit).toHaveBeenCalledTimes(1);
-    expect(onManagePermissions).toHaveBeenCalledTimes(1);
   });
 
   it("hides owner actions for non-owners", () => {
@@ -80,22 +75,8 @@ describe("SkillsetHeroStrip", () => {
       <SkillsetHeroStrip
         skillset={DETAIL}
         isOwner={false}
-        onEdit={vi.fn()}
-        onManagePermissions={vi.fn()}
       />,
     );
     expect(screen.queryByRole("button", { name: "Edit" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Permissions" })).not.toBeInTheDocument();
-  });
-
-  it("renders the supplied version picker slot", () => {
-    render(
-      <SkillsetHeroStrip
-        skillset={DETAIL}
-        isOwner={false}
-        versionPicker={<div data-testid="version-picker">picker</div>}
-      />,
-    );
-    expect(screen.getByTestId("version-picker")).toBeInTheDocument();
   });
 });
