@@ -69,21 +69,50 @@
 /* Directed-edge arrowhead color is set via markerEnd.color in the component
    (v12 paints it as an inline fill that beats CSS), so no rule is needed here. */
 
-/* Modern nodes: rounded card with letterpress impression (per DESIGN.md),
-   smooth hover without blink/shift. Use hard offset shadow for "pressed" feel.
-   Larger effective size via padding on inner content. */
+/* ── Custom Forge card node (#1092) ───────────────────────────────────────
+   The node's whole visual is the inner `.depgraph-node` card (Tailwind:
+   bg-card + border + rounded). Strip react-flow's wrapper frame so there's no
+   double border/shadow; the transform transition above stays for the tween. */
 .skillset-depgraph-canvas .react-flow__node {
-  border-radius: 6px;
-  box-shadow: 2px 2px 0 0 var(--color-shadow-press);
-  transition: box-shadow 120ms ease, border-color 120ms ease;
-  font-size: 12px;
-  line-height: 1.3;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  border-radius: 0;
+  padding: 0;
 }
 
-/* Stronger, attractive hover: ember glow ring + slight lift, no layout shift. */
-.skillset-depgraph-canvas .react-flow__node:hover {
-  box-shadow: 0 0 0 2px var(--color-accent), 3px 3px 0 0 var(--color-shadow-press);
+/* The member-skill card — letterpress hard-offset impression (DESIGN.md: never
+   a soft glow), smooth hover/selected to an ember border with no layout shift. */
+.skillset-depgraph-canvas .depgraph-node {
+  box-shadow: 3px 3px 0 0 var(--color-shadow-press);
+  transition: box-shadow 120ms ease, border-color 120ms ease;
+}
+.skillset-depgraph-canvas .react-flow__node:hover .depgraph-node,
+.skillset-depgraph-canvas .react-flow__node.selected .depgraph-node {
   border-color: var(--color-accent);
+  box-shadow: 0 0 0 1.5px var(--color-accent), 4px 4px 0 0 var(--color-shadow-press);
+}
+
+/* Code-glyph icon — arc-blue diagrammatic accent (restricted role per DESIGN). */
+.skillset-depgraph-canvas .depgraph-node-icon {
+  color: var(--color-accent-secondary);
+}
+
+/* Blueprint canvas: dark drafting base + a subtle center→edge vignette so the
+   faint react-flow Lines grid reads as a drafting surface and the diagram
+   stays the focus. */
+.skillset-depgraph-canvas {
+  position: relative;
+}
+.skillset-depgraph-canvas .react-flow {
+  background-color: var(--color-page);
+}
+.skillset-depgraph-canvas::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, transparent 45%, var(--color-page) 100%);
 }
 
 /* Edges: thicker base for presence, arc color, smooth hover thicken.
