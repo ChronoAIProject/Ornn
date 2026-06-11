@@ -240,38 +240,97 @@ export function SkillsetDependencyGraphCanvas({
 }: SkillsetDependencyGraphCanvasProps) {
   const { t } = useTranslation();
   const [source, setSource] = useState<string | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const _setSource = setSource; // setter used in editor clickNode; this silences lint in read-only path
 
   const cyclic = useMemo(() => hasCycle(members, edges), [members, edges]);
   const columns = useMemo(() => topoColumns(members, edges), [members, edges]);
 
+  // Editor hooks are declared unconditionally (required by Rules of Hooks).
+  // They run for both read-only and editor paths (extra work in read-only is harmless).
+  const initialNodes = useMemo<Node[]>(() => buildNodes(members, topoColumns(members, edges)), [members]);
+  const [nodes, setNodes, onNodesChange] = useNodesState<Node>(initialNodes);
+
+  const membersKey = members.join("|");
+  useEffect(() => {
+    setNodes((prev) => reconcileNodes(prev, members, topoColumns(members, edges)));
+  }, [membersKey]);
+
+  const flowEdges: FlowEdge[] = useMemo(
+    () =>
+      edges.map((e) => ({
+        id: `${e.from}->${e.to}`,
+        source: e.from,
+        target: e.to,
+      })),
+    [edges],
+  );
+
+  const onConnect = useCallback(
+    (conn: Connection) => {
+      const from = conn.source;
+      const to = conn.target;
+      if (!from || !to) return;
+      if (from === to) return;
+      if (hasEdge(edges, from, to)) return;
+      onEdgesChange([...edges, { from, to }]);
+    },
+    [edges, onEdgesChange],
+  );
+
+  const onEdgesDelete = useCallback(
+    (deleted: FlowEdge[]) => {
+      const drop = new Set(deleted.map((d) => `${d.source}->${d.target}`));
+      onEdgesChange(edges.filter((e) => !drop.has(`${e.from}->${e.to}`)));
+    },
+    [edges, onEdgesChange],
+  );
+
+  const tidy = useCallback(() => {
+    const cols = topoColumns(members, edges);
+    setNodes((prev) => {
+      const rowInCol = new Map<number, number>();
+      const byId = new Map(prev.map((n) => [n.id, n] as const));
+      return members.map((ref) => {
+        const col = cols.get(ref) ?? 0;
+        const row = rowInCol.get(col) ?? 0;
+        rowInCol.set(col, row + 1);
+        const existing = byId.get(ref);
+        const base = existing ?? buildNodes([ref], cols)[0]!;
+        return { ...base, position: { x: col * COL_GAP, y: row * ROW_GAP } };
+      });
+    });
+  }, [members, edges, setNodes]);
+
+  // Read-only specific memos (also unconditional hooks for consistent hook order).
+  const staticNodes = useMemo(
+    () =>
+      buildNodes(members, columns).map((n) => ({
+        ...n,
+        draggable: false,
+        connectable: false,
+        selectable: false,
+      })),
+    [members, columns]
+  );
+  const readOnlyFlowEdges: FlowEdge[] = useMemo(
+    () =>
+      edges.map((e) => ({
+        id: `${e.from}->${e.to}`,
+        source: e.from,
+        target: e.to,
+      })),
+    [edges]
+  );
+
   if (readOnly) {
     // Read-only display for detail page: static topo layout, no editing, hover support
-    // for the package preview dialog. Uses the same canvas engine for consistent
-    // "proper canvas" rendering and space utilization.
-    const staticNodes = useMemo(
-      () =>
-        buildNodes(members, columns).map((n) => ({
-          ...n,
-          draggable: false,
-          connectable: false,
-          selectable: false,
-        })),
-      [members, columns]
-    );
-    const flowEdges: FlowEdge[] = useMemo(
-      () =>
-        edges.map((e) => ({
-          id: `${e.from}->${e.to}`,
-          source: e.from,
-          target: e.to,
-        })),
-      [edges]
-    );
+    // for the package preview dialog.
     return (
       <div className="skillset-depgraph-canvas h-full min-h-[200px] overflow-hidden rounded-sm border border-subtle bg-elevated/30">
         <ReactFlow
           nodes={staticNodes}
-          edges={flowEdges}
+          edges={readOnlyFlowEdges}
           onNodeMouseEnter={(event, node) => {
             if (onHoverMember && node?.id) {
               const pos = event && typeof event.clientX === 'number' 
@@ -297,75 +356,6 @@ export function SkillsetDependencyGraphCanvas({
     );
   }
 
-  // Seed react-flow node positions ONCE from the deterministic topo columns.
-  // After mount, positions are owned by the user's drags (and the Tidy button),
-  // NOT by re-solving topology — so drawing an edge never teleports a node.
-  // Positions are presentation only and never reach the backend.
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- mount seed only; later positions come from drags/Tidy.
-  const initialNodes = useMemo<Node[]>(() => buildNodes(members, topoColumns(members, edges)), []);
-  const [nodes, setNodes, onNodesChange] = useNodesState<Node>(initialNodes);
-
-  // Reconcile positions only when MEMBERS change (add/remove). `edges` is read
-  // for a new member's initial column but is deliberately NOT a dependency —
-  // re-seeding on edge edits is exactly the teleport bug we removed.
-  const membersKey = members.join("|");
-  useEffect(() => {
-    setNodes((prev) => reconcileNodes(prev, members, topoColumns(members, edges)));
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- seed from members only; edges feed a new node's slot but must not re-seed.
-  }, [membersKey]);
-
-  const flowEdges: FlowEdge[] = useMemo(
-    () =>
-      edges.map((e) => ({
-        id: `${e.from}->${e.to}`,
-        source: e.from,
-        target: e.to,
-      })),
-    [edges],
-  );
-
-  // ── react-flow: a dragged connection adds an edge.
-  const onConnect = useCallback(
-    (conn: Connection) => {
-      const from = conn.source;
-      const to = conn.target;
-      if (!from || !to) return;
-      if (from === to) return; // self-loop — a node can't depend on itself.
-      if (hasEdge(edges, from, to)) return; // dedup.
-      onEdgesChange([...edges, { from, to }]);
-    },
-    [edges, onEdgesChange],
-  );
-
-  // ── react-flow: deleting edge(s) on the canvas removes them.
-  const onEdgesDelete = useCallback(
-    (deleted: FlowEdge[]) => {
-      const drop = new Set(deleted.map((d) => `${d.source}->${d.target}`));
-      onEdgesChange(edges.filter((e) => !drop.has(`${e.from}->${e.to}`)));
-    },
-    [edges, onEdgesChange],
-  );
-
-  // ── Tidy: the ONLY path that re-arranges EXISTING nodes — re-run the topo
-  // layout and snap every node to its column slot. Node ids persist, so the
-  // scoped `transform` transition tweens them into place. Never fires
-  // automatically; touches no edges (positions stay local, never emitted).
-  const tidy = useCallback(() => {
-    const cols = topoColumns(members, edges);
-    setNodes((prev) => {
-      const rowInCol = new Map<number, number>();
-      const byId = new Map(prev.map((n) => [n.id, n] as const));
-      return members.map((ref) => {
-        const col = cols.get(ref) ?? 0;
-        const row = rowInCol.get(col) ?? 0;
-        rowInCol.set(col, row + 1);
-        const existing = byId.get(ref);
-        const base = existing ?? buildNodes([ref], cols)[0]!;
-        return { ...base, position: { x: col * COL_GAP, y: row * ROW_GAP } };
-      });
-    });
-  }, [members, edges, setNodes]);
-
   // ── click-to-connect mirror (keyboard-accessible + jsdom-testable).
   function clickNode(ref: string) {
     if (source === null) {
@@ -387,6 +377,7 @@ export function SkillsetDependencyGraphCanvas({
   }
 
   // Group members into ordered columns for the click-to-connect grid.
+  // (columns and source are declared at top level for hook consistency)
   const maxCol = members.reduce((m, ref) => Math.max(m, columns.get(ref) ?? 0), 0);
   const grid: string[][] = Array.from({ length: maxCol + 1 }, () => []);
   for (const ref of members) {

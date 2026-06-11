@@ -56,6 +56,11 @@ export function SkillsetDetailPage() {
   const { data: versions = [] } = useSkillsetVersions(id);
   const { data: closure } = useSkillsetClosure(id, versionParam);
 
+  // Stabilize graph data for memoized canvas (prevents re-renders on hover state).
+  // Must be before any early returns to satisfy Rules of Hooks.
+  const depEdges = useMemo(() => (skillset?.instructions ? parseDeps(skillset.instructions).edges : []), [skillset?.instructions]);
+  const graphMembers = useMemo(() => skillset?.members ?? [], [skillset?.members]);
+
   const [showPermissions, setShowPermissions] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
 
@@ -107,20 +112,6 @@ export function SkillsetDetailPage() {
 
   const isOwner = !!user && skillset.createdBy === user.id;
   const latestVersion = versions[0]?.version ?? skillset.latestVersion;
-
-  // Dependency edges are a PROJECTION of the master prompt (#1064) — parsed
-  // read-only here; no write path, no new API call.
-  // Stabilize for the memoized graph component: prevents re-renders of the entire
-  // react-flow canvas on every hover state change (the root cause of all nodes
-  // flashing rapidly when hovering one node).
-  const depEdges = useMemo(
-    () => parseDeps(skillset.instructions).edges,
-    [skillset.instructions]
-  );
-  const graphMembers = useMemo(
-    () => skillset.members,
-    [skillset.members]
-  );
 
   function handleVersionChange(versionOrLatest: string | null) {
     const next = new URLSearchParams(searchParams);

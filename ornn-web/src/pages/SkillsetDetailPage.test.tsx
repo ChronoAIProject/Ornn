@@ -48,7 +48,7 @@ vi.mock("@/components/skill/ReadmeViewer", () => ({
 // Graph now uses react-flow canvas in read-only (detail). Mock it for the page tests
 // that assert on graph rendering/empty states.
 vi.mock("@/components/skillset/SkillsetDependencyGraphCanvas", () => ({
-  SkillsetDependencyGraphCanvas: ({ members, edges }: { members?: string[]; edges?: any[] }) => (
+  SkillsetDependencyGraphCanvas: ({ edges }: { edges?: unknown[] }) => (
     <div data-testid="depgraph-canvas">
       {(edges || []).length > 0 ? "flowchart" : "No dependencies declared"}
     </div>
