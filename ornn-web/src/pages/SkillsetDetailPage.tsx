@@ -173,10 +173,12 @@ export function SkillsetDetailPage() {
               closure + visibility + danger. Natural page scroll (no viewport
               lock) — the viewer has its own fixed height. */}
           <main className="flex flex-col gap-4 lg:flex-row lg:items-stretch lg:h-[calc(100vh-280px)] lg:min-h-[480px]">
-            <div className="flex min-w-0 flex-col gap-4 lg:flex-1 lg:min-h-0 lg:min-w-0">
+            <div className="flex min-w-0 flex-col gap-2 lg:flex-1 lg:min-h-0 lg:min-w-0">
               {/* Member-dependency graph (#1064) — read-only projection of the
                   master prompt's managed deps block. Now above the package
-                  viewer in the left column (#1082); gets full width here. */}
+                  viewer in the left column (#1082); gets full width here.
+                  Takes most of the vertical space to utilize the available height
+                  and make the actual diagram larger (reduced gap and graph card padding). */}
               <RailCard
                 title={t("skillsetGraph.sectionTitle", "Member dependencies")}
                 icon={
@@ -187,12 +189,14 @@ export function SkillsetDetailPage() {
                     <path d="M7.7 7.7 10.6 16M16.3 7.7 13.4 16" />
                   </svg>
                 }
+                className="flex-1 min-h-0 !p-2"
               >
-                <SkillsetDependencyGraph readOnly members={skillset.members} edges={depEdges} />
+                <SkillsetDependencyGraph readOnly members={skillset.members} edges={depEdges} className="h-full" />
               </RailCard>
 
               {/* Package viewer — pick a member skill (left column), view its
-                  files. Fixed height to match equal-height layout like skill details. */}
+                  files. Shorter fixed height to give more room to the graph above
+                  while keeping preview usable. Matches equal-height intent. */}
               <SkillsetMemberViewer members={skillset.members} />
             </div>
 

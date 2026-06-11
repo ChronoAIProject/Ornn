@@ -56,7 +56,7 @@ export function SkillsetMemberViewer({ members }: SkillsetMemberViewerProps) {
 
   return (
     <section
-      className="card-impression flex h-[520px] flex-row overflow-hidden rounded border border-subtle bg-card"
+      className="card-impression flex h-[280px] flex-row overflow-hidden rounded border border-subtle bg-card"
       data-testid="skillset-member-viewer"
     >
       {/* Skills selector — a vertical list on the far LEFT (#1082), so the
