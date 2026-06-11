@@ -37,19 +37,21 @@
  * @module components/skillset/SkillsetDependencyGraphCanvas
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   ReactFlow,
   Background,
   BackgroundVariant,
   Controls,
+  Handle,
   useNodesState,
   Position,
   MarkerType,
   ConnectionLineType,
   ConnectionMode,
   type Node,
+  type NodeProps,
   type Edge as FlowEdge,
   type Connection,
 } from "@xyflow/react";
@@ -190,6 +192,45 @@ const CONNECTION_LINE_STYLE = { strokeWidth: 2 } as const;
 const PRO_OPTIONS = { hideAttribution: true } as const;
 const DELETE_KEYS = ["Backspace", "Delete"];
 
+/** Code-glyph icon for a member skill card (arc-blue, set in CSS). */
+const MEMBER_NODE_ICON = (
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <polyline points="16 18 22 12 16 6" />
+    <polyline points="8 6 2 12 8 18" />
+  </svg>
+);
+
+/**
+ * Custom Forge "card" node (#1092): a code-glyph icon + the skill name + its
+ * version, with left(target)/right(source) connection handles. The card chrome
+ * (letterpress hard-offset shadow, hover/selected ember border) lives in
+ * skillset-depgraph-canvas.css — this just lays out the content. Replaces
+ * react-flow's plain default box node on both the editor + read-only canvas.
+ */
+const MemberSkillNode = memo(function MemberSkillNode({ data }: NodeProps) {
+  const { name, version } = data as { name: string; version?: string };
+  return (
+    <div className="depgraph-node flex w-[186px] items-center gap-2.5 rounded-lg border border-subtle bg-card px-3 py-2">
+      <Handle type="target" position={Position.Left} />
+      <span className="depgraph-node-icon flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-md border border-strong-edge bg-elevated">
+        {MEMBER_NODE_ICON}
+      </span>
+      <span className="min-w-0">
+        <span className="block truncate font-mono text-[12.5px] font-semibold leading-tight text-strong">
+          {name}
+        </span>
+        {version && (
+          <span className="mt-0.5 block font-mono text-[10px] leading-none text-meta">v{version}</span>
+        )}
+      </span>
+      <Handle type="source" position={Position.Right} />
+    </div>
+  );
+});
+
+/** Stable nodeTypes map (module-level so react-flow doesn't re-init per render). */
+const NODE_TYPES = { memberSkill: MemberSkillNode };
+
 /**
  * Build react-flow nodes for `members` at their topo-column slots, oriented for
  * a left→right flow (source handle right, target handle left). Used for the
@@ -204,8 +245,9 @@ function buildNodes(members: string[], columns: Map<string, number>): Node[] {
     const { name, version } = refLabel(ref);
     return {
       id: ref,
+      type: "memberSkill",
       position: { x: col * COL_GAP, y: row * ROW_GAP },
-      data: { label: version ? `${name}@${version}` : name },
+      data: { name, version, label: version ? `${name}@${version}` : name },
       sourcePosition: Position.Right,
       targetPosition: Position.Left,
     } satisfies Node;
@@ -329,10 +371,12 @@ export function SkillsetDependencyGraphCanvas({
         <ReactFlow
           nodes={staticNodes}
           edges={readOnlyFlowEdges}
+          nodeTypes={NODE_TYPES}
+          defaultEdgeOptions={DEFAULT_EDGE_OPTIONS}
           onNodeMouseEnter={(event, node) => {
             if (onHoverMember && node?.id) {
-              const pos = event && typeof event.clientX === 'number' 
-                ? { clientX: event.clientX, clientY: event.clientY } 
+              const pos = event && typeof event.clientX === 'number'
+                ? { clientX: event.clientX, clientY: event.clientY }
                 : undefined;
               onHoverMember(node.id, pos);
             }
@@ -348,7 +392,7 @@ export function SkillsetDependencyGraphCanvas({
           zoomOnScroll
           preventScrolling={false}
         >
-          <Background variant={BackgroundVariant.Dots} />
+          <Background variant={BackgroundVariant.Lines} gap={26} color="var(--color-border-subtle)" />
         </ReactFlow>
       </div>
     );
@@ -405,6 +449,7 @@ export function SkillsetDependencyGraphCanvas({
         <ReactFlow
           nodes={nodes}
           edges={flowEdges}
+          nodeTypes={NODE_TYPES}
           onNodesChange={onNodesChange}
           onConnect={onConnect}
           onEdgesDelete={onEdgesDelete}
@@ -425,7 +470,7 @@ export function SkillsetDependencyGraphCanvas({
           preventScrolling={false}
           proOptions={PRO_OPTIONS}
         >
-          <Background variant={BackgroundVariant.Dots} gap={20} size={1} />
+          <Background variant={BackgroundVariant.Lines} gap={26} color="var(--color-border-subtle)" />
           {/* bottom-LEFT so the cluster never overlaps a node's right-edge
               (source) handle — the primary drag-to-connect grab target. */}
           <Controls showInteractive={false} position="bottom-left" />
