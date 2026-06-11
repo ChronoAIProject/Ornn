@@ -68,7 +68,9 @@ describe("SkillsetMemberViewer", () => {
         <SkillsetMemberViewer members={MEMBERS} />
       </MemoryRouter>,
     );
-    fireEvent.click(screen.getByText("beta"));
+    // Click the button (not just the inner Link text, which has stopPropagation for navigation)
+    const betaButton = screen.getByText("beta").closest("button");
+    fireEvent.click(betaButton!);
     expect(useSkill).toHaveBeenLastCalledWith("beta", "2.1");
   });
 
