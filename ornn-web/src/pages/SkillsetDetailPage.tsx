@@ -266,10 +266,10 @@ export function SkillsetDetailPage() {
                 </dl>
               </section>
 
-              {/* Versions card in right rail (moved from top hero, matching skill details page) */}
+              {/* ── Versions card ── exact visual match to skill details page's SkillVersionsCard */}
               {versions.length > 0 && (
                 <RailCard
-                  title={t("skillsetDetail.versionsCount", "Versions")}
+                  title={t("skillDetail.cardVersions", "Versions")}
                   icon={
                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
                       <path d="M21 16V8a2 2 0 0 0-1-1.7l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.7l7 4a2 2 0 0 0 2 0l7-4a2 2 0 0 0 1-1.7z" />
@@ -278,11 +278,32 @@ export function SkillsetDetailPage() {
                     </svg>
                   }
                 >
-                  <VersionPicker
-                    versions={versions}
-                    currentVersion={skillset.version}
-                    onChange={handleVersionChange}
-                  />
+                  <div className="mb-1.5 flex items-baseline gap-2">
+                    <span className="font-display text-2xl font-semibold tracking-tight text-strong">
+                      {skillset.version}
+                    </span>
+                    {skillset.version === latestVersion && (
+                      <span className="rounded-sm border border-accent/40 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.16em] text-accent">
+                        {t("skillDetail.latest", "latest")}
+                      </span>
+                    )}
+                  </div>
+                  <p className="font-mono text-[11px] leading-relaxed tracking-wide text-meta">
+                    {t("skillDetail.heroPublishedOn", "Published {{date}}", { date: formatDateSGT(skillset.createdOn, i18n.language) })}
+                    {versions.length > 1 && (
+                      <>
+                        {" · "}
+                        {t("skillDetail.versionsTotal", "{{n}} versions total", { n: versions.length })}
+                      </>
+                    )}
+                  </p>
+                  <div className="mt-3.5 flex flex-col gap-2">
+                    <VersionPicker
+                      versions={versions}
+                      currentVersion={skillset.version}
+                      onChange={handleVersionChange}
+                    />
+                  </div>
                 </RailCard>
               )}
 
