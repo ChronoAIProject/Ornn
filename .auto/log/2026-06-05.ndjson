@@ -1,3 +1,0 @@
-{"ts":"2026-06-05T06:05:42Z","run":"-","lvl":"INFO","evt":"commit_gate_start","issue":"-","phase":"commit-gate","cause":"","msg":"gating commit in /tmp/relnotes-wt"}
-{"ts":"2026-06-05T06:05:42Z","run":"-","lvl":"INFO","evt":"commit_gate_build_skip","issue":"-","phase":"commit-gate","cause":"","msg":"WARN: --skip-build set; per-commit buildability NOT verified here"}
-{"ts":"2026-06-05T06:05:42Z","run":"-","lvl":"INFO","evt":"commit_gate_ok","issue":"-","phase":"commit-gate","cause":"","msg":"all commit gates passed"}

@@ -8,7 +8,7 @@
  *   create  → name is editable + required (kebab-case); version defaults 1.0;
  *             submits via `onSubmit` with the create payload.
  *   edit    → name is LOCKED (display-only); version is auto-bumped on mount
- *             (next patch) with quick +patch/+minor/+major buttons so you rarely
+ *             (next minor) with quick +minor / +major buttons so you rarely
  *             have to type the tag by hand. Still validated to be different from
  *             the loaded version (server also enforces proper bump).
  *
@@ -79,15 +79,15 @@ export function SkillsetForm({
   const [tags, setTags] = useState<string[]>(initial?.tags ?? []);
   const [members, setMembersRaw] = useState<string[]>(initial?.members ?? []);
   /** Compute an auto-bumped version for edit mode so user doesn't have to manually type the next tag. */
-  function bumpVersion(current: string, level: "patch" | "minor" | "major" = "patch"): string {
+  function bumpVersion(current: string, level: "minor" | "major" = "minor"): string {
     const [majStr = "", minStr = ""] = current.trim().split(".");
     const major = parseInt(majStr, 10);
     const minor = parseInt(minStr, 10);
     if (isNaN(major) || isNaN(minor)) return "1.0";
-    if (level === "patch") {
-      return `${major}.${minor + 1}`;
+    if (level === "major") {
+      return `${major + 1}.0`;
     }
-    return `${major + 1}.0`;
+    return `${major}.${minor + 1}`;
   }
 
   const [version, setVersion] = useState(() => {
@@ -208,8 +208,8 @@ export function SkillsetForm({
           </div>
         )}
 
-        {/* Version — defaulted 1.0 on create; in edit we auto-bump to the next patch on mount
-            and provide quick +patch / +minor / +major buttons so you don't have to type tags manually. */}
+        {/* Version — defaulted 1.0 on create; in edit we auto-bump to the next minor on mount
+            and provide quick +minor / +major buttons so you don't have to type tags manually. */}
         {mode === "edit" ? (
           <div className="flex flex-col gap-1.5">
             <Input

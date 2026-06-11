@@ -240,8 +240,6 @@ export function SkillsetDependencyGraphCanvas({
 }: SkillsetDependencyGraphCanvasProps) {
   const { t } = useTranslation();
   const [source, setSource] = useState<string | null>(null);
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const _setSource = setSource; // setter used in editor clickNode; this silences lint in read-only path
 
   const cyclic = useMemo(() => hasCycle(members, edges), [members, edges]);
   const columns = useMemo(() => topoColumns(members, edges), [members, edges]);
