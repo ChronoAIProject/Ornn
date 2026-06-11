@@ -7,9 +7,10 @@
  *
  *   create  → name is editable + required (kebab-case); version defaults 1.0;
  *             submits via `onSubmit` with the create payload.
- *   edit    → name is LOCKED (display-only); version is REQUIRED and must be
- *             bumped (the publish path validates the bump server-side; the
- *             form requires a non-empty version distinct from the loaded one).
+ *   edit    → name is LOCKED (display-only); version is auto-bumped on mount
+ *             (next patch) with quick +patch/+minor/+major buttons so you rarely
+ *             have to type the tag by hand. Still validated to be different from
+ *             the loaded version (server also enforces proper bump).
  *
  * Validation is surfaced inline; the submit button is disabled until the form
  * is structurally valid (name present in create, ≥2 members, required prompt,
@@ -77,7 +78,25 @@ export function SkillsetForm({
   const [kind, setKind] = useState<SkillsetKind>(initial?.kind ?? "generic");
   const [tags, setTags] = useState<string[]>(initial?.tags ?? []);
   const [members, setMembersRaw] = useState<string[]>(initial?.members ?? []);
-  const [version, setVersion] = useState(initial?.version ?? (mode === "create" ? "1.0" : ""));
+  /** Compute an auto-bumped version for edit mode so user doesn't have to manually type the next tag. */
+  function bumpVersion(current: string, level: "patch" | "minor" | "major" = "patch"): string {
+    const parts = current.trim().split(".").map((n) => parseInt(n, 10));
+    if (parts.length !== 2 || isNaN(parts[0]) || isNaN(parts[1])) return "1.0";
+    let [major, minor] = parts;
+    if (level === "patch") {
+      minor += 1;
+    } else {
+      major += 1;
+      minor = 0;
+    }
+    return `${major}.${minor}`;
+  }
+
+  const [version, setVersion] = useState(() => {
+    if (mode === "create") return "1.0";
+    const cur = initial?.version?.trim() ?? "";
+    return cur ? bumpVersion(cur) : "1.0";
+  });
   const [submitted, setSubmitted] = useState(false);
 
   // Dependency edges are a PROJECTION of the single `instructions` state — the
@@ -191,20 +210,51 @@ export function SkillsetForm({
           </div>
         )}
 
-        {/* Version — defaulted 1.0 on create; required + bumped on edit. */}
-        <Input
-          label={t("skillsetForm.version", "Version") as string}
-          value={version}
-          onChange={(e) => setVersion(e.target.value)}
-          placeholder={mode === "edit" ? "1.1" : "1.0"}
-          error={
-            submitted && !versionValid
-              ? mode === "edit"
-                ? (t("skillsetForm.versionBumpError", "Publish requires a new, bumped version (e.g. 1.1).") as string)
-                : (t("skillsetForm.versionError", "Version must be <major>.<minor> (e.g. 1.0).") as string)
-              : undefined
-          }
-        />
+        {/* Version — defaulted 1.0 on create; in edit we auto-bump to the next patch on mount
+            and provide quick +patch / +minor / +major buttons so you don't have to type tags manually. */}
+        {mode === "edit" ? (
+          <div className="flex flex-col gap-1.5">
+            <Input
+              label={t("skillsetForm.version", "Version") as string}
+              value={version}
+              onChange={(e) => setVersion(e.target.value)}
+              placeholder="1.1"
+              error={
+                submitted && !versionValid
+                  ? (t("skillsetForm.versionBumpError", "Publish requires a new, bumped version (e.g. 1.1).") as string)
+                  : undefined
+              }
+            />
+            <div className="flex items-center gap-1.5">
+              <span className="font-mono text-[9px] uppercase tracking-[0.16em] text-meta">
+                from {initial?.version ?? "?"}
+              </span>
+              {(["patch", "minor", "major"] as const).map((level) => (
+                <button
+                  key={level}
+                  type="button"
+                  onClick={() => setVersion(bumpVersion(version, level))}
+                  className="rounded-sm border border-subtle px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-widest text-meta hover:border-accent hover:text-strong focus:outline-none"
+                  title={`Bump ${level} from current field value`}
+                >
+                  +{level}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <Input
+            label={t("skillsetForm.version", "Version") as string}
+            value={version}
+            onChange={(e) => setVersion(e.target.value)}
+            placeholder="1.0"
+            error={
+              submitted && !versionValid
+                ? (t("skillsetForm.versionError", "Version must be <major>.<minor> (e.g. 1.0).") as string)
+                : undefined
+            }
+          />
+        )}
 
         {/* Description — full width. */}
         <div className="sm:col-span-2">
