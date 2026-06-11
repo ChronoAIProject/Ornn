@@ -177,6 +177,8 @@ const ROW_GAP = 80;
 const FIT_VIEW_OPTIONS = { padding: 0.2, maxZoom: 1, duration: 200 } as const;
 const DEFAULT_EDGE_OPTIONS = {
   type: "smoothstep",
+  // Subtle flowing dash so the "runs before" direction reads as motion (#1094).
+  animated: true,
   // `color` is load-bearing: v12 paints the arrowhead with an INLINE fill that
   // overrides any CSS rule, falling back to stock grey (#b1b1b7) when absent.
   // Pin it to the arc-blue edge token so the marker matches the edge stroke and
@@ -187,6 +189,8 @@ const DEFAULT_EDGE_OPTIONS = {
     height: 16,
     color: "var(--color-accent-secondary)",
   },
+  // The "runs before" label pill is styled via CSS (.react-flow__edge-text /
+  // -textbg) with Forge tokens — see skillset-depgraph-canvas.css (#1094).
 } as const;
 const CONNECTION_LINE_STYLE = { strokeWidth: 2 } as const;
 const PRO_OPTIONS = { hideAttribution: true } as const;
@@ -282,6 +286,9 @@ export function SkillsetDependencyGraphCanvas({
 }: SkillsetDependencyGraphCanvasProps) {
   const { t } = useTranslation();
   const [source, setSource] = useState<string | null>(null);
+  // Relationship label rendered on every arrow: source "runs before" target (the
+  // canonical skillset-deps semantic). i18n; pill-styled via DEFAULT_EDGE_OPTIONS.
+  const edgeLabel = t("skillsetGraph.edgeLabel", "runs before");
 
   const cyclic = useMemo(() => hasCycle(members, edges), [members, edges]);
   const columns = useMemo(() => topoColumns(members, edges), [members, edges]);
@@ -302,8 +309,9 @@ export function SkillsetDependencyGraphCanvas({
         id: `${e.from}->${e.to}`,
         source: e.from,
         target: e.to,
+        label: edgeLabel,
       })),
-    [edges],
+    [edges, edgeLabel],
   );
 
   const onConnect = useCallback(
@@ -359,8 +367,9 @@ export function SkillsetDependencyGraphCanvas({
         id: `${e.from}->${e.to}`,
         source: e.from,
         target: e.to,
+        label: edgeLabel,
       })),
-    [edges]
+    [edges, edgeLabel]
   );
 
   if (readOnly) {
@@ -390,9 +399,13 @@ export function SkillsetDependencyGraphCanvas({
           elementsSelectable={false}
           panOnDrag
           zoomOnScroll
+          minZoom={0.4}
+          maxZoom={2}
           preventScrolling={false}
         >
           <Background variant={BackgroundVariant.Lines} gap={26} color="var(--color-border-subtle)" />
+          {/* Zoom in / out / fit on the read-only detail graph (#1094). */}
+          <Controls showInteractive={false} position="bottom-right" />
         </ReactFlow>
       </div>
     );

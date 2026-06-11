@@ -11,7 +11,7 @@
  * @module pages/SkillsetDetailPage
  */
 
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useRef } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { PageTransition } from "@/components/layout/PageTransition";
@@ -69,11 +69,40 @@ export function SkillsetDetailPage() {
   const [hoveredMemberRef, setHoveredMemberRef] = useState<string | null>(null);
   const [hoveredPos, setHoveredPos] = useState<{ clientX: number; clientY: number } | null>(null);
 
-  // Stable callback so memoized graph doesn't re-render on every hover (prevents node blinking/flash).
-  const handleHoverMember = useCallback((ref: string | null, pos?: { clientX: number; clientY: number }) => {
-    setHoveredMemberRef(ref);
-    setHoveredPos(pos || null);
+  // Grace timer so the popup survives the gap between the node and the dialog:
+  // leaving a node SCHEDULES a close, but entering the popup cancels it (#1094 —
+  // previously the popup was "gone already" before the cursor reached it).
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cancelClose = useCallback(() => {
+    if (closeTimer.current) {
+      clearTimeout(closeTimer.current);
+      closeTimer.current = null;
+    }
   }, []);
+  const closePreview = useCallback(() => {
+    cancelClose();
+    setHoveredMemberRef(null);
+    setHoveredPos(null);
+  }, [cancelClose]);
+
+  // Stable callback so the memoized graph doesn't re-render on every hover.
+  const handleHoverMember = useCallback(
+    (ref: string | null, pos?: { clientX: number; clientY: number }) => {
+      if (ref) {
+        cancelClose();
+        setHoveredMemberRef(ref);
+        if (pos) setHoveredPos(pos);
+      } else {
+        // Left the node — let the cursor reach the dialog (~250ms) before close.
+        cancelClose();
+        closeTimer.current = setTimeout(() => {
+          setHoveredMemberRef(null);
+          setHoveredPos(null);
+        }, 250);
+      }
+    },
+    [cancelClose],
+  );
 
   // Two-id split: delete is GUID-only on the wire; cache cleanup keys on the
   // URL idOrName so the still-mounted detail page doesn't refetch → 404 (#940).
@@ -218,34 +247,31 @@ export function SkillsetDetailPage() {
                     SVG/Mermaid). Dismiss on mouseleave of the popup. */}
                 {hoveredMemberRef && hoveredPos && (
                   <div
-                    className="fixed z-[100] w-[460px] max-h-[420px] overflow-auto rounded-md border border-subtle bg-card card-impression p-3 text-sm shadow-xl"
+                    className="fixed z-[100] flex w-[600px] max-w-[calc(100vw-2rem)] max-h-[70vh] flex-col overflow-hidden rounded-md border border-subtle bg-card card-impression text-sm shadow-xl"
                     style={{
-                      left: (hoveredPos.clientX ?? 0) + 18,
-                      top: (hoveredPos.clientY ?? 0) + 8,
+                      left: Math.min((hoveredPos.clientX ?? 0) + 18, window.innerWidth - 616),
+                      top: Math.min((hoveredPos.clientY ?? 0) + 8, window.innerHeight - 120),
                     }}
-                    onMouseLeave={() => {
-                      setHoveredMemberRef(null);
-                      setHoveredPos(null);
-                    }}
+                    onMouseEnter={cancelClose}
+                    onMouseLeave={closePreview}
                   >
-                    <div className="mb-1.5 flex items-center justify-between font-mono text-[10px] text-meta">
-                      <span className="truncate font-medium">{hoveredMemberRef}</span>
+                    <div className="flex shrink-0 items-center justify-between border-b border-subtle px-3 py-2 font-mono text-[11px] text-meta">
+                      <span className="truncate font-medium text-strong">{hoveredMemberRef}</span>
                       <button
                         type="button"
-                        onClick={() => {
-                          setHoveredMemberRef(null);
-                          setHoveredPos(null);
-                        }}
-                        className="text-meta hover:text-danger"
+                        onClick={closePreview}
+                        className="ml-2 shrink-0 text-meta hover:text-danger"
                         aria-label="Close preview"
                       >
                         ×
                       </button>
                     </div>
-                    <SkillsetMemberViewer
-                      members={skillset.members}
-                      previewRef={hoveredMemberRef}
-                    />
+                    <div className="min-h-0 flex-1 overflow-auto p-2">
+                      <SkillsetMemberViewer
+                        members={skillset.members}
+                        previewRef={hoveredMemberRef}
+                      />
+                    </div>
                   </div>
                 )}
               </RailCard>

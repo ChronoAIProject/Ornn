@@ -1788,6 +1788,7 @@
     "pickTarget": "为 {{ref}} 选择目标…",
     "removeEdge": "移除依赖边 {{from}} → {{to}}",
     "tidy": "整理",
+    "edgeLabel": "先于",
     "cycleWarning": "成员之间形成了环——执行顺序仅供参考。",
     "emptyReadonly": "没有可绘制的成员。",
     "emptyDeps": "成员之间未声明依赖关系。"
