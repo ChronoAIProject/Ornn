@@ -80,16 +80,14 @@ export function SkillsetForm({
   const [members, setMembersRaw] = useState<string[]>(initial?.members ?? []);
   /** Compute an auto-bumped version for edit mode so user doesn't have to manually type the next tag. */
   function bumpVersion(current: string, level: "patch" | "minor" | "major" = "patch"): string {
-    const parts = current.trim().split(".").map((n) => parseInt(n, 10));
-    if (parts.length !== 2 || isNaN(parts[0]) || isNaN(parts[1])) return "1.0";
-    let [major, minor] = parts;
+    const [majStr = "", minStr = ""] = current.trim().split(".");
+    const major = parseInt(majStr, 10);
+    const minor = parseInt(minStr, 10);
+    if (isNaN(major) || isNaN(minor)) return "1.0";
     if (level === "patch") {
-      minor += 1;
-    } else {
-      major += 1;
-      minor = 0;
+      return `${major}.${minor + 1}`;
     }
-    return `${major}.${minor}`;
+    return `${major + 1}.0`;
   }
 
   const [version, setVersion] = useState(() => {
