@@ -1,10 +1,10 @@
 /**
  * SkillsetMemberViewer — the skillset detail page's left pane (#1080).
  *
- * A member selector (a row of clickable skill chips) + a READ-ONLY
- * `SkillPackagePreview` of the selected member skill's files — mirroring the
- * skill detail page's package pane so a skillset reads like "a workshop of its
- * member skills". The user clicks a member to view its content.
+ * A vertical skills selector (far-left column) + a READ-ONLY
+ * `SkillPackagePreview` of the selected member skill's files — so the viewer
+ * reads skills | file tree | content. The user clicks a skill in the set to
+ * view its content, mirroring the skill detail page's package pane.
  *
  * Data path (all read-only — NO skill mutation, NO closure write):
  *   member ref `name@version`
@@ -56,15 +56,17 @@ export function SkillsetMemberViewer({ members }: SkillsetMemberViewerProps) {
 
   return (
     <section
-      className="card-impression flex min-h-[420px] flex-col overflow-hidden rounded border border-subtle bg-card lg:flex-1 lg:min-h-0 lg:min-w-0"
+      className="card-impression flex h-[520px] flex-row overflow-hidden rounded border border-subtle bg-card"
       data-testid="skillset-member-viewer"
     >
-      {/* Member selector — click a skill in the set to view its package. */}
+      {/* Skills selector — a vertical list on the far LEFT (#1082), so the
+          viewer reads skills | file tree | content. Click a skill in the set to
+          view its package. */}
       <div
-        className="flex shrink-0 items-center gap-2 overflow-x-auto border-b border-subtle bg-elevated px-3 py-2"
+        className="flex w-[168px] shrink-0 flex-col gap-1 overflow-y-auto border-r border-subtle bg-elevated p-2"
         data-testid="member-tabs"
       >
-        <span className="shrink-0 font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
+        <span className="px-1 pb-1 font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
           {t("skillsetDetail.membersLabel", "Members")}
         </span>
         {members.map((ref) => {
@@ -76,21 +78,21 @@ export function SkillsetMemberViewer({ members }: SkillsetMemberViewerProps) {
               type="button"
               onClick={() => setSelectedRef(ref)}
               aria-pressed={isActive}
-              className={`shrink-0 rounded-sm border px-2.5 py-1 font-mono text-xs transition-colors cursor-pointer ${
+              className={`w-full rounded-sm border px-2 py-1.5 text-left font-mono text-xs transition-colors cursor-pointer ${
                 isActive
                   ? "border-accent bg-accent/15 text-strong"
-                  : "border-subtle bg-card text-meta hover:border-accent hover:text-strong"
+                  : "border-transparent text-meta hover:border-subtle hover:text-strong"
               }`}
             >
-              <span className="max-w-[12rem] truncate align-middle">{name}</span>
-              {version && <span className="text-meta">@{version}</span>}
+              <span className="block truncate">{name}</span>
+              {version && <span className="text-[10px] text-meta">@{version}</span>}
             </button>
           );
         })}
       </div>
 
-      {/* Selected member's package — read-only file tree + viewer. */}
-      <div className="flex-1 min-h-0">
+      {/* Selected member's package — read-only file tree + content. */}
+      <div className="min-w-0 flex-1">
         {!activeRef ? (
           <p className="py-12 text-center font-text text-sm text-meta">
             {t("skillsetDetail.noMembers", "This skillset has no members.")}
