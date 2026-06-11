@@ -29,15 +29,17 @@ import { parseMemberRef } from "@/types/skillset";
 export interface SkillsetMemberViewerProps {
   /** Member refs (`name@version`) of the skillset version being viewed. */
   members: string[];
+  /** If provided, render *only* the package preview for this ref (hides the left selector). Outer height becomes content-based. Used for graph hover dialogs. */
+  previewRef?: string | null | undefined;
 }
 
-export function SkillsetMemberViewer({ members }: SkillsetMemberViewerProps) {
+export function SkillsetMemberViewer({ members, previewRef }: SkillsetMemberViewerProps) {
   const { t } = useTranslation();
   const [selectedRef, setSelectedRef] = useState<string | null>(members[0] ?? null);
 
   // Keep the selection valid if `members` changes (version switch / edit).
   const activeRef =
-    selectedRef && members.includes(selectedRef) ? selectedRef : (members[0] ?? null);
+    previewRef ?? (selectedRef && members.includes(selectedRef) ? selectedRef : (members[0] ?? null));
   const parsed = activeRef ? parseMemberRef(activeRef) : null;
 
   const {
@@ -56,12 +58,13 @@ export function SkillsetMemberViewer({ members }: SkillsetMemberViewerProps) {
 
   return (
     <section
-      className="card-impression flex h-[280px] flex-row overflow-hidden rounded border border-subtle bg-card"
+      className={`card-impression flex ${previewRef ? '' : 'h-[280px]'} flex-row overflow-hidden rounded border border-subtle bg-card`}
       data-testid="skillset-member-viewer"
     >
       {/* Skills selector — a vertical list on the far LEFT (#1082), so the
           viewer reads skills | file tree | content. Click a skill in the set to
-          view its package. */}
+          view its package. Hidden in preview-only mode (e.g. graph hover dialog). */}
+      {!previewRef && (
       <div
         className="flex w-[168px] shrink-0 flex-col gap-1 overflow-y-auto border-r border-subtle bg-elevated p-2"
         data-testid="member-tabs"
@@ -90,9 +93,10 @@ export function SkillsetMemberViewer({ members }: SkillsetMemberViewerProps) {
           );
         })}
       </div>
+      )}
 
       {/* Selected member's package — read-only file tree + content. */}
-      <div className="min-w-0 flex-1">
+      <div className={`min-w-0 flex-1 ${previewRef ? 'w-full' : ''}`}>
         {!activeRef ? (
           <p className="py-12 text-center font-text text-sm text-meta">
             {t("skillsetDetail.noMembers", "This skillset has no members.")}

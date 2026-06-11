@@ -131,9 +131,6 @@ describe("SkillsetDetailPage", () => {
     expect(screen.getByText("Consensus")).toBeInTheDocument();
     // Master prompt (rendered via stubbed ReadmeViewer, now in the metadata card).
     expect(screen.getByTestId("readme")).toHaveTextContent("Run A, then B.");
-    // Members — the package viewer receives both member refs.
-    expect(screen.getByTestId("member-viewer")).toHaveTextContent("a@1.0");
-    expect(screen.getByTestId("member-viewer")).toHaveTextContent("b@1.0");
     // Closure (flat list with a depth-1 dependency).
     expect(screen.getByTestId("closure-list")).toHaveTextContent("a-dep");
     // Visibility card (exact same as skill details) — shows user/org counts.

@@ -46,6 +46,8 @@ export interface SkillsetDependencyGraphProps {
   /** Render the read-only Mermaid view (detail page) instead of the editor. */
   readOnly?: boolean | undefined;
   className?: string | undefined;
+  /** Called when a graph node is hovered (in read-only mode). The ref is matched from the node label. */
+  onHoverMember?: ((ref: string | null) => void) | undefined;
 }
 
 export function SkillsetDependencyGraph({
@@ -54,6 +56,7 @@ export function SkillsetDependencyGraph({
   onEdgesChange,
   readOnly = false,
   className = "",
+  onHoverMember,
 }: SkillsetDependencyGraphProps) {
   const { t } = useTranslation();
 
@@ -83,6 +86,20 @@ export function SkillsetDependencyGraph({
         ) : (
           <MermaidBlock
             chart={chart}
+            direct
+            onNodeHover={(label) => {
+              if (!onHoverMember) return;
+              if (!label) {
+                onHoverMember(null);
+                return;
+              }
+              const clean = label.replace(/["\s]/g, '');
+              const matched = members.find((m) => {
+                const mclean = m.replace(/["\s]/g, '');
+                return clean === mclean || clean.includes(mclean) || mclean.includes(clean);
+              });
+              onHoverMember(matched || null);
+            }}
             className="my-0 !p-1 min-h-0 h-full bg-transparent"
           />
         )}

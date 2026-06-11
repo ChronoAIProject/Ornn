@@ -206,7 +206,19 @@ function MermaidLightbox({ svg, onClose }: { svg: string; onClose: () => void })
 
 let mermaidCounter = 0;
 
-export function MermaidBlock({ chart, className = "" }: { chart: string; className?: string }) {
+export function MermaidBlock({ 
+  chart, 
+  className = "", 
+  direct = false, 
+  onNodeHover 
+}: { 
+  chart: string; 
+  className?: string; 
+  /** Render the SVG directly in the page DOM (trusted sources only — e.g. internal generated graphs). Enables hover handlers etc. */
+  direct?: boolean; 
+  /** Called with the hovered node's label text (or null on leave). Only when direct=true. */
+  onNodeHover?: ((label: string | null) => void) | undefined;
+}) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [svg, setSvg] = useState<string>("");
   const [lightboxOpen, setLightboxOpen] = useState(false);
@@ -228,6 +240,27 @@ export function MermaidBlock({ chart, className = "" }: { chart: string; classNa
     return () => { cancelled = true; };
   }, [chart, theme]);
 
+  // Attach hover listeners when using direct render (SVG is in main DOM).
+  useEffect(() => {
+    if (!direct || !onNodeHover || !svg || !containerRef.current) return;
+    const root = containerRef.current;
+    const nodeGs = root.querySelectorAll('g.node');
+    const cleanups: Array<() => void> = [];
+    nodeGs.forEach((g) => {
+      const label = g.textContent?.trim() || g.querySelector('text')?.textContent?.trim() || '';
+      if (!label) return;
+      const enter = () => onNodeHover(label);
+      const leave = () => onNodeHover(null);
+      g.addEventListener('mouseenter', enter);
+      g.addEventListener('mouseleave', leave);
+      cleanups.push(() => {
+        g.removeEventListener('mouseenter', enter);
+        g.removeEventListener('mouseleave', leave);
+      });
+    });
+    return () => cleanups.forEach((c) => c());
+  }, [direct, onNodeHover, svg]);
+
   return (
     <>
       <div
@@ -235,8 +268,9 @@ export function MermaidBlock({ chart, className = "" }: { chart: string; classNa
         className={`mermaid-container group relative my-4 overflow-x-auto rounded border border-accent/10 bg-page p-4 cursor-pointer ${className}`}
         onClick={() => setLightboxOpen(true)}
         style={{ minHeight: svg ? "240px" : undefined }}
+        {...(direct && svg ? { dangerouslySetInnerHTML: { __html: svg } } : {})}
       >
-        {svg ? <SandboxedSvg svg={svg} /> : null}
+        {!direct && svg ? <SandboxedSvg svg={svg} /> : null}
       </div>
       {lightboxOpen && <MermaidLightbox svg={svg} onClose={() => setLightboxOpen(false)} />}
     </>
