@@ -153,48 +153,61 @@ export function SkillsetDetailPage() {
             </p>
           )}
 
-          {/* Two-pane workshop (#1080): left = member skill-package viewer
-              (click a member to view its files); right rail = metadata (leading
-              with the master prompt) + member dependencies + resolved closure +
-              visibility + danger. Mirrors SkillDetailPage — on lg+ the grid is
-              locked to a viewport-relative height so each pane scrolls its own
-              content; on mobile it falls back to natural page flow. */}
-          <main className="flex flex-col gap-4 lg:flex-row lg:items-stretch lg:h-[calc(100vh-280px)] lg:min-h-[480px]">
-            {/* Left pane: member skill-package viewer (#1080) — click a member
-                to view its files, like the skill detail page. The master prompt
-                + dependency graph + resolved closure now live in the right rail. */}
-            <SkillsetMemberViewer members={skillset.members} />
+          {/* Master prompt (#1082) — the skillset's "how to use" entry point,
+              as the TOPMOST full-width card right under the hero. */}
+          <RailCard
+            title={t("skillsetDetail.masterPrompt", "Master prompt")}
+            icon={
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                <polyline points="14 2 14 8 20 8" />
+                <line x1="8" y1="13" x2="16" y2="13" />
+                <line x1="8" y1="17" x2="13" y2="17" />
+              </svg>
+            }
+          >
+            {skillset.instructions ? (
+              <div className="max-h-64 overflow-y-auto">
+                <ReadmeViewer content={skillset.instructions} />
+              </div>
+            ) : (
+              <p className="font-text text-sm text-meta italic">
+                {t("skillsetDetail.noPrompt", "No master prompt for this version.")}
+              </p>
+            )}
+          </RailCard>
 
-            <aside className="flex flex-col gap-4 lg:w-[320px] lg:shrink-0 lg:min-h-0 lg:overflow-y-auto">
-              {/* Metadata — now leads with the master prompt (#1080), the
-                  skillset's "how to use" entry point, then the typed fields. */}
+          {/* Workshop (#1082): left column = member-dependency graph (top) + a
+              slimmer package viewer (below); right rail = metadata + resolved
+              closure + visibility + danger. Natural page scroll (no viewport
+              lock) — the viewer has its own fixed height. */}
+          <main className="flex flex-col gap-4 lg:flex-row lg:items-start">
+            <div className="flex min-w-0 flex-col gap-4 lg:flex-1">
+              {/* Member-dependency graph (#1064) — read-only projection of the
+                  master prompt's managed deps block. Now above the package
+                  viewer in the left column (#1082); gets full width here. */}
               <RailCard
-                title={t("skillsetDetail.metadata", "Metadata")}
+                title={t("skillsetGraph.sectionTitle", "Member dependencies")}
                 icon={
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
-                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                    <polyline points="14 2 14 8 20 8" />
-                    <line x1="8" y1="13" x2="16" y2="13" />
-                    <line x1="8" y1="17" x2="13" y2="17" />
+                    <circle cx="6" cy="6" r="2.5" />
+                    <circle cx="18" cy="6" r="2.5" />
+                    <circle cx="12" cy="18" r="2.5" />
+                    <path d="M7.7 7.7 10.6 16M16.3 7.7 13.4 16" />
                   </svg>
                 }
               >
-                {/* Master prompt — rendered markdown, capped + scrollable so a
-                    long prompt doesn't dominate the rail. */}
-                <div className="mb-4">
-                  <p className="mb-1.5 font-mono text-[10px] uppercase tracking-widest text-meta">
-                    {t("skillsetDetail.masterPrompt", "Master prompt")}
-                  </p>
-                  {skillset.instructions ? (
-                    <div className="max-h-72 overflow-y-auto rounded-sm border border-subtle bg-elevated/30 px-3 py-2">
-                      <ReadmeViewer content={skillset.instructions} />
-                    </div>
-                  ) : (
-                    <p className="font-text text-sm text-meta italic">
-                      {t("skillsetDetail.noPrompt", "No master prompt for this version.")}
-                    </p>
-                  )}
-                </div>
+                <SkillsetDependencyGraph readOnly members={skillset.members} edges={depEdges} />
+              </RailCard>
+
+              {/* Package viewer — pick a member skill (left column), view its
+                  files. Slimmer than before (fixed height inside the viewer). */}
+              <SkillsetMemberViewer members={skillset.members} />
+            </div>
+
+            <aside className="flex flex-col gap-4 lg:w-[320px] lg:shrink-0">
+              {/* Metadata. */}
+              <RailCard title={t("skillsetDetail.metadata", "Metadata")}>
                 <dl className="space-y-2.5 font-text text-sm text-body">
                   <div className="flex items-baseline justify-between gap-2">
                     <dt className="font-mono text-[10px] uppercase tracking-widest text-meta">
@@ -251,22 +264,6 @@ export function SkillsetDetailPage() {
                     </dd>
                   </div>
                 </dl>
-              </RailCard>
-
-              {/* Member-dependency graph (#1064) — read-only projection of the
-                  master prompt's managed deps block. No write path. */}
-              <RailCard
-                title={t("skillsetGraph.sectionTitle", "Member dependencies")}
-                icon={
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
-                    <circle cx="6" cy="6" r="2.5" />
-                    <circle cx="18" cy="6" r="2.5" />
-                    <circle cx="12" cy="18" r="2.5" />
-                    <path d="M7.7 7.7 10.6 16M16.3 7.7 13.4 16" />
-                  </svg>
-                }
-              >
-                <SkillsetDependencyGraph readOnly members={skillset.members} edges={depEdges} />
               </RailCard>
 
               {/* Resolved closure — flat depth-indented list. */}
