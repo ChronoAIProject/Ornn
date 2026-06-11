@@ -11,6 +11,7 @@
 
 import { describe, it, expect, afterEach } from "vitest";
 import { cleanup, render, screen, within } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { SkillsetClosureViewer } from "./SkillsetClosureViewer";
 import type { SkillsetClosureItem } from "@/types/skillset";
 
@@ -25,12 +26,20 @@ afterEach(() => cleanup());
 
 describe("SkillsetClosureViewer", () => {
   it("renders an empty hint when there are no items", () => {
-    render(<SkillsetClosureViewer items={[]} />);
+    render(
+      <MemoryRouter>
+        <SkillsetClosureViewer items={[]} />
+      </MemoryRouter>,
+    );
     expect(screen.getByText(/No resolved members/i)).toBeInTheDocument();
   });
 
   it("renders every node flat, in the given deps-first order", () => {
-    render(<SkillsetClosureViewer items={ITEMS} />);
+    render(
+      <MemoryRouter>
+        <SkillsetClosureViewer items={ITEMS} />
+      </MemoryRouter>,
+    );
     const rows = within(screen.getByTestId("closure-list")).getAllByRole("listitem");
     expect(rows).toHaveLength(4);
     expect(rows[0]).toHaveTextContent("a");
@@ -40,7 +49,11 @@ describe("SkillsetClosureViewer", () => {
   });
 
   it("tags depth-0 rows as members and deeper rows as deps", () => {
-    render(<SkillsetClosureViewer items={ITEMS} />);
+    render(
+      <MemoryRouter>
+        <SkillsetClosureViewer items={ITEMS} />
+      </MemoryRouter>,
+    );
     const rows = within(screen.getByTestId("closure-list")).getAllByRole("listitem");
     expect(rows[0]).toHaveTextContent("member");
     expect(rows[2]).toHaveTextContent("dep");
@@ -48,7 +61,11 @@ describe("SkillsetClosureViewer", () => {
   });
 
   it("indents each row proportional to its depth", () => {
-    render(<SkillsetClosureViewer items={ITEMS} />);
+    render(
+      <MemoryRouter>
+        <SkillsetClosureViewer items={ITEMS} />
+      </MemoryRouter>,
+    );
     const rows = within(screen.getByTestId("closure-list")).getAllByRole("listitem");
     // depth 0 → 0px, depth 1 → 20px, depth 2 → 40px.
     expect((rows[0] as HTMLElement).style.marginLeft).toBe("0px");
