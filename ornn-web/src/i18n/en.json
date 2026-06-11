@@ -1788,6 +1788,7 @@
     "pickTarget": "Pick a target for {{ref}}…",
     "removeEdge": "Remove edge {{from}} → {{to}}",
     "tidy": "Tidy",
+    "edgeLabel": "runs before",
     "cycleWarning": "Members form a cycle — order is advisory.",
     "emptyReadonly": "No members to graph.",
     "emptyDeps": "No dependencies declared between members."

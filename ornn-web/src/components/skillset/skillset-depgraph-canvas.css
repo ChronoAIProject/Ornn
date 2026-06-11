@@ -127,6 +127,34 @@
   stroke-width: 3;
 }
 
+/* Animated edge flow (#1094): a slower, refined dash than react-flow's stock
+   0.5s/dash-5 so the "runs before" direction reads as gentle motion, not a
+   marketplace-y strobe. */
+.skillset-depgraph-canvas .react-flow__edge.animated .react-flow__edge-path {
+  stroke-dasharray: 7 5;
+  animation: depgraph-edge-flow 0.9s linear infinite;
+}
+@keyframes depgraph-edge-flow {
+  to {
+    stroke-dashoffset: -12;
+  }
+}
+
+/* "runs before" edge label (#1094) — arc-blue mono text on a card-chip pill so
+   the relationship is legible without opening the master prompt. */
+.skillset-depgraph-canvas .react-flow__edge-text {
+  fill: var(--color-accent-secondary);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+}
+.skillset-depgraph-canvas .react-flow__edge-textbg {
+  fill: var(--color-card);
+  stroke: var(--color-border-subtle);
+  stroke-width: 1px;
+}
+
 /* Controls skin — on-brand, zero stock blue. */
 .skillset-depgraph-canvas .react-flow__controls {
   background: var(--color-card);
