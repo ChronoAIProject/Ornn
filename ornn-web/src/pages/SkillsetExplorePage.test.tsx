@@ -123,10 +123,11 @@ describe("SkillsetExplorePage tabs + filters", () => {
     expect(screen.getByRole("button", { name: "All kinds" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Bundle" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Consensus" })).toBeInTheDocument();
-    // The tag input is the ONLY text field — there is no keyword SearchBar.
-    const textboxes = screen.getAllByRole("textbox");
-    expect(textboxes).toHaveLength(1);
-    expect(textboxes[0]).toHaveAttribute("placeholder", "add tag…");
+    // Two text fields: the keyword search box + the tag input.
+    expect(
+      screen.getByPlaceholderText("Search skillsets by name or description..."),
+    ).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("add tag…")).toBeInTheDocument();
   });
 
   it("toggles the kind filter via the sidebar chip and updates the URL/hook", () => {
@@ -139,11 +140,22 @@ describe("SkillsetExplorePage tabs + filters", () => {
 
   it("adds a tag from the sidebar input and passes it to the active hook", () => {
     renderAt("/skillsets");
-    const input = screen.getByRole("textbox");
+    const input = screen.getByPlaceholderText("add tag…");
     fireEvent.change(input, { target: { value: "research" } });
     fireEvent.keyDown(input, { key: "Enter" });
     expect(publicHook).toHaveBeenLastCalledWith(
       expect.objectContaining({ tags: ["research"] }),
+    );
+  });
+
+  it("passes the keyword search box value to the active hook as q", () => {
+    renderAt("/skillsets");
+    const search = screen.getByPlaceholderText(
+      "Search skillsets by name or description...",
+    );
+    fireEvent.change(search, { target: { value: "rag" } });
+    expect(publicHook).toHaveBeenLastCalledWith(
+      expect.objectContaining({ q: "rag" }),
     );
   });
 

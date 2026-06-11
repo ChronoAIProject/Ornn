@@ -38,6 +38,8 @@ const searchQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).optional(),
   /** Comma-separated tag list — skillsets must have ALL listed tags. */
   tags: z.string().optional(),
+  /** Free-text keyword — case-insensitive substring on name + description. */
+  q: z.string().max(200).optional(),
 });
 
 function parseCsv(raw: string | undefined): string[] | undefined {
@@ -104,6 +106,7 @@ export function createSkillsetSearchRoutes(
         pageSize,
         kind: parsed.kind,
         tagsAll: parseCsv(parsed.tags),
+        q: parsed.q,
       });
 
       const itemsReturned = response.items.length;

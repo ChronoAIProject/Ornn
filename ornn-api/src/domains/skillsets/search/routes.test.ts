@@ -17,6 +17,7 @@ interface SearchCall {
   scope: string;
   kind?: string;
   tagsAll?: string[];
+  q?: string;
   page: number;
   pageSize: number;
   currentUserId: string;
@@ -97,6 +98,13 @@ describe("GET /skillset-search", () => {
     const app = buildApp({ capture: (c) => (call = c) });
     await app.request("/api/v1/skillset-search?tags=alpha,beta");
     expect(call!.tagsAll).toEqual(["alpha", "beta"]);
+  });
+
+  test("forwards the q keyword to the service", async () => {
+    let call: SearchCall | null = null;
+    const app = buildApp({ capture: (c) => (call = c) });
+    await app.request("/api/v1/skillset-search?q=research%20bundle");
+    expect(call!.q).toBe("research bundle");
   });
 
   test("anonymous caller is collapsed to public scope", async () => {

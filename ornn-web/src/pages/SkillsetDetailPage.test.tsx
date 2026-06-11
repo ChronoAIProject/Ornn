@@ -48,6 +48,14 @@ vi.mock("@/components/skill/ReadmeViewer", () => ({
 vi.mock("@/components/docs/DocsMermaid", () => ({
   MermaidBlock: ({ chart }: { chart: string }) => <div data-testid="mermaid">{chart}</div>,
 }));
+// The member-package viewer fetches each member's skill + package via TanStack
+// Query; stub it to a light list so this page test needs no QueryClientProvider.
+// Its own behavior is covered in SkillsetMemberViewer.test.
+vi.mock("@/components/skillset/SkillsetMemberViewer", () => ({
+  SkillsetMemberViewer: ({ members }: { members: string[] }) => (
+    <div data-testid="member-viewer">{members.join(" ")}</div>
+  ),
+}));
 
 import { SkillsetDetailPage } from "./SkillsetDetailPage";
 import type { SkillsetDetail } from "@/types/skillset";
@@ -121,11 +129,11 @@ describe("SkillsetDetailPage", () => {
     expect(screen.getByText("A curated comparison set")).toBeInTheDocument();
     // Kind badge (consensus).
     expect(screen.getByText("Consensus")).toBeInTheDocument();
-    // Master prompt (rendered via stubbed ReadmeViewer).
+    // Master prompt (rendered via stubbed ReadmeViewer, now in the metadata card).
     expect(screen.getByTestId("readme")).toHaveTextContent("Run A, then B.");
-    // Members — both a@1.0 and b@1.0 render their @version chip.
-    expect(screen.getAllByText("a").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("@1.0").length).toBeGreaterThan(0);
+    // Members — the package viewer receives both member refs.
+    expect(screen.getByTestId("member-viewer")).toHaveTextContent("a@1.0");
+    expect(screen.getByTestId("member-viewer")).toHaveTextContent("b@1.0");
     // Closure (flat list with a depth-1 dependency).
     expect(screen.getByTestId("closure-list")).toHaveTextContent("a-dep");
     // Visibility — private, with the shared-with count.
