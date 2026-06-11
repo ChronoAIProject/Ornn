@@ -11,7 +11,7 @@
  * @module pages/SkillsetDetailPage
  */
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { PageTransition } from "@/components/layout/PageTransition";
@@ -110,7 +110,17 @@ export function SkillsetDetailPage() {
 
   // Dependency edges are a PROJECTION of the master prompt (#1064) — parsed
   // read-only here; no write path, no new API call.
-  const depEdges = parseDeps(skillset.instructions).edges;
+  // Stabilize for the memoized graph component: prevents re-renders of the entire
+  // react-flow canvas on every hover state change (the root cause of all nodes
+  // flashing rapidly when hovering one node).
+  const depEdges = useMemo(
+    () => parseDeps(skillset.instructions).edges,
+    [skillset.instructions]
+  );
+  const graphMembers = useMemo(
+    () => skillset.members,
+    [skillset.members]
+  );
 
   function handleVersionChange(versionOrLatest: string | null) {
     const next = new URLSearchParams(searchParams);
@@ -204,7 +214,7 @@ export function SkillsetDetailPage() {
               >
                 <SkillsetDependencyGraph
                   readOnly
-                  members={skillset.members}
+                  members={graphMembers}
                   edges={depEdges}
                   className="h-full"
                   onHoverMember={handleHoverMember}
