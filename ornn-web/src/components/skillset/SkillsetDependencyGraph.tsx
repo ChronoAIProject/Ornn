@@ -43,8 +43,9 @@ export interface SkillsetDependencyGraphProps {
   /** Render the read-only Mermaid view (detail page) instead of the editor. */
   readOnly?: boolean | undefined;
   className?: string | undefined;
-  /** Called when a graph node is hovered (in read-only mode). The ref is matched from the node label. */
-  onHoverMember?: ((ref: string | null) => void) | undefined;
+  /** Called when a graph node is hovered (in read-only mode).
+   *  Second arg provides mouse position for placing the preview popup beside the cursor. */
+  onHoverMember?: ((ref: string | null, pos?: { clientX: number; clientY: number }) => void) | undefined;
 }
 
 export function SkillsetDependencyGraph({

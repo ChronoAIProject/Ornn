@@ -59,9 +59,10 @@ export function SkillsetDetailPage() {
   const [showPermissions, setShowPermissions] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
 
-  // Hover state for graph nodes — shows a floating package preview dialog instead of a permanent
-  // viewer below the graph (frees the full canvas height for the Mermaid diagram).
+  // Hover state for graph nodes (now canvas-based). Shows floating preview dialog.
+  // Position tracks cursor for "beside my cursor" placement.
   const [hoveredMemberRef, setHoveredMemberRef] = useState<string | null>(null);
+  const [hoveredPos, setHoveredPos] = useState<{ clientX: number; clientY: number } | null>(null);
 
   // Two-id split: delete is GUID-only on the wire; cache cleanup keys on the
   // URL idOrName so the still-mounted detail page doesn't refetch → 404 (#940).
@@ -200,23 +201,37 @@ export function SkillsetDetailPage() {
                   members={skillset.members}
                   edges={depEdges}
                   className="h-full"
-                  onHoverMember={setHoveredMemberRef}
+                  onHoverMember={(ref, pos) => {
+                    setHoveredMemberRef(ref);
+                    setHoveredPos(pos || null);
+                  }}
                 />
 
                 {/* Floating package preview dialog for the hovered graph node.
-                    Positioned inside the graph card (right side) so it doesn't take
-                    permanent layout space. Dismiss on mouseleave. Reuses the compact
-                    preview path of SkillsetMemberViewer. */}
-                {hoveredMemberRef && (
+                    Positioned fixed beside the cursor (offset right+down) so it appears
+                    "right beside my cursor". Larger size for better readability of the
+                    package tree + content. Uses canvas node hover (no more blinking from
+                    SVG/Mermaid). Dismiss on mouseleave of the popup. */}
+                {hoveredMemberRef && hoveredPos && (
                   <div
-                    className="absolute top-2 right-2 z-50 w-[420px] max-h-[380px] overflow-auto rounded border border-subtle bg-card card-impression p-3 text-sm shadow-lg"
-                    onMouseLeave={() => setHoveredMemberRef(null)}
+                    className="fixed z-[100] w-[460px] max-h-[420px] overflow-auto rounded-md border border-subtle bg-card card-impression p-3 text-sm shadow-xl"
+                    style={{
+                      left: hoveredPos.clientX + 18,
+                      top: hoveredPos.clientY + 8,
+                    }}
+                    onMouseLeave={() => {
+                      setHoveredMemberRef(null);
+                      setHoveredPos(null);
+                    }}
                   >
-                    <div className="mb-1 flex items-center justify-between font-mono text-[10px] text-meta">
-                      <span className="truncate">{hoveredMemberRef}</span>
+                    <div className="mb-1.5 flex items-center justify-between font-mono text-[10px] text-meta">
+                      <span className="truncate font-medium">{hoveredMemberRef}</span>
                       <button
                         type="button"
-                        onClick={() => setHoveredMemberRef(null)}
+                        onClick={() => {
+                          setHoveredMemberRef(null);
+                          setHoveredPos(null);
+                        }}
                         className="text-meta hover:text-danger"
                         aria-label="Close preview"
                       >

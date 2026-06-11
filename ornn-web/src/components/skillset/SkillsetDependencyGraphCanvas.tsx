@@ -69,8 +69,9 @@ export interface SkillsetDependencyGraphCanvasProps {
   onEdgesChange: (edges: Edge[]) => void;
   /** Display-only mode for detail page (no drag/connect/edit). */
   readOnly?: boolean | undefined;
-  /** Hover callback for nodes (used by detail page for package preview dialog). */
-  onHoverMember?: ((ref: string | null) => void) | undefined;
+  /** Hover callback for nodes (used by detail page for package preview dialog).
+   *  Second arg is mouse position for cursor-follow popup. */
+  onHoverMember?: ((ref: string | null, pos?: { clientX: number; clientY: number }) => void) | undefined;
 }
 
 /** Has edge `from → to` already (exact ref match)? */
@@ -271,7 +272,11 @@ export function SkillsetDependencyGraphCanvas({
         <ReactFlow
           nodes={staticNodes}
           edges={flowEdges}
-          onNodeMouseEnter={(_, node) => onHoverMember?.(node.id)}
+          onNodeMouseEnter={(event, node) => {
+            if (onHoverMember) {
+              onHoverMember(node.id, { clientX: event.clientX, clientY: event.clientY });
+            }
+          }}
           onNodeMouseLeave={() => onHoverMember?.(null)}
           fitView
           fitViewOptions={FIT_VIEW_OPTIONS}
