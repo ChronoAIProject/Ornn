@@ -43,6 +43,7 @@ interface SkillsetListParams {
   // Optionals widen to `T | undefined` for exactOptionalPropertyTypes (#657).
   kind?: SkillsetKind | undefined;
   tags?: string[] | undefined;
+  q?: string | undefined;
   page?: number | undefined;
   pageSize?: number | undefined;
   enabled?: boolean | undefined;
@@ -56,6 +57,7 @@ function buildSearchParams(
     scope,
     kind: params.kind,
     tags: params.tags,
+    q: params.q,
     page: params.page,
     pageSize: params.pageSize,
   };

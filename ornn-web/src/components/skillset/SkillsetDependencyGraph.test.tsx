@@ -3,11 +3,9 @@
  * and the #1064 / #1067 no-mutation grep-guard (now covering BOTH the graph
  * dispatcher and its react-flow canvas child).
  *
- * The Mermaid renderer is heavy (pulls real `mermaid` into jsdom), so we stub
- * `<MermaidBlock>` to a marker div. The editor branch lazy-loads the real
- * react-flow canvas; its interaction wiring (onConnect / onEdgesDelete /
- * click-to-connect) is asserted in SkillsetDependencyGraphCanvas.test — here we
- * only assert the lazy surface mounts.
+ * The read-only path now uses the canvas (proper engine). We stub the canvas
+ * (and kept old mermaid mock for compatibility). Editor wiring tested in the
+ * canvas-specific test file. Here we assert dispatcher + read-only canvas mount.
  *
  * @module components/skillset/SkillsetDependencyGraph.test
  */
@@ -20,6 +18,16 @@ import { cleanup, render, screen } from "@testing-library/react";
 vi.mock("@/components/docs/DocsMermaid", () => ({
   MermaidBlock: ({ chart }: { chart: string }) => (
     <div data-testid="mermaid">{chart}</div>
+  ),
+}));
+
+// Canvas used for both editor and (now) read-only detail. Provide the testids
+// that editor lazy test and read-only expect.
+vi.mock("@/components/skillset/SkillsetDependencyGraphCanvas", () => ({
+  SkillsetDependencyGraphCanvas: ({ members }: { members?: string[] }) => (
+    <div data-testid="graph-columns">
+      <div data-testid="graph-canvas">{(members || []).join(",")}</div>
+    </div>
   ),
 }));
 
@@ -53,7 +61,7 @@ describe("SkillsetDependencyGraph — editor mount", () => {
 });
 
 describe("SkillsetDependencyGraph — read-only", () => {
-  it("renders the Mermaid chart when there are edges", () => {
+  it("renders the canvas graph when there are edges", () => {
     render(
       <SkillsetDependencyGraph
         readOnly
@@ -61,16 +69,16 @@ describe("SkillsetDependencyGraph — read-only", () => {
         edges={[{ from: "a@1.0", to: "b@1.0" }]}
       />,
     );
-    expect(screen.getByTestId("mermaid")).toHaveTextContent("flowchart TD");
+    expect(screen.getByTestId("graph-canvas")).toHaveTextContent("a@1.0,b@1.0,c@1.0");
   });
 
   it("shows the empty-deps state when there are no edges", () => {
     render(<SkillsetDependencyGraph readOnly members={MEMBERS} edges={[]} />);
-    expect(screen.queryByTestId("mermaid")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("graph-canvas")).not.toBeInTheDocument();
     expect(screen.getByText(/No dependencies declared/)).toBeInTheDocument();
   });
 
-  it("does NOT load react-flow on the read path (no canvas)", () => {
+  it("read-only now uses the canvas (proper engine for hover/space)", () => {
     render(
       <SkillsetDependencyGraph
         readOnly
@@ -78,7 +86,9 @@ describe("SkillsetDependencyGraph — read-only", () => {
         edges={[{ from: "a@1.0", to: "b@1.0" }]}
       />,
     );
-    expect(screen.queryByTestId("graph-canvas")).not.toBeInTheDocument();
+    // Previously avoided canvas on read path; now intentionally uses it for
+    // better rendering per request.
+    expect(screen.getByTestId("graph-canvas")).toBeInTheDocument();
   });
 });
 

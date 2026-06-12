@@ -54,14 +54,20 @@ function renderCard(props: Partial<Parameters<typeof SkillsetCard>[0]> = {}) {
 }
 
 describe("SkillsetCard", () => {
-  it("renders the name, kind, visibility, version, tags, and author", () => {
+  it("renders the name, kind, visibility, tags, and author", () => {
     renderCard();
     expect(screen.getByText("research-bundle")).toBeInTheDocument();
     expect(screen.getByText("Consensus")).toBeInTheDocument();
     expect(screen.getByText(/Public/)).toBeInTheDocument();
-    expect(screen.getByText("v1.2")).toBeInTheDocument();
     expect(screen.getByText("research")).toBeInTheDocument();
     expect(screen.getByText("Ada")).toBeInTheDocument();
+  });
+
+  it("does not surface a version badge in the grid (parity with SkillCard)", () => {
+    // SkillCard shows version only on the detail page, not the browse grid;
+    // the skillset card matches that badge-row weight.
+    renderCard();
+    expect(screen.queryByText("v1.2")).not.toBeInTheDocument();
   });
 
   it("never surfaces a member count (memberCount is 0 from search)", () => {

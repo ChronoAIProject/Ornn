@@ -66,7 +66,9 @@ export function SkillsetCard({
         {skillset.name}
       </h3>
 
-      {/* Kind + visibility badges. No member count (sourced 0 from search). */}
+      {/* Kind + visibility badges — mirrors SkillCard's badge row weight (no
+          version badge: SkillCard surfaces version only on the detail page, not
+          in the grid). No member count (sourced 0 from search). */}
       <div className="mb-3 flex flex-wrap items-center gap-1.5">
         <KindBadge kind={skillset.kind} />
         {skillset.isPrivate ? (
@@ -74,7 +76,6 @@ export function SkillsetCard({
         ) : (
           <Badge color="green">🌐 {t("common.public")}</Badge>
         )}
-        <Badge color="muted">v{skillset.latestVersion}</Badge>
       </div>
 
       {/* Description — fixed 2 lines, break long words. */}

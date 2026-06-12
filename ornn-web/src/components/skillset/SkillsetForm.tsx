@@ -7,9 +7,10 @@
  *
  *   create  → name is editable + required (kebab-case); version defaults 1.0;
  *             submits via `onSubmit` with the create payload.
- *   edit    → name is LOCKED (display-only); version is REQUIRED and must be
- *             bumped (the publish path validates the bump server-side; the
- *             form requires a non-empty version distinct from the loaded one).
+ *   edit    → name is LOCKED (display-only); version is auto-bumped on mount
+ *             (next minor) with quick +minor / +major buttons so you rarely
+ *             have to type the tag by hand. Still validated to be different from
+ *             the loaded version (server also enforces proper bump).
  *
  * Validation is surfaced inline; the submit button is disabled until the form
  * is structurally valid (name present in create, ≥2 members, required prompt,
@@ -77,7 +78,23 @@ export function SkillsetForm({
   const [kind, setKind] = useState<SkillsetKind>(initial?.kind ?? "generic");
   const [tags, setTags] = useState<string[]>(initial?.tags ?? []);
   const [members, setMembersRaw] = useState<string[]>(initial?.members ?? []);
-  const [version, setVersion] = useState(initial?.version ?? (mode === "create" ? "1.0" : ""));
+  /** Compute an auto-bumped version for edit mode so user doesn't have to manually type the next tag. */
+  function bumpVersion(current: string, level: "minor" | "major" = "minor"): string {
+    const [majStr = "", minStr = ""] = current.trim().split(".");
+    const major = parseInt(majStr, 10);
+    const minor = parseInt(minStr, 10);
+    if (isNaN(major) || isNaN(minor)) return "1.0";
+    if (level === "major") {
+      return `${major + 1}.0`;
+    }
+    return `${major}.${minor + 1}`;
+  }
+
+  const [version, setVersion] = useState(() => {
+    if (mode === "create") return "1.0";
+    const cur = initial?.version?.trim() ?? "";
+    return cur ? bumpVersion(cur, "minor") : "1.0";
+  });
   const [submitted, setSubmitted] = useState(false);
 
   // Dependency edges are a PROJECTION of the single `instructions` state — the
@@ -159,99 +176,153 @@ export function SkillsetForm({
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-6">
-      {/* Name — editable on create, locked on edit. */}
-      {mode === "create" ? (
-        <Input
-          label={t("skillsetForm.name", "Name") as string}
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="research-bundle"
-          error={
-            submitted && !nameValid
-              ? (t("skillsetForm.nameError", "Name must be kebab-case (a-z, 0-9, hyphens).") as string)
-              : undefined
-          }
-        />
-      ) : (
+      {/* Identity + metadata — a compact 2-col grid so the editor surfaces below
+          (members, dependency graph, master prompt) get the vertical room.
+          Name + version share the top row; description spans full width; kind +
+          tags share the bottom row. */}
+      <div className="grid grid-cols-1 items-start gap-x-4 gap-y-4 sm:grid-cols-2">
+        {/* Name — editable on create, locked on edit. */}
+        {mode === "create" ? (
+          <Input
+            label={t("skillsetForm.name", "Name") as string}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="research-bundle"
+            error={
+              submitted && !nameValid
+                ? (t("skillsetForm.nameError", "Name must be kebab-case (a-z, 0-9, hyphens).") as string)
+                : undefined
+            }
+          />
+        ) : (
+          <div className="flex flex-col gap-1.5">
+            <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-meta">
+              {t("skillsetForm.name", "Name")}
+            </span>
+            <div className="rounded-sm border border-subtle bg-elevated/40 px-3 py-2 font-mono text-sm text-meta">
+              {lockedName}
+              <span className="ml-2 font-mono text-[10px] uppercase tracking-wider text-meta">
+                ({t("skillsetForm.nameLocked", "locked")})
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* Version — defaulted 1.0 on create; in edit we auto-bump to the next minor on mount
+            and provide quick +minor / +major buttons so you don't have to type tags manually. */}
+        {mode === "edit" ? (
+          <div className="flex flex-col gap-1.5">
+            <Input
+              label={t("skillsetForm.version", "Version") as string}
+              value={version}
+              onChange={(e) => setVersion(e.target.value)}
+              placeholder="1.1"
+              error={
+                submitted && !versionValid
+                  ? (t("skillsetForm.versionBumpError", "Publish requires a new, bumped version (e.g. 1.1).") as string)
+                  : undefined
+              }
+            />
+            <div className="flex items-center gap-1.5">
+              <span className="font-mono text-[9px] uppercase tracking-[0.16em] text-meta">
+                from {initial?.version ?? "?"}
+              </span>
+              {(["minor", "major"] as const).map((level) => (
+                <button
+                  key={level}
+                  type="button"
+                  onClick={() => setVersion(bumpVersion(version, level))}
+                  className="rounded-sm border border-subtle px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-widest text-meta hover:border-accent hover:text-strong focus:outline-none"
+                  title={`Bump ${level} from current field value`}
+                >
+                  +{level}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <Input
+            label={t("skillsetForm.version", "Version") as string}
+            value={version}
+            onChange={(e) => setVersion(e.target.value)}
+            placeholder="1.0"
+            error={
+              submitted && !versionValid
+                ? (t("skillsetForm.versionError", "Version must be <major>.<minor> (e.g. 1.0).") as string)
+                : undefined
+            }
+          />
+        )}
+
+        {/* Description — full width. */}
+        <div className="sm:col-span-2">
+          <Input
+            label={t("skillsetForm.description", "Description") as string}
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder={t("skillsetForm.descriptionPlaceholder", "A short, human-readable summary") as string}
+            error={
+              submitted && !descriptionValid
+                ? (t("skillsetForm.descriptionError", "Description is required (1–1024 chars).") as string)
+                : undefined
+            }
+          />
+        </div>
+
+        {/* Kind. */}
         <div className="flex flex-col gap-1.5">
           <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-meta">
-            {t("skillsetForm.name", "Name")}
+            {t("skillsetForm.kind", "Kind")}
           </span>
-          <div className="rounded-sm border border-subtle bg-elevated/40 px-3 py-2 font-mono text-sm text-meta">
-            {lockedName}
-            <span className="ml-2 font-mono text-[10px] uppercase tracking-wider text-meta">
-              ({t("skillsetForm.nameLocked", "locked")})
-            </span>
-          </div>
+          <select
+            value={kind}
+            onChange={(e) => setKind(e.target.value as SkillsetKind)}
+            className="rounded-sm border border-subtle bg-elevated/40 px-3 py-2 font-text text-sm text-strong focus:border-accent focus:outline-none cursor-pointer"
+          >
+            {SKILLSET_KINDS.map((k) => (
+              <option key={k} value={k}>
+                {k === "consensus-supported"
+                  ? t("skillsetKind.consensusSupportedLong", "Consensus-supported")
+                  : t("skillsetKind.genericLong", "Generic bundle")}
+              </option>
+            ))}
+          </select>
         </div>
-      )}
 
-      {/* Description. */}
-      <Input
-        label={t("skillsetForm.description", "Description") as string}
-        value={description}
-        onChange={(e) => setDescription(e.target.value)}
-        placeholder={t("skillsetForm.descriptionPlaceholder", "A short, human-readable summary") as string}
-        error={
-          submitted && !descriptionValid
-            ? (t("skillsetForm.descriptionError", "Description is required (1–1024 chars).") as string)
-            : undefined
-        }
-      />
-
-      {/* Kind. */}
-      <div className="flex flex-col gap-1.5">
-        <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-meta">
-          {t("skillsetForm.kind", "Kind")}
-        </span>
-        <select
-          value={kind}
-          onChange={(e) => setKind(e.target.value as SkillsetKind)}
-          className="rounded-sm border border-subtle bg-elevated/40 px-3 py-2 font-text text-sm text-strong focus:border-accent focus:outline-none cursor-pointer"
-        >
-          {SKILLSET_KINDS.map((k) => (
-            <option key={k} value={k}>
-              {k === "consensus-supported"
-                ? t("skillsetKind.consensusSupportedLong", "Consensus-supported")
-                : t("skillsetKind.genericLong", "Generic bundle")}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      {/* Tags. */}
-      <div className="flex flex-col gap-1.5">
-        <label
-          htmlFor={tagInputId}
-          className="font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-meta"
-        >
-          {t("skillsetForm.tags", "Tags")}
-        </label>
-        <div className="flex flex-wrap items-center gap-2">
-          {tags.map((tag) => (
-            <button
-              key={tag}
-              type="button"
-              onClick={() => removeTag(tag)}
-              className="inline-flex items-center gap-1.5 rounded-full border border-accent/60 bg-accent/15 px-2.5 py-1 font-text text-xs text-accent cursor-pointer"
-            >
-              <span className="max-w-[140px] truncate">{tag}</span>
-              <span aria-hidden>×</span>
-            </button>
-          ))}
-          <input
-            id={tagInputId}
-            type="text"
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                addTag((e.target as HTMLInputElement).value);
-                (e.target as HTMLInputElement).value = "";
-              }
-            }}
-            placeholder={t("skillsetForm.addTag", "add tag…") as string}
-            className="w-28 rounded-sm border border-subtle bg-elevated/40 px-2 py-1.5 font-text text-xs text-strong placeholder:text-meta/70 focus:border-accent focus:outline-none"
-          />
+        {/* Tags. */}
+        <div className="flex flex-col gap-1.5">
+          <label
+            htmlFor={tagInputId}
+            className="font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-meta"
+          >
+            {t("skillsetForm.tags", "Tags")}
+          </label>
+          <div className="flex flex-wrap items-center gap-2">
+            {tags.map((tag) => (
+              <button
+                key={tag}
+                type="button"
+                onClick={() => removeTag(tag)}
+                className="inline-flex items-center gap-1.5 rounded-full border border-accent/60 bg-accent/15 px-2.5 py-1 font-text text-xs text-accent cursor-pointer"
+              >
+                <span className="max-w-[140px] truncate">{tag}</span>
+                <span aria-hidden>×</span>
+              </button>
+            ))}
+            <input
+              id={tagInputId}
+              type="text"
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  addTag((e.target as HTMLInputElement).value);
+                  (e.target as HTMLInputElement).value = "";
+                }
+              }}
+              placeholder={t("skillsetForm.addTag", "add tag…") as string}
+              className="w-28 rounded-sm border border-subtle bg-elevated/40 px-2 py-1.5 font-text text-xs text-strong placeholder:text-meta/70 focus:border-accent focus:outline-none"
+            />
+          </div>
         </div>
       </div>
 
@@ -285,21 +356,6 @@ export function SkillsetForm({
         error={
           submitted && !promptValid
             ? (t("skillsetForm.promptError", "A master prompt is required.") as string)
-            : undefined
-        }
-      />
-
-      {/* Version — defaulted 1.0 on create; required + bumped on edit. */}
-      <Input
-        label={t("skillsetForm.version", "Version") as string}
-        value={version}
-        onChange={(e) => setVersion(e.target.value)}
-        placeholder={mode === "edit" ? "1.1" : "1.0"}
-        error={
-          submitted && !versionValid
-            ? mode === "edit"
-              ? (t("skillsetForm.versionBumpError", "Publish requires a new, bumped version (e.g. 1.1).") as string)
-              : (t("skillsetForm.versionError", "Version must be <major>.<minor> (e.g. 1.0).") as string)
             : undefined
         }
       />

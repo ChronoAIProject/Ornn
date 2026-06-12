@@ -56,10 +56,13 @@ export interface UpdateSkillsetData {
   updatedBy: string;
 }
 
-/** Filters specific to skillset search: `kind` equality + `tags $all`. */
+/** Filters specific to skillset search: `kind` equality + `tags $all` + a `q`
+ * case-insensitive substring match on name/description. */
 export interface SkillsetSearchFilters {
   kind?: SkillsetKind | undefined;
   tagsAll?: string[] | undefined;
+  /** Free-text keyword — matched (case-insensitive) against name + description. */
+  q?: string | undefined;
   sharedWithOrgsAny?: string[] | undefined;
   sharedWithUsersAny?: string[] | undefined;
   createdByAny?: string[] | undefined;
@@ -189,6 +192,17 @@ export class SkillsetRepository {
     if (filters?.kind) extra.push({ kind: filters.kind });
     if (filters?.tagsAll && filters.tagsAll.length > 0) {
       extra.push({ tags: { $all: filters.tagsAll } });
+    }
+    // Keyword: case-insensitive substring on name OR description. Escape regex
+    // metachars so user input can't inject a pattern (or a catastrophic one).
+    if (filters?.q && filters.q.trim().length > 0) {
+      const safe = filters.q.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      extra.push({
+        $or: [
+          { name: { $regex: safe, $options: "i" } },
+          { description: { $regex: safe, $options: "i" } },
+        ],
+      });
     }
     if (extra.length > 0) {
       const existingAnd = (matchStage.$and as Array<Record<string, unknown>> | undefined) ?? [];

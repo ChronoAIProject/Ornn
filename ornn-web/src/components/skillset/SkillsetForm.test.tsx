@@ -259,21 +259,24 @@ describe("SkillsetForm — edit", () => {
 
   it("rejects publishing with the same (un-bumped) version", () => {
     wrap(<SkillsetForm mode="edit" initial={initial} onPublish={vi.fn()} />);
-    // Version field is pre-seeded with the loaded "1.0" → not bumped → disabled.
+    // We now auto-bump the version field on mount (next patch), so button starts enabled.
+    // Manually set it back to the loaded version to test the "must bump" guard.
+    fireEvent.change(screen.getByDisplayValue("1.1"), { target: { value: "1.0" } });
     expect(screen.getByRole("button", { name: "Publish version" })).toBeDisabled();
   });
 
-  it("publishes when the version is bumped", async () => {
+  it("publishes when the version is bumped (auto-filled on mount)", async () => {
     const onPublish = vi.fn().mockResolvedValue(undefined);
     wrap(<SkillsetForm mode="edit" initial={initial} onPublish={onPublish} />);
 
-    // The version field is pre-seeded with the loaded "1.0"; bump it.
-    fireEvent.change(screen.getByDisplayValue("1.0"), { target: { value: "1.1" } });
+    // Auto-bump pre-fills the next patch (1.1). We can submit immediately, or
+    // demonstrate manual edit still works.
+    fireEvent.change(screen.getByDisplayValue("1.1"), { target: { value: "1.2" } });
     fireEvent.click(screen.getByRole("button", { name: "Publish version" }));
 
     await waitFor(() => expect(onPublish).toHaveBeenCalledTimes(1));
     expect(onPublish.mock.calls[0]?.[0]).toMatchObject({
-      version: "1.1",
+      version: "1.2",
       members: ["a@1.0", "b@1.0"],
       instructions: "Run A, then B.",
     });

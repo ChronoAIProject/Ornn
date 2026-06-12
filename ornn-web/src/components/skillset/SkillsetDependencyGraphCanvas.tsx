@@ -1,15 +1,18 @@
 /**
  * SkillsetDependencyGraphCanvas — the EDITOR surface for the member-dependency
- * graph (#1064, #1067). Lazy-loaded by `SkillsetDependencyGraph` so the
- * ~150 KB `@xyflow/react` chunk is fetched ONLY when the create/edit form
- * mounts — never on the read-only detail page (which keeps Mermaid).
+ * graph (#1064, #1067; smoothness pass #1071). Lazy-loaded by
+ * `SkillsetDependencyGraph` so the ~150 KB `@xyflow/react` chunk is fetched
+ * ONLY when the create/edit form mounts — never on the read-only detail page
+ * (which keeps Mermaid).
  *
  * Two coupled editing surfaces, one controlled `edges` projection:
- *   1. A drag-on-canvas `<ReactFlow>` graph. Node x/y are SEEDED from the
- *      existing deterministic `topoColumns` layout (positions are NOT persisted
- *      — they're presentation only). Dragging a connection (`onConnect`) adds
- *      `{ from, to }`; deleting an edge on the canvas (`onEdgesDelete`) removes
- *      it. Self-loops are dropped.
+ *   1. A drag-on-canvas `<ReactFlow>` graph. Node x/y live in SESSION-LOCAL
+ *      `useNodesState` so a drag STICKS (the prior controlled-without-handler
+ *      memo snapped every node home on the next render). Positions are seeded
+ *      once from the deterministic `topoColumns` layout and preserved across
+ *      edge edits — drawing a dependency never teleports a node. Positions are
+ *      presentation only and are NEVER emitted upward (only `onEdgesChange` is).
+ *      A manual "Tidy" button is the ONLY path that re-arranges existing nodes.
  *   2. A click-to-connect node grid + removable edge chips. This is the
  *      keyboard-accessible, jsdom-testable mirror of the same wiring — click a
  *      source member, then a target, to declare "runs before".
@@ -20,23 +23,35 @@
  * CONTRACT (AC-enforced, #1064 / #1067):
  *   - This component edits NOTHING but its own `edges` projection. Its only
  *     output is `onEdgesChange`. It imports NO skill-mutation hook and NO
- *     closure hook — the grep-guard test asserts the source has no such import.
+ *     dependency-resolution hook — the grep-guard test asserts the source has
+ *     no such import. `useNodesState`/`onNodesChange` is react-flow's OWN node
+ *     reducer and is unrelated to the upward `onEdgesChange` prop.
  *   - Edges are owned by the parent (`SkillsetForm`), persisted inside the
  *     skillset's `instructions` master prompt. This is a pure controlled view.
  *
- * CUT (deliberately, per #1067 scope): minimap, react-flow Controls, custom
- * node theming beyond DESIGN tokens, edge-label editing, and multi-select.
+ * CUT (deliberately, per #1067 scope): minimap, custom node theming beyond
+ * DESIGN tokens, edge-label editing, and multi-select. (react-flow `Controls`
+ * is reinstated in #1071 as the camera-recovery affordance that replaces
+ * auto-refit-on-edit.)
  *
  * @module components/skillset/SkillsetDependencyGraphCanvas
  */
 
-import { useCallback, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   ReactFlow,
   Background,
   BackgroundVariant,
+  Controls,
+  Handle,
+  useNodesState,
+  Position,
+  MarkerType,
+  ConnectionLineType,
+  ConnectionMode,
   type Node,
+  type NodeProps,
   type Edge as FlowEdge,
   type Connection,
 } from "@xyflow/react";
@@ -52,8 +67,13 @@ export interface SkillsetDependencyGraphCanvasProps {
   members: string[];
   /** Current dependency edges (a projection of `instructions`). */
   edges: Edge[];
-  /** Emitted with the next edge set on every editor mutation. */
+  /** Emitted with the next edge set on every editor mutation. (ignored in readOnly) */
   onEdgesChange: (edges: Edge[]) => void;
+  /** Display-only mode for detail page (no drag/connect/edit). */
+  readOnly?: boolean | undefined;
+  /** Hover callback for nodes (used by detail page for package preview dialog).
+   *  Second arg is mouse position for cursor-follow popup. */
+  onHoverMember?: ((ref: string | null, pos?: { clientX: number; clientY: number }) => void) | undefined;
 }
 
 /** Has edge `from → to` already (exact ref match)? */
@@ -152,34 +172,136 @@ function refLabel(ref: string): { name: string; version: string } {
 const COL_GAP = 220;
 const ROW_GAP = 80;
 
+// Stable module-level react-flow config — referenced by identity so react-flow
+// never sees a "new object" on re-render (no churn, no v12 re-init warning).
+const FIT_VIEW_OPTIONS = { padding: 0.2, maxZoom: 1, duration: 200 } as const;
+const DEFAULT_EDGE_OPTIONS = {
+  type: "smoothstep",
+  // Subtle flowing dash so the "runs before" direction reads as motion (#1094).
+  animated: true,
+  // `color` is load-bearing: v12 paints the arrowhead with an INLINE fill that
+  // overrides any CSS rule, falling back to stock grey (#b1b1b7) when absent.
+  // Pin it to the arc-blue edge token so the marker matches the edge stroke and
+  // no stock palette leaks back (same silent-fallback trap as the #1067 vars).
+  markerEnd: {
+    type: MarkerType.ArrowClosed,
+    width: 16,
+    height: 16,
+    color: "var(--color-accent-secondary)",
+  },
+  // The "runs before" label pill is styled via CSS (.react-flow__edge-text /
+  // -textbg) with Forge tokens — see skillset-depgraph-canvas.css (#1094).
+} as const;
+const CONNECTION_LINE_STYLE = { strokeWidth: 2 } as const;
+const PRO_OPTIONS = { hideAttribution: true } as const;
+const DELETE_KEYS = ["Backspace", "Delete"];
+
+/** Code-glyph icon for a member skill card (arc-blue, set in CSS). */
+const MEMBER_NODE_ICON = (
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <polyline points="16 18 22 12 16 6" />
+    <polyline points="8 6 2 12 8 18" />
+  </svg>
+);
+
+/**
+ * Custom Forge "card" node (#1092): a code-glyph icon + the skill name + its
+ * version, with left(target)/right(source) connection handles. The card chrome
+ * (letterpress hard-offset shadow, hover/selected ember border) lives in
+ * skillset-depgraph-canvas.css — this just lays out the content. Replaces
+ * react-flow's plain default box node on both the editor + read-only canvas.
+ */
+const MemberSkillNode = memo(function MemberSkillNode({ data }: NodeProps) {
+  const { name, version } = data as { name: string; version?: string };
+  return (
+    <div className="depgraph-node flex w-[186px] items-center gap-2.5 rounded-lg border border-subtle bg-card px-3 py-2">
+      <Handle type="target" position={Position.Left} />
+      <span className="depgraph-node-icon flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-md border border-strong-edge bg-elevated">
+        {MEMBER_NODE_ICON}
+      </span>
+      <span className="min-w-0">
+        <span className="block truncate font-mono text-[12.5px] font-semibold leading-tight text-strong">
+          {name}
+        </span>
+        {version && (
+          <span className="mt-0.5 block font-mono text-[10px] leading-none text-meta">v{version}</span>
+        )}
+      </span>
+      <Handle type="source" position={Position.Right} />
+    </div>
+  );
+});
+
+/** Stable nodeTypes map (module-level so react-flow doesn't re-init per render). */
+const NODE_TYPES = { memberSkill: MemberSkillNode };
+
+/**
+ * Build react-flow nodes for `members` at their topo-column slots, oriented for
+ * a left→right flow (source handle right, target handle left). Used for the
+ * mount seed, for placing newly-added members, and for the Tidy re-layout.
+ */
+function buildNodes(members: string[], columns: Map<string, number>): Node[] {
+  const rowInCol = new Map<number, number>();
+  return members.map((ref) => {
+    const col = columns.get(ref) ?? 0;
+    const row = rowInCol.get(col) ?? 0;
+    rowInCol.set(col, row + 1);
+    const { name, version } = refLabel(ref);
+    return {
+      id: ref,
+      type: "memberSkill",
+      position: { x: col * COL_GAP, y: row * ROW_GAP },
+      data: { name, version, label: version ? `${name}@${version}` : name },
+      sourcePosition: Position.Right,
+      targetPosition: Position.Left,
+    } satisfies Node;
+  });
+}
+
+/**
+ * Reconcile the live node set against the current members: keep every existing
+ * node's position VERBATIM (including user drags), seed newly-added members at
+ * their topo slot, and drop removed members. Returns the previous array
+ * unchanged when the id set already matches so the members-keyed effect is
+ * idempotent (StrictMode-safe) and edge edits never move a node.
+ */
+function reconcileNodes(prev: Node[], members: string[], columns: Map<string, number>): Node[] {
+  const memberSet = new Set(members);
+  if (prev.length === members.length && prev.every((n) => memberSet.has(n.id))) {
+    return prev;
+  }
+  const prevById = new Map(prev.map((n) => [n.id, n] as const));
+  // A node's id IS its member ref, so an existing node's label + orientation are
+  // already correct — keep it wholesale (preserving its user-dragged position).
+  // Only brand-new members take a freshly seeded node.
+  return buildNodes(members, columns).map((seed) => prevById.get(seed.id) ?? seed);
+}
+
 export function SkillsetDependencyGraphCanvas({
   members,
   edges,
   onEdgesChange,
+  readOnly = false,
+  onHoverMember,
 }: SkillsetDependencyGraphCanvasProps) {
   const { t } = useTranslation();
   const [source, setSource] = useState<string | null>(null);
+  // Relationship label rendered on every arrow: source "runs before" target (the
+  // canonical skillset-deps semantic). i18n; pill-styled via DEFAULT_EDGE_OPTIONS.
+  const edgeLabel = t("skillsetGraph.edgeLabel", "runs before");
 
   const cyclic = useMemo(() => hasCycle(members, edges), [members, edges]);
   const columns = useMemo(() => topoColumns(members, edges), [members, edges]);
 
-  // Seed react-flow node positions from the deterministic topo columns. We
-  // track per-column row index so members in the same column stack vertically.
-  // Positions are NOT persisted — they exist only to lay out the canvas.
-  const flowNodes: Node[] = useMemo(() => {
-    const rowInCol = new Map<number, number>();
-    return members.map((ref) => {
-      const col = columns.get(ref) ?? 0;
-      const row = rowInCol.get(col) ?? 0;
-      rowInCol.set(col, row + 1);
-      const { name, version } = refLabel(ref);
-      return {
-        id: ref,
-        position: { x: col * COL_GAP, y: row * ROW_GAP },
-        data: { label: version ? `${name}@${version}` : name },
-      } satisfies Node;
-    });
-  }, [members, columns]);
+  // Editor hooks are declared unconditionally (required by Rules of Hooks).
+  // They run for both read-only and editor paths (extra work in read-only is harmless).
+  const initialNodes = useMemo<Node[]>(() => buildNodes(members, topoColumns(members, edges)), [members]);
+  const [nodes, setNodes, onNodesChange] = useNodesState<Node>(initialNodes);
+
+  const membersKey = members.join("|");
+  useEffect(() => {
+    setNodes((prev) => reconcileNodes(prev, members, topoColumns(members, edges)));
+  }, [membersKey]);
 
   const flowEdges: FlowEdge[] = useMemo(
     () =>
@@ -187,24 +309,23 @@ export function SkillsetDependencyGraphCanvas({
         id: `${e.from}->${e.to}`,
         source: e.from,
         target: e.to,
+        label: edgeLabel,
       })),
-    [edges],
+    [edges, edgeLabel],
   );
 
-  // ── react-flow: a dragged connection adds an edge.
   const onConnect = useCallback(
     (conn: Connection) => {
       const from = conn.source;
       const to = conn.target;
       if (!from || !to) return;
-      if (from === to) return; // self-loop — a node can't depend on itself.
-      if (hasEdge(edges, from, to)) return; // dedup.
+      if (from === to) return;
+      if (hasEdge(edges, from, to)) return;
       onEdgesChange([...edges, { from, to }]);
     },
     [edges, onEdgesChange],
   );
 
-  // ── react-flow: deleting edge(s) on the canvas removes them.
   const onEdgesDelete = useCallback(
     (deleted: FlowEdge[]) => {
       const drop = new Set(deleted.map((d) => `${d.source}->${d.target}`));
@@ -212,6 +333,83 @@ export function SkillsetDependencyGraphCanvas({
     },
     [edges, onEdgesChange],
   );
+
+  const tidy = useCallback(() => {
+    const cols = topoColumns(members, edges);
+    setNodes((prev) => {
+      const rowInCol = new Map<number, number>();
+      const byId = new Map(prev.map((n) => [n.id, n] as const));
+      return members.map((ref) => {
+        const col = cols.get(ref) ?? 0;
+        const row = rowInCol.get(col) ?? 0;
+        rowInCol.set(col, row + 1);
+        const existing = byId.get(ref);
+        const base = existing ?? buildNodes([ref], cols)[0]!;
+        return { ...base, position: { x: col * COL_GAP, y: row * ROW_GAP } };
+      });
+    });
+  }, [members, edges, setNodes]);
+
+  // Read-only specific memos (also unconditional hooks for consistent hook order).
+  const staticNodes = useMemo(
+    () =>
+      buildNodes(members, columns).map((n) => ({
+        ...n,
+        draggable: false,
+        connectable: false,
+        selectable: false,
+      })),
+    [members, columns]
+  );
+  const readOnlyFlowEdges: FlowEdge[] = useMemo(
+    () =>
+      edges.map((e) => ({
+        id: `${e.from}->${e.to}`,
+        source: e.from,
+        target: e.to,
+        label: edgeLabel,
+      })),
+    [edges, edgeLabel]
+  );
+
+  if (readOnly) {
+    // Read-only display for detail page: static topo layout, no editing, hover support
+    // for the package preview dialog.
+    return (
+      <div className="skillset-depgraph-canvas h-full min-h-[200px] overflow-hidden rounded-sm border border-subtle bg-elevated/30">
+        <ReactFlow
+          nodes={staticNodes}
+          edges={readOnlyFlowEdges}
+          nodeTypes={NODE_TYPES}
+          defaultEdgeOptions={DEFAULT_EDGE_OPTIONS}
+          onNodeMouseEnter={(event, node) => {
+            if (onHoverMember && node?.id) {
+              const pos = event && typeof event.clientX === 'number'
+                ? { clientX: event.clientX, clientY: event.clientY }
+                : undefined;
+              onHoverMember(node.id, pos);
+            }
+          }}
+          onNodeMouseLeave={() => onHoverMember?.(null)}
+          fitView
+          fitViewOptions={FIT_VIEW_OPTIONS}
+          proOptions={PRO_OPTIONS}
+          nodesDraggable={false}
+          nodesConnectable={false}
+          elementsSelectable={false}
+          panOnDrag
+          zoomOnScroll
+          minZoom={0.4}
+          maxZoom={2}
+          preventScrolling={false}
+        >
+          <Background variant={BackgroundVariant.Lines} gap={26} color="var(--color-border-subtle)" />
+          {/* Zoom in / out / fit on the read-only detail graph (#1094). */}
+          <Controls showInteractive={false} position="bottom-right" />
+        </ReactFlow>
+      </div>
+    );
+  }
 
   // ── click-to-connect mirror (keyboard-accessible + jsdom-testable).
   function clickNode(ref: string) {
@@ -234,6 +432,7 @@ export function SkillsetDependencyGraphCanvas({
   }
 
   // Group members into ordered columns for the click-to-connect grid.
+  // (columns and source are declared at top level for hook consistency)
   const maxCol = members.reduce((m, ref) => Math.max(m, columns.get(ref) ?? 0), 0);
   const grid: string[][] = Array.from({ length: maxCol + 1 }, () => []);
   for (const ref of members) {
@@ -243,21 +442,51 @@ export function SkillsetDependencyGraphCanvas({
 
   return (
     <div className="space-y-3">
+      {/* Canvas header: opt-in Tidy re-layout (the only non-drag reposition). */}
+      <div className="flex items-center justify-end">
+        <button
+          type="button"
+          data-testid="graph-tidy"
+          onClick={tidy}
+          className="inline-flex items-center gap-1.5 rounded-sm border border-subtle bg-card px-2 py-1 font-mono text-[10px] text-meta transition-colors cursor-pointer hover:border-accent hover:text-strong"
+        >
+          {t("skillsetGraph.tidy", "Tidy")}
+        </button>
+      </div>
+
       {/* Drag-on-canvas react-flow surface. */}
       <div
-        className="skillset-depgraph-canvas h-[280px] overflow-hidden rounded-sm border border-subtle bg-elevated/30"
+        className="skillset-depgraph-canvas h-[460px] overflow-hidden rounded-sm border border-subtle bg-elevated/30"
         data-testid="graph-canvas"
       >
         <ReactFlow
-          nodes={flowNodes}
+          nodes={nodes}
           edges={flowEdges}
+          nodeTypes={NODE_TYPES}
+          onNodesChange={onNodesChange}
           onConnect={onConnect}
           onEdgesDelete={onEdgesDelete}
           fitView
+          fitViewOptions={FIT_VIEW_OPTIONS}
+          minZoom={0.4}
+          maxZoom={1.5}
           nodesConnectable
-          proOptions={{ hideAttribution: true }}
+          defaultEdgeOptions={DEFAULT_EDGE_OPTIONS}
+          connectionLineType={ConnectionLineType.SmoothStep}
+          connectionLineStyle={CONNECTION_LINE_STYLE}
+          connectionRadius={30}
+          connectionMode={ConnectionMode.Loose}
+          deleteKeyCode={DELETE_KEYS}
+          // The canvas is embedded in a scrolling form — let a plain wheel
+          // scroll the PAGE (don't trap it as graph zoom). Zoom stays available
+          // via the Controls buttons, pinch, and ⌘/ctrl+wheel (#1074).
+          preventScrolling={false}
+          proOptions={PRO_OPTIONS}
         >
-          <Background variant={BackgroundVariant.Dots} gap={20} size={1} />
+          <Background variant={BackgroundVariant.Lines} gap={26} color="var(--color-border-subtle)" />
+          {/* bottom-LEFT so the cluster never overlaps a node's right-edge
+              (source) handle — the primary drag-to-connect grab target. */}
+          <Controls showInteractive={false} position="bottom-left" />
         </ReactFlow>
       </div>
 

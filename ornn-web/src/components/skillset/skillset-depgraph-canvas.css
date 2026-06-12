@@ -25,11 +25,148 @@
 
   /* Active / selected — ember primary accent. */
   --xy-edge-stroke-selected: var(--color-accent);
-  --xy-node-boxshadow-selected: 0 0 0 1.5px var(--color-accent);
+  --xy-node-boxshadow-selected: 0 0 0 2px var(--color-accent);
 
-  /* Nodes — match the click-to-connect chips: card fill, subtle border,
-     strong ink text. */
+  /* Nodes — modern card-like with Forge tokens: subtle letterpress shadow,
+     tighter border, better contrast. */
   --xy-node-background-color: var(--color-card);
-  --xy-node-border: 1px solid var(--color-border-subtle);
+  --xy-node-border: 1.5px solid var(--color-border-subtle);
   --xy-node-color: var(--color-strong);
+}
+
+/*
+ * Smoothness pass (#1071). Everything below is sizing / motion / on-brand
+ * chrome — no off-brand react-flow stock palette is reintroduced. Every
+ * var() is a token defined in styles/neon.css (both themes); the token-guard
+ * test enforces this.
+ */
+
+/* Silky motion: programmatic moves (Tidy / member reconcile) tween, but the
+   node being dragged tracks the pointer 1:1 (no transition while dragging).
+   Couples to react-flow v12 applying the inline `transform` to the
+   `.react-flow__node` wrapper (not the viewport) and adding `.dragging` to that
+   same element during a drag — re-verify the drag feel on any @xyflow upgrade. */
+.skillset-depgraph-canvas .react-flow__node {
+  transition: transform 180ms ease;
+}
+.skillset-depgraph-canvas .react-flow__node.dragging {
+  transition: none;
+}
+
+/* Enlarged handles — a bigger visible dot plus a transparent hit pad (~23px)
+   so drag-to-connect lands first try instead of missing the default ~6px dot. */
+.skillset-depgraph-canvas .react-flow__handle {
+  width: 11px;
+  height: 11px;
+}
+.skillset-depgraph-canvas .react-flow__handle::after {
+  content: "";
+  position: absolute;
+  inset: -6px;
+  border-radius: 9999px;
+}
+
+/* Directed-edge arrowhead color is set via markerEnd.color in the component
+   (v12 paints it as an inline fill that beats CSS), so no rule is needed here. */
+
+/* ── Custom Forge card node (#1092) ───────────────────────────────────────
+   The node's whole visual is the inner `.depgraph-node` card (Tailwind:
+   bg-card + border + rounded). Strip react-flow's wrapper frame so there's no
+   double border/shadow; the transform transition above stays for the tween. */
+.skillset-depgraph-canvas .react-flow__node {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  border-radius: 0;
+  padding: 0;
+}
+
+/* The member-skill card — letterpress hard-offset impression (DESIGN.md: never
+   a soft glow), smooth hover/selected to an ember border with no layout shift. */
+.skillset-depgraph-canvas .depgraph-node {
+  box-shadow: 3px 3px 0 0 var(--color-shadow-press);
+  transition: box-shadow 120ms ease, border-color 120ms ease;
+}
+.skillset-depgraph-canvas .react-flow__node:hover .depgraph-node,
+.skillset-depgraph-canvas .react-flow__node.selected .depgraph-node {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 1.5px var(--color-accent), 4px 4px 0 0 var(--color-shadow-press);
+}
+
+/* Code-glyph icon — arc-blue diagrammatic accent (restricted role per DESIGN). */
+.skillset-depgraph-canvas .depgraph-node-icon {
+  color: var(--color-accent-secondary);
+}
+
+/* Blueprint canvas: dark drafting base + a subtle center→edge vignette so the
+   faint react-flow Lines grid reads as a drafting surface and the diagram
+   stays the focus. */
+.skillset-depgraph-canvas {
+  position: relative;
+}
+.skillset-depgraph-canvas .react-flow {
+  background-color: var(--color-page);
+}
+.skillset-depgraph-canvas::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, transparent 45%, var(--color-page) 100%);
+}
+
+/* Edges: thicker base for presence, arc color, smooth hover thicken.
+   Rounded caps for modern feel. */
+.skillset-depgraph-canvas .react-flow__edge-path {
+  stroke-width: 2.25;
+  stroke-linecap: round;
+  transition: stroke-width 100ms ease;
+}
+
+.skillset-depgraph-canvas .react-flow__edge:hover .react-flow__edge-path {
+  stroke-width: 3;
+}
+
+/* Animated edge flow (#1094): a slower, refined dash than react-flow's stock
+   0.5s/dash-5 so the "runs before" direction reads as gentle motion, not a
+   marketplace-y strobe. */
+.skillset-depgraph-canvas .react-flow__edge.animated .react-flow__edge-path {
+  stroke-dasharray: 7 5;
+  animation: depgraph-edge-flow 0.9s linear infinite;
+}
+@keyframes depgraph-edge-flow {
+  to {
+    stroke-dashoffset: -12;
+  }
+}
+
+/* "runs before" edge label (#1094) — arc-blue mono text on a card-chip pill so
+   the relationship is legible without opening the master prompt. */
+.skillset-depgraph-canvas .react-flow__edge-text {
+  fill: var(--color-accent-secondary);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+}
+.skillset-depgraph-canvas .react-flow__edge-textbg {
+  fill: var(--color-card);
+  stroke: var(--color-border-subtle);
+  stroke-width: 1px;
+}
+
+/* Controls skin — on-brand, zero stock blue. */
+.skillset-depgraph-canvas .react-flow__controls {
+  background: var(--color-card);
+  border: 1px solid var(--color-border-subtle);
+}
+.skillset-depgraph-canvas .react-flow__controls-button {
+  background: var(--color-card);
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+.skillset-depgraph-canvas .react-flow__controls-button:hover {
+  background: var(--color-elevated);
+}
+.skillset-depgraph-canvas .react-flow__controls-button svg {
+  fill: var(--color-strong);
 }

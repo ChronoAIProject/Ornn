@@ -5,16 +5,15 @@
  * a left filter `aside` built from `RegistrySidebar` primitives, and the shared
  * `RegistryGrid` for the cards + pagination.
  *
- * Three tabs via `?scope`: Public · Mine · Shared with me. Filters are Kind +
- * Tags only — the skillset-search backend has NO `q` keyword param, so this
- * page deliberately mounts NO `SearchBar` (mounting one would fake a capability
- * the API doesn't have). Kind is a chip section; Tags are typed inline and
- * shown as removable chips. Everything is URL-encoded so a filtered view is
- * copy-pasteable.
+ * Three tabs via `?scope`: Public Skillsets · My Skillsets · Shared with me. A keyword box (`?q`,
+ * case-insensitive substring on name + description — keyword-only, no semantic
+ * mode) sits above a Kind + Tags filter sidebar. Kind is a chip section; Tags
+ * are typed inline and shown as removable chips. Everything is URL-encoded so a
+ * filtered view is copy-pasteable.
  *
- *   Public         → anyone (anon + authed)
- *   Mine           → authed only
- *   Shared with me → authed only
+ *   Public Skillsets → anyone (anon + authed)
+ *   My Skillsets     → authed only
+ *   Shared with me   → authed only
  *
  * When `pinScope` is set (the /my-skillsets wrapper passes "mine"), the tab
  * strip is hidden and the page renders that single scope.
@@ -83,10 +82,12 @@ export function SkillsetExplorePage({ pinScope }: SkillsetExplorePageProps = {})
     () => parseCsvParam(searchParams.get("tags")),
     [searchParams],
   );
+  const query = searchParams.get("q") ?? "";
 
   const listParams = {
     kind: selectedKind,
     tags: selectedTags,
+    q: query || undefined,
     page: activePage,
     pageSize: DEFAULT_PAGE_SIZE,
   };
@@ -116,10 +117,10 @@ export function SkillsetExplorePage({ pinScope }: SkillsetExplorePageProps = {})
   // auth. No counts — the skillset search surface doesn't return per-scope
   // totals the way the skill counts endpoint does.
   const tabs: RegistryTab[] = [
-    { id: "public", label: t("skillsetExplore.publicTab", "Public") },
+    { id: "public", label: t("skillsetExplore.publicTab", "Public Skillsets") },
     ...(isAuthenticated
       ? [
-          { id: "mine", label: t("skillsetExplore.mineTab", "Mine") },
+          { id: "mine", label: t("skillsetExplore.mineTab", "My Skillsets") },
           {
             id: "shared-with-me",
             label: t("skillsetExplore.sharedTab", "Shared with me"),
@@ -139,6 +140,15 @@ export function SkillsetExplorePage({ pinScope }: SkillsetExplorePageProps = {})
     if (p <= 1) next.delete("page");
     else next.set("page", String(p));
     setSearchParams(next);
+  }
+
+  function setQuery(raw: string) {
+    const next = new URLSearchParams(searchParams);
+    if (raw) next.set("q", raw);
+    else next.delete("q");
+    next.delete("page");
+    // replace (not push) so per-keystroke typing doesn't spam browser history.
+    setSearchParams(next, { replace: true });
   }
 
   function setKind(kind: SkillsetKind | undefined) {
@@ -199,8 +209,31 @@ export function SkillsetExplorePage({ pinScope }: SkillsetExplorePageProps = {})
           />
         )}
 
-        {/* 2-col: filter sidebar (Kind + Tags) + cards. NO SearchBar — the
-            skillset-search backend has no `q` keyword param. */}
+        {/* Keyword search — case-insensitive substring on name + description
+            (the `q` skillset-search param). Keyword-only: skillset-search has
+            no semantic mode, so this is a plain input, not the skill SearchBar. */}
+        <div className="relative shrink-0">
+          <svg
+            className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-accent/50"
+            viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden
+          >
+            <circle cx="11" cy="11" r="8" strokeWidth="1.5" />
+            <path d="M21 21l-4.35-4.35" strokeWidth="1.5" strokeLinecap="round" />
+          </svg>
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={t(
+              "skillsetExplore.searchPlaceholder",
+              "Search skillsets by name or description...",
+            )}
+            aria-label={t("skillsetExplore.searchAria", "Search skillsets")}
+            className="neon-input w-full rounded py-3 pr-4 pl-12 font-text text-strong placeholder:text-meta/50"
+          />
+        </div>
+
+        {/* 2-col: filter sidebar (Kind + Tags) + cards. */}
         <div className="flex flex-1 min-h-0 flex-col lg:flex-row gap-4">
           <aside className="lg:w-[280px] shrink-0 lg:overflow-y-auto lg:pr-1">
             <div className="space-y-4">
@@ -228,16 +261,9 @@ export function SkillsetExplorePage({ pinScope }: SkillsetExplorePageProps = {})
               loading={activeLoading}
               getKey={(skillset) => skillset.guid}
               renderItem={(skillset) => (
-                <SkillsetCard
-                  skillset={skillset}
-                  showOwnerControls={activeTab === "mine"}
-                  currentUserId={user?.id}
-                  onEdit={
-                    activeTab === "mine"
-                      ? (s) => navigate(`/skillsets/${s.guid}/edit`)
-                      : undefined
-                  }
-                />
+                // No per-card owner controls — edit/delete live on the detail
+                // page (mirrors the skills registry grid; keeps cards clean).
+                <SkillsetCard skillset={skillset} currentUserId={user?.id} />
               )}
               empty={
                 <EmptyState

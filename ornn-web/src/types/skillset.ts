@@ -143,6 +143,8 @@ export interface SkillsetSearchParams {
   // Optionals widen to `T | undefined` for exactOptionalPropertyTypes (#657).
   kind?: SkillsetKind | undefined;
   tags?: string[] | undefined;
+  /** Free-text keyword — case-insensitive substring on name + description. */
+  q?: string | undefined;
   scope?: SkillsetScope | undefined;
   page?: number | undefined;
   pageSize?: number | undefined;

@@ -11,7 +11,7 @@
  * @module pages/SkillsetDetailPage
  */
 
-import { useState } from "react";
+import { useState, useCallback, useMemo, useRef } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { PageTransition } from "@/components/layout/PageTransition";
@@ -21,10 +21,12 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { RailCard } from "@/components/detail/RailCard";
 import { ReadmeViewer } from "@/components/skill/ReadmeViewer";
+import { SkillVisibilityCard } from "@/components/skill/SkillVisibilityCard";
 import { VersionPicker } from "@/components/skill/VersionPicker";
 import { SkillsetHeroStrip } from "@/components/skillset/SkillsetHeroStrip";
 import { SkillsetClosureViewer } from "@/components/skillset/SkillsetClosureViewer";
 import { SkillsetDependencyGraph } from "@/components/skillset/SkillsetDependencyGraph";
+import { SkillsetMemberViewer } from "@/components/skillset/SkillsetMemberViewer";
 import { SkillsetPermissionsModal } from "@/components/skillset/SkillsetPermissionsModal";
 import { parseDeps } from "@/lib/skillsetDeps";
 import { useToastStore } from "@/stores/toastStore";
@@ -36,7 +38,6 @@ import {
   useDeleteSkillset,
 } from "@/hooks/useSkillsets";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
-import { parseMemberRef } from "@/types/skillset";
 import { formatDateSGT } from "@/utils/formatters";
 import { translateError } from "@/utils/translateError";
 
@@ -55,8 +56,53 @@ export function SkillsetDetailPage() {
   const { data: versions = [] } = useSkillsetVersions(id);
   const { data: closure } = useSkillsetClosure(id, versionParam);
 
+  // Stabilize graph data for memoized canvas (prevents re-renders on hover state).
+  // Must be before any early returns to satisfy Rules of Hooks.
+  const depEdges = useMemo(() => (skillset?.instructions ? parseDeps(skillset.instructions).edges : []), [skillset?.instructions]);
+  const graphMembers = useMemo(() => skillset?.members ?? [], [skillset?.members]);
+
   const [showPermissions, setShowPermissions] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
+
+  // Hover state for graph nodes (now canvas-based). Shows floating preview dialog.
+  // Position tracks cursor for "beside my cursor" placement.
+  const [hoveredMemberRef, setHoveredMemberRef] = useState<string | null>(null);
+  const [hoveredPos, setHoveredPos] = useState<{ clientX: number; clientY: number } | null>(null);
+
+  // Grace timer so the popup survives the gap between the node and the dialog:
+  // leaving a node SCHEDULES a close, but entering the popup cancels it (#1094 —
+  // previously the popup was "gone already" before the cursor reached it).
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cancelClose = useCallback(() => {
+    if (closeTimer.current) {
+      clearTimeout(closeTimer.current);
+      closeTimer.current = null;
+    }
+  }, []);
+  const closePreview = useCallback(() => {
+    cancelClose();
+    setHoveredMemberRef(null);
+    setHoveredPos(null);
+  }, [cancelClose]);
+
+  // Stable callback so the memoized graph doesn't re-render on every hover.
+  const handleHoverMember = useCallback(
+    (ref: string | null, pos?: { clientX: number; clientY: number }) => {
+      if (ref) {
+        cancelClose();
+        setHoveredMemberRef(ref);
+        if (pos) setHoveredPos(pos);
+      } else {
+        // Left the node — let the cursor reach the dialog (~250ms) before close.
+        cancelClose();
+        closeTimer.current = setTimeout(() => {
+          setHoveredMemberRef(null);
+          setHoveredPos(null);
+        }, 250);
+      }
+    },
+    [cancelClose],
+  );
 
   // Two-id split: delete is GUID-only on the wire; cache cleanup keys on the
   // URL idOrName so the still-mounted detail page doesn't refetch → 404 (#940).
@@ -96,10 +142,6 @@ export function SkillsetDetailPage() {
   const isOwner = !!user && skillset.createdBy === user.id;
   const latestVersion = versions[0]?.version ?? skillset.latestVersion;
 
-  // Dependency edges are a PROJECTION of the master prompt (#1064) — parsed
-  // read-only here; no write path, no new API call.
-  const depEdges = parseDeps(skillset.instructions).edges;
-
   function handleVersionChange(versionOrLatest: string | null) {
     const next = new URLSearchParams(searchParams);
     if (versionOrLatest === null) next.delete("version");
@@ -126,21 +168,11 @@ export function SkillsetDetailPage() {
             <BackLink label={t("common.back", "Back")} />
           </nav>
 
-          {/* Hero — name, kind, visibility, version picker, owner actions. */}
+          {/* Hero — name, kind, visibility, owner actions (edit only; version moved to right rail card). */}
           <SkillsetHeroStrip
             skillset={skillset}
             isOwner={isOwner}
-            versionPicker={
-              versions.length > 0 ? (
-                <VersionPicker
-                  versions={versions}
-                  currentVersion={skillset.version}
-                  onChange={handleVersionChange}
-                />
-              ) : undefined
-            }
             onEdit={isOwner ? () => navigate(`/skillsets/${skillset.guid}/edit`) : undefined}
-            onManagePermissions={isOwner ? () => setShowPermissions(true) : undefined}
           />
 
           {/* Consensus claim disclaimer (consensus-supported kind only). */}
@@ -153,68 +185,117 @@ export function SkillsetDetailPage() {
             </p>
           )}
 
-          {/* Main grid: left = master prompt + closure; right = members + meta. */}
-          <main className="grid gap-4 lg:grid-cols-[1fr_320px]">
-            <div className="flex flex-col gap-4 min-w-0">
-              {/* Master prompt (#978) — rendered markdown. */}
-              <section className="card-impression rounded border border-subtle bg-card p-6 min-w-0">
-                <h2 className="mb-3 flex items-center gap-2 border-b border-dashed border-subtle pb-3 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-meta">
-                  {t("skillsetDetail.masterPrompt", "Master prompt")}
-                </h2>
-                {skillset.instructions ? (
-                  <ReadmeViewer content={skillset.instructions} />
-                ) : (
-                  <p className="font-text text-sm text-meta italic">
-                    {t("skillsetDetail.noPrompt", "No master prompt for this version.")}
-                  </p>
+          {/* Master prompt (#1082) — the skillset's "how to use" entry point,
+              as the TOPMOST full-width card right under the hero. */}
+          <RailCard
+            title={t("skillsetDetail.masterPrompt", "Master prompt")}
+            icon={
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                <polyline points="14 2 14 8 20 8" />
+                <line x1="8" y1="13" x2="16" y2="13" />
+                <line x1="8" y1="17" x2="13" y2="17" />
+              </svg>
+            }
+          >
+            {skillset.instructions ? (
+              <div className="max-h-64 overflow-y-auto text-[13px] leading-[1.55]">
+                <ReadmeViewer content={skillset.instructions} />
+              </div>
+            ) : (
+              <p className="font-text text-sm text-meta italic">
+                {t("skillsetDetail.noPrompt", "No master prompt for this version.")}
+              </p>
+            )}
+          </RailCard>
+
+          {/* Workshop: left column is now *only* the member-dependency graph (full height,
+              no permanent package viewer below it). The graph uses the entire vertical
+              space in the equal-height left column. Package preview for a member appears
+              as a floating dialog on hover over a node in the graph (see onHoverMember). */}
+          <main className="flex flex-col gap-4 lg:flex-row lg:items-stretch lg:h-[calc(100vh-280px)] lg:min-h-[480px]">
+            <div className="flex min-w-0 flex-col lg:flex-1 lg:min-h-0 lg:min-w-0">
+              {/* Member-dependency graph (#1064) — read-only Mermaid projection of the
+                  master prompt's managed deps. Takes the *full* left column height now
+                  (previous package viewer below was removed per feedback to let the
+                  diagram utilize the canvas). Hover a node to see its package in a
+                  floating dialog. */}
+              <RailCard
+                title={t("skillsetGraph.sectionTitle", "Member dependencies")}
+                icon={
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                    <circle cx="6" cy="6" r="2.5" />
+                    <circle cx="18" cy="6" r="2.5" />
+                    <circle cx="12" cy="18" r="2.5" />
+                    <path d="M7.7 7.7 10.6 16M16.3 7.7 13.4 16" />
+                  </svg>
+                }
+                className="flex-1 min-h-0 !p-2 flex flex-col relative"
+              >
+                <SkillsetDependencyGraph
+                  readOnly
+                  members={graphMembers}
+                  edges={depEdges}
+                  className="h-full"
+                  onHoverMember={handleHoverMember}
+                />
+
+                {/* Floating package preview dialog for the hovered graph node.
+                    Positioned fixed beside the cursor (offset right+down) so it appears
+                    "right beside my cursor". Larger size for better readability of the
+                    package tree + content. Uses canvas node hover (no more blinking from
+                    SVG/Mermaid). Dismiss on mouseleave of the popup. */}
+                {hoveredMemberRef && hoveredPos && (
+                  <div
+                    className="fixed z-[100] flex w-[600px] max-w-[calc(100vw-2rem)] max-h-[70vh] flex-col overflow-hidden rounded-md border border-subtle bg-card card-impression text-sm shadow-xl"
+                    style={{
+                      left: Math.min((hoveredPos.clientX ?? 0) + 18, window.innerWidth - 616),
+                      top: Math.min((hoveredPos.clientY ?? 0) + 8, window.innerHeight - 120),
+                    }}
+                    onMouseEnter={cancelClose}
+                    onMouseLeave={closePreview}
+                  >
+                    <div className="flex shrink-0 items-center justify-between border-b border-subtle px-3 py-2 font-mono text-[11px] text-meta">
+                      <span className="truncate font-medium text-strong">{hoveredMemberRef}</span>
+                      <button
+                        type="button"
+                        onClick={closePreview}
+                        className="ml-2 shrink-0 text-meta hover:text-danger"
+                        aria-label="Close preview"
+                      >
+                        ×
+                      </button>
+                    </div>
+                    <div className="min-h-0 flex-1 overflow-auto p-2">
+                      <SkillsetMemberViewer
+                        members={skillset.members}
+                        previewRef={hoveredMemberRef}
+                      />
+                    </div>
+                  </div>
                 )}
-              </section>
-
-              {/* Member-dependency graph (#1064) — read-only projection of the
-                  master prompt's managed deps block. No write path. */}
-              <section className="card-impression rounded border border-subtle bg-card p-6 min-w-0">
-                <h2 className="mb-3 flex items-center gap-2 border-b border-dashed border-subtle pb-3 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-meta">
-                  {t("skillsetGraph.sectionTitle", "Member dependencies")}
-                </h2>
-                <SkillsetDependencyGraph readOnly members={skillset.members} edges={depEdges} />
-              </section>
-
-              {/* Resolved closure — flat depth-indented list. */}
-              <section className="card-impression rounded border border-subtle bg-card p-6 min-w-0">
-                <h2 className="mb-3 flex items-center gap-2 border-b border-dashed border-subtle pb-3 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-meta">
-                  {t("skillsetDetail.resolvedClosure", "Resolved closure")}
-                </h2>
-                <SkillsetClosureViewer items={closure?.items ?? []} />
-              </section>
+              </RailCard>
             </div>
 
-            <aside className="flex flex-col gap-4">
-              {/* Members. */}
-              <RailCard
-                title={t("skillsetDetail.members", "Members")}
-                headerRight={<span className="text-strong">{skillset.members.length}</span>}
-              >
-                <ul className="space-y-1.5">
-                  {skillset.members.map((ref) => {
-                    const { name, version } = parseMemberRef(ref);
-                    return (
-                      <li
-                        key={ref}
-                        className="flex items-center justify-between gap-2 rounded-sm border border-subtle bg-elevated/40 px-2.5 py-1.5"
-                      >
-                        <span className="min-w-0 truncate font-mono text-xs text-strong">{name}</span>
-                        {version && (
-                          <span className="shrink-0 font-mono text-[10px] text-meta">@{version}</span>
-                        )}
-                      </li>
-                    );
-                  })}
-                </ul>
-              </RailCard>
+            <aside className="flex flex-col gap-4 lg:w-[320px] lg:shrink-0 lg:h-full lg:overflow-y-auto">
+              {/* ── Metadata card ── matches skill details page styling/structure */}
+              <section className="rounded-md border border-subtle bg-card p-5 card-impression">
+                <h3 className="mb-3.5 flex items-center gap-2 border-b border-dashed border-subtle pb-3 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-meta">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                    <line x1="3" y1="6" x2="21" y2="6" />
+                    <line x1="3" y1="12" x2="21" y2="12" />
+                    <line x1="3" y1="18" x2="21" y2="18" />
+                  </svg>
+                  {t("skillsetDetail.metadata", "Metadata")}
+                </h3>
 
-              {/* Metadata. */}
-              <RailCard title={t("skillsetDetail.metadata", "Metadata")}>
                 <dl className="space-y-2.5 font-text text-sm text-body">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <dt className="font-mono text-[10px] uppercase tracking-widest text-meta">
+                      {t("skillsetDetail.membersLabel", "Members")}
+                    </dt>
+                    <dd className="font-mono text-xs text-strong">{skillset.members.length}</dd>
+                  </div>
                   <div className="flex items-baseline justify-between gap-2">
                     <dt className="font-mono text-[10px] uppercase tracking-widest text-meta">
                       {t("skillsetDetail.version", "Version")}
@@ -264,38 +345,88 @@ export function SkillsetDetailPage() {
                     </dd>
                   </div>
                 </dl>
-              </RailCard>
+              </section>
 
-              {/* Visibility — owner sees grant counts + manage. */}
-              <RailCard title={t("skillsetDetail.visibility", "Visibility")}>
-                <p className="font-text text-sm text-body">
-                  {skillset.isPrivate
-                    ? t("skillsetDetail.visPrivate", "Private")
-                    : t("skillsetDetail.visPublic", "Public")}
-                </p>
-                {skillset.isPrivate && (
-                  <p className="mt-1 font-mono text-[11px] text-meta">
-                    {t("skillsetDetail.sharedWith", "Shared with {{users}} users · {{orgs}} orgs", {
-                      users: skillset.sharedWithUsers.length,
-                      orgs: skillset.sharedWithOrgs.length,
-                    })}
+              {/* ── Versions card ── exact same structure as SkillVersionsCard in skill details page */}
+              {versions.length > 0 && (
+                <RailCard
+                  title={t("skillDetail.cardVersions", "Versions")}
+                  icon={
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                      <path d="M21 16V8a2 2 0 0 0-1-1.7l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.7l7 4a2 2 0 0 0 2 0l7-4a2 2 0 0 0 1-1.7z" />
+                      <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
+                      <line x1="12" y1="22.08" x2="12" y2="12" />
+                    </svg>
+                  }
+                >
+                  <div className="mb-1.5 flex items-baseline gap-2">
+                    <span className="font-display text-2xl font-semibold tracking-tight text-strong">
+                      {skillset.version}
+                    </span>
+                    {skillset.version === latestVersion && (
+                      <span className="rounded-sm border border-accent/40 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.16em] text-accent">
+                        {t("skillDetail.latest", "latest")}
+                      </span>
+                    )}
+                  </div>
+                  <p className="font-mono text-[11px] leading-relaxed tracking-wide text-meta">
+                    {t("skillDetail.heroPublishedOn", "Published {{date}}", { date: formatDateSGT(skillset.createdOn, i18n.language) })}
+                    {versions.length > 1 && (
+                      <>
+                        {" · "}
+                        {t("skillDetail.versionsTotal", "{{n}} versions total", { n: versions.length })}
+                      </>
+                    )}
                   </p>
-                )}
-                {isOwner && (
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    className="mt-3 w-full"
-                    onClick={() => setShowPermissions(true)}
-                  >
-                    {t("skillsetDetail.managePermissions", "Permissions")}
-                  </Button>
-                )}
+                  <div className="mt-3.5 flex flex-col gap-2">
+                    <VersionPicker
+                      versions={versions}
+                      currentVersion={skillset.version}
+                      onChange={handleVersionChange}
+                    />
+                  </div>
+                </RailCard>
+              )}
+
+              {/* Closure (renamed from "Resolved closure") — the complete flattened list of
+                  direct members + all their transitive dependencies (topo-sorted for install).
+                  "Closure" is the standard term for the fully expanded dependency set. */}
+              <RailCard
+                title={t("skillsetDetail.resolvedClosure", "Closure")}
+                icon={
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                    <line x1="8" y1="6" x2="21" y2="6" />
+                    <line x1="8" y1="12" x2="21" y2="12" />
+                    <line x1="8" y1="18" x2="21" y2="18" />
+                    <line x1="3" y1="6" x2="3.01" y2="6" />
+                    <line x1="3" y1="12" x2="3.01" y2="12" />
+                    <line x1="3" y1="18" x2="3.01" y2="18" />
+                  </svg>
+                }
+              >
+                <SkillsetClosureViewer items={closure?.items ?? []} />
               </RailCard>
 
-              {/* Danger zone (owner only). */}
+              {/* ── Visibility card ── use the exact same component as skill details for visual parity */}
+              <SkillVisibilityCard
+                isPrivate={skillset.isPrivate}
+                sharedWithUsersCount={skillset.sharedWithUsers.length}
+                sharedWithOrgsCount={skillset.sharedWithOrgs.length}
+                isOwner={isOwner}
+                onManagePermissions={() => setShowPermissions(true)}
+              />
+
+              {/* ── Danger zone (owner only) ── matches skill details page exactly in structure/styling */}
               {isOwner && (
-                <RailCard title={t("skillsetDetail.dangerZone", "Danger zone")} tone="danger">
+                <section className="rounded-md border border-subtle bg-card p-5 card-impression">
+                  <h3 className="mb-3.5 flex items-center gap-2 border-b border-dashed border-danger/30 pb-3 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-danger">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                      <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                      <line x1="12" y1="9" x2="12" y2="13" />
+                      <line x1="12" y1="17" x2="12.01" y2="17" />
+                    </svg>
+                    {t("skillsetDetail.dangerZone", "Danger zone")}
+                  </h3>
                   <p className="mb-3 font-mono text-[11px] leading-relaxed text-meta">
                     {t(
                       "skillsetDetail.dangerExplain",
@@ -310,7 +441,7 @@ export function SkillsetDetailPage() {
                   >
                     {t("skillsetDetail.deleteSkillset", "Delete skillset")}
                   </Button>
-                </RailCard>
+                </section>
               )}
             </aside>
           </main>
