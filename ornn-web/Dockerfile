@@ -6,7 +6,7 @@
 # 'zustand'". Pinning here + copying the real sibling package.jsons
 # below makes the install reproducible across CI / local / fresh dev
 # machines.
-FROM oven/bun:1.3.13 AS build
+FROM oven/bun:1.3.14 AS build
 WORKDIR /app
 
 # Copy workspace root package files
