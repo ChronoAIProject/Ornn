@@ -91,12 +91,12 @@ function clampLauncherPos(pos: Point, w = LAUNCHER_W, h = LAUNCHER_H): Point {
   };
 }
 
-/** Default resting position — bottom-right corner. */
+/** Default resting position — right edge, vertically centered. */
 function defaultLauncherPos(): Point {
   if (typeof window === "undefined") return { x: 0, y: 0 };
   return clampLauncherPos({
     x: window.innerWidth - LAUNCHER_W - EDGE_MARGIN,
-    y: window.innerHeight - LAUNCHER_H - EDGE_MARGIN,
+    y: (window.innerHeight - LAUNCHER_H) / 2,
   });
 }
 
