@@ -17,6 +17,7 @@ import { skillAuditSection, type SkillAuditSection } from "./skillAudit";
 import { skillGenSection, type SkillGenSection } from "./skillGen";
 import { telemetrySection, type TelemetrySection } from "./telemetry";
 import { extrasSection, type ExtrasSection } from "./extras";
+import { launchPromoSection, type LaunchPromoSection } from "./launchPromo";
 
 export {
   assistantSection,
@@ -27,6 +28,7 @@ export {
   skillGenSection,
   telemetrySection,
   extrasSection,
+  launchPromoSection,
 };
 
 export type {
@@ -38,6 +40,7 @@ export type {
   SkillGenSection,
   TelemetrySection,
   ExtrasSection,
+  LaunchPromoSection,
 };
 
 export type SectionId =
@@ -48,7 +51,8 @@ export type SectionId =
   | "nyxid"
   | "skillAudit"
   | "telemetry"
-  | "extras";
+  | "extras"
+  | "launchPromo";
 
 export interface SectionMeta<T> {
   /** Stable section id, also the Mongo `_id` of the section row. */
@@ -72,4 +76,5 @@ export const sections = {
   skillAudit: skillAuditSection,
   telemetry: telemetrySection,
   extras: extrasSection,
+  launchPromo: launchPromoSection,
 } as const;

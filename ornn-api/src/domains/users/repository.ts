@@ -288,6 +288,28 @@ export class UserDirectoryRepository {
   }
 
   /**
+   * Registration-rank lookup for the launch-promo eligibility gate
+   * (#724). Returns the 1-based position of `userId` in the ordering
+   * by `firstSeenAt` ascending — rank 1 == first user Ornn ever saw.
+   * Returns `null` when the user isn't in the directory.
+   *
+   * Two queries: one to load the target user's `firstSeenAt`, one to
+   * count users with an earlier timestamp. Both hit the primary key
+   * or a small filter — no full scan.
+   */
+  async getRegistrationRank(userId: string): Promise<number | null> {
+    const target = await this.collection.findOne(
+      { _id: userId },
+      { projection: { firstSeenAt: 1 } },
+    );
+    if (!target) return null;
+    const earlierCount = await this.collection.countDocuments({
+      firstSeenAt: { $lt: target.firstSeenAt },
+    });
+    return earlierCount + 1;
+  }
+
+  /**
    * Tile counts for the admin dashboard. Replaces the activity-derived
    * `getStats` from the old ActivityRepository.
    */
