@@ -98,7 +98,7 @@ export function HeroVideo() {
           overlay) keeps the labels above WCAG AA regardless of the decorative
           video frame behind them — the top scrim alone can't guarantee
           contrast once the CTA outgrows it. */}
-      <div className="absolute left-8 top-24 z-10 flex gap-3 rounded-[4px] border border-[color:var(--color-border-strong)] [background-color:var(--surface-overlay)] p-3 backdrop-blur-[14px] sm:left-12 sm:top-28">
+      <div className="absolute left-8 top-24 z-10 flex gap-3 sm:left-12 sm:top-28">
         <EmberLink to="/registry">{t("landing.browseSkills")}</EmberLink>
         <EmberLink to="/skills/new" variant="ghost">
           {t("landing.publishYours")}
