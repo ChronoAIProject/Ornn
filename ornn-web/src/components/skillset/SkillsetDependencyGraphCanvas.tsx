@@ -71,8 +71,7 @@ export interface SkillsetDependencyGraphCanvasProps {
   onEdgesChange: (edges: Edge[]) => void;
   /** Display-only mode for detail page (no drag/connect/edit). */
   readOnly?: boolean | undefined;
-  /** Hover callback for nodes (used by detail page for package preview dialog).
-   *  Second arg is mouse position for cursor-follow popup. */
+  /** Click callback for nodes (used by detail page for package preview dialog). */
   onHoverMember?: ((ref: string | null, pos?: { clientX: number; clientY: number }) => void) | undefined;
 }
 
@@ -361,15 +360,11 @@ export function SkillsetDependencyGraphCanvas({
           nodeTypes={NODE_TYPES}
           onNodesChange={onNodesChange}
           defaultEdgeOptions={DEFAULT_EDGE_OPTIONS}
-          onNodeMouseEnter={(event, node) => {
+          onNodeClick={(_event, node) => {
             if (onHoverMember && node?.id) {
-              const pos = event && typeof event.clientX === 'number'
-                ? { clientX: event.clientX, clientY: event.clientY }
-                : undefined;
-              onHoverMember(node.id, pos);
+              onHoverMember(node.id);
             }
           }}
-          onNodeMouseLeave={() => onHoverMember?.(null)}
           fitView
           fitViewOptions={FIT_VIEW_OPTIONS}
           proOptions={PRO_OPTIONS}

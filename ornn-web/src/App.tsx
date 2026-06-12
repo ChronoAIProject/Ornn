@@ -29,7 +29,6 @@ import { AdminLayout } from "@/components/layout/AdminLayout";
 import { AuthGuard } from "@/components/auth/AuthGuard";
 import { AdminGuard } from "@/components/auth/AdminGuard";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
-import { AnnouncementBanner } from "@/components/announcements/AnnouncementBanner";
 import { HighlighterMarkFilter } from "@/pages/landing/HighlighterMark";
 import { VersionUpdateBanner } from "@/components/layout/VersionUpdateBanner";
 import { PostHogProvider } from "@/components/analytics/PostHogProvider";
@@ -55,8 +54,6 @@ function AnalyticsRoot() {
       <PostHogProvider />
       <Outlet />
       <CookieConsentBanner />
-      {/* Global announcement surface — top-right headline pill on every page. */}
-      <AnnouncementBanner />
       {!hideAssistant && <AssistantWidget />}
     </>
   );
