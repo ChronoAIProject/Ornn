@@ -5,6 +5,7 @@ import { ToastContainer } from "@/components/ui/Toast";
 import { QuotaChip } from "@/components/quota/QuotaChip";
 import { useIsAuthenticated } from "@/stores/authStore";
 import { useSkill } from "@/hooks/useSkills";
+import { useSkillset } from "@/hooks/useSkillsets";
 
 /** Build breadcrumb segments from current route — every crumb is clickable */
 function useBreadcrumbs() {
@@ -21,6 +22,12 @@ function useBreadcrumbs() {
   // hits without a second round-trip.
   const isSkillRoute = path.startsWith("/skills/") && Boolean(params.idOrName);
   const { data: skillForCrumb } = useSkill(isSkillRoute ? params.idOrName! : "");
+
+  // Same idOrName → name resolution for the skillset detail route, so the
+  // skillset breadcrumb reads the human label instead of a raw GUID. Gated on
+  // path; the detail page already has this query in flight (cache hit).
+  const isSkillsetRoute = path.startsWith("/skillsets/") && Boolean(params.idOrName);
+  const { data: skillsetForCrumb } = useSkillset(isSkillsetRoute ? params.idOrName! : "");
 
   const crumbs: Array<{ label: string; to: string }> = [
     { label: t("breadcrumb.ornn"), to: "/" },
@@ -55,6 +62,22 @@ function useBreadcrumbs() {
     }
   } else if (path.startsWith("/skills/") && params.id) {
     crumbs.push({ label: t("breadcrumb.editSkill"), to: path });
+  } else if (path === "/skillsets") {
+    crumbs.push({ label: t("breadcrumb.skillsets", "Skillsets"), to: "/skillsets" });
+  } else if (path === "/my-skillsets") {
+    crumbs.push({ label: t("breadcrumb.mySkillsets", "My skillsets"), to: "/my-skillsets" });
+  } else if (path === "/skillsets/new") {
+    crumbs.push({ label: t("breadcrumb.skillsets", "Skillsets"), to: "/skillsets" });
+    crumbs.push({ label: t("breadcrumb.newSkillset", "New skillset"), to: "/skillsets/new" });
+  } else if (path.startsWith("/skillsets/") && path.endsWith("/edit") && params.id) {
+    crumbs.push({ label: t("breadcrumb.skillsets", "Skillsets"), to: "/skillsets" });
+    crumbs.push({ label: t("breadcrumb.editSkillset", "Edit skillset"), to: path });
+  } else if (path.startsWith("/skillsets/") && params.idOrName) {
+    // Resolve GUID → skillset name so the trail reads the human label even on
+    // a deep link; falls back to the raw idOrName until the query lands.
+    const skillsetName = skillsetForCrumb?.name || params.idOrName;
+    crumbs.push({ label: t("breadcrumb.skillsets", "Skillsets"), to: "/skillsets" });
+    crumbs.push({ label: skillsetName, to: `/skillsets/${params.idOrName}` });
   } else if (path === "/playground") {
     const skillName = new URLSearchParams(location.search).get("skill");
     if (skillName) {
@@ -141,7 +164,11 @@ export function RootLayout() {
             {crumbs.map((crumb, i) => {
               const isLast = i === crumbs.length - 1;
               return (
-                <span key={i} className="flex items-center gap-2">
+                // Breadcrumbs can re-shape when the route changes — use
+                // the crumb destination as a stable key so reconciliation
+                // doesn't preserve hover/focus state on the wrong segment
+                // when the trail length changes (#451).
+                <span key={`${crumb.to ?? ""}-${crumb.label}`} className="flex items-center gap-2">
                   {i > 0 && (
                     <span className="text-meta opacity-50 select-none">/</span>
                   )}

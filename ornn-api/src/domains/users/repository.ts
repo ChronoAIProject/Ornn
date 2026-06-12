@@ -30,9 +30,8 @@
  */
 
 import type { Collection, Db } from "mongodb";
-import pino from "pino";
-
-const logger = pino({ level: "info" }).child({ module: "userDirectoryRepository" });
+import { createLogger } from "../../shared/logger";
+const logger = createLogger("userDirectoryRepository");
 
 const COLLECTION = "users";
 
@@ -245,14 +244,8 @@ export class UserDirectoryRepository {
 
     const filter: Record<string, unknown> = {
       isAdmin: params.role === "admin",
+      ...buildUserSearchFilter(params.q),
     };
-    const q = params.q?.trim();
-    if (q) {
-      filter.email = {
-        $regex: `^${q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`,
-        $options: "i",
-      };
-    }
 
     const total = await this.collection.countDocuments(filter);
     const sortSpec: Record<string, 1 | -1> = {
@@ -289,14 +282,8 @@ export class UserDirectoryRepository {
   ): Promise<UserDirectoryDoc[]> {
     const filter: Record<string, unknown> = {
       isAdmin: role === "admin",
+      ...buildUserSearchFilter(q),
     };
-    const trimmed = q?.trim();
-    if (trimmed) {
-      filter.email = {
-        $regex: `^${trimmed.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`,
-        $options: "i",
-      };
-    }
     return this.collection.find(filter).limit(hardLimit).toArray();
   }
 
@@ -311,6 +298,38 @@ export class UserDirectoryRepository {
     ]);
     return { admin, normal: Math.max(0, total - admin), total };
   }
+}
+
+/**
+ * Build a Mongo filter fragment for the admin user-list search box.
+ *
+ * #587 — the box's placeholder says "email or display name" but the
+ * server only matched on email-prefix. Display names + substring
+ * keywords were silently ignored. Fix is additive:
+ *
+ *   - **Email** — keep the anchored prefix regex (it's the historical
+ *     behaviour, indexable, and matches the "type the local part" UX
+ *     admins already rely on).
+ *   - **DisplayName** — add a case-insensitive *substring* match.
+ *     Display names don't have a meaningful prefix (`Ornn Local Proxy`
+ *     should hit on `Proxy`, not just `Ornn`).
+ *
+ * `$or` lets either match. Empty / whitespace queries return an empty
+ * fragment so the role filter alone drives the query.
+ *
+ * Regex meta-chars are escaped so a literal `.` / `*` in a display name
+ * or local-part doesn't blow up the query (or DoS the matcher).
+ */
+function buildUserSearchFilter(q: string | undefined): Record<string, unknown> {
+  const trimmed = q?.trim();
+  if (!trimmed) return {};
+  const escaped = trimmed.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return {
+    $or: [
+      { email: { $regex: `^${escaped}`, $options: "i" } },
+      { displayName: { $regex: escaped, $options: "i" } },
+    ],
+  };
 }
 
 function toEntry(doc: UserDirectoryDoc): UserDirectoryEntry {

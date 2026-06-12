@@ -15,7 +15,8 @@ import type {
 
 export function useSkillAnalytics(
   idOrName: string | undefined,
-  options: { window?: AnalyticsWindow; version?: string } = {},
+  // exactOptionalPropertyTypes (#657)
+  options: { window?: AnalyticsWindow | undefined; version?: string | undefined } = {},
 ) {
   const window = options.window ?? "30d";
   return useQuery<SkillAnalyticsSummary | null>({
@@ -32,11 +33,12 @@ export function useSkillAnalytics(
  */
 export function useSkillPulls(
   idOrName: string | undefined,
+  // exactOptionalPropertyTypes (#657)
   options: {
     bucket: PullBucket;
-    from?: string;
-    to?: string;
-    version?: string;
+    from?: string | undefined;
+    to?: string | undefined;
+    version?: string | undefined;
   },
 ) {
   return useQuery<PullBucketCount[]>({

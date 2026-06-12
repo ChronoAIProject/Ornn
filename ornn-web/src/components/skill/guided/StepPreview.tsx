@@ -14,7 +14,8 @@ export interface StepPreviewProps {
   files: FileNode[];
   fileContents: Map<string, string>;
   metadata: SkillMetadata | null;
-  authorName?: string;
+  // exactOptionalPropertyTypes (#657)
+  authorName?: string | undefined;
 }
 
 export function StepPreview({ files, fileContents, metadata, authorName }: StepPreviewProps) {

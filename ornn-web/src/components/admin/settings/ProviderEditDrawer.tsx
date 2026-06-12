@@ -217,21 +217,7 @@ export function ProviderEditDrawer({
   provider,
 }: ProviderEditDrawerProps) {
   const { t } = useTranslation();
-  const qc = useQueryClient();
-  const addToast = useToastStore((s) => s.addToast);
   const isEdit = provider !== null;
-
-  const [form, setForm] = useState<DrawerForm>(() => emptyForm());
-  const [errors, setErrors] = useState<Record<string, string>>({});
-
-  // Reset form whenever the drawer opens against a different provider /
-  // create flow. Keep the form alive when the drawer is closed so an
-  // accidental backdrop click doesn't wipe in-progress input.
-  useEffect(() => {
-    if (!isOpen) return;
-    setForm(provider ? fromProvider(provider) : emptyForm());
-    setErrors({});
-  }, [isOpen, provider]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -241,6 +227,65 @@ export function ProviderEditDrawer({
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [isOpen, onClose]);
+
+  return createPortal(
+    <AnimatePresence>
+      {isOpen && (
+        <div className="fixed inset-0 z-50">
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.18 }}
+            className="absolute inset-0 bg-black/55 backdrop-blur-[2px]"
+            onClick={onClose}
+          />
+          <motion.aside
+            initial={{ x: "100%" }}
+            animate={{ x: 0 }}
+            exit={{ x: "100%" }}
+            transition={{ type: "spring", stiffness: 240, damping: 28, mass: 0.9 }}
+            role="dialog"
+            aria-label={isEdit ? "Edit LLM provider" : "New LLM provider"}
+            className="card-impression absolute right-0 top-0 flex h-full w-full max-w-[480px] flex-col gap-5 border-l border-subtle bg-page p-6 sm:p-8"
+          >
+            {/* Keyed on the open provider (or "new") so the form's state
+                resets by construction on reopen / entity-switch — no
+                reset effect, no cascading render (#888). The outer
+                AnimatePresence stays mounted for the slide animation. */}
+            <ProviderEditForm
+              key={provider?._id ?? "new"}
+              provider={provider}
+              isEdit={isEdit}
+              onClose={onClose}
+              t={t}
+            />
+          </motion.aside>
+        </div>
+      )}
+    </AnimatePresence>,
+    document.body,
+  );
+}
+
+interface ProviderEditFormProps {
+  provider: LlmProvider | null;
+  isEdit: boolean;
+  onClose: () => void;
+  t: ReturnType<typeof useTranslation>["t"];
+}
+
+function ProviderEditForm({ provider, isEdit, onClose, t }: ProviderEditFormProps) {
+  const qc = useQueryClient();
+  const addToast = useToastStore((s) => s.addToast);
+
+  // Lazy init from the prop so the first render is already prefilled in
+  // edit mode (no post-mount setState). Re-open / entity-switch resets
+  // via the `key` at the call site.
+  const [form, setForm] = useState<DrawerForm>(() =>
+    provider ? fromProvider(provider) : emptyForm(),
+  );
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
   const saveMut = useMutation<LlmProvider, Error, LlmProviderInput>({
     mutationFn: (input) =>
@@ -280,27 +325,8 @@ export function ProviderEditDrawer({
     saveMut.mutate(toInput(form));
   };
 
-  return createPortal(
-    <AnimatePresence>
-      {isOpen && (
-        <div className="fixed inset-0 z-50">
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.18 }}
-            className="absolute inset-0 bg-black/55 backdrop-blur-[2px]"
-            onClick={onClose}
-          />
-          <motion.aside
-            initial={{ x: "100%" }}
-            animate={{ x: 0 }}
-            exit={{ x: "100%" }}
-            transition={{ type: "spring", stiffness: 240, damping: 28, mass: 0.9 }}
-            role="dialog"
-            aria-label={isEdit ? "Edit LLM provider" : "New LLM provider"}
-            className="card-impression absolute right-0 top-0 flex h-full w-full max-w-[480px] flex-col gap-5 border-l border-subtle bg-page p-6 sm:p-8"
-          >
+  return (
+    <>
             <header className="flex items-baseline justify-between">
               <div>
                 <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-meta">
@@ -514,11 +540,7 @@ export function ProviderEditDrawer({
                 </Button>
               </footer>
             </form>
-          </motion.aside>
-        </div>
-      )}
-    </AnimatePresence>,
-    document.body,
+    </>
   );
 }
 
@@ -526,7 +548,8 @@ interface FieldProps {
   label: string;
   value: string;
   onChange: (v: string) => void;
-  error?: string;
+  // exactOptionalPropertyTypes (#657)
+  error?: string | undefined;
 }
 
 function Field({ label, value, onChange, error }: FieldProps) {

@@ -35,11 +35,14 @@ describe("infra/crypto", () => {
 
   it("UT-CRYPTO-003: tampered ciphertext rejected by auth tag", () => {
     const ct = encryptSecret("plaintext", KEY);
-    // Flip a single hex char in the ciphertext segment.
+    // Flip a single hex char in the ciphertext segment. `encryptSecret`
+    // emits a 4-part `v1:iv:tag:ct` payload, so index 3 is guaranteed
+    // present. `!` is safe under noUncheckedIndexedAccess (#450).
     const parts = ct.split(":");
-    parts[3] = parts[3].startsWith("a")
-      ? `b${parts[3].slice(1)}`
-      : `a${parts[3].slice(1)}`;
+    const ctSegment = parts[3]!;
+    parts[3] = ctSegment.startsWith("a")
+      ? `b${ctSegment.slice(1)}`
+      : `a${ctSegment.slice(1)}`;
     const tampered = parts.join(":");
     expect(() => decryptSecret(tampered, KEY)).toThrow();
   });

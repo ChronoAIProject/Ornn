@@ -75,6 +75,19 @@ html {
   --color-arc-soft: rgba(91, 200, 232, 0.10);
   --color-ember-glow: rgba(255, 115, 34, 0.30);      /* hero floor / pulse glows */
 
+  /* Landing-chrome tokens (#452) — referenced from PhoneMockup and
+     AnimatedTerminal so hex literals stay out of JSX. Same values in
+     both themes: the macOS-style traffic-light dots and the phone
+     bezel shadows read consistently on either page background. */
+  --color-bezel-edge: #1A1713;                       /* phone side rails + lens depth shadow */
+  --color-bezel-rim: #2A2620;                        /* phone outer rim */
+  --color-lens-deep: #0B1520;                        /* camera-lens base */
+  --color-lens-rim: #3A5060;                         /* camera-lens specular */
+  --color-traffic-red: #C94A4A;
+  --color-traffic-amber: #C9A64A;
+  --color-traffic-green: #5A9B5A;
+  --color-terminal-ok: #7DC97D;                      /* terminal-output checkmark green */
+
   --font-display: "Space Grotesk", "Inter", system-ui, sans-serif;
   --font-text: "Inter", system-ui, sans-serif;
   --font-ui: "Inter", system-ui, sans-serif;
@@ -468,6 +481,18 @@ html {
 .markdown-body h1 { font-size: 1.875rem; }
 .markdown-body h2 { font-size: 1.5rem; }
 .markdown-body h3 { font-size: 1.25rem; }
+
+/* Compact master prompt on skillset detail page (#1084): much smaller body + headings
+   so the instructions don't dominate vertical space in the RailCard. */
+.text-\[13px\] .markdown-body,
+.text-\[13px\] .markdown-body p,
+.text-\[13px\] .markdown-body li {
+  font-size: inherit;
+  line-height: inherit;
+}
+.text-\[13px\] .markdown-body h1 { font-size: 1.05rem; }
+.text-\[13px\] .markdown-body h2 { font-size: 0.95rem; }
+.text-\[13px\] .markdown-body h3 { font-size: 0.875rem; }
 
 .markdown-body p {
   margin-bottom: 1em;
@@ -893,4 +918,256 @@ html {
   outline: none;
   box-shadow: var(--button-focus-ring);
   border-radius: 2px;
+}
+
+/* Assistant launcher — forge-clip loop-seam mask (#976). The ~2.4s clip
+   pans slightly, so the hard `loop` cut is visible; a brief opacity dip
+   timed near the boundary softens the seam into a quiet crossfade. The
+   animation period tracks the clip length and starts with it on mount, so
+   the dip lands at the cut. motion-safe only — reduced-motion renders the
+   static poster instead of the video, so this never runs there. */
+@media (prefers-reduced-motion: no-preference) {
+  .forge-loop-mask {
+    animation: forge-loop-dip 2.4s linear infinite;
+  }
+}
+@keyframes forge-loop-dip {
+  0%,
+  88% {
+    opacity: 1;
+  }
+  95% {
+    opacity: 0.5;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+/* ───────────────────────────────────────────────────────────────────────
+   Skill-lifecycle orbital ring (landing hero overlay).
+   Geometry is unit/polar (a square sizing box → percentage coordinates) so
+   the circle stays perfectly round at any hero aspect ratio and scales down
+   to mobile. Motion (comet spin, conic accent ring) is CSS-driven and gated
+   by prefers-reduced-motion at the bottom of this block.
+   ─────────────────────────────────────────────────────────────────────── */
+
+/* The ring always sits over the dark intro video — which does NOT change with
+   the page theme — so the overlay renders in a fixed dark context in BOTH
+   themes. Re-pin the tokens it consumes to their dark-context values so every
+   child (labels, hub, card, discs, accents, text-shadows) stays legible over
+   the video without per-theme special-casing. Light-mode dark-on-light text
+   would otherwise vanish against the dark footage. */
+.lifecycle-overlay {
+  --color-page: #0b0907;
+  --color-strong: #f1ecde;
+  --color-body: #c9bfad;
+  --color-meta: #8a8170;
+  --color-accent: #ff7322;
+  --color-accent-support: #e8b341;
+  --color-arc: #5bc8e8;
+  --color-arc-dim: #3a8fb8;
+  --color-border-subtle: rgb(201 191 173 / 0.12);
+  --color-border-strong: rgb(201 191 173 / 0.24);
+  --color-border-stronger: rgb(201 191 173 / 0.34);
+  --color-shadow-press: rgba(0, 0, 0, 0.55);
+  --color-code-surface: #08070a;
+  --surface-overlay: rgb(14 13 11 / 0.86);
+}
+
+/* Square sizing box; --lc-size feeds both the box and card max-width. */
+.lifecycle-stage {
+  --lc-size: clamp(300px, min(90vw, 78vh), 660px);
+  width: var(--lc-size);
+  height: var(--lc-size);
+}
+
+/* Calm the busy video locally: a feathered dark scrim gives the ring a stage
+   to sit on, with a faint ember halo layered on top. Stays well inside the
+   frame (fades out by ~60%) so the animation reads at the edges. */
+.lifecycle-ambient {
+  width: calc(var(--lc-size, 520px) * 1.45);
+  height: calc(var(--lc-size, 520px) * 1.45);
+  border-radius: 9999px;
+  background:
+    radial-gradient(
+      circle,
+      rgba(255, 115, 34, 0.12) 0%,
+      rgba(232, 179, 65, 0.06) 30%,
+      transparent 55%
+    ),
+    radial-gradient(
+      circle,
+      rgba(8, 7, 6, 0.66) 0%,
+      rgba(8, 7, 6, 0.5) 28%,
+      rgba(8, 7, 6, 0.24) 46%,
+      transparent 62%
+    );
+}
+
+/* Orbiting comet — rotate the whole group around the SVG viewBox centre. */
+.lifecycle-comet {
+  transform-box: view-box;
+  transform-origin: 50% 50%;
+  animation: lifecycle-orbit 16s linear infinite;
+}
+@keyframes lifecycle-orbit {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Stage node icon disc. */
+.lifecycle-node-disc {
+  width: clamp(42px, 9.5vmin, 58px);
+  height: clamp(42px, 9.5vmin, 58px);
+  transition:
+    border-color 200ms ease,
+    color 200ms ease,
+    box-shadow 220ms ease,
+    opacity 200ms ease;
+}
+/* Active: localized welding-heat glow in the node's accent voice. Resting
+   discs carry no glow — this is an accent state, not baseline. */
+.lifecycle-node-disc[data-active] {
+  box-shadow:
+    0 0 0 1px var(--lc-accent),
+    0 0 14px -3px var(--lc-accent),
+    0 0 32px -8px var(--lc-accent);
+}
+/* Rotating conic accent ring on the active disc (reuses --offer-angle). */
+.lifecycle-node-disc::before {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  border-radius: 9999px;
+  padding: 2px;
+  background: conic-gradient(
+    from var(--offer-angle),
+    transparent 0deg,
+    var(--lc-accent) 60deg,
+    transparent 160deg,
+    transparent 360deg
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+          mask-composite: exclude;
+  opacity: 0;
+  transition: opacity 220ms ease;
+  pointer-events: none;
+}
+.lifecycle-node-disc[data-active]::before {
+  opacity: 1;
+  animation: offer-tile-rotate 2.6s linear infinite;
+}
+
+/* Travelling pulse — each node briefly lights as the comet sweeps past it.
+   Same 16s period as the comet, phase-offset by node index (--lc-i: 0..7 ×
+   2s), so the glow chases the comet head around the loop. Uses ::after to stay
+   independent of the active conic ring (::before). */
+.lifecycle-node-disc::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: 9999px;
+  box-shadow: 0 0 11px 1px var(--lc-accent);
+  opacity: 0;
+  pointer-events: none;
+  animation: lifecycle-travel 16s linear infinite;
+  animation-delay: calc(var(--lc-i, 0) * 2s);
+}
+/* The hovered node owns the glow — pause its ambient pulse. */
+.lifecycle-node-disc[data-active]::after {
+  animation: none;
+  opacity: 0;
+}
+@keyframes lifecycle-travel {
+  0% {
+    opacity: 0.5;
+  }
+  9% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* One-shot sonar ping on activation — re-mounts per activation so it plays
+   exactly once, then rests at opacity 0 (forwards). */
+.lifecycle-ripple {
+  position: absolute;
+  inset: -2px;
+  border-radius: 9999px;
+  border: 1.5px solid var(--lc-accent);
+  pointer-events: none;
+  animation: lifecycle-ripple 720ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+@keyframes lifecycle-ripple {
+  0% {
+    transform: scale(0.85);
+    opacity: 0.7;
+  }
+  100% {
+    transform: scale(2.35);
+    opacity: 0;
+  }
+}
+
+/* Active connector — dashes flow toward the centre card (energy arriving). */
+.lifecycle-connector {
+  stroke-dasharray: 1.6 2.4;
+  animation: lifecycle-dash 560ms linear infinite;
+}
+@keyframes lifecycle-dash {
+  to {
+    stroke-dashoffset: 4;
+  }
+}
+
+/* Counter-rotating dotted inner ring — slow, for parallax depth. */
+.lifecycle-inner-ring {
+  transform-box: view-box;
+  transform-origin: 50% 50%;
+  animation: lifecycle-spin-rev 44s linear infinite;
+}
+@keyframes lifecycle-spin-rev {
+  to {
+    transform: rotate(-360deg);
+  }
+}
+
+/* Focus ring on the node trigger — page-halo + accent, visible over video. */
+.lifecycle-node:focus-visible {
+  outline: none;
+}
+.lifecycle-node:focus-visible .lifecycle-node-disc {
+  box-shadow: var(--button-focus-ring);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lifecycle-comet,
+  .lifecycle-inner-ring,
+  .lifecycle-connector,
+  .lifecycle-ripple {
+    animation: none;
+  }
+  /* The travelling pulse is a CSS pseudo (not class-gated in JS) — silence it. */
+  .lifecycle-node-disc::after {
+    animation: none;
+    opacity: 0;
+  }
+  .lifecycle-node-disc[data-active]::before {
+    animation: none;
+    /* static heat arc instead of a rotating sweep */
+    background: conic-gradient(
+      from 220deg,
+      transparent 0deg,
+      var(--lc-accent) 70deg,
+      transparent 150deg,
+      transparent 360deg
+    );
+  }
 }

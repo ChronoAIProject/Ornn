@@ -70,7 +70,7 @@ export function NotificationBell() {
   const { data: unread = 0 } = useUnreadNotificationCount();
   // Keep the popover list small — we don't want to pay for 200 items on every
   // navbar render. The full /notifications page has its own list.
-  const { data: items = [], isLoading } = useNotifications({ limit: POPOVER_ITEM_CAP });
+  const { data: items = [], isLoading, refetch } = useNotifications({ limit: POPOVER_ITEM_CAP });
   const markRead = useMarkNotificationRead();
   const markAll = useMarkAllNotificationsRead();
 
@@ -80,6 +80,17 @@ export function NotificationBell() {
   );
 
   const lang = i18n.language;
+
+  // Refetch the list every time the popover opens. The list query stays
+  // mounted in the navbar forever and never remounts, and the badge
+  // (useUnreadNotificationCount) polls on its own 30s tick — so a fresh
+  // broadcast can bump the badge while the dropdown still shows the stale
+  // cached list until the next poll lands (#728 was an incomplete fix,
+  // #751). `refetch` from React Query is referentially stable, so this
+  // fires exactly once per false→true open transition, not every render.
+  useEffect(() => {
+    if (open) void refetch();
+  }, [open, refetch]);
 
   // Close popover on outside click.
   useEffect(() => {

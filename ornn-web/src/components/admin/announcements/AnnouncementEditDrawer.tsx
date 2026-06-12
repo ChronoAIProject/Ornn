@@ -190,22 +190,6 @@ export function AnnouncementEditDrawer({
   announcement,
 }: AnnouncementEditDrawerProps) {
   const isEdit = announcement !== null;
-  const addToast = useToastStore((s) => s.addToast);
-  const createMut = useCreateAnnouncement();
-  const updateMut = useUpdateAnnouncement();
-  const saving = createMut.isPending || updateMut.isPending;
-
-  const [form, setForm] = useState<DrawerForm>(() => emptyForm());
-  const [errors, setErrors] = useState<Record<string, string>>({});
-  /** Which locale's body markdown is in preview mode (null = both in edit). */
-  const [previewLocale, setPreviewLocale] = useState<"en" | "zh" | null>(null);
-
-  useEffect(() => {
-    if (!isOpen) return;
-    setForm(announcement ? fromAnnouncement(announcement) : emptyForm());
-    setErrors({});
-    setPreviewLocale(null);
-  }, [isOpen, announcement]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -215,6 +199,71 @@ export function AnnouncementEditDrawer({
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [isOpen, onClose]);
+
+  return createPortal(
+    <AnimatePresence>
+      {isOpen && (
+        <div className="fixed inset-0 z-50">
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.18 }}
+            className="absolute inset-0 bg-black/55 backdrop-blur-[2px]"
+            onClick={onClose}
+          />
+          <motion.aside
+            initial={{ x: "100%" }}
+            animate={{ x: 0 }}
+            exit={{ x: "100%" }}
+            transition={{ type: "spring", stiffness: 240, damping: 28, mass: 0.9 }}
+            role="dialog"
+            aria-label={isEdit ? "Edit announcement" : "New announcement"}
+            className="card-impression absolute right-0 top-0 flex h-full w-full max-w-[640px] flex-col gap-5 overflow-y-auto border-l border-subtle bg-page p-6 sm:p-8"
+          >
+            {/* Keyed on the open announcement (or "new") so the form's
+                state resets by construction on reopen / entity-switch —
+                no reset effect, no cascading render (#888). The outer
+                AnimatePresence stays mounted for the slide animation. */}
+            <AnnouncementEditForm
+              key={announcement?.id ?? "new"}
+              announcement={announcement}
+              isEdit={isEdit}
+              onClose={onClose}
+            />
+          </motion.aside>
+        </div>
+      )}
+    </AnimatePresence>,
+    document.body,
+  );
+}
+
+interface AnnouncementEditFormProps {
+  announcement: AdminAnnouncement | null;
+  isEdit: boolean;
+  onClose: () => void;
+}
+
+function AnnouncementEditForm({
+  announcement,
+  isEdit,
+  onClose,
+}: AnnouncementEditFormProps) {
+  const addToast = useToastStore((s) => s.addToast);
+  const createMut = useCreateAnnouncement();
+  const updateMut = useUpdateAnnouncement();
+  const saving = createMut.isPending || updateMut.isPending;
+
+  // Lazy init from the prop so the first render is already prefilled in
+  // edit mode (no post-mount setState). Re-open / entity-switch resets
+  // via the `key` at the call site.
+  const [form, setForm] = useState<DrawerForm>(() =>
+    announcement ? fromAnnouncement(announcement) : emptyForm(),
+  );
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  /** Which locale's body markdown is in preview mode (null = both in edit). */
+  const [previewLocale, setPreviewLocale] = useState<"en" | "zh" | null>(null);
 
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -260,27 +309,8 @@ export function AnnouncementEditDrawer({
     }
   };
 
-  return createPortal(
-    <AnimatePresence>
-      {isOpen && (
-        <div className="fixed inset-0 z-50">
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.18 }}
-            className="absolute inset-0 bg-black/55 backdrop-blur-[2px]"
-            onClick={onClose}
-          />
-          <motion.aside
-            initial={{ x: "100%" }}
-            animate={{ x: 0 }}
-            exit={{ x: "100%" }}
-            transition={{ type: "spring", stiffness: 240, damping: 28, mass: 0.9 }}
-            role="dialog"
-            aria-label={isEdit ? "Edit announcement" : "New announcement"}
-            className="card-impression absolute right-0 top-0 flex h-full w-full max-w-[640px] flex-col gap-5 overflow-y-auto border-l border-subtle bg-page p-6 sm:p-8"
-          >
+  return (
+    <>
             <header className="flex items-baseline justify-between">
               <div>
                 <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-meta">
@@ -469,11 +499,7 @@ export function AnnouncementEditDrawer({
                 </Button>
               </div>
             </form>
-          </motion.aside>
-        </div>
-      )}
-    </AnimatePresence>,
-    document.body,
+    </>
   );
 }
 

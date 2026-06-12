@@ -248,6 +248,10 @@ function ScrubHero() {
     let firingIdx = -1;
     for (let i = 0; i < RAIL_SKILLS.length; i++) {
       const skill = RAIL_SKILLS[i];
+      // `i` is bounded by `RAIL_SKILLS.length`, but
+      // noUncheckedIndexedAccess (#450) widens the lookup. Skip when
+      // the array shape drifts rather than crash.
+      if (!skill) continue;
       const start = ITEM_BASE + i * ITEM_STEP;
       const local = (v - start) / ITEM_DUR;
       const path = pathRefs.current[i];

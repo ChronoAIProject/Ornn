@@ -157,4 +157,55 @@ describe("buildTrySkillPrompt", () => {
     expect(out).toContain(`Ornn URL: ${ORIGIN}/skills/${GUID}`);
     expect(out).not.toContain("https://ornn.chrono-ai.fun///");
   });
+
+  describe("version pinning (#639)", () => {
+    test("pins all three fetch surfaces to ?version=<v> when version is provided", () => {
+      const out = buildTrySkillPrompt({
+        guid: GUID,
+        name: "s",
+        description: "d",
+        metadata: {},
+        ornnOrigin: ORIGIN,
+        version: "0.2",
+      });
+      // Header acknowledges the pin so the user/agent sees it.
+      expect(out).toContain("# Install Ornn skill: s @ 0.2");
+      expect(out).toMatch(/Pinned to version `0.2`/);
+      // NyxID CLI option uses --query.
+      expect(out).toContain(
+        `nyxid proxy request ornn-api /api/v1/skills/${GUID}/json --query version=0.2`,
+      );
+      // Direct HTTPS curl URL pins via ?version=.
+      expect(out).toContain(`${ORIGIN}/api/v1/skills/${GUID}/json?version=0.2`);
+      // Ornn URL footer also points at the same version.
+      expect(out).toContain(`Ornn URL: ${ORIGIN}/skills/${GUID}?version=0.2`);
+    });
+
+    test("absent version → no pin header, no ?version=", () => {
+      const out = buildTrySkillPrompt({
+        guid: GUID,
+        name: "s",
+        description: "d",
+        metadata: {},
+        ornnOrigin: ORIGIN,
+      });
+      expect(out).not.toMatch(/Pinned to version/);
+      expect(out).not.toContain("?version=");
+      expect(out).not.toContain("--query version=");
+    });
+
+    test("URL-encodes the version (defensive — server only accepts <major>.<minor> but be safe)", () => {
+      const out = buildTrySkillPrompt({
+        guid: GUID,
+        name: "s",
+        description: "d",
+        metadata: {},
+        ornnOrigin: ORIGIN,
+        version: "stable",
+      });
+      // Plain dist-tag passes through unchanged.
+      expect(out).toContain("?version=stable");
+      expect(out).toContain("# Install Ornn skill: s @ stable");
+    });
+  });
 });

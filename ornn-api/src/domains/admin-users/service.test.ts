@@ -117,7 +117,7 @@ describe("search by email prefix", () => {
     await seedUser({ userId: "bob", email: "bob@example.com", displayName: "Bob" });
     const r = await service.listUsers({ role: "normal", page: 1, pageSize: 50, q: "ali" });
     expect(r.total).toBe(1);
-    expect(r.items[0].email).toBe("alice@example.com");
+    expect(r.items[0]!.email).toBe("alice@example.com");
   });
 });
 
@@ -147,8 +147,8 @@ describe("default sort lastActiveAt desc, nulls last", () => {
       lastSeenAt: new Date(Date.UTC(2026, 4, 1)),
     });
     const r = await service.listUsers({ role: "normal", page: 1, pageSize: 10 });
-    expect(r.items[0].userId).toBe("new");
-    expect(r.items[1].userId).toBe("old");
+    expect(r.items[0]!.userId).toBe("new");
+    expect(r.items[1]!.userId).toBe("old");
   });
 });
 
@@ -160,8 +160,8 @@ describe("lastActiveAt surfaces directory's lastSeenAt", () => {
       activityCount: 7,
     });
     const r = await service.listUsers({ role: "normal", page: 1, pageSize: 10 });
-    expect(r.items[0].lastActiveAt).toBe("2026-05-15T00:00:00.000Z");
-    expect(r.items[0].activityCount).toBe(7);
+    expect(r.items[0]!.lastActiveAt).toBe("2026-05-15T00:00:00.000Z");
+    expect(r.items[0]!.activityCount).toBe(7);
   });
 });
 
@@ -169,7 +169,7 @@ describe("skillCount = N owned", () => {
   test("createdBy match", async () => {
     await seedUser({ userId: "u1", skills: 4 });
     const r = await service.listUsers({ role: "normal", page: 1, pageSize: 10 });
-    expect(r.items[0].skillCount).toBe(4);
+    expect(r.items[0]!.skillCount).toBe(4);
   });
 });
 
@@ -180,6 +180,6 @@ describe("firstJoinedAt surfaces directory's firstSeenAt", () => {
       firstSeenAt: new Date(Date.UTC(2025, 11, 15)),
     });
     const r = await service.listUsers({ role: "normal", page: 1, pageSize: 10 });
-    expect(r.items[0].firstJoinedAt).toBe("2025-12-15T00:00:00.000Z");
+    expect(r.items[0]!.firstJoinedAt).toBe("2025-12-15T00:00:00.000Z");
   });
 });

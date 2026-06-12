@@ -11,25 +11,17 @@ import { SkillFileViewer } from "@/components/skill/SkillFileViewer";
 import type { SkillMetadata } from "@/types/skillPackage";
 
 export interface SkillPackagePreviewProps {
-  /** FileTree data structure */
   files: FileNode[];
-  /** Map of file id -> plaintext content */
   fileContents: Map<string, string>;
-  /** Extracted or generated metadata */
   metadata: SkillMetadata | null;
-  /** Allow editing file content (generative mode) */
-  editable?: boolean;
-  /** Callback when file content changes (editable mode) */
-  onContentChange?: (fileId: string, content: string) => void;
-  /** Callback when a new file is created */
-  onCreateFile?: (parentId: string | null, name: string) => void;
-  /** Callback when a new folder is created */
-  onCreateFolder?: (parentId: string | null, name: string) => void;
-  /** Callback when a file is deleted */
-  onFileDelete?: (fileId: string) => void;
-  /** Author name (display only) */
-  authorName?: string;
-  className?: string;
+  // Optionals widen to `T | undefined` for exactOptionalPropertyTypes (#657).
+  editable?: boolean | undefined;
+  onContentChange?: ((fileId: string, content: string) => void) | undefined;
+  onCreateFile?: ((parentId: string | null, name: string) => void) | undefined;
+  onCreateFolder?: ((parentId: string | null, name: string) => void) | undefined;
+  onFileDelete?: ((fileId: string) => void) | undefined;
+  authorName?: string | undefined;
+  className?: string | undefined;
 }
 
 /**
@@ -157,28 +149,22 @@ export function SkillPackagePreview({
   authorName,
   className = "",
 }: SkillPackagePreviewProps) {
-  const [selectedFileId, setSelectedFileId] = useState<string | undefined>(
-    () => findDefaultFileId(files),
-  );
+  // `undefined` = no explicit user pick → derive the default file from
+  // the tree. A user click sets this explicitly.
+  const [userSelectedFileId, setUserSelectedFileId] = useState<string | undefined>();
 
-  // Default-select SKILL.md when files arrive (or change). Three triggers:
-  //   1. Initial render had no files yet (async fetch) — `selectedFileId`
-  //      is undefined; pick SKILL.md once files land.
-  //   2. The currently-selected file disappeared from the tree (rename,
-  //      version switch, deletion) — fall back to SKILL.md.
-  //   3. Version switch / refresh produced a different default — re-pick
-  //      so the viewer always lands on SKILL.md unless the user explicitly
-  //      navigated away.
-  useEffect(() => {
-    const fallback = findDefaultFileId(files);
-    if (!selectedFileId) {
-      if (fallback) setSelectedFileId(fallback);
-      return;
-    }
-    if (!fileContents.has(selectedFileId)) {
-      setSelectedFileId(fallback);
-    }
-  }, [files, fileContents, selectedFileId]);
+  // Derive the effective selection rather than seeding it via an effect
+  // (#888). Covers the same three cases the old effect did:
+  //   1. No files yet / no pick — fall back to the default (SKILL.md).
+  //   2. The user's pick disappeared (rename / version switch / delete)
+  //      — its contents are gone, so fall back to the default.
+  //   3. A version switch produced a different default — when there's no
+  //      explicit pick, the default re-derives automatically.
+  const fallbackFileId = findDefaultFileId(files);
+  const selectedFileId =
+    userSelectedFileId && fileContents.has(userSelectedFileId)
+      ? userSelectedFileId
+      : fallbackFileId;
 
   const selectedContent = selectedFileId
     ? fileContents.get(selectedFileId) ?? ""
@@ -188,7 +174,7 @@ export function SkillPackagePreview({
 
   const handleFileSelect = (node: FileNode) => {
     if (node.type === "file") {
-      setSelectedFileId(node.id);
+      setUserSelectedFileId(node.id);
     }
   };
 

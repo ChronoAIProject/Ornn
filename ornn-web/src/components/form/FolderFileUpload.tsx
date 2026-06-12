@@ -2,6 +2,28 @@
  * Folder File Upload Component.
  * Upload files with target folder selection for skill packages.
  * Used in Guided Step 3 and Generative Mode review.
+ *
+ * #655 — the upload accepted any file regardless of name or size:
+ * duplicates in the same target folder stacked silently and a 55 MB
+ * file went through without a warning. Added two guards inside
+ * `handleFileSelect`, so both the click and drop paths are covered:
+ *
+ *   1. Duplicate filename inside the same target folder is rejected
+ *      with an inline `<name> already exists in <folder>/` error. The
+ *      user picks Remove on the existing chip if they really want to
+ *      replace it — auto-overwrite would silently drop unsaved
+ *      content.
+ *   2. Per-file size cap of 10 MiB. The backend / ZIP pipeline caps
+ *      total uncompressed at ~100 MB (#443 / #633); per-file 10 MiB
+ *      keeps a single oversize artifact from eating the whole budget
+ *      and signals the limit before the user assembles a doomed
+ *      package.
+ *
+ * Both errors render under the drop zone with `aria-live="polite"`,
+ * auto-clear on the next successful upload, and explicitly do NOT
+ * call `onUpload` — the parent state stays untouched on rejection so
+ * there's nothing for the user to undo.
+ *
  * @module components/form/FolderFileUpload
  */
 
@@ -27,6 +49,13 @@ const FOLDER_LABELS: Record<UploadableFolder, string> = {
   assets: "assets/",
 };
 
+/**
+ * Per-file size cap (#655). 10 MiB. Backend caps total uncompressed at
+ * ~100 MB; per-file 10 MiB keeps a single oversize artifact from
+ * eating the whole package budget and signals the limit early.
+ */
+const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
+
 export function FolderFileUpload({
   files,
   onUpload,
@@ -36,13 +65,41 @@ export function FolderFileUpload({
   const { t } = useTranslation();
   const [selectedFolder, setSelectedFolder] = useState<UploadableFolder>("scripts");
   const [isDragging, setIsDragging] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const handleFileSelect = useCallback(
     (file: File) => {
+      // #655 guard 1 — size cap. Reject before the parent ever sees
+      // the file, so its package-state stays clean.
+      if (file.size > MAX_FILE_SIZE_BYTES) {
+        setUploadError(
+          t("guided.fileTooLarge", {
+            name: file.name,
+            size: formatFileSize(file.size),
+            max: formatFileSize(MAX_FILE_SIZE_BYTES),
+          }),
+        );
+        return;
+      }
+      // #655 guard 2 — duplicate filename inside the SAME target
+      // folder. Cross-folder duplicates are fine (a `README.md` can
+      // live in references/ even if scripts/ has one too — they
+      // become different paths in the final ZIP).
+      const existing = files.get(selectedFolder) ?? [];
+      if (existing.some((f) => f.name === file.name)) {
+        setUploadError(
+          t("guided.fileDuplicate", {
+            name: file.name,
+            folder: FOLDER_LABELS[selectedFolder],
+          }),
+        );
+        return;
+      }
+      setUploadError(null);
       onUpload(selectedFolder, file);
     },
-    [selectedFolder, onUpload],
+    [selectedFolder, onUpload, files, t],
   );
 
   const handleDrop = useCallback(
@@ -74,7 +131,12 @@ export function FolderFileUpload({
             <button
               key={folder}
               type="button"
-              onClick={() => setSelectedFolder(folder)}
+              onClick={() => {
+                setSelectedFolder(folder);
+                // Folder switch is a fresh context — drop any stale
+                // error from a previous folder's reject.
+                setUploadError(null);
+              }}
               className={`
                 px-4 py-2 rounded font-mono text-sm transition-all cursor-pointer
                 ${
@@ -116,6 +178,25 @@ export function FolderFileUpload({
           className="hidden"
         />
       </div>
+
+      {/* Inline upload error — reserved for the live transient
+          reject. Cleared on the next successful upload or folder
+          switch. */}
+      {uploadError && (
+        <p
+          className="font-text text-xs text-danger"
+          aria-live="polite"
+          role="alert"
+        >
+          {uploadError}
+        </p>
+      )}
+
+      {/* Per-file size hint — always visible so users know the cap
+          before they pick the file. */}
+      <p className="font-text text-[11px] text-meta/60">
+        {t("guided.fileSizeHint", { max: formatFileSize(MAX_FILE_SIZE_BYTES) })}
+      </p>
 
       {/* File list grouped by folder */}
       <div className="space-y-4">

@@ -60,36 +60,49 @@ export interface RedemptionCodeDetailDrawerProps {
   code: RedemptionCode | null;
 }
 
-export function RedemptionCodeDetailDrawer({
-  isOpen,
-  onClose,
-  code,
-}: RedemptionCodeDetailDrawerProps) {
-  const { t } = useTranslation();
+/**
+ * Copy-to-clipboard button with a transient "Copied" flash. The
+ * `copied` flag lives here (not the drawer) so re-opening the drawer
+ * against a different code resets the flash by construction via the
+ * `key` at the render site — no reset-on-close effect (#888).
+ */
+function CopyCodeButton({ value }: { value: string }) {
   const [copied, setCopied] = useState(false);
-
-  useEffect(() => {
-    if (!isOpen) {
-      setCopied(false);
-      return;
-    }
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [isOpen, onClose]);
-
   const onCopy = async () => {
-    if (!code) return;
     try {
-      await navigator.clipboard.writeText(code.code);
+      await navigator.clipboard.writeText(value);
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } catch {
       // silent — user can select-and-copy manually
     }
   };
+  return (
+    <button
+      type="button"
+      onClick={onCopy}
+      className="mt-2 font-mono text-[11px] uppercase tracking-[0.14em] text-meta hover:text-accent"
+    >
+      {copied ? "Copied" : "Copy code"}
+    </button>
+  );
+}
+
+export function RedemptionCodeDetailDrawer({
+  isOpen,
+  onClose,
+  code,
+}: RedemptionCodeDetailDrawerProps) {
+  const { t } = useTranslation();
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [isOpen, onClose]);
 
   return createPortal(
     <AnimatePresence>
@@ -150,13 +163,7 @@ export function RedemptionCodeDetailDrawer({
               <p className="mt-1 break-all font-mono text-base font-semibold text-accent">
                 {code.code}
               </p>
-              <button
-                type="button"
-                onClick={onCopy}
-                className="mt-2 font-mono text-[11px] uppercase tracking-[0.14em] text-meta hover:text-accent"
-              >
-                {copied ? "Copied" : "Copy code"}
-              </button>
+              <CopyCodeButton key={code.id} value={code.code} />
             </div>
 
             <div>

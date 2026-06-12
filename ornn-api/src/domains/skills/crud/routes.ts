@@ -20,15 +20,14 @@ import {
   optionalAuthMiddleware,
   requirePermission,
   getAuth,
-  readUserOrgMemberships,
   readUserOrgIds,
 } from "../../../middleware/nyxidAuth";
 import { validateBody, getValidatedBody } from "../../../middleware/validate";
 import { AppError } from "../../../shared/types/index";
-import { canReadSkill, canManageSkill } from "./authorize";
+import { canReadSkill, canManageSkill, buildActorContext } from "./authorize";
 import { parseGithubUrl } from "./utils/githubPull";
-import pino from "pino";
-
+import { rateLimit } from "../../../middleware/rateLimit";
+import { createLogger } from "../../../shared/logger";
 const deprecationPatchSchema = z.object({
   isDeprecated: z.boolean(),
   deprecationNote: z.string().max(1024).optional(),
@@ -55,7 +54,64 @@ const nyxidServicePatchSchema = z.object({
   nyxidServiceId: z.string().min(1).max(128).nullable(),
 });
 
-const logger = pino({ level: "info" }).child({ module: "skillCrudRoutes" });
+/**
+ * Body for `PUT /api/v1/skills/:id/dist-tags/:tag` (#463). Just the
+ * version string the tag should point at; the service validates that
+ * the version exists.
+ */
+const distTagSetSchema = z.object({
+  version: z
+    .string()
+    .min(1)
+    .max(20)
+    .regex(/^(0|[1-9]\d*)\.(0|[1-9]\d*)$/, "version must be <major>.<minor>"),
+});
+
+/**
+ * Body for `POST /api/v1/skills/pull` (#438). Either `githubUrl` (a
+ * single browser-bar URL the server parses into repo/ref/path) OR an
+ * explicit `repo` (with optional `ref`/`path`). A cross-field refine
+ * checks that at least one is provided so we don't reach the handler
+ * with an empty body.
+ */
+const skillPullSchema = z
+  .object({
+    githubUrl: z.string().min(1).optional(),
+    repo: z.string().min(1).optional(),
+    ref: z.string().optional(),
+    path: z.string().optional(),
+    skip_validation: z.boolean().optional(),
+  })
+  .refine((b) => Boolean(b.githubUrl) || Boolean(b.repo), {
+    message: "Provide either 'githubUrl' (preferred) or 'repo' (with optional 'ref'/'path').",
+  });
+
+/**
+ * Body for `POST /api/v1/skills/:id/refresh` (#438). All fields optional.
+ * `skipValidation` and `skip_validation` are both accepted for
+ * backward compatibility with the original ad-hoc handler.
+ */
+const skillRefreshSchema = z.object({
+  dryRun: z.boolean().optional(),
+  skipValidation: z.boolean().optional(),
+  skip_validation: z.boolean().optional(),
+});
+
+/**
+ * Body for `PUT /api/v1/skills/:id/source` (#438). The url field is
+ * a discriminated union: `string` to link, `null` to clear. Anything
+ * else is rejected with a clear ZodIssue.
+ */
+const skillSourceSchema = z.object({
+  githubUrl: z.union([z.string().min(1), z.null()]),
+});
+
+/** Body for `PUT /api/v1/skills/:id` JSON-only branch (#438). ZIP branch handled separately. */
+const skillUpdateJsonSchema = z.object({
+  isPrivate: z.boolean().optional(),
+});
+
+const logger = createLogger("skillCrudRoutes");
 
 export interface SkillRoutesConfig {
   skillService: SkillService;
@@ -201,18 +257,22 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
     "/skills",
     auth,
     requirePermission("ornn:skill:create"),
+    // Rate limit (#439): upload runs the ZIP validator + storage write
+    // + AgentSeal scan. Per-user 10/min is generous for legitimate
+    // publishing flow and stops a runaway script from filling storage.
+    rateLimit({ windowMs: 60_000, max: 10, label: "skills-create" }),
     async (c) => {
       const authCtx = getAuth(c);
       const skipValidation = c.req.query("skip_validation") === "true";
 
       const contentType = c.req.header("content-type") ?? "";
       if (!contentType.includes("application/zip") && !contentType.includes("application/octet-stream")) {
-        throw AppError.badRequest("INVALID_CONTENT_TYPE", "Expected application/zip content type");
+        throw AppError.badRequest("invalid_content_type", "Expected application/zip content type");
       }
 
       const body = await c.req.arrayBuffer();
       if (!body || body.byteLength === 0) {
-        throw AppError.badRequest("EMPTY_BODY", "Request body is empty");
+        throw AppError.badRequest("empty_body", "Request body is empty");
       }
 
       if (body.byteLength > maxFileSize) {
@@ -220,6 +280,13 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
       }
 
       const zipBuffer = new Uint8Array(body);
+
+      // Zip-bomb defense (#632/#633) now runs at the service ingestion
+      // chokepoint (`createSkill`), so it also covers the GitHub pull
+      // path that bypasses this route. The cheap compressed-size early-out
+      // above (`body.byteLength > maxFileSize`) stays here to reject
+      // oversized payloads before we even allocate the buffer.
+
       const userEmail = authCtx.email || undefined;
       const userDisplayName = authCtx.displayName || undefined;
 
@@ -248,7 +315,12 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
       // mirror service log the "considered + skipped" decision.
       fireMirrorSync(result.guid);
 
-      return c.json({ data: skill, error: null });
+      // CONVENTIONS.md §3.2 (#458): POST that creates a resource MUST
+      // return 201 Created with a Location header pointing at the
+      // canonical URL. Existing 200 + envelope clients are unaffected
+      // — the response body is unchanged, only status code + header.
+      c.header("Location", `/api/v1/skills/${skill.guid}`);
+      return c.json({ data: skill, error: null }, 201);
     },
   );
 
@@ -265,24 +337,16 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
     "/skills/pull",
     auth,
     requirePermission("ornn:skill:create"),
+    validateBody(skillPullSchema, "invalid_pull_body"),
     async (c) => {
       const authCtx = getAuth(c);
-      const body = (await c.req.json().catch(() => ({}))) as {
-        // Preferred: a single GitHub folder URL the user copied from the
-        // browser address bar. Server parses out repo / ref / path.
-        githubUrl?: unknown;
-        // Legacy / explicit form: caller already split the source apart.
-        repo?: unknown;
-        ref?: unknown;
-        path?: unknown;
-        skip_validation?: unknown;
-      };
+      const body = getValidatedBody<z.infer<typeof skillPullSchema>>(c);
 
       let repo: string;
       let ref: string | undefined;
       let path: string | undefined;
 
-      if (typeof body.githubUrl === "string" && body.githubUrl) {
+      if (body.githubUrl) {
         try {
           const parsed = parseGithubUrl(body.githubUrl);
           repo = parsed.repo;
@@ -290,19 +354,16 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
           path = parsed.path;
         } catch (err) {
           throw AppError.badRequest(
-            "INVALID_GITHUB_URL",
+            "invalid_github_url",
             err instanceof Error ? err.message : String(err),
           );
         }
-      } else if (typeof body.repo === "string" && body.repo) {
-        repo = body.repo;
-        ref = typeof body.ref === "string" && body.ref ? body.ref : undefined;
-        path = typeof body.path === "string" ? body.path : undefined;
       } else {
-        throw AppError.badRequest(
-          "MISSING_SOURCE",
-          "Provide either 'githubUrl' (preferred) or 'repo' (with optional 'ref'/'path').",
-        );
+        // .refine() in the schema guarantees we have at least one of
+        // githubUrl/repo, so this branch is the explicit-repo form.
+        repo = body.repo!;
+        ref = body.ref;
+        path = body.path;
       }
 
       const skipValidation = body.skip_validation === true;
@@ -335,11 +396,13 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
         // so the contract is uniform across both create flows.
         fireMirrorSync(guid);
 
-        return c.json({ data: skill, error: null });
+        // 201 + Location, parity with POST /skills (#458).
+        c.header("Location", `/api/v1/skills/${skill.guid}`);
+        return c.json({ data: skill, error: null }, 201);
       } catch (err) {
         if (err instanceof AppError) throw err;
         const message = err instanceof Error ? err.message : String(err);
-        throw AppError.badRequest("PULL_FAILED", message);
+        throw AppError.badRequest("pull_failed", message);
       }
     },
   );
@@ -354,14 +417,11 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
     "/skills/:id/refresh",
     auth,
     requirePermission("ornn:skill:update"),
+    validateBody(skillRefreshSchema, "invalid_refresh_body"),
     async (c) => {
       const authCtx = getAuth(c);
       const guid = c.req.param("id");
-      const body = (await c.req.json().catch(() => ({}))) as {
-        dryRun?: unknown;
-        skipValidation?: unknown;
-        skip_validation?: unknown;
-      };
+      const body = getValidatedBody<z.infer<typeof skillRefreshSchema>>(c);
       const dryRun = body.dryRun === true;
       const skipValidation = body.skipValidation === true || body.skip_validation === true;
 
@@ -369,7 +429,7 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
       const isPlatformAdmin = authCtx.permissions.includes("ornn:admin:skill");
       if (existing.createdBy !== authCtx.userId && !isPlatformAdmin) {
         throw AppError.forbidden(
-          "NOT_SKILL_OWNER",
+          "not_skill_owner",
           "Only the skill's author or a platform admin may refresh it",
         );
       }
@@ -384,7 +444,7 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
         } catch (err) {
           if (err instanceof AppError) throw err;
           const message = err instanceof Error ? err.message : String(err);
-          throw AppError.badRequest("REFRESH_PREVIEW_FAILED", message);
+          throw AppError.badRequest("refresh_preview_failed", message);
         }
       }
 
@@ -420,7 +480,7 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
       } catch (err) {
         if (err instanceof AppError) throw err;
         const message = err instanceof Error ? err.message : String(err);
-        throw AppError.badRequest("REFRESH_FAILED", message);
+        throw AppError.badRequest("refresh_failed", message);
       }
     },
   );
@@ -441,29 +501,18 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
     "/skills/:id/source",
     auth,
     requirePermission("ornn:skill:update"),
+    validateBody(skillSourceSchema, "invalid_source_body"),
     async (c) => {
       const authCtx = getAuth(c);
       const guid = c.req.param("id");
-      const body = (await c.req.json().catch(() => ({}))) as { githubUrl?: unknown };
+      const { githubUrl } = getValidatedBody<z.infer<typeof skillSourceSchema>>(c);
 
       const existing = await skillService.getSkill(guid);
       const isPlatformAdmin = authCtx.permissions.includes("ornn:admin:skill");
       if (existing.createdBy !== authCtx.userId && !isPlatformAdmin) {
         throw AppError.forbidden(
-          "NOT_SKILL_OWNER",
+          "not_skill_owner",
           "Only the skill's author or a platform admin may set its source",
-        );
-      }
-
-      let githubUrl: string | null;
-      if (body.githubUrl === null) {
-        githubUrl = null;
-      } else if (typeof body.githubUrl === "string") {
-        githubUrl = body.githubUrl;
-      } else {
-        throw AppError.badRequest(
-          "INVALID_BODY",
-          "Body must include 'githubUrl' as a string (to link) or null (to unlink).",
         );
       }
 
@@ -495,6 +544,14 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
   /**
    * GET /skills/:idOrName/json — Return skill package as JSON with all file contents.
    * Requires: ornn:skill:read
+   *
+   * Query params:
+   *   - `version` (optional, #639) — literal `<major>.<minor>` or a
+   *     dist-tag (#463). When provided, the response carries that
+   *     version's package; otherwise latest is returned. Lets the
+   *     install-prompt `curl` / `nyxid proxy request` commands pin
+   *     to the version the user was viewing instead of silently
+   *     pulling whatever's `latest` at install time.
    */
   app.get(
     "/skills/:idOrName/json",
@@ -502,8 +559,25 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
     requirePermission("ornn:skill:read"),
     async (c) => {
       const idOrName = c.req.param("idOrName");
-      logger.info({ idOrName }, "Skill jsonize request");
-      const result = await skillService.getSkillJson(idOrName);
+      const version = c.req.query("version");
+      logger.info({ idOrName, version: version ?? null }, "Skill jsonize request");
+
+      // Build the caller's actor once — `requirePermission` above
+      // guarantees authCtx is set. Used both for the defense-in-depth
+      // pre-check below and threaded into the service call (#806).
+      const actor = await buildActorContext(c);
+
+      // Visibility check (#567) — the package contents endpoint must
+      // not be more permissive than the metadata endpoint. Load the
+      // skill first and reject inaccessible private skills with the
+      // same `SKILL_NOT_FOUND` shape `/skills/:idOrName` uses. Kept as
+      // defense-in-depth on top of the service-level gate (#806).
+      const skill = await skillService.getSkill(idOrName);
+      if (skill.isPrivate && !canReadSkill(skill, actor)) {
+        throw AppError.notFound("skill_not_found", `Skill '${idOrName}' not found`);
+      }
+
+      const result = await skillService.getSkillJson(idOrName, actor, version);
       // Programmatic pull — closest signal to the north-star metric.
       // Fire-and-forget; the analytics service swallows its own errors.
       const authCtx = c.get("auth");
@@ -550,17 +624,12 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
       const skill = await skillService.getSkill(idOrName);
       // Anonymous viewers only see public skills.
       if (!authCtx && skill.isPrivate) {
-        throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${idOrName}' not found`);
+        throw AppError.notFound("skill_not_found", `Skill '${idOrName}' not found`);
       }
       if (authCtx && skill.isPrivate) {
-        const memberships = await readUserOrgMemberships(c);
-        const actor = {
-          userId: authCtx.userId,
-          memberships,
-          isPlatformAdmin: authCtx.permissions.includes("ornn:admin:skill"),
-        };
+        const actor = await buildActorContext(c);
         if (!canReadSkill(skill, actor)) {
-          throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${idOrName}' not found`);
+          throw AppError.notFound("skill_not_found", `Skill '${idOrName}' not found`);
         }
       }
 
@@ -590,22 +659,65 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
 
       const skill = await skillService.getSkill(idOrName);
       if (!authCtx && skill.isPrivate) {
-        throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${idOrName}' not found`);
+        throw AppError.notFound("skill_not_found", `Skill '${idOrName}' not found`);
       }
       if (authCtx && skill.isPrivate) {
-        const memberships = await readUserOrgMemberships(c);
-        const actor = {
-          userId: authCtx.userId,
-          memberships,
-          isPlatformAdmin: authCtx.permissions.includes("ornn:admin:skill"),
-        };
+        const actor = await buildActorContext(c);
         if (!canReadSkill(skill, actor)) {
-          throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${idOrName}' not found`);
+          throw AppError.notFound("skill_not_found", `Skill '${idOrName}' not found`);
         }
       }
 
       const result = await skillService.diffVersions(idOrName, fromVersion, toVersion);
       return c.json({ data: result, error: null });
+    },
+  );
+
+  /**
+   * GET /skills/:idOrName/closure — Resolve the full transitive
+   * dependency closure of a skill version (#968).
+   *
+   * Query params:
+   *   - `version` (optional) — literal `<major>.<minor>` or a dist-tag.
+   *     When omitted, the skill's latest version is used.
+   *
+   * Returns the closure in deps-first topological order:
+   *   `{ data: { items: [{ guid, name, version, skillHash, depth }] }, error: null }`
+   *
+   * Auth: Optional. Anonymous callers resolve against public skills only —
+   * a public skill that transitively depends on a PRIVATE skill surfaces
+   * that node as `skill_dependency_not_found` rather than leaking it.
+   *
+   * Errors: `dependency_cycle` (409), `dependency_conflict` (409),
+   * `skill_dependency_not_found` (404), `skill_not_found` (404).
+   *
+   * Registered ABOVE `/skills/:idOrName` so the literal `/closure` segment
+   * wins the route match (mirrors `/skills/:idOrName/versions`).
+   */
+  app.get(
+    "/skills/:idOrName/closure",
+    optionalAuth,
+    async (c) => {
+      const idOrName = c.req.param("idOrName");
+      const version = c.req.query("version") || undefined;
+      const authCtx = c.get("auth");
+
+      // Build the visibility-scoped actor. Authenticated callers get their
+      // full org/admin context; anonymous callers get a read-only actor
+      // that can see public skills only.
+      const actor = authCtx
+        ? await buildActorContext(c)
+        : {
+            userId: "",
+            memberships: [],
+            isPlatformAdmin: false,
+            membershipsResolved: true,
+          };
+
+      logger.info({ idOrName, version: version ?? null, anon: !authCtx }, "Skill closure request");
+
+      const items = await skillService.resolveSkillClosure(idOrName, actor, version);
+      return c.json({ data: { items }, error: null });
     },
   );
 
@@ -627,30 +739,34 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
 
       // Anonymous users can only see public skills.
       if (!authCtx && skill.isPrivate) {
-        throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${idOrName}' not found`);
+        throw AppError.notFound("skill_not_found", `Skill '${idOrName}' not found`);
       }
 
       // Authenticated users: apply the full ownership/org-visibility rules.
       if (authCtx && skill.isPrivate) {
-        const memberships = await readUserOrgMemberships(c);
-        const actor = {
-          userId: authCtx.userId,
-          memberships,
-          isPlatformAdmin: authCtx.permissions.includes("ornn:admin:skill"),
-        };
+        const actor = await buildActorContext(c);
         if (!canReadSkill(skill, actor)) {
-          throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${idOrName}' not found`);
+          throw AppError.notFound("skill_not_found", `Skill '${idOrName}' not found`);
         }
       }
 
-      // Signal deprecation via response headers so non-JSON-aware clients
-      // (CLIs, agents) still get the warning. Notes are URL-encoded to keep
-      // header values ASCII-safe per RFC 7230.
+      // Signal deprecation via standard RFC 8594 headers (#586) — no
+      // custom `X-Skill-Deprecated` style. CLIs, agents, and proxies
+      // can read these without an Ornn-specific parser.
+      //
+      //   Deprecation: true
+      //   Link: <…/DEPRECATIONS.md#{guid}>; rel="deprecation"
+      //
+      // The deprecation note lives in the response body
+      // (`deprecationNote` on the SkillDetailResponse), where free-form
+      // text belongs. Sunset header is reserved for when we wire up the
+      // sunset-date field on the doc.
       if (skill.isDeprecated) {
-        c.header("X-Skill-Deprecated", "true");
-        if (skill.deprecationNote) {
-          c.header("X-Skill-Deprecation-Note", encodeURIComponent(skill.deprecationNote));
-        }
+        c.header("Deprecation", "true");
+        c.header(
+          "Link",
+          `<https://github.com/ChronoAIProject/Ornn/blob/main/docs/DEPRECATIONS.md#${skill.guid}>; rel="deprecation"`,
+        );
       }
 
       // Web-side pull. The detail endpoint is what the SkillDetailPage
@@ -679,42 +795,41 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
   );
 
   /**
-   * PATCH /skills/:idOrName/versions/:version
-   * Toggle the deprecation flag on a specific version.
+   * PATCH /skills/:id/versions/:version
+   *
+   * Toggle the deprecation flag on a specific version. Per
+   * CONVENTIONS.md §2.2 (#586): write operations accept only the
+   * stable GUID, not the name. Callers with a name should resolve
+   * via the read endpoint first.
+   *
    * Requires: ornn:skill:update + owner or admin on the skill.
    */
   app.patch(
-    "/skills/:idOrName/versions/:version",
+    "/skills/:id/versions/:version",
     auth,
     requirePermission("ornn:skill:update"),
-    validateBody(deprecationPatchSchema, "INVALID_DEPRECATION_PATCH"),
+    validateBody(deprecationPatchSchema, "invalid_deprecation_patch"),
     async (c) => {
-      const idOrName = c.req.param("idOrName");
+      const id = c.req.param("id");
       const version = c.req.param("version");
       const authCtx = getAuth(c);
 
-      const existing =
-        (await skillRepo.findByGuid(idOrName)) ??
-        (await skillRepo.findByName(idOrName));
+      // GUID-only — name fallback removed in #586.
+      const existing = await skillRepo.findByGuid(id);
       if (!existing) {
-        throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${idOrName}' not found`);
+        throw AppError.notFound("skill_not_found", `Skill '${id}' not found`);
       }
-      const memberships = await readUserOrgMemberships(c);
-      const actor = {
-        userId: authCtx.userId,
-        memberships,
-        isPlatformAdmin: authCtx.permissions.includes("ornn:admin:skill"),
-      };
+      const actor = await buildActorContext(c);
       if (!canManageSkill(existing, actor)) {
         throw AppError.forbidden(
-          "FORBIDDEN",
+          "forbidden",
           "You do not have permission to manage this skill",
         );
       }
 
       const body = getValidatedBody<z.infer<typeof deprecationPatchSchema>>(c);
       const result = await skillService.setVersionDeprecation(
-        idOrName,
+        id,
         version,
         body.isDeprecated,
         body.deprecationNote ?? null,
@@ -736,6 +851,111 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
     },
   );
 
+  // -------- Dist-tags (#463) --------
+  //
+  // Three endpoints mirror npm's `dist-tag` surface: read all, set
+  // one, delete one. `latest` is auto-managed by the publish path —
+  // PUT / DELETE against it return `dist_tag_immutable` from the
+  // service layer.
+
+  /**
+   * GET /skills/:idOrName/dist-tags — Read the dist-tags map for a
+   * skill (#463). Anonymous can read public skills; private skills
+   * require the same auth posture as the read endpoint.
+   */
+  app.get(
+    "/skills/:idOrName/dist-tags",
+    optionalAuth,
+    async (c) => {
+      const idOrName = c.req.param("idOrName");
+      const authCtx = c.get("auth");
+      const skill = await skillRepo.findByGuid(idOrName)
+        ?? await skillRepo.findByName(idOrName);
+      if (!skill) {
+        throw AppError.notFound("skill_not_found", `Skill '${idOrName}' not found`);
+      }
+      if (!authCtx && skill.isPrivate) {
+        throw AppError.notFound("skill_not_found", `Skill '${idOrName}' not found`);
+      }
+      if (authCtx && skill.isPrivate) {
+        const actor = await buildActorContext(c);
+        if (!canReadSkill(skill, actor)) {
+          throw AppError.notFound("skill_not_found", `Skill '${idOrName}' not found`);
+        }
+      }
+      const tags = await skillService.getDistTags(skill.guid);
+      return c.json({ data: { tags }, error: null });
+    },
+  );
+
+  /**
+   * PUT /skills/:id/dist-tags/:tag — Set or update a dist-tag (#463).
+   *
+   * Owner / platform-admin only (same gate as the rest of `/skills/:id/*`
+   * write paths). `latest` is rejected with `dist_tag_immutable`.
+   * Per CONVENTIONS.md §2.2, the `:id` slot is the stable GUID — no
+   * polymorphic name resolution on writes.
+   */
+  app.put(
+    "/skills/:id/dist-tags/:tag",
+    auth,
+    requirePermission("ornn:skill:update"),
+    validateBody(distTagSetSchema, "invalid_dist_tag_body"),
+    async (c) => {
+      const id = c.req.param("id");
+      const tag = c.req.param("tag");
+
+      const existing = await skillRepo.findByGuid(id);
+      if (!existing) {
+        throw AppError.notFound("skill_not_found", `Skill '${id}' not found`);
+      }
+      // buildActorContext throws 401 when unauthenticated.
+      const actor = await buildActorContext(c);
+      if (!canManageSkill(existing, actor)) {
+        throw AppError.forbidden(
+          "forbidden",
+          "You do not have permission to manage this skill",
+        );
+      }
+
+      const body = getValidatedBody<z.infer<typeof distTagSetSchema>>(c);
+      const tags = await skillService.setDistTag(id, tag, body.version);
+      return c.json({ data: { tags }, error: null });
+    },
+  );
+
+  /**
+   * DELETE /skills/:id/dist-tags/:tag — Remove a dist-tag (#463).
+   *
+   * Owner / platform-admin only. `latest` is rejected with
+   * `dist_tag_immutable` to preserve the auto-managed invariant.
+   */
+  app.delete(
+    "/skills/:id/dist-tags/:tag",
+    auth,
+    requirePermission("ornn:skill:update"),
+    async (c) => {
+      const id = c.req.param("id");
+      const tag = c.req.param("tag");
+
+      const existing = await skillRepo.findByGuid(id);
+      if (!existing) {
+        throw AppError.notFound("skill_not_found", `Skill '${id}' not found`);
+      }
+      // buildActorContext throws 401 when unauthenticated.
+      const actor = await buildActorContext(c);
+      if (!canManageSkill(existing, actor)) {
+        throw AppError.forbidden(
+          "forbidden",
+          "You do not have permission to manage this skill",
+        );
+      }
+
+      const tags = await skillService.deleteDistTag(id, tag);
+      return c.json({ data: { tags }, error: null });
+    },
+  );
+
   /**
    * PUT /skills/:id — Update a skill.
    * Requires: ornn:skill:update + owner or admin
@@ -753,17 +973,12 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
 
       const existing = await skillRepo.findByGuid(guid);
       if (!existing) {
-        throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${guid}' not found`);
+        throw AppError.notFound("skill_not_found", `Skill '${guid}' not found`);
       }
-      const memberships = await readUserOrgMemberships(c);
-      const actor = {
-        userId: authCtx.userId,
-        memberships,
-        isPlatformAdmin: authCtx.permissions.includes("ornn:admin:skill"),
-      };
+      const actor = await buildActorContext(c);
       if (!canManageSkill(existing, actor)) {
         throw AppError.forbidden(
-          "FORBIDDEN",
+          "forbidden",
           "You do not have permission to update this skill",
         );
       }
@@ -793,15 +1008,41 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
           isPrivate = String(formData["isPrivate"]) === "true";
         }
       } else if (contentType.includes("application/json")) {
-        const body = await c.req.json();
+        // Inline Zod parse — the route is hybrid content-type, so the
+        // `validateBody` middleware doesn't fit. Same #438 intent:
+        // malformed JSON returns 400 with the documented RFC 7807
+        // shape instead of bubbling a raw `SyntaxError`.
+        let body: z.infer<typeof skillUpdateJsonSchema>;
+        try {
+          const text = await c.req.text();
+          const raw = text.trim().length === 0 ? {} : JSON.parse(text);
+          const result = skillUpdateJsonSchema.safeParse(raw);
+          if (!result.success) {
+            throw AppError.badRequest(
+              "invalid_body",
+              result.error.issues
+                .map((i) => `${i.path.join(".") || "<root>"}: ${i.message}`)
+                .join("; "),
+            );
+          }
+          body = result.data;
+        } catch (err) {
+          if (err instanceof AppError) throw err;
+          throw AppError.badRequest("invalid_body", "Request body must be valid JSON");
+        }
         if (body.isPrivate !== undefined) {
-          isPrivate = Boolean(body.isPrivate);
+          isPrivate = body.isPrivate;
         }
       }
 
       if (zipBuffer === undefined && isPrivate === undefined) {
-        throw AppError.badRequest("NO_UPDATE", "No update data provided. Send a ZIP file and/or isPrivate field.");
+        throw AppError.badRequest("no_update", "No update data provided. Send a ZIP file and/or isPrivate field.");
       }
+
+      // Zip-bomb defense (#632/#633) now runs at the service chokepoint
+      // (`updateSkill`, only when a ZIP is actually being replaced), so it
+      // also covers the GitHub refresh path that bypasses this route. The
+      // cheap compressed-size early-out above stays here.
 
       logger.info({ guid, userId: authCtx.userId }, "Skill update via API");
       const result = await skillService.updateSkill(guid, authCtx.userId, {
@@ -847,24 +1088,19 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
     "/skills/:id/permissions",
     auth,
     requirePermission("ornn:skill:update"),
-    validateBody(permissionsPatchSchema, "INVALID_PERMISSIONS"),
+    validateBody(permissionsPatchSchema, "invalid_permissions"),
     async (c) => {
       const guid = c.req.param("id");
       const authCtx = getAuth(c);
 
       const existing = await skillRepo.findByGuid(guid);
       if (!existing) {
-        throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${guid}' not found`);
+        throw AppError.notFound("skill_not_found", `Skill '${guid}' not found`);
       }
-      const memberships = await readUserOrgMemberships(c);
-      const actor = {
-        userId: authCtx.userId,
-        memberships,
-        isPlatformAdmin: authCtx.permissions.includes("ornn:admin:skill"),
-      };
+      const actor = await buildActorContext(c);
       if (!canManageSkill(existing, actor)) {
         throw AppError.forbidden(
-          "FORBIDDEN",
+          "forbidden",
           "You do not have permission to change this skill's visibility",
         );
       }
@@ -875,7 +1111,7 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
         isPrivate: body.isPrivate,
         sharedWithUsers: body.sharedWithUsers,
         sharedWithOrgs: body.sharedWithOrgs,
-      });
+      }, actor);
 
       const updated = await skillService.getSkill(guid);
 
@@ -922,14 +1158,12 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
 
       const existing = await skillRepo.findByGuid(guid);
       if (!existing) {
-        throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${guid}' not found`);
+        throw AppError.notFound("skill_not_found", `Skill '${guid}' not found`);
       }
-      const memberships = await readUserOrgMemberships(c);
-      const isPlatformAdmin = authCtx.permissions.includes("ornn:admin:skill");
-      const actor = { userId: authCtx.userId, memberships, isPlatformAdmin };
+      const actor = await buildActorContext(c);
       if (!canManageSkill(existing, actor)) {
         throw AppError.forbidden(
-          "FORBIDDEN",
+          "forbidden",
           "You do not have permission to change this skill's NyxID service tie",
         );
       }
@@ -940,7 +1174,7 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
       const updated = await skillService.tieToNyxidService(
         guid,
         body.nyxidServiceId,
-        { userId: authCtx.userId, isPlatformAdmin },
+        { userId: authCtx.userId, isPlatformAdmin: actor.isPlatformAdmin },
         async (id) => {
           // Synthetic ids (`synthetic:<slug>`) come from
           // `EXTRA_NYXID_SERVICES` config — short-circuit before the
@@ -1047,7 +1281,6 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
         guid: s.guid,
         name: s.name,
         description: s.description,
-        ownerId: s.ownerId,
         createdBy: s.createdBy,
         createdByEmail: s.createdByEmail,
         createdByDisplayName: s.createdByDisplayName,
@@ -1095,17 +1328,12 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
       const authCtx = getAuth(c);
       const skill = await skillRepo.findByGuid(guid);
       if (!skill) {
-        throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${guid}' not found`);
+        throw AppError.notFound("skill_not_found", `Skill '${guid}' not found`);
       }
-      const memberships = await readUserOrgMemberships(c);
-      const actor = {
-        userId: authCtx.userId,
-        memberships,
-        isPlatformAdmin: authCtx.permissions.includes("ornn:admin:skill"),
-      };
+      const actor = await buildActorContext(c);
       if (!canManageSkill(skill, actor)) {
         throw AppError.forbidden(
-          "FORBIDDEN",
+          "forbidden",
           "You do not have permission to delete this skill",
         );
       }
@@ -1136,28 +1364,23 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
    * Requires: ornn:skill:delete + owner or admin.
    */
   app.delete(
-    "/skills/:idOrName/versions/:version",
+    "/skills/:id/versions/:version",
     auth,
     requirePermission("ornn:skill:delete"),
     async (c) => {
-      const idOrName = c.req.param("idOrName");
+      // GUID-only on write per CONVENTIONS.md §2.2 (#586).
+      const id = c.req.param("id");
       const version = c.req.param("version");
       const authCtx = getAuth(c);
 
-      let skill = await skillRepo.findByGuid(idOrName);
-      if (!skill) skill = await skillRepo.findByName(idOrName);
+      const skill = await skillRepo.findByGuid(id);
       if (!skill) {
-        throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${idOrName}' not found`);
+        throw AppError.notFound("skill_not_found", `Skill '${id}' not found`);
       }
-      const memberships = await readUserOrgMemberships(c);
-      const actor = {
-        userId: authCtx.userId,
-        memberships,
-        isPlatformAdmin: authCtx.permissions.includes("ornn:admin:skill"),
-      };
+      const actor = await buildActorContext(c);
       if (!canManageSkill(skill, actor)) {
         throw AppError.forbidden(
-          "FORBIDDEN",
+          "forbidden",
           "You do not have permission to delete this skill version",
         );
       }

@@ -8,7 +8,26 @@
 import type { SkillRepository } from "../crud/repository";
 import type { NyxLlmClient } from "../../../clients/nyxid/llm";
 import type { SkillDocument, SkillSearchItem, SkillSearchResponse } from "../../../shared/types/index";
-import pino from "pino";
+import { createLogger } from "../../../shared/logger";
+import { z } from "zod";
+
+/**
+ * Shape the LLM re-ranker contract promises: an array of
+ * `{ id, score, reason? }` rows. Parsed with Zod (#444) instead of an
+ * `as` cast — `JSON.parse(...) as Array<...>` is a runtime no-op and
+ * a malformed model response previously slipped through the GUID
+ * filter and broke downstream score arithmetic with `NaN`.
+ *
+ * Rows with `score <= 0` are still dropped, but that filter is now
+ * applied after schema validation; the schema itself only enforces
+ * the shape.
+ */
+const rerankRowSchema = z.object({
+  id: z.string().min(1),
+  score: z.number().finite(),
+  reason: z.string().optional(),
+});
+const rerankResponseSchema = z.array(rerankRowSchema);
 
 /**
  * Per-item response enrichment context. The system-skill predicate is
@@ -23,7 +42,7 @@ export interface SearchEnrichmentContext {
 
 export type SystemFilter = "any" | "only" | "exclude";
 
-const logger = pino({ level: "info" }).child({ module: "skillSearchService" });
+const logger = createLogger("skillSearchService");
 
 const BATCH_SIZE = 50;
 
@@ -58,21 +77,14 @@ export class SearchService {
     currentUserId: string;
     /** Org user_ids the caller is admin or member of (viewer-role filtered out). */
     userOrgIds: string[];
-    model?: string;
-    /**
-     * Tri-state toggle for the System-skill filter. Pushed down to the
-     * DB match stage — `isSystemSkill: true` (cached on the skill doc
-     * at tie-time) is the source of truth.
-     */
-    systemFilter?: SystemFilter;
-    /** Registry filter-chip constraints. Applied at the DB match level. */
-    sharedWithOrgsAny?: string[];
-    sharedWithUsersAny?: string[];
-    createdByAny?: string[];
-    /** Restrict to skills tied to a specific NyxID service. */
-    nyxidServiceId?: string;
-    /** Skills must have ALL listed tags (AND match). */
-    tagsAll?: string[];
+    // Optionals widen to `T | undefined` for exactOptionalPropertyTypes (#657).
+    model?: string | undefined;
+    systemFilter?: SystemFilter | undefined;
+    sharedWithOrgsAny?: string[] | undefined;
+    sharedWithUsersAny?: string[] | undefined;
+    createdByAny?: string[] | undefined;
+    nyxidServiceId?: string | undefined;
+    tagsAll?: string[] | undefined;
   }): Promise<SkillSearchResponse> {
     const { query, mode, scope, page, pageSize, currentUserId, userOrgIds } = params;
     const systemFilter = params.systemFilter ?? "any";
@@ -124,9 +136,39 @@ export class SearchService {
     const queryTimeMs = Date.now() - startTime;
     logger.info({ mode, scope, query: query.slice(0, 50), total, queryTimeMs }, "Search completed");
 
-    const items = skills.map((s) =>
+    const rawItems = skills.map((s) =>
       enrichItem(s, { callerUserId: currentUserId, callerOrgIds: userOrgIds }),
     );
+
+    // #720 — zero-trust filter for shared-with-me. applyScope at the
+    // DB layer already gates on the caller's effective orgs, but a
+    // stale cache, a partially-replicated write, or a future query
+    // regression could let a skill leak through that points at an
+    // org the caller is no longer in. Drop such items unconditionally
+    // — the user can't actually open them (skill detail correctly
+    // 404s, that's verified) so surfacing them in search results is
+    // pure misinformation. We log when this trips so cache/data drift
+    // is visible.
+    let items = rawItems;
+    if (scope === "shared-with-me") {
+      const orgSet = new Set(userOrgIds);
+      const filtered = rawItems.filter((item) => {
+        if (item.myAccessReason !== "shared-via-org") return true;
+        if (!item.sharedViaOrgId) return false;
+        return orgSet.has(item.sharedViaOrgId);
+      });
+      if (filtered.length !== rawItems.length) {
+        logger.warn(
+          {
+            userId: currentUserId,
+            droppedCount: rawItems.length - filtered.length,
+            orgsConsidered: userOrgIds.length,
+          },
+          "shared-with-me defensive filter dropped result(s) — applyScope and effective orgs disagree",
+        );
+      }
+      items = filtered;
+    }
     const totalPages = Math.ceil(total / pageSize);
 
     return {
@@ -154,8 +196,9 @@ export class SearchService {
     page: number;
     pageSize: number;
     systemFilter: SystemFilter;
-    nyxidServiceId?: string;
-    tagsAll?: string[];
+    // exactOptionalPropertyTypes (#657)
+    nyxidServiceId?: string | undefined;
+    tagsAll?: string[] | undefined;
   }): Promise<{ skills: SkillDocument[]; total: number }> {
     const { query, scope, currentUserId, userOrgIds, model, page, pageSize, systemFilter, nyxidServiceId, tagsAll } = params;
 
@@ -323,12 +366,20 @@ ${JSON.stringify(skillList, null, 2)}`;
         return [];
       }
 
-      const parsed = JSON.parse(jsonMatch[0]) as Array<{ id: string; score: number; reason?: string }>;
+      const parseResult = rerankResponseSchema.safeParse(JSON.parse(jsonMatch[0]));
+      if (!parseResult.success) {
+        logger.warn(
+          { batchSize: batch.length, issues: parseResult.error.issues.slice(0, 3) },
+          "Semantic search: LLM output failed schema validation",
+        );
+        return [];
+      }
+      const parsed = parseResult.data;
 
       // Validate and map
       const validGuids = new Set(batch.map((s) => s.guid));
       return parsed
-        .filter((r) => validGuids.has(r.id) && typeof r.score === "number" && r.score > 0)
+        .filter((r) => validGuids.has(r.id) && r.score > 0)
         .map((r) => ({
           guid: r.id,
           score: Math.min(10, Math.max(0, r.score)),
@@ -394,7 +445,6 @@ function enrichItem(
     guid: s.guid,
     name: s.name,
     description: s.description,
-    ownerId: s.ownerId,
     createdBy: s.createdBy,
     createdByEmail: s.createdByEmail,
     createdByDisplayName: s.createdByDisplayName,

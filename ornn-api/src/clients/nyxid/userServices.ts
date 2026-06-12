@@ -20,10 +20,11 @@
  * @module clients/nyxid/userServices
  */
 
-import pino from "pino";
+import { createLogger } from "../../shared/logger";
+import { safeFetch } from "../../infra/safeFetch";
 import type { NyxidConfigResolver } from "./base";
 
-const logger = pino({ level: "info" }).child({ module: "nyxidUserServicesClient" });
+const logger = createLogger("nyxidUserServicesClient");
 
 /**
  * Minimal per-user service shape Ornn cares about. Mirrors the subset
@@ -76,7 +77,7 @@ export class NyxidUserServicesClient {
   async listUserServices(userAccessToken: string): Promise<UserService[]> {
     const baseUrl = await this.resolveBaseUrl();
     const url = `${baseUrl}/api/v1/user-services`;
-    const resp = await fetch(url, {
+    const resp = await safeFetch(url, {
       headers: { Authorization: `Bearer ${userAccessToken}` },
     });
     if (!resp.ok) {

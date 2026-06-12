@@ -11,10 +11,11 @@
  * @module clients/nyxid/orgs
  */
 
-import pino from "pino";
+import { createLogger } from "../../shared/logger";
+import { safeFetch } from "../../infra/safeFetch";
 import type { NyxidConfigResolver, NyxidSaTokenProvider } from "./base";
 
-const logger = pino({ level: "info" }).child({ module: "nyxidOrgsClient" });
+const logger = createLogger("nyxidOrgsClient");
 
 /**
  * Membership record Ornn cares about. Mirrors the subset of NyxID's
@@ -47,7 +48,9 @@ interface RawResponse {
 
 export class NyxidOrgsClient {
   private readonly resolver: NyxidConfigResolver;
-  private readonly saTokenProvider?: NyxidSaTokenProvider;
+  // exactOptionalPropertyTypes (#657): widen to `T | undefined` so the
+  // optional-from-deps assignment lands cleanly. Same runtime shape.
+  private readonly saTokenProvider: NyxidSaTokenProvider | undefined;
 
   constructor(opts: {
     resolver: NyxidConfigResolver;
@@ -73,7 +76,7 @@ export class NyxidOrgsClient {
   async listUserOrgs(userAccessToken: string): Promise<OrgMembership[]> {
     const baseUrl = await this.resolveBaseUrl();
     const url = `${baseUrl}/api/v1/orgs`;
-    const resp = await fetch(url, {
+    const resp = await safeFetch(url, {
       headers: { Authorization: `Bearer ${userAccessToken}` },
     });
     if (!resp.ok) {
@@ -135,7 +138,7 @@ export class NyxidOrgsClient {
     const url = `${baseUrl}/api/v1/orgs/${encodeURIComponent(orgUserId)}/members`;
     let resp: Response;
     try {
-      resp = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+      resp = await safeFetch(url, { headers: { Authorization: `Bearer ${token}` } });
     } catch (err) {
       logger.warn({ err, orgUserId }, "NyxID listOrgMembers fetch threw");
       return [];

@@ -32,8 +32,10 @@ export type SectionKey =
   | "extras";
 
 export interface SectionMeta {
-  updatedAt?: string;
-  updatedBy?: string;
+  // exactOptionalPropertyTypes (#657): widen to `T | undefined` so Zod-
+  // inferred shapes with `.optional()` fields fit.
+  updatedAt?: string | undefined;
+  updatedBy?: string | undefined;
 }
 
 export const REDACTION_PREFIX = "<REDACTED:";
@@ -130,7 +132,8 @@ export interface ExtrasSection extends SectionMeta {
   extraNyxidServices: Array<{
     name: string;
     baseUrl: string;
-    scopes?: string[];
+    // exactOptionalPropertyTypes (#657)
+    scopes?: string[] | undefined;
   }>;
 }
 
@@ -193,8 +196,12 @@ export interface LlmProviderModel {
    * `defaultFor<Surface>` invariant across every provider. */
   enabledForPlayground: boolean;
   enabledForSkillGen: boolean;
+  /** #970 — Ornn Assistant surface (repo-aware Q&A chatbot). */
+  enabledForAssistant: boolean;
   defaultForPlayground: boolean;
   defaultForSkillGen: boolean;
+  /** #970 — Ornn Assistant surface default. */
+  defaultForAssistant: boolean;
   removed: boolean;
   firstSeenAt?: string;
   lastSyncedAt?: string;
@@ -228,8 +235,10 @@ export interface LlmProviderInput {
 export interface ModelFlagsPatchInput {
   enabledForPlayground?: boolean;
   enabledForSkillGen?: boolean;
+  enabledForAssistant?: boolean;
   defaultForPlayground?: boolean;
   defaultForSkillGen?: boolean;
+  defaultForAssistant?: boolean;
 }
 
 export async function listLlmProviders(): Promise<LlmProvider[]> {

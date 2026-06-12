@@ -213,7 +213,7 @@ describe("SettingsServiceImpl", () => {
       err = e;
     }
     expect(err).toBeTruthy();
-    expect((err as { code: string }).code).toBe("INVALID_SETTING");
+    expect((err as { code: string }).code).toBe("invalid_setting");
     expect((err as { message: string }).message).toContain("sseKeepAliveMs");
   });
 

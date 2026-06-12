@@ -14,9 +14,10 @@ import type {
 } from "@/types/analytics";
 
 export interface FetchAnalyticsOptions {
-  window?: AnalyticsWindow;
+  // Optionals widen for exactOptionalPropertyTypes (#657).
+  window?: AnalyticsWindow | undefined;
   /** Optional version filter; matches the same query the backend supports. */
-  version?: string;
+  version?: string | undefined;
 }
 
 export async function fetchSkillAnalytics(
@@ -35,11 +36,12 @@ export async function fetchSkillAnalytics(
 
 export interface FetchPullsOptions {
   bucket: PullBucket;
+  // Optionals widen for exactOptionalPropertyTypes (#657).
   /** Inclusive lower bound (ISO string). Backend defaults to last 7 days. */
-  from?: string;
+  from?: string | undefined;
   /** Exclusive upper bound (ISO string). Backend defaults to now. */
-  to?: string;
-  version?: string;
+  to?: string | undefined;
+  version?: string | undefined;
 }
 
 export async function fetchSkillPulls(

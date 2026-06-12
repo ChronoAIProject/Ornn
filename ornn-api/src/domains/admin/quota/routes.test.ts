@@ -18,6 +18,7 @@ import { QuotaRepository } from "../../quota/repository";
 import { QuotaService } from "../../quota/service";
 import type { AuthVariables } from "../../../middleware/nyxidAuth";
 import { createAdminQuotaRoutes } from "./routes";
+import { buildProblemJsonBody } from "../../../shared/types/index";
 
 let mongo: MongoMemoryServer;
 let client: MongoClient;
@@ -62,16 +63,18 @@ beforeAll(async () => {
   });
   app.onError((err, c) => {
     const e = err as { statusCode?: number; code?: string; message: string };
-    if (e.statusCode && e.code) {
-      return c.json(
-        { data: null, error: { code: e.code, message: e.message } },
-        e.statusCode as never,
-      );
-    }
-    return c.json(
-      { data: null, error: { code: "INTERNAL", message: e.message } },
-      500,
-    );
+    const statusCode = e.statusCode ?? 500;
+    const code = e.code ?? "internal_error";
+    const body = buildProblemJsonBody({
+      statusCode,
+      code,
+      message: e.message ?? "",
+      instance: c.req.path,
+      requestId: null,
+    });
+    return c.json(body, statusCode as never, {
+      "Content-Type": "application/problem+json",
+    });
   });
   app.route("/", router);
 });
@@ -190,7 +193,7 @@ describe("UT-ADMQROUTE-001 GET /admin/quota/users surface=playground", () => {
       };
     };
     expect(json.data.items.length).toBe(1);
-    expect(json.data.items[0].userId).toBe("u1");
+    expect(json.data.items[0]!.userId).toBe("u1");
     expect(json.data.monthMarker).toMatch(/^\d{4}-\d{2}$/);
   });
 });
@@ -203,7 +206,7 @@ describe("UT-ADMQROUTE-002 surface=skillGen filter", () => {
     });
     expect(res.status).toBe(200);
     const json = (await res.json()) as { data: { items: Array<{ defaultAllotment: number }> } };
-    expect(json.data.items[0].defaultAllotment).toBe(10);
+    expect(json.data.items[0]!.defaultAllotment).toBe(10);
   });
 });
 
@@ -241,7 +244,7 @@ describe("UT-ADMQROUTE-006 remaining floors at 0", () => {
       headers: authHeaders(),
     });
     const json = (await res.json()) as { data: { items: Array<{ remaining: number }> } };
-    expect(json.data.items[0].remaining).toBe(0);
+    expect(json.data.items[0]!.remaining).toBe(0);
   });
 });
 

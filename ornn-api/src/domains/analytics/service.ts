@@ -46,7 +46,8 @@ export class AnalyticsService {
     window: "7d" | "30d" | "all" = "30d",
     version?: string,
   ): Promise<SkillAnalyticsSummary> {
-    return this.repo.summarize(skillGuid, window, { version });
+    // exactOptionalPropertyTypes (#657)
+    return this.repo.summarize(skillGuid, window, version !== undefined ? { version } : {});
   }
 
   async getPullsTimeSeries(

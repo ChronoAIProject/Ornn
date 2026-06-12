@@ -16,10 +16,11 @@
  * @module clients/nyxid/llmCatalog
  */
 
-import pino from "pino";
+import { createLogger } from "../../shared/logger";
+import { safeFetch } from "../../infra/safeFetch";
 import type { NyxidConfigResolver, NyxidSaTokenProvider } from "./base";
 
-const logger = pino({ level: "info" }).child({ module: "nyxLlmCatalogClient" });
+const logger = createLogger("nyxLlmCatalogClient");
 
 export interface UpstreamModel {
   /** Upstream `id`, e.g. `gpt-5-mini`. */
@@ -72,7 +73,7 @@ export class NyxLlmCatalogClient {
   async listUpstreamModels(): Promise<UpstreamModel[]> {
     const url = await this.resolveUrl();
     const token = await this.saTokenProvider.getAccessToken();
-    const resp = await fetch(url, {
+    const resp = await safeFetch(url, {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (!resp.ok) {

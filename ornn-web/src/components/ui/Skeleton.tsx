@@ -21,15 +21,5 @@ export function SkeletonCard({ className = "" }: { className?: string }) {
   return <NeonSkillCardSkeleton className={className} />;
 }
 
-// Re-export all NeonSkeleton components
-export {
-  NeonSkeleton,
-  SkillCardSkeleton,
-  TableRowSkeleton,
-  ProfileSkeleton,
-  ListItemSkeleton,
-  DetailPageSkeleton,
-  StatsCardSkeleton,
-  FormSkeleton,
-  SkeletonGrid,
-} from "./NeonSkeleton";
+// Re-export the live NeonSkeleton components
+export { NeonSkeleton, SkillCardSkeleton } from "./NeonSkeleton";

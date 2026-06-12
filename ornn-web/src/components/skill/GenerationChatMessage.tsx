@@ -107,8 +107,9 @@ function CompleteBubble({
   skillDescription,
 }: {
   content: string;
-  skillName?: string;
-  skillDescription?: string;
+  // exactOptionalPropertyTypes (#657)
+  skillName?: string | undefined;
+  skillDescription?: string | undefined;
 }) {
   return (
     <motion.div

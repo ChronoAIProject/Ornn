@@ -11,7 +11,7 @@
  * @module domains/skills/audit/service
  */
 
-import pino from "pino";
+import { createLogger } from "../../../shared/logger";
 import type { NyxLlmClient, ResponsesApiInputMessage } from "../../../clients/nyxid/llm";
 import type { IStorageClient } from "../../../clients/storageClient";
 import type { NyxidOrgsClient } from "../../../clients/nyxid/orgs";
@@ -32,7 +32,7 @@ import { AUDIT_SYSTEM_PROMPT, buildAuditUserPrompt } from "./prompts";
 import JSZip from "jszip";
 import { resolveZipRoot } from "../../../shared/utils/zip";
 
-const logger = pino({ level: "info" }).child({ module: "auditService" });
+const logger = createLogger("auditService");
 
 /**
  * Per-call resolution of the audit pipeline's LLM defaults. Sourced
@@ -92,8 +92,9 @@ export class AuditService {
   private readonly llmClient: NyxLlmClient;
   private readonly defaultsResolver: AuditDefaultsResolver;
   private readonly cacheTtlMs: number;
-  private readonly notificationService?: NotificationService;
-  private readonly nyxidOrgsClient?: NyxidOrgsClient;
+  // exactOptionalPropertyTypes (#657): widen to `T | undefined`.
+  private readonly notificationService: NotificationService | undefined;
+  private readonly nyxidOrgsClient: NyxidOrgsClient | undefined;
 
   constructor(deps: AuditServiceDeps) {
     this.auditRepo = deps.auditRepo;
@@ -355,7 +356,7 @@ export class AuditService {
     // Prefer the skill doc's presigned URL — `getSkill` already minted one.
     const url = (skillDoc as unknown as { presignedPackageUrl?: string }).presignedPackageUrl;
     if (!url) {
-      throw AppError.internalError("AUDIT_PACKAGE_UNAVAILABLE", "No storage URL for skill package");
+      throw AppError.internalError("audit_package_unavailable", "No storage URL for skill package");
     }
     const res = await fetch(url);
     if (!res.ok) {
@@ -375,7 +376,11 @@ export class AuditService {
 
     for (const path of allPaths) {
       const entry = zip.files[path];
-      if (entry.dir) continue;
+      // `allPaths` is built from `Object.keys(zip.files)` upstream, so
+      // every path resolves. Defensive null-check under
+      // noUncheckedIndexedAccess (#450) — drop the file rather than
+      // crash if a future refactor introduces a mismatch.
+      if (!entry || entry.dir) continue;
       const parts = path.split("/");
       let relative = path;
       if (parts.length > 1 && zip.files[`${parts[0]}/`]?.dir) {
@@ -391,8 +396,11 @@ export class AuditService {
         }
         chunks.push(`// FILE: ${relative}\n${text}`);
         bundledBytes += text.length;
-      } catch {
-        // skip unreadable files
+      } catch (err) {
+        // Skip unreadable files — binary blobs and zip-entry decode
+        // errors land here. Logging so an audit that quietly drops
+        // every file (e.g. a JSZip regression) becomes visible.
+        logger.debug({ err, relative }, "audit: skipping unreadable file");
       }
     }
 
@@ -429,7 +437,15 @@ export function parseAuditJson(raw: string): ParsedAudit | null {
   let obj: unknown;
   try {
     obj = JSON.parse(slice);
-  } catch {
+  } catch (err) {
+    // Audit LLM produced malformed JSON — parseAuditJson returns null
+    // and the caller (Service.scan) treats it as "no audit produced"
+    // and falls back gracefully. Log the head of the slice so we can
+    // catch a pattern of the LLM repeatedly mis-formatting output.
+    logger.debug(
+      { err, sliceHead: slice.slice(0, 120) },
+      "parseAuditJson: malformed JSON slice",
+    );
     return null;
   }
   if (!obj || typeof obj !== "object") return null;

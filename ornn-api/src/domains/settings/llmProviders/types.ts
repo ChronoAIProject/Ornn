@@ -26,6 +26,8 @@ export interface LlmProviderModel {
    */
   readonly enabledForPlayground: boolean;
   readonly enabledForSkillGen: boolean;
+  /** #970 — Ornn Assistant surface (repo-aware Q&A chatbot). */
+  readonly enabledForAssistant: boolean;
   /**
    * Per-surface default flags. Server enforces at-most-one-true
    * across **all providers** — setting a default on one model clears
@@ -36,6 +38,8 @@ export interface LlmProviderModel {
    */
   readonly defaultForPlayground: boolean;
   readonly defaultForSkillGen: boolean;
+  /** #970 — Ornn Assistant surface default. */
+  readonly defaultForAssistant: boolean;
   /**
    * `removed` flips to true when a previously-known model disappears
    * from the upstream catalog. Kept for history / lifetime breakdowns;

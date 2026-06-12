@@ -2,7 +2,7 @@ name: Changeset check
 
 on:
   pull_request:
-    branches: [develop]
+    branches: [develop, develop-auto]
     types: [opened, synchronize, reopened]
 
 jobs:

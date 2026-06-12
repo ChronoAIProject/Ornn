@@ -7,10 +7,12 @@
  * operator can:
  *   - toggle "Enabled for Playground"
  *   - toggle "Enabled for SkillGen"
+ *   - toggle "Enabled for Assistant" (#970)
  *   - radio-pick "Default for Playground" (server enforces at-most-one
  *     across **all** providers, so flipping one default unselects every
  *     other provider's default for that surface in the same write)
  *   - radio-pick "Default for SkillGen" (same)
+ *   - radio-pick "Default for Assistant" (same — #970)
  *
  * Removed-from-upstream rows (`removed: true`) are segregated below the
  * active rows with an "archived" badge and a disabled toggle column —
@@ -156,7 +158,7 @@ export function ProviderModelsDrawer({
                   to pull the upstream catalog.
                 </p>
               ) : (
-                <table className="w-full table-fixed">
+                <table className="w-full">
                   <thead>
                     <tr className="border-b border-accent/20">
                       <th className="px-2 py-2 text-left font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
@@ -167,6 +169,9 @@ export function ProviderModelsDrawer({
                       </th>
                       <th className="px-2 py-2 text-center font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
                         Skill-Gen
+                      </th>
+                      <th className="px-2 py-2 text-center font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
+                        Assistant
                       </th>
                     </tr>
                   </thead>
@@ -182,7 +187,7 @@ export function ProviderModelsDrawer({
                     {archived.length > 0 && (
                       <>
                         <tr>
-                          <td colSpan={3} className="pt-6 pb-2 font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
+                          <td colSpan={4} className="pt-6 pb-2 font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
                             Archived (no longer in upstream catalog)
                           </td>
                         </tr>
@@ -267,6 +272,24 @@ function ModelRow({ model, disabled, onPatch }: ModelRowProps) {
             disabled={disabled || model.removed}
             label="Default for skill-gen"
             onSelect={() => onPatch({ defaultForSkillGen: true })}
+          />
+        </div>
+      </td>
+      <td className="px-2 py-3">
+        <div className="flex items-center justify-center gap-3">
+          <Toggle
+            checked={model.enabledForAssistant}
+            disabled={disabled || model.removed}
+            label="Enabled for assistant"
+            onToggle={() =>
+              onPatch({ enabledForAssistant: !model.enabledForAssistant })
+            }
+          />
+          <Radio
+            checked={model.defaultForAssistant}
+            disabled={disabled || model.removed}
+            label="Default for assistant"
+            onSelect={() => onPatch({ defaultForAssistant: true })}
           />
         </div>
       </td>

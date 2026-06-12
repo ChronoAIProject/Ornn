@@ -1,3 +1,25 @@
+/**
+ * TagInput — multi-value tag input with a soft duplicate guard.
+ *
+ * Used by SkillForm + the Guided-create StepBasicInfo to collect
+ * `metadata.tag` entries. Tags are normalized to `trim().toLowerCase()`
+ * before insertion so casing + whitespace differences don't slip through
+ * the dup check.
+ *
+ * #650 / #653 — on Enter (or `,`) with a duplicate, the input was
+ * silently rejected: no error and the rejected text stayed in the
+ * field. Typing the next tag concatenated onto the stale value
+ * (`alpha` → `alpha` rejected → `beta` typed → result `alphabeta`).
+ * Fixed by:
+ *   1. Clearing the input on duplicate (nothing to fix — the existing
+ *      tag is already valid), matching the success path.
+ *   2. Surfacing a transient `Already added` error below the field,
+ *      mirroring `MultiValueInput`'s feedback wording so the two
+ *      multi-value inputs read the same.
+ * The error clears on the next keystroke so it never blocks typing.
+ *
+ * @module components/form/TagInput
+ */
 import { useState, useCallback } from "react";
 import { Badge, type BadgeProps } from "@/components/ui/Badge";
 import { MAX_TAGS } from "@/utils/constants";
@@ -14,26 +36,52 @@ function getTagColor(tag: string): BadgeProps["color"] {
 export interface TagInputProps {
   tags: string[];
   onChange: (tags: string[]) => void;
-  error?: string;
-  className?: string;
+  // exactOptionalPropertyTypes (#657)
+  error?: string | undefined;
+  className?: string | undefined;
 }
 
 export function TagInput({ tags, onChange, error, className = "" }: TagInputProps) {
   const [input, setInput] = useState("");
+  const [inputError, setInputError] = useState<string | null>(null);
 
   const addTag = useCallback(
     (value: string) => {
       const trimmed = value.trim().toLowerCase();
-      if (!trimmed || tags.includes(trimmed) || tags.length >= MAX_TAGS) return;
+      // Empty after trim — silently swallow; nothing to flag, the user
+      // just pressed Enter on whitespace.
+      if (!trimmed) {
+        setInput("");
+        return;
+      }
+      // Max guard is also enforced by the disabled input below, but keep
+      // a defensive branch in case the prop is wired to bypass the UI
+      // (e.g. paste-then-Enter while at the cap).
+      if (tags.length >= MAX_TAGS) {
+        setInputError(`Maximum ${MAX_TAGS} tags`);
+        setInput("");
+        return;
+      }
+      if (tags.includes(trimmed)) {
+        // #650 + #653 — surface the rejection AND clear the input so
+        // the next keystroke doesn't concatenate onto the stale value.
+        setInputError("Already added");
+        setInput("");
+        return;
+      }
+      setInputError(null);
       onChange([...tags, trimmed]);
       setInput("");
     },
-    [tags, onChange]
+    [tags, onChange],
   );
 
   const removeTag = useCallback(
-    (tag: string) => onChange(tags.filter((t) => t !== tag)),
-    [tags, onChange]
+    (tag: string) => {
+      setInputError(null);
+      onChange(tags.filter((t) => t !== tag));
+    },
+    [tags, onChange],
   );
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -42,9 +90,14 @@ export function TagInput({ tags, onChange, error, className = "" }: TagInputProp
       addTag(input);
     }
     if (e.key === "Backspace" && !input && tags.length > 0) {
-      removeTag(tags[tags.length - 1]);
+      removeTag(tags[tags.length - 1]!);
     }
   };
+
+  // Prefer the live transient error (`inputError`) over the form-level
+  // `error` prop so the user sees feedback for the action they just
+  // took, not a stale parent-level message.
+  const displayError = inputError ?? error;
 
   return (
     <div className={`flex flex-col gap-1.5 ${className}`}>
@@ -67,14 +120,19 @@ export function TagInput({ tags, onChange, error, className = "" }: TagInputProp
         <input
           type="text"
           value={input}
-          onChange={(e) => setInput(e.target.value)}
+          onChange={(e) => {
+            setInput(e.target.value);
+            // Any keystroke means the user is acting on the feedback;
+            // drop the transient error so it doesn't linger.
+            if (inputError) setInputError(null);
+          }}
           onKeyDown={handleKeyDown}
           placeholder={tags.length < MAX_TAGS ? "Type + Enter" : "Max tags reached"}
           disabled={tags.length >= MAX_TAGS}
           className="min-w-[100px] flex-1 border-none bg-transparent font-text text-sm text-strong outline-none placeholder:text-meta/50"
         />
       </div>
-      {error && <span className="text-xs text-danger">{error}</span>}
+      {displayError && <span className="text-xs text-danger">{displayError}</span>}
     </div>
   );
 }

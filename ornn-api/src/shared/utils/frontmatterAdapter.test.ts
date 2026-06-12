@@ -102,7 +102,7 @@ describe("adaptOldFrontmatter", () => {
       runtimeDependencies: ["lodash"],
     };
     const result = adaptOldFrontmatter(input);
-    expect((result.metadata as any).runtimeDependency).toEqual(["lodash"]);
+    expect((result.metadata as Record<string, unknown>).runtimeDependency).toEqual(["lodash"]);
   });
 
   test("flatFrontmatter_withEnvVars_alternateKey", () => {
@@ -112,23 +112,23 @@ describe("adaptOldFrontmatter", () => {
       envVars: ["SECRET"],
     };
     const result = adaptOldFrontmatter(input);
-    expect((result.metadata as any).runtimeEnvVar).toEqual(["SECRET"]);
+    expect((result.metadata as Record<string, unknown>).runtimeEnvVar).toEqual(["SECRET"]);
   });
 
   test("flatFrontmatter_noCategory_defaultsToPlain", () => {
     const input = { name: "my-skill" };
     const result = adaptOldFrontmatter(input);
-    expect((result.metadata as any).category).toBe("plain");
+    expect((result.metadata as Record<string, unknown>).category).toBe("plain");
   });
 
   test("flatFrontmatter_missingArrays_defaultsToEmpty", () => {
     const input = { name: "my-skill", category: "plain" };
     const result = adaptOldFrontmatter(input);
-    expect((result.metadata as any).runtime).toEqual([]);
-    expect((result.metadata as any).runtimeDependency).toEqual([]);
-    expect((result.metadata as any).runtimeEnvVar).toEqual([]);
-    expect((result.metadata as any).toolList).toEqual([]);
-    expect((result.metadata as any).tag).toEqual([]);
+    expect((result.metadata as Record<string, unknown>).runtime).toEqual([]);
+    expect((result.metadata as Record<string, unknown>).runtimeDependency).toEqual([]);
+    expect((result.metadata as Record<string, unknown>).runtimeEnvVar).toEqual([]);
+    expect((result.metadata as Record<string, unknown>).toolList).toEqual([]);
+    expect((result.metadata as Record<string, unknown>).tag).toEqual([]);
   });
 });
 
@@ -157,7 +157,7 @@ describe("adaptApiRequest", () => {
     };
     const { adapted, isLegacy } = adaptApiRequest(body);
     expect(isLegacy).toBe(true);
-    expect((adapted.metadata as any).toolList).toEqual(["Bash"]);
+    expect((adapted.metadata as Record<string, unknown>).toolList).toEqual(["Bash"]);
   });
 
   test("oldShape_withFlatRuntimes_transforms", () => {
@@ -169,7 +169,7 @@ describe("adaptApiRequest", () => {
     };
     const { adapted, isLegacy } = adaptApiRequest(body);
     expect(isLegacy).toBe(true);
-    expect((adapted.metadata as any).runtime).toEqual(["node"]);
+    expect((adapted.metadata as Record<string, unknown>).runtime).toEqual(["node"]);
   });
 
   test("noToolsOrRuntimes_noMetadata_notLegacy", () => {

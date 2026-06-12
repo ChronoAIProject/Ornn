@@ -8,13 +8,9 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { AuthUser, NyxIDTokenResponse, NyxIDJwtClaims, NyxIDIdTokenClaims } from "@/types/auth";
 import { config } from "@/config";
+import { createLogger } from "@/lib/logger";
 
-const logger = {
-  info: (msg: string, data?: Record<string, unknown>) =>
-    console.log(`[auth] ${msg}`, data ?? ""),
-  error: (msg: string, data?: Record<string, unknown>) =>
-    console.error(`[auth] ${msg}`, data ?? ""),
-};
+const logger = createLogger("auth");
 
 /** Refresh token 1 minute before expiry. */
 const TOKEN_REFRESH_BUFFER_MS = 60 * 1000;
@@ -40,6 +36,24 @@ interface AuthState {
   isLoading: boolean;
   tokenExpiresAt: number | null;
   _refreshTimerId: ReturnType<typeof setTimeout> | null;
+  /**
+   * In-flight token-refresh promise (#631). When non-null, the SPA has
+   * an `/oauth/token` `refresh_token` request pending; concurrent
+   * callers (a near-expiry preflight in `apiClient.fetchWithRetry`, a
+   * 401-triggered retry in the same client, the scheduled
+   * `startTokenRefresh` timer, and the `visibilitychange` handler can
+   * all race within the same millisecond) MUST await this promise
+   * instead of firing their own. NyxID rotates the refresh token on
+   * every successful exchange, so a second concurrent request loses
+   * the race and gets:
+   *
+   *   `Conflict: Refresh token was concurrently rotated, please retry`
+   *
+   * which then surfaces as a logout-loop. Promises aren't
+   * serialisable, so this field is deliberately excluded from
+   * `partialize` — it only lives for the lifetime of the tab.
+   */
+  _refreshInFlight: Promise<void> | null;
 
   loginWithNyxID(): Promise<void>;
   handleNyxIDCallback(code: string): Promise<void>;
@@ -59,7 +73,9 @@ function decodeJwtPayload(token: string): NyxIDJwtClaims | null {
   try {
     const parts = token.split(".");
     if (parts.length !== 3) return null;
-    const payload = atob(parts[1].replace(/-/g, "+").replace(/_/g, "/"));
+    // Length-checked above. `!` is safe under noUncheckedIndexedAccess
+    // (#450).
+    const payload = atob(parts[1]!.replace(/-/g, "+").replace(/_/g, "/"));
     return JSON.parse(payload) as NyxIDJwtClaims;
   } catch {
     logger.error("Failed to decode JWT payload");
@@ -186,6 +202,7 @@ export const useAuthStore = create<AuthState>()(
       isLoading: false,
       tokenExpiresAt: null,
       _refreshTimerId: null,
+      _refreshInFlight: null,
 
       loginWithNyxID: async () => {
         logger.info("Initiating NyxID OAuth login with PKCE");
@@ -286,6 +303,22 @@ export const useAuthStore = create<AuthState>()(
       },
 
       refreshToken: async () => {
+        // #631 — dedup concurrent callers. The SPA fans out into
+        // `refreshToken()` from up to four places within the same
+        // millisecond (`apiClient.fetchWithRetry` proactive +
+        // reactive-on-401, the scheduled `startTokenRefresh` timer,
+        // and the `visibilitychange` handler). NyxID rotates the
+        // refresh token on every successful exchange, so a second
+        // concurrent caller wins the rotation while the loser sees
+        //   `Conflict: Refresh token was concurrently rotated`
+        // and the SPA logs the user out. Funnel all callers through
+        // a single in-flight promise.
+        const existing = get()._refreshInFlight;
+        if (existing) {
+          logger.debug("Token refresh already in flight — awaiting existing promise");
+          return existing;
+        }
+
         const refreshTokenValue = get().refreshTokenValue;
         if (!refreshTokenValue) {
           logger.info("No refresh token available, clearing auth");
@@ -295,62 +328,73 @@ export const useAuthStore = create<AuthState>()(
 
         logger.info("Refreshing NyxID access token");
 
+        const promise = (async () => {
+          try {
+            const response = await fetch(NYXID_CONFIG.tokenUrl, {
+              method: "POST",
+              headers: { "Content-Type": "application/x-www-form-urlencoded" },
+              body: new URLSearchParams({
+                grant_type: "refresh_token",
+                refresh_token: refreshTokenValue,
+                client_id: NYXID_CONFIG.clientId,
+              }),
+            });
+
+            if (!response.ok) {
+              throw new Error(`Token refresh failed: ${response.status}`);
+            }
+
+            const tokenResponse = (await response.json()) as NyxIDTokenResponse;
+            const accessClaims = decodeJwtPayload(tokenResponse.access_token) as NyxIDJwtClaims | null;
+            if (!accessClaims) {
+              throw new Error("Failed to decode refreshed access token");
+            }
+
+            // Preserve profile info from initial login; keep existing roles/permissions if refreshed token lacks them
+            const existingUser = get().user;
+            const user: AuthUser = {
+              id: accessClaims.sub,
+              email: existingUser?.email ?? "",
+              displayName: existingUser?.displayName ?? accessClaims.sub,
+              avatarUrl: existingUser?.avatarUrl ?? "",
+              roles: accessClaims.roles?.length ? accessClaims.roles : (existingUser?.roles ?? []),
+              permissions: accessClaims.permissions?.length ? accessClaims.permissions : (existingUser?.permissions ?? []),
+            };
+            const expiresAt = accessClaims.exp * 1000;
+
+            logger.info("Token refresh successful");
+
+            set({
+              accessToken: tokenResponse.access_token,
+              refreshTokenValue: tokenResponse.refresh_token ?? refreshTokenValue,
+              user,
+              isAuthenticated: true,
+              tokenExpiresAt: expiresAt,
+            });
+
+            get().startTokenRefresh();
+          } catch (err) {
+            logger.error("Token refresh failed", {
+              error: err instanceof Error ? err.message : String(err),
+            });
+            get().stopTokenRefresh();
+            set({
+              accessToken: null,
+              refreshTokenValue: null,
+              user: null,
+              isAuthenticated: false,
+              tokenExpiresAt: null,
+            });
+          }
+        })();
+        // Stash so concurrent callers latch on. The finally clears
+        // the slot once the request settles — the NEXT (later in
+        // time) `refreshToken()` call then starts fresh.
+        set({ _refreshInFlight: promise });
         try {
-          const response = await fetch(NYXID_CONFIG.tokenUrl, {
-            method: "POST",
-            headers: { "Content-Type": "application/x-www-form-urlencoded" },
-            body: new URLSearchParams({
-              grant_type: "refresh_token",
-              refresh_token: refreshTokenValue,
-              client_id: NYXID_CONFIG.clientId,
-            }),
-          });
-
-          if (!response.ok) {
-            throw new Error(`Token refresh failed: ${response.status}`);
-          }
-
-          const tokenResponse = (await response.json()) as NyxIDTokenResponse;
-          const accessClaims = decodeJwtPayload(tokenResponse.access_token) as NyxIDJwtClaims | null;
-          if (!accessClaims) {
-            throw new Error("Failed to decode refreshed access token");
-          }
-
-          // Preserve profile info from initial login; keep existing roles/permissions if refreshed token lacks them
-          const existingUser = get().user;
-          const user: AuthUser = {
-            id: accessClaims.sub,
-            email: existingUser?.email ?? "",
-            displayName: existingUser?.displayName ?? accessClaims.sub,
-            avatarUrl: existingUser?.avatarUrl ?? "",
-            roles: accessClaims.roles?.length ? accessClaims.roles : (existingUser?.roles ?? []),
-            permissions: accessClaims.permissions?.length ? accessClaims.permissions : (existingUser?.permissions ?? []),
-          };
-          const expiresAt = accessClaims.exp * 1000;
-
-          logger.info("Token refresh successful");
-
-          set({
-            accessToken: tokenResponse.access_token,
-            refreshTokenValue: tokenResponse.refresh_token ?? refreshTokenValue,
-            user,
-            isAuthenticated: true,
-            tokenExpiresAt: expiresAt,
-          });
-
-          get().startTokenRefresh();
-        } catch (err) {
-          logger.error("Token refresh failed", {
-            error: err instanceof Error ? err.message : String(err),
-          });
-          get().stopTokenRefresh();
-          set({
-            accessToken: null,
-            refreshTokenValue: null,
-            user: null,
-            isAuthenticated: false,
-            tokenExpiresAt: null,
-          });
+          await promise;
+        } finally {
+          set({ _refreshInFlight: null });
         }
       },
 

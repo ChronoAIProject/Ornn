@@ -13,9 +13,10 @@ const API_BASE = config.apiBaseUrl;
 
 export interface ChatStreamParams {
   messages: Array<{ role: string; content: string }>;
-  skillId?: string;
-  envVars?: Record<string, string>;
-  modelId?: string;
+  // exactOptionalPropertyTypes (#657)
+  skillId?: string | undefined;
+  envVars?: Record<string, string> | undefined;
+  modelId?: string | undefined;
 }
 
 export interface StreamHandle {

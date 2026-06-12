@@ -17,8 +17,9 @@ import {
   nyxidAuthMiddleware,
   requirePermission,
 } from "../../middleware/nyxidAuth";
-import { AppError } from "../../shared/types/index";
+import { z } from "zod";
 import { midMaskSecret } from "../../infra/crypto";
+import { validateBody, getValidatedBody } from "../../middleware/validate";
 import { sections, type SectionId } from "./sections";
 import type { SettingsService, SettingsActor } from "./types";
 
@@ -48,24 +49,30 @@ export function createSettingsRoutes(
       return c.json({ data: masked, error: null });
     });
 
-    app.put(path, auth, adminGuard, async (c) => {
-      const body = await c.req.json().catch(() => null);
-      if (!body || typeof body !== "object") {
-        throw AppError.badRequest("INVALID_BODY", "request body must be a JSON object");
-      }
-      const actor = currentActor(c);
-      const result = await settingsService.putSection<Record<string, unknown>>(
-        id,
-        body as Record<string, unknown>,
-        actor,
-      );
-      const masked = maskSecrets(result.value, meta.secretFields);
-      return c.json({
-        data: masked,
-        error: null,
-        meta: { changedFields: result.changedFields },
-      });
-    });
+    app.put(
+      path,
+      auth,
+      adminGuard,
+      // Section-specific Zod schemas live inside `settingsService.putSection`;
+      // here we just gate that the body is a JSON object so a SyntaxError
+      // becomes 400 invalid_body instead of a 500 (#438).
+      validateBody(z.record(z.string(), z.unknown()), "invalid_body"),
+      async (c) => {
+        const body = getValidatedBody<Record<string, unknown>>(c);
+        const actor = currentActor(c);
+        const result = await settingsService.putSection<Record<string, unknown>>(
+          id,
+          body,
+          actor,
+        );
+        const masked = maskSecrets(result.value, meta.secretFields);
+        return c.json({
+          data: masked,
+          error: null,
+          meta: { changedFields: result.changedFields },
+        });
+      },
+    );
   }
 
   return app;

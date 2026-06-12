@@ -30,6 +30,9 @@ export function createQuotaRoutes(
   const auth = nyxidAuthMiddleware();
 
   app.get("/me/quota", auth, async (c) => {
+    // `remaining` here reflects in-flight reservations: `used` is bumped
+    // at reserve time (before the LLM call) and refunded on
+    // system-error/abort. See `SurfaceSnapshot.remaining` in types.ts.
     const authCtx = getAuth(c);
     const snapshot = await quotaService.getSnapshot({
       userId: authCtx.userId,
@@ -50,5 +53,5 @@ export function throwQuotaError(decision: {
   surface: Surface;
   message: string;
 }): never {
-  throw new AppError(429, "QUOTA_EXCEEDED", decision.message);
+  throw new AppError(429, "quota_exceeded", decision.message);
 }

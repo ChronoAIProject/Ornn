@@ -16,17 +16,14 @@ import rehypeHighlight from "rehype-highlight";
 export interface MarkdownEditorProps {
   value: string;
   onChange: (value: string) => void;
-  placeholder?: string;
-  label?: string;
-  error?: string;
-  /** Minimum rows for textarea */
-  minRows?: number;
-  /** Maximum rows for textarea */
-  maxRows?: number;
-  /** Whether to show preview toggle */
-  showPreview?: boolean;
-  /** Additional CSS classes */
-  className?: string;
+  // Optionals widen to `T | undefined` for exactOptionalPropertyTypes (#657).
+  placeholder?: string | undefined;
+  label?: string | undefined;
+  error?: string | undefined;
+  minRows?: number | undefined;
+  maxRows?: number | undefined;
+  showPreview?: boolean | undefined;
+  className?: string | undefined;
 }
 
 /** Bold icon */
@@ -272,7 +269,7 @@ export function MarkdownEditor({
               ) : (
                 <>
                   <PreviewIcon className="h-4 w-4" />
-                  <span className="hidden sm:inline">Preview</span>
+                  <span className="hidden sm:inline">{t("markdownEditor.preview")}</span>
                 </>
               )}
             </button>
@@ -301,7 +298,7 @@ export function MarkdownEditor({
                 </div>
               ) : (
                 <p className="text-meta font-text text-sm italic">
-                  Nothing to preview yet...
+                  {t("markdownEditor.emptyPreview")}
                 </p>
               )}
             </motion.div>
@@ -337,7 +334,7 @@ export function MarkdownEditor({
 
       {/* Help text */}
       <p className="text-xs text-meta font-text">
-        Supports Markdown formatting. Use **bold**, _italic_, `code`, and more.
+        {t("markdownEditor.helpText")}
       </p>
     </div>
   );

@@ -19,7 +19,7 @@
  * @module domains/settings/service
  */
 
-import pino from "pino";
+import { createLogger } from "../../shared/logger";
 import { ZodError } from "zod";
 import {
   decryptSecret,
@@ -31,6 +31,7 @@ import type { LlmProvider } from "./llmProviders/types";
 import type { SettingsRepository } from "./repository";
 import {
   sections,
+  type AssistantSection,
   type ExtrasSection,
   type MirrorSection,
   type NyxidSection,
@@ -46,7 +47,7 @@ import type {
   SettingsService,
 } from "./types";
 
-const logger = pino({ level: "info" }).child({ module: "settingsService" });
+const logger = createLogger("settingsService");
 
 export interface SettingsServiceDeps {
   readonly repo: SettingsRepository;
@@ -97,6 +98,9 @@ export class SettingsServiceImpl implements SettingsService {
   }
   async getSkillGen(): Promise<SkillGenSection> {
     return this.getSection<SkillGenSection>("skillGen");
+  }
+  async getAssistant(): Promise<AssistantSection> {
+    return this.getSection<AssistantSection>("assistant");
   }
   async getMirror(): Promise<MirrorSection> {
     return this.getSection<MirrorSection>("mirror");
@@ -258,13 +262,20 @@ function shallowEqual(a: unknown, b: unknown): boolean {
   try {
     return JSON.stringify(a) === JSON.stringify(b);
   } catch {
+    // Intentional silent (#579): JSON.stringify throws only on circular
+    // refs — section payloads in this collection are plain Mongo
+    // documents and have never been circular. If they ever become so,
+    // we want change-detection to fail-safe (treat as changed) without
+    // crashing the settings save path. No log spam needed.
     return false;
   }
 }
 
 function zodToAppError(err: ZodError): AppError {
-  const first = err.issues[0];
+  // ZodError always carries at least one issue when `safeParse` returns
+  // success: false. `!` is safe under noUncheckedIndexedAccess (#450).
+  const first = err.issues[0]!;
   const path = first.path.join(".");
   const msg = path.length > 0 ? `${path}: ${first.message}` : first.message;
-  return AppError.badRequest("INVALID_SETTING", msg);
+  return AppError.badRequest("invalid_setting", msg);
 }

@@ -92,6 +92,18 @@ describe("normalizeRepoIdentifier", () => {
     expect(() => normalizeRepoIdentifier("acme/s kill")).toThrow();
     expect(() => normalizeRepoIdentifier("acme/skill#branch")).toThrow();
   });
+  test("rejects path-traversal segments (#818)", () => {
+    expect(() => normalizeRepoIdentifier("owner/..")).toThrow(
+      /Invalid GitHub repo/,
+    );
+    expect(() => normalizeRepoIdentifier("../repo")).toThrow(
+      /Invalid GitHub repo/,
+    );
+  });
+  test("accepts dotted / dashed repo names", () => {
+    expect(normalizeRepoIdentifier("owner/repo.name")).toBe("owner/repo.name");
+    expect(normalizeRepoIdentifier("owner/repo-1")).toBe("owner/repo-1");
+  });
 });
 
 describe("normalizePath", () => {

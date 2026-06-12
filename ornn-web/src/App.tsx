@@ -21,6 +21,7 @@ import {
   Outlet,
   Route,
   RouterProvider,
+  useLocation,
 } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { RootLayout } from "@/components/layout/RootLayout";
@@ -28,23 +29,35 @@ import { AdminLayout } from "@/components/layout/AdminLayout";
 import { AuthGuard } from "@/components/auth/AuthGuard";
 import { AdminGuard } from "@/components/auth/AdminGuard";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { AnnouncementBanner } from "@/components/announcements/AnnouncementBanner";
 import { HighlighterMarkFilter } from "@/pages/landing/HighlighterMark";
 import { VersionUpdateBanner } from "@/components/layout/VersionUpdateBanner";
 import { PostHogProvider } from "@/components/analytics/PostHogProvider";
 import { CookieConsentBanner } from "@/components/analytics/CookieConsentBanner";
+import { AssistantWidget } from "@/components/assistant/AssistantWidget";
 
 /**
  * Top-level wrapper rendered as the root route's element. Lives INSIDE
  * the router tree so child analytics hooks (`useLocation`) work, and
  * renders the consent banner above every page. PostHogProvider has no
  * DOM output — it just wires init / identify / pageview tracking.
+ *
+ * The Ornn Assistant mounts here (not RootLayout) so its mascot launcher
+ * floats over EVERY page — including the landing page and for anonymous
+ * visitors (#976). Suppressed only on the auth handshake routes
+ * (`/login`, `/oauth/*`) where a floating chatbot would be noise.
  */
 function AnalyticsRoot() {
+  const { pathname } = useLocation();
+  const hideAssistant = pathname === "/login" || pathname.startsWith("/oauth");
   return (
     <>
       <PostHogProvider />
       <Outlet />
       <CookieConsentBanner />
+      {/* Global announcement surface — top-right headline pill on every page. */}
+      <AnnouncementBanner />
+      {!hideAssistant && <AssistantWidget />}
     </>
   );
 }
@@ -121,6 +134,21 @@ const PlaygroundPage = lazy(() =>
 const MySkillsPage = lazy(() =>
   import("@/pages/skill/MySkillsPage").then((m) => ({ default: m.MySkillsPage })),
 );
+const SkillsetExplorePage = lazy(() =>
+  import("@/pages/SkillsetExplorePage").then((m) => ({ default: m.SkillsetExplorePage })),
+);
+const SkillsetDetailPage = lazy(() =>
+  import("@/pages/SkillsetDetailPage").then((m) => ({ default: m.SkillsetDetailPage })),
+);
+const SkillsetNewPage = lazy(() =>
+  import("@/pages/SkillsetNewPage").then((m) => ({ default: m.SkillsetNewPage })),
+);
+const SkillsetEditPage = lazy(() =>
+  import("@/pages/SkillsetEditPage").then((m) => ({ default: m.SkillsetEditPage })),
+);
+const MySkillsetsPage = lazy(() =>
+  import("@/pages/MySkillsetsPage").then((m) => ({ default: m.MySkillsetsPage })),
+);
 const ServiceDetailPage = lazy(() =>
   import("@/pages/ServiceDetailPage").then((m) => ({ default: m.ServiceDetailPage })),
 );
@@ -156,6 +184,9 @@ const AdminAnnouncementsPage = lazy(() =>
 );
 const AdminBroadcastsPage = lazy(() =>
   import("@/pages/admin").then((m) => ({ default: m.BroadcastsPage })),
+);
+const MirrorPage = lazy(() =>
+  import("@/pages/admin/MirrorPage").then((m) => ({ default: m.MirrorPage })),
 );
 
 // Settings layout + section components live under pages/admin/settings.
@@ -253,6 +284,11 @@ const router = createBrowserRouter(
           path="/skills/:idOrName/audits"
           element={<SkillAuditHistoryPage />}
         />
+        {/* Skillsets registry (#1059). `/skillsets/new` + `/skillsets/:id/edit`
+            are auth-guarded below; static segments win the match over the
+            `:idOrName` capture regardless of declaration group. */}
+        <Route path="/skillsets" element={<SkillsetExplorePage />} />
+        <Route path="/skillsets/:idOrName" element={<SkillsetDetailPage />} />
       </Route>
 
       {/* Protected routes */}
@@ -267,6 +303,12 @@ const router = createBrowserRouter(
           <Route path="/playground" element={<PlaygroundPage />} />
 
           <Route path="/my-skills" element={<MySkillsPage />} />
+
+          {/* Skillsets create/edit/mine (#1059) — auth-guarded. */}
+          <Route path="/skillsets/new" element={<SkillsetNewPage />} />
+          <Route path="/skillsets/:id/edit" element={<SkillsetEditPage />} />
+          <Route path="/my-skillsets" element={<MySkillsetsPage />} />
+
           <Route path="/services/:id" element={<ServiceDetailPage />} />
           <Route path="/notifications" element={<NotificationsPage />} />
           <Route path="/settings" element={<SettingsPage />} />
@@ -293,13 +335,13 @@ const router = createBrowserRouter(
               <Route path="/admin/announcements" element={<AdminAnnouncementsPage />} />
               <Route path="/admin/broadcasts" element={<AdminBroadcastsPage />} />
 
-              {/* /admin/mirror keeps working but redirects to the new
-                  settings/mirror section so existing deep-links + bookmarks
-                  continue to land on the right surface. */}
-              <Route
-                path="/admin/mirror"
-                element={<Navigate to="/admin/settings/mirror" replace />}
-              />
+              {/* /admin/mirror is the deep mirror operations console
+                  (counts, manual reconcile, status). It used to redirect
+                  to /admin/settings/mirror, but that left admins with no
+                  reachable "Manual reconcile" / "Reconcile now" control
+                  (#716). The settings section now links here for the
+                  full operations view. */}
+              <Route path="/admin/mirror" element={<MirrorPage />} />
 
               <Route path="/admin/settings" element={<SettingsLayout />}>
                 <Route

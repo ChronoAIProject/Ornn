@@ -42,11 +42,18 @@ export async function fetchSkillVersionDiff(
   return res.data!;
 }
 
-/** Toggle the deprecation flag on a specific published version. */
+/**
+ * Toggle the deprecation flag on a specific published version.
+ *
+ * First arg MUST be the skill GUID — version-write routes are GUID-only
+ * (CONVENTIONS §2.2). A name passed here resolves via `findByGuid` on
+ * the backend and 404s (#750).
+ */
 export async function setSkillVersionDeprecation(
-  idOrName: string,
+  guid: string,
   version: string,
-  body: { isDeprecated: boolean; deprecationNote?: string },
+  // exactOptionalPropertyTypes (#657)
+  body: { isDeprecated: boolean; deprecationNote?: string | undefined },
 ): Promise<{
   skillGuid: string;
   skillName: string;
@@ -62,11 +69,10 @@ export async function setSkillVersionDeprecation(
     headers["Authorization"] = `Bearer ${token}`;
   }
   const response = await fetch(
-    `${API_BASE}/api/v1/skills/${encodeURIComponent(idOrName)}/versions/${encodeURIComponent(version)}`,
+    `${API_BASE}/api/v1/skills/${encodeURIComponent(guid)}/versions/${encodeURIComponent(version)}`,
     {
       method: "PATCH",
       headers,
-      credentials: "include",
       body: JSON.stringify(body),
     },
   );
@@ -85,20 +91,33 @@ export async function setSkillVersionDeprecation(
  * Create a new skill from a ZIP file. Sends the ZIP as a raw
  * application/zip body. New skills are always private — visibility is
  * managed afterward via the permissions panel on the skill detail page.
+ *
+ * #528 — `X-User-Email` / `X-User-Display-Name` headers used to ride
+ * along here. They were stripped by the NyxID proxy and never read by
+ * the backend (identity is sourced from the proxy-forwarded identity
+ * token), but the backend CORS allowlist is `["Content-Type",
+ * "Authorization"]`, so the preflight allowed-headers response didn't
+ * include them — the browser then blocked the actual POST with a
+ * CORS error. Same dead code as the `apiClient.createHeaders`
+ * cleanup; this was the last unmigrated caller of the ZIP-upload
+ * flow.
+ *
+ * #732 / #709 — also drop `credentials: "include"` here (and on the
+ * PUT/PATCH siblings below). These calls authenticate with the
+ * `Authorization: Bearer` header, never cookies. With
+ * `credentials: "include"` the browser rejects the NyxID proxy's
+ * wildcard `Access-Control-Allow-Origin: *` (a credentialed request
+ * forbids wildcard ACAO), blocking the request at the CORS layer
+ * before it leaves the browser — the exact "Failed to fetch" symptom
+ * in #732. Same trap #709 already cleared in activityApi.ts.
  */
 export async function createSkill(zipFile: File, skipValidation = false): Promise<SkillDetail> {
-  const { accessToken: token, user } = useAuthStore.getState();
+  const token = useAuthStore.getState().accessToken;
   const headers: HeadersInit = {
     "Content-Type": "application/zip",
   };
   if (token) {
     headers["Authorization"] = `Bearer ${token}`;
-  }
-  if (user?.email) {
-    headers["X-User-Email"] = user.email;
-  }
-  if (user?.displayName) {
-    headers["X-User-Display-Name"] = user.displayName;
   }
 
   const params = skipValidation ? "?skip_validation=true" : "";
@@ -106,7 +125,6 @@ export async function createSkill(zipFile: File, skipValidation = false): Promis
     method: "POST",
     headers,
     body: zipFile,
-    credentials: "include",
   });
 
   if (!response.ok) {
@@ -146,7 +164,6 @@ export async function updateSkillPackage(id: string, zipFile: File, skipValidati
     method: "PUT",
     headers,
     body: zipFile,
-    credentials: "include",
   });
 
   if (!response.ok) {
@@ -170,13 +187,17 @@ export async function deleteSkill(id: string): Promise<void> {
  * Hard-delete one non-latest version of a skill. Backend forbids deleting
  * the only version (use `deleteSkill`) or the current latest (publish a
  * newer version first).
+ *
+ * First arg MUST be the skill GUID — version-write routes are GUID-only
+ * (CONVENTIONS §2.2). A name passed here resolves via `findByGuid` on
+ * the backend and 404s (#750).
  */
 export async function deleteSkillVersion(
-  idOrName: string,
+  guid: string,
   version: string,
 ): Promise<void> {
   await apiDelete(
-    `/api/v1/skills/${encodeURIComponent(idOrName)}/versions/${encodeURIComponent(version)}`,
+    `/api/v1/skills/${encodeURIComponent(guid)}/versions/${encodeURIComponent(version)}`,
   );
 }
 
@@ -216,7 +237,8 @@ export async function pullSkillFromGitHub(input: PullFromGitHubInput): Promise<S
  */
 export async function refreshSkillFromSource(
   id: string,
-  options?: { skipValidation?: boolean },
+  // exactOptionalPropertyTypes (#657)
+  options?: { skipValidation?: boolean | undefined },
 ): Promise<SkillDetail> {
   const res = await apiPost<SkillDetail>(`/api/v1/skills/${id}/refresh`, {
     skipValidation: options?.skipValidation ?? false,

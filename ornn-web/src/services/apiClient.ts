@@ -8,12 +8,9 @@
 import type { ApiResponse } from "@/types/api";
 import { useAuthStore } from "@/stores/authStore";
 import { config } from "@/config";
+import { createLogger } from "@/lib/logger";
 
-const logger = {
-  error: (msg: string, data?: Record<string, unknown>) =>
-    console.error(`[apiClient] ${msg}`, data ?? ""),
-};
-
+const logger = createLogger("apiClient");
 const API_BASE = config.apiBaseUrl;
 
 /**
@@ -119,17 +116,51 @@ async function handleResponse<T>(response: Response): Promise<ApiResponse<T>> {
     return { data: null, error: null };
   }
 
-  const json = (await response.json()) as ApiResponse<T>;
+  const json = (await response.json()) as unknown;
 
-  if (!response.ok || json.error) {
+  if (!response.ok) {
+    // Two error body shapes are observed on non-2xx responses:
+    //
+    //   1. RFC 7807 `application/problem+json` (#456) — `{ code, detail,
+    //      title, status }` at the body root. Newer endpoints emit this.
+    //   2. Legacy `{ data: null, error: { code, message } }` envelope.
+    //      Several domain routes (LLM provider sync, settings validation)
+    //      still throw via `AppError → buildErrorEnvelope` which keeps
+    //      this shape with a non-2xx status, and #694 surfaced that the
+    //      frontend was discarding their actionable `error.message`.
+    //
+    // Try the envelope first because `error.message` is the most
+    // actionable when present; fall back to RFC 7807 fields; final
+    // fallback is the generic literal.
+    const body = (json ?? {}) as {
+      code?: string;
+      detail?: string;
+      title?: string;
+      status?: number;
+      error?: { code?: string; message?: string };
+    };
+    const envelopeCode = body.error?.code;
+    const envelopeMessage = body.error?.message;
     throw new ApiClientError(
-      json.error?.code ?? "UNKNOWN_ERROR",
-      json.error?.message ?? "An unexpected error occurred",
-      response.status,
+      envelopeCode ?? body.code ?? "unknown_error",
+      envelopeMessage ??
+        body.detail ??
+        body.title ??
+        "An unexpected error occurred",
+      body.status ?? response.status,
     );
   }
 
-  return json;
+  // Success: legacy `{ data, error: null }` envelope (unchanged).
+  const envelope = json as ApiResponse<T>;
+  if (envelope?.error) {
+    throw new ApiClientError(
+      envelope.error.code ?? "unknown_error",
+      envelope.error.message ?? "An unexpected error occurred",
+      response.status,
+    );
+  }
+  return envelope;
 }
 
 /**
@@ -258,53 +289,17 @@ export async function apiPatch<T>(
 
 /**
  * DELETE request with auth.
+ *
+ * Routes through `fetchWithRetry` (#578) so the proactive-refresh /
+ * 401-retry / redirect-to-login logic stays in one place. The DELETE
+ * response is discarded — most ornn-api DELETEs return 204, and the
+ * caller only cares about success vs. an `ApiClientError`.
  */
 export async function apiDelete(path: string): Promise<void> {
-  // Proactively refresh expired tokens before sending
-  if (getAccessToken()) {
-    await useAuthStore.getState().ensureFreshToken();
-  }
-
-  const response = await fetch(buildUrl(path), {
+  await fetchWithRetry<unknown>(buildUrl(path), {
     method: "DELETE",
     headers: createHeaders(),
   });
-
-  // Handle 401 (not 403 — token refresh cannot resolve permission errors).
-  if (response.status === 401) {
-    const refreshSuccess = await attemptTokenRefresh();
-
-    if (refreshSuccess) {
-      const retryResponse = await fetch(buildUrl(path), {
-        method: "DELETE",
-        headers: createHeaders(),
-      });
-
-      if (!retryResponse.ok) {
-        const json = await retryResponse.json().catch(() => null);
-        throw new ApiClientError(
-          (json as ApiResponse<unknown>)?.error?.code ?? "DELETE_FAILED",
-          (json as ApiResponse<unknown>)?.error?.message ?? "Delete failed",
-          retryResponse.status,
-        );
-      }
-      return;
-    }
-
-    logger.error("Token refresh failed during DELETE, redirecting to login");
-    if (typeof window !== "undefined") {
-      window.location.href = "/login";
-    }
-  }
-
-  if (!response.ok) {
-    const json = await response.json().catch(() => null);
-    throw new ApiClientError(
-      (json as ApiResponse<unknown>)?.error?.code ?? "DELETE_FAILED",
-      (json as ApiResponse<unknown>)?.error?.message ?? "Delete failed",
-      response.status,
-    );
-  }
 }
 
 export { ApiClientError as ApiError };

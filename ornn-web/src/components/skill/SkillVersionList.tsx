@@ -5,48 +5,24 @@ import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import type { SkillVersionEntry } from "@/types/domain";
 import type { AuditRecord, AuditVerdict } from "@/types/audit";
-
-/** Format a date string to exact SGT (Asia/Singapore) timestamp. */
-function formatDateSGT(dateStr: string): string {
-  const date = new Date(dateStr);
-  return date.toLocaleString("en-SG", {
-    timeZone: "Asia/Singapore",
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  });
-}
+import { formatDateSGT } from "@/utils/formatters";
 
 export interface SkillVersionListProps {
   versions: SkillVersionEntry[];
   currentVersion: string;
-  /** Fire when the user clicks a version row to switch to it. */
   onSelect: (version: string) => void;
-  /** Show owner-only controls (deprecation toggle, delete). */
   canManage: boolean;
-  /** Fire when the deprecation flag changes; receives the target version. */
-  onToggleDeprecation?: (args: {
+  // Optionals widen to `T | undefined` for exactOptionalPropertyTypes (#657).
+  onToggleDeprecation?: ((args: {
     version: string;
     isDeprecated: boolean;
-    deprecationNote?: string;
-  }) => Promise<void> | void;
-  /** Whether a deprecation mutation is currently in flight (for loading state). */
-  isMutating?: boolean;
-  /** Fire when the user confirms a non-latest version delete. */
-  onDeleteVersion?: (version: string) => Promise<void> | void;
-  /** Whether a delete mutation is currently in flight (for loading state). */
-  isDeleting?: boolean;
-  /**
-   * Optional per-version audit summary. Versions present render their
-   * verdict pill (green / yellow / red); versions absent render a
-   * neutral "not audited" pill. Pass `undefined` to suppress audit
-   * pills entirely (e.g. on the explore page).
-   */
-  auditSummary?: Record<string, AuditRecord>;
-  className?: string;
+    deprecationNote?: string | undefined;
+  }) => Promise<void> | void) | undefined;
+  isMutating?: boolean | undefined;
+  onDeleteVersion?: ((version: string) => Promise<void> | void) | undefined;
+  isDeleting?: boolean | undefined;
+  auditSummary?: Record<string, AuditRecord> | undefined;
+  className?: string | undefined;
 }
 
 /**
@@ -59,7 +35,8 @@ function AuditPill({
   audit,
   notAuditedLabel,
 }: {
-  audit?: AuditRecord;
+  // exactOptionalPropertyTypes (#657)
+  audit?: AuditRecord | undefined;
   notAuditedLabel: string;
 }) {
   if (!audit) {
@@ -109,7 +86,7 @@ export function SkillVersionList({
   auditSummary,
   className = "",
 }: SkillVersionListProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [modalTarget, setModalTarget] = useState<SkillVersionEntry | null>(null);
   const [noteDraft, setNoteDraft] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<SkillVersionEntry | null>(null);
@@ -197,7 +174,7 @@ export function SkillVersionList({
                     )}
                   </div>
                   <div className="mt-0.5 font-text text-xs text-meta truncate">
-                    {formatDateSGT(v.createdOn)}
+                    {formatDateSGT(v.createdOn, i18n.language)}
                     {v.createdByDisplayName ? ` · ${v.createdByDisplayName}` : ""}
                   </div>
                 </button>

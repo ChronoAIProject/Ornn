@@ -32,9 +32,9 @@ describe("diffSkillInterface", () => {
     });
     const changes = diffSkillInterface(prev, next);
     expect(changes).toHaveLength(1);
-    expect(changes[0].field).toBe("tools");
-    expect(changes[0].kind).toBe("added");
-    expect(changes[0].detail).toContain("edit");
+    expect(changes[0]!.field).toBe("tools");
+    expect(changes[0]!.kind).toBe("added");
+    expect(changes[0]!.detail).toContain("edit");
   });
 
   test("removing a tool is breaking", () => {
@@ -48,8 +48,8 @@ describe("diffSkillInterface", () => {
     const next = meta({ category: "tool-based", tools: [{ tool: "bash", type: "mcp" }] });
     const changes = diffSkillInterface(prev, next);
     expect(changes).toHaveLength(1);
-    expect(changes[0].kind).toBe("removed");
-    expect(changes[0].detail).toContain("edit");
+    expect(changes[0]!.kind).toBe("removed");
+    expect(changes[0]!.detail).toContain("edit");
   });
 
   test("adding a runtime is breaking", () => {

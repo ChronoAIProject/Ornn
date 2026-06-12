@@ -16,9 +16,8 @@ import {
   OPENAPI_GENERATION_SYSTEM_PROMPT,
   SOURCE_CODE_GENERATION_SYSTEM_PROMPT,
 } from "./prompts";
-import pino from "pino";
-
-const logger = pino({ level: "info" }).child({ module: "skillGenerationService" });
+import { createLogger } from "../../../shared/logger";
+const logger = createLogger("skillGenerationService");
 
 const generatedSkillSchema = z.object({
   name: z.string().min(1).max(100).regex(/^[a-z0-9-]+$/),
@@ -283,7 +282,8 @@ export class SkillGenerationService {
    */
   async *generateFromOpenApi(
     specContent: string,
-    options?: { endpoints?: string[]; description?: string },
+    // exactOptionalPropertyTypes (#657)
+    options?: { endpoints?: string[] | undefined; description?: string | undefined },
     signal?: AbortSignal,
     modelOverride?: string,
   ): AsyncIterable<SkillStreamEvent> {
@@ -357,7 +357,12 @@ export class SkillGenerationService {
    */
   async *generateFromSource(
     code: string,
-    options?: { framework?: string; description?: string; sourceUrl?: string },
+    // exactOptionalPropertyTypes (#657)
+    options?: {
+      framework?: string | undefined;
+      description?: string | undefined;
+      sourceUrl?: string | undefined;
+    },
     signal?: AbortSignal,
     modelOverride?: string,
   ): AsyncIterable<SkillStreamEvent> {
@@ -446,8 +451,18 @@ export class SkillGenerationService {
         return null;
       }
 
-      return result.data;
-    } catch {
+      // The Zod-inferred shape and GeneratedSkill match in spirit but
+      // Zod surfaces `outputType` as `"text" | "file" | undefined`
+      // (explicit undefined, not optional) which exactOptionalPropertyTypes
+      // (#657) treats as different from the interface's `outputType?:`.
+      // Same runtime shape; cast is safe.
+      return result.data as GeneratedSkill;
+    } catch (err) {
+      // Generated-skill JSON parse failed. Caller treats null as
+      // "regenerate" or "give up" depending on retry budget. Logging
+      // so we can spot a model that's consistently producing
+      // unparseable output (#579).
+      logger.debug({ err }, "generated skill JSON parse failed");
       return null;
     }
   }
@@ -461,11 +476,11 @@ function extractTextFromEvent(event: ResponsesApiStreamEvent): string | null {
   const eventType = event.type;
 
   if (eventType === "response.output_text.delta") {
-    return (event as any).delta ?? null;
+    return (event.delta as string | undefined) ?? null;
   }
 
   if (eventType === "response.content_part.delta") {
-    const delta = (event as any).delta;
+    const delta = event.delta as { type?: unknown; text?: unknown } | undefined;
     if (delta && typeof delta === "object" && delta.type === "output_text" && typeof delta.text === "string") {
       return delta.text;
     }

@@ -24,12 +24,12 @@ export interface ParsedVersion {
  */
 export function parseVersion(raw: string): ParsedVersion {
   if (typeof raw !== "string") {
-    throw AppError.badRequest("INVALID_VERSION", `version must be a string, got ${typeof raw}`);
+    throw AppError.badRequest("invalid_version", `version must be a string, got ${typeof raw}`);
   }
   const match = raw.match(SKILL_VERSION_REGEX);
   if (!match) {
     throw AppError.badRequest(
-      "INVALID_VERSION",
+      "invalid_version",
       `version "${raw}" is invalid — expected "<major>.<minor>" (non-negative integers, no leading zeroes, no patch digit)`,
     );
   }

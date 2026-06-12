@@ -12,8 +12,9 @@ import { SUGGESTED_TOOLS } from "@/utils/constants";
 export interface ToolsInputProps {
   tools: string[];
   onChange: (tools: string[]) => void;
-  error?: string;
-  className?: string;
+  // exactOptionalPropertyTypes (#657)
+  error?: string | undefined;
+  className?: string | undefined;
 }
 
 export function ToolsInput({ tools, onChange, error, className = "" }: ToolsInputProps) {
@@ -41,7 +42,7 @@ export function ToolsInput({ tools, onChange, error, className = "" }: ToolsInpu
       addTool(input);
     }
     if (e.key === "Backspace" && !input && tools.length > 0) {
-      removeTool(tools[tools.length - 1]);
+      removeTool(tools[tools.length - 1]!);
     }
   };
 

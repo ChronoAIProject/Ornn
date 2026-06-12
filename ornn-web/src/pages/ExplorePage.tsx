@@ -23,15 +23,20 @@
 
 import { useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { motion, type Variants } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import { PageTransition } from "@/components/layout/PageTransition";
 import { SearchBar } from "@/components/search/SearchBar";
+import {
+  FilterSection,
+  FilterEmpty,
+  FilterChipList,
+  FilterChip,
+} from "@/components/registry/RegistrySidebar";
+import { RegistryTabs, type RegistryTab } from "@/components/registry/RegistryTabs";
+import { RegistryGrid } from "@/components/registry/RegistryGrid";
 import { SkillCard } from "@/components/skill/SkillCard";
-import { SkeletonCard } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Button } from "@/components/ui/Button";
-import { Pagination } from "@/components/ui/Pagination";
 import { useSearchStore } from "@/stores/searchStore";
 import {
   useSkills,
@@ -52,16 +57,6 @@ import { useCurrentUser, useIsAuthenticated } from "@/stores/authStore";
 type ExploreTab = "system" | "public" | "my-skills" | "shared-with-me";
 
 const DEFAULT_PAGE_SIZE = 20;
-
-const containerVariants: Variants = {
-  hidden: {},
-  visible: { transition: { staggerChildren: 0.05 } },
-};
-
-const itemVariants: Variants = {
-  hidden: { opacity: 0, y: 10 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.15, ease: "easeOut" } },
-};
 
 /**
  * Parse the `?tab=` query param into a concrete tab value, defaulting to
@@ -111,6 +106,12 @@ export function ExplorePage() {
   const selectedSourceUsers = parseCsvParam(searchParams.get("srcUsers"));
 
   const { query, mode } = useSearchStore();
+  // #726 — semantic search requires a query; the backend rejects an
+  // empty `q` with 400 QUERY_REQUIRED and the regular empty state
+  // ("No skills match") looks indistinguishable from a legitimate
+  // zero-result search. When the gate isn't met, render a clear
+  // validation EmptyState instead of the generic "no skills" copy.
+  const semanticGateUnmet = mode === "semantic" && !query.trim();
 
   const { data: systemData, isLoading: systemLoading } = useSystemSkills({
     query: query || undefined,
@@ -171,6 +172,35 @@ export function ExplorePage() {
   const totalPages = activeData?.totalPages ?? 0;
   const items = useMemo(() => activeData?.items ?? [], [activeData]);
 
+  // Tab descriptors for the shared RegistryTabs strip. System + Public are
+  // visible to everyone; My Skills + Shared with me require auth.
+  const tabs: RegistryTab[] = [
+    {
+      id: "system",
+      label: t("explore.systemSkills", "System Skills"),
+      count: systemData?.total,
+    },
+    {
+      id: "public",
+      label: t("explore.publicSkills", "Public Skills"),
+      count: counts?.public,
+    },
+    ...(isAuthenticated
+      ? [
+          {
+            id: "my-skills",
+            label: t("explore.mySkills", "My Skills"),
+            count: counts?.mine,
+          },
+          {
+            id: "shared-with-me",
+            label: t("explore.sharedWithMe", "Shared with me"),
+            count: counts?.sharedWithMe,
+          },
+        ]
+      : []),
+  ];
+
   /** Update `?tab=`; reset page + per-tab filter params to avoid leaking state. */
   function handleTabChange(tab: ExploreTab) {
     const next = new URLSearchParams();
@@ -211,44 +241,11 @@ export function ExplorePage() {
     <PageTransition>
       <div className="flex flex-col h-full py-2 gap-3">
         {/* Tabs */}
-        <div className="shrink-0 flex justify-center">
-          <div
-            className={`
-              grid rounded border border-accent/20 bg-elevated p-1 gap-1
-              w-full max-w-3xl
-              ${isAuthenticated ? "grid-cols-4" : "grid-cols-2"}
-            `}
-          >
-            <TabButton
-              label={t("explore.systemSkills", "System Skills")}
-              count={systemData?.total}
-              active={activeTab === "system"}
-              onClick={() => handleTabChange("system")}
-            />
-            <TabButton
-              label={t("explore.publicSkills", "Public Skills")}
-              count={counts?.public}
-              active={activeTab === "public"}
-              onClick={() => handleTabChange("public")}
-            />
-            {isAuthenticated && (
-              <>
-                <TabButton
-                  label={t("explore.mySkills", "My Skills")}
-                  count={counts?.mine}
-                  active={activeTab === "my-skills"}
-                  onClick={() => handleTabChange("my-skills")}
-                />
-                <TabButton
-                  label={t("explore.sharedWithMe", "Shared with me")}
-                  count={counts?.sharedWithMe}
-                  active={activeTab === "shared-with-me"}
-                  onClick={() => handleTabChange("shared-with-me")}
-                />
-              </>
-            )}
-          </div>
-        </div>
+        <RegistryTabs
+          tabs={tabs}
+          activeId={activeTab}
+          onSelect={(id) => handleTabChange(id as ExploreTab)}
+        />
 
         {/* Search bar (full width, above the 2-col layout) */}
         <div className="shrink-0">
@@ -278,83 +275,51 @@ export function ExplorePage() {
           </aside>
 
           <main className="flex-1 min-h-0 overflow-y-auto px-2 py-1 -mx-2 -my-1">
-            {activeLoading ? (
-              <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3 pb-4">
-                {Array.from({ length: 6 }).map((_, i) => (
-                  <SkeletonCard key={i} />
-                ))}
-              </div>
-            ) : items.length === 0 ? (
-              <EmptyState
-                title={emptyTitle(activeTab, t as (k: string, f?: string) => string)}
-                description={emptyDescription(activeTab, t as (k: string, f?: string) => string)}
-                action={
-                  activeTab === "my-skills" && isAuthenticated ? (
-                    <Button onClick={() => navigate("/skills/new")}>
-                      {t("explore.createSkill", "Create a skill")}
-                    </Button>
-                  ) : undefined
-                }
-              />
-            ) : (
-              <motion.div
-                variants={containerVariants}
-                initial="hidden"
-                animate="visible"
-                className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3 pb-4"
-              >
-                {items.map((skill) => (
-                  <motion.div key={skill.guid} variants={itemVariants}>
-                    <SkillCard
-                      skill={skill}
-                      showOwnerControls={activeTab === "my-skills"}
-                      currentUserId={user?.id}
-                    />
-                  </motion.div>
-                ))}
-              </motion.div>
-            )}
-
-            <Pagination page={activePage} totalPages={totalPages} onPageChange={handlePageChange} />
+            <RegistryGrid
+              items={items}
+              loading={activeLoading}
+              getKey={(skill) => skill.guid}
+              renderItem={(skill) => (
+                <SkillCard
+                  skill={skill}
+                  showOwnerControls={activeTab === "my-skills"}
+                  currentUserId={user?.id}
+                />
+              )}
+              empty={
+                semanticGateUnmet ? (
+                  <EmptyState
+                    title={t(
+                      "explore.semanticQueryRequiredTitle",
+                      "Enter a search description",
+                    )}
+                    description={t(
+                      "explore.semanticQueryRequiredDesc",
+                      "Semantic search needs a description of what you're looking for. Type a phrase in the search box above, or switch back to Keyword mode.",
+                    )}
+                  />
+                ) : (
+                  <EmptyState
+                    title={emptyTitle(activeTab, t as (k: string, f?: string) => string)}
+                    description={emptyDescription(activeTab, t as (k: string, f?: string) => string)}
+                    action={
+                      activeTab === "my-skills" && isAuthenticated ? (
+                        <Button onClick={() => navigate("/skills/new")}>
+                          {t("explore.createSkill", "Create a skill")}
+                        </Button>
+                      ) : undefined
+                    }
+                  />
+                )
+              }
+              page={activePage}
+              totalPages={totalPages}
+              onPageChange={handlePageChange}
+            />
           </main>
         </div>
       </div>
     </PageTransition>
-  );
-}
-
-interface TabButtonProps {
-  label: string;
-  count?: number;
-  active: boolean;
-  onClick: () => void;
-}
-
-function TabButton({ label, count, active, onClick }: TabButtonProps) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`
-        w-full px-3 py-2 rounded-md font-text text-sm transition-all cursor-pointer
-        inline-flex items-center justify-center gap-2 whitespace-nowrap
-        ${active
-          ? "bg-accent/20 text-accent border border-accent/50"
-          : "text-meta hover:text-strong"}
-      `}
-    >
-      <span className="whitespace-nowrap">{label}</span>
-      {count !== undefined && (
-        <span
-          className={`
-            shrink-0 px-1.5 py-0.5 rounded font-mono text-[10px]
-            ${active ? "bg-accent/30 text-accent" : "bg-elevated text-meta"}
-          `}
-        >
-          {count}
-        </span>
-      )}
-    </button>
   );
 }
 
@@ -364,7 +329,8 @@ function TabButton({ label, count, active, onClick }: TabButtonProps) {
 
 interface FilterSidebarProps {
   tab: ExploreTab;
-  selectedServiceId?: string;
+  // exactOptionalPropertyTypes (#657)
+  selectedServiceId?: string | undefined;
   selectedTags: string[];
   selectedAuthors: string[];
   selectedGrantOrgs: string[];
@@ -427,7 +393,8 @@ function SystemFilters({
   selectedServiceId,
   onSetService,
 }: {
-  selectedServiceId?: string;
+  // exactOptionalPropertyTypes (#657)
+  selectedServiceId?: string | undefined;
   onSetService: (id: string | undefined) => void;
 }) {
   const { t } = useTranslation();
@@ -643,63 +610,6 @@ function SharedWithMeFilters({
   );
 }
 
-// --- sidebar primitives ---
-
-function FilterSection({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <section>
-      <h3 className="mb-2 font-mono text-[10px] uppercase tracking-[0.18em] text-meta">
-        {title}
-      </h3>
-      {children}
-    </section>
-  );
-}
-
-function FilterEmpty({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="font-text text-xs text-meta italic">{children}</p>
-  );
-}
-
-function FilterChipList({ children }: { children: React.ReactNode }) {
-  return <div className="flex flex-wrap gap-1.5">{children}</div>;
-}
-
-interface FilterChipProps {
-  label: string;
-  count?: number;
-  selected: boolean;
-  onClick: () => void;
-}
-
-function FilterChip({ label, count, selected, onClick }: FilterChipProps) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`
-        inline-flex items-center gap-2 px-2.5 py-1 rounded-full border font-text text-xs transition-all cursor-pointer
-        ${selected
-          ? "border-accent/60 bg-accent/15 text-accent"
-          : "border-accent/15 bg-elevated text-strong hover:border-accent/40"}
-      `}
-    >
-      <span className="max-w-[180px] truncate">{label}</span>
-      {count !== undefined && (
-        <span
-          className={`
-            px-1.5 rounded font-mono text-[10px]
-            ${selected ? "bg-accent/30" : "bg-bg-base/70 text-meta"}
-          `}
-        >
-          {count}
-        </span>
-      )}
-    </button>
-  );
-}
-
 function emptyTitle(tab: ExploreTab, t: (key: string, fallback?: string) => string): string {
   if (tab === "system") return t("explore.noSystemSkills", "No system skills yet");
   if (tab === "public") return t("explore.noSkillsFound", "No public skills match");
@@ -708,15 +618,20 @@ function emptyTitle(tab: ExploreTab, t: (key: string, fallback?: string) => stri
 }
 
 function emptyDescription(tab: ExploreTab, t: (key: string, fallback?: string) => string): string {
+  // #682 — point at the canonical i18n keys (`systemSkillsIntro` /
+  // `sharedWithMeIntro`) so both EN + ZH locales pick up the right
+  // copy. The old `systemSkillsHint` / `sharedHint` keys never
+  // existed in either locale file, so i18n was always falling back
+  // to the English literal for both languages.
   if (tab === "system")
     return t(
-      "explore.systemSkillsHint",
+      "explore.systemSkillsIntro",
       "System skills are skills tied to a NyxID admin service. Platform admins tie any skill to any admin service to publish it as a system skill.",
     );
   if (tab === "public") return t("explore.tryAdjusting", "Try adjusting your search or filters.");
   if (tab === "my-skills") return t("explore.createFirst", "Create your first skill to get started.");
   return t(
-    "explore.sharedHint",
+    "explore.sharedWithMeIntro",
     "When someone grants you access to a private skill — either directly or via an org — it shows up here.",
   );
 }

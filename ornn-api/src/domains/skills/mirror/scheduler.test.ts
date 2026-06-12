@@ -53,7 +53,8 @@ mock.module("agenda", () => ({
       _data: unknown,
       options?: { timezone?: string },
     ) {
-      agendaCalls.every.push({ interval, name, options });
+      // exactOptionalPropertyTypes (#657)
+      agendaCalls.every.push({ interval, name, ...(options !== undefined ? { options } : {}) });
     }
     async cancel(opts: { name?: string }) {
       agendaCalls.cancel.push(opts);

@@ -5,6 +5,7 @@
 
 import { loadConfig, ConfigError, type SkillConfig } from "./infra/config";
 import { bootstrap } from "./bootstrap";
+import { REDACT_PATHS } from "./shared/logger";
 import pino from "pino";
 
 let config: SkillConfig;
@@ -23,6 +24,7 @@ try {
 const logger = pino({
   level: config.logLevel,
   ...(config.logPretty ? { transport: { target: "pino-pretty" } } : {}),
+  redact: { paths: REDACT_PATHS },
 }).child({ service: "ornn-api" });
 
 logger.info({ port: config.port }, "ornn-api starting");

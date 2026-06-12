@@ -47,11 +47,11 @@ export class AppError extends Error {
   }
 
   static payloadTooLarge(message: string): AppError {
-    return new AppError(413, "PAYLOAD_TOO_LARGE", message);
+    return new AppError(413, "payload_too_large", message);
   }
 
   static internal(message: string): AppError {
-    return new AppError(500, "INTERNAL_ERROR", message);
+    return new AppError(500, "internal_error", message);
   }
 
   static internalError(code: string, message: string): AppError {
@@ -81,20 +81,16 @@ export interface SkillDocument {
   skillHash: string;
   storageKey: string;
   /**
-   * Legacy back-compat field. Was used by an earlier "org-as-owner" design
-   * to drive visibility; visibility logic no longer consults it. New skills
-   * copy `createdBy` into it; safe to drop in a future cleanup migration.
-   */
-  ownerId: string;
-  /**
    * The actual person who authored the skill. ALWAYS a person user_id —
    * never an org. Authors are the only non-admin principals allowed to
    * manage their skill (edit package, toggle public, change permissions,
-   * delete).
+   * delete). #581 removed the legacy `ownerId` mirror of this field.
    */
   createdBy: string;
-  createdByEmail?: string;
-  createdByDisplayName?: string;
+  // Optionals widen to `T | undefined` so partial-update / Zod-inferred
+  // shapes assign cleanly under exactOptionalPropertyTypes (#657).
+  createdByEmail?: string | undefined;
+  createdByDisplayName?: string | undefined;
   createdOn: Date;
   updatedBy: string;
   updatedOn: Date;
@@ -131,7 +127,7 @@ export interface SkillDocument {
    *
    * Absent for hand-uploaded skills.
    */
-  source?: SkillSource;
+  source?: SkillSource | undefined;
   /**
    * NyxID service this skill is tied to. Null/undefined when untied.
    * The tied service determines whether the skill is a "system" skill:
@@ -139,18 +135,18 @@ export interface SkillDocument {
    * sets `isSystemSkill: true` and forces `isPrivate: false`; tying to a
    * private service the caller owns leaves privacy alone.
    */
-  nyxidServiceId?: string | null;
+  nyxidServiceId?: string | null | undefined;
   /** Cached service slug for cheap card/list rendering. */
-  nyxidServiceSlug?: string | null;
+  nyxidServiceSlug?: string | null | undefined;
   /** Cached service label for cheap card/list rendering. */
-  nyxidServiceLabel?: string | null;
+  nyxidServiceLabel?: string | null | undefined;
   /**
    * Cached: true iff `nyxidServiceId` points at an admin/platform-wide
    * service (NyxID `visibility: "public"`). System skills are always
    * `isPrivate: false`. Maintained at tie-time; slight staleness is
    * accepted if NyxID flips a service's visibility — re-tie refreshes.
    */
-  isSystemSkill?: boolean;
+  isSystemSkill?: boolean | undefined;
   /**
    * Per-skill GitHub mirror state. Set by `MirrorService` after a
    * successful publish/reconcile commit lands; unset (`$unset`) when
@@ -165,11 +161,28 @@ export interface SkillDocument {
    * and the next mirror sync — the frontend uses that gap to render a
    * "lagging" chip.
    */
-  mirrorSync?: {
-    version: string;
-    syncedAt: Date;
-    commitSha: string;
-  };
+  mirrorSync?:
+    | {
+        version: string;
+        syncedAt: Date;
+        commitSha: string;
+      }
+    | undefined;
+  /**
+   * Dist-tags per #463 — npm-style aliases that resolve to a concrete
+   * version. Lets callers pin to a stable channel without enumerating
+   * versions.
+   *
+   * - `latest` is **auto-managed**: every successful version publish
+   *   sets `distTags.latest` to the new version. Cannot be PUT/DELETEd
+   *   via the API (those return `dist_tag_immutable`).
+   * - Other tags (`stable`, `beta`, `rc1`, ...) are owner-managed via
+   *   `PUT /v1/skills/:id/dist-tags/:tag` and freely deletable.
+   *
+   * Absent on legacy skills published before #463 — readers treat
+   * absence as `{ latest: <skill.latestVersion> }`.
+   */
+  distTags?: Record<string, string> | undefined;
 }
 
 /**
@@ -192,12 +205,12 @@ export type SkillSource =
        * sync (the user can save a GitHub link first and trigger the sync
        * later from the detail-page advanced options).
        */
-      lastSyncedAt?: Date;
+      lastSyncedAt?: Date | undefined;
       /**
        * Commit SHA that was fetched at `lastSyncedAt`. Allows drift
        * detection. Absent in the same "linked but not yet synced" state.
        */
-      lastSyncedCommit?: string;
+      lastSyncedCommit?: string | undefined;
     };
 
 /**
@@ -222,8 +235,10 @@ export interface SkillVersionDocument {
   license: string | null;
   compatibility: string | null;
   createdBy: string;
-  createdByEmail?: string;
-  createdByDisplayName?: string;
+  // Optionals widen to `T | undefined` so partial-update / Zod-inferred
+  // shapes assign cleanly under exactOptionalPropertyTypes (#657).
+  createdByEmail?: string | undefined;
+  createdByDisplayName?: string | undefined;
   createdOn: Date;
   /**
    * Mutable deprecation flag (phase 2). Absent/undefined means "not deprecated".
@@ -279,6 +294,16 @@ export interface SkillMetadata {
     "mcp-servers"?: Array<{ mcp: string; version: string }>;
   }>;
   tags?: string[];
+  /**
+   * Skill dependencies (#968). Each entry pins another skill by
+   * `<name-or-guid>@<major.minor>` or `<name>@<dist-tag>` (the
+   * `metadata.depends-on` frontmatter field, kebab→camel mapped on
+   * extract). Persisted per immutable version inside
+   * `SkillVersionDocument.metadata`, so no new version-doc field or
+   * migration is needed — a version published before #968 simply reads
+   * back with `dependsOn` absent. Empty/omitted = no dependencies.
+   */
+  dependsOn?: string[];
 }
 
 export interface SkillDetailResponse {
@@ -292,11 +317,10 @@ export interface SkillDetailResponse {
   skillHash: string;
   presignedPackageUrl: string;
   isPrivate: boolean;
-  /** Legacy back-compat field. Not used for visibility; equals `createdBy` on new skills. */
-  ownerId: string;
   createdBy: string;
-  createdByEmail?: string;
-  createdByDisplayName?: string;
+  // Optionals widen to `T | undefined` for exactOptionalPropertyTypes (#657).
+  createdByEmail?: string | undefined;
+  createdByDisplayName?: string | undefined;
   createdOn: string;
   updatedOn: string;
   /** Person user_ids granted explicit access. Same semantics as on `SkillDocument`. */
@@ -309,41 +333,41 @@ export interface SkillDetailResponse {
    */
   version: string;
   /** True when the resolved version is marked deprecated by the author. */
-  isDeprecated?: boolean;
+  isDeprecated?: boolean | undefined;
   /** Optional note the author left when deprecating this version. */
-  deprecationNote?: string | null;
+  deprecationNote?: string | null | undefined;
   /**
    * Present when the skill was created or refreshed by pulling from an
    * external source (e.g. a public GitHub repo). Clients use this to
    * render a "source" link on the detail page and to power "Refresh from
    * source" actions. Serialized form — `lastSyncedAt` is an ISO string.
    */
-  source?: {
-    type: "github";
-    repo: string;
-    ref: string;
-    path: string;
-    /**
-     * Absent when the skill was linked but not yet synced (the user can
-     * attach a GitHub URL via PUT /skills/:id/source first and trigger
-     * the sync separately via POST /skills/:id/refresh).
-     */
-    lastSyncedAt?: string;
-    /** Absent in the same "linked but never synced" state. */
-    lastSyncedCommit?: string;
-  };
+  source?:
+    | {
+        type: "github";
+        repo: string;
+        ref: string;
+        path: string;
+        /**
+         * Absent when the skill was linked but not yet synced.
+         */
+        lastSyncedAt?: string | undefined;
+        /** Absent in the same "linked but never synced" state. */
+        lastSyncedCommit?: string | undefined;
+      }
+    | undefined;
   /** NyxID service tie (null when untied). See `SkillDocument.nyxidServiceId`. */
-  nyxidServiceId?: string | null;
-  nyxidServiceSlug?: string | null;
-  nyxidServiceLabel?: string | null;
+  nyxidServiceId?: string | null | undefined;
+  nyxidServiceSlug?: string | null | undefined;
+  nyxidServiceLabel?: string | null | undefined;
   /** Cached: true iff tied to an admin/platform-wide NyxID service. */
-  isSystemSkill?: boolean;
+  isSystemSkill?: boolean | undefined;
   /**
    * AgentSeal trust score for the resolved version (#253). Null when
    * the version hasn't been scanned (legacy / disabled). Frontend
    * renders a color-coded badge from this — see DESIGN.md.
    */
-  agentsealScan?: AgentsealScanSnapshot | null;
+  agentsealScan?: AgentsealScanSnapshot | null | undefined;
   /**
    * Per-skill GitHub mirror state. Absent ⇒ never mirrored (or
    * un-mirrored after a privacy flip / explicit reset). Present ⇒ the
@@ -357,77 +381,62 @@ export interface SkillDetailResponse {
    *   - `mirrorSync.version === SkillDetailResponse.version` ⇒ "Synced"
    *   - `mirrorSync.version !== version` ⇒ "Lagging" (mirror push pending)
    */
-  mirrorSync?: {
-    version: string;
-    syncedAt: string;
-    commitSha: string;
-  };
+  mirrorSync?:
+    | {
+        version: string;
+        syncedAt: string;
+        commitSha: string;
+      }
+    | undefined;
+  /**
+   * Dist-tags for this skill (#463). Keys are tag names (`latest`,
+   * `stable`, `beta`, ...); values are the concrete version each tag
+   * currently points at. `latest` is always present and auto-managed
+   * server-side. Absent on legacy skills published before #463.
+   */
+  distTags?: Record<string, string> | undefined;
 }
 
 export interface SkillSearchItem {
   guid: string;
   name: string;
   description: string;
-  /** Owner entity — person user_id or org user_id. */
-  ownerId: string;
   createdBy: string;
-  createdByEmail?: string;
-  createdByDisplayName?: string;
+  // Optionals widen to `T | undefined` for exactOptionalPropertyTypes (#657).
+  createdByEmail?: string | undefined;
+  createdByDisplayName?: string | undefined;
   createdOn: string;
   updatedOn: string;
   isPrivate: boolean;
   tags: string[];
-  /**
-   * Why the current caller can see this skill. Populated on search responses
-   * where the caller is authenticated; omitted for anonymous callers.
-   *   - "owner"          — caller authored it (or is platform admin).
-   *   - "public"         — visible to everyone; caller has no special grant.
-   *   - "shared-direct"  — private skill, caller is in `sharedWithUsers`.
-   *   - "shared-via-org" — private skill, one of caller's orgs is in
-   *                        `sharedWithOrgs`; `sharedViaOrgId` names the org.
-   */
-  myAccessReason?: "owner" | "public" | "shared-direct" | "shared-via-org";
-  /** Present when `myAccessReason === "shared-via-org"`. */
-  sharedViaOrgId?: string;
+  myAccessReason?: "owner" | "public" | "shared-direct" | "shared-via-org" | undefined;
+  sharedViaOrgId?: string | undefined;
   /**
    * True when any of this skill's tags matches the slug of a NyxID service
    * the caller can manage (personal or org-inherited). Derived per-request
    * against `/api/me/nyxid-services`.
    */
-  isSystemForMe?: boolean;
-  /**
-   * When `isSystemForMe`, the first matching service. Used by the UI to
-   * render a "⚙️ <label>" chip without a second round-trip. Multiple
-   * matches are possible; the first one wins.
-   */
-  systemForService?: { id: string; slug: string; label: string };
-  /**
-   * Compact view of the skill's ACL state. Cheap to compute (lengths
-   * already on the doc) and lets card UIs render permission chips without
-   * re-fetching the full skill.
-   */
-  permissionSummary?: {
-    isPrivate: boolean;
-    sharedUserCount: number;
-    sharedOrgCount: number;
-  };
-  /**
-   * NyxID service tie surfaced on the search row so cards can render the
-   * "⚙ <serviceLabel>" chip without a second round-trip. `null` when
-   * untied.
-   */
-  nyxidServiceId?: string | null;
-  nyxidServiceSlug?: string | null;
-  nyxidServiceLabel?: string | null;
+  isSystemForMe?: boolean | undefined;
+  systemForService?: { id: string; slug: string; label: string } | undefined;
+  permissionSummary?:
+    | {
+        isPrivate: boolean;
+        sharedUserCount: number;
+        sharedOrgCount: number;
+      }
+    | undefined;
+  nyxidServiceId?: string | null | undefined;
+  nyxidServiceSlug?: string | null | undefined;
+  nyxidServiceLabel?: string | null | undefined;
   /** Cached: true iff tied to an admin/platform-wide NyxID service. */
-  isSystemSkill?: boolean;
+  isSystemSkill?: boolean | undefined;
   /**
    * True when the skill has a `source` pointer of type "github". The
    * card UI uses this to render a small non-clickable GitHub mark; the
    * actual repo URL is not exposed in search results — callers drill
    * into the detail page if they want to follow the link.
    */
-  hasGithubSource?: boolean;
+  hasGithubSource?: boolean | undefined;
 }
 
 export interface SkillSearchResponse {
@@ -495,33 +504,78 @@ export type PlaygroundChatEvent =
   | { type: "finish"; finishReason: string };
 
 // ---------------------------------------------------------------------------
-// Auth Types
-// ---------------------------------------------------------------------------
-
-export interface ApiKeyInfo {
-  userId: string;
-  email: string;
-  roles: string[];
-  permissions: string[];
-}
-
-// ---------------------------------------------------------------------------
 // Auth Utilities
 // ---------------------------------------------------------------------------
 
-export const INTERNAL_AUTH_HEADER = "X-Internal-Auth";
+// `ApiKeyInfo` + `INTERNAL_AUTH_HEADER` were removed in #581. They
+// existed only to support the dead `clients/nyxid/auth.ts` AuthClient,
+// itself an unmounted middleware leftover.
+//
+// `createErrorHandler` was also removed — the live error handler lives
+// on the Hono app via `app.onError(...)` in bootstrap.ts; no route
+// imported this function.
 
 export function isDuplicateKeyError(err: unknown): boolean {
   return typeof err === "object" && err !== null && "code" in err && (err as { code: number }).code === 11000;
 }
 
-export function createErrorHandler(logger: { error: (...args: unknown[]) => void }) {
-  return (err: Error, c: { json: (body: unknown, status: number) => unknown }) => {
-    if (err instanceof AppError) {
-      return c.json({ data: null, error: { code: err.code, message: err.message } }, err.statusCode);
-    }
-    logger.error(err, "Unhandled error");
-    return c.json({ data: null, error: { code: "INTERNAL_ERROR", message: "Internal server error" } }, 500);
-  };
+// ---------------------------------------------------------------------------
+// RFC 7807 error body (#456)
+// ---------------------------------------------------------------------------
+
+/**
+ * Wire shape of the RFC 7807 `application/problem+json` body the API
+ * emits on every 4xx/5xx response. Fields at the root, not inside an
+ * envelope. See CONVENTIONS.md §1.3 and docs/ERRORS.md.
+ */
+export interface ProblemJsonBody {
+  readonly type: string;
+  readonly title: string;
+  readonly status: number;
+  readonly detail: string;
+  readonly instance: string;
+  readonly code: string;
+  readonly requestId: string | null;
+  readonly errors?: ReadonlyArray<{ path?: string; code?: string; message: string }>;
 }
 
+/**
+ * Short human-readable summary for the RFC 7807 `title` field. Used by
+ * the live bootstrap handler AND the per-domain test stubs so they stay
+ * in lockstep on the wire shape.
+ */
+export function rfc7807TitleForStatus(status: number): string {
+  if (status === 400) return "Validation failed";
+  if (status === 401) return "Authentication required";
+  if (status === 403) return "Permission denied";
+  if (status === 404) return "Resource not found";
+  if (status === 409) return "Resource conflict";
+  if (status === 413) return "Payload too large";
+  if (status === 415) return "Unsupported media type";
+  if (status === 429) return "Rate limited";
+  if (status >= 500 && status < 600) return "Server error";
+  return "Request failed";
+}
+
+/**
+ * Build the canonical RFC 7807 body from an `AppError`-like + the path
+ * the request hit. Shared between bootstrap.ts (live) and per-domain
+ * test stubs so wire shape never drifts between dev and CI.
+ */
+export function buildProblemJsonBody(input: {
+  statusCode: number;
+  code: string;
+  message: string;
+  instance: string;
+  requestId: string | null;
+}): ProblemJsonBody {
+  return {
+    type: `https://github.com/ChronoAIProject/Ornn/blob/main/docs/ERRORS.md#${input.code}`,
+    title: rfc7807TitleForStatus(input.statusCode),
+    status: input.statusCode,
+    detail: input.message,
+    instance: input.instance,
+    code: input.code,
+    requestId: input.requestId,
+  };
+}

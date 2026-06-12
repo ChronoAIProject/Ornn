@@ -6,7 +6,7 @@
 
 import { createHash } from "node:crypto";
 import { randomUUID } from "node:crypto";
-import type { SkillRepository } from "./repository";
+import type { SkillRepository, UpdateSkillData } from "./repository";
 import type { SkillVersionRepository } from "./skillVersionRepository";
 import type { IStorageClient } from "../../../clients/storageClient";
 import type { SkillDocument, SkillMetadata, SkillDetailResponse, SkillVersionDocument, SkillSource } from "../../../shared/types/index";
@@ -14,17 +14,45 @@ import { AppError } from "../../../shared/types/index";
 import { fetchSkillFromGitHub, parseGithubUrl, type GitHubPullInput } from "./utils/githubPull";
 import { computeVersionDiff, type VersionDiffResult } from "./utils/versionDiff";
 import { isReservedVerb } from "../../../shared/reservedVerbs";
-import { validateSkillFrontmatter } from "../../../shared/schemas/skillFrontmatter";
+import { canReadSkill, isMemberOfOrg, SYSTEM_ACTOR, type ActorContext } from "./authorize";
+import {
+  resolveClosure,
+  type LoadVersion,
+  type ResolvedVersion,
+  type ClosureNode,
+} from "../closure/resolver";
+
+/**
+ * Convert the stored hex `skillHash` into npm-style Subresource Integrity
+ * (#461): `sha256-<base64-of-raw-digest>`. Equivalent to
+ * `package-lock.json`'s `integrity:` field — clients verify a downloaded
+ * package byte-for-byte before installing.
+ */
+function hexToIntegrity(hex: string): string {
+  if (!hex || hex.length === 0) return "";
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < bytes.length; i++) {
+    bytes[i] = parseInt(hex.substr(i * 2, 2), 16);
+  }
+  return `sha256-${Buffer.from(bytes).toString("base64")}`;
+}
+import {
+  validateSkillFrontmatter,
+  SKILL_NAME_REGEX,
+  SKILL_NAME_MAX,
+  SKILL_VERSION_REGEX,
+  DEPENDS_ON_REF_REGEX,
+} from "../../../shared/schemas/skillFrontmatter";
 import { resolveZipRoot } from "../../../shared/utils/zip";
+import { enforceZipLimits, type ZipLimitsConfig } from "../../../shared/utils/zipLimits";
 import { parseVersion, isGreater } from "./version";
 import { diffSkillInterface, type InterfaceChange } from "./interfaceDiff";
 import type { AnalyticsEmitter } from "../../../infra/analytics";
 import type { IAgentSealScanner } from "../../../infra/agentseal";
 import { parse as parseYaml } from "yaml";
 import JSZip from "jszip";
-import pino from "pino";
-
-const logger = pino({ level: "info" }).child({ module: "skillCrudService" });
+import { createLogger } from "../../../shared/logger";
+const logger = createLogger("skillCrudService");
 
 const FRONTMATTER_REGEX = /^---\s*\n([\s\S]*?)\n---/;
 
@@ -40,6 +68,50 @@ function buildVersionedStorageKey(guid: string, version: string): string {
 
 function formatInterfaceChanges(changes: InterfaceChange[]): string {
   return changes.map((c) => `${c.field} ${c.kind} ${c.detail}`).join("; ");
+}
+
+/**
+ * Dist-tag name rule (#463): npm-style — lowercase ASCII, leading
+ * letter, optional hyphens, max 50 chars. The leading-letter rule
+ * stops tags from looking like version numbers (`1`, `0.5`).
+ */
+const DIST_TAG_NAME_RE = /^[a-z][a-z0-9-]{0,49}$/;
+
+export function isValidTagName(tag: string): boolean {
+  return typeof tag === "string" && DIST_TAG_NAME_RE.test(tag);
+}
+
+/**
+ * Map the `version` query-param value to the concrete version the
+ * caller wants. Recognized forms (#463):
+ *   - undefined / empty → undefined (caller wants latest, handled upstream)
+ *   - `@<tag>` → resolved via `skill.distTags`, or fallback to
+ *     `latestVersion` when `tag === "latest"` and the skill predates
+ *     the dist-tags feature
+ *   - everything else → returned verbatim (literal `<major>.<minor>`)
+ *
+ * Returning undefined here means "caller didn't specify"; returning a
+ * concrete string means "use exactly this version". A missing tag
+ * resolves to `null` and we surface it as an explicit 404 from the
+ * caller so the user sees `Tag 'beta' not found` rather than `Version
+ * '@beta' not found` — the latter would be confusing.
+ */
+export function resolveDistTag(skill: SkillDocument, version: string): string | undefined {
+  if (version.length === 0) return undefined;
+  if (!version.startsWith("@")) return version;
+  const tag = version.slice(1);
+  if (!tag) {
+    throw AppError.badRequest("invalid_dist_tag", "Dist-tag name is empty");
+  }
+  const resolved = skill.distTags?.[tag];
+  if (resolved) return resolved;
+  // Legacy compatibility: `@latest` on a pre-#463 skill (no distTags
+  // field) falls back to the cached `latestVersion` pointer.
+  if (tag === "latest") return skill.latestVersion;
+  throw AppError.notFound(
+    "skill_version_not_found",
+    `Dist-tag '${tag}' is not set for skill '${skill.name}'`,
+  );
 }
 
 export interface SkillServiceDeps {
@@ -64,6 +136,17 @@ export interface SkillServiceDeps {
    * never block the publish path.
    */
   agentsealScanner?: IAgentSealScanner;
+
+  // ---- Zip-bomb defense caps (#632) — env-overridable. ----
+  // Threaded down from `loadConfig()` so the ingestion chokepoint
+  // (`createSkill` / `updateSkill`, which every upload + GitHub
+  // pull/refresh funnels through) enforces the same caps the route layer
+  // used to. All optional (exactOptionalPropertyTypes): when omitted the
+  // guard falls back to the baked-in defaults in `zipLimits.ts`.
+  maxPackageUncompressedBytes?: number;
+  maxEntryUncompressedBytes?: number;
+  maxPackageFileCount?: number;
+  maxCompressionRatio?: number;
 }
 
 export class SkillService {
@@ -71,8 +154,14 @@ export class SkillService {
   private readonly skillVersionRepo: SkillVersionRepository;
   private readonly storageClient: IStorageClient;
   private readonly storageBucketResolver: () => Promise<string>;
-  private readonly analyticsEmitter?: AnalyticsEmitter;
-  private readonly agentsealScanner?: IAgentSealScanner;
+  // exactOptionalPropertyTypes (#657): widen to `T | undefined`.
+  private readonly analyticsEmitter: AnalyticsEmitter | undefined;
+  private readonly agentsealScanner: IAgentSealScanner | undefined;
+  // Zip-bomb caps (#632) — undefined means "use zipLimits.ts defaults".
+  private readonly maxPackageUncompressedBytes: number | undefined;
+  private readonly maxEntryUncompressedBytes: number | undefined;
+  private readonly maxPackageFileCount: number | undefined;
+  private readonly maxCompressionRatio: number | undefined;
 
   constructor(deps: SkillServiceDeps) {
     this.skillRepo = deps.skillRepo;
@@ -81,39 +170,100 @@ export class SkillService {
     this.storageBucketResolver = deps.storageBucketResolver;
     this.analyticsEmitter = deps.analyticsEmitter;
     this.agentsealScanner = deps.agentsealScanner;
+    this.maxPackageUncompressedBytes = deps.maxPackageUncompressedBytes;
+    this.maxEntryUncompressedBytes = deps.maxEntryUncompressedBytes;
+    this.maxPackageFileCount = deps.maxPackageFileCount;
+    this.maxCompressionRatio = deps.maxCompressionRatio;
+  }
+
+  /**
+   * Map the configured caps onto the `ZipLimitsConfig` shape consumed by
+   * `enforceZipLimits`. Any cap left undefined falls through to the
+   * baked-in default inside `zipLimits.ts` (50 MiB / 25 MiB / 1000 / 100×).
+   *
+   * exactOptionalPropertyTypes (#657): build the object conditionally so
+   * we never assign `undefined` to an optional field — `enforceZipLimits`
+   * already `?? DEFAULT`s any missing key.
+   */
+  private zipLimitsConfig(): ZipLimitsConfig {
+    const cfg: ZipLimitsConfig = {};
+    if (this.maxPackageUncompressedBytes !== undefined) {
+      cfg.maxTotalUncompressedBytes = this.maxPackageUncompressedBytes;
+    }
+    if (this.maxEntryUncompressedBytes !== undefined) {
+      cfg.maxEntryUncompressedBytes = this.maxEntryUncompressedBytes;
+    }
+    if (this.maxPackageFileCount !== undefined) {
+      cfg.maxFileCount = this.maxPackageFileCount;
+    }
+    if (this.maxCompressionRatio !== undefined) {
+      cfg.maxCompressionRatio = this.maxCompressionRatio;
+    }
+    return cfg;
+  }
+
+  /**
+   * Public zip-bomb guard for standalone read paths that don't flow
+   * through `createSkill`/`updateSkill` — today only the
+   * `POST /skill-format/validate` endpoint, which parses a ZIP without
+   * persisting it. Delegates to {@link enforceZipLimits} with the same
+   * env-driven caps the ingestion chokepoint uses, so the validate path
+   * can't be slowed down by a pathological ZIP that the publish path
+   * would reject. Throws `AppError.payloadTooLarge` (413) on any
+   * violation; `invalid_zip` (400) on an unparseable buffer.
+   */
+  async enforceZipLimits(zipBuffer: Uint8Array): Promise<void> {
+    await enforceZipLimits(zipBuffer, this.zipLimitsConfig());
   }
 
   async createSkill(
     zipBuffer: Uint8Array,
     userId: string,
+    // Optionals accept `| undefined` so route layers passing
+    // Zod-inferred values fit under exactOptionalPropertyTypes (#657).
     options?: {
-      skipValidation?: boolean;
-      userEmail?: string;
-      userDisplayName?: string;
+      skipValidation?: boolean | undefined;
+      userEmail?: string | undefined;
+      userDisplayName?: string | undefined;
       /** Origin metadata stamped on the skill doc when created from an external pull. */
-      source?: import("../../../shared/types/index").SkillSource;
+      source?: import("../../../shared/types/index").SkillSource | undefined;
     },
   ): Promise<{ guid: string }> {
+    // 0. Zip-bomb defense (#632) — the ingestion chokepoint. EVERY upload
+    //    AND every GitHub pull (`createSkillFromGitHub` → here) funnels
+    //    through this method, so enforcing the caps here closes the
+    //    route-layer bypass. Runs REGARDLESS of skipValidation: it's a
+    //    DoS guard, not format validation, so an "import as-is" toggle
+    //    must not disarm it. Walks the central directory without
+    //    extracting; throws 413 before any storage upload / AgentSeal
+    //    subprocess. We never log payload bytes.
+    await enforceZipLimits(zipBuffer, this.zipLimitsConfig());
+
     // 1. Validate ZIP format rules
     if (!options?.skipValidation) {
       const violations = await this.validateZipFormat(zipBuffer);
       if (violations.length > 0) {
         throw AppError.badRequest(
-          "VALIDATION_FAILED",
+          "validation_failed",
           violations.map((v) => `[${v.rule}] ${v.message}`).join("; "),
         );
       }
     }
 
     // 2. Parse SKILL.md from ZIP
-    const { name, description, version, license, compatibility, metadata, releaseNotes } = await this.extractSkillInfo(zipBuffer);
+    // #529 — `skipValidation` extends to the frontmatter Zod check so
+    // third-party packages that don't conform to Ornn's schema (e.g.
+    // imported from outside the platform via "Import from GitHub"
+    // with skip-validation toggled) can still land. YAML syntax
+    // errors still fail loudly — we can't import what we can't parse.
+    const { name, description, version, license, compatibility, metadata, releaseNotes } = await this.extractSkillInfo(zipBuffer, !!options?.skipValidation);
     const parsedVersion = parseVersion(version);
 
     // 3a. Reject reserved-verb names — would collide with `/v1/skills/{verb}`
     //     action paths and make the skill unreachable via the canonical read.
     if (isReservedVerb("skill", name)) {
       throw AppError.badRequest(
-        "RESERVED_NAME",
+        "reserved_name",
         `Skill name '${name}' is reserved — pick a different name`,
       );
     }
@@ -121,8 +271,14 @@ export class SkillService {
     // 3b. Check name uniqueness
     const existing = await this.skillRepo.findByName(name);
     if (existing) {
-      throw AppError.conflict("SKILL_NAME_EXISTS", `Skill '${name}' already exists`);
+      throw AppError.conflict("skill_name_exists", `Skill '${name}' already exists`);
     }
+
+    // 3c. Skill-dependency validation (#968). Resolve the closure of the
+    //     declared `depends-on` refs BEFORE any storage write so a missing
+    //     dependency / cycle / version conflict fails the publish early.
+    //     No-op when the skill declares no dependencies.
+    await this.validatePublishDependencies(metadata, { name, version });
 
     // 4. Generate GUID and hash
     const guid = randomUUID();
@@ -143,10 +299,6 @@ export class SkillService {
       metadata,
       skillHash,
       storageKey,
-      // `ownerId` is retained as a no-op field for back-compat. New skills
-      // always record the author here; visibility is expressed via
-      // sharedWithUsers/sharedWithOrgs on the skill doc.
-      ownerId: userId,
       createdBy: userId,
       createdByEmail: options?.userEmail,
       createdByDisplayName: options?.userDisplayName,
@@ -172,6 +324,11 @@ export class SkillService {
       releaseNotes,
     });
 
+    // Seed `distTags.latest` so the auto-managed tag exists from the
+    // first publish (#463). Custom tags (`stable`, `beta`, ...) are
+    // owner-managed via the `/dist-tags/:tag` routes.
+    await this.skillRepo.setDistTag(guid, "latest", version);
+
     // 8. Fire-and-forget product-analytics + AgentSeal trust scan. Both are
     //    deliberately not awaited so a slow PostHog backend or AgentSeal
     //    subprocess can't block the response. Failures inside either path
@@ -193,19 +350,108 @@ export class SkillService {
    * cached pointer). With `version`, reads from the `skill_versions` collection
    * and overlays that version's storageKey / metadata / hash on the identity
    * fields from the skill doc.
+   *
+   * Dist-tag resolution (#463): when `version` starts with `@`, the
+   * remainder is looked up in `skill.distTags`. Failed lookup is a 404
+   * (`skill_version_not_found`) — same error as a missing literal
+   * version, since from the caller's perspective both mean "no such
+   * version".
    */
   async getSkill(idOrName: string, version?: string): Promise<SkillDetailResponse> {
     const skill = await this.findSkillByIdOrName(idOrName);
-    if (version !== undefined) {
+    const resolvedVersion = version === undefined ? undefined : resolveDistTag(skill, version);
+    if (resolvedVersion !== undefined) {
       // Validate format early so clients get a clear 400, not a 404.
-      parseVersion(version);
-      const versionDoc = await this.skillVersionRepo.findBySkillAndVersion(skill.guid, version);
+      parseVersion(resolvedVersion);
+      const versionDoc = await this.skillVersionRepo.findBySkillAndVersion(skill.guid, resolvedVersion);
       if (!versionDoc) {
-        throw AppError.notFound("SKILL_VERSION_NOT_FOUND", `Version '${version}' not found for skill '${skill.name}'`);
+        throw AppError.notFound(
+          "skill_version_not_found",
+          `Version '${resolvedVersion}' not found for skill '${skill.name}'`,
+        );
       }
       return this.buildDetailResponse(skill, versionDoc);
     }
     return this.buildDetailResponse(skill);
+  }
+
+  /**
+   * Read the dist-tags map for a skill (#463). Read-only — no auth
+   * check here; the route layer applies the same visibility rules as
+   * the read endpoint (anonymous can see public, etc.).
+   *
+   * Always returns `latest` (synthesized from `latestVersion` for
+   * legacy skills predating #463 that never had the field set).
+   */
+  async getDistTags(idOrName: string): Promise<Record<string, string>> {
+    const skill = await this.findSkillByIdOrName(idOrName);
+    const tags: Record<string, string> = { ...(skill.distTags ?? {}) };
+    if (!tags.latest) {
+      tags.latest = skill.latestVersion;
+    }
+    return tags;
+  }
+
+  /**
+   * Set a dist-tag → version mapping (#463). Owner / platform-admin
+   * only — the route layer enforces that. `latest` is auto-managed by
+   * the publish path and cannot be set via this endpoint.
+   *
+   * The version must already exist on the `skill_versions` collection;
+   * otherwise we'd be creating a dangling tag.
+   */
+  async setDistTag(
+    idOrName: string,
+    tag: string,
+    version: string,
+  ): Promise<Record<string, string>> {
+    if (!isValidTagName(tag)) {
+      throw AppError.badRequest(
+        "invalid_dist_tag",
+        `Dist-tag '${tag}' is invalid — must match /^[a-z][a-z0-9-]{0,49}$/`,
+      );
+    }
+    if (tag === "latest") {
+      throw AppError.badRequest(
+        "dist_tag_immutable",
+        "`latest` is auto-managed on publish and cannot be set directly",
+      );
+    }
+    // Format-validate the version before hitting Mongo.
+    parseVersion(version);
+    const skill = await this.findSkillByIdOrName(idOrName);
+    const versionDoc = await this.skillVersionRepo.findBySkillAndVersion(skill.guid, version);
+    if (!versionDoc) {
+      throw AppError.notFound(
+        "skill_version_not_found",
+        `Version '${version}' not found for skill '${skill.name}'`,
+      );
+    }
+    await this.skillRepo.setDistTag(skill.guid, tag, version);
+    return this.getDistTags(skill.guid);
+  }
+
+  /**
+   * Remove a dist-tag (#463). `latest` is refused with
+   * `dist_tag_immutable` to preserve the invariant that every skill
+   * has a `latest` pointer.
+   */
+  async deleteDistTag(idOrName: string, tag: string): Promise<Record<string, string>> {
+    if (tag === "latest") {
+      throw AppError.badRequest(
+        "dist_tag_immutable",
+        "`latest` is auto-managed and cannot be deleted",
+      );
+    }
+    if (!isValidTagName(tag)) {
+      throw AppError.badRequest(
+        "invalid_dist_tag",
+        `Dist-tag '${tag}' is invalid — must match /^[a-z][a-z0-9-]{0,49}$/`,
+      );
+    }
+    const skill = await this.findSkillByIdOrName(idOrName);
+    await this.skillRepo.deleteDistTag(skill.guid, tag);
+    return this.getDistTags(skill.guid);
   }
 
   /**
@@ -216,9 +462,17 @@ export class SkillService {
   async listSkillVersions(idOrName: string): Promise<Array<{
     version: string;
     skillHash: string;
+    /**
+     * npm-style Subresource Integrity (#461). `sha256-<base64(skillHash)>`.
+     * Clients verify a downloaded package matches this value byte-for-byte
+     * before installing. Equivalent in spirit to npm's `integrity:` field
+     * on `package-lock.json` and PyPI's `sha256_digest` per file.
+     */
+    integrity: string;
     createdBy: string;
-    createdByEmail?: string;
-    createdByDisplayName?: string;
+    // exactOptionalPropertyTypes (#657)
+    createdByEmail?: string | undefined;
+    createdByDisplayName?: string | undefined;
     createdOn: string;
     isDeprecated: boolean;
     deprecationNote: string | null;
@@ -229,6 +483,7 @@ export class SkillService {
     return versions.map((v) => ({
       version: v.version,
       skillHash: v.skillHash,
+      integrity: hexToIntegrity(v.skillHash),
       createdBy: v.createdBy,
       createdByEmail: v.createdByEmail,
       createdByDisplayName: v.createdByDisplayName,
@@ -282,7 +537,7 @@ export class SkillService {
       skill = await this.skillRepo.findByName(idOrName);
     }
     if (!skill) {
-      throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${idOrName}' not found`);
+      throw AppError.notFound("skill_not_found", `Skill '${idOrName}' not found`);
     }
     return skill;
   }
@@ -292,9 +547,15 @@ export class SkillService {
    * route layer has already enforced the write gate (author/admin); the
    * service just validates the inputs and persists them.
    *
-   * Ownership (`createdBy`, `ownerId`) is left untouched — permissions
-   * don't change who wrote or "owns" the skill, they just widen who can
-   * read it.
+   * Ownership (`createdBy`) is left untouched — permissions don't
+   * change who wrote the skill, they just widen who can read it.
+   *
+   * CWE-862 (#815): in addition to the route write gate, this method now
+   * enforces that the caller may only share a skill into orgs they are a
+   * member of — every `sharedWithOrgs` id is intersected against the
+   * caller's memberships (platform admins exempt). Defense-in-depth: the
+   * check lives here so any future caller of the service is covered, not
+   * just the current route.
    */
   async setSkillPermissions(
     guid: string,
@@ -304,10 +565,11 @@ export class SkillService {
       sharedWithUsers: string[];
       sharedWithOrgs: string[];
     },
+    actor: ActorContext,
   ): Promise<SkillDetailResponse> {
     const existing = await this.skillRepo.findByGuid(guid);
     if (!existing) {
-      throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${guid}' not found`);
+      throw AppError.notFound("skill_not_found", `Skill '${guid}' not found`);
     }
 
     // System-skill invariant: a skill tied to an admin NyxID service is
@@ -331,6 +593,37 @@ export class SkillService {
       new Set(permissions.sharedWithOrgs.filter((id) => !!id)),
     );
 
+    // CWE-862 (#815): an owner may only share into orgs they belong to.
+    // isMemberOfOrg is membership-only (does not consider platform admin), so
+    // gate the whole check behind the admin bypass.
+    if (!actor.isPlatformAdmin) {
+      // #842: an unresolved org-membership lookup (forwarded token absent or
+      // NyxID unreachable) leaves `memberships` empty for a non-membership
+      // reason. Validating a share into orgs against that empty list would
+      // wrongly 403 a legitimate member, so fail closed with a retryable 503
+      // instead — but only when the caller actually asked to share into an
+      // org. A public / user-only change (empty sharedWithOrgs) needs no
+      // membership data and proceeds even while the lookup is unresolved.
+      if (sharedWithOrgs.length > 0 && !actor.membershipsResolved) {
+        logger.warn(
+          { guid, userId },
+          "Org membership unresolved; cannot validate share into orgs (#842)",
+        );
+        throw AppError.serviceUnavailable(
+          "org_membership_unavailable",
+          "Could not verify your organization memberships right now. Retry shortly.",
+        );
+      }
+      const nonMember = sharedWithOrgs.filter((orgId) => !isMemberOfOrg(actor, orgId));
+      if (nonMember.length > 0) {
+        logger.warn({ guid, userId, nonMember }, "Rejected skill share into non-member org(s) (#815)");
+        throw AppError.forbidden(
+          "not_org_member",
+          `Cannot share skill into org(s) you are not a member of: ${nonMember.join(", ")}`,
+        );
+      }
+    }
+
     const updated = await this.skillRepo.update(guid, {
       isPrivate: permissions.isPrivate,
       sharedWithUsers,
@@ -343,19 +636,21 @@ export class SkillService {
   async updateSkill(
     guid: string,
     userId: string,
+    // exactOptionalPropertyTypes (#657): allow `T | undefined` on all
+    // optionals so route layers can pass Zod-inferred values directly.
     options: {
-      zipBuffer?: Uint8Array;
-      isPrivate?: boolean;
-      skipValidation?: boolean;
-      userEmail?: string;
-      userDisplayName?: string;
+      zipBuffer?: Uint8Array | undefined;
+      isPrivate?: boolean | undefined;
+      skipValidation?: boolean | undefined;
+      userEmail?: string | undefined;
+      userDisplayName?: string | undefined;
       /** Refresh-from-source path stamps this so lastSyncedAt/Commit move forward. */
-      source?: import("../../../shared/types/index").SkillSource;
+      source?: import("../../../shared/types/index").SkillSource | undefined;
     },
   ): Promise<SkillDetailResponse> {
     const existing = await this.skillRepo.findByGuid(guid);
     if (!existing) {
-      throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${guid}' not found`);
+      throw AppError.notFound("skill_not_found", `Skill '${guid}' not found`);
     }
 
     // System-skill invariant — same as setSkillPermissions. Block
@@ -370,20 +665,31 @@ export class SkillService {
       );
     }
 
-    const updateData: Record<string, unknown> = { updatedBy: userId };
+    const updateData: UpdateSkillData = { updatedBy: userId };
 
     if (options.zipBuffer) {
+      // Zip-bomb defense (#632) — same chokepoint guard as createSkill.
+      // The GitHub refresh path (`refreshSkillFromSource` → here) and
+      // admin re-upload both land here, so the route-layer bypass is
+      // closed for updates too. Runs REGARDLESS of skipValidation
+      // (DoS guard, not format validation), ahead of storage upload /
+      // AgentSeal. No payload bytes are logged.
+      await enforceZipLimits(options.zipBuffer, this.zipLimitsConfig());
+
       if (!options.skipValidation) {
         const violations = await this.validateZipFormat(options.zipBuffer);
         if (violations.length > 0) {
           throw AppError.badRequest(
-            "VALIDATION_FAILED",
+            "validation_failed",
             violations.map((v) => `[${v.rule}] ${v.message}`).join("; "),
           );
         }
       }
 
-      const { name, description, version, license, compatibility, metadata, releaseNotes } = await this.extractSkillInfo(options.zipBuffer);
+      // #529 — same skipValidation extension as createSkill above so
+      // `PUT /skills/:id` (replace-package on an existing skill, used by
+      // GitHub refresh + admin re-upload) honours the flag too.
+      const { name, description, version, license, compatibility, metadata, releaseNotes } = await this.extractSkillInfo(options.zipBuffer, !!options.skipValidation);
       const parsedNewVersion = parseVersion(version);
 
       // Enforce strictly-incrementing version on every package update.
@@ -407,6 +713,11 @@ export class SkillService {
           );
         }
       }
+
+      // Skill-dependency validation (#968) — same gate as createSkill,
+      // applied to the new version's declared deps before any storage
+      // write. No-op when the version declares no dependencies.
+      await this.validatePublishDependencies(metadata, { name, version });
 
       const skillHash = createHash("sha256").update(options.zipBuffer).digest("hex");
 
@@ -452,6 +763,13 @@ export class SkillService {
         storageKey,
         latestVersion: version,
       });
+
+      // Keep `distTags.latest` in lockstep with `latestVersion` on
+      // every publish (#463). The two writes can briefly race the
+      // doc-level `update` below, but readers tolerate a transient
+      // mismatch (resolution falls back to `latestVersion` when the
+      // tag isn't set) so we don't bother with a transaction.
+      await this.skillRepo.setDistTag(guid, "latest", version);
     }
 
     if (options.isPrivate !== undefined) {
@@ -462,7 +780,7 @@ export class SkillService {
       updateData.source = options.source;
     }
 
-    const updated = await this.skillRepo.update(guid, updateData as any);
+    const updated = await this.skillRepo.update(guid, updateData);
     return this.buildDetailResponse(updated);
   }
 
@@ -479,7 +797,12 @@ export class SkillService {
   async createSkillFromGitHub(
     input: GitHubPullInput,
     userId: string,
-    options?: { userEmail?: string; userDisplayName?: string; skipValidation?: boolean },
+    // exactOptionalPropertyTypes (#657)
+    options?: {
+      userEmail?: string | undefined;
+      userDisplayName?: string | undefined;
+      skipValidation?: boolean | undefined;
+    },
   ): Promise<{ guid: string; source: SkillSource }> {
     const pulled = await fetchSkillFromGitHub(input);
     const source: SkillSource = {
@@ -507,11 +830,16 @@ export class SkillService {
   async refreshSkillFromSource(
     guid: string,
     userId: string,
-    options?: { userEmail?: string; userDisplayName?: string; skipValidation?: boolean },
+    // exactOptionalPropertyTypes (#657)
+    options?: {
+      userEmail?: string | undefined;
+      userDisplayName?: string | undefined;
+      skipValidation?: boolean | undefined;
+    },
   ): Promise<SkillDetailResponse> {
     const existing = await this.skillRepo.findByGuid(guid);
     if (!existing) {
-      throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${guid}' not found`);
+      throw AppError.notFound("skill_not_found", `Skill '${guid}' not found`);
     }
     if (!existing.source || existing.source.type !== "github") {
       throw AppError.badRequest(
@@ -559,7 +887,7 @@ export class SkillService {
   ): Promise<SkillDetailResponse> {
     const existing = await this.skillRepo.findByGuid(guid);
     if (!existing) {
-      throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${guid}' not found`);
+      throw AppError.notFound("skill_not_found", `Skill '${guid}' not found`);
     }
 
     if (githubUrl === null) {
@@ -567,12 +895,12 @@ export class SkillService {
       return this.getSkill(guid);
     }
 
-    let parsed: { repo: string; ref?: string; path?: string };
+    let parsed: { repo: string; ref?: string | undefined; path?: string | undefined };
     try {
       parsed = parseGithubUrl(githubUrl);
     } catch (err) {
       throw AppError.badRequest(
-        "INVALID_GITHUB_URL",
+        "invalid_github_url",
         err instanceof Error ? err.message : String(err),
       );
     }
@@ -606,7 +934,7 @@ export class SkillService {
   }> {
     const existing = await this.skillRepo.findByGuid(guid);
     if (!existing) {
-      throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${guid}' not found`);
+      throw AppError.notFound("skill_not_found", `Skill '${guid}' not found`);
     }
     if (!existing.source || existing.source.type !== "github") {
       throw AppError.badRequest(
@@ -645,12 +973,21 @@ export class SkillService {
     // out of the pulled ZIP so the UI can show "you'll create v1.2".
     let pendingVersion = existing.latestVersion;
     try {
-      const info = await this.extractSkillInfo(pulled.zipBuffer);
+      // Preview is dry-run — we just want the predicted version label.
+      // Pass skipValidation=true so a third-party-shaped SKILL.md
+      // doesn't kill the preview; the real refresh path enforces the
+      // caller's flag separately.
+      const info = await this.extractSkillInfo(pulled.zipBuffer, true);
       pendingVersion = info.version;
-    } catch {
+    } catch (err) {
       // If the package can't be parsed (e.g. malformed frontmatter),
       // fall back to the existing latest. The actual sync will surface
-      // the validation error properly.
+      // the validation error properly. Log so we can spot a pulled
+      // source repo that's been broken for a while (#579).
+      logger.debug(
+        { err, skillGuid: existing.guid },
+        "preview-refresh: pulled ZIP parse failed, falling back to existing version",
+      );
     }
 
     return {
@@ -685,7 +1022,7 @@ export class SkillService {
   }> {
     if (fromVersion === toVersion) {
       throw AppError.badRequest(
-        "SAME_VERSION",
+        "same_version",
         `'from' and 'to' refer to the same version '${fromVersion}'`,
       );
     }
@@ -701,13 +1038,13 @@ export class SkillService {
     ]);
     if (!fromDoc) {
       throw AppError.notFound(
-        "SKILL_VERSION_NOT_FOUND",
+        "skill_version_not_found",
         `Version '${fromVersion}' not found for skill '${skill.name}'`,
       );
     }
     if (!toDoc) {
       throw AppError.notFound(
-        "SKILL_VERSION_NOT_FOUND",
+        "skill_version_not_found",
         `Version '${toVersion}' not found for skill '${skill.name}'`,
       );
     }
@@ -753,7 +1090,7 @@ export class SkillService {
     const res = await fetch(presigned.presignedUrl);
     if (!res.ok) {
       throw AppError.internalError(
-        "PACKAGE_DOWNLOAD_FAILED",
+        "package_download_failed",
         `Failed to download package for key '${storageKey}' (HTTP ${res.status})`,
       );
     }
@@ -776,12 +1113,12 @@ export class SkillService {
     let skill = await this.skillRepo.findByGuid(idOrName);
     if (!skill) skill = await this.skillRepo.findByName(idOrName);
     if (!skill) {
-      throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${idOrName}' not found`);
+      throw AppError.notFound("skill_not_found", `Skill '${idOrName}' not found`);
     }
     const versionDoc = await this.skillVersionRepo.findBySkillAndVersion(skill.guid, version);
     if (!versionDoc) {
       throw AppError.notFound(
-        "SKILL_VERSION_NOT_FOUND",
+        "skill_version_not_found",
         `Version '${version}' not found for skill '${skill.name}'`,
       );
     }
@@ -848,7 +1185,7 @@ export class SkillService {
   ): Promise<SkillDetailResponse> {
     const existing = await this.skillRepo.findByGuid(guid);
     if (!existing) {
-      throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${guid}' not found`);
+      throw AppError.notFound("skill_not_found", `Skill '${guid}' not found`);
     }
 
     // Untie path — wipe all four cached fields, leave `isPrivate` alone.
@@ -892,7 +1229,10 @@ export class SkillService {
       nyxidServiceLabel: service.label,
       isSystemSkill: isAdminService,
       // Admin tie forces public; personal tie leaves privacy alone.
-      isPrivate: isAdminService ? false : undefined,
+      // exactOptionalPropertyTypes (#657): conditional spread so we
+      // never pass `{ isPrivate: undefined }` to a contract that wants
+      // `isPrivate?: boolean`.
+      ...(isAdminService ? { isPrivate: false } : {}),
       updatedBy: actor.userId,
     });
     return this.buildDetailResponse(updated);
@@ -901,7 +1241,7 @@ export class SkillService {
   async deleteSkill(guid: string): Promise<void> {
     const existing = await this.skillRepo.findByGuid(guid);
     if (!existing) {
-      throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${guid}' not found`);
+      throw AppError.notFound("skill_not_found", `Skill '${guid}' not found`);
     }
 
     // Collect every storage key to clean up: the current pointer on the skill
@@ -930,11 +1270,33 @@ export class SkillService {
 
   /**
    * Return the full skill package as a JSON object with all file contents.
-   * Used by playground to inject skill context.
+   * Used by playground to inject skill context, and by the SkillInstallCard
+   * prompt's pull commands.
+   *
+   * #639 — accepts an optional `version` that may be a literal `<major>.
+   * <minor>` or a dist-tag (#463). When provided, the response uses that
+   * version's package (`storageKey` + `metadata` from `skill_versions`)
+   * instead of the skill doc's "latest" storage key. Identity fields
+   * (`name`) still come from the skill doc; `description` falls through
+   * to the skill doc too because version docs don't carry one.
+   *
+   * When `version` is omitted the response is the latest package — same
+   * as before.
+   *
+   * #806 — object-level authorization (BOLA / OWASP API1). `actor` is a
+   * REQUIRED arg: the loaded skill doc is run through `canReadSkill`
+   * before any storage download, so a private skill the actor cannot
+   * read surfaces as `skill_not_found` instead of leaking its package
+   * (incl. embedded secrets). Trusted server jobs pass `SYSTEM_ACTOR`.
    */
-  async getSkillJson(idOrName: string): Promise<{
+  async getSkillJson(
+    idOrName: string,
+    actor: ActorContext,
+    version?: string,
+  ): Promise<{
     name: string;
     description: string;
+    version: string;
     metadata: Record<string, unknown>;
     files: Record<string, string>;
   }> {
@@ -944,14 +1306,56 @@ export class SkillService {
       skill = await this.skillRepo.findByName(idOrName);
     }
     if (!skill) {
-      throw AppError.notFound("SKILL_NOT_FOUND", `Skill '${idOrName}' not found`);
+      throw AppError.notFound("skill_not_found", `Skill '${idOrName}' not found`);
+    }
+
+    // 1.5 Object-level authorization (#806, BOLA / OWASP API1). The
+    //      package-contents path must not be more permissive than the
+    //      metadata path: a private skill the actor cannot read is
+    //      denied here, before any storage download, with the same
+    //      `skill_not_found` shape so existence isn't leaked. Never log
+    //      file contents or secrets — only ids.
+    if (!canReadSkill(skill, actor)) {
+      logger.info({ idOrName, actorUserId: actor.userId }, "getSkillJson visibility denied");
+      throw AppError.notFound("skill_not_found", `Skill '${idOrName}' not found`);
+    }
+
+    // 1a. Resolve the requested version (literal or dist-tag, #463).
+    //     When unset OR empty-string, fall through to the skill doc's
+    //     latest storage. `resolveDistTag` returns `undefined` for
+    //     empty input, which we treat as "no pin requested".
+    let resolvedVersion = skill.latestVersion;
+    let storageKey = skill.storageKey;
+    let metadata: SkillMetadata = skill.metadata;
+    if (version !== undefined && version.length > 0) {
+      const literal = resolveDistTag(skill, version);
+      if (!literal) {
+        // Defensive — resolveDistTag's contract returns string for any
+        // non-empty input, but the type system widens to `| undefined`.
+        // Treat as malformed rather than crash.
+        throw AppError.badRequest(
+          "invalid_version",
+          `Could not resolve version '${version}'`,
+        );
+      }
+      parseVersion(literal); // 400 if malformed, before Mongo lookup
+      const versionDoc = await this.skillVersionRepo.findBySkillAndVersion(skill.guid, literal);
+      if (!versionDoc) {
+        throw AppError.notFound(
+          "skill_version_not_found",
+          `Version '${literal}' not found for skill '${skill.name}'`,
+        );
+      }
+      resolvedVersion = versionDoc.version;
+      storageKey = versionDoc.storageKey;
+      metadata = versionDoc.metadata;
     }
 
     // 2. Download ZIP from storage
-    const presigned = await this.storageClient.getPresignedUrl((await this.storageBucketResolver()), skill.storageKey);
+    const presigned = await this.storageClient.getPresignedUrl((await this.storageBucketResolver()), storageKey);
     const response = await fetch(presigned.presignedUrl);
     if (!response.ok) {
-      throw AppError.internalError("PACKAGE_DOWNLOAD_FAILED", "Failed to download skill package from storage");
+      throw AppError.internalError("package_download_failed", "Failed to download skill package from storage");
     }
     const zipBuffer = new Uint8Array(await response.arrayBuffer());
 
@@ -965,7 +1369,10 @@ export class SkillService {
     // Walk all entries and extract text content
     for (const path of allPaths) {
       const entry = zip.files[path];
-      if (entry.dir) continue;
+      // allPaths is sourced from `Object.keys(zip.files)`, but
+      // noUncheckedIndexedAccess (#450) widens the lookup to `T |
+      // undefined`. Defensive skip rather than crash.
+      if (!entry || entry.dir) continue;
 
       // Get the relative path (strip root folder prefix if present)
       let relativePath = path;
@@ -988,12 +1395,16 @@ export class SkillService {
       }
     }
 
-    logger.info({ skillName: skill.name, fileCount: Object.keys(files).length }, "Skill jsonized");
+    logger.info(
+      { skillName: skill.name, version: resolvedVersion, fileCount: Object.keys(files).length },
+      "Skill jsonized",
+    );
 
     return {
       name: skill.name,
       description: skill.description,
-      metadata: skill.metadata as unknown as Record<string, unknown>,
+      version: resolvedVersion,
+      metadata: metadata as unknown as Record<string, unknown>,
       files,
     };
   }
@@ -1022,7 +1433,7 @@ export class SkillService {
     const versionDoc = await this.skillVersionRepo.findBySkillAndVersion(skill.guid, version);
     if (!versionDoc) {
       throw AppError.notFound(
-        "SKILL_VERSION_NOT_FOUND",
+        "skill_version_not_found",
         `Version '${version}' not found for skill '${skill.name}'`,
       );
     }
@@ -1086,10 +1497,183 @@ export class SkillService {
   }
 
   // ==========================================================================
+  // Dependency closure (#968)
+  // ==========================================================================
+
+  /**
+   * Build a {@link LoadVersion} loader over the live skill collections,
+   * scoped to what `actor` may read. Resolves a dependency ref
+   * (`<name-or-guid>@<major.minor>` or `<name>@<dist-tag>`) into a
+   * {@link ResolvedVersion} the closure resolver can walk, or `null` when
+   * the skill / version doesn't exist OR isn't visible to the actor.
+   *
+   * Per-node `canReadSkill` (#806/#968): an anonymous or under-privileged
+   * caller resolving the closure of a public skill that transitively
+   * depends on a PRIVATE skill gets `null` for that node, surfaced as
+   * `skill_dependency_not_found` — existence isn't leaked. Trusted
+   * callers (publish-time validation) pass `SYSTEM_ACTOR`.
+   *
+   * PUBLIC (#969): the skillsets service injects `SkillService` and
+   * reuses this loader to resolve a skillset's member refs against the
+   * live skill graph — a skillset member is just a skill ref. Promoting
+   * the loader from `private` to a public method means the closure walk
+   * stays single-sourced; both surfaces resolve refs (and apply the
+   * per-node `canReadSkill` visibility gate) identically.
+   */
+  createVersionLoader(actor: ActorContext): LoadVersion {
+    return async (ref: string): Promise<ResolvedVersion | null> => {
+      const at = ref.lastIndexOf("@");
+      if (at <= 0 || at === ref.length - 1) return null;
+      const idOrName = ref.slice(0, at);
+      const versionOrTag = ref.slice(at + 1);
+
+      const skill =
+        (await this.skillRepo.findByGuid(idOrName)) ??
+        (await this.skillRepo.findByName(idOrName));
+      if (!skill) return null;
+
+      // Visibility gate (#806) — a node the actor cannot read is invisible
+      // (returns null), not a hard error, so the closure of a public skill
+      // never leaks the existence of a private dependency.
+      if (!canReadSkill(skill, actor)) return null;
+
+      // Resolve a dist-tag to a literal version; a literal passes through.
+      // Dist-tag refs use the `<name>@<tag>` grammar; map them via the
+      // skill's distTags. `resolveDistTag` expects an `@`-prefixed tag, so
+      // detect the literal-version shape first.
+      let literalVersion: string;
+      if (SKILL_VERSION_REGEX.test(versionOrTag)) {
+        literalVersion = versionOrTag;
+      } else {
+        const resolved = skill.distTags?.[versionOrTag];
+        if (resolved) {
+          literalVersion = resolved;
+        } else if (versionOrTag === "latest") {
+          literalVersion = skill.latestVersion;
+        } else {
+          return null;
+        }
+      }
+
+      const versionDoc = await this.skillVersionRepo.findBySkillAndVersion(
+        skill.guid,
+        literalVersion,
+      );
+      if (!versionDoc) return null;
+
+      const node: ResolvedVersion = {
+        ref: `${skill.name}@${versionDoc.version}`,
+        name: skill.name,
+        version: versionDoc.version,
+        guid: skill.guid,
+        skillHash: versionDoc.skillHash,
+        dependsOn: versionDoc.metadata?.dependsOn ?? [],
+      };
+      return node;
+    };
+  }
+
+  /**
+   * Resolve the full transitive dependency closure of a skill version,
+   * scoped to what `actor` may read (#968).
+   *
+   * The roots are the skill's own direct `depends-on` refs at the
+   * requested version (NOT the skill itself — the closure describes what
+   * the skill *needs*). Returns nodes in deps-first topological order.
+   *
+   * Throws `skill_not_found` (404) when the root skill / version is
+   * unknown, and `dependency_cycle` / `dependency_conflict` /
+   * `skill_dependency_not_found` from the resolver.
+   */
+  async resolveSkillClosure(
+    idOrName: string,
+    actor: ActorContext,
+    version?: string,
+  ): Promise<ClosureNode[]> {
+    const skill = await this.findSkillByIdOrName(idOrName);
+    if (!canReadSkill(skill, actor)) {
+      throw AppError.notFound("skill_not_found", `Skill '${idOrName}' not found`);
+    }
+
+    const resolvedVersion =
+      version === undefined || version.length === 0
+        ? skill.latestVersion
+        : resolveDistTag(skill, version) ?? skill.latestVersion;
+    parseVersion(resolvedVersion);
+
+    const versionDoc = await this.skillVersionRepo.findBySkillAndVersion(
+      skill.guid,
+      resolvedVersion,
+    );
+    if (!versionDoc) {
+      throw AppError.notFound(
+        "skill_version_not_found",
+        `Version '${resolvedVersion}' not found for skill '${skill.name}'`,
+      );
+    }
+
+    const roots = versionDoc.metadata?.dependsOn ?? [];
+    if (roots.length === 0) {
+      logger.info({ idOrName, version: resolvedVersion }, "Closure resolved: no dependencies");
+      return [];
+    }
+
+    const closure = await resolveClosure(roots, {
+      loadVersion: this.createVersionLoader(actor),
+    });
+    logger.info(
+      { idOrName, version: resolvedVersion, nodeCount: closure.length },
+      "Skill dependency closure resolved",
+    );
+    return closure;
+  }
+
+  /**
+   * Publish-time dependency validation (#968). Walks the closure of the
+   * just-extracted `dependsOn` refs to guarantee, BEFORE the version is
+   * committed, that every dependency exists, is readable to the author,
+   * the graph is acyclic, and no two versions of one skill collide.
+   *
+   * Runs as `SYSTEM_ACTOR` deliberately: the author may legitimately
+   * depend on a private skill they own / were granted; the closure is
+   * computed over the full graph and the route layer does NOT expose
+   * these results — it only gates the publish. A missing / unresolvable
+   * dependency surfaces as `skill_dependency_not_found`, a cycle as
+   * `dependency_cycle`, a conflict as `dependency_conflict`.
+   *
+   * No-op when the new version declares no dependencies.
+   */
+  private async validatePublishDependencies(
+    metadata: SkillMetadata,
+    context: { name: string; version: string },
+  ): Promise<void> {
+    const roots = metadata.dependsOn ?? [];
+    if (roots.length === 0) return;
+    await resolveClosure(roots, {
+      loadVersion: this.createVersionLoader(SYSTEM_ACTOR),
+    });
+    logger.info(
+      { name: context.name, version: context.version, depCount: roots.length },
+      "Publish-time dependencies validated",
+    );
+  }
+
+  // ==========================================================================
   // Private helpers
   // ==========================================================================
 
-  private async extractSkillInfo(zipBuffer: Uint8Array): Promise<{
+  private async extractSkillInfo(
+    zipBuffer: Uint8Array,
+    // #529 — when the caller passes `skipValidation: true` (Import from
+    // GitHub → "Skip Ornn package format validation"), the strict Zod
+    // frontmatter check is downgraded to a best-effort extract. The
+    // directory-structure validator was already skipped one layer up
+    // in `createSkill`; this brings the frontmatter validator under
+    // the same flag so a third-party skill (e.g. Anthropic's official
+    // skills repo) that doesn't conform to Ornn's frontmatter schema
+    // still imports.
+    skipValidation: boolean = false,
+  ): Promise<{
     name: string;
     description: string;
     version: string;
@@ -1105,34 +1689,49 @@ export class SkillService {
 
     const skillMdEntry = getFile("SKILL.md");
     if (!skillMdEntry) {
-      throw AppError.badRequest("MISSING_SKILL_MD", "SKILL.md not found in package");
+      throw AppError.badRequest("missing_skill_md", "SKILL.md not found in package");
     }
 
     const content = await skillMdEntry.async("string");
     const fmMatch = content.match(FRONTMATTER_REGEX);
     if (!fmMatch) {
-      throw AppError.badRequest("MISSING_FRONTMATTER", "SKILL.md must have a frontmatter section");
+      throw AppError.badRequest("missing_frontmatter", "SKILL.md must have a frontmatter section");
     }
 
     let rawFrontmatter: Record<string, unknown>;
     try {
-      const parsed = parseYaml(fmMatch[1]);
+      // FRONTMATTER_REGEX always has a capture group 1 (the YAML body)
+      // when it matches. `!` is safe under noUncheckedIndexedAccess
+      // (#450).
+      const parsed = parseYaml(fmMatch[1]!);
       if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
         throw new Error("Frontmatter must be a YAML object");
       }
       rawFrontmatter = parsed as Record<string, unknown>;
     } catch (err) {
+      // YAML SYNTAX errors (vs. schema mismatches) still fail loudly
+      // even under skipValidation — we can't import a skill we can't
+      // parse at all, no matter how lenient we want to be.
       throw AppError.badRequest(
         "INVALID_FRONTMATTER",
         `Invalid frontmatter YAML: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
 
-    // Validate with Zod schema (no backward compat adapter)
+    // Strict Zod validation (#529 — bypassable when skipValidation).
     const validation = validateSkillFrontmatter(rawFrontmatter);
     if (!validation.success) {
-      const errorMsg = validation.errors.map((e) => `${e.field}: ${e.message}`).join("; ");
-      throw AppError.badRequest("FRONTMATTER_VALIDATION_FAILED", errorMsg);
+      if (!skipValidation) {
+        const errorMsg = validation.errors.map((e) => `${e.field}: ${e.message}`).join("; ");
+        throw AppError.badRequest("frontmatter_validation_failed", errorMsg);
+      }
+      // skipValidation path — fall through to best-effort field
+      // extraction below.
+      logger.info(
+        { errors: validation.errors.length },
+        "Frontmatter validation failed but skipValidation=true; falling back to best-effort extract",
+      );
+      return this.extractSkillInfoLenient(rawFrontmatter);
     }
 
     const fm = validation.data;
@@ -1174,6 +1773,15 @@ export class SkillService {
       metadata.tags = rawMeta.tag;
     }
 
+    // Skill dependencies (#968). Map the kebab `depends-on` frontmatter
+    // field onto the camelCase `dependsOn` metadata field. The Zod schema
+    // already validated grammar + self-ref + the 50-entry cap, so this is
+    // a straight copy. Only set the key when non-empty so legacy / no-dep
+    // versions read back clean (absent, not `[]`).
+    if (rawMeta["depends-on"].length > 0) {
+      metadata.dependsOn = rawMeta["depends-on"];
+    }
+
     // Author-supplied changelog lives next to the formal frontmatter but isn't
     // part of the Zod schema — kept permissive so missing/older SKILL.md files
     // just report null instead of hard-failing. Accepts either `release-notes`
@@ -1197,6 +1805,130 @@ export class SkillService {
     };
   }
 
+  /**
+   * Best-effort extract from a raw frontmatter object when the strict
+   * Zod schema rejected it (#529). Used by `extractSkillInfo` under
+   * `skipValidation: true` so a third-party-shaped SKILL.md still
+   * imports.
+   *
+   * Strategy:
+   *   - Pull the canonical Ornn fields by name when present and the
+   *     right type; otherwise synthesise a safe default.
+   *   - `name` MUST be present (we have no fallback that would be
+   *     unique). Reject with the same `frontmatter_validation_failed`
+   *     code that the strict path uses.
+   *   - `version` defaults to "0.1" if missing — the import has to
+   *     start somewhere. Format-validation downstream
+   *     (`parseVersion`) still kicks in so genuinely malformed
+   *     versions hard-fail.
+   *   - `metadata.category` defaults to "plain" — the safest category
+   *     (no runtime / tool execution expected). The user can edit
+   *     post-import.
+   *   - `tags` / `runtime` / `tools` are extracted when they look
+   *     plausibly correct, dropped silently otherwise.
+   */
+  private extractSkillInfoLenient(
+    raw: Record<string, unknown>,
+  ): {
+    name: string;
+    description: string;
+    version: string;
+    license: string | null;
+    compatibility: string | null;
+    metadata: SkillMetadata;
+    releaseNotes: string | null;
+  } {
+    const name =
+      typeof raw.name === "string" && raw.name.trim().length > 0
+        ? raw.name.trim()
+        : null;
+    if (!name) {
+      throw AppError.badRequest(
+        "frontmatter_validation_failed",
+        "name: required (cannot be derived under skipValidation either)",
+      );
+    }
+    // #807 (CWE-22): the strict path rejects non-kebab-case names via the
+    // Zod schema; the lenient path bypassed it, so a crafted name (`../`,
+    // `/etc/passwd`, `..`) flowed straight into the public-mirror blob
+    // paths and could escape the skill's own `<name>/` subtree. Enforce
+    // the SAME kebab-case rule here so `skipValidation` can never widen
+    // the name surface beyond the strict path.
+    if (name.length > SKILL_NAME_MAX || !SKILL_NAME_REGEX.test(name)) {
+      logger.warn({ name }, "skipValidation: rejecting non-kebab-case skill name");
+      throw AppError.badRequest(
+        "frontmatter_validation_failed",
+        `name: must be kebab-case (^[a-z0-9][a-z0-9-]*$, <= ${SKILL_NAME_MAX} chars)`,
+      );
+    }
+    const description =
+      typeof raw.description === "string" ? raw.description : "";
+    const version =
+      typeof raw.version === "string" && raw.version.trim().length > 0
+        ? raw.version.trim()
+        : "0.1";
+    const license = typeof raw.license === "string" ? raw.license : null;
+    const compatibility =
+      typeof raw.compatibility === "string" ? raw.compatibility : null;
+
+    const rawMeta =
+      raw.metadata && typeof raw.metadata === "object" && !Array.isArray(raw.metadata)
+        ? (raw.metadata as Record<string, unknown>)
+        : {};
+    const category =
+      typeof rawMeta.category === "string" ? rawMeta.category : "plain";
+
+    const tags =
+      Array.isArray(rawMeta.tag) &&
+      rawMeta.tag.every((t): t is string => typeof t === "string")
+        ? (rawMeta.tag as string[])
+        : undefined;
+
+    const metadata: SkillMetadata = { category };
+    if (tags && tags.length > 0) metadata.tags = tags;
+
+    // Skill dependencies (#968) under skipValidation. The strict Zod
+    // schema was bypassed, so we re-apply the grammar regex here and keep
+    // only well-formed refs (self-refs by name dropped too). A malformed
+    // ref is silently discarded rather than failing the import — same
+    // best-effort posture as `tags` above. This keeps the closure
+    // resolver's input invariant ("every persisted ref parses") even on
+    // the lenient path; the dropped refs are logged for diagnosis.
+    if (Array.isArray(rawMeta["depends-on"])) {
+      const validDeps = (rawMeta["depends-on"] as unknown[]).filter(
+        (d): d is string =>
+          typeof d === "string" &&
+          DEPENDS_ON_REF_REGEX.test(d) &&
+          d.slice(0, d.indexOf("@")) !== name,
+      );
+      const dropped = (rawMeta["depends-on"] as unknown[]).length - validDeps.length;
+      if (dropped > 0) {
+        logger.info(
+          { name, dropped },
+          "skipValidation: dropped malformed/self depends-on entries",
+        );
+      }
+      if (validDeps.length > 0) metadata.dependsOn = validDeps.slice(0, 50);
+    }
+
+    const rawReleaseNotes = raw["release-notes"] ?? raw["releaseNotes"];
+    let releaseNotes: string | null = null;
+    if (typeof rawReleaseNotes === "string" && rawReleaseNotes.trim().length > 0) {
+      const trimmed = rawReleaseNotes.trim();
+      releaseNotes = trimmed.length > 2000 ? trimmed.slice(0, 2000) : trimmed;
+    }
+
+    return {
+      name,
+      description,
+      version,
+      license,
+      compatibility,
+      metadata,
+      releaseNotes,
+    };
+  }
+
   private async buildDetailResponse(
     skill: SkillDocument,
     versionOverlay?: SkillVersionDocument,
@@ -1205,11 +1937,13 @@ export class SkillService {
     // identity fields (name, createdBy, isPrivate, ...) still come from the
     // skill doc.
     //
-    // For the latest-read path (no overlay), we do one extra lookup against
-    // `skill_versions` so the response can still surface `isDeprecated` /
-    // `deprecationNote` consistently with the versioned path. If this becomes
-    // a hot-path bottleneck we can denormalize those two fields onto the
-    // skill doc later (TODO).
+    // For the latest-read path (no overlay) we issue one indexed lookup against
+    // `skill_versions` so the response surfaces `isDeprecated` / `deprecationNote`
+    // consistently with the versioned path. Those fields live only on
+    // `skill_versions`, so this lookup is the single source of truth — it is not
+    // denormalized onto the skill doc on purpose: a copy would introduce a
+    // dual-write drift trap (cf. the `distTags.latest` concern). This runs
+    // per-detail-read, not as a list fan-out, so the indexed limit(1) is cheap.
     let effectiveOverlay = versionOverlay;
     if (!effectiveOverlay) {
       effectiveOverlay =
@@ -1248,7 +1982,6 @@ export class SkillService {
       skillHash,
       presignedPackageUrl,
       isPrivate: skill.isPrivate,
-      ownerId: skill.ownerId,
       createdBy: skill.createdBy,
       createdByEmail: skill.createdByEmail,
       createdByDisplayName: skill.createdByDisplayName,
@@ -1281,6 +2014,10 @@ export class SkillService {
       nyxidServiceSlug: skill.nyxidServiceSlug ?? null,
       nyxidServiceLabel: skill.nyxidServiceLabel ?? null,
       isSystemSkill: skill.isSystemSkill === true,
+      // Always surface a `latest` tag — legacy skills predating #463
+      // get one synthesized from `latestVersion` so consumers can rely
+      // on `distTags.latest` always being set.
+      distTags: { latest: skill.latestVersion, ...(skill.distTags ?? {}) },
       ...(skill.mirrorSync && skill.mirrorSync.syncedAt instanceof Date
         ? {
             mirrorSync: {
@@ -1313,10 +2050,12 @@ export class SkillService {
     const allPaths = Object.keys(zip.files);
     const { rootFolderName, rootEntries, getFile } = resolveZipRoot(zip, allPaths);
 
-    const KEBAB_RE = /^[a-z0-9][a-z0-9-]*$/;
+    // #807: reuse the canonical kebab-case rule (was a duplicate local
+    // regex) so folder-name validation can never drift from the name rule
+    // enforced on the create/import path.
     const ALLOWED_ROOT = new Set(["SKILL.md", "scripts", "references", "assets"]);
 
-    if (rootFolderName && !KEBAB_RE.test(rootFolderName)) {
+    if (rootFolderName && !SKILL_NAME_REGEX.test(rootFolderName)) {
       violations.push({
         rule: "folder-name-kebab-case",
         message: `Package folder name "${rootFolderName}" must be kebab-case.`,
@@ -1369,7 +2108,10 @@ export class SkillService {
       return violations;
     }
 
-    const yamlBlock = fmMatch[1];
+    // FRONTMATTER_REGEX always has capture group 1 (the YAML body)
+    // when it matches. `!` is safe under noUncheckedIndexedAccess
+    // (#450).
+    const yamlBlock = fmMatch[1]!;
     if (yamlBlock.includes("<") || yamlBlock.includes(">")) {
       violations.push({
         rule: "no-xml-brackets",

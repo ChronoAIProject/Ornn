@@ -1,0 +1,90 @@
+# Codecov configuration for chrono-ornn (#471).
+#
+# Reports are uploaded from two CI jobs:
+#   - `test`            → flags `api`, `web`, `sdk-ts` (one per workspace lcov)
+#   - `python-sdk-test` → flag `python` (sdk/python coverage.xml)
+#
+# The pooled `bun` flag was split per-package (#889) so each surface is
+# judged on its own honest coverage rather than a blended headline that
+# lets a well-tested package mask a thin one. Per-flag status targets are
+# the real signal; the global project default is kept as a coarse backstop.
+#
+# Files that are deliberately not covered today (god-files, generation
+# prompts, infra shims) are excluded so each number reflects code that's
+# reasonably testable.
+
+coverage:
+  status:
+    project:
+      # Coarse backstop across all flags. Per-flag targets below are the
+      # signal that actually gates each package honestly.
+      default:
+        target: 70%
+        threshold: 1%
+        if_ci_failed: error
+      # ornn-api is well covered today — hold it near its real number.
+      api:
+        flags:
+          - api
+        target: 90%
+        threshold: 2%
+        if_ci_failed: error
+      # ornn-web is early — floor it at its measured level, ratchet later.
+      web:
+        flags:
+          - web
+        target: 14%
+        threshold: 2%
+        if_ci_failed: error
+      # TS SDK — informational until it has a real test suite.
+      sdk-ts:
+        flags:
+          - sdk-ts
+        target: auto
+        informational: true
+    patch:
+      default:
+        target: 80%
+        threshold: 5%
+        if_ci_failed: error
+
+# Source-of-truth flags. Each Bun workspace uploads under its own flag so
+# a regression in one package is isolated and visible (#889). Codecov sums
+# across flags for the headline; per-flag carryforward keeps a package's
+# last-known coverage when its upload is absent from a given PR.
+flags:
+  api:
+    paths:
+      - ornn-api/src/
+    carryforward: true
+  web:
+    paths:
+      - ornn-web/src/
+    carryforward: true
+  sdk-ts:
+    paths:
+      - sdk/typescript/src/
+    carryforward: true
+  python:
+    paths:
+      - sdk/python/src/
+    carryforward: true
+
+ignore:
+  # God-files awaiting decomposition (#453, #580). Excluded from the
+  # headline number until they're broken up.
+  - "ornn-web/src/pages/skill/SkillDetailPage.tsx"
+  - "ornn-web/src/pages/DocsPage.tsx"
+  - "ornn-web/src/pages/PlaygroundPage.tsx"
+  - "ornn-api/src/bootstrap.ts"
+  # Prompt-template strings, scaffolding scripts, generated code.
+  - "**/*.test.ts"
+  - "**/*.test.py"
+  - "**/__pycache__/**"
+  - "ornn-api/scripts/**"
+  - "examples/**"
+
+comment:
+  layout: "reach,diff,flags,tree"
+  behavior: default
+  require_changes: false

@@ -35,7 +35,7 @@
  */
 
 import { randomUUID } from "node:crypto";
-import pino from "pino";
+import { createLogger } from "../../../shared/logger";
 import { z, ZodError } from "zod";
 import {
   decryptSecret,
@@ -59,15 +59,25 @@ import type {
   LlmProviderModel,
 } from "./types";
 
-const logger = pino({ level: "info" }).child({ module: "llmProvidersService" });
+const logger = createLogger("llmProvidersService");
 
 /** Surfaces the picker / resolver care about. Mirror of `quota/types.ts:Surface`. */
-export type Surface = "playground" | "skillGen";
+export type Surface = "playground" | "skillGen" | "assistant";
 
 const SURFACE_KEY: Record<Surface, SurfaceKey> = {
   playground: "Playground",
   skillGen: "SkillGen",
+  assistant: "Assistant",
 };
+
+/**
+ * Canonical surface list. Loops that must touch every surface (model
+ * coherence rules, default-clearing) iterate this so adding a surface
+ * is a single-line change to `SURFACE_KEY` + this array.
+ */
+export const ALL_SURFACES: ReadonlyArray<Surface> = Object.keys(
+  SURFACE_KEY,
+) as Surface[];
 
 // ---------------------------------------------------------------------------
 // Input schemas
@@ -109,8 +119,10 @@ const modelInputSchema = z.object({
   displayName: z.string().min(1),
   enabledForPlayground: z.boolean().optional(),
   enabledForSkillGen: z.boolean().optional(),
+  enabledForAssistant: z.boolean().optional(),
   defaultForPlayground: z.boolean().optional(),
   defaultForSkillGen: z.boolean().optional(),
+  defaultForAssistant: z.boolean().optional(),
   removed: z.boolean().optional(),
 });
 
@@ -131,7 +143,14 @@ export const providerCreateSchema = z.object({
 
 export type ProviderCreateInput = z.infer<typeof providerCreateSchema>;
 
-export const providerUpdateSchema = providerCreateSchema.partial();
+// #588 — `.partial()` keeps every field's `.default(...)`, so a PATCH
+// that omits `models` was parsed back as `models: []` and silently
+// wiped the persisted model list. Override `models` here so the
+// update path can distinguish "caller didn't send it" (undefined →
+// preserve) from "caller sent empty" (`[]` → wipe explicitly).
+export const providerUpdateSchema = providerCreateSchema
+  .partial()
+  .extend({ models: z.array(modelInputSchema).optional() });
 export type ProviderUpdateInput = z.infer<typeof providerUpdateSchema>;
 
 /**
@@ -143,8 +162,10 @@ export const modelFlagsPatchSchema = z
   .object({
     enabledForPlayground: z.boolean().optional(),
     enabledForSkillGen: z.boolean().optional(),
+    enabledForAssistant: z.boolean().optional(),
     defaultForPlayground: z.boolean().optional(),
     defaultForSkillGen: z.boolean().optional(),
+    defaultForAssistant: z.boolean().optional(),
   })
   .refine((v) => Object.keys(v).length > 0, {
     message: "At least one flag must be provided",
@@ -238,8 +259,19 @@ export class LlmProvidersService {
    * across all providers, sorted with the surface default first then
    * by display name. The first row's `modelId` is also exposed via
    * `default` for easy "what's the fallback?" UI.
+   *
+   * #607 — `sectionDefaultModelId` is the per-section setting (e.g.
+   * `playground.defaultModelId`) that admins can pin to override the
+   * per-model `defaultForX` flag. When provided AND that model is in
+   * the enabled set, it wins the `default` slot and is sorted first
+   * — same precedence as the execute path's `resolveSurfaceDefaults`
+   * helper in `bootstrap.ts`, so the picker pre-selection and the
+   * execute fallback agree on what "default" means.
    */
-  async listPickerModels(surface: Surface): Promise<{
+  async listPickerModels(
+    surface: Surface,
+    sectionDefaultModelId?: string,
+  ): Promise<{
     items: PickerModelRow[];
     default: string | null;
   }> {
@@ -251,12 +283,18 @@ export class LlmProvidersService {
       for (const m of provider.models) {
         if (m.removed) continue;
         if (m[enabledField] !== true) continue;
+        // Mark the section-pinned model as `isDefault` so the
+        // frontend ModelPicker's "default" badge agrees with the
+        // backend's resolution. Falls back to the per-model
+        // `defaultForX` flag when no section override exists.
+        const isPinned =
+          !!sectionDefaultModelId && m.id === sectionDefaultModelId;
         items.push({
           modelId: m.id,
           displayName: m.displayName,
           providerId: provider._id,
           providerName: provider.name,
-          isDefault: m[defaultField] === true,
+          isDefault: isPinned || (!sectionDefaultModelId && m[defaultField] === true),
         });
       }
     }
@@ -334,7 +372,10 @@ export class LlmProvidersService {
       return { kind: "no-models-enabled", surface };
     }
     enabledList.sort((a, b) => a.displayName.localeCompare(b.displayName));
-    const winner = defaultMatch ?? enabledList[0];
+    // Length-guarded above (`enabledList.length === 0` returns), so
+    // index 0 is guaranteed defined — `!` is safe under
+    // `noUncheckedIndexedAccess` (#450).
+    const winner = defaultMatch ?? enabledList[0]!;
     return {
       kind: "ok",
       modelId: winner.modelId,
@@ -372,8 +413,10 @@ export class LlmProvidersService {
         displayName: m.displayName,
         enabledForPlayground: m.enabledForPlayground === true,
         enabledForSkillGen: m.enabledForSkillGen === true,
+        enabledForAssistant: m.enabledForAssistant === true,
         defaultForPlayground: m.defaultForPlayground === true,
         defaultForSkillGen: m.defaultForSkillGen === true,
+        defaultForAssistant: m.defaultForAssistant === true,
         removed: m.removed === true,
         firstSeenAt: now,
         lastSyncedAt: now,
@@ -399,15 +442,18 @@ export class LlmProvidersService {
   ): Promise<LlmProvider> {
     const existing = await this.repo.findById(id);
     if (!existing) {
-      throw AppError.notFound("PROVIDER_NOT_FOUND", `No provider ${id}`);
+      throw AppError.notFound("provider_not_found", `No provider ${id}`);
     }
     const patch = parse(providerUpdateSchema, input);
 
     // Models update: if the caller passed `models`, replace the list
     // wholesale BUT preserve `firstSeenAt` for any incoming model that
-    // already exists — only sync changes lifecycle dates.
+    // already exists — only sync changes lifecycle dates. #588: an
+    // explicit `[]` from the caller IS a valid "wipe all" intent (e.g.
+    // the model-list refresh found zero models); only `undefined`
+    // (field absent in the PATCH) means "don't touch".
     let models = existing.models;
-    if (patch.models) {
+    if (patch.models !== undefined) {
       const now = this.clock();
       const previousMap = new Map(existing.models.map((m) => [m.id, m]));
       models = patch.models.map((m) => {
@@ -419,10 +465,14 @@ export class LlmProvidersService {
             m.enabledForPlayground ?? prev?.enabledForPlayground ?? false,
           enabledForSkillGen:
             m.enabledForSkillGen ?? prev?.enabledForSkillGen ?? false,
+          enabledForAssistant:
+            m.enabledForAssistant ?? prev?.enabledForAssistant ?? false,
           defaultForPlayground:
             m.defaultForPlayground ?? prev?.defaultForPlayground ?? false,
           defaultForSkillGen:
             m.defaultForSkillGen ?? prev?.defaultForSkillGen ?? false,
+          defaultForAssistant:
+            m.defaultForAssistant ?? prev?.defaultForAssistant ?? false,
           removed: m.removed ?? prev?.removed ?? false,
           firstSeenAt: prev?.firstSeenAt ?? now,
           lastSyncedAt: prev?.lastSyncedAt ?? now,
@@ -480,7 +530,7 @@ export class LlmProvidersService {
     const flags = parse(modelFlagsPatchSchema, input);
     const existing = await this.repo.findById(providerId);
     if (!existing) {
-      throw AppError.notFound("PROVIDER_NOT_FOUND", `No provider ${providerId}`);
+      throw AppError.notFound("provider_not_found", `No provider ${providerId}`);
     }
     const idx = existing.models.findIndex((m) => m.id === modelId);
     if (idx === -1) {
@@ -489,7 +539,9 @@ export class LlmProvidersService {
         `Model "${modelId}" not on provider "${existing.name}"`,
       );
     }
-    const current = existing.models[idx];
+    // idx is guaranteed in-range — we just confirmed via findIndex
+    // above. `!` is safe under noUncheckedIndexedAccess (#450).
+    const current = existing.models[idx]!;
     if (current.removed) {
       throw AppError.badRequest(
         "MODEL_REMOVED",
@@ -500,7 +552,7 @@ export class LlmProvidersService {
     // Compute the new flags, applying coherence rules.
     let next: LlmProviderModel = { ...current };
 
-    for (const surface of ["playground", "skillGen"] as const) {
+    for (const surface of ALL_SURFACES) {
       const enKey = enabledFieldFor(surface);
       const defKey = defaultFieldFor(surface);
       if (flags[enKey] !== undefined) {
@@ -522,7 +574,7 @@ export class LlmProvidersService {
 
     // Cross-provider clears: for each surface where this row is now
     // the default, blow away the flag on every other model first.
-    for (const surface of ["playground", "skillGen"] as const) {
+    for (const surface of ALL_SURFACES) {
       const defKey = defaultFieldFor(surface);
       if (next[defKey] === true) {
         await this.repo.clearDefaultsForSurfaceExcept(SURFACE_KEY[surface], {
@@ -542,8 +594,10 @@ export class LlmProvidersService {
             ...m,
             enabledForPlayground: next.enabledForPlayground,
             enabledForSkillGen: next.enabledForSkillGen,
+            enabledForAssistant: next.enabledForAssistant,
             defaultForPlayground: next.defaultForPlayground,
             defaultForSkillGen: next.defaultForSkillGen,
+            defaultForAssistant: next.defaultForAssistant,
           }
         : m,
     );
@@ -570,7 +624,7 @@ export class LlmProvidersService {
   }> {
     const existing = await this.repo.findById(id);
     if (!existing) {
-      throw AppError.notFound("PROVIDER_NOT_FOUND", `No provider ${id}`);
+      throw AppError.notFound("provider_not_found", `No provider ${id}`);
     }
     const decryptedAuth = this.decryptAuth(existing.auth);
     let upstream: ReadonlyArray<{ id: string; displayName: string }>;
@@ -608,8 +662,10 @@ export class LlmProvidersService {
           displayName: u.displayName,
           enabledForPlayground: false,
           enabledForSkillGen: false,
+          enabledForAssistant: false,
           defaultForPlayground: false,
           defaultForSkillGen: false,
+          defaultForAssistant: false,
           removed: false,
           firstSeenAt: now,
           lastSyncedAt: now,
@@ -625,8 +681,10 @@ export class LlmProvidersService {
         displayName: u.displayName,
         enabledForPlayground: prev.enabledForPlayground,
         enabledForSkillGen: prev.enabledForSkillGen,
+        enabledForAssistant: prev.enabledForAssistant,
         defaultForPlayground: prev.defaultForPlayground,
         defaultForSkillGen: prev.defaultForSkillGen,
+        defaultForAssistant: prev.defaultForAssistant,
         removed: false,
         firstSeenAt: prev.firstSeenAt,
         lastSyncedAt: now,
@@ -643,6 +701,7 @@ export class LlmProvidersService {
         removed: true,
         defaultForPlayground: false,
         defaultForSkillGen: false,
+        defaultForAssistant: false,
         lastSyncedAt: now,
       });
       if (!wasRemoved) removed += 1;
@@ -772,12 +831,12 @@ export class LlmProvidersService {
 // Helpers
 // ---------------------------------------------------------------------------
 
-export function enabledFieldFor(surface: Surface): "enabledForPlayground" | "enabledForSkillGen" {
-  return surface === "playground" ? "enabledForPlayground" : "enabledForSkillGen";
+export function enabledFieldFor(surface: Surface): `enabledFor${SurfaceKey}` {
+  return `enabledFor${SURFACE_KEY[surface]}`;
 }
 
-export function defaultFieldFor(surface: Surface): "defaultForPlayground" | "defaultForSkillGen" {
-  return surface === "playground" ? "defaultForPlayground" : "defaultForSkillGen";
+export function defaultFieldFor(surface: Surface): `defaultFor${SurfaceKey}` {
+  return `defaultFor${SURFACE_KEY[surface]}`;
 }
 
 function safeDecrypt(blob: string, key: string): string {
@@ -805,8 +864,10 @@ function parse<T extends z.ZodTypeAny>(
 }
 
 function zodToAppError(err: ZodError): AppError {
-  const first = err.issues[0];
+  // ZodError always carries at least one issue when `safeParse` returns
+  // success: false. `!` is safe under noUncheckedIndexedAccess (#450).
+  const first = err.issues[0]!;
   const path = first.path.join(".");
   const msg = path.length > 0 ? `${path}: ${first.message}` : first.message;
-  return AppError.badRequest("INVALID_PROVIDER_INPUT", msg);
+  return AppError.badRequest("invalid_provider_input", msg);
 }

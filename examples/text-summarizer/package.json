@@ -1,0 +1,14 @@
+{
+  "name": "@ornn-examples/text-summarizer",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Minimal LLM-backed summarizer skill — example for the Ornn skill format",
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "start": "bun run src/index.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.30.1"
+  }
+}

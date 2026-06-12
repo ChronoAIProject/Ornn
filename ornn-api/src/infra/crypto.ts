@@ -80,7 +80,12 @@ export function decryptSecret(value: string, passphrase: string): string {
   if (parts.length !== 4) {
     throw new Error(`decryptSecret: malformed v1 payload (got ${parts.length} parts)`);
   }
-  const [, ivHex, tagHex, ctHex] = parts;
+  // Length-checked above (`parts.length !== 4` returns early) — every
+  // slot is guaranteed defined. `!` is safe under noUncheckedIndexedAccess
+  // (#450).
+  const ivHex = parts[1]!;
+  const tagHex = parts[2]!;
+  const ctHex = parts[3]!;
   const key = deriveKey(passphrase);
   const decipher = createDecipheriv("aes-256-gcm", key, Buffer.from(ivHex, "hex"));
   decipher.setAuthTag(Buffer.from(tagHex, "hex"));

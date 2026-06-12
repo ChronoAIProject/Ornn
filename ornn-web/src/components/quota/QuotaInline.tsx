@@ -18,6 +18,7 @@
 import { useTranslation } from "react-i18next";
 import type { Surface, SurfaceSnapshot } from "@/services/quotaApi";
 import { useMyQuota } from "@/hooks/useQuota";
+import { displayUsagePercent } from "./quotaDisplay";
 
 interface QuotaInlineProps {
   surface: Surface;
@@ -83,7 +84,9 @@ export function QuotaInline({ surface, className = "" }: QuotaInlineProps) {
   const warning = snap.warning && !exhausted;
 
   if (warning) {
-    const percent = cap > 0 ? Math.round((snap.used / cap) * 100) : 0;
+    // #629 — share the QuotaSummary helper so the inline banner can
+    // never claim "100% used this month" while a call still remains.
+    const percent = displayUsagePercent(snap.used, cap, remaining);
     const adminGrantSuffix =
       snap.adminGrant > 0
         ? t(

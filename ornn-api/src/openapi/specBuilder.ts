@@ -260,6 +260,33 @@ function formatValidatePath(): PathItem {
   };
 }
 
+/**
+ * JSON Schema for SKILL.md frontmatter (#464). Unlike the other format
+ * endpoints this one returns a raw JSON Schema document — no envelope —
+ * so external tooling (IDEs, schemastore.org) consumes it directly.
+ */
+function formatSchemaPath(): PathItem {
+  return {
+    get: {
+      summary: "JSON Schema for SKILL.md frontmatter",
+      description:
+        "Canonical JSON Schema (draft-7) for `SKILL.md` YAML frontmatter, generated from the server's Zod schema. Public, long-cacheable. Returns the schema document at the body root with `Content-Type: application/schema+json` — not the standard `{ data, error }` envelope, since consumers (VS Code, Cursor, schemastore.org) expect a raw JSON Schema.",
+      operationId: "getFormatSchema",
+      tags: ["Format"],
+      responses: {
+        200: {
+          description: "JSON Schema document",
+          content: {
+            "application/schema+json": {
+              schema: { type: "object" },
+            },
+          },
+        },
+      },
+    },
+  };
+}
+
 function playgroundChatPath(): PathItem {
   return {
     post: {
@@ -272,6 +299,29 @@ function playgroundChatPath(): PathItem {
         content: { "application/json": { schema: toSchema(S.chatRequestBodySchema) } },
       },
       responses: { ...sseResponse("SSE stream of chat events"), ...errorResponses(400, 401) },
+    },
+  };
+}
+
+function assistantChatPath(): PathItem {
+  return {
+    post: {
+      summary: "Ornn Assistant — repo-aware Q&A chat (SSE stream)",
+      description:
+        "Pure, non-agentic Q&A about Ornn and the skills the caller may see. Grounds answers in a curated knowledge-base digest plus a visibility-scoped skill retrieval (SAFE fields only). SSE event types: 'chat_start', 'chat_text_delta', 'chat_error', 'chat_finish' (+ keepalive comment frames). No tools / no execution.",
+      operationId: "assistantChat",
+      tags: ["Assistant"],
+      security: bearerAuth(),
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": { schema: toSchema(S.assistantChatRequestBodySchema) },
+        },
+      },
+      responses: {
+        ...sseResponse("SSE stream of assistant chat events"),
+        ...errorResponses(400, 401, 429, 503),
+      },
     },
   };
 }
@@ -414,8 +464,11 @@ export function buildSpec(): OpenApiSpec {
       // Format
       [`${prefix}/skill-format/rules`]: formatRulesPath(),
       [`${prefix}/skill-format/validate`]: formatValidatePath(),
+      [`${prefix}/skill-manifest-schema.json`]: formatSchemaPath(),
       // Playground
       [`${prefix}/playground/chat`]: playgroundChatPath(),
+      // Assistant (#970)
+      [`${prefix}/assistant/chat`]: assistantChatPath(),
       // Admin
       [`${prefix}/admin/categories`]: categoriesListCreatePath(),
       [`${prefix}/admin/categories/{id}`]: categoryUpdateDeletePath(),

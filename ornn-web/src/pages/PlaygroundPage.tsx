@@ -18,283 +18,112 @@
  * @module pages/PlaygroundPage
  */
 
-import { useState, useRef, useEffect, useMemo, useCallback, type ComponentType } from "react";
+import { useMemo } from "react";
 import { useSearchParams, Link } from "react-router-dom";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { motion, AnimatePresence } from "framer-motion";
 import { PageTransition } from "@/components/layout/PageTransition";
-import { Skeleton } from "@/components/ui/Skeleton";
-import { ChatInput, type ChatInputHandle } from "@/components/playground/ChatInput";
-import { ChatMessage } from "@/components/playground/ChatMessage";
-import { SkillPackagePreview } from "@/components/skill/SkillPackagePreview";
+import { ChatInput } from "@/components/playground/ChatInput";
 import { ModelPicker } from "@/components/models/ModelPicker";
 import { OverLimitPage } from "@/components/quota/OverLimitPage";
 import { QuotaInline } from "@/components/quota/QuotaInline";
-import { EnvIcon, PackageIcon, type IconProps } from "@/components/icons";
-import {
-  createDefaultSkillMetadata,
-  type SkillMetadata,
-} from "@/types/skillPackage";
-import type { SkillCategory } from "@/utils/constants";
-import { useSkill } from "@/hooks/useSkills";
-import { useSkillPackage } from "@/hooks/useSkillPackage";
-import { usePlaygroundChat } from "@/hooks/usePlaygroundChat";
-import { useMyQuota } from "@/hooks/useQuota";
+import { EnvIcon, PackageIcon } from "@/components/icons";
 import { useTranslation } from "react-i18next";
+import { defaultPromptStarters } from "@/components/playground/PlaygroundHelpers.helpers";
+import { PlaygroundEmptyHero } from "@/components/playground/PlaygroundEmptyHero";
+import { PlaygroundEnvDrawerBody } from "@/components/playground/PlaygroundEnvDrawerBody";
+import { PlaygroundPackageDrawerBody } from "@/components/playground/PlaygroundPackageDrawerBody";
+import {
+  PlaygroundRail,
+  type PlaygroundRailTab,
+} from "@/components/playground/PlaygroundRail";
+import { PlaygroundConversation } from "@/components/playground/PlaygroundConversation";
+import { usePlaygroundSession } from "@/hooks/usePlaygroundSession";
 
-/** Extract env var keys from skill metadata */
-function extractEnvVarKeys(metadata: Record<string, unknown> | null): string[] {
-  if (!metadata) return [];
-  const runtimes = metadata.runtimes as Array<{ envs?: Array<{ var: string }> }> | undefined;
-  if (!runtimes?.length) return [];
-  const keys: string[] = [];
-  for (const rt of runtimes) {
-    if (rt.envs) {
-      for (const env of rt.envs) {
-        if (env.var && !keys.includes(env.var)) {
-          keys.push(env.var);
-        }
-      }
-    }
-  }
-  return keys;
-}
-
-/** Check if skill is runtime-based */
-function isRuntimeBased(metadata: Record<string, unknown> | null): boolean {
-  if (!metadata) return false;
-  const category = metadata.category as string;
-  return category === "runtime-based" || category === "mixed";
-}
-
-/** Pre-token streaming indicator — three pulsing ember dots, spring-in. */
-function ThinkingBubble() {
-  const { t } = useTranslation();
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 8, scale: 0.98 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      exit={{ opacity: 0, scale: 0.96 }}
-      transition={{ type: "spring", stiffness: 320, damping: 28, mass: 0.6 }}
-      className="flex justify-start"
-    >
-      <div className="rounded-2xl border border-subtle bg-card px-4 py-3">
-        <div className="flex items-center gap-1.5" aria-label={t("aria.generating")}>
-          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent/70" style={{ animationDelay: "0ms" }} />
-          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent/70" style={{ animationDelay: "150ms" }} />
-          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent/70" style={{ animationDelay: "300ms" }} />
-        </div>
-      </div>
-    </motion.div>
-  );
-}
-
-interface PromptStarter {
-  label: string;
-  body: string;
-}
-
-type TFunc = ReturnType<typeof import("react-i18next").useTranslation>["t"];
-
-function defaultPromptStarters(skillName: string, t: TFunc): PromptStarter[] {
-  return [
-    {
-      label: t("playground.starter1Label", "Walk me through it"),
-      body: t("playground.starter1Body", "Walk me through what `{{name}}` does and the main ways I'd use it.", {
-        name: skillName,
-      }),
-    },
-    {
-      label: t("playground.starter2Label", "Show an example"),
-      body: t("playground.starter2Body", "Give me a concrete usage example for `{{name}}` — make up sample input and run it.", {
-        name: skillName,
-      }),
-    },
-    {
-      label: t("playground.starter3Label", "List capabilities"),
-      body: t("playground.starter3Body", "List every capability `{{name}}` exposes, with a one-line description for each.", {
-        name: skillName,
-      }),
-    },
-  ];
-}
-
-type DrawerKey = "package" | "env";
 
 export function PlaygroundPage() {
   const { t } = useTranslation();
   const [searchParams] = useSearchParams();
   const skillName = searchParams.get("skill");
+  const session = usePlaygroundSession(skillName);
 
-  const { data: skill, isLoading: skillLoading } = useSkill(skillName ?? "");
+  // Destructure for JSX readability — every name below came out of
+  // `usePlaygroundSession`; the hook is the single source of truth
+  // for queries / refs / state / handlers.
   const {
-    files: packageFiles,
-    fileContents: packageContents,
-    isLoading: packageLoading,
-  } = useSkillPackage(skill?.presignedPackageUrl);
-
-  const envVarKeys = useMemo(() => extractEnvVarKeys(skill?.metadata as Record<string, unknown> ?? null), [skill?.metadata]);
-  const needsEnvVars = useMemo(() => isRuntimeBased(skill?.metadata as Record<string, unknown> ?? null) && envVarKeys.length > 0, [skill?.metadata, envVarKeys]);
-  const [envVars, setEnvVars] = useState<Record<string, string>>({});
-
-  const allEnvVarsFilled = useMemo(() => {
-    if (!needsEnvVars) return true;
-    return envVarKeys.every((key) => envVars[key]?.trim());
-  }, [needsEnvVars, envVarKeys, envVars]);
-
-  const handleEnvVarChange = useCallback((key: string, value: string) => {
-    setEnvVars((prev) => ({ ...prev, [key]: value }));
-  }, []);
-
-  const [pickedModelId, setPickedModelId] = useState<string | null>(null);
-
-  const { data: quotaSnapshot } = useMyQuota();
-  const playgroundSnap = quotaSnapshot?.playground;
-  const isOverLimit =
-    Boolean(playgroundSnap) &&
-    !quotaSnapshot?.isAdmin &&
-    playgroundSnap!.remaining <= 0;
-
-  const {
+    skill,
+    skillLoading,
+    skillError,
+    packageFiles,
+    packageContents,
+    packageLoading,
+    quotaSnapshot,
+    playgroundSnap,
+    isOverLimit,
     messages,
     isStreaming,
     toolCallStatuses,
     fileOutputs,
     error,
     currentAssistantContent,
-    sendMessage,
     abort,
     clearChat,
-  } = usePlaygroundChat();
+    messagesEndRef,
+    messagesScrollRef,
+    chatInputRef,
+    envVarKeys,
+    needsEnvVars,
+    envVars,
+    allEnvVarsFilled,
+    envIncomplete,
+    handleEnvVarChange,
+    handleSend,
+    handleStarterClick,
+    setPickedModelId,
+    pinnedDrawer,
+    setPinnedDrawer,
+    setHoverDrawer,
+    activeDrawer,
+    openHover,
+    scheduleHoverClose,
+    togglePin,
+    previewMetadata,
+  } = session;
 
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const messagesScrollRef = useRef<HTMLDivElement>(null);
-  const chatInputRef = useRef<ChatInputHandle>(null);
-  // Tracks whether the user has manually scrolled away from the bottom.
-  // While true, we do NOT yank them back on each token flush.
-  const stickToBottomRef = useRef(true);
+  // Memoized: the suggestion-chip set depends only on the skill name
+  // (i18n-substituted into the prompt body). Recomputing on every render
+  // works fine but caching is cheap and lets PlaygroundEmptyHero's
+  // reference-equality short-circuit do its job.
+  const starters = useMemo(
+    () => (skillName ? defaultPromptStarters(skillName, t) : []),
+    [skillName, t],
+  );
 
-  // Detect manual scroll-away: if the scrollbar is more than ~80px from
-  // the bottom we stop auto-scrolling. The user can return to live
-  // tailing by scrolling back to the bottom.
-  useEffect(() => {
-    const el = messagesScrollRef.current;
-    if (!el) return;
-    const onScroll = () => {
-      const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-      stickToBottomRef.current = distFromBottom < 80;
-    };
-    el.addEventListener("scroll", onScroll, { passive: true });
-    return () => el.removeEventListener("scroll", onScroll);
-  }, []);
+  const conversationActive = messages.length > 0 || isStreaming || !!currentAssistantContent;
 
-  // Auto-scroll only when stick-to-bottom is on (i.e. user hasn't
-  // scrolled up). Uses `auto` (instant) instead of `smooth` during
-  // streaming because `smooth` queues animations and gets choppy with
-  // 50ms-batched token flushes.
-  useEffect(() => {
-    if (!stickToBottomRef.current) return;
-    messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
-  }, [messages, currentAssistantContent]);
-
-  const handleSend = useCallback((content: string) => {
-    sendMessage(
-      content,
-      skillName ?? undefined,
-      needsEnvVars ? envVars : undefined,
-      pickedModelId ?? undefined,
-    );
-  }, [sendMessage, skillName, envVars, needsEnvVars, pickedModelId]);
-
-  const handleStarterClick = useCallback((body: string) => {
-    chatInputRef.current?.setValue(body);
-  }, []);
-
-  // ── Drawer state ──
-  // `hover` = mouse is on a rail tab or inside the drawer (auto-close
-  // when it leaves). `pinned` = clicked open; stays until clicked
-  // again, click outside, or Esc.
-  const [hoverDrawer, setHoverDrawer] = useState<DrawerKey | null>(null);
-  const [pinnedDrawer, setPinnedDrawer] = useState<DrawerKey | null>(null);
-  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const openHover = useCallback((key: DrawerKey) => {
-    if (closeTimerRef.current) {
-      clearTimeout(closeTimerRef.current);
-      closeTimerRef.current = null;
-    }
-    setHoverDrawer(key);
-  }, []);
-  const scheduleHoverClose = useCallback(() => {
-    if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
-    closeTimerRef.current = setTimeout(() => {
-      setHoverDrawer(null);
-      closeTimerRef.current = null;
-    }, 220);
-  }, []);
-  const togglePin = useCallback((key: DrawerKey) => {
-    setPinnedDrawer((cur) => (cur === key ? null : key));
-    setHoverDrawer(null);
-  }, []);
-
-  // Close pinned drawer on Esc
-  useEffect(() => {
-    if (!pinnedDrawer) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setPinnedDrawer(null);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [pinnedDrawer]);
-
-  // Auto-pin Env when env vars are missing — the user MUST fill them
-  // before chatting, so make it obvious without forcing them to discover
-  // the drawer hint.
-  const envIncomplete = needsEnvVars && !allEnvVarsFilled;
-  useEffect(() => {
-    if (envIncomplete) setPinnedDrawer("env");
-  }, [envIncomplete]);
-
-  // ── Per-skill session lifecycle ──
-  // Each Playground visit (and each switch between skills) starts a
-  // fresh chat. Without this, the Zustand store carries stale messages
-  // across navigation — confusing UX and breaking any per-session
-  // analytics that assume a session begins on mount.
-  useEffect(() => {
-    clearChat();
-    setEnvVars({});
-    stickToBottomRef.current = true;
-    return () => {
-      clearChat();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [skillName]);
-
-  const activeDrawer = pinnedDrawer ?? hoverDrawer;
-
-  const skillCategory = (skill?.metadata as Record<string, unknown> | null)?.category as string | undefined;
-
-  // Synthesise a SkillMetadata-shaped object from the registry skill record
-  // so SkillPackagePreview can render the same flat identity strip as the
-  // generative page. The preview only reads name / description / category /
-  // tag, so we don't need to faithfully reproduce the rest of the shape —
-  // `createDefaultSkillMetadata` fills the unused fields with safe defaults.
-  // Declared above the early-return guards so the hook order is stable.
-  const previewMetadata = useMemo<SkillMetadata | null>(() => {
-    if (!skill) return null;
-    return createDefaultSkillMetadata({
-      name: skill.name,
-      description: skill.description ?? "",
-      version: skill.version,
-      metadata: {
-        category: (skillCategory as SkillCategory) ?? "plain",
-        runtime: [],
-        runtimeDependency: [],
-        runtimeEnvVar: [],
-        toolList: [],
-        tag: skill.tags ?? [],
-      },
-    });
-  }, [skill, skillCategory]);
+  // ── Rail tabs ───────────────────────────────────────────────────────
+  // Inline because the tab list flips with `needsEnvVars` — pulling it
+  // into the hook would force a re-build of PlaygroundRailTab[] in every
+  // hook consumer that didn't care.
+  const railTabs: PlaygroundRailTab[] = [
+    ...(needsEnvVars
+      ? [
+          {
+            key: "env" as const,
+            ariaLabel: t("aria.playgroundEnvDrawer"),
+            tip: "ENV",
+            Icon: EnvIcon,
+            warn: envIncomplete,
+          },
+        ]
+      : []),
+    {
+      key: "package" as const,
+      ariaLabel: t("aria.skillPackageDrawer"),
+      tip: "PACKAGE",
+      Icon: PackageIcon,
+    },
+  ];
 
   // No skill specified
   if (!skillName) {
@@ -324,7 +153,42 @@ export function PlaygroundPage() {
     );
   }
 
-  if (isOverLimit && playgroundSnap && quotaSnapshot) {
+  // After loading: no skill data means the caller doesn't have access
+  // (404 SKILL_NOT_FOUND on a private skill they aren't allowed to see),
+  // OR the slug is bogus. Either way, render the not-found state —
+  // never the playground UI (#563). Without this gate, starter prompts
+  // and the chat input were rendering for unauthorized users even
+  // though every API call would 404.
+  if (skillError || !skill) {
+    return (
+      <PageTransition>
+        <div className="flex h-full items-center justify-center">
+          <div className="text-center max-w-md">
+            <p className="mb-2 font-display text-lg text-strong">
+              {t("playground.notFoundTitle", "Skill not found")}
+            </p>
+            <p className="mb-4 font-text text-sm text-meta">
+              {t(
+                "playground.notFoundBody",
+                "This skill doesn't exist, or you don't have access to it.",
+              )}
+            </p>
+            <Link to="/registry" className="font-text text-sm text-accent hover:underline">
+              {t("playground.browseSkills")}
+            </Link>
+          </div>
+        </div>
+      </PageTransition>
+    );
+  }
+
+  // #624 (sibling) — only kick to OverLimitPage on a *fresh* arrival.
+  // Once the user has messages on screen, their conversation
+  // (including a just-completed final allowed run) must not be
+  // replaced by the quota gate when the post-charge quota poll
+  // arrives. The Send button is already disabled via `isOverLimit`
+  // inside the composer, so no new runs slip through.
+  if (isOverLimit && playgroundSnap && quotaSnapshot && !conversationActive) {
     return (
       <PageTransition>
         <OverLimitPage
@@ -336,39 +200,6 @@ export function PlaygroundPage() {
     );
   }
 
-  const starters = defaultPromptStarters(skillName, t);
-  const conversationActive = messages.length > 0 || !!currentAssistantContent || isStreaming;
-
-  // Right-edge rail tabs. Each tab renders as a compact icon handle —
-  // the `tip` is a horizontal mono-uppercase label shown on hover (matches
-  // the drawer header `[§ NAME]` voice). The Package drawer now hosts the
-  // skill identity (name + category + tags + description) at the top of
-  // `SkillPackagePreview`, so a separate Skill tab would be redundant.
-  const railTabs: Array<{
-    key: DrawerKey;
-    ariaLabel: string;
-    tip: string;
-    Icon: ComponentType<IconProps>;
-    warn?: boolean;
-  }> = [
-    ...(needsEnvVars
-      ? [
-          {
-            key: "env" as const,
-            ariaLabel: t("aria.playgroundEnvDrawer"),
-            tip: "ENV",
-            Icon: EnvIcon,
-            warn: envIncomplete,
-          },
-        ]
-      : []),
-    {
-      key: "package",
-      ariaLabel: t("aria.skillPackageDrawer"),
-      tip: "PACKAGE",
-      Icon: PackageIcon,
-    },
-  ];
 
   return (
     <PageTransition>
@@ -405,125 +236,22 @@ export function PlaygroundPage() {
             {/* Messages scroll area */}
             <div ref={messagesScrollRef} className="min-h-0 flex-1 overflow-y-auto pr-1">
               {!conversationActive ? (
-                /* ─── Empty-state hero ─── ChatGPT-style centered prompt
-                    flag with skill identity, single-line lede, and three
-                    starters as soft chips below. Vertical-centered so
-                    the cursor lands ~middle of the screen at rest. */
-                <div className="flex h-full flex-col items-center justify-center py-8">
-                  <div className="w-full space-y-6 text-center">
-                    <div className="space-y-2">
-                      <div className="font-mono text-[10px] uppercase tracking-[0.20em] text-meta">
-                        {skillName}
-                      </div>
-                      <h2 className="font-display text-3xl font-semibold leading-[1.15] tracking-tight text-strong">
-                        {t("playground.heroTitle", "Probe the skill.")}
-                      </h2>
-                      <p className="font-text text-[15px] leading-relaxed text-body">
-                        {envIncomplete
-                          ? t(
-                              "playground.heroEnvFirst",
-                              "Set the runtime env vars in the Env drawer on the right, then start chatting.",
-                            )
-                          : t(
-                              "playground.heroSubtitle",
-                              "Ask anything about {{name}}, or have it run with sample input.",
-                              { name: skillName },
-                            )}
-                      </p>
-                    </div>
-
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                      {starters.map((s) => (
-                        <button
-                          key={s.label}
-                          type="button"
-                          onClick={() => handleStarterClick(s.body)}
-                          disabled={envIncomplete}
-                          className="group flex flex-col items-start gap-1 rounded-xl border border-subtle bg-card/60 px-3.5 py-3 text-left transition-all hover:border-accent/60 hover:bg-card disabled:cursor-not-allowed disabled:opacity-40"
-                        >
-                          <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-accent">
-                            {s.label}
-                          </span>
-                          <span className="line-clamp-2 font-text text-[13px] leading-snug text-body">
-                            {s.body}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-
-                    <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-meta/70">
-                      {t(
-                        "playground.drawerHint",
-                        "Skill · Env · Package on the right edge",
-                      )}
-                    </p>
-                  </div>
-                </div>
+                <PlaygroundEmptyHero
+                  skillName={skillName}
+                  envIncomplete={envIncomplete}
+                  starters={starters}
+                  onStarterClick={handleStarterClick}
+                />
               ) : (
-                /* ─── Conversation ─── */
-                <div className="space-y-3 py-3">
-                  {messages.map((msg, idx) => {
-                    const isLastAssistant =
-                      msg.role === "assistant" &&
-                      idx === messages.length - 1 &&
-                      isStreaming;
-                    return (
-                      <ChatMessage
-                        key={msg.id}
-                        message={msg}
-                        toolCallStatuses={toolCallStatuses}
-                        isStreaming={isLastAssistant}
-                      />
-                    );
-                  })}
-
-                  {currentAssistantContent && (
-                    <ChatMessage
-                      message={{
-                        id: "streaming-buffer",
-                        role: "assistant",
-                        content: currentAssistantContent,
-                      }}
-                      toolCallStatuses={toolCallStatuses}
-                      isStreaming
-                    />
-                  )}
-
-                  {isStreaming && !currentAssistantContent && <ThinkingBubble />}
-
-                  {fileOutputs.map((file, idx) => (
-                    <div key={`file-${idx}`} className="flex justify-start">
-                      <div className="max-w-[88%] rounded-sm border border-subtle bg-card p-2.5">
-                        {file.mimeType.startsWith("image/") ? (
-                          <div>
-                            <img
-                              src={`data:${file.mimeType};base64,${file.content}`}
-                              alt={file.path}
-                              className="max-w-full rounded-sm"
-                            />
-                            <p className="mt-1.5 font-mono text-[10px] text-meta">{file.path} ({Math.round(file.size / 1024)}KB)</p>
-                          </div>
-                        ) : (
-                          <a
-                            href={`data:${file.mimeType};base64,${file.content}`}
-                            download={file.path.split("/").pop()}
-                            className="font-mono text-xs text-accent hover:underline"
-                          >
-                            {file.path} ({Math.round(file.size / 1024)}KB)
-                          </a>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-
-                  {error && (
-                    <div className="rounded-sm border border-danger/30 bg-danger/5 px-3 py-2.5">
-                      <p className="font-text text-xs text-danger">{error}</p>
-                    </div>
-                  )}
-
-                  <div ref={messagesEndRef} />
-                </div>
+                <PlaygroundConversation
+                  ref={messagesEndRef}
+                  messages={messages}
+                  isStreaming={isStreaming}
+                  toolCallStatuses={toolCallStatuses}
+                  currentAssistantContent={currentAssistantContent}
+                  fileOutputs={fileOutputs}
+                  error={error}
+                />
               )}
             </div>
 
@@ -560,56 +288,14 @@ export function PlaygroundPage() {
 
         {/* ─── Right-edge rail (always visible — anchored to viewport
             so it stays put when the page scrolls) ─── */}
-        <div
-          className="fixed right-0 top-1/2 z-40 flex -translate-y-1/2 flex-col gap-1"
-          onMouseLeave={scheduleHoverClose}
-        >
-          {railTabs.map((tab) => {
-            const active = activeDrawer === tab.key;
-            const Icon = tab.Icon;
-            return (
-              <button
-                key={tab.key}
-                type="button"
-                onMouseEnter={() => openHover(tab.key)}
-                onClick={() => togglePin(tab.key)}
-                className={`group relative flex h-11 w-9 items-center justify-center rounded-l-sm border-y border-l transition-colors ${
-                  active
-                    ? "border-accent/60 bg-card text-accent"
-                    : "border-subtle bg-card/80 text-meta hover:border-accent/40 hover:text-strong"
-                }`}
-                aria-label={tab.ariaLabel}
-              >
-                <Icon className="h-4 w-4" />
-
-                {/* Horizontal tooltip — fades in on hover when the drawer
-                    for this tab is not already open. Matches the drawer
-                    header voice `[§ NAME]`. */}
-                {!active && (
-                  <span
-                    className="pointer-events-none absolute right-full top-1/2 mr-2 -translate-y-1/2 whitespace-nowrap rounded-sm border border-subtle bg-card px-2 py-1 font-mono text-[10px] uppercase tracking-[0.18em] text-strong opacity-0 transition-opacity duration-150 group-hover:opacity-100"
-                    aria-hidden
-                  >
-                    [§&nbsp;{tab.tip}]
-                  </span>
-                )}
-
-                {tab.warn && (
-                  <span
-                    className="absolute -left-1 top-1.5 h-1.5 w-1.5 rounded-full bg-warning"
-                    aria-hidden
-                  />
-                )}
-                {pinnedDrawer === tab.key && (
-                  <span
-                    className="absolute -left-px inset-y-2 w-px bg-accent"
-                    aria-hidden
-                  />
-                )}
-              </button>
-            );
-          })}
-        </div>
+        <PlaygroundRail
+          tabs={railTabs}
+          activeDrawer={activeDrawer}
+          pinnedDrawer={pinnedDrawer}
+          onHoverOpen={openHover}
+          onHoverCloseScheduled={scheduleHoverClose}
+          onTogglePin={togglePin}
+        />
 
         {/* ─── Drawer overlay ─── */}
         <AnimatePresence>
@@ -678,100 +364,22 @@ export function PlaygroundPage() {
                 {/* Drawer body */}
                 <div className="flex min-h-0 flex-1 flex-col">
                   {activeDrawer === "env" && needsEnvVars && (
-                    <div className="flex min-h-0 flex-1 flex-col">
-                      {/* Header strip — same flat voice as the skill drawer. */}
-                      <div className="shrink-0 border-b border-subtle bg-elevated/30 px-5 py-4">
-                        <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-accent">
-                          [§&nbsp;{t("playground.envVars")}]
-                        </div>
-                        <p className="mt-2 font-text text-sm leading-relaxed text-body">
-                          {t("playground.envVarsDesc")}
-                        </p>
-                      </div>
-
-                      {/* Form */}
-                      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-5 py-4">
-                        {envVarKeys.map((key) => {
-                          const filled = !!envVars[key]?.trim();
-                          return (
-                            <div key={key} className="space-y-1">
-                              <div className="flex items-center justify-between gap-2">
-                                <label
-                                  className="block min-w-0 flex-1 truncate font-mono text-[11px] text-strong"
-                                  title={key}
-                                >
-                                  {key}
-                                </label>
-                                <span
-                                  className={`shrink-0 font-mono text-[10px] uppercase tracking-[0.14em] ${
-                                    filled ? "text-success" : "text-meta"
-                                  }`}
-                                >
-                                  {filled ? t("common.set") : t("common.required")}
-                                </span>
-                              </div>
-                              <input
-                                type="text"
-                                value={envVars[key] ?? ""}
-                                onChange={(e) => handleEnvVarChange(key, e.target.value)}
-                                placeholder={t("playground.enterValue")}
-                                className="w-full rounded-sm border border-subtle bg-page px-2.5 py-1.5 font-mono text-xs text-strong placeholder:text-meta/50 focus:border-accent/60 focus:outline-none"
-                              />
-                            </div>
-                          );
-                        })}
-                        {!allEnvVarsFilled && (
-                          <p className="pt-2 font-text text-[11px] leading-relaxed text-meta">
-                            {t(
-                              "playground.envVarsLockHint",
-                              "Chat is locked until every required env var has a value.",
-                            )}
-                          </p>
-                        )}
-                      </div>
-                    </div>
+                    <PlaygroundEnvDrawerBody
+                      envVarKeys={envVarKeys}
+                      envVars={envVars}
+                      allEnvVarsFilled={allEnvVarsFilled}
+                      onEnvVarChange={handleEnvVarChange}
+                    />
                   )}
 
                   {activeDrawer === "package" && (
-                    <div className="flex min-h-0 flex-1 flex-col">
-                      {/* Padded content area — must itself be a flex column
-                          so the preview's `flex-1 min-h-0` actually claims
-                          the remaining height and the file viewer scrolls
-                          internally instead of bleeding past the footer. */}
-                      <div className="flex min-h-0 flex-1 flex-col p-4">
-                        {packageLoading ? (
-                          <Skeleton lines={8} />
-                        ) : packageFiles.length > 0 ? (
-                          <SkillPackagePreview
-                            files={packageFiles}
-                            fileContents={packageContents}
-                            metadata={previewMetadata}
-                            editable={false}
-                            className="min-h-0 flex-1"
-                          />
-                        ) : (
-                          <div className="flex h-32 items-center justify-center">
-                            <p className="font-text text-xs text-meta">{t("playground.noPackage")}</p>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Footer — registry link pinned at the bottom,
-                          matching the Skill drawer's pattern. */}
-                      {skill && (
-                        <div className="flex shrink-0 items-center justify-between border-t border-subtle bg-elevated/30 px-5 py-3">
-                          <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-meta">
-                            {skill.name}@v{skill.version}
-                          </span>
-                          <Link
-                            to={`/skills/${encodeURIComponent(skill.name)}`}
-                            className="font-mono text-[11px] text-accent hover:underline"
-                          >
-                            {t("playground.openInRegistry", "Open in registry →")}
-                          </Link>
-                        </div>
-                      )}
-                    </div>
+                    <PlaygroundPackageDrawerBody
+                      packageLoading={packageLoading}
+                      packageFiles={packageFiles}
+                      packageContents={packageContents}
+                      previewMetadata={previewMetadata}
+                      skill={skill}
+                    />
                   )}
                 </div>
               </motion.aside>

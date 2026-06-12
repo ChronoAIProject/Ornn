@@ -20,15 +20,30 @@ import {
   requirePermission,
   getAuth,
 } from "../../middleware/nyxidAuth";
+import { buildActorContext } from "../skills/crud/authorize";
 import { validateBody, getValidatedBody } from "../../middleware/validate";
-import pino from "pino";
-
-const logger = pino({ level: "info" }).child({ module: "playgroundRoutes" });
+import { rateLimit } from "../../middleware/rateLimit";
+import { createLogger } from "../../shared/logger";
+const logger = createLogger("playgroundRoutes");
 
 // Zod schemas
+
+/**
+ * Per-message content cap (#654). Mirrors the frontend `MAX_INPUT_CHARS`
+ * in `ornn-web/src/components/playground/ChatInput.tsx`. ~8k tokens at
+ * 4 chars/token — generous for interactive prompts without enabling
+ * whole-novel pastes. The textarea hard-caps at this value via its
+ * `maxLength`, but the backend duplicates the check so a malicious /
+ * non-browser client can't slip past.
+ */
+const MAX_CHAT_MESSAGE_CHARS = 32_000;
+
 const playgroundMessageSchema = z.object({
   role: z.enum(["user", "assistant", "tool", "system"]),
-  content: z.string(),
+  content: z.string().max(
+    MAX_CHAT_MESSAGE_CHARS,
+    `Message content exceeds ${MAX_CHAT_MESSAGE_CHARS} character limit`,
+  ),
   toolCalls: z.array(z.object({
     id: z.string(),
     name: z.string(),
@@ -84,6 +99,11 @@ export function createPlaygroundRoutes(config: PlaygroundRoutesConfig): Hono<{ V
   app.post(
     "/playground/chat",
     requirePermission("ornn:playground:use"),
+    // Rate limit (#809): per-user 20/min, same cap as skills-generate
+    // (generation/routes.ts) — playground chat runs an LLM call per request,
+    // same cost class. Mounted before validateBody so a flood of malformed
+    // bodies still 429s before Zod (and before any LLM cost).
+    rateLimit({ windowMs: 60_000, max: 20, label: "playground-chat" }),
     validateBody(chatRequestSchema, "VALIDATION_ERROR"),
     async (c) => {
       const authCtx = getAuth(c);
@@ -91,24 +111,50 @@ export function createPlaygroundRoutes(config: PlaygroundRoutesConfig): Hono<{ V
 
       logger.info({ userId: authCtx.userId, messageCount: parsed.messages.length }, "Chat request");
 
-      // Quota check — rejects with 429 BEFORE any LLM cost is incurred.
-      // Admins bypass via permission inside the service.
+      // Resolve the model — explicit `modelId` (validated against the
+      // surface's enabled list) or the admin-set default. 503 when no
+      // models are enabled for the playground surface. This (and the
+      // org-membership read below) run BEFORE the quota reserve so a
+      // model/auth failure can't strand a reserved slot (#808) — both
+      // are pure reads that touch no LLM, so "429 before LLM cost" still
+      // holds.
+      const resolution = await llmProvidersService.resolveModel({
+        surface: "playground",
+        // exactOptionalPropertyTypes (#657)
+        ...(parsed.modelId !== undefined ? { requested: parsed.modelId } : {}),
+      });
+      if (resolution.kind !== "ok") throwModelResolutionError(resolution);
+      const resolvedModelId = resolution.modelId;
+
+      // #806 — build the caller's object-level authorization actor and
+      // thread it into the chat service. Depends on nyxidOrgLookupMiddleware
+      // being mounted in bootstrap.ts ahead of the playground routes so the
+      // helper can resolve the caller's org memberships. The chat service
+      // uses this single actor to gate BOTH skill bypass paths (the
+      // `skillId` injection and the `load_skill` tool).
+      const actor = await buildActorContext(c);
+
+      // Quota reserve — atomically claims a slot under the cap guard and
+      // rejects with 429 BEFORE any LLM cost is incurred (#808). Runs
+      // last among the pre-stream awaits: from here to the producer's
+      // `finally` (which always calls chargeOnCompletion) nothing can
+      // throw, so a reserved slot is always reconciled (committed on
+      // success, released on system_error/abort). Admins bypass inside
+      // the service and take no reservation.
+      // Capture the reservation instant so the eventual charge lands in
+      // the SAME calendar-month bucket the slot was reserved against
+      // (#827). Without this, a run that starts at 23:59:59 on the last
+      // day of a month and finishes after the UTC rollover would commit
+      // its per-model tally to the next month's bucket while `used` was
+      // bumped in the previous one — a benign but confusing straddle.
+      const reservedAt = new Date();
       const decision = await quotaService.checkAllowed({
         userId: authCtx.userId,
         permissions: authCtx.permissions,
         surface: "playground",
+        now: reservedAt,
       });
       if (!decision.allowed) throwQuotaError(decision);
-
-      // Resolve the model — explicit `modelId` (validated against the
-      // surface's enabled list) or the admin-set default. 503 when no
-      // models are enabled for the playground surface.
-      const resolution = await llmProvidersService.resolveModel({
-        surface: "playground",
-        requested: parsed.modelId,
-      });
-      if (resolution.kind !== "ok") throwModelResolutionError(resolution);
-      const resolvedModelId = resolution.modelId;
 
       // Record a `playground` pull if the chat is bound to a skill. The
       // chat service loads the skill internally; we duplicate the lookup
@@ -137,6 +183,14 @@ export function createPlaygroundRoutes(config: PlaygroundRoutesConfig): Hono<{ V
       // safe fallback — only flips to `success` if the stream
       // completes cleanly.
       let outcome: ChargeOutcome = "system_error";
+      // Tracks whether the provider produced any genuinely billable
+      // output before the run terminated (#766). The LLM bills for
+      // tokens the moment they stream, so a client abort (or any error)
+      // AFTER billable output must NOT refund the reserved slot —
+      // otherwise an abort-after-first-token loop yields free usage.
+      // Flipped true on the first non-empty text delta / tool event in
+      // the consume loop; consulted once in `finally` before charging.
+      let chargeableStarted = false;
 
       const encoder = new TextEncoder();
       const signal = c.req.raw.signal;
@@ -213,8 +267,24 @@ export function createPlaygroundRoutes(config: PlaygroundRoutesConfig): Hono<{ V
         try {
           for await (const event of chatService.chat(authCtx.userId, chatRequest, signal, {
             modelId: resolvedModelId,
+            actor,
           })) {
             await writeEvent(event);
+            // #766 — mark the run billable on the first event that
+            // represents real provider output. A non-empty text delta
+            // means tokens were streamed (and billed); tool-call /
+            // tool-result / file-output mean the skill side actually
+            // ran. An empty text-delta is a no-op flush and stays
+            // refundable. Consulted in `finally` so an abort/error AFTER
+            // this point commits the slot instead of refunding it.
+            if (
+              (event.type === "text-delta" && event.delta.length > 0) ||
+              event.type === "tool-call" ||
+              event.type === "tool-result" ||
+              event.type === "file-output"
+            ) {
+              chargeableStarted = true;
+            }
             if (event.type === "tool-result") outcome = "skill_error";
             if (event.type === "finish") {
               const reason = (event as { finishReason?: string }).finishReason;
@@ -229,6 +299,13 @@ export function createPlaygroundRoutes(config: PlaygroundRoutesConfig): Hono<{ V
           signal.removeEventListener("abort", onAbort);
           clearInterval(keepAlive);
           await closeOnce();
+          if (chargeableStarted && outcome === "system_error") {
+            // Provider already produced billable output before the run
+            // aborted/errored; commit the reserved slot instead of
+            // refunding it (#766). The LLM bill is already incurred —
+            // a refund here would hand out free usage on abort-after-token.
+            outcome = "skill_error";
+          }
           await quotaService
             .chargeOnCompletion({
               userId: authCtx.userId,
@@ -236,6 +313,10 @@ export function createPlaygroundRoutes(config: PlaygroundRoutesConfig): Hono<{ V
               surface: "playground",
               outcome,
               modelId: resolvedModelId,
+              // Reconcile against the reserved month bucket (#827), not
+              // wall-clock-now, so a month-boundary straddle commits/
+              // releases the slot it actually reserved.
+              now: reservedAt,
             })
             .catch((err) => {
               logger.warn(

@@ -1,17 +1,3 @@
-/** Format a date string to a human-readable relative or absolute form */
-export function formatDate(dateStr: string): string {
-  const date = new Date(dateStr);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-
-  if (diffDays === 0) return "Today";
-  if (diffDays === 1) return "Yesterday";
-  if (diffDays < 30) return `${diffDays}d ago`;
-  if (diffDays < 365) return `${Math.floor(diffDays / 30)}mo ago`;
-  return date.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
-}
-
 /** Format a number with commas */
 export function formatNumber(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
@@ -28,8 +14,17 @@ export function formatFileSize(bytes: number): string {
   return `${value.toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
 }
 
-/** Truncate a string to a max length with ellipsis */
-export function truncate(str: string, maxLength: number): string {
-  if (str.length <= maxLength) return str;
-  return str.slice(0, maxLength - 3) + "...";
+/** Format an ISO date to an exact Asia/Singapore timestamp in the active UI locale (#752). */
+export function formatDateSGT(dateStr: string, lang?: string, opts?: { withSeconds?: boolean }): string {
+  const locale = lang === "zh" ? "zh-CN" : "en-SG"; // zh→zh-CN (NewsPage precedent); en→en-SG preserves current output
+  return new Date(dateStr).toLocaleString(locale, {
+    timeZone: "Asia/Singapore",
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    ...(opts?.withSeconds ? { second: "2-digit" as const } : {}),
+    hour12: false,
+  });
 }

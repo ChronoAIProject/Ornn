@@ -37,7 +37,8 @@ export type SkillOutputType = "text" | "file";
 /** Nested metadata sub-object matching the frontmatter schema */
 export interface SkillMetadataBlock {
   category: SkillCategory;
-  outputType?: SkillOutputType;
+  // exactOptionalPropertyTypes (#657)
+  outputType?: SkillOutputType | undefined;
   runtime: string[];
   runtimeDependency: string[];
   runtimeEnvVar: string[];

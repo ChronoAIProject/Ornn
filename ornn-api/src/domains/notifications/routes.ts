@@ -69,8 +69,10 @@ function toFeedDto(item: FeedItem): FeedItemDto {
     userId: item.userId,
     category: item.category,
     title: item.title,
-    body: item.body,
-    link: item.link,
+    // exactOptionalPropertyTypes (#657): conditional spread on
+    // optional body/link.
+    ...(item.body !== undefined ? { body: item.body } : {}),
+    ...(item.link !== undefined ? { link: item.link } : {}),
     data: item.data,
     readAt: item.readAt ? item.readAt.toISOString() : null,
     createdAt: item.createdAt.toISOString(),
@@ -87,11 +89,18 @@ export function createNotificationRoutes(
   app.get("/notifications", auth, async (c) => {
     const authCtx = getAuth(c);
     const unreadOnly = c.req.query("unread") === "true";
+    // Parse + finite-validate only. The clamp authority lives in the
+    // service (single source of truth) — a malformed/empty `?limit=`
+    // (e.g. `abc`, ``) yields NaN here, which we drop to `undefined` so
+    // the service falls back to its default page size instead of
+    // erroring (#920).
     const limitParam = c.req.query("limit");
-    const limit = limitParam ? Math.max(1, Math.min(200, Number.parseInt(limitParam, 10))) : undefined;
+    const parsed = limitParam !== undefined ? Number.parseInt(limitParam, 10) : NaN;
+    const limit = Number.isFinite(parsed) ? parsed : undefined;
     const items = await notificationService.listFeedForUser(authCtx.userId, {
       unreadOnly,
-      limit,
+      // exactOptionalPropertyTypes (#657)
+      ...(limit !== undefined ? { limit } : {}),
     });
     return c.json({ data: { items: items.map(toFeedDto) }, error: null });
   });

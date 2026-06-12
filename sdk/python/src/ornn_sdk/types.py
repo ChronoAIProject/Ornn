@@ -18,6 +18,7 @@ Visibility = Literal["public", "private"]
 SearchScope = Literal["public", "private", "mine", "mixed", "shared-with-me"]
 SearchMode = Literal["keyword", "semantic", "hybrid"]
 SystemFilter = Literal["any", "only", "exclude"]
+SkillsetKind = Literal["generic", "consensus-supported"]
 
 
 @dataclass
@@ -35,7 +36,7 @@ class SkillSummary:
     _extra: dict[str, Any] = field(default_factory=dict, repr=False)
 
     @classmethod
-    def from_dict(cls, raw: dict[str, Any]) -> "SkillSummary":
+    def from_dict(cls, raw: dict[str, Any]) -> SkillSummary:
         known = {
             "id",
             "name",
@@ -66,16 +67,17 @@ class SkillSummary:
 
 @dataclass
 class SkillDetail(SkillSummary):
-    owner_id: str = ""
     storage_key: str | None = None
     shared_with_users: list[str] = field(default_factory=list)
     shared_with_orgs: list[str] = field(default_factory=list)
 
     @classmethod
-    def from_dict(cls, raw: dict[str, Any]) -> "SkillDetail":
+    def from_dict(cls, raw: dict[str, Any]) -> SkillDetail:
         base = SkillSummary.from_dict(raw).__dict__
         base.pop("_extra")
-        known_extra = {"ownerId", "storageKey", "sharedWithUsers", "sharedWithOrgs"}
+        # `ownerId` was removed from the wire in #581 — tolerate it
+        # showing up on old API responses (treat as unknown extra).
+        known_extra = {"storageKey", "sharedWithUsers", "sharedWithOrgs"}
         summary_known = {
             "id",
             "name",
@@ -91,11 +93,10 @@ class SkillDetail(SkillSummary):
         extra = {
             k: v
             for k, v in raw.items()
-            if k not in summary_known and k not in known_extra
+            if k not in summary_known and k not in known_extra and k != "ownerId"
         }
         return cls(
             **base,
-            owner_id=raw.get("ownerId", ""),
             storage_key=raw.get("storageKey"),
             shared_with_users=list(raw.get("sharedWithUsers") or []),
             shared_with_orgs=list(raw.get("sharedWithOrgs") or []),
@@ -113,7 +114,7 @@ class SkillVersionEntry:
     deprecation_note: str | None = None
 
     @classmethod
-    def from_dict(cls, raw: dict[str, Any]) -> "SkillVersionEntry":
+    def from_dict(cls, raw: dict[str, Any]) -> SkillVersionEntry:
         return cls(
             version=raw["version"],
             created_on=raw.get("createdOn", ""),
@@ -134,7 +135,7 @@ class SkillSearchResult:
     mode: str | None = None
 
     @classmethod
-    def from_dict(cls, raw: dict[str, Any]) -> "SkillSearchResult":
+    def from_dict(cls, raw: dict[str, Any]) -> SkillSearchResult:
         return cls(
             items=[SkillSummary.from_dict(i) for i in raw.get("items") or []],
             total=int(raw.get("total", 0)),
@@ -143,6 +144,44 @@ class SkillSearchResult:
             total_pages=int(raw.get("totalPages", 0)),
             mode=raw.get("mode"),
         )
+
+
+@dataclass
+class ClosureNode:
+    """One node in a resolved dependency closure (#968).
+
+    Mirrors the items returned by
+    ``GET /api/v1/skills/{id_or_name}/closure``. Nodes arrive in
+    deps-first topological order — every dependency precedes the
+    dependents that pin it.
+    """
+
+    guid: str
+    name: str
+    version: str
+    depth: int
+    skill_hash: str | None = None
+
+    @classmethod
+    def from_dict(cls, raw: dict[str, Any]) -> ClosureNode:
+        return cls(
+            guid=raw.get("guid", ""),
+            name=raw["name"],
+            version=raw["version"],
+            depth=int(raw.get("depth", 0)),
+            skill_hash=raw.get("skillHash"),
+        )
+
+
+@dataclass
+class ClosureResult:
+    """Result of :meth:`OrnnClient.resolve_closure` — the ordered closure."""
+
+    items: list[ClosureNode]
+
+    @classmethod
+    def from_dict(cls, raw: dict[str, Any]) -> ClosureResult:
+        return cls(items=[ClosureNode.from_dict(i) for i in raw.get("items") or []])
 
 
 @dataclass
@@ -165,3 +204,128 @@ class UpdateSkillMetadata:
         if self.metadata is not None:
             out["metadata"] = self.metadata
         return out
+
+
+# ---------------------------------------------------------------------------
+# Skillsets (#969)
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class SkillsetDetail:
+    """Full skillset detail returned by single-skillset reads.
+
+    A ``consensus-supported`` skillset is an author CLAIM that the members
+    are an independent, comparable set suitable for agent-side consensus —
+    not a guarantee. ``generic`` is a plain curated bundle.
+    """
+
+    guid: str
+    name: str
+    description: str
+    kind: SkillsetKind
+    version: str
+    latest_version: str
+    is_private: bool
+    created_by: str
+    # Master prompt (#978) — the per-version usage instructions for agents.
+    instructions: str = ""
+    tags: list[str] = field(default_factory=list)
+    members: list[str] = field(default_factory=list)
+    shared_with_users: list[str] = field(default_factory=list)
+    shared_with_orgs: list[str] = field(default_factory=list)
+    created_on: str = ""
+    updated_on: str = ""
+
+    @classmethod
+    def from_dict(cls, raw: dict[str, Any]) -> SkillsetDetail:
+        return cls(
+            guid=raw.get("guid", ""),
+            name=raw["name"],
+            description=raw.get("description", ""),
+            kind=raw.get("kind", "generic"),
+            version=raw.get("version", ""),
+            latest_version=raw.get("latestVersion", ""),
+            is_private=bool(raw.get("isPrivate", False)),
+            created_by=raw.get("createdBy", ""),
+            instructions=raw.get("instructions", ""),
+            tags=list(raw.get("tags") or []),
+            members=list(raw.get("members") or []),
+            shared_with_users=list(raw.get("sharedWithUsers") or []),
+            shared_with_orgs=list(raw.get("sharedWithOrgs") or []),
+            created_on=raw.get("createdOn", ""),
+            updated_on=raw.get("updatedOn", ""),
+        )
+
+
+@dataclass
+class SkillsetSummary:
+    """Lighter skillset summary returned by search."""
+
+    guid: str
+    name: str
+    description: str
+    kind: SkillsetKind
+    member_count: int
+    latest_version: str
+    is_private: bool
+    created_by: str
+    tags: list[str] = field(default_factory=list)
+    created_on: str = ""
+    updated_on: str = ""
+
+    @classmethod
+    def from_dict(cls, raw: dict[str, Any]) -> SkillsetSummary:
+        return cls(
+            guid=raw.get("guid", ""),
+            name=raw["name"],
+            description=raw.get("description", ""),
+            kind=raw.get("kind", "generic"),
+            member_count=int(raw.get("memberCount", 0)),
+            latest_version=raw.get("latestVersion", ""),
+            is_private=bool(raw.get("isPrivate", False)),
+            created_by=raw.get("createdBy", ""),
+            tags=list(raw.get("tags") or []),
+            created_on=raw.get("createdOn", ""),
+            updated_on=raw.get("updatedOn", ""),
+        )
+
+
+@dataclass
+class SkillsetSearchResult:
+    items: list[SkillsetSummary]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
+
+    @classmethod
+    def from_dict(cls, raw: dict[str, Any]) -> SkillsetSearchResult:
+        return cls(
+            items=[SkillsetSummary.from_dict(i) for i in raw.get("items") or []],
+            total=int(raw.get("total", 0)),
+            page=int(raw.get("page", 1)),
+            page_size=int(raw.get("pageSize", 0)),
+            total_pages=int(raw.get("totalPages", 0)),
+        )
+
+
+@dataclass
+class SkillsetClosureResult:
+    """Result of :meth:`OrnnClient.resolve_skillset_closure` (#978).
+
+    The resolved delivery closure PLUS the version's master prompt. A
+    dedicated type (NOT the shared :class:`ClosureResult`): the skillset
+    closure carries ``instructions`` as a root sibling of ``items``, while
+    the skill closure (#968) stays ``{items}``.
+    """
+
+    instructions: str
+    items: list[ClosureNode]
+
+    @classmethod
+    def from_dict(cls, raw: dict[str, Any]) -> SkillsetClosureResult:
+        return cls(
+            instructions=raw.get("instructions", ""),
+            items=[ClosureNode.from_dict(i) for i in raw.get("items") or []],
+        )

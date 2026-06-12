@@ -12,21 +12,21 @@
 import { NavLink } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 
-interface NavEntry {
+interface NavEntrySource {
   to: string;
-  label: string;
+  i18nKey: string;
 }
 
-const SECTIONS: NavEntry[] = [
-  { to: "/admin/settings/llm-providers", label: "LLM Providers" },
-  { to: "/admin/settings/playground", label: "Playground" },
-  { to: "/admin/settings/skill-generation", label: "Skill Generation" },
-  { to: "/admin/settings/mirror", label: "GitHub Mirror" },
-  { to: "/admin/settings/integrations/nyxid", label: "NyxID Integration" },
-  { to: "/admin/settings/skill-audit", label: "Skill Auditing" },
-  { to: "/admin/settings/posthog", label: "PostHog" },
-  { to: "/admin/settings/extras", label: "Service Binding List" },
-  { to: "/admin/settings/export-import", label: "Export / Import" },
+const SECTIONS: NavEntrySource[] = [
+  { to: "/admin/settings/llm-providers", i18nKey: "llmProviders" },
+  { to: "/admin/settings/playground", i18nKey: "playground" },
+  { to: "/admin/settings/skill-generation", i18nKey: "skillGeneration" },
+  { to: "/admin/settings/mirror", i18nKey: "githubMirror" },
+  { to: "/admin/settings/integrations/nyxid", i18nKey: "nyxidIntegration" },
+  { to: "/admin/settings/skill-audit", i18nKey: "skillAuditing" },
+  { to: "/admin/settings/posthog", i18nKey: "postHog" },
+  { to: "/admin/settings/extras", i18nKey: "serviceBinding" },
+  { to: "/admin/settings/export-import", i18nKey: "exportImport" },
 ];
 
 interface SettingsNavProps {
@@ -52,7 +52,7 @@ export function SettingsNav({ className = "" }: SettingsNavProps) {
             }`
           }
         >
-          {s.label}
+          {t(`adminSettingsNav.${s.i18nKey}`)}
         </NavLink>
       ))}
     </nav>

@@ -13,6 +13,7 @@
  */
 
 import type {
+  AssistantSection,
   ExtrasSection,
   MirrorSection,
   NyxidSection,
@@ -27,7 +28,9 @@ import type { LlmProvider } from "./llmProviders/types";
 export interface SettingsActor {
   readonly userId: string;
   readonly email: string;
-  readonly displayName?: string;
+  // exactOptionalPropertyTypes (#657): widen to allow `undefined` so
+  // callers passing nyxidAuth's `string | undefined` displayName fit.
+  readonly displayName?: string | undefined;
 }
 
 /**
@@ -49,6 +52,7 @@ export interface SettingsService {
   // ---- Per-section typed accessors ----
   getPlayground(): Promise<PlaygroundSection>;
   getSkillGen(): Promise<SkillGenSection>;
+  getAssistant(): Promise<AssistantSection>;
   getMirror(): Promise<MirrorSection>;
   getNyxid(): Promise<NyxidSection>;
   getSkillAudit(): Promise<SkillAuditSection>;
