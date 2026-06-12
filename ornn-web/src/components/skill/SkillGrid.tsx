@@ -33,6 +33,7 @@ export function SkillGrid({ skills, isLoading, className = "" }: SkillGridProps)
     return (
       <div className={`grid gap-6 sm:grid-cols-2 lg:grid-cols-3 ${className}`}>
         {Array.from({ length: 6 }).map((_, i) => (
+          // Positional list — never reorders, key={i} is intentional (#451).
           <SkeletonCard key={i} />
         ))}
       </div>

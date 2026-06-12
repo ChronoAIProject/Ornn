@@ -13,14 +13,14 @@
  * @module domains/notifications/service
  */
 
-import pino from "pino";
+import { createLogger } from "../../shared/logger";
 import { AppError } from "../../shared/types/index";
 import type { BroadcastRepository } from "../broadcasts/repository";
 import type { BroadcastDocument } from "../broadcasts/types";
 import type { NotificationRepository } from "./repository";
 import type { FeedItem, NotificationDocument } from "./types";
 
-const logger = pino({ level: "info" }).child({ module: "notificationService" });
+const logger = createLogger("notificationService");
 
 /**
  * Recipient predicate for broadcasts (#502). `null` recipientUserIds
@@ -97,16 +97,23 @@ export class NotificationService {
     userId: string,
     options: { limit?: number; unreadOnly?: boolean } = {},
   ): Promise<FeedItem[]> {
-    const limit = Math.max(
-      1,
-      Math.min(MERGED_FEED_LIMIT_MAX, options.limit ?? MERGED_FEED_LIMIT_DEFAULT),
-    );
+    // Single clamp authority for the merged feed (#920). The route only
+    // parses + finite-validates; everything else — missing, NaN, ±Inf,
+    // below floor, above ceiling — is normalised here so every caller
+    // (route, MCP, internal) gets the same guardrails.
+    const requested = options.limit;
+    const safe =
+      typeof requested === "number" && Number.isFinite(requested)
+        ? requested
+        : MERGED_FEED_LIMIT_DEFAULT;
+    const limit = Math.max(1, Math.min(MERGED_FEED_LIMIT_MAX, safe));
     // Pull `limit` from each source, then take the top `limit` after
     // merging — guarantees we don't drop a newer item from one source
     // because the other source had `limit` older items.
     const perUser = await this.repo.list(userId, {
       limit,
-      unreadOnly: options.unreadOnly,
+      // exactOptionalPropertyTypes (#657)
+      ...(options.unreadOnly !== undefined ? { unreadOnly: options.unreadOnly } : {}),
     });
     const userItems: FeedItem[] = perUser.map((n) => ({ ...n, source: "user" }));
 
@@ -197,7 +204,7 @@ export class NotificationService {
         return { source: "broadcast", readAt: receipt.readAt };
       }
     }
-    throw AppError.notFound("NOTIFICATION_NOT_FOUND", "Notification not found");
+    throw AppError.notFound("notification_not_found", "Notification not found");
   }
 
   /**

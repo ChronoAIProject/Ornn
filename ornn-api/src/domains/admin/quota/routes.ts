@@ -15,7 +15,7 @@
 
 import { Hono } from "hono";
 import { z } from "zod";
-import pino from "pino";
+import { createLogger } from "../../../shared/logger";
 import {
   type AuthVariables,
   getAuth,
@@ -24,6 +24,7 @@ import {
 } from "../../../middleware/nyxidAuth";
 import { validateBody, getValidatedBody } from "../../../middleware/validate";
 import { AppError } from "../../../shared/types/index";
+import { MAX_PAGE } from "../../../shared/cursor";
 import type { UserDirectoryRepository } from "../../users/repository";
 import type { QuotaService } from "../../quota/service";
 import {
@@ -32,7 +33,7 @@ import {
   monthBounds,
 } from "../../quota/types";
 
-const logger = pino({ level: "info" }).child({ module: "adminQuotaRoutes" });
+const logger = createLogger("adminQuotaRoutes");
 
 const surfaceSchema = z.enum(SURFACES);
 
@@ -71,7 +72,7 @@ export function createAdminQuotaRoutes(
       const surfaceParam = c.req.query("surface") ?? "playground";
       const parsedSurface = surfaceSchema.safeParse(surfaceParam);
       if (!parsedSurface.success) {
-        throw new AppError(400, "INVALID_SURFACE", "Invalid surface query parameter");
+        throw new AppError(400, "invalid_surface", "Invalid surface query parameter");
       }
       const surface = parsedSurface.data;
       const page = Math.max(1, Number(c.req.query("page")) || 1);
@@ -127,11 +128,11 @@ export function createAdminQuotaRoutes(
     requirePermission(QUOTA_ADMIN_PERMISSION),
     async (c) => {
       const userId = c.req.param("userId");
-      if (!userId) throw new AppError(400, "INVALID_USER_ID", "userId is required");
+      if (!userId) throw new AppError(400, "invalid_user_id", "userId is required");
       const surfaceParam = c.req.query("surface") ?? "playground";
       const parsedSurface = surfaceSchema.safeParse(surfaceParam);
       if (!parsedSurface.success) {
-        throw new AppError(400, "INVALID_SURFACE", "Invalid surface query parameter");
+        throw new AppError(400, "invalid_surface", "Invalid surface query parameter");
       }
       const surface = parsedSurface.data;
       const buckets = await quotaService.getLifetime(userId, surface);
@@ -168,7 +169,8 @@ export function createAdminQuotaRoutes(
           targetUserId: body.userId,
           surface: body.surface,
           amount: body.amount,
-          note: body.note,
+          // exactOptionalPropertyTypes (#657)
+          ...(body.note !== undefined ? { note: body.note } : {}),
         });
         logger.info(
           {
@@ -186,7 +188,7 @@ export function createAdminQuotaRoutes(
         });
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        throw new AppError(400, "INVALID_GRANT_AMOUNT", msg);
+        throw new AppError(400, "invalid_grant_amount", msg);
       }
     },
   );
@@ -210,7 +212,8 @@ export function createAdminQuotaRoutes(
         targetUserIds: unique,
         surface: body.surface,
         amount: body.amount,
-        note: body.note,
+        // exactOptionalPropertyTypes (#657)
+        ...(body.note !== undefined ? { note: body.note } : {}),
       });
       const applied = results.filter((r) => r.ok).length;
       const { monthMarker } = monthBounds(new Date());
@@ -237,15 +240,18 @@ export function createAdminQuotaRoutes(
     auth,
     requirePermission(QUOTA_ADMIN_PERMISSION),
     async (c) => {
-      const page = Math.max(1, Number(c.req.query("page")) || 1);
+      // Clamp to MAX_PAGE so a huge ?page= can't drive an unbounded
+      // `.skip()` scan in the grant-audit query (CWE-770, #810).
+      const page = Math.min(MAX_PAGE, Math.max(1, Number(c.req.query("page")) || 1));
       const pageSize = Math.min(200, Math.max(1, Number(c.req.query("pageSize")) || 50));
       const targetUserId = c.req.query("userId") || undefined;
       const adminUserId = c.req.query("adminUserId") || undefined;
       const result = await quotaService.listGrantAudit({
         page,
         pageSize,
-        targetUserId,
-        adminUserId,
+        // exactOptionalPropertyTypes (#657)
+        ...(targetUserId !== undefined ? { targetUserId } : {}),
+        ...(adminUserId !== undefined ? { adminUserId } : {}),
       });
       return c.json({
         data: {

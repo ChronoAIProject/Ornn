@@ -1,0 +1,272 @@
+<?xml version="1.0"?>
+<svg viewBox="0 0 1280 640" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, &#39;Inter&#39;, &#39;Segoe UI&#39;, Helvetica, Arial, sans-serif">
+  <defs>
+    
+    
+
+    <symbol id="ornn-logomark" viewBox="0 0 230 64">
+      <path fill="#FF7322" fill-rule="evenodd" d="M63.39,38.24 L59.46,37.46 A28,28 0 0,1 55.28,47.56 L58.61,49.78 A32,32 0 0,1 49.78,58.61 L47.56,55.28 A28,28 0 0,1 37.46,59.46 L38.24,63.39 A32,32 0 0,1 25.76,63.39 L26.54,59.46 A28,28 0 0,1 16.44,55.28 L14.22,58.61 A32,32 0 0,1 5.39,49.78 L8.72,47.56 A28,28 0 0,1 4.54,37.46 L0.61,38.24 A32,32 0 0,1 0.61,25.76 L4.54,26.54 A28,28 0 0,1 8.72,16.44 L5.39,14.22 A32,32 0 0,1 14.22,5.39 L16.44,8.72 A28,28 0 0,1 26.54,4.54 L25.76,0.61 A32,32 0 0,1 38.24,0.61 L37.46,4.54 A28,28 0 0,1 47.56,8.72 L49.78,5.39 A32,32 0 0,1 58.61,14.22 L55.28,16.44 A28,28 0 0,1 59.46,26.54 L63.39,25.76 A32,32 0 0,1 63.39,38.24 Z M46,32 A14,14 0 1,0 18,32 A14,14 0 1,0 46,32 Z"></path>
+      <g fill="currentColor">
+        <path d="M74,60 L74,12 L86,12 A24,24 0 0,1 110,36 L98,36 A12,12 0 0,0 86,24 L86,60 Z"></path>
+        <path d="M122,60 L122,36 A24,24 0 0,1 170,36 L170,60 L158,60 L158,36 A12,12 0 0,0 134,36 L134,60 Z"></path>
+        <path d="M182,60 L182,36 A24,24 0 0,1 230,36 L230,60 L218,60 L218,36 A12,12 0 0,0 194,36 L194,60 Z"></path>
+      </g>
+    </symbol>
+    <symbol id="ornn-gear" viewBox="0 0 64 64">
+      <path fill="#FF7322" fill-rule="evenodd" d="M63.39,38.24 L59.46,37.46 A28,28 0 0,1 55.28,47.56 L58.61,49.78 A32,32 0 0,1 49.78,58.61 L47.56,55.28 A28,28 0 0,1 37.46,59.46 L38.24,63.39 A32,32 0 0,1 25.76,63.39 L26.54,59.46 A28,28 0 0,1 16.44,55.28 L14.22,58.61 A32,32 0 0,1 5.39,49.78 L8.72,47.56 A28,28 0 0,1 4.54,37.46 L0.61,38.24 A32,32 0 0,1 0.61,25.76 L4.54,26.54 A28,28 0 0,1 8.72,16.44 L5.39,14.22 A32,32 0 0,1 14.22,5.39 L16.44,8.72 A28,28 0 0,1 26.54,4.54 L25.76,0.61 A32,32 0 0,1 38.24,0.61 L37.46,4.54 A28,28 0 0,1 47.56,8.72 L49.78,5.39 A32,32 0 0,1 58.61,14.22 L55.28,16.44 A28,28 0 0,1 59.46,26.54 L63.39,25.76 A32,32 0 0,1 63.39,38.24 Z M46,32 A14,14 0 1,0 18,32 A14,14 0 1,0 46,32 Z"></path>
+    </symbol>
+    <pattern id="blueprint-grid" width="32" height="32" patternUnits="userSpaceOnUse">
+      <path d="M 32 0 L 0 0 0 32" fill="none" stroke="rgba(241,236,222,0.04)" stroke-width="0.6"></path>
+    </pattern>
+    <radialGradient id="ember-halo" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#D9461A" stop-opacity="0.32"></stop>
+      <stop offset="55%" stop-color="#D9461A" stop-opacity="0.10"></stop>
+      <stop offset="100%" stop-color="#D9461A" stop-opacity="0"></stop>
+    </radialGradient>
+    <radialGradient id="plinth-shine" cx="35%" cy="30%" r="75%">
+      <stop offset="0%" stop-color="#3A332A"></stop>
+      <stop offset="60%" stop-color="#221E16"></stop>
+      <stop offset="100%" stop-color="#14110B"></stop>
+    </radialGradient>
+    <linearGradient id="seg-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#FFB07A"></stop>
+      <stop offset="100%" stop-color="#FF7322"></stop>
+    </linearGradient>
+    <linearGradient id="dial-tick-grad" gradientUnits="userSpaceOnUse" x1="0" y1="-72" x2="0" y2="-56">
+      <stop offset="0%" stop-color="#FF7322"></stop>
+      <stop offset="100%" stop-color="#FFB07A"></stop>
+    </linearGradient>
+  </defs>
+
+  
+  <rect width="1280" height="640" fill="#0B0907"></rect>
+  <rect width="1280" height="640" fill="url(#blueprint-grid)"></rect>
+
+  
+  <g>
+    <line x1="14" y1="32" x2="14" y2="608" stroke="rgba(201,191,173,0.22)" stroke-width="0.8"></line>
+    <line x1="1266" y1="32" x2="1266" y2="608" stroke="rgba(201,191,173,0.22)" stroke-width="0.8"></line>
+    <g stroke="rgba(201,191,173,0.34)" stroke-width="0.8">
+      <line x1="6" y1="96" x2="14" y2="96"></line><line x1="6" y1="160" x2="14" y2="160"></line>
+      <line x1="6" y1="224" x2="14" y2="224"></line><line x1="6" y1="288" x2="14" y2="288"></line>
+      <line x1="6" y1="352" x2="14" y2="352"></line><line x1="6" y1="416" x2="14" y2="416"></line>
+      <line x1="6" y1="480" x2="14" y2="480"></line><line x1="6" y1="544" x2="14" y2="544"></line>
+      <line x1="1266" y1="96" x2="1274" y2="96"></line><line x1="1266" y1="160" x2="1274" y2="160"></line>
+      <line x1="1266" y1="224" x2="1274" y2="224"></line><line x1="1266" y1="288" x2="1274" y2="288"></line>
+      <line x1="1266" y1="352" x2="1274" y2="352"></line><line x1="1266" y1="416" x2="1274" y2="416"></line>
+      <line x1="1266" y1="480" x2="1274" y2="480"></line><line x1="1266" y1="544" x2="1274" y2="544"></line>
+    </g>
+  </g>
+
+  
+  <g stroke="rgba(201,191,173,0.34)" stroke-width="1" fill="none">
+    <g transform="translate(48, 48)"><line x1="-8" y1="0" x2="8" y2="0"></line><line x1="0" y1="-8" x2="0" y2="8"></line><circle r="3.5"></circle></g>
+    <g transform="translate(1232, 48)"><line x1="-8" y1="0" x2="8" y2="0"></line><line x1="0" y1="-8" x2="0" y2="8"></line><circle r="3.5"></circle></g>
+    <g transform="translate(48, 592)"><line x1="-8" y1="0" x2="8" y2="0"></line><line x1="0" y1="-8" x2="0" y2="8"></line><circle r="3.5"></circle></g>
+    <g transform="translate(1232, 592)"><line x1="-8" y1="0" x2="8" y2="0"></line><line x1="0" y1="-8" x2="0" y2="8"></line><circle r="3.5"></circle></g>
+  </g>
+
+  
+  <g transform="translate(64, 64)" color="#F1ECDE">
+    <use href="#ornn-logomark" width="115" height="32"></use>
+  </g>
+  <text x="1216" y="84" text-anchor="end" font-family="&#39;JetBrains Mono&#39;, ui-monospace, &#39;SF Mono&#39;, Menlo, Consolas, monospace" font-size="11" fill="#7E776B" letter-spacing="1.4"><tspan fill="#F1ECDE" font-weight="600">ornn.chrono-ai.fun</tspan>  ↗</text>
+
+  
+  <g transform="translate(64, 112)">
+    <rect x="0" y="-2" width="56" height="4" fill="#FF7322"></rect>
+    <line x1="56" y1="0" x2="1124" y2="0" stroke="rgba(201,191,173,0.22)" stroke-width="1"></line>
+    <rect x="323" y="-1.5" width="3" height="3" fill="rgba(201,191,173,0.34)"></rect>
+    <rect x="853" y="-1.5" width="3" height="3" fill="rgba(201,191,173,0.34)"></rect>
+    <rect x="1124" y="-2" width="28" height="4" fill="#1A5670"></rect>
+  </g>
+
+  
+  
+  <g transform="translate(64, 0)">
+    <g font-family="&#39;Bricolage Grotesque&#39;, &#39;Sora&#39;, &#39;Space Grotesk&#39;, &#39;Helvetica Neue&#39;, Helvetica, Arial, sans-serif" font-weight="800" font-size="52" fill="#F1ECDE" letter-spacing="-1.6">
+      <text x="0" y="184">THE SKILL</text>
+      <text x="0" y="234">LIFE-CYCLE API</text>
+      <rect x="104" y="244" width="298" height="50" rx="3" ry="5" fill="#FF7322" opacity="0.36" transform="rotate(-0.5 253 269)"></rect>
+      <text x="0" y="284">FOR <tspan fill="#F1ECDE">AI AGENTS</tspan></text>
+    </g>
+
+    
+    <rect x="0" y="316" width="3" height="40" fill="#FF7322"></rect>
+    <text x="16" y="332" font-family="&#39;Inter&#39;, -apple-system, BlinkMacSystemFont, &#39;Segoe UI&#39;, Helvetica, Arial, sans-serif" font-size="14" fill="#C9BFAD">Fully automated skill life-cycle, self-managed by your agents.</text>
+    <text x="16" y="352" font-family="&#39;Inter&#39;, -apple-system, BlinkMacSystemFont, &#39;Segoe UI&#39;, Helvetica, Arial, sans-serif" font-size="14" font-weight="600" fill="#F1ECDE"><tspan fill="#D9461A">Skill-as-a-Service</tspan> — not another marketplace.</text>
+
+  </g>
+
+  
+  
+  <g transform="translate(224, 464)">
+    <circle r="70" fill="url(#ember-halo)" opacity="0.5"></circle>
+    <circle r="64" fill="none" stroke="rgba(241,236,222,0.18)" stroke-width="1"></circle>
+    <circle r="74" fill="none" stroke="rgba(241,236,222,0.28)" stroke-width="0.6" stroke-dasharray="1 3"></circle>
+    <circle r="50" fill="none" stroke="rgba(241,236,222,0.18)" stroke-width="0.6"></circle>
+    <line x1="5.58" y1="-63.76" x2="5.32" y2="-60.77" stroke="rgba(241,236,222,0.20)" stroke-width="0.8"></line>
+    <line x1="11.11" y1="-63.03" x2="10.59" y2="-60.07" stroke="rgba(241,236,222,0.20)" stroke-width="0.8"></line>
+    <line x1="16.56" y1="-61.82" x2="15.79" y2="-58.92" stroke="rgba(241,236,222,0.20)" stroke-width="0.8"></line>
+    <line x1="21.89" y1="-60.14" x2="20.86" y2="-57.32" stroke="rgba(241,236,222,0.20)" stroke-width="0.8"></line>
+    <line x1="27.05" y1="-58" x2="25.78" y2="-55.28" stroke="rgba(241,236,222,0.20)" stroke-width="0.8"></line>
+    <line x1="32" y1="-55.43" x2="30.5" y2="-52.83" stroke="rgba(241,236,222,0.20)" stroke-width="0.8"></line>
+    <line x1="36.71" y1="-52.43" x2="34.99" y2="-49.97" stroke="rgba(241,236,222,0.20)" stroke-width="0.8"></line>
+    <line x1="41.14" y1="-49.03" x2="39.21" y2="-46.73" stroke="rgba(241,236,222,0.20)" stroke-width="0.8"></line>
+    <line x1="49.03" y1="-41.14" x2="46.73" y2="-39.21" stroke="rgba(241,236,222,0.20)" stroke-width="0.8"></line>
+    <line x1="52.43" y1="-36.71" x2="49.97" y2="-34.99" stroke="rgba(241,236,222,0.20)" stroke-width="0.8"></line>
+    <line x1="55.43" y1="-32" x2="52.83" y2="-30.5" stroke="rgba(241,236,222,0.20)" stroke-width="0.8"></line>
+    <line x1="58" y1="-27.05" x2="55.28" y2="-25.78" stroke="rgba(241,236,222,0.20)" stroke-width="0.8"></line>
+    <line x1="60.14" y1="-21.89" x2="57.32" y2="-20.86" stroke="rgba(241,236,222,0.20)" stroke-width="0.8"></line>
+    <line x1="61.82" y1="-16.56" x2="58.92" y2="-15.79" stroke="rgba(241,236,222,0.20)" stroke-width="0.8"></line>
+    <line x1="63.03" y1="-11.11" x2="60.07" y2="-10.59" stroke="rgba(241,236,222,0.20)" stroke-width="0.8"></line>
+    <line x1="63.76" y1="-5.58" x2="60.77" y2="-5.32" stroke="rgba(241,236,222,0.20)" stroke-width="0.8"></line>
+    <line x1="63.76" y1="5.58" x2="60.77" y2="5.32" stroke="rgba(241,236,222,0.20)" stroke-width="0.8"></line>
+    <line x1="63.03" y1="11.11" x2="60.07" y2="10.59" stroke="rgba(241,236,222,0.20)" stroke-width="0.8"></line>
+    <line x1="61.82" y1="16.56" x2="58.92" y2="15.79" stroke="rgba(241,236,222,0.20)" stroke-width="0.8"></line>
+    <line x1="60.14" y1="21.89" x2="57.32" y2="20.86" stroke="rgba(241,236,222,0.20)" stroke-width="0.8"></line>
+    <line x1="58" y1="27.05" x2="55.28" y2="25.78" stroke="rgba(241,236,222,0.20)" stroke-width="0.8"></line>
+    <line x1="55.43" y1="32" x2="52.83" y2="30.5" stroke="rgba(241,236,222,0.20)" stroke-width="0.8"></line>
+    <line x1="52.43" y1="36.71" x2="49.97" y2="34.99" stroke="rgba(241,236,222,0.20)" stroke-width="0.8"></line>
+    <line x1="49.03" y1="41.14" x2="46.73" y2="39.21" stroke="rgba(241,236,222,0.20)" stroke-width="0.8"></line>
+    <line x1="41.14" y1="49.03" x2="39.21" y2="46.73" stroke="rgba(241,236,222,0.20)" stroke-width="0.8"></line>
+    <line x1="36.71" y1="52.43" x2="34.99" y2="49.97" stroke="rgba(241,236,222,0.20)" stroke-width="0.8"></line>
+    <line x1="32" y1="55.43" x2="30.5" y2="52.83" stroke="rgba(241,236,222,0.20)" stroke-width="0.8"></line>
+    <line x1="27.05" y1="58" x2="25.78" y2="55.28" stroke="rgba(241,236,222,0.20)" stroke-width="0.8"></line>
+    <line x1="21.89" y1="60.14" x2="20.86" y2="57.32" stroke="rgba(241,236,222,0.20)" stroke-width="0.8"></line>
+    <line x1="16.56" y1="61.82" x2="15.79" y2="58.92" stroke="rgba(241,236,222,0.20)" stroke-width="0.8"></line>
+    <line x1="11.11" y1="63.03" x2="10.59" y2="60.07" stroke="rgba(241,236,222,0.20)" stroke-width="0.8"></line>
+    <line x1="5.58" y1="63.76" x2="5.32" y2="60.77" stroke="rgba(241,236,222,0.20)" stroke-width="0.8"></line>
+    <line x1="-5.58" y1="63.76" x2="-5.32" y2="60.77" stroke="rgba(241,236,222,0.20)" stroke-width="0.8"></line>
+    <line x1="-11.11" y1="63.03" x2="-10.59" y2="60.07" stroke="rgba(241,236,222,0.20)" stroke-width="0.8"></line>
+    <line x1="-16.56" y1="61.82" x2="-15.79" y2="58.92" stroke="rgba(241,236,222,0.20)" stroke-width="0.8"></line>
+    <line x1="-21.89" y1="60.14" x2="-20.86" y2="57.32" stroke="rgba(241,236,222,0.20)" stroke-width="0.8"></line>
+    <line x1="-27.05" y1="58" x2="-25.78" y2="55.28" stroke="rgba(241,236,222,0.20)" stroke-width="0.8"></line>
+    <line x1="-32" y1="55.43" x2="-30.5" y2="52.83" stroke="rgba(241,236,222,0.20)" stroke-width="0.8"></line>
+    <line x1="-36.71" y1="52.43" x2="-34.99" y2="49.97" stroke="rgba(241,236,222,0.20)" stroke-width="0.8"></line>
+    <line x1="-41.14" y1="49.03" x2="-39.21" y2="46.73" stroke="rgba(241,236,222,0.20)" stroke-width="0.8"></line>
+    <line x1="-49.03" y1="41.14" x2="-46.73" y2="39.21" stroke="rgba(241,236,222,0.20)" stroke-width="0.8"></line>
+    <line x1="-52.43" y1="36.71" x2="-49.97" y2="34.99" stroke="rgba(241,236,222,0.20)" stroke-width="0.8"></line>
+    <line x1="-55.43" y1="32" x2="-52.83" y2="30.5" stroke="rgba(241,236,222,0.20)" stroke-width="0.8"></line>
+    <line x1="-58" y1="27.05" x2="-55.28" y2="25.78" stroke="rgba(241,236,222,0.20)" stroke-width="0.8"></line>
+    <line x1="-60.14" y1="21.89" x2="-57.32" y2="20.86" stroke="rgba(241,236,222,0.20)" stroke-width="0.8"></line>
+    <line x1="-61.82" y1="16.56" x2="-58.92" y2="15.79" stroke="rgba(241,236,222,0.20)" stroke-width="0.8"></line>
+    <line x1="-63.03" y1="11.11" x2="-60.07" y2="10.59" stroke="rgba(241,236,222,0.20)" stroke-width="0.8"></line>
+    <line x1="-63.76" y1="5.58" x2="-60.77" y2="5.32" stroke="rgba(241,236,222,0.20)" stroke-width="0.8"></line>
+    <line x1="-63.76" y1="-5.58" x2="-60.77" y2="-5.32" stroke="rgba(241,236,222,0.20)" stroke-width="0.8"></line>
+    <line x1="-63.03" y1="-11.11" x2="-60.07" y2="-10.59" stroke="rgba(241,236,222,0.20)" stroke-width="0.8"></line>
+    <line x1="-61.82" y1="-16.56" x2="-58.92" y2="-15.79" stroke="rgba(241,236,222,0.20)" stroke-width="0.8"></line>
+    <line x1="-60.14" y1="-21.89" x2="-57.32" y2="-20.86" stroke="rgba(241,236,222,0.20)" stroke-width="0.8"></line>
+    <line x1="-58" y1="-27.05" x2="-55.28" y2="-25.78" stroke="rgba(241,236,222,0.20)" stroke-width="0.8"></line>
+    <line x1="-55.43" y1="-32" x2="-52.83" y2="-30.5" stroke="rgba(241,236,222,0.20)" stroke-width="0.8"></line>
+    <line x1="-52.43" y1="-36.71" x2="-49.97" y2="-34.99" stroke="rgba(241,236,222,0.20)" stroke-width="0.8"></line>
+    <line x1="-49.03" y1="-41.14" x2="-46.73" y2="-39.21" stroke="rgba(241,236,222,0.20)" stroke-width="0.8"></line>
+    <line x1="-41.14" y1="-49.03" x2="-39.21" y2="-46.73" stroke="rgba(241,236,222,0.20)" stroke-width="0.8"></line>
+    <line x1="-36.71" y1="-52.43" x2="-34.99" y2="-49.97" stroke="rgba(241,236,222,0.20)" stroke-width="0.8"></line>
+    <line x1="-32" y1="-55.43" x2="-30.5" y2="-52.83" stroke="rgba(241,236,222,0.20)" stroke-width="0.8"></line>
+    <line x1="-27.05" y1="-58" x2="-25.78" y2="-55.28" stroke="rgba(241,236,222,0.20)" stroke-width="0.8"></line>
+    <line x1="-21.89" y1="-60.14" x2="-20.86" y2="-57.32" stroke="rgba(241,236,222,0.20)" stroke-width="0.8"></line>
+    <line x1="-16.56" y1="-61.82" x2="-15.79" y2="-58.92" stroke="rgba(241,236,222,0.20)" stroke-width="0.8"></line>
+    <line x1="-11.11" y1="-63.03" x2="-10.59" y2="-60.07" stroke="rgba(241,236,222,0.20)" stroke-width="0.8"></line>
+    <line x1="-5.58" y1="-63.76" x2="-5.32" y2="-60.77" stroke="rgba(241,236,222,0.20)" stroke-width="0.8"></line>
+    <line x1="0" y1="-56" x2="0" y2="-68" stroke="url(#dial-tick-grad)" stroke-width="3" stroke-linecap="round"></line>
+    <line x1="39.6" y1="-39.6" x2="48.08" y2="-48.08" stroke="url(#dial-tick-grad)" stroke-width="3" stroke-linecap="round"></line>
+    <line x1="56" y1="0" x2="68" y2="0" stroke="url(#dial-tick-grad)" stroke-width="3" stroke-linecap="round"></line>
+    <line x1="39.6" y1="39.6" x2="48.08" y2="48.08" stroke="url(#dial-tick-grad)" stroke-width="3" stroke-linecap="round"></line>
+    <line x1="0" y1="56" x2="0" y2="68" stroke="url(#dial-tick-grad)" stroke-width="3" stroke-linecap="round"></line>
+    <line x1="-39.6" y1="39.6" x2="-48.08" y2="48.08" stroke="url(#dial-tick-grad)" stroke-width="3" stroke-linecap="round"></line>
+    <line x1="-56" y1="0" x2="-68" y2="0" stroke="url(#dial-tick-grad)" stroke-width="3" stroke-linecap="round"></line>
+    <line x1="-39.6" y1="-39.6" x2="-48.08" y2="-48.08" stroke="url(#dial-tick-grad)" stroke-width="3" stroke-linecap="round"></line>
+    <circle cx="2" cy="2" r="34" fill="rgba(0,0,0,0.55)"></circle>
+    <circle r="34" fill="#1A1610"></circle>
+    <circle r="34" fill="none" stroke="rgba(241,236,222,0.16)" stroke-width="1"></circle>
+    <use href="#ornn-gear" x="-24" y="-24" width="48" height="48"></use>
+    <text x="0" y="-84" text-anchor="middle" font-family="&#39;JetBrains Mono&#39;, ui-monospace, &#39;SF Mono&#39;, Menlo, Consolas, monospace" font-size="9" font-weight="600" fill="#F1ECDE" letter-spacing="1.2"><tspan fill="#FF7322" font-weight="500" font-size="7.5">01 </tspan>SEARCH</text>
+    <text x="55.15" y="-51.15" text-anchor="start" font-family="&#39;JetBrains Mono&#39;, ui-monospace, &#39;SF Mono&#39;, Menlo, Consolas, monospace" font-size="9" font-weight="600" fill="#F1ECDE" letter-spacing="1.2"><tspan fill="#FF7322" font-weight="500" font-size="7.5">02 </tspan>PREVIEW</text>
+    <text x="78" y="4" text-anchor="start" font-family="&#39;JetBrains Mono&#39;, ui-monospace, &#39;SF Mono&#39;, Menlo, Consolas, monospace" font-size="9" font-weight="600" fill="#F1ECDE" letter-spacing="1.2"><tspan fill="#FF7322" font-weight="500" font-size="7.5">03 </tspan>AUDIT</text>
+    <text x="55.15" y="59.15" text-anchor="start" font-family="&#39;JetBrains Mono&#39;, ui-monospace, &#39;SF Mono&#39;, Menlo, Consolas, monospace" font-size="9" font-weight="600" fill="#F1ECDE" letter-spacing="1.2"><tspan fill="#FF7322" font-weight="500" font-size="7.5">04 </tspan>INSTALL</text>
+    <text x="0" y="98" text-anchor="middle" font-family="&#39;JetBrains Mono&#39;, ui-monospace, &#39;SF Mono&#39;, Menlo, Consolas, monospace" font-size="9" font-weight="600" fill="#F1ECDE" letter-spacing="1.2"><tspan fill="#FF7322" font-weight="500" font-size="7.5">05 </tspan>EXECUTE</text>
+    <text x="-55.15" y="59.15" text-anchor="end" font-family="&#39;JetBrains Mono&#39;, ui-monospace, &#39;SF Mono&#39;, Menlo, Consolas, monospace" font-size="9" font-weight="600" fill="#F1ECDE" letter-spacing="1.2"><tspan fill="#FF7322" font-weight="500" font-size="7.5">06 </tspan>GENERATE</text>
+    <text x="-78" y="4" text-anchor="end" font-family="&#39;JetBrains Mono&#39;, ui-monospace, &#39;SF Mono&#39;, Menlo, Consolas, monospace" font-size="9" font-weight="600" fill="#F1ECDE" letter-spacing="1.2"><tspan fill="#FF7322" font-weight="500" font-size="7.5">07 </tspan>PUBLISH</text>
+    <text x="-55.15" y="-51.15" text-anchor="end" font-family="&#39;JetBrains Mono&#39;, ui-monospace, &#39;SF Mono&#39;, Menlo, Consolas, monospace" font-size="9" font-weight="600" fill="#F1ECDE" letter-spacing="1.2"><tspan fill="#FF7322" font-weight="500" font-size="7.5">08 </tspan>SHARE</text>
+  </g>
+
+      <g transform="translate(404, 406)" font-family="&#39;JetBrains Mono&#39;, ui-monospace, &#39;SF Mono&#39;, Menlo, Consolas, monospace" font-size="11" font-weight="600" letter-spacing="1.4">
+    <g>
+      <rect x="3" y="3" width="168" height="34" rx="3" fill="#000000" opacity="0.55"></rect>
+      <rect width="168" height="34" rx="3" fill="#F1ECDE"></rect>
+      <rect width="168" height="34" rx="3" fill="none" stroke="rgba(201,191,173,0.34)"></rect>
+      <text x="14" y="22" fill="#14130E">AGENT-FACING</text>
+    </g>
+    <g transform="translate(0, 46)">
+      <rect x="3" y="3" width="168" height="34" rx="3" fill="#000000" opacity="0.55"></rect>
+      <rect width="168" height="34" rx="3" fill="#F1ECDE"></rect>
+      <rect width="168" height="34" rx="3" fill="none" stroke="rgba(201,191,173,0.34)"></rect>
+      <text x="14" y="22" fill="#14130E">HTTP · MCP</text>
+    </g>
+    <g transform="translate(0, 92)">
+      <rect x="3" y="3" width="168" height="34" rx="3" fill="#000000" opacity="0.55"></rect>
+      <rect width="168" height="34" rx="3" fill="#F1ECDE"></rect>
+      <rect width="168" height="34" rx="3" fill="none" stroke="rgba(201,191,173,0.34)"></rect>
+      <text x="14" y="22" fill="#14130E">MODEL-AGNOSTIC</text>
+    </g>
+  </g>
+
+  
+  
+  <g transform="translate(636, 130)">
+    <rect x="5" y="5" width="580" height="440" rx="4" fill="#000000" opacity="0.55"></rect>
+    <rect width="580" height="440" rx="4" fill="#FFFFFF"></rect>
+    <rect width="580" height="440" rx="4" fill="none" stroke="rgba(201,191,173,0.22)" stroke-width="1"></rect>
+
+    
+    <g>
+      <rect width="580" height="38" rx="4" fill="#EDEFEF"></rect>
+      <rect y="20" width="580" height="18" fill="#EDEFEF"></rect>
+      <line x1="0" y1="38" x2="580" y2="38" stroke="rgba(201,191,173,0.18)" stroke-width="1"></line>
+      <g transform="translate(18, 19)">
+        <circle cx="0" cy="0" r="5.5" fill="#E36055"></circle>
+        <circle cx="18" cy="0" r="5.5" fill="#E9B345"></circle>
+        <circle cx="36" cy="0" r="5.5" fill="#5BBF50"></circle>
+      </g>
+      <text x="290" y="24" text-anchor="middle" font-family="&#39;JetBrains Mono&#39;, ui-monospace, &#39;SF Mono&#39;, Menlo, Consolas, monospace" font-size="11" fill="#6B6254" letter-spacing="1.4">[ § ORNN EMBEDDED SKILL SEARCH ]</text>
+    </g>
+
+    
+    
+    <g transform="translate(22, 66)" font-family="&#39;JetBrains Mono&#39;, ui-monospace, &#39;SF Mono&#39;, Menlo, Consolas, monospace" font-size="10">
+
+      <text y="0"><tspan fill="#FF7322">⏺</tspan> <tspan fill="#14130E">Hello — how can I help today?</tspan></text>
+      <text y="24"><tspan fill="#1A5670">&gt;</tspan> <tspan fill="#1A5670">Let&#39;s create a marketing video to introduce my new skill</tspan></text>
+      <text y="40"><tspan fill="#1A5670">  life-cycle API product to the public.</tspan></text>
+      <text y="64"><tspan fill="#FF7322">⏺</tspan> <tspan fill="#14130E">Understood. Let me search Ornn for skills that handle marketing video generation.</tspan></text>
+      <text y="80"><tspan fill="#7E776B">  ⎿ ornn.search({ q: &#34;marketing video generation&#34; })</tspan></text>
+      <text y="104"><tspan fill="#FF7322">⏺</tspan> <tspan fill="#14130E">Found &#34;</tspan><tspan fill="#B8861A">marketing-content-generation</tspan><tspan fill="#14130E">&#34; on Ornn — v0.1.3 · 12,400 installs</tspan></text>
+      <text y="120"><tspan fill="#14130E">  MIT · video + text. Shall we proceed with execution?</tspan></text>
+      <text y="144"><tspan fill="#1A5670">&gt;</tspan> <tspan fill="#1A5670">Let&#39;s proceed.</tspan></text>
+      <text y="168"><tspan fill="#FF7322">⏺</tspan> <tspan fill="#14130E">Sure. Pulling skill package, preparing local execution…</tspan></text>
+      <text y="184"><tspan fill="#7E776B">  ⎿ already installed at v0.1.3 (~/.ornn/installed-skills.json)</tspan></text>
+      <text y="200"><tspan fill="#B8861A">  ?</tspan> <tspan fill="#14130E">Latest on Ornn is v1.0.1 — would you like to update?</tspan></text>
+      <text y="224"><tspan fill="#1A5670">&gt;</tspan> <tspan fill="#1A5670">Yes — update, load, and start creating the video.</tspan></text>
+      <text y="248"><tspan fill="#FF7322">⏺</tspan> <tspan fill="#14130E">On it.</tspan></text>
+      <text y="264"><tspan fill="#7E776B">  ⎿ ornn.update(&#34;marketing-content-generation&#34;, &#34;1.0.1&#34;)</tspan></text>
+      <text y="280"><tspan fill="#5F7A46">  ✓ v1.0.1 loaded  ·  2.4 s</tspan></text>
+      <text y="304"><tspan fill="#FF7322">⏺</tspan> <tspan fill="#14130E">Skill loaded. Generating marketing video now…</tspan></text>
+      <text y="320"><tspan fill="#2B7791">▌</tspan> <tspan fill="#4A453B">scene 1 / 12  ·  audio  ·  captions</tspan></text>
+    </g>
+  </g>
+
+    <g transform="translate(64, 580)">
+    <rect x="0" y="-2" width="56" height="4" fill="#FF7322"></rect>
+    <line x1="56" y1="0" x2="1124" y2="0" stroke="rgba(201,191,173,0.22)" stroke-width="1"></line>
+    <rect x="323" y="-1.5" width="3" height="3" fill="rgba(201,191,173,0.34)"></rect>
+    <rect x="853" y="-1.5" width="3" height="3" fill="rgba(201,191,173,0.34)"></rect>
+    <rect x="1124" y="-2" width="28" height="4" fill="#1A5670"></rect>
+  </g>
+
+  
+  <g font-family="&#39;JetBrains Mono&#39;, ui-monospace, &#39;SF Mono&#39;, Menlo, Consolas, monospace" font-size="11" fill="#7E776B" letter-spacing="1.4">
+    <text x="64" y="610">[ § APACHE 2.0  ·  OPEN SOURCE ]</text>
+    <text x="1216" y="610" text-anchor="end"><tspan fill="#F1ECDE" font-weight="600">github.com/ChronoAIProject/Ornn</tspan>  ↗</text>
+  </g>
+</svg>

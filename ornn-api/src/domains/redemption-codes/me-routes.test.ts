@@ -15,6 +15,7 @@ import { RedemptionCodeRepository } from "./repository";
 import { RedemptionCodeService } from "./service";
 import { createMeRedemptionCodesRoutes } from "./me-routes";
 import type { AuthVariables } from "../../middleware/nyxidAuth";
+import { buildProblemJsonBody } from "../../shared/types/index";
 
 let mongo: MongoMemoryServer;
 let client: MongoClient;
@@ -57,16 +58,18 @@ beforeAll(async () => {
   });
   app.onError((err, c) => {
     const e = err as { statusCode?: number; code?: string; message: string };
-    if (e.statusCode && e.code) {
-      return c.json(
-        { data: null, error: { code: e.code, message: e.message } },
-        e.statusCode as never,
-      );
-    }
-    return c.json(
-      { data: null, error: { code: "INTERNAL", message: e.message } },
-      500,
-    );
+    const statusCode = e.statusCode ?? 500;
+    const code = e.code ?? "internal_error";
+    const body = buildProblemJsonBody({
+      statusCode,
+      code,
+      message: e.message ?? "",
+      instance: c.req.path,
+      requestId: null,
+    });
+    return c.json(body, statusCode as never, {
+      "Content-Type": "application/problem+json",
+    });
   });
   app.route("/", createMeRedemptionCodesRoutes({ redemptionCodeService: service }));
 });
@@ -108,8 +111,8 @@ describe("POST /me/redemption-codes/redeem", () => {
       data: { codeId: string; grants: Array<{ surface: string; amount: number }> };
     };
     expect(json.data.grants.length).toBe(1);
-    expect(json.data.grants[0].surface).toBe("playground");
-    expect(json.data.grants[0].amount).toBe(5);
+    expect(json.data.grants[0]!.surface).toBe("playground");
+    expect(json.data.grants[0]!.amount).toBe(5);
 
     const audits = await db.collection("quota_grants_audit").countDocuments();
     expect(audits).toBe(1);
@@ -132,8 +135,8 @@ describe("POST /me/redemption-codes/redeem", () => {
       body: JSON.stringify({ code: "ZZZZZZZZZZZZZZZZ" }),
     });
     expect(res.status).toBe(404);
-    const json = (await res.json()) as { error: { code: string } };
-    expect(json.error.code).toBe("REDEMPTION_CODE_NOT_FOUND");
+    const json = (await res.json()) as { code: string; detail: string; status: number };
+    expect(json.code).toBe("redemption_code_not_found");
   });
 
   test("expired → 410 REDEMPTION_CODE_EXPIRED", async () => {
@@ -147,8 +150,8 @@ describe("POST /me/redemption-codes/redeem", () => {
       body: JSON.stringify({ code }),
     });
     expect(res.status).toBe(410);
-    const json = (await res.json()) as { error: { code: string } };
-    expect(json.error.code).toBe("REDEMPTION_CODE_EXPIRED");
+    const json = (await res.json()) as { code: string; detail: string; status: number };
+    expect(json.code).toBe("redemption_code_expired");
   });
 
   test("invalidated → 410 REDEMPTION_CODE_INVALIDATED", async () => {
@@ -167,8 +170,8 @@ describe("POST /me/redemption-codes/redeem", () => {
       body: JSON.stringify({ code: minted.code }),
     });
     expect(res.status).toBe(410);
-    const json = (await res.json()) as { error: { code: string } };
-    expect(json.error.code).toBe("REDEMPTION_CODE_INVALIDATED");
+    const json = (await res.json()) as { code: string; detail: string; status: number };
+    expect(json.code).toBe("redemption_code_invalidated");
   });
 
   test("already-redeemed → 409 REDEMPTION_CODE_ALREADY_REDEEMED", async () => {
@@ -184,8 +187,8 @@ describe("POST /me/redemption-codes/redeem", () => {
       body: JSON.stringify({ code }),
     });
     expect(res.status).toBe(409);
-    const json = (await res.json()) as { error: { code: string } };
-    expect(json.error.code).toBe("REDEMPTION_CODE_ALREADY_REDEEMED");
+    const json = (await res.json()) as { code: string; detail: string; status: number };
+    expect(json.code).toBe("redemption_code_already_redeemed");
   });
 });
 

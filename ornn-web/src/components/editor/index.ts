@@ -7,7 +7,7 @@
 export { FileTree, type FileNode, type FileTreeProps } from "./FileTree";
 export {
   CodeEditor,
-  useEditorState,
   type EditorTab,
   type CodeEditorProps,
 } from "./CodeEditor";
+export { useEditorState } from "./CodeEditor.helpers";

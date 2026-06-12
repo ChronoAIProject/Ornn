@@ -143,8 +143,9 @@ export interface SkillVersionEntry {
   version: string;
   skillHash: string;
   createdBy: string;
-  createdByEmail?: string;
-  createdByDisplayName?: string;
+  // exactOptionalPropertyTypes (#657)
+  createdByEmail?: string | undefined;
+  createdByDisplayName?: string | undefined;
   createdOn: string;
   isDeprecated: boolean;
   deprecationNote: string | null;

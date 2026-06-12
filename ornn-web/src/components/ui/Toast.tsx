@@ -166,7 +166,11 @@ export function ToastContainer({
 
   return (
     <div
-      className={`pointer-events-none fixed z-50 flex flex-col gap-3 ${POSITION_STYLES[position]} ${className}`}
+      // z-[60] (#699) — modals sit at z-50; without this bump the
+      // toast portal renders behind any open modal overlay and the
+      // operation result for an in-modal action (e.g. delete inside
+      // the all-versions modal) becomes dim and unreadable.
+      className={`pointer-events-none fixed z-[60] flex flex-col gap-3 ${POSITION_STYLES[position]} ${className}`}
       role="region"
       aria-label={t("common.aria.notifications")}
     >
@@ -181,18 +185,5 @@ export function ToastContainer({
   );
 }
 
-export function useToast() {
-  const addToast = useToastStore((s) => s.addToast);
-  return {
-    success: (message: string, duration?: number) =>
-      addToast({ type: "success", message, duration }),
-    error: (message: string, duration?: number) =>
-      addToast({ type: "error", message, duration }),
-    warning: (message: string, duration?: number) =>
-      addToast({ type: "warning", message, duration }),
-    info: (message: string, duration?: number) =>
-      addToast({ type: "info", message, duration }),
-    custom: (type: ToastType["type"], message: string, duration?: number) =>
-      addToast({ type, message, duration }),
-  };
-}
+// `useToast` lives in the sibling `Toast.helpers.ts` so this file only
+// exports components (react-refresh boundary, #888).

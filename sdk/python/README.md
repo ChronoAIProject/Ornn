@@ -8,6 +8,18 @@ Wraps the `/api/v1/*` HTTP surface with auth injection, response-envelope unwrap
 
 ## Install
 
+> **Status: pre-publish.** Not yet on PyPI — both SDKs are held for v1.0 so the surface stops shifting under early adopters. See [`docs/SDK_PUBLISHING.md`](../../docs/SDK_PUBLISHING.md) and [#473](https://github.com/ChronoAIProject/Ornn/issues/473).
+
+Until v1 ships, install editable from source:
+
+```bash
+pip install -e ./sdk/python
+# or pin via git
+pip install "git+https://github.com/ChronoAIProject/Ornn.git#subdirectory=sdk/python"
+```
+
+Once v1 publishes:
+
 ```bash
 pip install ornn-sdk
 # or with uv / poetry / pdm — whichever you prefer

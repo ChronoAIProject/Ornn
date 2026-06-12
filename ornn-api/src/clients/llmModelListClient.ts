@@ -32,18 +32,16 @@
  * @module clients/llmModelListClient
  */
 
-import pino from "pino";
+import { createLogger } from "../shared/logger";
 import type {
   ApiFormat,
   LlmProviderAuth,
 } from "../domains/settings/llmProviders/types";
 import type { ModelListFetcher } from "../domains/settings/llmProviders/service";
-import {
-  assertPublicResolvedAddress,
-  SsrfRefusalError,
-} from "../infra/url";
+import { safeFetch } from "../infra/safeFetch";
+import { SsrfRefusalError } from "../infra/url";
 
-const logger = pino({ level: "info" }).child({ module: "llmModelListClient" });
+const logger = createLogger("llmModelListClient");
 
 /** Max wall-clock for a single upstream request (model-list or token-exchange). */
 const FETCH_TIMEOUT_MS = 15_000;
@@ -76,27 +74,6 @@ function redactCredentials(body: string): string {
     .replace(/"(access_token|api_key|apiKey|token)"\s*:\s*"[^"]*"/g, '"$1":"[REDACTED]"');
 }
 
-/**
- * Pre-flight SSRF check + AbortSignal wrapper around `fetch`. Centralised
- * so the model-list and OAuth2 token-exchange paths share one
- * implementation.
- */
-async function safeFetch(
-  url: string,
-  init: RequestInit,
-): Promise<Response> {
-  let parsed: URL;
-  try {
-    parsed = new URL(url);
-  } catch {
-    throw new Error(`Invalid URL: '${url}'`);
-  }
-  await assertPublicResolvedAddress(parsed.hostname);
-
-  const signal = AbortSignal.timeout(FETCH_TIMEOUT_MS);
-  return fetch(url, { ...init, signal });
-}
-
 export class LlmModelListClient implements ModelListFetcher {
   /**
    * Fetch the upstream catalog. Returns `[{ id, displayName }]` —
@@ -119,7 +96,10 @@ export class LlmModelListClient implements ModelListFetcher {
 
     let resp: Response;
     try {
-      resp = await safeFetch(args.modelListUrl, { headers });
+      resp = await safeFetch(args.modelListUrl, {
+        headers,
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      });
     } catch (err) {
       // Distinguish SSRF refusal (operator-actionable) from generic
       // transport failures so the admin "Refresh" toast can render
@@ -219,6 +199,7 @@ export class LlmModelListClient implements ModelListFetcher {
           method: "POST",
           headers: { "Content-Type": "application/x-www-form-urlencoded" },
           body: body.toString(),
+          signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
         });
       } catch (err) {
         if (err instanceof SsrfRefusalError) {

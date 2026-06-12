@@ -21,11 +21,21 @@ import {
 } from "../../../middleware/nyxidAuth";
 import { AppError } from "../../../shared/types/index";
 import { resolveZipRoot } from "../../../shared/utils/zip";
+import { validateBody, getValidatedBody } from "../../../middleware/validate";
+import { rateLimit } from "../../../middleware/rateLimit";
 import { fetchGithubSourceBundle } from "./githubFetcher";
 import JSZip from "jszip";
-import pino from "pino";
+import { createLogger } from "../../../shared/logger";
+import { z } from "zod";
 
-const logger = pino({ level: "info" }).child({ module: "skillGenerationRoutes" });
+const logger = createLogger("skillGenerationRoutes");
+
+/**
+ * Per-message + per-prompt content cap (#654). Mirrors the playground
+ * chat schema's `MAX_CHAT_MESSAGE_CHARS` and the frontend
+ * `MAX_INPUT_CHARS` in `ChatInput.tsx`. Keep all three in sync.
+ */
+const MAX_GENERATION_CHARS = 32_000;
 
 export interface GenerationRoutesConfig {
   generationService: SkillGenerationService;
@@ -59,30 +69,56 @@ async function resolveKeepAliveMs(
 }
 
 /**
- * Run quota check + model resolution for a skill-gen request. Returns
+ * Run model resolution + quota reserve for a skill-gen request. Returns
  * the resolved model id; throws the appropriate AppError when either
- * gate fails (quota → 429, models → 503/4xx).
+ * gate fails (models → 503/4xx, quota → 429).
+ *
+ * Order is load-bearing (#808): model resolution runs FIRST so a
+ * resolution failure can't strand a reserved quota slot. `resolveModel`
+ * is a pure catalog read (no LLM), so reserving last still keeps the
+ * "429 before any LLM cost" guarantee. Once `checkAllowed` reserves,
+ * every caller threads the result straight into `streamGenerationEvents`,
+ * whose `finally` always reconciles the reservation (commit on success,
+ * release on system_error/abort).
  */
 async function preflight(
   c: Context<{ Variables: AuthVariables }>,
   quotaService: QuotaService,
   llmProvidersService: LlmProvidersService,
   requestedModelId: string | undefined,
-): Promise<{ modelId: string; userId: string; permissions: readonly string[] | undefined }> {
+): Promise<{
+  modelId: string;
+  userId: string;
+  permissions: readonly string[] | undefined;
+  reservedAt: Date;
+}> {
   const authCtx = getAuth(c);
+
+  const resolution = await llmProvidersService.resolveModel({
+    surface: "skillGen",
+    // exactOptionalPropertyTypes (#657)
+    ...(requestedModelId !== undefined ? { requested: requestedModelId } : {}),
+  });
+  if (resolution.kind !== "ok") throwModelResolutionError(resolution);
+
+  // Capture the reservation instant so the charge lands in the SAME
+  // month bucket the slot was reserved against (#827) — see the
+  // playground route for the boundary-straddle rationale.
+  const reservedAt = new Date();
   const decision = await quotaService.checkAllowed({
     userId: authCtx.userId,
     permissions: authCtx.permissions,
     surface: "skillGen",
+    now: reservedAt,
   });
   if (!decision.allowed) throwQuotaError(decision);
 
-  const resolution = await llmProvidersService.resolveModel({
-    surface: "skillGen",
-    requested: requestedModelId,
-  });
-  if (resolution.kind !== "ok") throwModelResolutionError(resolution);
-  return { modelId: resolution.modelId, userId: authCtx.userId, permissions: authCtx.permissions };
+  return {
+    modelId: resolution.modelId,
+    userId: authCtx.userId,
+    permissions: authCtx.permissions,
+    reservedAt,
+  };
 }
 
 /**
@@ -94,7 +130,7 @@ async function preflight(
  * (system_error — no charge).
  */
 async function streamGenerationEvents(
-  c: any,
+  c: Context,
   events: AsyncIterable<{ type: string; [key: string]: unknown }>,
   keepAliveIntervalMs: number,
   chargeAfter?: {
@@ -103,6 +139,12 @@ async function streamGenerationEvents(
     permissions: readonly string[] | undefined;
     /** Resolved model id used for the LLM call — flows into `usedByModel`. */
     modelId: string;
+    /**
+     * Reservation instant captured at `preflight` time (#827). Threaded
+     * into `chargeOnCompletion` as `now` so the commit/release reconciles
+     * against the month bucket the slot was reserved in, not wall-clock.
+     */
+    reservedAt: Date;
   },
 ) {
   c.header("Cache-Control", "no-cache");
@@ -137,6 +179,8 @@ async function streamGenerationEvents(
             surface: "skillGen",
             outcome,
             modelId: chargeAfter.modelId,
+            // Reconcile against the reserved month bucket (#827).
+            now: chargeAfter.reservedAt,
           })
           .catch((err) => {
             logger.warn(
@@ -163,13 +207,15 @@ async function analyzePackageContent(zipBuffer: Uint8Array): Promise<string> {
 
   for (const path of allPaths) {
     const file = zip.files[path];
-    if (file.dir) continue;
+    // allPaths is `Object.keys(zip.files)`, but noUncheckedIndexedAccess
+    // (#450) widens the lookup to `T | undefined`. Defensive skip.
+    if (!file || file.dir) continue;
 
     // Check if this is a relevant file
     const segments = path.split("/").filter(Boolean);
     let relativePath = path;
     if (segments.length > 1) {
-      const firstEntry = segments[0];
+      const firstEntry = segments[0]!;
       const folderEntry = zip.files[firstEntry + "/"];
       if (folderEntry && folderEntry.dir) {
         relativePath = segments.slice(1).join("/");
@@ -183,8 +229,11 @@ async function analyzePackageContent(zipBuffer: Uint8Array): Promise<string> {
       try {
         const content = await file.async("string");
         parts.push(`--- ${relativePath} ---\n${content}`);
-      } catch {
-        // Skip binary or unreadable files
+      } catch (err) {
+        // Skip binary or unreadable files. Log so an upload that's
+        // 100% binary doesn't silently produce an empty generation
+        // context (#579).
+        logger.debug({ err, relativePath }, "generation: skipping unreadable file");
       }
     }
   }
@@ -208,6 +257,11 @@ export function createGenerationRoutes(config: GenerationRoutesConfig): Hono<{ V
     "/skills/generate",
     auth,
     requirePermission("ornn:skill:build"),
+    // Rate limit (#439): every generation runs an LLM call —
+    // most expensive endpoint in the API. Per-user 20/min is
+    // ~3s minimum between requests, which still feels instant for
+    // legitimate flows while stopping a script from burning budget.
+    rateLimit({ windowMs: 60_000, max: 20, label: "skills-generate" }),
     async (c) => {
       const contentType = c.req.header("content-type") ?? "";
       const authCtx = getAuth(c);
@@ -219,7 +273,7 @@ export function createGenerationRoutes(config: GenerationRoutesConfig): Hono<{ V
         const body = await c.req.parseBody({ all: true });
 
         if (typeof body["prompt"] !== "string" || !body["prompt"]) {
-          throw AppError.badRequest("MISSING_PROMPT", "A 'prompt' field is required");
+          throw AppError.badRequest("missing_prompt", "A 'prompt' field is required");
         }
         prompt = body["prompt"];
 
@@ -233,30 +287,70 @@ export function createGenerationRoutes(config: GenerationRoutesConfig): Hono<{ V
           packageContent = await analyzePackageContent(new Uint8Array(buf));
         }
       } else if (contentType.includes("application/json")) {
-        const body = await c.req.json();
+        // Hybrid endpoint — multipart-or-JSON. Inline Zod parse so
+        // malformed JSON returns 400 invalid_body via the global RFC
+        // 7807 handler instead of a raw SyntaxError 500 (#438).
+        let body: { modelId?: string; messages?: unknown[]; prompt?: string };
+        try {
+          const text = await c.req.text();
+          const raw = text.trim().length === 0 ? {} : JSON.parse(text);
+          if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+            throw AppError.badRequest("invalid_body", "Request body must be a JSON object");
+          }
+          body = raw as typeof body;
+        } catch (err) {
+          if (err instanceof AppError) throw err;
+          throw AppError.badRequest("invalid_body", "Request body must be valid JSON");
+        }
         if (typeof body.modelId === "string" && body.modelId) {
           requestedModelId = body.modelId;
         }
 
         // Multi-turn format: messages array
         if (body.messages && Array.isArray(body.messages)) {
+          // #654 — per-message content cap. Mirrors the playground
+          // chat schema's `.max(MAX_CHAT_MESSAGE_CHARS)` so both
+          // surfaces enforce the same ceiling.
+          for (const m of body.messages) {
+            if (
+              m && typeof m === "object" && "content" in m &&
+              typeof (m as { content: unknown }).content === "string" &&
+              (m as { content: string }).content.length > MAX_GENERATION_CHARS
+            ) {
+              throw AppError.badRequest(
+                "content_too_long",
+                `Message content exceeds ${MAX_GENERATION_CHARS} character limit`,
+              );
+            }
+          }
           logger.info({ userId: authCtx.userId, messageCount: body.messages.length }, "Multi-turn generation request");
           const pf = await preflight(c, quotaService, llmProvidersService, requestedModelId);
           const keepAliveMs = await resolveKeepAliveMs(keepAliveIntervalMsResolver);
           return streamGenerationEvents(
             c,
-            generationService.generateStreamWithHistory(body.messages, c.req.raw.signal, pf.modelId),
+            generationService.generateStreamWithHistory(
+              body.messages as Array<{ role: "user" | "assistant"; content: string }>,
+              c.req.raw.signal,
+              pf.modelId,
+            ),
             keepAliveMs,
-            { quotaService, userId: pf.userId, permissions: pf.permissions, modelId: pf.modelId },
+            { quotaService, userId: pf.userId, permissions: pf.permissions, modelId: pf.modelId, reservedAt: pf.reservedAt },
           );
         }
 
         if (!body.prompt || typeof body.prompt !== "string") {
-          throw AppError.badRequest("MISSING_PROMPT", "A 'prompt' field is required");
+          throw AppError.badRequest("missing_prompt", "A 'prompt' field is required");
+        }
+        if (body.prompt.length > MAX_GENERATION_CHARS) {
+          // #654 — symmetric with the multi-turn branch above.
+          throw AppError.badRequest(
+            "prompt_too_long",
+            `Prompt exceeds ${MAX_GENERATION_CHARS} character limit`,
+          );
         }
         prompt = body.prompt;
       } else {
-        throw AppError.badRequest("INVALID_CONTENT_TYPE", "Expected multipart/form-data or application/json");
+        throw AppError.badRequest("invalid_content_type", "Expected multipart/form-data or application/json");
       }
 
       const signal = c.req.raw.signal;
@@ -273,7 +367,7 @@ export function createGenerationRoutes(config: GenerationRoutesConfig): Hono<{ V
         c,
         generationService.generateStream(query, signal, pf.modelId),
         keepAliveMs,
-        { quotaService, userId: pf.userId, permissions: pf.permissions, modelId: pf.modelId },
+        { quotaService, userId: pf.userId, permissions: pf.permissions, modelId: pf.modelId, reservedAt: pf.reservedAt },
       );
     },
   );
@@ -295,27 +389,38 @@ export function createGenerationRoutes(config: GenerationRoutesConfig): Hono<{ V
     "/skills/generate/from-source",
     auth,
     requirePermission("ornn:skill:build"),
+    validateBody(
+      z.object({
+        code: z.string().optional(),
+        repoUrl: z.string().optional(),
+        path: z.string().optional(),
+        framework: z.string().optional(),
+        description: z.string().optional(),
+        modelId: z.string().optional(),
+      }),
+      "invalid_from_source_body",
+    ),
     async (c) => {
       const authCtx = getAuth(c);
-      const body = (await c.req.json().catch(() => ({}))) as {
-        code?: unknown;
-        repoUrl?: unknown;
-        path?: unknown;
-        framework?: unknown;
-        description?: unknown;
-        modelId?: unknown;
-      };
+      const body = getValidatedBody<{
+        code?: string;
+        repoUrl?: string;
+        path?: string;
+        framework?: string;
+        description?: string;
+        modelId?: string;
+      }>(c);
 
-      const inlineCode = typeof body.code === "string" ? body.code : undefined;
-      const repoUrl = typeof body.repoUrl === "string" ? body.repoUrl : undefined;
-      const path = typeof body.path === "string" ? body.path : undefined;
-      const framework = typeof body.framework === "string" ? body.framework : undefined;
-      const description = typeof body.description === "string" ? body.description : undefined;
-      const requestedModelId = typeof body.modelId === "string" ? body.modelId : undefined;
+      const inlineCode = body.code;
+      const repoUrl = body.repoUrl;
+      const path = body.path;
+      const framework = body.framework;
+      const description = body.description;
+      const requestedModelId = body.modelId;
 
       if (!inlineCode && !repoUrl) {
         throw AppError.badRequest(
-          "MISSING_SOURCE",
+          "missing_source",
           "Provide either 'code' (inline source) or 'repoUrl' (public GitHub URL)",
         );
       }
@@ -347,12 +452,12 @@ export function createGenerationRoutes(config: GenerationRoutesConfig): Hono<{ V
           );
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
-          throw AppError.badRequest("REPO_FETCH_FAILED", `Could not fetch repository: ${message}`);
+          throw AppError.badRequest("repo_fetch_failed", `Could not fetch repository: ${message}`);
         }
       }
 
       if (!code.trim()) {
-        throw AppError.badRequest("EMPTY_SOURCE", "Source code is empty — nothing to analyze");
+        throw AppError.badRequest("empty_source", "Source code is empty — nothing to analyze");
       }
 
       logger.info(
@@ -379,7 +484,7 @@ export function createGenerationRoutes(config: GenerationRoutesConfig): Hono<{ V
           pf.modelId,
         ),
         keepAliveMs,
-        { quotaService, userId: pf.userId, permissions: pf.permissions, modelId: pf.modelId },
+        { quotaService, userId: pf.userId, permissions: pf.permissions, modelId: pf.modelId, reservedAt: pf.reservedAt },
       );
     },
   );
@@ -394,17 +499,27 @@ export function createGenerationRoutes(config: GenerationRoutesConfig): Hono<{ V
     "/skills/generate/from-openapi",
     auth,
     requirePermission("ornn:skill:build"),
+    validateBody(
+      z.object({
+        spec: z.string().min(1),
+        endpoints: z.array(z.unknown()).optional(),
+        description: z.string().optional(),
+        modelId: z.string().optional(),
+      }),
+      "invalid_from_openapi_body",
+    ),
     async (c) => {
       const authCtx = getAuth(c);
-      const body = await c.req.json();
+      const body = getValidatedBody<{
+        spec: string;
+        endpoints?: unknown[];
+        description?: string;
+        modelId?: string;
+      }>(c);
 
-      if (!body.spec || typeof body.spec !== "string") {
-        throw AppError.badRequest("MISSING_SPEC", "An OpenAPI 'spec' field (JSON or YAML string) is required");
-      }
-
-      const endpoints = Array.isArray(body.endpoints) ? body.endpoints : undefined;
-      const description = typeof body.description === "string" ? body.description : undefined;
-      const requestedModelId = typeof body.modelId === "string" ? body.modelId : undefined;
+      const endpoints = body.endpoints;
+      const description = body.description;
+      const requestedModelId = body.modelId;
 
       logger.info(
         { userId: authCtx.userId, specLength: body.spec.length, endpoints, hasDescription: !!description },
@@ -417,9 +532,14 @@ export function createGenerationRoutes(config: GenerationRoutesConfig): Hono<{ V
       const keepAliveMs = await resolveKeepAliveMs(keepAliveIntervalMsResolver);
       return streamGenerationEvents(
         c,
-        generationService.generateFromOpenApi(body.spec, { endpoints, description }, signal, pf.modelId),
+        generationService.generateFromOpenApi(
+          body.spec,
+          { endpoints: endpoints as string[] | undefined, description },
+          signal,
+          pf.modelId,
+        ),
         keepAliveMs,
-        { quotaService, userId: pf.userId, permissions: pf.permissions, modelId: pf.modelId },
+        { quotaService, userId: pf.userId, permissions: pf.permissions, modelId: pf.modelId, reservedAt: pf.reservedAt },
       );
     },
   );

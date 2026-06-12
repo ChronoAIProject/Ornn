@@ -51,34 +51,57 @@ function useDebouncedValue<T>(value: T, delayMs: number): T {
 
 export function PermissionsModal({ isOpen, onClose, skill }: PermissionsModalProps) {
   const { t } = useTranslation();
+  return (
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title={t("permissions.title", "Permissions") as string}
+      className="!max-w-3xl"
+    >
+      {/* Keyed on the skill's ACL signature (+ open) so the form's state
+          resets by construction whenever the modal reopens or the
+          underlying ACLs change — no synchronous reset effect, no
+          cascading render (#888). The outer Modal owns the open/close
+          animation, so its AnimatePresence stays stable. */}
+      <PermissionsForm
+        key={`${isOpen ? "open" : "closed"}:${skill.guid}:${skill.isPrivate}:${skill.sharedWithOrgs.join(",")}:${skill.sharedWithUsers.join(",")}`}
+        skill={skill}
+        onClose={onClose}
+        t={t}
+      />
+    </Modal>
+  );
+}
+
+interface PermissionsFormProps {
+  skill: SkillDetail;
+  onClose: () => void;
+  t: ReturnType<typeof useTranslation>["t"];
+}
+
+function PermissionsForm({ skill, onClose, t }: PermissionsFormProps) {
   const addToast = useToastStore((s) => s.addToast);
   const { data: myOrgs = [] } = useMyOrgs();
   const permissionsMutation = useUpdateSkillPermissions(skill.guid);
 
+  // Lazy init from the skill ACLs — the very first render is already in
+  // the reset state, so no synchronous setState-in-effect is needed.
+  // Re-open / ACL-change resets via the `key` at the call site.
   const [isPublic, setIsPublic] = useState<boolean>(!skill.isPrivate);
-  const [sharedUsers, setSharedUsers] = useState<UserDirectoryEntry[]>([]);
+  const [sharedUsers, setSharedUsers] = useState<UserDirectoryEntry[]>(() =>
+    skill.sharedWithUsers.map((id) => ({ userId: id, email: "", displayName: id })),
+  );
   const [sharedOrgIds, setSharedOrgIds] = useState<string[]>(skill.sharedWithOrgs);
   const [userQuery, setUserQuery] = useState("");
   const [userInputFocused, setUserInputFocused] = useState(false);
   const userInputRef = useRef<HTMLInputElement>(null);
 
-  // Reset form + resolve saved user_ids into email/displayName whenever
-  // the modal opens or the underlying skill ACLs change. The two used
-  // to be split across separate effects, but the resolve effect's
-  // closure captured `sharedUsers` from the render BEFORE the reset
-  // effect ran — so the resolved labels never landed on a re-open.
-  // Folding both into one effect closes that race: we always resolve
-  // against `skill.sharedWithUsers` directly, not the post-reset state.
+  // Resolve saved user_ids into email/displayName once the form mounts.
+  // This is a genuine external-system sync (user directory API) and only
+  // setStates from the async callback, never synchronously in the effect
+  // body — so it doesn't trip set-state-in-effect (#888).
   useEffect(() => {
-    if (!isOpen) return;
-    setIsPublic(!skill.isPrivate);
-    setSharedOrgIds(skill.sharedWithOrgs);
-    setUserQuery("");
     const ids = skill.sharedWithUsers;
-    setSharedUsers(
-      ids.map((id) => ({ userId: id, email: "", displayName: id })),
-    );
-
     if (ids.length === 0) return;
     let cancelled = false;
     (async () => {
@@ -92,7 +115,7 @@ export function PermissionsModal({ isOpen, onClose, skill }: PermissionsModalPro
     return () => {
       cancelled = true;
     };
-  }, [isOpen, skill]);
+  }, [skill]);
 
   const debouncedQuery = useDebouncedValue(userQuery.trim(), 200);
   const shouldSearch = !isPublic && (userInputFocused || debouncedQuery.length > 0);
@@ -111,25 +134,38 @@ export function PermissionsModal({ isOpen, onClose, skill }: PermissionsModalPro
     queryKey: ["orgs-backfill", unknownOrgIds.sort().join(",")],
     queryFn: async () => {
       const resolved = await Promise.all(unknownOrgIds.map((id) => fetchOrgSummary(id)));
-      return resolved
-        .map(
-          (entry, i) =>
-            entry ?? { userId: unknownOrgIds[i], displayName: unknownOrgIds[i], avatarUrl: null },
-        )
-        .filter((e) => !!e);
+      return resolved.map((entry, i) => {
+        // `i` is bounded by `unknownOrgIds.length` (Promise.all preserves
+        // indexing). `!` is safe under noUncheckedIndexedAccess (#450).
+        const orgId = unknownOrgIds[i]!;
+        // #720 — entry is null when NyxID couldn't resolve the id (org
+        // deleted, or caller can't see it). Keep the row visible so
+        // the owner can revoke, but flag `isUnresolved` so the chip
+        // gets the warning treatment.
+        return entry
+          ? { ...entry, isUnresolved: false }
+          : { userId: orgId, displayName: orgId, avatarUrl: null, isUnresolved: true };
+      });
     },
-    enabled: isOpen && unknownOrgIds.length > 0,
+    // The form only mounts while the modal is open (Modal renders its
+    // children conditionally), so the prior `isOpen &&` gate is implicit.
+    enabled: unknownOrgIds.length > 0,
     staleTime: 5 * 60_000,
   });
 
   const allOrgOptions = useMemo(() => {
-    const map = new Map<string, { userId: string; displayName: string; isMember: boolean }>();
+    const map = new Map<string, { userId: string; displayName: string; isMember: boolean; isUnresolved: boolean }>();
     for (const o of myOrgs) {
-      map.set(o.userId, { userId: o.userId, displayName: o.displayName, isMember: true });
+      map.set(o.userId, { userId: o.userId, displayName: o.displayName, isMember: true, isUnresolved: false });
     }
     for (const o of fetchedUnknownOrgs) {
       if (!map.has(o.userId)) {
-        map.set(o.userId, { userId: o.userId, displayName: o.displayName, isMember: false });
+        map.set(o.userId, {
+          userId: o.userId,
+          displayName: o.displayName,
+          isMember: false,
+          isUnresolved: o.isUnresolved,
+        });
       }
     }
     return Array.from(map.values());
@@ -199,12 +235,7 @@ export function PermissionsModal({ isOpen, onClose, skill }: PermissionsModalPro
   };
 
   return (
-    <Modal
-      isOpen={isOpen}
-      onClose={onClose}
-      title={t("permissions.title", "Permissions") as string}
-      className="!max-w-3xl"
-    >
+    <>
       <div className="flex gap-4">
         <div className="flex flex-col items-center py-1 shrink-0" aria-hidden>
           <svg
@@ -283,7 +314,17 @@ export function PermissionsModal({ isOpen, onClose, skill }: PermissionsModalPro
                   return (
                     <label
                       key={org.userId}
-                      className="flex items-center gap-2 cursor-pointer py-1 px-2 rounded hover:bg-accent/5"
+                      className={`flex items-center gap-2 cursor-pointer py-1 px-2 rounded hover:bg-accent/5 ${
+                        org.isUnresolved ? "bg-warning-soft/40" : ""
+                      }`}
+                      title={
+                        org.isUnresolved
+                          ? (t(
+                              "permissions.orgUnresolvedTip",
+                              "This organization is no longer reachable in NyxID. Uncheck to revoke the stale grant.",
+                            ) as string)
+                          : undefined
+                      }
                     >
                       <input
                         type="checkbox"
@@ -294,11 +335,19 @@ export function PermissionsModal({ isOpen, onClose, skill }: PermissionsModalPro
                       <span className="font-text text-sm text-strong truncate">
                         {org.displayName}
                       </span>
-                      {!org.isMember && (
+                      {org.isUnresolved ? (
+                        <span className="ml-auto inline-flex items-center gap-1 rounded-sm border border-warning/40 px-1.5 py-[1px] font-mono text-[10px] uppercase tracking-wider text-warning">
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                            <path d="M12 9v2m0 4h.01" />
+                            <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                          </svg>
+                          {t("permissions.orgUnresolved", "unresolved")}
+                        </span>
+                      ) : !org.isMember ? (
                         <span className="font-mono text-[10px] text-meta ml-auto">
                           {t("permissions.notMember", "not member")}
                         </span>
-                      )}
+                      ) : null}
                     </label>
                   );
                 })}
@@ -325,22 +374,49 @@ export function PermissionsModal({ isOpen, onClose, skill }: PermissionsModalPro
                   isPublic ? "opacity-60 pointer-events-none" : ""
                 }`}
               >
-                {sharedUsers.map((u) => (
-                  <span
-                    key={u.userId}
-                    className="inline-flex items-center gap-2 px-2 py-1 rounded-full border border-accent/30 bg-accent/5 font-mono text-xs text-strong h-fit"
-                  >
-                    <span>{u.email || u.displayName || u.userId}</span>
-                    <button
-                      type="button"
-                      onClick={() => removeUser(u.userId)}
-                      className="text-danger hover:text-danger/80 cursor-pointer"
-                      aria-label={t("permissions.removeUser", "Remove") as string}
+                {sharedUsers.map((u) => {
+                  // #720 — user couldn't be resolved via the directory.
+                  // `resolveUsers` leaves the placeholder
+                  // `{ userId, email: "", displayName: userId }` in place
+                  // when a lookup misses, so `!u.email && u.displayName === u.userId`
+                  // is the signal that the grant points at a user who no
+                  // longer exists (or who the caller can't see).
+                  const isUnresolved = !u.email && u.displayName === u.userId;
+                  return (
+                    <span
+                      key={u.userId}
+                      className={`inline-flex items-center gap-2 px-2 py-1 rounded-full border font-mono text-xs h-fit ${
+                        isUnresolved
+                          ? "border-warning/40 bg-warning-soft/40 text-warning"
+                          : "border-accent/30 bg-accent/5 text-strong"
+                      }`}
+                      title={
+                        isUnresolved
+                          ? (t(
+                              "permissions.userUnresolvedTip",
+                              "This user could not be resolved. They may have left or been removed; click × to revoke the stale grant.",
+                            ) as string)
+                          : undefined
+                      }
                     >
-                      ×
-                    </button>
-                  </span>
-                ))}
+                      {isUnresolved && (
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                          <path d="M12 9v2m0 4h.01" />
+                          <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                        </svg>
+                      )}
+                      <span>{u.email || u.displayName || u.userId}</span>
+                      <button
+                        type="button"
+                        onClick={() => removeUser(u.userId)}
+                        className="text-danger hover:text-danger/80 cursor-pointer"
+                        aria-label={t("permissions.removeUser", "Remove") as string}
+                      >
+                        ×
+                      </button>
+                    </span>
+                  );
+                })}
                 {sharedUsers.length === 0 && (
                   <p className="font-text text-xs text-meta italic w-full">
                     {t("permissions.noUsersYet", "No users added yet.")}
@@ -413,7 +489,7 @@ export function PermissionsModal({ isOpen, onClose, skill }: PermissionsModalPro
           {t("common.save", "Save")}
         </Button>
       </div>
-    </Modal>
+    </>
   );
 }
 

@@ -38,11 +38,10 @@ class FakeRepo {
     return this.rows.delete(id);
   }
   async clearDefaultsForSurfaceExcept(
-    surface: "Playground" | "SkillGen",
+    surface: "Playground" | "SkillGen" | "Assistant",
     keep: { providerId: string; modelId: string } | null,
   ): Promise<void> {
-    const defKey =
-      surface === "Playground" ? "defaultForPlayground" : "defaultForSkillGen";
+    const defKey = `defaultFor${surface}` as const;
     for (const [id, doc] of this.rows) {
       const isKeeper = keep && id === keep.providerId;
       const nextModels = doc.models.map((m) => {
@@ -177,6 +176,105 @@ describe("LlmProvidersService", () => {
     expect(m.enabledForPlayground).toBe(true);
     expect(m.enabledForSkillGen).toBe(true);
     expect(m.displayName).toBe("GPT-4o (renamed)");
+  });
+
+  it("UT-LLM-004a: update WITHOUT models key preserves existing list (#588)", async () => {
+    // The ProviderEditDrawer's basic-settings save sends only name /
+    // gatewayUrl / etc. — no `models` field. Before #588 the update
+    // schema's inherited `.default([])` parsed the missing field as
+    // `[]`, then `if (patch.models)` was truthy on `[]` and silently
+    // wiped the model list. This pins the "undefined means preserve"
+    // contract so a future schema refactor can't regress.
+    const { svc } = makeService();
+    const created = await svc.create(
+      { ...baseInput, auth: { kind: "apiKey", apiKey: "sk-aaaaaa" } },
+      ACTOR,
+    );
+    expect(created.models.length).toBeGreaterThan(0);
+    const updated = await svc.update(
+      created._id,
+      {
+        // basic-settings-only patch — no `models` field whatsoever
+        name: "renamed-provider",
+        maxOutputTokens: 4096,
+      },
+      ACTOR,
+    );
+    expect(updated.name).toBe("renamed-provider");
+    expect(updated.maxOutputTokens).toBe(4096);
+    expect(updated.models.length).toBe(created.models.length);
+    expect(updated.models.map((m) => m.id).sort()).toEqual(
+      created.models.map((m) => m.id).sort(),
+    );
+  });
+
+  it("UT-LLM-004b: update WITH explicit models: [] wipes the list (#588)", async () => {
+    // Symmetry check: passing an explicit empty array IS a valid
+    // "remove everything" intent (e.g. the model-list refresh found
+    // zero models on the upstream provider). The fix must preserve
+    // that path while only treating `undefined` as "don't touch".
+    const { svc } = makeService();
+    const created = await svc.create(
+      { ...baseInput, auth: { kind: "apiKey", apiKey: "sk-aaaaaa" } },
+      ACTOR,
+    );
+    expect(created.models.length).toBeGreaterThan(0);
+    const updated = await svc.update(
+      created._id,
+      { models: [] },
+      ACTOR,
+    );
+    expect(updated.models).toEqual([]);
+  });
+
+  it("UT-LLM-004c: listPickerModels honours sectionDefaultModelId override (#607)", async () => {
+    // Admin pins playground.defaultModelId = "gpt-3.5" via settings.
+    // Without the override the picker would return whichever model
+    // has `defaultForPlayground: true`. With the override the pinned
+    // model wins the `default` slot and lands first in the items list,
+    // matching what `resolveSurfaceDefaults` does on the execute path.
+    const { svc } = makeService();
+    await svc.create(
+      {
+        ...baseInput,
+        name: "alpha",
+        auth: { kind: "apiKey", apiKey: "k1" },
+        models: [
+          {
+            id: "gpt-4o",
+            displayName: "GPT-4o",
+            enabledForPlayground: true,
+            defaultForPlayground: true,
+          },
+          {
+            id: "gpt-3.5",
+            displayName: "GPT-3.5",
+            enabledForPlayground: true,
+          },
+        ],
+      },
+      ACTOR,
+    );
+
+    // No override → per-model flag wins, gpt-4o is default.
+    const noOverride = await svc.listPickerModels("playground");
+    expect(noOverride.default).toBe("gpt-4o");
+    expect(noOverride.items[0]?.modelId).toBe("gpt-4o");
+
+    // With section pin → gpt-3.5 wins.
+    const pinned = await svc.listPickerModels("playground", "gpt-3.5");
+    expect(pinned.default).toBe("gpt-3.5");
+    expect(pinned.items[0]?.modelId).toBe("gpt-3.5");
+    expect(pinned.items[0]?.isDefault).toBe(true);
+    // gpt-4o is still in the list, just no longer marked default.
+    const gpt4o = pinned.items.find((i) => i.modelId === "gpt-4o");
+    expect(gpt4o?.isDefault).toBe(false);
+
+    // Pin points at a disabled/missing model → falls through to the
+    // first enabled item; nothing is marked default.
+    const stalePin = await svc.listPickerModels("playground", "gpt-deprecated");
+    expect(stalePin.items.every((i) => i.isDefault === false)).toBe(true);
+    expect(stalePin.default).toBe(stalePin.items[0]?.modelId ?? null);
   });
 
   it("UT-LLM-005: sync — newly arrived model lands with all surface flags false", async () => {
@@ -315,6 +413,146 @@ describe("LlmProvidersService", () => {
     if (masked?.auth.kind !== "apiKey") throw new Error("kind");
     expect(masked.auth.apiKey).not.toBe("sk-aabbccdd1122");
     expect(isMidMaskSentinel(masked.auth.apiKey)).toBe(true);
+  });
+
+  // ──────────────── #970 — assistant surface ────────────────
+
+  it("UT-LLM-ASST-001: resolveModel(assistant) → no-models-enabled until a model opts in", async () => {
+    // baseInput enables gpt-4o for playground + skillGen but NOT for the
+    // assistant — a brand-new surface must start with zero routable
+    // models so it never silently borrows another surface's default.
+    const { svc } = makeService();
+    await svc.create(
+      { ...baseInput, auth: { kind: "apiKey", apiKey: "k" } },
+      ACTOR,
+    );
+    const resolution = await svc.resolveModel({ surface: "assistant" });
+    expect(resolution.kind).toBe("no-models-enabled");
+  });
+
+  it("UT-LLM-ASST-002: patchModel(defaultForAssistant) auto-enables + resolveModel picks it", async () => {
+    const { svc } = makeService();
+    const created = await svc.create(
+      { ...baseInput, auth: { kind: "apiKey", apiKey: "k" } },
+      ACTOR,
+    );
+    const after = await svc.patchModel(
+      created._id,
+      "gpt-4o",
+      { defaultForAssistant: true },
+      ACTOR,
+    );
+    const gpt4o = after.models.find((m) => m.id === "gpt-4o")!;
+    expect(gpt4o.defaultForAssistant).toBe(true);
+    expect(gpt4o.enabledForAssistant).toBe(true);
+
+    const resolution = await svc.resolveModel({ surface: "assistant" });
+    expect(resolution.kind).toBe("ok");
+    if (resolution.kind === "ok") expect(resolution.modelId).toBe("gpt-4o");
+  });
+
+  it("UT-LLM-ASST-003: resolveModel(assistant) prefers default over first-enabled", async () => {
+    const { svc } = makeService();
+    await svc.create(
+      {
+        ...baseInput,
+        name: "asst",
+        auth: { kind: "apiKey", apiKey: "k" },
+        models: [
+          {
+            id: "alpha",
+            displayName: "Alpha",
+            enabledForAssistant: true,
+          },
+          {
+            id: "bravo",
+            displayName: "Bravo",
+            enabledForAssistant: true,
+            defaultForAssistant: true,
+          },
+        ],
+      },
+      ACTOR,
+    );
+    const resolution = await svc.resolveModel({ surface: "assistant" });
+    expect(resolution.kind).toBe("ok");
+    // bravo is the surface default even though alpha sorts first by name.
+    if (resolution.kind === "ok") expect(resolution.modelId).toBe("bravo");
+  });
+
+  it("UT-LLM-ASST-004: requested model not enabled for assistant → not-enabled", async () => {
+    const { svc } = makeService();
+    await svc.create(
+      { ...baseInput, auth: { kind: "apiKey", apiKey: "k" } },
+      ACTOR,
+    );
+    // gpt-4o is enabled for playground/skillGen but not assistant.
+    const resolution = await svc.resolveModel({
+      surface: "assistant",
+      requested: "gpt-4o",
+    });
+    expect(resolution.kind).toBe("not-enabled");
+  });
+
+  it("UT-LLM-ASST-005: assistant default flip is surface-isolated (#970)", async () => {
+    // baseInput marks gpt-4o as the playground AND skillGen default.
+    // Setting gpt-3.5 as the assistant default must NOT disturb either
+    // of gpt-4o's other-surface defaults — surfaces are independent.
+    const { svc } = makeService();
+    const created = await svc.create(
+      { ...baseInput, auth: { kind: "apiKey", apiKey: "k" } },
+      ACTOR,
+    );
+    const after = await svc.patchModel(
+      created._id,
+      "gpt-3.5",
+      { defaultForAssistant: true },
+      ACTOR,
+    );
+    const gpt4o = after.models.find((m) => m.id === "gpt-4o")!;
+    expect(gpt4o.defaultForPlayground).toBe(true);
+    expect(gpt4o.defaultForSkillGen).toBe(true);
+    expect(gpt4o.defaultForAssistant).toBe(false);
+    const gpt35 = after.models.find((m) => m.id === "gpt-3.5")!;
+    expect(gpt35.defaultForAssistant).toBe(true);
+    expect(gpt35.enabledForAssistant).toBe(true);
+  });
+
+  it("UT-LLM-ASST-006: assistant default is at-most-one across providers (#970)", async () => {
+    const { svc } = makeService();
+    const a = await svc.create(
+      {
+        ...baseInput,
+        name: "alpha",
+        auth: { kind: "apiKey", apiKey: "k1" },
+        models: [
+          {
+            id: "m-a",
+            displayName: "M-A",
+            enabledForAssistant: true,
+            defaultForAssistant: true,
+          },
+        ],
+      },
+      ACTOR,
+    );
+    const b = await svc.create(
+      {
+        ...baseInput,
+        name: "beta",
+        auth: { kind: "apiKey", apiKey: "k2" },
+        models: [{ id: "m-b", displayName: "M-B", enabledForAssistant: true }],
+      },
+      ACTOR,
+    );
+    // Promote m-b on provider beta → m-a's default must clear.
+    await svc.patchModel(b._id, "m-b", { defaultForAssistant: true }, ACTOR);
+    const alpha = await svc.get(a._id);
+    const mA = alpha!.models.find((m) => m.id === "m-a")!;
+    expect(mA.defaultForAssistant).toBe(false);
+    const beta = await svc.get(b._id);
+    const mB = beta!.models.find((m) => m.id === "m-b")!;
+    expect(mB.defaultForAssistant).toBe(true);
   });
 
   it("UT-LLM-013: sentinel apiKey on update preserves DB value", async () => {

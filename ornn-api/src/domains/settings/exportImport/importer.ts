@@ -13,12 +13,12 @@
  * @module domains/settings/exportImport/importer
  */
 
-import pino from "pino";
+import { createLogger } from "../../../shared/logger";
 import { sections, type SectionId } from "../sections";
 import type { SettingsActor, SettingsService } from "../types";
 import { SETTINGS_SCHEMA_VERSION } from "./exporter";
 
-const logger = pino({ level: "info" }).child({ module: "settingsImporter" });
+const logger = createLogger("settingsImporter");
 
 export interface ImportInput {
   readonly schemaVersion?: unknown;

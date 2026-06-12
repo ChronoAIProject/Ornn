@@ -11,7 +11,7 @@
  * @module components/skill/AdvancedOptionsModal
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
@@ -56,15 +56,6 @@ const SETTINGS: ReadonlyArray<{
 
 export function AdvancedOptionsModal({ isOpen, onClose, skill }: AdvancedOptionsModalProps) {
   const { t } = useTranslation();
-  const [selected, setSelected] = useState<AdvancedSettingId>(SETTINGS[0].id);
-
-  // Reset to the first setting whenever the modal opens, so the user
-  // always lands on a known starting point rather than wherever they
-  // left off across different skills.
-  useEffect(() => {
-    if (isOpen) setSelected(SETTINGS[0].id);
-  }, [isOpen]);
-
   return (
     <Modal
       isOpen={isOpen}
@@ -72,6 +63,31 @@ export function AdvancedOptionsModal({ isOpen, onClose, skill }: AdvancedOptions
       title={t("advancedOptions.title", "Advanced options") as string}
       className="!max-w-4xl !h-[80vh] !max-h-[80vh] !overflow-hidden flex flex-col"
     >
+      {/* Keyed on `isOpen` so the selected-setting state resets to the
+          first setting by construction on each open — no reset effect,
+          no cascading render (#888). The outer Modal owns the open/close
+          animation. */}
+      <AdvancedOptionsBody
+        key={isOpen ? "open" : "closed"}
+        skill={skill}
+        onClose={onClose}
+        t={t}
+      />
+    </Modal>
+  );
+}
+
+interface AdvancedOptionsBodyProps {
+  skill: AdvancedOptionsModalProps["skill"];
+  onClose: () => void;
+  t: ReturnType<typeof useTranslation>["t"];
+}
+
+function AdvancedOptionsBody({ skill, onClose, t }: AdvancedOptionsBodyProps) {
+  const [selected, setSelected] = useState<AdvancedSettingId>(SETTINGS[0]!.id);
+
+  return (
+    <>
       {/*
         Fixed-height modal. The grid below grabs the remaining vertical
         space (flex-1 min-h-0) and gives both cells their own scroll
@@ -119,7 +135,7 @@ export function AdvancedOptionsModal({ isOpen, onClose, skill }: AdvancedOptions
           )}
         </div>
       </div>
-    </Modal>
+    </>
   );
 }
 
@@ -140,9 +156,14 @@ function NyxidServiceBindingPanel({
   const mutation = useTieSkillToNyxidService(skill.guid);
 
   const [selectedId, setSelectedId] = useState<string | null>(skill.nyxidServiceId ?? null);
-  useEffect(() => {
+  // Sync the picker to the server's linked service when it changes,
+  // using the "adjust state during render" guard rather than an effect
+  // (avoids the extra commit + cascading render, #888).
+  const [prevNyxidServiceId, setPrevNyxidServiceId] = useState(skill.nyxidServiceId);
+  if (skill.nyxidServiceId !== prevNyxidServiceId) {
+    setPrevNyxidServiceId(skill.nyxidServiceId);
     setSelectedId(skill.nyxidServiceId ?? null);
-  }, [skill.nyxidServiceId]);
+  }
 
   const adminServices = useMemo(
     () => services.filter((s) => s.tier === "admin"),
@@ -330,12 +351,16 @@ function GithubLinkPanel({ skill, onClose }: { skill: SkillDetail; onClose: () =
   const [skipValidation, setSkipValidation] = useState(false);
   const [preview, setPreview] = useState<RefreshPreviewResponse | null>(null);
 
-  // When the modal reopens (or the skill changes), reset to whatever the
-  // server says is currently linked.
-  useEffect(() => {
+  // When the skill's linked source changes, reset to whatever the server
+  // says is currently linked — using the "adjust state during render"
+  // guard rather than an effect (avoids the extra commit + cascading
+  // render, #888).
+  const [prevInitialUrl, setPrevInitialUrl] = useState(initialUrl);
+  if (initialUrl !== prevInitialUrl) {
+    setPrevInitialUrl(initialUrl);
     setUrl(initialUrl);
     setPreview(null);
-  }, [initialUrl]);
+  }
 
   const isLinked = !!(skill.source && skill.source.type === "github");
   const dirty = url.trim() !== initialUrl;

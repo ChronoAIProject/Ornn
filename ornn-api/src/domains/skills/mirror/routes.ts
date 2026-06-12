@@ -30,7 +30,9 @@
  */
 
 import { Hono } from "hono";
-import pino from "pino";
+import { createLogger } from "../../../shared/logger";
+import { z } from "zod";
+import { validateBody, getValidatedBody } from "../../../middleware/validate";
 import {
   type AuthVariables,
   nyxidAuthMiddleware,
@@ -38,24 +40,25 @@ import {
 } from "../../../middleware/nyxidAuth";
 import { AppError } from "../../../shared/types/index";
 import { isMidMaskSentinel, midMaskSecret } from "../../../infra/crypto";
+import { OWNER_RE, REPO_RE } from "../../../shared/githubNaming";
 import type { MirrorService, ReconcileResult } from "./mirrorService";
 import type { MirrorScheduler, ScheduledRunStatus } from "./scheduler";
 import type { SettingsService, SettingsActor } from "../../settings/types";
 import type { MirrorSection } from "../../settings/sections/mirror";
 import type { SkillRepository } from "../crud/repository";
+import { validateGitHubAppPrivateKey } from "./privateKeyValidation";
 
-const logger = pino({ level: "info" }).child({ module: "mirrorRoutes" });
+const logger = createLogger("mirrorRoutes");
 
 /**
  * GitHub naming validation.
  *
- *   owner: alphanumeric + dashes; can't start or end with a dash; 1–39 chars.
- *   repo:  alphanumeric + dot/dash/underscore; 1–100 chars.
+ *   owner / repo: see `shared/githubNaming` (OWNER_RE / REPO_RE) — the
+ *          single source of truth shared with the mirror settings section
+ *          and the repo-pull path.
  *   branch: any non-empty string up to 250 chars (git's actual limit is
  *          looser but we want a sane upper bound and disallow control chars).
  */
-const OWNER_RE = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/;
-const REPO_RE = /^[A-Za-z0-9._-]{1,100}$/;
 // eslint-disable-next-line no-control-regex -- intentional: rejects branch names containing C0 control chars or DEL.
 const BRANCH_RE = /^[^\x00-\x1f\x7f]{1,250}$/;
 const APP_ID_RE = /^[0-9]{1,15}$/;
@@ -158,8 +161,13 @@ export function createMirrorRoutes(
     "/github/repo",
     auth,
     requirePermission("ornn:admin:skill"),
+    // The per-field type / regex checks below are intricate (owner /
+    // repo name regex, app-id digits, PEM shape, branch protection).
+    // The middleware here just gates the JSON-object shape so a
+    // SyntaxError becomes 400 invalid_body (#438).
+    validateBody(z.record(z.string(), z.unknown()), "invalid_body"),
     async (c) => {
-      const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+      const body = getValidatedBody<Record<string, unknown>>(c);
       const current = await settingsService.getMirror();
       const confirmAbandonOldRepo = body.confirmAbandonOldRepo === true;
 
@@ -167,7 +175,7 @@ export function createMirrorRoutes(
       let enabled = current.enabled;
       if ("enabled" in body) {
         if (typeof body.enabled !== "boolean") {
-          throw AppError.badRequest("INVALID_SETTING", "'enabled' must be a boolean.");
+          throw AppError.badRequest("invalid_setting", "'enabled' must be a boolean.");
         }
         enabled = body.enabled;
       }
@@ -180,7 +188,7 @@ export function createMirrorRoutes(
         const v = typeof body.owner === "string" ? body.owner.trim() : "";
         if (v.length > 0 && !OWNER_RE.test(v)) {
           throw AppError.badRequest(
-            "INVALID_OWNER",
+            "invalid_owner",
             "'owner' must be 1–39 chars of letters/digits/dashes, no leading/trailing dash.",
           );
         }
@@ -190,7 +198,7 @@ export function createMirrorRoutes(
         const v = typeof body.repo === "string" ? body.repo.trim() : "";
         if (v.length > 0 && !REPO_RE.test(v)) {
           throw AppError.badRequest(
-            "INVALID_REPO",
+            "invalid_repo",
             "'repo' must be 1–100 chars of letters/digits/dot/dash/underscore.",
           );
         }
@@ -215,7 +223,7 @@ export function createMirrorRoutes(
         const v = typeof body.appId === "string" ? body.appId.trim() : "";
         if (v.length > 0 && !APP_ID_RE.test(v)) {
           throw AppError.badRequest(
-            "INVALID_SETTING",
+            "invalid_setting",
             "'appId' must be 1–15 digits.",
           );
         }
@@ -225,7 +233,7 @@ export function createMirrorRoutes(
         const v = typeof body.installationId === "string" ? body.installationId.trim() : "";
         if (v.length > 0 && !INSTALLATION_ID_RE.test(v)) {
           throw AppError.badRequest(
-            "INVALID_SETTING",
+            "invalid_setting",
             "'installationId' must be 1–20 digits.",
           );
         }
@@ -235,15 +243,25 @@ export function createMirrorRoutes(
         const v = body.appPrivateKey;
         if (typeof v !== "string") {
           throw AppError.badRequest(
-            "INVALID_SETTING",
+            "invalid_setting",
             "'appPrivateKey' must be a string (empty = clear).",
           );
         }
         if (isMidMaskSentinel(v)) {
           // Round-trip of the mid-masked display value — keep stored key.
           appPrivateKey = current.appPrivateKey;
-        } else {
+        } else if (v === "") {
+          // Explicit clear.
           appPrivateKey = v;
+        } else {
+          const validated = validateGitHubAppPrivateKey(v);
+          if (!validated.ok) {
+            throw AppError.badRequest(
+              "invalid_setting",
+              `'appPrivateKey' ${validated.reason}.`,
+            );
+          }
+          appPrivateKey = validated.value;
         }
       }
 
@@ -254,7 +272,7 @@ export function createMirrorRoutes(
         const stampedCount = counts.synced + counts.lagging;
         if (stampedCount > 0 && !confirmAbandonOldRepo) {
           throw AppError.conflict(
-            "OLD_REPO_NOT_CONFIRMED",
+            "old_repo_not_confirmed",
             `Changing the mirror to ${owner}/${repo} would abandon ${stampedCount} skill(s) ` +
               `currently mirrored to ${current.owner}/${current.repo}. ` +
               `Pass confirmAbandonOldRepo: true to proceed; the old repo will not be cleaned up automatically.`,
@@ -332,7 +350,7 @@ export function createMirrorRoutes(
           {
             data: null,
             error: {
-              code: "MIRROR_DISABLED",
+              code: "mirror_disabled",
               message: !runtime.enabled
                 ? "GitHub mirror is disabled. Flip the kill switch in the admin UI to enable."
                 : "GitHub mirror is missing required credentials. Set owner/repo/branch + GitHub App credentials in the admin UI.",
@@ -346,7 +364,7 @@ export function createMirrorRoutes(
           {
             data: null,
             error: {
-              code: "RECONCILE_ALREADY_RUNNING",
+              code: "reconcile_already_running",
               message: `A reconcile is already in progress (started at ${reconcileState.startedAt?.toISOString() ?? "unknown"}).`,
             },
           },

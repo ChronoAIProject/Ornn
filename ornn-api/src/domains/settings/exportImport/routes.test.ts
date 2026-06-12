@@ -17,6 +17,7 @@ import {
 } from "./routes";
 import { sections } from "../sections";
 import type { SettingsService } from "../types";
+import { buildProblemJsonBody } from "../../../shared/types/index";
 
 function fakeSettingsService(): SettingsService {
   const store = new Map<string, Record<string, unknown>>();
@@ -26,6 +27,7 @@ function fakeSettingsService(): SettingsService {
   return {
     getPlayground: async () => store.get("playground") as never,
     getSkillGen: async () => store.get("skillGen") as never,
+    getAssistant: async () => store.get("assistant") as never,
     getMirror: async () => store.get("mirror") as never,
     getNyxid: async () => store.get("nyxid") as never,
     getSkillAudit: async () => store.get("skillAudit") as never,
@@ -78,12 +80,18 @@ function makeApp(opts: {
   // AppError is a domain error; the test app needs a tiny error handler so
   // 4xx surfaces with the expected status (otherwise Hono returns 500).
   app.onError((err, c) => {
-    const code = (err as { code?: string }).code ?? "INTERNAL_ERROR";
+    const code = (err as { code?: string }).code ?? "internal_error";
     const status = (err as { statusCode?: number }).statusCode ?? 500;
-    return c.json(
-      { data: null, error: { code, message: err.message } },
-      status as never,
-    );
+    const body = buildProblemJsonBody({
+      statusCode: status,
+      code,
+      message: err.message,
+      instance: c.req.path,
+      requestId: null,
+    });
+    return c.json(body, status as never, {
+      "Content-Type": "application/problem+json",
+    });
   });
   return { app };
 }

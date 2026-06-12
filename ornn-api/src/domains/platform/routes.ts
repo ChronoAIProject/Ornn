@@ -13,8 +13,10 @@ import {
   nyxidAuthMiddleware,
   requirePermission,
 } from "../../middleware/nyxidAuth";
+import { z } from "zod";
 import { AppError } from "../../shared/types/index";
 import { isMidMaskSentinel, midMaskSecret } from "../../infra/crypto";
+import { validateBody, getValidatedBody } from "../../middleware/validate";
 import type { PlatformSettingsService } from "./service";
 import type { PlatformSettings } from "./types";
 
@@ -50,10 +52,16 @@ export function createPlatformSettingsRoutes(
     return c.json({ data: maskSensitiveSettings(settings), error: null });
   });
 
-  app.patch("/admin/settings", auth, requirePermission("ornn:admin:skill"), async (c) => {
-    const body = (await c.req.json().catch(() => ({}))) as Partial<
-      Record<keyof PlatformSettings, unknown>
-    >;
+  app.patch(
+    "/admin/settings",
+    auth,
+    requirePermission("ornn:admin:skill"),
+    // The downstream field-by-field checks below enforce the proper
+    // shape per key; this gate just turns a SyntaxError into a clean
+    // 400 invalid_body (#438).
+    validateBody(z.record(z.string(), z.unknown()), "invalid_body"),
+    async (c) => {
+      const body = getValidatedBody<Partial<Record<keyof PlatformSettings, unknown>>>(c);
     type MutablePatch = { -readonly [K in keyof PlatformSettings]?: PlatformSettings[K] };
     const patch: MutablePatch = {};
 
@@ -61,7 +69,7 @@ export function createPlatformSettingsRoutes(
       const n = Number(body.auditWaiverThreshold);
       if (!Number.isFinite(n) || n < 0 || n > 10) {
         throw AppError.badRequest(
-          "INVALID_SETTING",
+          "invalid_setting",
           "'auditWaiverThreshold' must be a number between 0 and 10",
         );
       }
@@ -72,7 +80,7 @@ export function createPlatformSettingsRoutes(
       const lp = body.llmProvider;
       if (!lp || typeof lp !== "object") {
         throw AppError.badRequest(
-          "INVALID_SETTING",
+          "invalid_setting",
           "'llmProvider' must be an object with optional gatewayUrl + apiKey",
         );
       }
@@ -83,7 +91,7 @@ export function createPlatformSettingsRoutes(
         const u = lpObj.gatewayUrl;
         if (typeof u !== "string") {
           throw AppError.badRequest(
-            "INVALID_SETTING",
+            "invalid_setting",
             "'llmProvider.gatewayUrl' must be a string (empty = use env default)",
           );
         }
@@ -93,7 +101,7 @@ export function createPlatformSettingsRoutes(
             new URL(trimmed); // validate
           } catch {
             throw AppError.badRequest(
-              "INVALID_SETTING",
+              "invalid_setting",
               "'llmProvider.gatewayUrl' must be a valid URL",
             );
           }
@@ -109,7 +117,7 @@ export function createPlatformSettingsRoutes(
         const k = lpObj.apiKey;
         if (typeof k !== "string") {
           throw AppError.badRequest(
-            "INVALID_SETTING",
+            "invalid_setting",
             "'llmProvider.apiKey' must be a string (empty = clear)",
           );
         }
@@ -131,12 +139,13 @@ export function createPlatformSettingsRoutes(
     }
 
     if (Object.keys(patch).length === 0) {
-      throw AppError.badRequest("INVALID_SETTING", "No valid setting fields in body");
+      throw AppError.badRequest("invalid_setting", "No valid setting fields in body");
     }
 
-    const updated = await platformSettingsService.patch(patch);
-    return c.json({ data: maskSensitiveSettings(updated), error: null });
-  });
+      const updated = await platformSettingsService.patch(patch);
+      return c.json({ data: maskSensitiveSettings(updated), error: null });
+    },
+  );
 
   return app;
 }

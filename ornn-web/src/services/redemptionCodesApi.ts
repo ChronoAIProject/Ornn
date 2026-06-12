@@ -47,10 +47,11 @@ export type {
 } from "./redemptionCodesApi.schema";
 
 export interface AdminRedemptionCodeFilters {
-  status?: RedemptionCodeStatus;
-  search?: string;
-  page?: number;
-  pageSize?: number;
+  // exactOptionalPropertyTypes (#657)
+  status?: RedemptionCodeStatus | undefined;
+  search?: string | undefined;
+  page?: number | undefined;
+  pageSize?: number | undefined;
 }
 
 export async function mintCode(req: MintCodeRequest): Promise<MintCodeResponse> {

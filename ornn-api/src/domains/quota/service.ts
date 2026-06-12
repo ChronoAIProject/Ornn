@@ -2,9 +2,13 @@
  * Quota policy on the calendar-month bucket model.
  *
  *   - Admins (`ornn:admin:skill`) bypass entirely.
- *   - `checkAllowed` reads the current-month bucket. Pure read; no upsert.
- *   - `chargeOnCompletion` upserts the bucket and atomically increments
- *     `used` and `usedByModel.<id>`. `system_error` outcomes are no-ops.
+ *   - `checkAllowed` atomically *reserves* a slot (#808): a cap-guarded
+ *     `$inc` on `used`, so concurrent requests at the cap boundary can't
+ *     all pass the check and over-spend. Returns the allow/deny decision.
+ *   - `chargeOnCompletion` reconciles the reservation by outcome:
+ *     `system_error` (incl. abort) → release (refund the slot);
+ *     `success` / `skill_error` → commit the per-model tally. `used`
+ *     was already bumped at reserve time and is not touched again.
  *   - `grant` adds to `adminGrant` for the current month and appends an
  *     audit row. Negative grants rejected (out of scope for v1).
  *   - Default allotment is settings-driven; runtime computes
@@ -14,12 +18,13 @@
  * @module domains/quota/service
  */
 
-import pino from "pino";
+import { createLogger } from "../../shared/logger";
 import type { NotificationService } from "../notifications/service";
 import type { QuotaRepository } from "./repository";
 import {
   DEFAULT_WARNING_THRESHOLD,
   type ChargeOutcome,
+  type GrantableSurface,
   type QuotaBucketDoc,
   type QuotaDecision,
   type QuotaSnapshot,
@@ -29,11 +34,19 @@ import {
   nextMonthlyResetAt,
 } from "./types";
 
-const logger = pino({ level: "info" }).child({ module: "quotaService" });
+const logger = createLogger("quotaService");
 
 export interface QuotaDefaults {
   defaultPlaygroundMonthly: number;
   defaultSkillGenMonthly: number;
+  /**
+   * Ornn Assistant monthly default (#970). Optional so existing
+   * `QuotaDefaultsResolver` mocks keep compiling; the production resolver
+   * always supplies it from `assistant.defaultMonthlyQuota`. When absent,
+   * the assistant surface resolves to a 0 allotment (fail-closed: every
+   * non-admin assistant call is denied until the default is wired).
+   */
+  defaultAssistantMonthly?: number;
 }
 
 export interface QuotaDefaultsResolver {
@@ -53,7 +66,8 @@ export class QuotaService {
   private readonly repo: QuotaRepository;
   private readonly defaults: QuotaDefaultsResolver;
   private readonly adminPermission: string;
-  private readonly notificationService?: NotificationService;
+  // exactOptionalPropertyTypes (#657): widen to `T | undefined`.
+  private readonly notificationService: NotificationService | undefined;
   private readonly warningThreshold: number;
 
   constructor(config: QuotaServiceConfig) {
@@ -70,11 +84,26 @@ export class QuotaService {
 
   private async resolveDefault(surface: Surface): Promise<number> {
     const def = await this.defaults.getQuotaDefaults();
-    return surface === "playground"
-      ? def.defaultPlaygroundMonthly
-      : def.defaultSkillGenMonthly;
+    switch (surface) {
+      case "playground":
+        return def.defaultPlaygroundMonthly;
+      case "skillGen":
+        return def.defaultSkillGenMonthly;
+      case "assistant":
+        return def.defaultAssistantMonthly ?? 0;
+    }
   }
 
+  /**
+   * Atomically reserve a slot before the LLM call. The reservation IS
+   * the charge — it bumps `used` under a cap guard so concurrent
+   * requests at the boundary can't all be admitted (#808, CWE-367).
+   * A reservation that doesn't reach a chargeable outcome is refunded
+   * by `chargeOnCompletion` (`system_error`/abort → release).
+   *
+   * Admins bypass entirely: no reservation is taken and none is
+   * released, so their runs never touch a bucket.
+   */
   async checkAllowed(params: {
     userId: string;
     permissions: readonly string[] | undefined;
@@ -85,18 +114,38 @@ export class QuotaService {
       return { allowed: true, isAdminBypass: true };
     }
     const now = params.now ?? new Date();
-    const { monthMarker } = monthBounds(now);
-    const [bucket, currentDefault] = await Promise.all([
-      this.repo.findBucket(params.userId, params.surface, monthMarker),
-      this.resolveDefault(params.surface),
-    ]);
-    const stored = bucket?.defaultAllotment ?? 0;
+    // The bucket stores the first-touch default; the runtime-effective
+    // default may be higher if the admin raised it mid-month. The repo
+    // guards against `adminGrant + effectiveDefault`, reading the bucket's
+    // own `adminGrant` inside the atomic update.
+    const currentDefault = await this.resolveDefault(params.surface);
+    const existing = await this.repo.findBucket(
+      params.userId,
+      params.surface,
+      monthBounds(now).monthMarker,
+    );
+    const stored = existing?.defaultAllotment ?? 0;
     const effectiveDefault = Math.max(stored, currentDefault);
-    const adminGrant = bucket?.adminGrant ?? 0;
-    const used = bucket?.used ?? 0;
-    if (used < effectiveDefault + adminGrant) {
+
+    const reserved = await this.repo.reserveSlot({
+      userId: params.userId,
+      surface: params.surface,
+      effectiveDefault,
+      now,
+    });
+
+    if (reserved) {
+      logger.info(
+        { userId: params.userId, surface: params.surface },
+        "Quota slot reserved",
+      );
       return { allowed: true, isAdminBypass: false };
     }
+
+    logger.info(
+      { userId: params.userId, surface: params.surface },
+      "Quota denied — cap reached",
+    );
     return {
       allowed: false,
       isAdminBypass: false,
@@ -105,6 +154,15 @@ export class QuotaService {
     };
   }
 
+  /**
+   * Reconcile a reservation once the run terminates. The slot was
+   * already taken at `checkAllowed` time, so this never bumps `used`:
+   *  - `system_error` (LLM timeout, infra 5xx, client abort) → release
+   *    the slot (refund), since the request never reached the skill.
+   *  - `success` / `skill_error` → commit the per-model tally; the slot
+   *    stays consumed.
+   * Admins took no reservation, so this is a no-op for them.
+   */
   async chargeOnCompletion(params: {
     userId: string;
     permissions: readonly string[] | undefined;
@@ -114,14 +172,25 @@ export class QuotaService {
     now?: Date;
   }): Promise<void> {
     if (this.isAdmin(params.permissions)) return;
-    if (params.outcome === "system_error") return;
     const now = params.now ?? new Date();
-    const def = await this.resolveDefault(params.surface);
-    await this.repo.incrementUsed({
+
+    if (params.outcome === "system_error") {
+      await this.repo.releaseSlot({
+        userId: params.userId,
+        surface: params.surface,
+        now,
+      });
+      logger.info(
+        { userId: params.userId, surface: params.surface, outcome: params.outcome },
+        "Quota reservation released",
+      );
+      return;
+    }
+
+    await this.repo.commitModel({
       userId: params.userId,
       surface: params.surface,
       modelId: params.modelId,
-      defaultAllotment: def,
       now,
     });
     logger.debug(
@@ -138,7 +207,7 @@ export class QuotaService {
   async grant(params: {
     admin: { userId: string; email: string; displayName: string };
     targetUserId: string;
-    surface: Surface;
+    surface: GrantableSurface;
     amount: number;
     note?: string;
     now?: Date;
@@ -167,7 +236,8 @@ export class QuotaService {
       targetUserId: params.targetUserId,
       surface: params.surface,
       amount: params.amount,
-      note: params.note,
+      // exactOptionalPropertyTypes (#657)
+      ...(params.note !== undefined ? { note: params.note } : {}),
       monthMarker,
       createdAt: now,
     });
@@ -190,7 +260,8 @@ export class QuotaService {
           targetUserId: params.targetUserId,
           surface: params.surface,
           amount: params.amount,
-          note: params.note,
+          // exactOptionalPropertyTypes (#657)
+          ...(params.note !== undefined ? { note: params.note } : {}),
           adminDisplayName: params.admin.displayName,
         })
         .catch((err: unknown) => {
@@ -207,7 +278,7 @@ export class QuotaService {
   async bulkGrant(params: {
     admin: { userId: string; email: string; displayName: string };
     targetUserIds: readonly string[];
-    surface: Surface;
+    surface: GrantableSurface;
     amount: number;
     note?: string;
     now?: Date;
@@ -221,7 +292,8 @@ export class QuotaService {
           targetUserId: userId,
           surface: params.surface,
           amount: params.amount,
-          note: params.note,
+          // exactOptionalPropertyTypes (#657)
+          ...(params.note !== undefined ? { note: params.note } : {}),
           now,
         });
         out.push({ userId, ok: true, auditId });
@@ -305,6 +377,11 @@ export class QuotaService {
 }
 
 function buildOverLimitMessage(surface: Surface): string {
-  const surfaceLabel = surface === "playground" ? "playground" : "skill-generation";
+  const surfaceLabel =
+    surface === "playground"
+      ? "playground"
+      : surface === "skillGen"
+        ? "skill-generation"
+        : "assistant";
   return `You've hit your monthly ${surfaceLabel} limit — contact admin for credits, or upgrade when paid plans launch.`;
 }

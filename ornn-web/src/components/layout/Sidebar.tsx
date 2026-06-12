@@ -7,7 +7,6 @@
  * @module components/layout/Sidebar
  */
 
-import { useState, useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "react-i18next";
@@ -73,39 +72,35 @@ const labelVariants = {
   hidden: { opacity: 0, width: 0 },
 };
 
-export function Sidebar({
-  items,
-  collapsed = false,
-  onCollapsedChange,
-  mobileOpen = false,
+interface SidebarContentProps {
+  /** Mobile drawer variant (shows header + always-expanded labels). */
+  isMobile?: boolean;
+  collapsed: boolean;
+  visibleItems: SidebarItem[];
+  user: ReturnType<typeof useCurrentUser>;
+  t: ReturnType<typeof useTranslation>["t"];
+  isActive: (path: string) => boolean;
+  toggleCollapsed: () => void;
+  onMobileClose?: (() => void) | undefined;
+}
+
+/**
+ * Inner sidebar body, declared at module scope so it is a stable
+ * component identity across renders (React would otherwise remount it
+ * — and reset its animation state — every parent render). All values
+ * it closed over previously are now explicit props (#888).
+ */
+function SidebarContent({
+  isMobile = false,
+  collapsed,
+  visibleItems,
+  user,
+  t,
+  isActive,
+  toggleCollapsed,
   onMobileClose,
-  className = "",
-}: SidebarProps) {
-  const { t } = useTranslation();
-  const location = useLocation();
-  const isAuthenticated = useIsAuthenticated();
-  const user = useCurrentUser();
-
-  // Filter items based on auth and admin status
-  const visibleItems = items.filter((item) => {
-    if (item.authRequired && !isAuthenticated) return false;
-    if (item.adminOnly && !isAdmin(user)) return false;
-    return true;
-  });
-
-  const isActive = (path: string) => {
-    if (path === "/") {
-      return location.pathname === "/";
-    }
-    return location.pathname.startsWith(path);
-  };
-
-  const toggleCollapsed = () => {
-    onCollapsedChange?.(!collapsed);
-  };
-
-  // Desktop Sidebar
-  const SidebarContent = ({ isMobile = false }: { isMobile?: boolean }) => (
+}: SidebarContentProps) {
+  return (
     <div className="flex h-full flex-col">
       {/* Header with collapse toggle */}
       {!isMobile && (
@@ -128,7 +123,7 @@ export function Sidebar({
       {isMobile && (
         <div className="flex h-14 items-center justify-between border-b border-subtle px-4">
           <span className="font-display text-sm uppercase tracking-wider text-accent">
-            Navigation
+            {t("sidebar.navigation")}
           </span>
           <button
             type="button"
@@ -248,6 +243,38 @@ export function Sidebar({
       )}
     </div>
   );
+}
+
+export function Sidebar({
+  items,
+  collapsed = false,
+  onCollapsedChange,
+  mobileOpen = false,
+  onMobileClose,
+  className = "",
+}: SidebarProps) {
+  const { t } = useTranslation();
+  const location = useLocation();
+  const isAuthenticated = useIsAuthenticated();
+  const user = useCurrentUser();
+
+  // Filter items based on auth and admin status
+  const visibleItems = items.filter((item) => {
+    if (item.authRequired && !isAuthenticated) return false;
+    if (item.adminOnly && !isAdmin(user)) return false;
+    return true;
+  });
+
+  const isActive = (path: string) => {
+    if (path === "/") {
+      return location.pathname === "/";
+    }
+    return location.pathname.startsWith(path);
+  };
+
+  const toggleCollapsed = () => {
+    onCollapsedChange?.(!collapsed);
+  };
 
   return (
     <>
@@ -263,7 +290,15 @@ export function Sidebar({
           ${className}
         `}
       >
-        <SidebarContent />
+        <SidebarContent
+          collapsed={collapsed}
+          visibleItems={visibleItems}
+          user={user}
+          t={t}
+          isActive={isActive}
+          toggleCollapsed={toggleCollapsed}
+          onMobileClose={onMobileClose}
+        />
       </motion.aside>
 
       {/* Mobile Drawer */}
@@ -288,39 +323,20 @@ export function Sidebar({
               transition={{ type: "spring", stiffness: 300, damping: 30 }}
               className="card-impression fixed top-0 left-0 bottom-0 z-40 w-72 border-r border-subtle bg-page lg:hidden"
             >
-              <SidebarContent isMobile />
+              <SidebarContent
+                isMobile
+                collapsed={collapsed}
+                visibleItems={visibleItems}
+                user={user}
+                t={t}
+                isActive={isActive}
+                toggleCollapsed={toggleCollapsed}
+                onMobileClose={onMobileClose}
+              />
             </motion.aside>
           </>
         )}
       </AnimatePresence>
     </>
   );
-}
-
-/**
- * Hook to manage sidebar state.
- * Persists collapsed state in localStorage.
- */
-export function useSidebarState(defaultCollapsed = false) {
-  const [collapsed, setCollapsed] = useState(() => {
-    if (typeof window === "undefined") return defaultCollapsed;
-    const stored = localStorage.getItem("sidebar-collapsed");
-    return stored ? JSON.parse(stored) : defaultCollapsed;
-  });
-
-  const [mobileOpen, setMobileOpen] = useState(false);
-
-  useEffect(() => {
-    localStorage.setItem("sidebar-collapsed", JSON.stringify(collapsed));
-  }, [collapsed]);
-
-  return {
-    collapsed,
-    setCollapsed,
-    mobileOpen,
-    setMobileOpen,
-    openMobile: () => setMobileOpen(true),
-    closeMobile: () => setMobileOpen(false),
-    toggleMobile: () => setMobileOpen((prev) => !prev),
-  };
 }

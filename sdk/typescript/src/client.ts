@@ -17,10 +17,19 @@
 
 import { OrnnError, type OrnnErrorPayload } from "./errors";
 import type {
+  ClosureNode,
+  ClosureResult,
+  CreateSkillsetInput,
   PublishOptions,
+  PublishSkillsetInput,
   SkillDetail,
   SkillSearchParams,
   SkillSearchResult,
+  SkillsetClosureResult,
+  SkillsetDetail,
+  SkillsetPermissionsInput,
+  SkillsetSearchParams,
+  SkillsetSearchResult,
   SkillVersionEntry,
   UpdateSkillMetadata,
 } from "./types";
@@ -41,17 +50,21 @@ interface EnvelopeSuccess<T> {
   readonly error: null;
 }
 
-interface EnvelopeFailure {
-  readonly data: null;
-  readonly error: {
-    readonly code: string;
-    readonly message: string;
-    readonly requestId?: string;
-    readonly errors?: ReadonlyArray<{ path?: string; code?: string; message: string }>;
-  };
+/**
+ * Wire shape for error responses post-#456 — RFC 7807
+ * `application/problem+json`. Fields at the body root; `error` /
+ * `data` are gone.
+ */
+interface ProblemJson {
+  readonly type?: string;
+  readonly title?: string;
+  readonly status?: number;
+  readonly code?: string;
+  readonly detail?: string;
+  readonly instance?: string;
+  readonly requestId?: string;
+  readonly errors?: ReadonlyArray<{ path?: string; code?: string; message: string }>;
 }
-
-type Envelope<T> = EnvelopeSuccess<T> | EnvelopeFailure;
 
 export class OrnnClient {
   private readonly baseUrl: string;
@@ -63,7 +76,14 @@ export class OrnnClient {
     if (!options.baseUrl) {
       throw new Error("OrnnClient: baseUrl is required");
     }
-    this.baseUrl = options.baseUrl.replace(/\/+$/, "");
+    // Strip ALL trailing slashes with a linear loop rather than a regex
+    // (`/\/+$/`) — the regex backtracks polynomially on a pathological
+    // all-slashes input, a ReDoS vector. The loop is O(n) regardless.
+    let normalizedBaseUrl = options.baseUrl;
+    while (normalizedBaseUrl.endsWith("/")) {
+      normalizedBaseUrl = normalizedBaseUrl.slice(0, -1);
+    }
+    this.baseUrl = normalizedBaseUrl;
     this.staticToken = options.token;
     this.tokenResolver = options.getToken;
     this.fetchImpl = options.fetch ?? globalThis.fetch;
@@ -74,16 +94,23 @@ export class OrnnClient {
 
   // ---- Public API ----
 
-  /** Search skills. Returns paginated results with `items` + pagination meta. */
-  async search(params: SkillSearchParams = {}): Promise<SkillSearchResult> {
+  /** Search skills. Returns one page; for cross-page iteration use `searchAll()`. */
+  async search(
+    params: SkillSearchParams & { cursor?: string; limit?: number } = {},
+  ): Promise<SkillSearchResult> {
     const query = new URLSearchParams();
-    if (params.q) query.set("query", params.q);
+    // Per CONVENTIONS.md §4.1 (#586) the canonical search param is `q`.
+    if (params.q) query.set("q", params.q);
     if (params.scope) query.set("scope", params.scope);
     if (params.category) query.set("category", params.category);
     if (params.tag) query.set("tag", params.tag);
     if (params.runtime) query.set("runtime", params.runtime);
     if (params.mode) query.set("mode", params.mode);
     if (params.systemFilter) query.set("systemFilter", params.systemFilter);
+    // Cursor pagination (#457). When `cursor` is set, server uses it
+    // instead of `page`; both are still accepted for backward compat.
+    if (params.cursor !== undefined) query.set("cursor", params.cursor);
+    if (params.limit !== undefined) query.set("limit", String(params.limit));
     if (params.page !== undefined) query.set("page", String(params.page));
     if (params.pageSize !== undefined) query.set("pageSize", String(params.pageSize));
     const qs = query.toString();
@@ -91,6 +118,40 @@ export class OrnnClient {
       "GET",
       `/skill-search${qs ? `?${qs}` : ""}`,
     );
+  }
+
+  /**
+   * Auto-paginating iterator (#465). Yields every matching skill across
+   * pages; fetches the next page on demand using `meta.nextCursor`:
+   *
+   * ```ts
+   * for await (const skill of client.searchAll({ q: "pdf" })) {
+   *   console.log(skill.name);
+   * }
+   * ```
+   *
+   * Stops cleanly when the server returns `meta.hasMore === false` (or
+   * no `nextCursor`). Per-page errors surface as `OrnnError` and stop
+   * iteration — wrap in try/catch if you want to skip-and-continue.
+   */
+  async *searchAll(
+    params: SkillSearchParams & { limit?: number } = {},
+  ): AsyncIterableIterator<SkillSearchResult["items"][number]> {
+    let cursor: string | undefined;
+    // Loop guard — the server contract says nextCursor only appears
+    // when there's a next page, so this loop terminates naturally on
+    // the last page. Cap at 10k pages defensively in case a misbehaving
+    // server returns nextCursor forever; 10k pages × default limit (9)
+    // is ~90k items which exceeds every realistic registry.
+    for (let i = 0; i < 10_000; i++) {
+      const page: SkillSearchResult = await this.search(
+        cursor !== undefined ? { ...params, cursor } : params,
+      );
+      for (const item of page.items) yield item;
+      const next = page.meta?.nextCursor;
+      if (!next || page.meta?.hasMore === false) return;
+      cursor = next;
+    }
   }
 
   /** Fetch a single skill by GUID or name. */
@@ -126,6 +187,56 @@ export class OrnnClient {
       throw await parseError(res);
     }
     return res.arrayBuffer();
+  }
+
+  /**
+   * Resolve the full transitive dependency closure of a skill (#968).
+   *
+   * Returns the closure in deps-first topological order — every
+   * dependency precedes the dependents that pin it, so iterating the
+   * `items` array installs in a safe order. Throws `OrnnError` with code
+   * `dependency_cycle` / `dependency_conflict` / `skill_dependency_not_found`
+   * when the graph can't be resolved.
+   */
+  async resolveClosure(
+    guidOrName: string,
+    options: { version?: string } = {},
+  ): Promise<ClosureResult> {
+    const suffix = options.version
+      ? `?version=${encodeURIComponent(options.version)}`
+      : "";
+    return this.request<ClosureResult>(
+      "GET",
+      `/skills/${encodeURIComponent(guidOrName)}/closure${suffix}`,
+    );
+  }
+
+  /**
+   * Resolve a skill's dependency closure and download every package in
+   * the closure (#968). Convenience over {@link resolveClosure} +
+   * {@link downloadPackage}: downloads in the closure's topological order
+   * (dependencies first) so a caller can install each ZIP as it arrives.
+   *
+   * Returns the ordered closure plus the downloaded bytes per node,
+   * keyed by `<name>@<version>`. Does NOT include the root skill itself —
+   * pull that separately via {@link downloadPackage} if needed.
+   */
+  async pullClosure(
+    guidOrName: string,
+    options: { version?: string } = {},
+  ): Promise<{
+    closure: ClosureResult;
+    packages: Array<{ node: ClosureNode; bytes: ArrayBuffer }>;
+  }> {
+    const closure = await this.resolveClosure(guidOrName, options);
+    const packages: Array<{ node: ClosureNode; bytes: ArrayBuffer }> = [];
+    // Sequential, in topo order — dependencies download before their
+    // dependents so a consumer can install incrementally.
+    for (const node of closure.items) {
+      const bytes = await this.downloadPackage(node.guid, node.version);
+      packages.push({ node, bytes });
+    }
+    return { closure, packages };
   }
 
   /** Publish a new skill from a ZIP package. */
@@ -173,6 +284,102 @@ export class OrnnClient {
     await this.request<{ success: boolean }>("DELETE", `/skills/${encodeURIComponent(id)}`);
   }
 
+  // ---- Skillsets (#969) ----
+
+  /**
+   * Create a skillset — a curated, versioned meta-package over N member
+   * skills (private by default, like skills). Member refs are validated
+   * server-side at publish time: every member must resolve to a readable
+   * skill version, and the union dependency closure must be conflict-free.
+   */
+  async createSkillset(input: CreateSkillsetInput): Promise<SkillsetDetail> {
+    return this.request<SkillsetDetail>("POST", "/skillsets", {
+      body: JSON.stringify(input),
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  /** Fetch a single skillset by GUID or name. */
+  async getSkillset(guidOrName: string, version?: string): Promise<SkillsetDetail> {
+    const suffix = version ? `?version=${encodeURIComponent(version)}` : "";
+    return this.request<SkillsetDetail>(
+      "GET",
+      `/skillsets/${encodeURIComponent(guidOrName)}${suffix}`,
+    );
+  }
+
+  /** Publish a new immutable version of an existing skillset. */
+  async publishSkillset(id: string, input: PublishSkillsetInput): Promise<SkillsetDetail> {
+    return this.request<SkillsetDetail>("PUT", `/skillsets/${encodeURIComponent(id)}`, {
+      body: JSON.stringify(input),
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  /** Update a skillset's visibility / sharing lists. */
+  async setSkillsetPermissions(
+    id: string,
+    input: SkillsetPermissionsInput,
+  ): Promise<SkillsetDetail> {
+    const res = await this.request<{ skillset: SkillsetDetail }>(
+      "PUT",
+      `/skillsets/${encodeURIComponent(id)}/permissions`,
+      {
+        body: JSON.stringify(input),
+        headers: { "Content-Type": "application/json" },
+      },
+    );
+    return res.skillset;
+  }
+
+  /** Delete a skillset (and all its versions) by ID. */
+  async deleteSkillset(id: string): Promise<void> {
+    await this.request<{ success: boolean }>(
+      "DELETE",
+      `/skillsets/${encodeURIComponent(id)}`,
+    );
+  }
+
+  /**
+   * Resolve a skillset's full delivery closure (#969): the union of all
+   * member skills PLUS each member's #968 dependency closure, deduplicated
+   * and topo-sorted (deps-first), PLUS the version's master prompt (#978,
+   * as a root sibling `instructions`). Throws `OrnnError` with code
+   * `dependency_cycle` / `dependency_conflict` / `skill_dependency_not_found`
+   * when the graph can't be resolved.
+   */
+  async getSkillsetClosure(
+    guidOrName: string,
+    options: { version?: string } = {},
+  ): Promise<SkillsetClosureResult> {
+    const suffix = options.version
+      ? `?version=${encodeURIComponent(options.version)}`
+      : "";
+    return this.request<SkillsetClosureResult>(
+      "GET",
+      `/skillsets/${encodeURIComponent(guidOrName)}/closure${suffix}`,
+    );
+  }
+
+  /** Discover skillsets by kind / tag / scope. Returns one page. */
+  async searchSkillsets(
+    params: SkillsetSearchParams & { cursor?: string; limit?: number } = {},
+  ): Promise<SkillsetSearchResult> {
+    const query = new URLSearchParams();
+    if (params.kind) query.set("kind", params.kind);
+    if (params.scope) query.set("scope", params.scope);
+    if (params.tag) query.set("tags", params.tag);
+    if (params.cursor !== undefined) query.set("cursor", params.cursor);
+    if (params.limit !== undefined) query.set("limit", String(params.limit));
+    if (params.page !== undefined) query.set("page", String(params.page));
+    if (params.pageSize !== undefined) query.set("pageSize", String(params.pageSize));
+    const qs = query.toString();
+    return this.request<SkillsetSearchResult>(
+      "GET",
+      `/skillset-search${qs ? `?${qs}` : ""}`,
+    );
+  }
+
   // ---- Plumbing ----
 
   /** Escape hatch: run any HTTP request against /api/v1 with auth + envelope handling. */
@@ -182,11 +389,21 @@ export class OrnnClient {
     init: { body?: BodyInit; headers?: Record<string, string> } = {},
   ): Promise<T> {
     const res = await this.rawRequest(method, path, init);
-    const body = (await res.json().catch(() => null)) as Envelope<T> | null;
-    if (!res.ok || !body || body.error !== null) {
-      throw buildError(res.status, body);
+    const body = (await res.json().catch(() => null)) as unknown;
+    if (!res.ok) {
+      // Error responses are RFC 7807 (#456) — fields at the body root.
+      throw buildError(res.status, body as ProblemJson | null);
     }
-    return (body as EnvelopeSuccess<T>).data;
+    // Success responses keep the `{ data, error: null }` envelope.
+    const env = body as EnvelopeSuccess<T> | null;
+    if (!env || env.error !== null) {
+      throw new OrnnError({
+        status: res.status,
+        code: "unknown_error",
+        message: `Ornn API returned ${res.status} with an unexpected body shape`,
+      });
+    }
+    return env.data;
   }
 
   private async rawRequest(
@@ -199,10 +416,14 @@ export class OrnnClient {
     if (token) {
       headers.Authorization = `Bearer ${token}`;
     }
+    // exactOptionalPropertyTypes (#450): `RequestInit.body` is
+    // `BodyInit | null`, not optional-`undefined`. Only set the key
+    // when we actually have a body so we don't pass `body: undefined`
+    // (rejected under the stricter contract).
     return this.fetchImpl(`${this.baseUrl}/api/v1${path}`, {
       method,
-      body: init.body,
       headers,
+      ...(init.body !== undefined ? { body: init.body } : {}),
     });
   }
 }
@@ -213,25 +434,29 @@ function zipToBlob(zip: Blob | ArrayBuffer | Uint8Array): Blob {
 }
 
 async function parseError(res: Response): Promise<OrnnError> {
-  const body = (await res.json().catch(() => null)) as Envelope<unknown> | null;
+  const body = (await res.json().catch(() => null)) as ProblemJson | null;
   return buildError(res.status, body);
 }
 
-function buildError(status: number, body: Envelope<unknown> | null): OrnnError {
-  if (body && body.error) {
-    const err = body.error;
+function buildError(status: number, body: ProblemJson | null): OrnnError {
+  if (body && (body.code || body.detail || body.title)) {
+    // exactOptionalPropertyTypes (#450): only stamp `requestId` /
+    // `errors` keys when the upstream actually provided them — the
+    // payload type is `requestId?: string`, not `string | undefined`,
+    // so `{ requestId: undefined }` is a type error under the
+    // stricter contract.
     const payload: OrnnErrorPayload = {
-      status,
-      code: err.code,
-      message: err.message,
-      requestId: err.requestId,
-      errors: err.errors,
+      status: body.status ?? status,
+      code: body.code ?? "unknown_error",
+      message: body.detail ?? body.title ?? `Ornn API returned ${status}`,
+      ...(body.requestId !== undefined ? { requestId: body.requestId } : {}),
+      ...(body.errors !== undefined ? { errors: body.errors } : {}),
     };
     return new OrnnError(payload);
   }
   return new OrnnError({
     status,
     code: "unknown_error",
-    message: `Ornn API returned ${status} without a recognized error envelope`,
+    message: `Ornn API returned ${status} without a recognized error body`,
   });
 }

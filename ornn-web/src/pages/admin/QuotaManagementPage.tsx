@@ -66,20 +66,32 @@ export function QuotaManagementPage() {
   });
 
   // Deep-link from /admin/users "Grant quota" action: open the modal as
-  // soon as the matching row arrives. Once consumed, strip the query
-  // params so a refresh doesn't re-trigger.
+  // soon as the matching row arrives, then strip the query param so a
+  // refresh doesn't re-trigger.
+  //
+  // The modal-open is state, so it runs in the "adjust state during
+  // render" guard (no setState-in-effect cascade, #888). The param strip
+  // is a router navigation — a genuine external-system side effect — so
+  // it stays in an effect, but that effect never calls setState, so it
+  // doesn't trip the rule.
+  const deepLinkUserId = params.get("userId");
+  const deepLinkRow =
+    deepLinkUserId && usersQuery.data
+      ? usersQuery.data.items.find((r) => r.userId === deepLinkUserId) ?? null
+      : null;
+  const [consumedDeepLink, setConsumedDeepLink] = useState<string | null>(null);
+  if (deepLinkRow && consumedDeepLink !== deepLinkUserId) {
+    setConsumedDeepLink(deepLinkUserId);
+    setGrantRow(deepLinkRow);
+    setGrantOpen(true);
+  }
+
   useEffect(() => {
-    const userId = params.get("userId");
-    if (!userId || !usersQuery.data) return;
-    const found = usersQuery.data.items.find((r) => r.userId === userId);
-    if (found) {
-      setGrantRow(found);
-      setGrantOpen(true);
-      const next = new URLSearchParams(params);
-      next.delete("userId");
-      setParams(next, { replace: true });
-    }
-  }, [params, usersQuery.data, setParams]);
+    if (!deepLinkUserId || consumedDeepLink !== deepLinkUserId) return;
+    const next = new URLSearchParams(params);
+    next.delete("userId");
+    setParams(next, { replace: true });
+  }, [deepLinkUserId, consumedDeepLink, params, setParams]);
 
   const items = usersQuery.data?.items ?? [];
   const banner = usersQuery.data?.banner;

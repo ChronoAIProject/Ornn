@@ -38,6 +38,19 @@ export interface SkillConfig {
   // Skill package upload limit (image-baked operational constant).
   readonly maxPackageSizeBytes: number;
 
+  // Zip-bomb defense caps (#632/#633). Bound what an uploaded/pulled ZIP
+  // is allowed to uncompress to BEFORE extraction, so a tiny compressed
+  // payload can't be coerced into exhausting memory/disk in an extraction
+  // loop or AgentSeal subprocess. Env-overridable operational constants.
+  /** Cumulative uncompressed size cap across all entries (default 50 MiB). */
+  readonly maxPackageUncompressedBytes: number;
+  /** Per-entry uncompressed size cap (default 25 MiB). */
+  readonly maxEntryUncompressedBytes: number;
+  /** Maximum number of files an uploaded ZIP may contain (default 1000). */
+  readonly maxPackageFileCount: number;
+  /** Compression-ratio sanity cap — classic zip-bomb signature (default 100×). */
+  readonly maxCompressionRatio: number;
+
   // CORS
   /**
    * Allow-listed origins for cross-origin requests with credentials.
@@ -59,6 +72,13 @@ export interface SkillConfig {
   // timeout move to settings (skillAudit section).
   readonly agentsealPython: string;
   readonly agentsealScript: string;
+  /**
+   * Boot-time master switch (#442). When false the scanner skips path
+   * validation entirely and `scan()` short-circuits to null. Lets
+   * integration tests and any env without agentseal installed boot
+   * without satisfying the absolute-path-must-exist guard.
+   */
+  readonly agentsealEnabled: boolean;
 
   /**
    * Origin used in mirror READMEs to link back to the canonical Ornn
@@ -67,12 +87,7 @@ export interface SkillConfig {
    */
   readonly ornnPublicOrigin: string;
 
-  /**
-   * Master passphrase for AES-256-GCM at-rest secret encryption (LLM
-   * provider apiKey, future operator-pasted secrets). Falls back to a
-   * dev sentinel when `ENCRYPTION_KEY` is unset — production deployments
-   * MUST override.
-   */
+  /** Master passphrase for AES-256-GCM at-rest secret encryption. Required, ≥32 chars; boot fails with ConfigError if missing/short. See ENCRYPTION_KEY in envSchema for full rationale. */
   readonly encryptionKey: string;
 }
 
@@ -94,6 +109,14 @@ const envSchema = z.object({
   MONGODB_DB: z.string().min(1).default("ornn"),
 
   MAX_PACKAGE_SIZE_BYTES: z.coerce.number().int().positive().default(52428800),
+
+  // ---- Zip-bomb defense caps (#632/#633) — env-overridable. ----
+  // Defaults mirror the constants baked into `shared/utils/zipLimits.ts`
+  // (50 MiB cumulative / 25 MiB per-entry / 1000 files / 100× ratio).
+  MAX_PACKAGE_UNCOMPRESSED_BYTES: z.coerce.number().int().positive().default(52428800),
+  MAX_ENTRY_UNCOMPRESSED_BYTES: z.coerce.number().int().positive().default(26214400),
+  MAX_PACKAGE_FILE_COUNT: z.coerce.number().int().positive().default(1000),
+  MAX_COMPRESSION_RATIO: z.coerce.number().positive().default(100),
 
   /**
    * Comma-separated list of origins permitted for cross-origin requests
@@ -124,6 +147,10 @@ const envSchema = z.object({
   // ---- AgentSeal (skill trust scanner, #253) — binary paths only ----
   AGENTSEAL_PYTHON: z.string().min(1).default("/opt/agentseal/bin/python"),
   AGENTSEAL_SCRIPT: z.string().min(1).default("/opt/agentseal/scan_skill.py"),
+  // String-typed so `AGENTSEAL_ENABLED=false` in a `.env` file works
+  // without booleanish-string parsing gymnastics. `"false"` disables;
+  // any other value (default `"true"`) enables. Per #442.
+  AGENTSEAL_ENABLED: z.string().default("true"),
 
   /**
    * Public origin agents and humans use to reach Ornn (no trailing
@@ -175,6 +202,11 @@ export function loadConfig(): SkillConfig {
 
     maxPackageSizeBytes: env.MAX_PACKAGE_SIZE_BYTES,
 
+    maxPackageUncompressedBytes: env.MAX_PACKAGE_UNCOMPRESSED_BYTES,
+    maxEntryUncompressedBytes: env.MAX_ENTRY_UNCOMPRESSED_BYTES,
+    maxPackageFileCount: env.MAX_PACKAGE_FILE_COUNT,
+    maxCompressionRatio: env.MAX_COMPRESSION_RATIO,
+
     allowedOrigins: env.ALLOWED_ORIGINS
       .split(",")
       .map((s) => s.trim())
@@ -193,6 +225,7 @@ export function loadConfig(): SkillConfig {
 
     agentsealPython: env.AGENTSEAL_PYTHON,
     agentsealScript: env.AGENTSEAL_SCRIPT,
+    agentsealEnabled: env.AGENTSEAL_ENABLED !== "false",
 
     ornnPublicOrigin: env.ORNN_PUBLIC_ORIGIN.replace(/\/+$/, ""),
   };

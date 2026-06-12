@@ -67,6 +67,7 @@ const NAV_ITEMS = [
   { i18nKey: "nav.news", path: "/news", requiresAuth: false },
   { i18nKey: "nav.build", path: "/skills/new", requiresAuth: true },
   { i18nKey: "nav.registry", path: "/registry", requiresAuth: false, exact: true },
+  { i18nKey: "nav.skillsets", path: "/skillsets", requiresAuth: false },
   { i18nKey: "nav.docs", path: "/docs", requiresAuth: false },
   { i18nKey: "nav.contact", path: "/contact", requiresAuth: false },
 ] as const;
@@ -127,6 +128,17 @@ export function Navbar({ className = "", showGetStartedCta = false }: NavbarProp
   const [menuOpen, setMenuOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
+
+  // Close both menus on navigation. Using the "adjust state during
+  // render" pattern (tracking the previous pathname) rather than a
+  // route-change effect avoids the extra commit + cascading render that
+  // setState-in-effect causes (#888).
+  const [prevPath, setPrevPath] = useState(location.pathname);
+  if (location.pathname !== prevPath) {
+    setPrevPath(location.pathname);
+    setUserMenuOpen(false);
+    setMenuOpen(false);
+  }
 
   function renderDesktopItem(
     item: UserMenuItem,
@@ -220,11 +232,6 @@ export function Navbar({ className = "", showGetStartedCta = false }: NavbarProp
       document.removeEventListener("keydown", onKey);
     };
   }, [userMenuOpen]);
-
-  useEffect(() => {
-    setUserMenuOpen(false);
-    setMenuOpen(false);
-  }, [location.pathname]);
 
   useEffect(() => {
     document.body.style.overflow = menuOpen ? "hidden" : "";

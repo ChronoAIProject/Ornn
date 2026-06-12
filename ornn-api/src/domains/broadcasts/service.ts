@@ -24,7 +24,7 @@
  * @module domains/broadcasts/service
  */
 
-import pino from "pino";
+import { createLogger } from "../../shared/logger";
 import { AppError } from "../../shared/types/index";
 import type {
   BroadcastRepository,
@@ -37,7 +37,7 @@ import type {
   BroadcastI18nString,
 } from "./types";
 
-const logger = pino({ level: "info" }).child({ module: "broadcastService" });
+const logger = createLogger("broadcastService");
 
 export interface BroadcastServiceDeps {
   readonly repo: BroadcastRepository;
@@ -62,8 +62,10 @@ export interface CreateBroadcastParams {
  * path is a compile error, matching the repository's enforcement.
  */
 export interface UpdateBroadcastParams {
-  titleI18n?: Partial<BroadcastI18nString>;
-  bodyMarkdownI18n?: Partial<BroadcastI18nString>;
+  // Inner Partial accepts `string | undefined` so Zod-inferred patch
+  // shapes fit under exactOptionalPropertyTypes (#657).
+  titleI18n?: { en?: string | undefined; zh?: string | undefined };
+  bodyMarkdownI18n?: { en?: string | undefined; zh?: string | undefined };
   updatedBy: string;
 }
 
@@ -91,7 +93,7 @@ export class BroadcastService {
   async getById(id: string): Promise<BroadcastDocument> {
     const doc = await this.repo.getById(id);
     if (!doc) {
-      throw AppError.notFound("BROADCAST_NOT_FOUND", "Broadcast not found");
+      throw AppError.notFound("broadcast_not_found", "Broadcast not found");
     }
     return doc;
   }
@@ -101,7 +103,10 @@ export class BroadcastService {
       titleI18n: params.titleI18n,
       bodyMarkdownI18n: params.bodyMarkdownI18n,
       createdBy: params.createdBy,
-      recipientUserIds: params.recipientUserIds,
+      // exactOptionalPropertyTypes (#657)
+      ...(params.recipientUserIds !== undefined
+        ? { recipientUserIds: params.recipientUserIds }
+        : {}),
     };
     const doc = await this.repo.create(input);
     logger.info(
@@ -125,13 +130,16 @@ export class BroadcastService {
     params: UpdateBroadcastParams,
   ): Promise<AdminBroadcastResponse> {
     const patch: UpdateBroadcastDocInput = {
-      titleI18n: params.titleI18n,
-      bodyMarkdownI18n: params.bodyMarkdownI18n,
+      // exactOptionalPropertyTypes (#657)
+      ...(params.titleI18n !== undefined ? { titleI18n: params.titleI18n } : {}),
+      ...(params.bodyMarkdownI18n !== undefined
+        ? { bodyMarkdownI18n: params.bodyMarkdownI18n }
+        : {}),
       updatedBy: params.updatedBy,
     };
     const updated = await this.repo.update(id, patch);
     if (!updated) {
-      throw AppError.notFound("BROADCAST_NOT_FOUND", "Broadcast not found");
+      throw AppError.notFound("broadcast_not_found", "Broadcast not found");
     }
     logger.info(
       { broadcastId: id, by: params.updatedBy },
@@ -154,7 +162,7 @@ export class BroadcastService {
     // "ok, deleted nothing" on a typo.
     const removed = await this.repo.delete(id);
     if (!removed) {
-      throw AppError.notFound("BROADCAST_NOT_FOUND", "Broadcast not found");
+      throw AppError.notFound("broadcast_not_found", "Broadcast not found");
     }
     try {
       const receiptsRemoved = await this.repo.deleteAllForBroadcast(id);

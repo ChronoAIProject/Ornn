@@ -66,7 +66,7 @@ export function buildFileTreeFromEntries(entries: FileTreeEntry[]): FileNode[] {
     if (existing) return existing;
 
     const parts = folderPath.split("/");
-    const name = parts[parts.length - 1];
+    const name = parts[parts.length - 1]!;
     const node: FileNode = { id: folderPath, name, type: "folder", children: [] };
     folderMap.set(folderPath, node);
 
@@ -93,7 +93,7 @@ export function buildFileTreeFromEntries(entries: FileTreeEntry[]): FileNode[] {
     if (entry.type !== "file") continue;
 
     const parts = entry.path.split("/");
-    const name = parts[parts.length - 1];
+    const name = parts[parts.length - 1]!;
     const fileNode: FileNode = { id: entry.path, name, type: "file" };
 
     if (parts.length === 1) {

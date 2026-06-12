@@ -32,6 +32,7 @@ function fakeSettingsService(initial?: Partial<Record<string, Record<string, unk
   const svc: SettingsService = {
     getPlayground: async () => store.get("playground") as never,
     getSkillGen: async () => store.get("skillGen") as never,
+    getAssistant: async () => store.get("assistant") as never,
     getMirror: async () => store.get("mirror") as never,
     getNyxid: async () => store.get("nyxid") as never,
     getSkillAudit: async () => store.get("skillAudit") as never,
@@ -156,8 +157,8 @@ describe("SettingsImporter", () => {
     );
     const q = r.sections.find((s) => s.id === "playground")!;
     expect(q.status).toBe("failed");
-    expect(q.errors?.[0].field).toBe("defaultMonthlyQuota");
-    expect(q.errors?.[0].message).toBeDefined();
+    expect(q.errors?.[0]!.field).toBe("defaultMonthlyQuota");
+    expect(q.errors?.[0]!.message).toBeDefined();
   });
 
   it("UT-IMPORT-008: dry-run preview produces no writes", async () => {

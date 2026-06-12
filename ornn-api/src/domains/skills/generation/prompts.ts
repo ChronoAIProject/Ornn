@@ -226,7 +226,8 @@ Output ONLY the JSON object. Nothing else.`;
  */
 export function buildOpenApiGenerationPrompt(
   specContent: string,
-  options?: { endpoints?: string[]; description?: string },
+  // exactOptionalPropertyTypes (#657)
+  options?: { endpoints?: string[] | undefined; description?: string | undefined },
 ): string {
   let prompt = `Generate a PLAIN API reference skill from this OpenAPI spec. Document ALL endpoints.\n\n${specContent}`;
 
@@ -269,7 +270,12 @@ Output rules:
  */
 export function buildSourceCodeGenerationPrompt(
   code: string,
-  options?: { framework?: string; description?: string; sourceUrl?: string },
+  // exactOptionalPropertyTypes (#657)
+  options?: {
+    framework?: string | undefined;
+    description?: string | undefined;
+    sourceUrl?: string | undefined;
+  },
 ): string {
   let prompt = "Generate a PLAIN API reference skill from the backend source code below. Document every endpoint you can identify.";
 

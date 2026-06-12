@@ -16,9 +16,9 @@
  * @module domains/redemption-codes/service
  */
 
-import { randomBytes } from "node:crypto";
+import { randomInt } from "node:crypto";
 import { ObjectId } from "mongodb";
-import pino from "pino";
+import { createLogger } from "../../shared/logger";
 import { isDuplicateKeyError } from "../../shared/types/index";
 import type { Surface } from "../quota/types";
 import type { QuotaService } from "../quota/service";
@@ -32,7 +32,7 @@ import {
   type RedemptionGrantEntry,
 } from "./types";
 
-const logger = pino({ level: "info" }).child({ module: "redemptionCodeService" });
+const logger = createLogger("redemptionCodeService");
 
 const MINT_RETRY_LIMIT = 5;
 
@@ -112,16 +112,19 @@ export class RedemptionCodeService {
   }
 
   /**
-   * Generate one candidate code. The `% alphabet.length` step
-   * introduces a sub-1.5% modulo bias (256 % 31), which is harmless
-   * for human-shareable IDs since the unique index + retry loop
-   * absorbs collisions regardless.
+   * Generate one candidate code. Each character is drawn with
+   * `crypto.randomInt(alphabet.length)`, which rejection-samples
+   * internally to yield a uniform index over `[0, length)` — no modulo
+   * bias. The unique index + mint retry loop still absorbs the (now
+   * purely birthday-paradox) chance of a collision.
    */
   private generateCode(): string {
-    const bytes = randomBytes(REDEMPTION_CODE_LENGTH);
     let out = "";
     for (let i = 0; i < REDEMPTION_CODE_LENGTH; i++) {
-      out += REDEMPTION_CODE_ALPHABET[bytes[i] % REDEMPTION_CODE_ALPHABET.length];
+      // `randomInt(length)` returns an integer in `[0, length)`, so the
+      // index is always in-bounds; the `?? ""` satisfies
+      // noUncheckedIndexedAccess (#450) without a non-null assertion.
+      out += REDEMPTION_CODE_ALPHABET[randomInt(REDEMPTION_CODE_ALPHABET.length)] ?? "";
     }
     return out;
   }

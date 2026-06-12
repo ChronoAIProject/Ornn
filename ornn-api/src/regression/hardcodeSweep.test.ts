@@ -71,6 +71,10 @@ const URL_ALLOWLIST: Array<string | RegExp> = [
   // API the mirror + skill-pull paths talk to. Token-based auth is
   // configured separately via the `mirror` settings section.
   /https?:\/\/api\.github\.com\b/,
+  // The Ornn repo URL used in RFC 8594 `Link: rel="deprecation"`
+  // headers (#586) — points at docs/DEPRECATIONS.md anchors, not a
+  // runtime endpoint we fetch.
+  /https?:\/\/github\.com\/ChronoAIProject\/Ornn\/blob\b/,
 ];
 
 // Specific filename → line allow-list for unavoidable hits (e.g.

@@ -13,8 +13,9 @@ const API_BASE = config.apiBaseUrl;
 
 export interface GenerateStreamParams {
   messages: Array<{ role: string; content: string }>;
-  model?: string;
-  modelId?: string;
+  // exactOptionalPropertyTypes (#657)
+  model?: string | undefined;
+  modelId?: string | undefined;
 }
 
 export interface StreamHandle {

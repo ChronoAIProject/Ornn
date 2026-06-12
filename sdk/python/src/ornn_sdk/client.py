@@ -22,10 +22,16 @@ import httpx
 
 from .errors import OrnnError
 from .types import (
+    ClosureNode,
+    ClosureResult,
     SearchMode,
     SearchScope,
     SkillDetail,
     SkillSearchResult,
+    SkillsetClosureResult,
+    SkillsetDetail,
+    SkillsetKind,
+    SkillsetSearchResult,
     SkillVersionEntry,
     SystemFilter,
     UpdateSkillMetadata,
@@ -80,7 +86,7 @@ class OrnnClient:
     def close(self) -> None:
         self._http.close()
 
-    def __enter__(self) -> "OrnnClient":
+    def __enter__(self) -> OrnnClient:
         return self
 
     def __exit__(self, *_: Any) -> None:
@@ -104,7 +110,8 @@ class OrnnClient:
         """Search skills. Returns a paginated :class:`SkillSearchResult`."""
         params: dict[str, str] = {}
         if q is not None:
-            params["query"] = q
+            # Canonical search param is `q` per CONVENTIONS.md §4.1 (#586).
+            params["q"] = q
         if scope is not None:
             params["scope"] = scope
         if category is not None:
@@ -138,10 +145,47 @@ class OrnnClient:
 
     def download_package(self, guid: str, version: str) -> bytes:
         """Download a skill package ZIP. Returns raw bytes."""
-        res = self._raw_request("GET", f"/skills/{_quote(guid)}/versions/{_quote(version)}/download")
+        path = f"/skills/{_quote(guid)}/versions/{_quote(version)}/download"
+        res = self._raw_request("GET", path)
         if res.status_code >= 400:
             raise _build_error(res)
-        return res.content
+        # httpx exposes res.content as bytes at runtime; the typeshed
+        # stub annotates it as Any. Cast explicitly so strict mypy is
+        # happy without disabling the rule.
+        return bytes(res.content)
+
+    def resolve_closure(self, guid_or_name: str, *, version: str | None = None) -> ClosureResult:
+        """Resolve the full transitive dependency closure of a skill (#968).
+
+        Returns the closure in deps-first topological order — every
+        dependency precedes the dependents that pin it. Raises
+        :class:`OrnnError` with code ``dependency_cycle`` /
+        ``dependency_conflict`` / ``skill_dependency_not_found`` when the
+        graph can't be resolved.
+        """
+        suffix = f"?version={httpx.QueryParams({'version': version})['version']}" if version else ""
+        data = self.request("GET", f"/skills/{_quote(guid_or_name)}/closure{suffix}")
+        return ClosureResult.from_dict(data)
+
+    def pull_closure(
+        self, guid_or_name: str, *, version: str | None = None
+    ) -> tuple[ClosureResult, list[tuple[ClosureNode, bytes]]]:
+        """Resolve a skill's closure and download every package (#968).
+
+        Convenience over :meth:`resolve_closure` + :meth:`download_package`:
+        downloads in the closure's topological order (dependencies first)
+        so a caller can install each ZIP as it arrives. Does NOT include
+        the root skill itself.
+
+        Returns ``(closure, packages)`` where ``packages`` is a list of
+        ``(node, zip_bytes)`` pairs in topological order.
+        """
+        closure = self.resolve_closure(guid_or_name, version=version)
+        packages: list[tuple[ClosureNode, bytes]] = []
+        for node in closure.items:
+            data = self.download_package(node.guid, node.version)
+            packages.append((node, data))
+        return closure, packages
 
     def publish(self, zip_bytes: bytes, *, skip_validation: bool = False) -> SkillDetail:
         """Publish a new skill from a ZIP package (raw bytes)."""
@@ -195,6 +239,144 @@ class OrnnClient:
         """Delete a skill by ID."""
         self.request("DELETE", f"/skills/{_quote(skill_id)}")
 
+    # ---- Skillsets (#969) ---------------------------------------------------
+
+    def create_skillset(
+        self,
+        *,
+        name: str,
+        description: str,
+        instructions: str,
+        members: list[str],
+        kind: SkillsetKind | None = None,
+        tags: list[str] | None = None,
+        version: str | None = None,
+    ) -> SkillsetDetail:
+        """Create a skillset — a curated, versioned meta-package over N member skills.
+
+        Private by default (like skills). Member refs are validated
+        server-side at publish time: every member must resolve to a
+        readable skill version, and the union dependency closure must be
+        conflict-free.
+
+        ``instructions`` is the REQUIRED master prompt (#978) — a markdown
+        body telling agents HOW to use the set (1..8000 chars, trimmed
+        server-side).
+        """
+        payload: dict[str, Any] = {
+            "name": name,
+            "description": description,
+            "instructions": instructions,
+            "members": members,
+        }
+        if kind is not None:
+            payload["kind"] = kind
+        if tags is not None:
+            payload["tags"] = tags
+        if version is not None:
+            payload["version"] = version
+        data = self.request("POST", "/skillsets", json=payload)
+        return SkillsetDetail.from_dict(data)
+
+    def get_skillset(self, guid_or_name: str, *, version: str | None = None) -> SkillsetDetail:
+        """Fetch a single skillset by GUID or name."""
+        suffix = f"?version={httpx.QueryParams({'version': version})['version']}" if version else ""
+        data = self.request("GET", f"/skillsets/{_quote(guid_or_name)}{suffix}")
+        return SkillsetDetail.from_dict(data)
+
+    def publish_skillset(
+        self,
+        skillset_id: str,
+        *,
+        members: list[str],
+        version: str,
+        instructions: str,
+        description: str | None = None,
+        kind: SkillsetKind | None = None,
+        tags: list[str] | None = None,
+    ) -> SkillsetDetail:
+        """Publish a new immutable version of an existing skillset.
+
+        ``instructions`` is the REQUIRED master prompt (#978) — REQUIRED on
+        publish too, with NO carry-forward: each version explicitly carries
+        its own prompt (unlike ``description``, which inherits when omitted).
+        """
+        payload: dict[str, Any] = {
+            "members": members,
+            "version": version,
+            "instructions": instructions,
+        }
+        if description is not None:
+            payload["description"] = description
+        if kind is not None:
+            payload["kind"] = kind
+        if tags is not None:
+            payload["tags"] = tags
+        data = self.request("PUT", f"/skillsets/{_quote(skillset_id)}", json=payload)
+        return SkillsetDetail.from_dict(data)
+
+    def set_skillset_permissions(
+        self,
+        skillset_id: str,
+        *,
+        is_private: bool,
+        shared_with_users: list[str] | None = None,
+        shared_with_orgs: list[str] | None = None,
+    ) -> SkillsetDetail:
+        """Update a skillset's visibility / sharing lists."""
+        payload: dict[str, Any] = {
+            "isPrivate": is_private,
+            "sharedWithUsers": shared_with_users or [],
+            "sharedWithOrgs": shared_with_orgs or [],
+        }
+        data = self.request("PUT", f"/skillsets/{_quote(skillset_id)}/permissions", json=payload)
+        return SkillsetDetail.from_dict(data["skillset"])
+
+    def delete_skillset(self, skillset_id: str) -> None:
+        """Delete a skillset (and all its versions) by ID."""
+        self.request("DELETE", f"/skillsets/{_quote(skillset_id)}")
+
+    def resolve_skillset_closure(
+        self, guid_or_name: str, *, version: str | None = None
+    ) -> SkillsetClosureResult:
+        """Resolve a skillset's full delivery closure (#969).
+
+        The union of all member skills PLUS each member's #968 dependency
+        closure, deduplicated and topo-sorted (deps-first), PLUS the
+        version's master prompt (#978, as a root sibling ``instructions``).
+        Raises :class:`OrnnError` with code ``dependency_cycle`` /
+        ``dependency_conflict`` / ``skill_dependency_not_found`` when the
+        graph can't be resolved.
+        """
+        suffix = f"?version={httpx.QueryParams({'version': version})['version']}" if version else ""
+        data = self.request("GET", f"/skillsets/{_quote(guid_or_name)}/closure{suffix}")
+        return SkillsetClosureResult.from_dict(data)
+
+    def search_skillsets(
+        self,
+        *,
+        kind: SkillsetKind | None = None,
+        scope: SearchScope | None = None,
+        tag: str | None = None,
+        page: int | None = None,
+        page_size: int | None = None,
+    ) -> SkillsetSearchResult:
+        """Discover skillsets by kind / tag / scope. Returns a paginated result."""
+        params: dict[str, str] = {}
+        if kind is not None:
+            params["kind"] = kind
+        if scope is not None:
+            params["scope"] = scope
+        if tag is not None:
+            params["tags"] = tag
+        if page is not None:
+            params["page"] = str(page)
+        if page_size is not None:
+            params["pageSize"] = str(page_size)
+        qs = f"?{urlencode(params)}" if params else ""
+        data = self.request("GET", f"/skillset-search{qs}")
+        return SkillsetSearchResult.from_dict(data)
+
     # ---- Escape hatch -------------------------------------------------------
 
     def request(self, method: str, path: str, **kwargs: Any) -> Any:
@@ -202,6 +384,10 @@ class OrnnClient:
 
         Returns the unwrapped ``data`` field on success. Raises
         :class:`OrnnError` on any failure.
+
+        Success responses keep the legacy ``{data, error: null}`` envelope.
+        Error responses are RFC 7807 ``application/problem+json`` (#456) —
+        fields at the body root.
         """
         res = self._raw_request(method, path, **kwargs)
         body: Any = None
@@ -209,8 +395,14 @@ class OrnnClient:
             body = res.json()
         except ValueError:
             body = None
-        if res.status_code >= 400 or not isinstance(body, dict) or body.get("error") is not None:
+        if res.status_code >= 400:
             raise _build_error(res, body)
+        if not isinstance(body, dict) or body.get("error") is not None:
+            raise OrnnError(
+                status=res.status_code,
+                code="unknown_error",
+                message=f"Ornn API returned {res.status_code} with an unexpected body shape",
+            )
         return body.get("data")
 
     # ---- Plumbing -----------------------------------------------------------
@@ -231,22 +423,29 @@ def _quote(segment: str) -> str:
 
 
 def _build_error(res: httpx.Response, body: Any | None = None) -> OrnnError:
+    """Build an OrnnError from an RFC 7807 problem+json response (#456).
+
+    Fields live at the body root now (``code``, ``status``, ``detail``,
+    ``title``, ``type``, ``instance``, ``requestId``, optional
+    ``errors[]``). The pre-#456 ``{data, error: {…}}`` envelope is no
+    longer emitted.
+    """
     if body is None:
         try:
             body = res.json()
         except ValueError:
             body = None
-    if isinstance(body, dict) and isinstance(body.get("error"), dict):
-        err = body["error"]
+    if isinstance(body, dict) and (body.get("code") or body.get("detail") or body.get("title")):
+        message = body.get("detail") or body.get("title") or f"Ornn API returned {res.status_code}"
         return OrnnError(
-            status=res.status_code,
-            code=str(err.get("code") or "unknown_error"),
-            message=str(err.get("message") or f"Ornn API returned {res.status_code}"),
-            request_id=err.get("requestId"),
-            errors=list(err.get("errors") or []) or None,
+            status=int(body.get("status") or res.status_code),
+            code=str(body.get("code") or "unknown_error"),
+            message=str(message),
+            request_id=body.get("requestId"),
+            errors=list(body.get("errors") or []) or None,
         )
     return OrnnError(
         status=res.status_code,
         code="unknown_error",
-        message=f"Ornn API returned {res.status_code} without a recognized error envelope",
+        message=f"Ornn API returned {res.status_code} without a recognized error body",
     )

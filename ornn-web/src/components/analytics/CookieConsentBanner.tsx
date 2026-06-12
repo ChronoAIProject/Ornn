@@ -16,7 +16,7 @@
  * @module components/analytics/CookieConsentBanner
  */
 
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 import { Link } from "react-router-dom";
 import { Trans, useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/Button";
@@ -28,18 +28,13 @@ import {
 
 export function CookieConsentBanner() {
   const { t } = useTranslation();
-  // Hydrate from localStorage on mount so SSR-style snapshots don't
-  // briefly flash the banner for users who already decided.
-  const [visible, setVisible] = useState<boolean>(false);
-
-  useEffect(() => {
-    setVisible(isUndecided());
-    const unsub = onConsentChange(() => {
-      // Whether granted or revoked, the banner has done its job.
-      if (!isUndecided()) setVisible(false);
-    });
-    return unsub;
-  }, []);
+  // Subscribe to the consent store directly via useSyncExternalStore —
+  // the banner is visible exactly while the choice is undecided. This
+  // replaces a mount effect that set visibility + wired a listener,
+  // removing the setState-in-effect cascade (#888). The subscribe
+  // callback ignores its `granted` arg; the snapshot is recomputed by
+  // re-reading the store.
+  const visible = useSyncExternalStore(onConsentChange, isUndecided, isUndecided);
 
   if (!visible) return null;
 

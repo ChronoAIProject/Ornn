@@ -11,9 +11,27 @@
  * @module domains/quota/types
  */
 
-export type Surface = "playground" | "skillGen";
+export type Surface = "playground" | "skillGen" | "assistant";
 
+/**
+ * Admin-grantable / redeemable surfaces. The Ornn Assistant (#970) is a
+ * billed surface that reserves + charges like the others, but in v1 it is
+ * NOT admin-grantable and NOT redeemable — its allotment comes solely from
+ * the `assistant.defaultMonthlyQuota` section default. So `Surface` (the
+ * reserve/charge type) includes `assistant`, but this list — which drives
+ * the admin-grant + redemption-code surface enums and the quota snapshot
+ * UI — deliberately does not. Add `assistant` here only when those flows
+ * gain assistant support.
+ */
 export const SURFACES = ["playground", "skillGen"] as const;
+
+/**
+ * Surfaces an admin can grant credits to / a redemption code can target.
+ * Narrower than {@link Surface}: the assistant surface (#970) reserves +
+ * charges but isn't grantable in v1, so grant/bulk-grant accept only this
+ * subset (and stay assignable to the notification layer's narrow type).
+ */
+export type GrantableSurface = (typeof SURFACES)[number];
 
 export const QUOTA_ADMIN_PERMISSION = "ornn:admin:skill" as const;
 
@@ -77,6 +95,12 @@ export interface SurfaceSnapshot {
   defaultAllotment: number;
   adminGrant: number;
   used: number;
+  /**
+   * Reflects in-flight reservations — `used` is bumped at reserve time
+   * (before the LLM call), so `remaining` already accounts for runs
+   * currently streaming. A run that ends in system_error/abort releases
+   * its slot, raising `remaining` back.
+   */
   remaining: number;
   warningThreshold: number;
   warning: boolean;

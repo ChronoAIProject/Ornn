@@ -11,12 +11,131 @@ import type {
   ResponsesApiInputMessage,
   ResponsesApiTool,
 } from "../../clients/nyxid/llm";
-import type { SandboxClient } from "../../clients/sandboxClient";
+import type {
+  SandboxClient,
+  SandboxExecuteResult,
+} from "../../clients/sandboxClient";
 import type { SkillService } from "../skills/crud/service";
 import type { PlaygroundChatEvent } from "../../shared/types/index";
-import pino from "pino";
+import type { ActorContext } from "../skills/crud/authorize";
+import { createLogger } from "../../shared/logger";
+import { z } from "zod";
 
-const logger = pino({ level: "info" }).child({ module: "playgroundChatService" });
+const logger = createLogger("playgroundChatService");
+
+/**
+ * Zod schemas for the four LLM Responses-API event shapes we
+ * consume on the playground stream (#449). `as any` previously
+ * propagated unchecked field renames upstream into `undefined`
+ * flowing through SSE; with a discriminated union we ignore
+ * malformed events explicitly and log them.
+ *
+ * Schemas are intentionally permissive — only fields we read are
+ * required; the upstream API may add fields freely without
+ * breaking us.
+ */
+const textDeltaEventSchema = z.object({
+  type: z.literal("response.output_text.delta"),
+  delta: z.string(),
+});
+
+const contentPartDeltaEventSchema = z.object({
+  type: z.literal("response.content_part.delta"),
+  delta: z.object({
+    type: z.string().optional(),
+    text: z.string().optional(),
+  }).optional(),
+});
+
+const outputItemDoneEventSchema = z.object({
+  type: z.literal("response.output_item.done"),
+  item: z.object({
+    type: z.string().optional(),
+    id: z.string().optional(),
+    call_id: z.string().optional(),
+    name: z.string().optional(),
+    arguments: z.string().optional(),
+  }).optional(),
+});
+
+const anyKnownEventSchema = z.union([
+  textDeltaEventSchema,
+  contentPartDeltaEventSchema,
+  outputItemDoneEventSchema,
+]);
+
+/** Server-side tool-call return shape consumed by the playground stream. */
+interface ToolCallResult {
+  text: string;
+  files: Array<{ path: string; content: string; size: number; mimeType: string }>;
+}
+
+/**
+ * Translate a thrown error from `sandboxClient.{execute,sessionExecute}`
+ * into a user-facing one-liner for the playground transcript (#530).
+ *
+ * `SandboxClient.post` throws an `Error` whose message is
+ * `"Sandbox service error (<status>): <raw body text>"`. The raw body
+ * is often an `{ error, error_code, message }` JSON envelope from
+ * chrono-sandbox; the legacy formatter spat that JSON straight into
+ * the chat. Try to parse the body — if it's the structured envelope
+ * we surface a friendly sentence plus an internal-code hint admins
+ * can grep on. Otherwise fall back to the raw message so any new
+ * upstream shape still makes it to the operator.
+ */
+function formatSandboxError(err: unknown): string {
+  const raw = err instanceof Error ? err.message : String(err);
+  const match = raw.match(/^Sandbox service error \((\d+)\): (.*)$/s);
+  if (!match) return `Sandbox execution failed: ${raw}`;
+  const status = match[1]!;
+  const body = match[2]!;
+  try {
+    const parsed = JSON.parse(body) as {
+      error?: string;
+      error_code?: number;
+      message?: string;
+    };
+    const codeHint =
+      typeof parsed.error_code === "number" ? ` [code ${parsed.error_code}]` : "";
+    const summary = parsed.message ?? parsed.error ?? `HTTP ${status}`;
+    if (status === "500" || (parsed.error_code === 1006)) {
+      return `Sandbox is having trouble running this script${codeHint}. This is usually a transient sandbox-server issue — try again, or simplify the script if it keeps failing.`;
+    }
+    if (status === "504" || status === "503") {
+      return `Sandbox timed out / temporarily unavailable${codeHint}. Try again in a few seconds.`;
+    }
+    return `Sandbox execution failed (HTTP ${status})${codeHint}: ${summary}`;
+  } catch {
+    return `Sandbox execution failed (HTTP ${status}): ${body.slice(0, 200)}`;
+  }
+}
+
+/**
+ * Translate a chrono-sandbox `SandboxExecuteResult` (both /execute and
+ * /sessions/{id}/execute return this shape) into the {text, files}
+ * envelope the playground stream feeds back to the LLM and emits as
+ * `file-output` events to the client.
+ */
+function formatSandboxResult(result: SandboxExecuteResult): ToolCallResult {
+  const files = (result.output?.files ?? [])
+    .filter((f): f is typeof f & { content: string } => !!f.content && !f.error)
+    .map((f) => ({
+      path: f.path,
+      content: f.content,
+      size: f.size ?? 0,
+      mimeType: guessMimeType(f.path),
+    }));
+
+  const filesSummary = files.length > 0
+    ? `\nFiles retrieved: ${files.map((f) => `${f.path} (${f.size} bytes)`).join(", ")}`
+    : "";
+
+  const text = result.success
+    ? `Execution succeeded (exit code ${result.output?.exit_code}).\nstdout:\n${result.output?.stdout ?? ""}\nstderr:\n${result.output?.stderr ?? ""}${filesSummary}`
+    : `Execution failed: ${result.error?.message ?? "unknown error"}\nstdout:\n${result.output?.stdout ?? ""}\nstderr:\n${result.output?.stderr ?? ""}`;
+
+  return { text, files };
+}
 
 /** Guess MIME type from file extension. */
 function guessMimeType(path: string): string {
@@ -55,21 +174,26 @@ When calling execute_in_sandbox:
 - env: the user-provided environment variables (already in context)
 - output_type: from metadata (text or file)
 - retrieve_files: glob patterns for output files (e.g. ["*.png", "*.jpg"])
-- timeout_secs: 120 (default)
+- timeout_secs: 60 (default, clamped to 1-600)
 
 Be concise. Act, don't explain.`;
 
 export interface PlaygroundMessage {
   role: "user" | "assistant" | "tool" | "system";
   content: string;
-  toolCalls?: Array<{ id: string; name: string; args: Record<string, unknown> }>;
-  toolCallId?: string;
+  toolCalls?: Array<{ id: string; name: string; args: Record<string, unknown> }> | undefined;
+  toolCallId?: string | undefined;
 }
 
+// Optionals widen to `T | undefined` so the Zod-inferred shape from the
+// validated request body assigns cleanly under exactOptionalPropertyTypes
+// (#657). The fields are still semantically optional; only the type
+// boundary widens.
 export interface PlaygroundChatRequest {
   messages: PlaygroundMessage[];
-  skillId?: string;
-  envVars?: Record<string, string>;
+  skillId?: string | undefined;
+  envVars?: Record<string, string> | undefined;
+  modelId?: string | undefined;
 }
 
 /** Tools for the playground agent. */
@@ -186,9 +310,14 @@ export class PlaygroundChatService {
   async *chat(
     userId: string,
     request: PlaygroundChatRequest,
-    abortSignal?: AbortSignal,
-    options?: { modelId?: string },
+    abortSignal: AbortSignal | undefined,
+    options: { modelId?: string; actor: ActorContext },
   ): AsyncGenerator<PlaygroundChatEvent> {
+    // #806/#826 — object-level authorization for skill loads. The actor
+    // is REQUIRED: every caller (routes + tests) must supply the real
+    // caller context. This single actor gates BOTH skill bypass paths
+    // below (skillId injection + the load_skill tool).
+    const actor = options.actor;
     // Resolve LLM defaults from admin settings on every call so
     // operator updates land without a pod restart.
     let defaults: PlaygroundLlmDefaults;
@@ -212,7 +341,7 @@ export class PlaygroundChatService {
     // Resolved model id (already validated by the route). Falls back
     // to settings default for tests / internal callers that don't
     // go through the model picker.
-    const model = options?.modelId ?? defaults.model;
+    const model = options.modelId ?? defaults.model;
     const input = this.buildInput(request);
 
     // Inject system prompt as developer message (instructions field is ignored by upstream LLM)
@@ -224,7 +353,7 @@ export class PlaygroundChatService {
     // Auto-inject skill context if skillId is provided
     if (request.skillId) {
       try {
-        const skillJson = await this.skillService.getSkillJson(request.skillId);
+        const skillJson = await this.skillService.getSkillJson(request.skillId, actor);
         const skillContext = this.buildSkillContext(skillJson, request.envVars);
         input.unshift({
           role: "developer" as const,
@@ -239,158 +368,328 @@ export class PlaygroundChatService {
       }
     }
 
-    // Tool-use loop: stream LLM → if tool call → execute → feed result → stream again
-    const MAX_TOOL_ROUNDS = 5;
-    for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
-      try {
-        const streamEvents = this.llmClient.stream({
-          model,
-          input,
-          max_output_tokens: defaults.maxOutputTokens,
-          temperature: defaults.temperature,
-          tools: PLAYGROUND_TOOLS,
-        });
+    // Per-chat sandbox session reuse (#531). Same-language tool calls
+    // within one chat share a persistent kernel — installed CLIs,
+    // filesystem state, and env survive across rounds. Sessions are
+    // created lazily on first execute_in_sandbox call and torn down
+    // best-effort in `finally`. Keyed by language because chrono-sandbox
+    // kernels are per-language; a TS skill and a Python skill in the
+    // same chat each get their own session.
+    const sandboxSessions = new Map<string, string>();
+    const createdSessionIds: string[] = [];
 
-        let pendingToolCall: { id: string; name: string; args: Record<string, unknown> } | null = null;
+    try {
+      // Tool-use loop: stream LLM → if tool call → execute → feed result → stream again
+      const MAX_TOOL_ROUNDS = 5;
+      for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
+        try {
+          const streamEvents = this.llmClient.stream({
+            model,
+            input,
+            max_output_tokens: defaults.maxOutputTokens,
+            temperature: defaults.temperature,
+            tools: PLAYGROUND_TOOLS,
+          });
 
-        for await (const event of streamEvents) {
-          if (abortSignal?.aborted) {
-            yield { type: "error", message: "Request aborted" };
-            yield { type: "finish", finishReason: "abort" };
+          let pendingToolCall: { id: string; name: string; args: Record<string, unknown> } | null = null;
+
+          for await (const event of streamEvents) {
+            if (abortSignal?.aborted) {
+              yield { type: "error", message: "Request aborted" };
+              yield { type: "finish", finishReason: "abort" };
+              return;
+            }
+
+            // #449 — parse with a discriminated Zod union instead of
+            // `as any`. Unknown event types are ignored (forward-compat
+            // with new upstream events); shape-mismatch on a known event
+            // logs at debug and is dropped.
+            const parsed = anyKnownEventSchema.safeParse(event);
+            if (!parsed.success) {
+              logger.debug(
+                { issues: parsed.error.issues.slice(0, 2) },
+                "Unrecognized LLM event shape — dropping",
+              );
+              continue;
+            }
+            const parsedEvent = parsed.data;
+
+            // Stream text deltas to client
+            if (parsedEvent.type === "response.output_text.delta") {
+              yield { type: "text-delta", delta: parsedEvent.delta };
+              continue;
+            }
+            if (parsedEvent.type === "response.content_part.delta") {
+              const delta = parsedEvent.delta;
+              if (delta?.type === "output_text" && typeof delta.text === "string") {
+                yield { type: "text-delta", delta: delta.text };
+              }
+              continue;
+            }
+
+            // Capture complete function call from output_item.done
+            // This event contains everything: item.id, item.name, item.arguments
+            if (parsedEvent.type === "response.output_item.done") {
+              const item = parsedEvent.item;
+              if (item?.type === "function_call") {
+                const toolName = item.name ?? "";
+                const toolCallId = item.call_id ?? item.id ?? "";
+                let args: Record<string, unknown> = {};
+                try {
+                  args = JSON.parse(item.arguments ?? "{}");
+                } catch {
+                  logger.error({ rawArgs: String(item.arguments).slice(0, 200) }, "Failed to parse function call arguments");
+                }
+                pendingToolCall = { id: toolCallId, name: toolName, args };
+                logger.info({ toolName, toolCallId }, "Tool call received from LLM");
+              }
+              continue;
+            }
+          }
+
+          // If no tool call, we're done
+          if (!pendingToolCall) {
+            yield { type: "finish", finishReason: "stop" };
             return;
           }
 
-          const eventType = (event as any).type;
+          // Auto-execute the tool call server-side
+          logger.info({ toolName: pendingToolCall.name, round }, "Auto-executing tool call");
+          yield { type: "tool-call", toolCall: pendingToolCall };
 
-          // Stream text deltas to client
-          if (eventType === "response.output_text.delta") {
-            const delta = (event as any).delta;
-            if (typeof delta === "string") yield { type: "text-delta", delta };
-            continue;
-          }
-          if (eventType === "response.content_part.delta") {
-            const delta = (event as any).delta;
-            if (delta?.type === "output_text" && typeof delta.text === "string") {
-              yield { type: "text-delta", delta: delta.text };
-            }
-            continue;
+          const toolResult = await this.executeToolCall(
+            pendingToolCall,
+            sandboxSessions,
+            createdSessionIds,
+            request.envVars,
+            actor,
+          );
+          yield { type: "tool-result", toolCallId: pendingToolCall.id, result: toolResult.text };
+
+          // Emit file outputs if any
+          for (const file of toolResult.files) {
+            yield { type: "file-output", file };
           }
 
-          // Capture complete function call from output_item.done
-          // This event contains everything: item.id, item.name, item.arguments
-          if (eventType === "response.output_item.done") {
-            const item = (event as any).item;
-            if (item?.type === "function_call") {
-              const toolName = item.name ?? "";
-              const toolCallId = item.call_id ?? item.id ?? "";
-              let args: Record<string, unknown> = {};
-              try {
-                args = JSON.parse(item.arguments ?? "{}");
-              } catch {
-                logger.error({ rawArgs: String(item.arguments).slice(0, 200) }, "Failed to parse function call arguments");
-              }
-              pendingToolCall = { id: toolCallId, name: toolName, args };
-              logger.info({ toolName, toolCallId }, "Tool call received from LLM");
-            }
-            continue;
-          }
-        }
+          // Feed tool result back to LLM for next round
+          input.push({
+            role: "assistant" as const,
+            content: `[Tool call: ${pendingToolCall.name}(${JSON.stringify(pendingToolCall.args)})]`,
+          });
+          input.push({
+            role: "user" as const,
+            content: `Tool result for ${pendingToolCall.name}: ${toolResult.text}`,
+          });
 
-        // If no tool call, we're done
-        if (!pendingToolCall) {
-          yield { type: "finish", finishReason: "stop" };
+        } catch (err) {
+          logger.error({ userId, err, round }, "Chat stream error");
+          yield { type: "error", message: err instanceof Error ? err.message : "Stream failed" };
+          yield { type: "finish", finishReason: "error" };
           return;
         }
+      }
 
-        // Auto-execute the tool call server-side
-        logger.info({ toolName: pendingToolCall.name, round }, "Auto-executing tool call");
-        yield { type: "tool-call", toolCall: pendingToolCall };
-
-        const toolResult = await this.executeToolCall(pendingToolCall);
-        yield { type: "tool-result", toolCallId: pendingToolCall.id, result: toolResult.text };
-
-        // Emit file outputs if any
-        for (const file of toolResult.files) {
-          yield { type: "file-output", file };
-        }
-
-        // Feed tool result back to LLM for next round
-        input.push({
-          role: "assistant" as const,
-          content: `[Tool call: ${pendingToolCall.name}(${JSON.stringify(pendingToolCall.args)})]`,
-        });
-        input.push({
-          role: "user" as const,
-          content: `Tool result for ${pendingToolCall.name}: ${toolResult.text}`,
-        });
-
-      } catch (err) {
-        logger.error({ userId, err, round }, "Chat stream error");
-        yield { type: "error", message: err instanceof Error ? err.message : "Stream failed" };
-        yield { type: "finish", finishReason: "error" };
-        return;
+      yield { type: "finish", finishReason: "stop" };
+    } finally {
+      // Best-effort session cleanup. chrono-sandbox sessions also
+      // expire via ttlSecs, but explicit teardown frees the container
+      // immediately. Swallow errors — a leftover session will TTL out.
+      if (createdSessionIds.length > 0) {
+        await Promise.allSettled(
+          createdSessionIds.map(async (sessionId) => {
+            try {
+              await this.sandboxClient.deleteSession(sessionId);
+            } catch (err) {
+              logger.warn(
+                { sessionId, err: (err as Error).message },
+                "Sandbox session delete failed — relying on TTL",
+              );
+            }
+          }),
+        );
       }
     }
-
-    yield { type: "finish", finishReason: "stop" };
   }
 
   /**
-   * Execute a tool call server-side. Returns text result and any output files.
+   * Execute a tool call server-side. Returns text result and any
+   * output files. `sandboxSessions` and `createdSessionIds` are
+   * owned by the caller (`chat()`) — per-chat state that lets
+   * `execute_in_sandbox` reuse the same chrono-sandbox kernel across
+   * tool-use rounds so installed CLIs, env, and filesystem persist
+   * (#531).
    */
   private async executeToolCall(
     toolCall: { id: string; name: string; args: Record<string, unknown> },
-  ): Promise<{ text: string; files: Array<{ path: string; content: string; size: number; mimeType: string }> }> {
+    sandboxSessions: Map<string, string>,
+    createdSessionIds: string[],
+    userEnvVars: Record<string, string> | undefined,
+    actor: ActorContext,
+  ): Promise<ToolCallResult> {
     const { name, args } = toolCall;
-    const noFiles: Array<{ path: string; content: string; size: number; mimeType: string }> = [];
 
     if (name === "execute_in_sandbox") {
-      try {
-        const result = await this.sandboxClient.execute({
-          script: (args.script as string) ?? "",
-          language: (args.language as string) ?? "python",
-          outputType: (args.output_type as "text" | "file") ?? "text",
-          env: (args.env as Record<string, string>) ?? {},
-          dependencies: (args.dependencies as string[]) ?? [],
-          retrieveFiles: (args.retrieve_files as string[]) ?? [],
-          inputFiles: (args.input_files as Array<{ path: string; content: string }>) ?? [],
-          timeoutSecs: (args.timeout_secs as number) ?? 120,
-        });
-
-        // Extract retrieved files
-        const files = (result.output?.files ?? [])
-          .filter((f): f is typeof f & { content: string } => !!f.content && !f.error)
-          .map((f) => ({
-            path: f.path,
-            content: f.content,
-            size: f.size ?? 0,
-            mimeType: guessMimeType(f.path),
-          }));
-
-        const filesSummary = files.length > 0
-          ? `\nFiles retrieved: ${files.map((f) => `${f.path} (${f.size} bytes)`).join(", ")}`
-          : "";
-
-        const text = result.success
-          ? `Execution succeeded (exit code ${result.output?.exit_code}).\nstdout:\n${result.output?.stdout ?? ""}\nstderr:\n${result.output?.stderr ?? ""}${filesSummary}`
-          : `Execution failed: ${result.error?.message ?? "unknown error"}\nstdout:\n${result.output?.stdout ?? ""}\nstderr:\n${result.output?.stderr ?? ""}`;
-
-        return { text, files };
-      } catch (err) {
-        return { text: `Sandbox execution failed: ${err instanceof Error ? err.message : String(err)}`, files: noFiles };
-      }
+      return await this.runSandboxToolCall(
+        args,
+        sandboxSessions,
+        createdSessionIds,
+        userEnvVars,
+      );
     }
 
     if (name === "load_skill") {
       try {
-        const skillJson = await this.skillService.getSkillJson((args.skill_id as string) ?? "");
-        return { text: JSON.stringify(skillJson, null, 2), files: noFiles };
+        // #806 — gate the load through the caller's actor. A skill the
+        // caller can't read throws skill_not_found here, so the tool
+        // result below carries the denial string, never the contents.
+        const skillJson = await this.skillService.getSkillJson((args.skill_id as string) ?? "", actor);
+        return { text: JSON.stringify(skillJson, null, 2), files: [] };
       } catch (err) {
-        return { text: `Failed to load skill: ${err instanceof Error ? err.message : String(err)}`, files: noFiles };
+        return { text: `Failed to load skill: ${err instanceof Error ? err.message : String(err)}`, files: [] };
       }
     }
 
-    return { text: `Unknown tool: ${name}`, files: noFiles };
+    return { text: `Unknown tool: ${name}`, files: [] };
+  }
+
+  /**
+   * Dispatch a single `execute_in_sandbox` tool call.
+   *
+   * Lazily reuses a per-language chrono-sandbox session for the chat —
+   * the first call for a language pays the createSession cost (with
+   * the LLM-supplied dependency list installed once); subsequent
+   * same-language calls hit the persistent kernel and see prior CLI
+   * installs, env writes, and filesystem state (#531).
+   *
+   * Fail-open fallbacks keep one-call behaviour identical to
+   * pre-session if session APIs error: createSession failure or
+   * sessionExecute failure both retry via the one-shot `/execute`
+   * endpoint, log a warning, and (for sessionExecute) drop the stale
+   * session id so the next call can recreate.
+   */
+  private async runSandboxToolCall(
+    args: Record<string, unknown>,
+    sandboxSessions: Map<string, string>,
+    createdSessionIds: string[],
+    userEnvVars: Record<string, string> | undefined,
+  ): Promise<ToolCallResult> {
+    const script = (args.script as string) ?? "";
+    const language = (args.language as string) ?? "python";
+    const outputType = (args.output_type as "text" | "file") ?? "text";
+    // #721 — user-provided env values always win over what the model
+    // supplied in `args.env`. Since #721 we no longer feed the actual
+    // env *values* into the developer message; the model only sees
+    // placeholder shapes (`KEY=<provided-server-side>`) and is told
+    // to reference them by name. Here we replace whatever the model
+    // emitted with the real values for any key the user supplied,
+    // closing the leak path where a chat-completion provider could
+    // serialize the tool call as assistant text and echo the env
+    // back to the user. Keys the model added that aren't in
+    // `userEnvVars` ride through unchanged (the model legitimately
+    // sets ad-hoc env like sentinel markers).
+    const env: Record<string, string> = {
+      ...((args.env as Record<string, string>) ?? {}),
+      ...(userEnvVars ?? {}),
+    };
+    const dependencies = (args.dependencies as string[]) ?? [];
+    const retrieveFiles = (args.retrieve_files as string[]) ?? [];
+    const inputFiles = (args.input_files as Array<{ path: string; content: string }>) ?? [];
+    // #819 — coerce + clamp the model-supplied timeout before it reaches the
+    // sandbox client. Computed once here; flows into the session path and both
+    // one-shot fallbacks, so this is the single chokepoint for this value.
+    // Non-numeric / NaN falls back to the documented 60s default.
+    const rawTimeout = Number(args.timeout_secs);
+    const timeoutSecs = Number.isFinite(rawTimeout)
+      ? Math.min(600, Math.max(1, Math.trunc(rawTimeout)))
+      : 60;
+
+    let sessionId = sandboxSessions.get(language);
+
+    if (!sessionId) {
+      try {
+        const session = await this.sandboxClient.createSession({
+          language,
+          dependencies,
+          env,
+          inputFiles,
+          // 10 min covers a typical multi-round playground session; the
+          // server also bumps last_used_at on each execute, so an
+          // active chat won't expire mid-conversation.
+          ttlSecs: 600,
+          networkEnabled: true,
+        });
+        sessionId = session.session_id;
+        sandboxSessions.set(language, sessionId);
+        createdSessionIds.push(sessionId);
+        logger.info(
+          { language, sessionId, deps: dependencies.length },
+          "Sandbox session created for chat",
+        );
+      } catch (err) {
+        logger.warn(
+          { language, err: (err as Error).message },
+          "createSession failed — falling back to one-shot execute",
+        );
+        return await this.runSandboxOneShot({
+          script, language, outputType, env, dependencies,
+          retrieveFiles, inputFiles, timeoutSecs,
+        });
+      }
+    }
+
+    try {
+      const result = await this.sandboxClient.sessionExecute(sessionId, {
+        script,
+        language,
+        outputType,
+        env,
+        inputFiles,
+        retrieveFiles,
+        timeoutSecs,
+      });
+      return formatSandboxResult(result);
+    } catch (err) {
+      logger.warn(
+        { sessionId, language, err: (err as Error).message },
+        "sessionExecute failed — dropping session and falling back to one-shot",
+      );
+      sandboxSessions.delete(language);
+      return await this.runSandboxOneShot({
+        script, language, outputType, env, dependencies,
+        retrieveFiles, inputFiles, timeoutSecs,
+      });
+    }
+  }
+
+  /**
+   * One-shot fallback path used when session APIs are unavailable.
+   * Matches the legacy pre-#531 behaviour exactly so a broken sandbox
+   * session layer never makes the playground worse than it was.
+   */
+  private async runSandboxOneShot(params: {
+    script: string;
+    language: string;
+    outputType: "text" | "file";
+    env: Record<string, string>;
+    dependencies: string[];
+    retrieveFiles: string[];
+    inputFiles: Array<{ path: string; content: string }>;
+    timeoutSecs: number;
+  }): Promise<ToolCallResult> {
+    try {
+      const result = await this.sandboxClient.execute(params);
+      return formatSandboxResult(result);
+    } catch (err) {
+      logger.error(
+        {
+          language: params.language,
+          scriptLen: params.script.length,
+          err: (err as Error).message,
+        },
+        "Sandbox one-shot execute failed",
+      );
+      return { text: formatSandboxError(err), files: [] };
+    }
   }
 
   /**
@@ -416,11 +715,25 @@ export class PlaygroundChatService {
       lines.push("");
     }
 
-    // Add user-provided env vars
+    // #721 — list ONLY the env var NAMES the user provided values for,
+    // never the values themselves. If the model ever echoes the
+    // developer message back (as it can do when chat-completion
+    // providers serialize `execute_in_sandbox` to assistant text
+    // instead of a structured tool call), the transcript would leak
+    // the user's secret. The server-side path (`runSandboxToolCall`)
+    // injects the real values into the sandbox env at execution
+    // time — the LLM never needs the literal value to issue the
+    // tool call.
     if (envVars && Object.keys(envVars).length > 0) {
       lines.push("### User-provided Environment Variables");
-      for (const [key, value] of Object.entries(envVars)) {
-        lines.push(`- ${key}=${value}`);
+      lines.push(
+        "The user has supplied values for the variables below. Reference each",
+        "by name when constructing `execute_in_sandbox`'s `env` argument —",
+        "the runtime will inject the real values server-side. DO NOT attempt to",
+        "guess, repeat, or echo the values; you do not have them.",
+      );
+      for (const key of Object.keys(envVars)) {
+        lines.push(`- ${key}=<provided-server-side>`);
       }
       lines.push("");
     }

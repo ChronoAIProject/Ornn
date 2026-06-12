@@ -68,7 +68,7 @@ Content-Type: application/problem+json
 X-Request-ID: req_01HXYZ...
 
 {
-  "type": "https://github.com/ChronoAIProject/Ornn/blob/main/docs/errors.md#validation_error",
+  "type": "https://github.com/ChronoAIProject/Ornn/blob/main/docs/ERRORS.md#validation_error",
   "title": "Validation failed",
   "status": 400,
   "detail": "Request body failed validation",
@@ -88,14 +88,18 @@ Optional: `detail`, `errors[]`.
 | Code | HTTP | Meaning |
 |---|---|---|
 | `validation_error` | 400 | Body / query / path param validation failed — details in `errors[]` |
+| `invalid_zip` | 400 | Uploaded payload is not a parseable ZIP (malformed / unreadable) |
 | `unsupported_media_type` | 415 | Request `Content-Type` not accepted |
 | `payload_too_large` | 413 | Upload exceeds max size |
+| `uncompressed_too_large` | 413 | Uncompressed size or compression ratio of skill ZIP exceeds caps (zip-bomb guard) |
+| `too_many_files` | 413 | Skill ZIP entry count exceeds `MAX_PACKAGE_FILE_COUNT` |
 | `authentication_required` | 401 | No valid identity |
 | `permission_denied` | 403 | Authenticated but lacks required permission |
 | `resource_not_found` | 404 | Target resource does not exist or not visible to caller |
 | `resource_conflict` | 409 | State conflict (duplicate, concurrent modification, etc.) |
 | `rate_limited` | 429 | Caller exceeded rate limit |
 | `upstream_unavailable` | 502 / 503 | Dependency (NyxID, LLM, sandbox, ...) failed |
+| `org_membership_unavailable` | 503 | NyxID org-membership lookup unresolved — forwarded token absent or lookup failed. Retryable |
 | `internal_error` | 500 | Unhandled server error |
 
 New codes require convention-doc update. Handlers MUST NOT invent ad-hoc codes.
@@ -112,10 +116,10 @@ New codes require convention-doc update. Handlers MUST NOT invent ad-hoc codes.
 Point to GitHub markdown anchors in this repository:
 
 ```
-https://github.com/ChronoAIProject/Ornn/blob/main/docs/errors.md#<code>
+https://github.com/ChronoAIProject/Ornn/blob/main/docs/ERRORS.md#<code>
 ```
 
-A matching `docs/errors.md` must exist with `##` headings per error code (GitHub auto-generates anchors). Zero infra cost; resolves day one. Future migration to a docs domain (`docs.ornn.xyz`) is a one-time redirect configuration; no client changes required.
+The catalog lives in [`docs/ERRORS.md`](ERRORS.md) with `##` headings per code (GitHub auto-generates anchors). Zero infra cost; resolves day one. Future migration to a docs domain (`docs.ornn.xyz`) is a one-time redirect configuration; no client changes required.
 
 ---
 
@@ -154,6 +158,73 @@ Reserved action verbs per resource documented in `ornn-api/src/shared/reservedVe
 - `POST /v1/{resource}/search` — complex queries with structured body (semantic mode, long queries, compound filters).
 
 Both return the same collection shape (`{ items, meta }`).
+
+### 2.5 Skill dependency closure (#968)
+
+```
+GET /v1/skills/{idOrName}/closure[?version=<major.minor>|<dist-tag>]
+```
+
+Resolves the full **transitive** dependency closure of a skill version. A skill declares its direct dependencies in SKILL.md frontmatter via `metadata.depends-on` — an array of `<name-or-guid>@<major.minor>` or `<name>@<dist-tag>` refs (no semver ranges). The endpoint walks that graph and returns every transitive dependency.
+
+- **Auth:** optional. Anonymous callers resolve against public skills only; a public skill that transitively depends on a private skill the caller can't read surfaces that node as `skill_dependency_not_found` (existence not leaked).
+- **Order:** items are returned in deps-first **topological order** — every dependency precedes the dependents that pin it, so installing in array order is always safe. Shared nodes (diamonds) appear exactly once.
+- **Response:** standard collection envelope.
+
+```json
+{
+  "data": {
+    "items": [
+      { "guid": "…", "name": "pdf-tools", "version": "1.0", "skillHash": "…", "depth": 1 },
+      { "guid": "…", "name": "report-gen", "version": "2.3", "skillHash": "…", "depth": 0 }
+    ]
+  },
+  "error": null
+}
+```
+
+- **Errors:** `dependency_cycle` (409) when the graph loops; `dependency_conflict` (409) when one skill is pinned to two versions in the same closure; `skill_dependency_not_found` (404) when a ref doesn't resolve or isn't visible. See `docs/ERRORS.md`.
+
+The same closure is validated at **publish time**: declaring a `depends-on` ref that can't be resolved, forms a cycle, or conflicts fails the create/update before the version is committed.
+
+SDK helpers: `client.resolveClosure(idOrName, { version })` / `client.pullClosure(...)` (TypeScript), `client.resolve_closure(...)` / `client.pull_closure(...)` (Python).
+
+### 2.6 Skillsets (#969)
+
+A **skillset** is a named, versioned, owned, visibility-scoped meta-package that references N member skills and carries a `kind`. One call resolves + delivers the whole set — including each member's dependency closure (§2.5). The ownership / visibility / immutable-versioning model mirrors skills verbatim; permission scopes **reuse** the existing `ornn:skill:{create,read,update,delete}` (see §5.2 — a dedicated `ornn:skillset:*` scope split is a tracked follow-up).
+
+```
+POST   /v1/skillsets                       — create (ornn:skill:create; private by default)
+GET    /v1/skillsets/{idOrName}            — read   (optional auth; anon sees public only)
+GET    /v1/skillsets/{idOrName}/versions   — list versions (optional auth)
+GET    /v1/skillsets/{idOrName}/closure    — one-call resolve (optional auth)
+PUT    /v1/skillsets/{id}                  — publish a new immutable version (ornn:skill:update)
+PUT    /v1/skillsets/{id}/permissions      — visibility / sharing (ornn:skill:update)
+DELETE /v1/skillsets/{id}                  — delete + cascade versions (ornn:skill:delete)
+GET    /v1/skillset-search                 — discovery by kind / tags / scope (optional auth)
+```
+
+- **`kind`:** enum, v1 `{ "generic", "consensus-supported" }` (extensible). Default `generic`. `consensus-supported` is an author **claim** that the members are an independent, comparable set suitable for agent-side consensus — **not a guarantee** (stated honestly; Ornn packages + delivers the set, the agent runs any consensus in its own runtime).
+- **`members`:** 2..N skill refs, each `<name-or-guid>@<major.minor>` or `<name>@<dist-tag>` (the **same** grammar as `depends-on`, §2.5). No nested skillsets in v1 — a skillset references skills only. Validated on publish: every member must resolve to a readable skill version, and the union dependency closure must be conflict-free.
+- **`instructions` (master prompt, #978):** a **REQUIRED**, versioned markdown body telling an agent **HOW** to use the set (orchestration, ordering, which member to pick when). 1..8000 chars (trimmed server-side; a whitespace-only body is rejected). Distinct from `description` (a short ≤1024-char human summary). **Required on BOTH create and publish, with NO carry-forward** — unlike `description`/`kind`/`tags` (which a publish may omit to inherit the prior version's value), every published version must explicitly state its own master prompt. Stored opaque — Ornn does not render, sanitize, template, lint, or search-index it. Surfaced verbatim on `GET /v1/skillsets/{idOrName}` and as a root field on `/closure`.
+- **Create / publish bodies (JSON):**
+
+```json
+POST /v1/skillsets
+{ "name": "review-set", "description": "…",
+  "instructions": "Run pdf-tools first, then feed its output to csv-tools…",
+  "kind": "consensus-supported",
+  "tags": ["review"], "members": ["pdf-tools@1.0", "csv-tools@2.1"], "version": "1.0" }
+```
+
+`GET /v1/skillsets/{idOrName}` returns the detail object including the version's `instructions`.
+
+- **Closure:** `GET /v1/skillsets/{idOrName}/closure` resolves `roots = members` through the **same** §2.5 resolver — the union of all members plus each member's transitive dependency closure, deduplicated and topo-sorted (deps-first). The success body carries the version's master prompt as a **root sibling** of `items`: `{ "data": { "instructions": "…", "items": [ … ] }, "error": null }` (the skill `/skills/:id/closure` envelope stays `{ items }`, unchanged). Same error codes as §2.5: `dependency_cycle` (409), `dependency_conflict` (409), `skill_dependency_not_found` (404). Anonymous callers resolving a public skillset whose member transitively pins a private skill get `skill_dependency_not_found` for that node — existence is not leaked.
+- **Search:** `GET /v1/skillset-search?kind=…&tags=a,b&scope=…` — plain keyword/filter discovery (no semantic / LLM ranking, no facets, no popularity ranking). Cursor pagination per §4.3.
+
+SDK helpers: `client.createSkillset(...)` / `getSkillset(...)` / `publishSkillset(...)` / `setSkillsetPermissions(...)` / `deleteSkillset(...)` / `getSkillsetClosure(...)` / `searchSkillsets(...)` (TypeScript); `client.create_skillset(...)` / `get_skillset(...)` / `publish_skillset(...)` / `set_skillset_permissions(...)` / `delete_skillset(...)` / `resolve_skillset_closure(...)` / `search_skillsets(...)` (Python).
+
+> **Scope follow-up:** skillset endpoints intentionally reuse the `ornn:skill:*` permission scopes in v1 (a skillset is a skill-lifecycle resource). Splitting them into dedicated `ornn:skillset:{create,read,update,delete}` scopes is a tracked follow-up; callers should not assume the reuse is permanent.
 
 ---
 
@@ -327,6 +398,7 @@ Endpoints pick a subset and MAY add endpoint-specific events with the same prefi
 |---|---|
 | `POST /v1/skills/generate` | `generation_start`, `generation_delta`, `generation_validation_error`, `generation_error`, `generation_complete` |
 | `POST /v1/playground/chat` | `chat_start`, `chat_text_delta`, `chat_tool_call`, `chat_tool_result`, `chat_file_output`, `chat_error`, `chat_finish` |
+| `POST /v1/assistant/chat` | `chat_start`, `chat_text_delta`, `chat_error`, `chat_finish` |
 
 ### 6.3 Transport rules
 
@@ -340,12 +412,14 @@ Endpoints pick a subset and MAY add endpoint-specific events with the same prefi
 
 ## 7. Deprecation
 
+See [`docs/API_STABILITY.md`](API_STABILITY.md) for the public stability commitment, per-route tiers, and the full deprecation lead-time policy. This section codifies the header shape only.
+
 Per RFC 8594 on deprecated endpoints and representations:
 
 ```
 Deprecation: true
 Sunset: Wed, 01 Jan 2027 00:00:00 GMT
-Link: <https://github.com/ChronoAIProject/Ornn/blob/main/docs/deprecations.md#skill-version-v1>; rel="deprecation"
+Link: <https://github.com/ChronoAIProject/Ornn/blob/main/docs/DEPRECATIONS.md#skill-version-v1>; rel="deprecation"
 ```
 
 Free-form notes go in response body, not custom headers. No `X-Skill-Deprecated` style custom headers.
@@ -375,6 +449,22 @@ Every response carries:
 - Every route declares security, request content types, all documented error responses, and at least one example.
 - CI contract test asserts every handler in code appears in the spec with complete metadata.
 - Error `type` URLs point to live documentation per § 1.6.
+
+### 10.1 Skill manifest JSON Schema
+
+The canonical JSON Schema for `SKILL.md` YAML frontmatter is published at:
+
+```
+GET /api/v1/skill-manifest-schema.json
+```
+
+- Generated from the Zod source of truth (`ornn-api/src/shared/schemas/skillFrontmatter.ts`) at server boot — the published schema cannot drift from the runtime validator.
+- Output is JSON Schema **draft-2020-12** (`$schema`) — what current IDEs (VS Code, Cursor, JetBrains) and `schemastore.org` consume.
+- Served with `Content-Type: application/schema+json` (IANA registration). No `{ data, error }` envelope — the body root is the schema document itself, because that's what schema-store tools expect.
+- Public, no auth required. `Cache-Control: public, max-age=3600`.
+- `SKILL_MANIFEST_SCHEMA_VERSION` (currently `"1"`) is bumped manually when the frontmatter contract changes in a way external tooling cares about. Out of an abundance of caution while we're pre-1.0, this version is not yet baked into the URL; consumers should re-fetch on a finite TTL.
+
+Skill authors and tooling SHOULD point their YAML language servers at this URL via `# yaml-language-server: $schema=...` so SKILL.md gets autocomplete + inline validation.
 
 ---
 

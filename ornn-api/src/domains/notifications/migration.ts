@@ -20,11 +20,9 @@
  */
 
 import type { Db } from "mongodb";
-import pino from "pino";
+import { createLogger } from "../../shared/logger";
 
-const logger = pino({ level: "info" }).child({
-  module: "notificationsMigration",
-});
+const logger = createLogger("notificationsMigration");
 
 const ALLOWED_CATEGORIES = [
   "audit.completed",

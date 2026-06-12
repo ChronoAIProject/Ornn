@@ -66,7 +66,9 @@ export function extractFrontmatter(
   if (!match) return null;
 
   try {
-    const raw = parseYaml(match[1]);
+    // FRONTMATTER_REGEX always has capture group 1 when it matches.
+    // `!` is safe under noUncheckedIndexedAccess (#450).
+    const raw = parseYaml(match[1]!);
     if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
 
     const camelized = yamlKeysToCamel(raw as Record<string, unknown>);

@@ -56,7 +56,7 @@ describe("parseVersion", () => {
     } catch (err) {
       expect(err).toBeInstanceOf(AppError);
       expect((err as AppError).statusCode).toBe(400);
-      expect((err as AppError).code).toBe("INVALID_VERSION");
+      expect((err as AppError).code).toBe("invalid_version");
     }
   });
 });

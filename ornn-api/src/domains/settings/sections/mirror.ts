@@ -15,6 +15,7 @@
  */
 import { z } from "zod";
 import { CronExpressionParser } from "cron-parser";
+import { OWNER_RE, REPO_RE } from "../../../shared/githubNaming";
 import type { SectionMeta } from "./index";
 
 /**
@@ -32,6 +33,10 @@ const cronSchedule = z
         CronExpressionParser.parse(s);
         return true;
       } catch {
+        // Intentional silent (#579): the false return becomes a Zod
+        // validation error with the message below — that's the
+        // user-facing signal. Logging the cron-parser exception would
+        // be noisy on every form-validation typo.
         return false;
       }
     },
@@ -40,8 +45,12 @@ const cronSchedule = z
 
 export const mirrorSchema = z.object({
   enabled: z.boolean(),
-  owner: z.string(),
-  repo: z.string(),
+  owner: z.string().refine((v) => v === "" || OWNER_RE.test(v), {
+    message: "must be a valid GitHub owner or empty",
+  }),
+  repo: z.string().refine((v) => v === "" || REPO_RE.test(v), {
+    message: "must be a valid GitHub repo name or empty",
+  }),
   branch: z.string(),
   appId: z.string(),
   installationId: z.string(),

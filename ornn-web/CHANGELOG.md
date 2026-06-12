@@ -1,5 +1,544 @@
 # ornn-web
 
+## 0.11.0
+
+### Minor Changes
+
+- [#950](https://github.com/ChronoAIProject/Ornn/pull/950) [`7186430`](https://github.com/ChronoAIProject/Ornn/commit/71864301b7abe40b03f5c4307eabca6d69426622) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - feat(web): interactive skill-lifecycle orbital ring on the landing hero
+
+  Overlay an orbital "skill lifecycle" ring on the looping hero video: eight
+  agent-facing stages (search → preview → audit → install → execute → build →
+  publish → share, and back to search) around a hairline circle, with an ember
+  comet orbiting clockwise to signal the loop. Hovering / focusing / tapping a
+  stage ignites the node, draws a connector to the centre, and morphs the hub
+  into a detail card (agent-API hint + CTA) for that stage. Dark + light themes,
+  reduced-motion fallback, mobile tap support, and EN + ZH copy.
+
+  Also replace the two centred landing announcement modals with a single global
+  announcement banner: a collapsed top-right headline pill that expands on hover
+  into a dismissable stack, aggregating the hardcoded launch announcement and the
+  dynamic announcements, shown on every page.
+
+### Patch Changes
+
+- [#933](https://github.com/ChronoAIProject/Ornn/pull/933) [`cb2a3b5`](https://github.com/ChronoAIProject/Ornn/commit/cb2a3b544b9a9ba230a3eb8a2c686ee70bcf3715) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Enforce per-package line-coverage floors (api 75%, web 12% ratchet) and split the pooled Codecov flag ([#889](https://github.com/ChronoAIProject/Ornn/issues/889))
+
+- [#955](https://github.com/ChronoAIProject/Ornn/pull/955) [`523e247`](https://github.com/ChronoAIProject/Ornn/commit/523e247bcba32240c34213af575b06c8dbd38f55) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Fix version delete/deprecation 404 when Skill Detail is opened by name: the GUID-only version-write routes now always receive the skill GUID on the wire while cache invalidation stays keyed on idOrName ([#750](https://github.com/ChronoAIProject/Ornn/issues/750))
+
+- [#956](https://github.com/ChronoAIProject/Ornn/pull/956) [`c287305`](https://github.com/ChronoAIProject/Ornn/commit/c287305054b745e6510c808bd78e257bcaa06a0f) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Notification bell dropdown now refetches the list when opened, so a new broadcast reflected in the badge also appears in the list without a manual refresh ([#751](https://github.com/ChronoAIProject/Ornn/issues/751))
+
+- [#959](https://github.com/ChronoAIProject/Ornn/pull/959) [`7d89852`](https://github.com/ChronoAIProject/Ornn/commit/7d89852e289f4a8b9663d023d06472c4dc4c8716) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - skill timestamps (registry card, version list, detail page) now follow the active UI language — Chinese mode no longer shows English month names ([#752](https://github.com/ChronoAIProject/Ornn/issues/752))
+
+- [#932](https://github.com/ChronoAIProject/Ornn/pull/932) [`92b5622`](https://github.com/ChronoAIProject/Ornn/commit/92b56227d05ccc292bfe5570420ddf0a0e596119) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Resolve all 65 ESLint warnings with proper type/effect/ref fixes; compiler-only rules off pending react-compiler ([#888](https://github.com/ChronoAIProject/Ornn/issues/888))
+
+- [#957](https://github.com/ChronoAIProject/Ornn/pull/957) [`72b14b5`](https://github.com/ChronoAIProject/Ornn/commit/72b14b562ee7f06c94723bc3b1b33661816a1180) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Deleting a skill now removes its detail/versions cache (predicate covers name- and guid-keyed entries) so the page no longer refetches the deleted skill → 404 ([#940](https://github.com/ChronoAIProject/Ornn/issues/940))
+
+- [#958](https://github.com/ChronoAIProject/Ornn/pull/958) [`7e64cc9`](https://github.com/ChronoAIProject/Ornn/commit/7e64cc993d9d83ad612d8eb35032604715ed97c7) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Deleting a skill now also refreshes the My-Skills filter-sidebar facet + grants-summary counts so they stay consistent without a full-page refresh ([#941](https://github.com/ChronoAIProject/Ornn/issues/941))
+
+- [#927](https://github.com/ChronoAIProject/Ornn/pull/927) [`8d99819`](https://github.com/ChronoAIProject/Ornn/commit/8d9981909609601223ea4dc55ccd86a62e542679) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Honest vitest coverage config: v8 provider, all-files reporting over src/\*\* with justified excludes ([#884](https://github.com/ChronoAIProject/Ornn/issues/884))
+
+- [#928](https://github.com/ChronoAIProject/Ornn/pull/928) [`55187a3`](https://github.com/ChronoAIProject/Ornn/commit/55187a3317153a3130a51aa8de48ff4317260f8a) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Cover web utils and lib modules; drop two dead formatter exports ([#885](https://github.com/ChronoAIProject/Ornn/issues/885))
+
+- [#929](https://github.com/ChronoAIProject/Ornn/pull/929) [`f288580`](https://github.com/ChronoAIProject/Ornn/commit/f2885806d59e809a97b6677b6b9a5d6872188ad2) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Cover form and skeleton components; remove dead FileUpload and unused skeleton variants ([#886](https://github.com/ChronoAIProject/Ornn/issues/886))
+
+- [#930](https://github.com/ChronoAIProject/Ornn/pull/930) [`80ed642`](https://github.com/ChronoAIProject/Ornn/commit/80ed6424d405b1c7df93582274e1103f54dbd5db) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Raise page/feature component coverage; drop a dead type re-export ([#887](https://github.com/ChronoAIProject/Ornn/issues/887))
+
+- [#939](https://github.com/ChronoAIProject/Ornn/pull/939) [`5e61028`](https://github.com/ChronoAIProject/Ornn/commit/5e61028db5a79bf47eec6ed47fa05c252c44e99f) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Backfill per-component reset/derivation tests for the [#888](https://github.com/ChronoAIProject/Ornn/issues/888) effect refactors ([#931](https://github.com/ChronoAIProject/Ornn/issues/931))
+
+## 0.10.2
+
+### Patch Changes
+
+- [#898](https://github.com/ChronoAIProject/Ornn/pull/898) [`a88e866`](https://github.com/ChronoAIProject/Ornn/commit/a88e866d13b6bbee0622611b2a1e093964da09f2) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Landing hero video: re-render caption-free (pure animation, no burned-in text overlays), motion-interpolate 30 → 60 fps, and ship a true 16:9 1080p frame — the old 2.4:1 canvas baked blurred letterbox bars into the pixels, which read as empty side gutters on wide viewports. object-cover now always fills the screen with real content.
+
+## 0.10.1
+
+### Patch Changes
+
+- [#871](https://github.com/ChronoAIProject/Ornn/pull/871) [`47683b0`](https://github.com/ChronoAIProject/Ornn/commit/47683b02f8a5a9695b2fc80a0ce48b19f3ff242c) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Fix the landing hero video freezing on phones and other devices. The 4K upscale shipped an H.264 Level 6.0 / 5184px-wide asset that exceeds the hardware decoder limits of phones and most laptops, so the hero stayed stuck on the poster frame everywhere except the author's desktop. Reverted the video and poster to a universally-decodable 1080p encode (2592×1080, H.264 High Level 5.0), so the intro now autoplays for everyone.
+
+## 0.10.0
+
+### Minor Changes
+
+- [#843](https://github.com/ChronoAIProject/Ornn/pull/843) [`866d809`](https://github.com/ChronoAIProject/Ornn/commit/866d809b872654d056d2fa0a342caa36ff6fa597) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Replace the scroll-scrub landing hero with a full-bleed, autoplaying, muted, looping background intro video (static poster under reduced-motion).
+
+### Patch Changes
+
+- [#861](https://github.com/ChronoAIProject/Ornn/pull/861) [`ac9fd33`](https://github.com/ChronoAIProject/Ornn/commit/ac9fd33ef0951c2c20cc127b7a49aa73ab7a65e3) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Fix landing hero text being clipped at short/wide viewport ratios: re-encode the intro video + poster to a 2.4:1 canvas (blurred-scene edge fill) so the burned-in captions survive object-cover cropping, and drop the min-height that forced the hero past the viewport. Video stays full-bleed.
+
+- [#863](https://github.com/ChronoAIProject/Ornn/pull/863) [`9016efb`](https://github.com/ChronoAIProject/Ornn/commit/9016efbe3bdec9434a55f23bed8fcf110ff1276f) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Upscale the landing hero intro video + poster to 4K (5184×2160, AI-upscaled from the 1080p master via Real-ESRGAN, ~64MB) for crisper rendering on retina/4K displays. No layout change — the 2.4:1 canvas + object-cover framing from the previous fix is preserved.
+
+## 0.9.1
+
+### Patch Changes
+
+- [#760](https://github.com/ChronoAIProject/Ornn/pull/760) [`46ff335`](https://github.com/ChronoAIProject/Ornn/commit/46ff335a742200a5462faaf1350ada41da3c7a1e) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Fix hosted CORS failure blocking skill save / update / version-deprecation ([#732](https://github.com/ChronoAIProject/Ornn/issues/732)). `skillApi.ts` set `credentials: "include"` on three raw-fetch calls (`createSkill`, `updateSkillPackage`, `setSkillVersionDeprecation`). These authenticate with the `Authorization: Bearer` header, never cookies, so the flag was unnecessary — and fatal: a credentialed request forbids a wildcard `Access-Control-Allow-Origin: *`, which the NyxID proxy returns, so the browser blocked every request at the CORS layer with "Failed to fetch". [#528](https://github.com/ChronoAIProject/Ornn/issues/528) only removed the dead `X-User-*` headers and [#709](https://github.com/ChronoAIProject/Ornn/issues/709) cleared the same trap in `activityApi.ts`; the `skillApi.ts` siblings were missed. Dropping `credentials: "include"` restores hosted skill creation, package update, and version deprecation.
+
+## 0.9.0
+
+### Patch Changes
+
+- [#742](https://github.com/ChronoAIProject/Ornn/pull/742) [`8f05f5d`](https://github.com/ChronoAIProject/Ornn/commit/8f05f5d3590b1b4f0e6cd02a7560feba2bf66ada) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - `useSectionForm` validation errors now include the offending field path and rephrase length-1 string failures as "is required" instead of the raw `Too small: expected string to have >=1 characters` ([#698](https://github.com/ChronoAIProject/Ornn/issues/698)).
+
+  The shared admin-settings form hook joined `i.message` only when surfacing Zod validation issues. The Mirror section (and every other section that uses `.min(1)` as a required-field gate) ended up emitting a single SectionShell alert that read like:
+
+  > Too small: expected string to have >=1 characters; Too small: expected string to have >=1 characters; Too small: expected string to have >=1 characters; ...
+
+  — with no indication of which fields needed filling.
+
+  Fix: prefix each issue with `path.join(".")`, and for the specific `code: "too_small"` + `type: "string"` + `minimum: 1` triple swap the message to `is required`. Renders as:
+
+  > owner: is required; repo: is required; branch: is required; appId: is required; installationId: is required; appPrivateKey: is required
+
+  — actionable from the alert alone, no schema-by-schema rewrite needed.
+
+  Per-section schemas can still ship their own friendlier messages (`.min(1, "Owner is required")`) — those flow through `i.message` unchanged.
+
+- [#605](https://github.com/ChronoAIProject/Ornn/pull/605) [`8444213`](https://github.com/ChronoAIProject/Ornn/commit/8444213051cc52cc4c091982cf7b4ee33b8ec75a) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Route `apiDelete` through `fetchWithRetry` ([#578](https://github.com/ChronoAIProject/Ornn/issues/578)) so the proactive-refresh / 401-retry / redirect-to-login logic lives in one place instead of being copy-pasted between `GET/POST/PATCH/PUT` and DELETE. Behaviour-equivalent: DELETE still proactively refreshes, retries once on 401, redirects to `/login` if refresh fails, and surfaces non-2xx responses as `ApiClientError`. Only observable difference is the default error code on bodyless failures is now `UNKNOWN_ERROR` instead of `DELETE_FAILED` — that string was a dead default, no caller checks it.
+
+- [#743](https://github.com/ChronoAIProject/Ornn/pull/743) [`acad1a9`](https://github.com/ChronoAIProject/Ornn/commit/acad1a9a3d01b8da6d1749e4f584be7dc4d0c303) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Skill Detail now surfaces a "latest rerun failed" indicator next to the score so a failed audit rerun is no longer invisible ([#718](https://github.com/ChronoAIProject/Ornn/issues/718)).
+
+  Background: `auditSummaryByVersion` returns the latest _completed_ audit per version. When a rerun ends in `failed`, the summary still points at the previous successful record, and Skill Detail renders that stale score — visually identical to "current passing audit". Admins only discovered the failure by opening Audit History.
+
+  Fix: `useSkillDetail` already loads `versionAuditHistory` (newest-first across all statuses) to compute `versionAuditRunning`. Compute one more derived flag from it — `versionAuditLatestFailed = history[0].status === "failed" && newer than the displayed completed audit` — and thread it through to `AuditVerdictPill` as the new `latestRerunFailed` prop. The pill keeps the old completed score (so admins can still see the last-good number) and renders a danger-toned banner directly below: "Latest rerun failed — score above is from the prior audit. Check audit history for details." (`skillDetail.auditLatestFailed`).
+
+  No backend change. The shape `getAudit` returns is unchanged — the gap was that the _latest-of-any-status_ signal was already in hand and just wasn't propagated.
+
+- [#670](https://github.com/ChronoAIProject/Ornn/pull/670) [`e5e4f0c`](https://github.com/ChronoAIProject/Ornn/commit/e5e4f0c7cd6811cf55d6b188a10c2ebedc17ae2a) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Chat composer length cap + counter ([#654](https://github.com/ChronoAIProject/Ornn/issues/654)).
+
+  The Playground + AI-generation chat composer accepted prompts of any length — the live reproducer was 24 000 chars typed, send button still enabled, no warning. Backend caps existed only for message _count_ (100), never message _content_.
+
+  Front-end (`ChatInput.tsx`):
+
+  - `maxLength={32_000}` on the textarea — browser-side hard cap on typing / paste.
+  - Live `<used> / <max>` counter appears once the input crosses 24 000 chars (75 %); stays hidden below that so the composer isn't chromed for normal use.
+  - Counter flips danger-tone + send button disables when content is over the cap (defensive — `maxLength` should make this unreachable, but covers IME / non-browser-paste edge cases).
+  - Imperative `setValue` (used by suggestion-prompt clicks) truncates past the cap so curated copy can't bypass the limit silently.
+
+  Back-end:
+
+  - `playgroundMessageSchema.content` adds `.max(MAX_CHAT_MESSAGE_CHARS)` — rejects with `400 content_too_long` (RFC 7807 envelope).
+  - `skills/generation` JSON path validates prompt length AND each multi-turn message's content length symmetrically — rejects with `400 prompt_too_long` or `400 content_too_long`.
+
+  The 32 000-char ceiling is `~8k tokens` at 4 chars/token. Generous for interactive prompts without enabling whole-novel pastes; the three constants are deliberately duplicated across `ChatInput.tsx`, `playground/routes.ts`, and `skills/generation/routes.ts` with cross-referencing comments so a change in one stays in step with the others.
+
+  Pinned with `ChatInput.test.tsx` (7 assertions covering `maxLength` attribute, counter visibility, send-enable / disable, imperative truncate, empty disabled).
+
+  Closes [#654](https://github.com/ChronoAIProject/Ornn/issues/654).
+
+- [#678](https://github.com/ChronoAIProject/Ornn/pull/678) [`fc84e40`](https://github.com/ChronoAIProject/Ornn/commit/fc84e4012bfca15b7e499770428a189ca31916b8) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Deduplicate concurrent NyxID token-refresh requests ([#631](https://github.com/ChronoAIProject/Ornn/issues/631)).
+
+  `authStore.refreshToken()` could fire 2–4 times within the same millisecond — `apiClient.fetchWithRetry`'s proactive `ensureFreshToken()`, its reactive 401-retry path, the scheduled `startTokenRefresh` `setTimeout`, and the `visibilitychange` handler all converge near the expiry boundary. Each fired its own `POST /oauth/token` with `grant_type=refresh_token`.
+
+  NyxID rotates the refresh token on every successful exchange. The second concurrent caller therefore lost the rotation race and got:
+
+  ```json
+  {
+    "error": "invalid_request",
+    "error_description": "Conflict: Refresh token was concurrently rotated, please retry"
+  }
+  ```
+
+  …which the SPA's `refreshToken` `catch` interpreted as a hard failure: it nulled the access + refresh tokens and surfaced an unexpected logout. Users observed it as "I came back to the tab and got logged out".
+
+  Fix funnels every caller through a single `_refreshInFlight: Promise<void> | null` slot on the store. The first caller stores the promise; subsequent callers `await` the same one. The slot is cleared in `finally` so a later (truly new) refresh starts fresh.
+
+  Slot is excluded from `partialize` — Promises aren't serialisable and the dedup window only matters within a tab's lifetime.
+
+- [#677](https://github.com/ChronoAIProject/Ornn/pull/677) [`dccbdb3`](https://github.com/ChronoAIProject/Ornn/commit/dccbdb37bd6e05ece14db148cb64ab21f82fe608) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Remove dead `X-User-*` headers from skill-create + activity log ([#528](https://github.com/ChronoAIProject/Ornn/issues/528)).
+
+  `createSkill` (POST /api/v1/skills — used by Free / Guided / AI-generated save) and `logActivity` (POST /api/v1/activity/login|logout) still attached `X-User-Email` / `X-User-Display-Name` headers, leftover from a pre-NyxID-proxy auth model where the backend read identity off these headers. The backend hasn't read them in months (identity comes from the proxy-forwarded JWT), and the `apiClient.createHeaders` cleanup that struck the same code from the shared client missed these two raw-`fetch` callers.
+
+  Sending them caused the browser's CORS preflight to ask permission for `X-User-Email` and `X-User-Display-Name`. The backend CORS allowlist is `["Content-Type", "Authorization"]` (`bootstrap.ts:744`), so the preflight response didn't include those headers — the browser then blocked the actual `POST` with a CORS error. End user sees: "Save Skill" never completes, DevTools shows preflight `204` then a `CORS error` on the real request.
+
+  Net change: both callers now send only `Content-Type` + `Authorization` (matching the rest of the SDK), the preflight allow-headers list is fully satisfied, and the real request goes through.
+
+  This is the definitive fix for the `POST /skills` case. The `PUT /skills/:id` case tracked in [#565](https://github.com/ChronoAIProject/Ornn/issues/565) doesn't send `X-User-*` itself, but the parallel login-time `logActivity` failure here was producing a CORS-error toast that could be misattributed to the in-flight PUT — worth re-verifying [#565](https://github.com/ChronoAIProject/Ornn/issues/565) after this lands.
+
+- [#643](https://github.com/ChronoAIProject/Ornn/pull/643) [`7179349`](https://github.com/ChronoAIProject/Ornn/commit/717934960687ca5122c37950980d6bd41a3a3c88) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Ship a `docker-compose.yml` for one-command local dev ([#466](https://github.com/ChronoAIProject/Ornn/issues/466)). Brings up MongoDB, MinIO, `ornn-api`, and `ornn-web` in a single `docker compose up`. README's new "Run Ornn locally (5 minutes)" section and `CONTRIBUTING.md`'s rewritten "Getting set up" tier the prerequisites by what each contributor actually needs:
+
+  - **Unit tests / lint / typecheck:** just Bun + Docker.
+  - **Running the services:** `docker compose up`.
+  - **Full integration with NyxID / chrono-storage / chrono-sandbox / opensandbox:** the existing K8s manifests under `deployment/`.
+
+  NyxID stays out of compose deliberately — mocking the OAuth + JWT-signing path is non-trivial and would either ship a fake or pin to a real staging. Public endpoints (`/livez`, `/api/v1/skill-format/rules`, `/api/v1/skill-manifest-schema.json`, OpenAPI spec) work without auth, which is enough for most contributor flows. Auth-required endpoints need `NYXID_BASE_URL` pointed at your own NyxID instance — same model the existing `deployment/.env.ornn` uses.
+
+  Includes a sample `.env.compose.sample` with the only knob a contributor typically overrides (`ENCRYPTION_KEY`).
+
+- [#659](https://github.com/ChronoAIProject/Ornn/pull/659) [`5b63dbd`](https://github.com/ChronoAIProject/Ornn/commit/5b63dbd013d622d5b59bbc864d64f91f5db669a2) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Decompose DocsPage into 5 colocated components ([#453](https://github.com/ChronoAIProject/Ornn/issues/453)).
+
+  `pages/DocsPage.tsx`: **905 → 303 lines (−67%)**, just over the issue's 300-line target. Five new components under `components/docs/`:
+
+  - `DocsMermaid` (244L) — MermaidBlock + MermaidLightbox + SandboxedSvg + per-theme palettes
+  - `DocsMarkdownComponents` (139L) — `markdownComponents` object for `<ReactMarkdown components={...}>` plus the shared `slugify()` helper
+  - `DocsReleaseAccordion` (139L) — ReleaseAccordion + VersionBadge
+  - `DocsSidebar` (112L) — collapsible left rail
+  - `DocsTableOfContents` (69L) — sticky right minimap
+
+  DocsPage now only carries page state (active doc, scroll-spy active heading, frontmatter parse, copy-doc handler) and the layout shell. Behavior unchanged; 110 web tests still pass.
+
+  Second PR under [#453](https://github.com/ChronoAIProject/Ornn/issues/453) (after SkillDetailPage in [#651](https://github.com/ChronoAIProject/Ornn/issues/651)). PlaygroundPage (813L) still pending its own PR.
+
+- [#623](https://github.com/ChronoAIProject/Ornn/pull/623) [`d39ac3a`](https://github.com/ChronoAIProject/Ornn/commit/d39ac3aa7e73674c232eab7b1bfa6a9e4eff3773) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - **BREAKING:** drop the legacy `ownerId` field from skill responses ([#581](https://github.com/ChronoAIProject/Ornn/issues/581)). The field was a no-op back-compat mirror of `createdBy` for an old "org-as-owner" design that visibility logic no longer consults — `createdBy` + `sharedWithUsers` + `sharedWithOrgs` is the authoritative ownership model.
+
+  Removed from:
+
+  - `ornn-api` — `SkillDocument`, `SkillDetailResponse`, `SkillSearchItem`, repository write path, search service mapping, routes response shape. No DB migration ships; old documents keep the field in storage, code just stops reading it.
+  - `@chronoai/ornn-sdk` (TypeScript) — `SkillDetail.ownerId` dropped.
+  - `ornn-sdk` (Python) — `SkillDetail.owner_id` dropped; `from_dict` tolerates the field appearing on stale responses by ignoring it.
+  - `ornn-web` — `SkillSearchResult.ownerId` dropped.
+
+  Also clears three more dead exports flagged in the same issue:
+
+  - `clients/nyxid/auth.ts` + its colocated test (the `AuthClient` was never mounted — its consumer middleware was deleted earlier).
+  - `INTERNAL_AUTH_HEADER` constant + `ApiKeyInfo` interface (both only referenced by the now-deleted `AuthClient`).
+  - `createErrorHandler` factory (live error handler is `app.onError` in bootstrap; the factory had no callers).
+
+- [#711](https://github.com/ChronoAIProject/Ornn/pull/711) [`caaa74f`](https://github.com/ChronoAIProject/Ornn/commit/caaa74f11a947b3166f4cf10d1448c692398c415) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - EditSkillPage hands the resolved skill GUID to write mutations ([#565](https://github.com/ChronoAIProject/Ornn/issues/565)).
+
+  Background: PR [#586](https://github.com/ChronoAIProject/Ornn/issues/586) tightened the backend's `PUT /skills/:id` and `DELETE /skills/:id` routes to resolve via `skillRepo.findByGuid` only — no fallback to `findByName`. The SPA's owner-edit page route stays human-readable (`/skills/:name/edit`) for shareability, but the page was passing the URL `:id` (the skill name) directly into `useUpdateSkill` / `useUpdateSkillPackage`. The mutations then built `PUT /api/v1/skills/<name>` and the backend returned 404, surfacing on the live cluster as "Failed to update package" with no visible reason.
+
+  End-to-end QA on the local cluster (2026-05-22) confirmed the failure. Owner-edit was 100% broken — every PUT returned `404 skill_not_found`.
+
+  Fix: resolve through `useSkill(id)` first (which accepts name OR GUID) and pass `skill.guid` to both write hooks. The fallback to the URL `:id` only matters on the first paint before skill data arrives; both mutations are gated behind the `isLoading` / `!skill` early returns, so the user can never click a button while the resolved id is still pointing at the name. Same pattern as `useSkillDetail.ts:77`.
+
+  Coverage: new `EditSkillPage.test.tsx` mocks `useSkill` to return `{ guid: "abc-123", name: "my-public-skill" }` and asserts the write hooks both receive `"abc-123"`, not `"my-public-skill"`. The test fails on the pre-fix code.
+
+- [#686](https://github.com/ChronoAIProject/Ornn/pull/686) [`8a766be`](https://github.com/ChronoAIProject/Ornn/commit/8a766be0838bca7b1c939bd8bc7df84b1f10e8bc) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Guided-create env-var input now enforces the 30-item cap inline ([#683](https://github.com/ChronoAIProject/Ornn/issues/683)).
+
+  `runtime-env-var` is capped at 30 in both the frontend frontmatter schema (`shared/schemas/skillFrontmatter.ts`) and the backend Zod schema. The Guided wizard's env-var input was a `MultiValueInput` with no `max` prop, so it defaulted to 50 — the page happily accepted chip 31. Submit-time Zod validation then blocked navigation, but the NEXT button stayed enabled with no inline feedback; users saw "click NEXT, nothing happens".
+
+  Passing `max={30}` to the env-var `MultiValueInput` surfaces the cap in the field header (`N/30`), disables the input at the cap, and rejects pasted-past-cap input inline with the existing "Maximum 30 values" copy. Runtime dependencies (capped at 50 in both schemas) stay at the default, matching their real limit.
+
+- [#739](https://github.com/ChronoAIProject/Ornn/pull/739) [`08120dc`](https://github.com/ChronoAIProject/Ornn/commit/08120dc44cb00b4e3b2da25acf34bb7fbafa567b) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - `apiClient.handleResponse` now extracts the actionable `error.message` from the legacy `{ data: null, error: { code, message } }` envelope on non-2xx responses, in addition to the RFC 7807 `application/problem+json` shape it already handled ([#694](https://github.com/ChronoAIProject/Ornn/issues/694)).
+
+  Pre-[#694](https://github.com/ChronoAIProject/Ornn/issues/694), `handleResponse` parsed only `body.code / body.detail / body.title` on non-2xx. Several backend domains (LLM provider model sync, settings validation under [#456](https://github.com/ChronoAIProject/Ornn/issues/456), anything still funnelling through `AppError → buildErrorEnvelope`) keep emitting the legacy envelope, so their structured `error.message` was discarded and the frontend surfaced only the generic literal "An unexpected error occurred" — losing actionable detail like `"MODEL_LIST_UNREACHABLE: Provider model-list endpoint failed: …"` or `"INVALID_SETTING: postHogHost: URL host is private/loopback/link-local; set ORNN_URL_ALLOWLIST_CIDR to allow"`.
+
+  Fix: in the non-2xx branch, try `body.error.{code,message}` first (the more actionable shape when present), then fall back to RFC 7807's `body.{code,detail,title}`, then to the generic literal. `ApiClientError.code` and `.message` now carry whichever was richer.
+
+  Out of scope: no new unit test added because the existing module-init chain (`apiClient → authStore → …`) fails to load cleanly in vitest's headless environment without additional setup; the per-domain `onError` callsites already exercise `translateError(err, fallback)` against real `ApiClientError` instances in `pages/admin/settings/*` and `components/skill/*` flows. Manual repro per the issue body (LLM provider sync against an invalid model-list URL; saving PostHog config with a loopback host) is the gate.
+
+- [#663](https://github.com/ChronoAIProject/Ornn/pull/663) [`9374483`](https://github.com/ChronoAIProject/Ornn/commit/9374483fb5fed70a08f5ae12bb9a9a764b811bbd) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Enable `exactOptionalPropertyTypes` on ornn-web ([#657](https://github.com/ChronoAIProject/Ornn/issues/657) part 2).
+
+  Closes the ornn-web half of the deferred work from [#450](https://github.com/ChronoAIProject/Ornn/issues/450). Enabling the flag surfaced 134 errors across ~40 files. Patterns mirror part 1:
+
+  1. **Optional component-prop interfaces widen to `T | undefined`** — UI primitives (Input, Select, Badge, MarkdownEditor), form inputs (TagInput, ToolsInput, MultiValueInput, RuntimeSelect), FileTree + SkillFileViewer + SkillPackagePreview, SkillVersionList + SkillVersionsBrowserModal, SkillHeroStrip + AuditVerdictPill + DeprecationBanner, SectionShell, Toast hooks, SkillCard, ExplorePage's TabButton/FilterSidebar/SystemFilters, GenerationChatMessage CompleteBubble, ChatMessage ToolResultMessage. PageTransition uses conditional spread for motion.div's `exit`.
+
+  2. **Service-layer + hook params widen** — useSkillAnalytics, useSkillPulls, useSkillAuditHistory, useSystemSkills/useSkills/useMySkills/useSharedWithMeSkills, useAdminQuotaUsers, ChatStreamParams, GenerateStreamParams, SkillSearchParams, SkillSearchResult, SkillVersionEntry, ChatDisplayMessage, GrantInput/BulkGrantInput, StartAuditInput, AdminRedemptionCodeFilters, BufferedCall (analytics).
+
+  3. **Settings sections widen via SectionMeta** — `updatedAt`/`updatedBy` accept `T | undefined` so Zod-inferred shapes (Playground, SkillGen, Mirror, NyxId, SkillAudit, Telemetry, Extras) round-trip cleanly.
+
+  4. **One type bridge**: `INK_OVERRIDES as unknown as never` for framer-motion's stricter MotionStyle — custom CSS-variable keys aren't expressible in either CSSProperties or MotionStyle under the stricter flag.
+
+  No behavior change — every fix is a type-only nudge. 110 web tests + 793 backend + 17 sdk = 920 tests pass; typecheck clean.
+
+  Closes [#657](https://github.com/ChronoAIProject/Ornn/issues/657) (both halves now landed).
+
+- [#671](https://github.com/ChronoAIProject/Ornn/pull/671) [`e6df2fc`](https://github.com/ChronoAIProject/Ornn/commit/e6df2fc0e42827d2d07c839ea363bf06afc62423) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Guided creation supporting-file upload now validates duplicate filenames + per-file size ([#655](https://github.com/ChronoAIProject/Ornn/issues/655)).
+
+  The Guided wizard's Step 3 file uploader accepted whatever the user dropped — including a second `run.js` into the same `scripts/` folder (silently stacked, would have produced two entries with the same path in the final ZIP) and a 55 MB blob (no warning, would have blown through the backend's 100 MB total cap on its own).
+
+  Both guards now live inside `FolderFileUpload`'s `handleFileSelect`, so click + drop paths share them:
+
+  1. **Duplicate filename inside the same target folder** → rejected with inline `<name> already exists in <folder>/. Remove it first to replace.` Auto-overwrite would silently drop content the user hadn't intentionally removed; making them hit Remove keeps the action explicit. Cross-folder duplicates stay allowed (different paths in the final ZIP).
+  2. **Per-file size cap of 10 MiB** → rejected with `<name> is <size> — over the 10 MiB per-file limit.` Backend / ZIP pipeline still caps total uncompressed at ~100 MB ([#443](https://github.com/ChronoAIProject/Ornn/issues/443) / [#633](https://github.com/ChronoAIProject/Ornn/issues/633)); 10 MiB per file keeps a single oversize artifact from eating the whole budget and surfaces the cap early.
+
+  Both errors render under the drop zone with `aria-live="polite"`, auto-clear on the next successful upload or folder switch, and explicitly do NOT call `onUpload` — parent state stays untouched on rejection so there's nothing for the user to undo.
+
+  A persistent `Per-file limit: 10 MiB` hint now sits above the file list so the cap is discoverable before the user picks a file.
+
+  i18n: 3 new keys per locale (`guided.fileSizeHint`, `guided.fileTooLarge`, `guided.fileDuplicate`) in EN + ZH.
+
+  Pinned with `FolderFileUpload.test.tsx` (6 assertions covering accept under cap, same-folder dup reject, cross-folder dup allowed, size-cap reject, error-clears-on-success, hint always visible).
+
+- [#675](https://github.com/ChronoAIProject/Ornn/pull/675) [`7aa1710`](https://github.com/ChronoAIProject/Ornn/commit/7aa17106b65c2c4a3c3aa9273aeda1181c14cb29) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Free / ZIP upload no longer shows contradictory "structure is valid" on backend reject ([#652](https://github.com/ChronoAIProject/Ornn/issues/652)).
+
+  When the frontend validator flagged a ZIP as `invalid`, the user could flip `Skip validation` and submit anyway. The backend then rejected (e.g. `SKILL.md not found in package`), the rejection toast fired — but the page banner unconditionally fell back to `valid` and rendered "Skill package structure is valid." on top of the toast.
+
+  `CreateSkillFreePage` now restores `pageState` to the original `validationResult.status` after a failed submit (`invalid` stays `invalid`, `warning` stays `warning`, `valid` stays `valid`). The success banner can never appear on a structure the frontend itself flagged as bad.
+
+- [#602](https://github.com/ChronoAIProject/Ornn/pull/602) [`86c955e`](https://github.com/ChronoAIProject/Ornn/commit/86c955eb72781f8bcf64b39d00487374bff99d44) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Production-mode console silencing for auth + analytics + apiClient + activityApi ([#584](https://github.com/ChronoAIProject/Ornn/issues/584)). Introduces `ornn-web/src/lib/logger.ts` — a `createLogger(tag)` factory that emits via `console` in development and no-ops in production. Replaces the four ad-hoc per-module loggers that previously leaked auth lifecycle metadata (refresh timing, token expiry, user ids) to browser devtools where it persisted across the session. Dev experience unchanged.
+
+- [#710](https://github.com/ChronoAIProject/Ornn/pull/710) [`c500e83`](https://github.com/ChronoAIProject/Ornn/commit/c500e83cdec2e97ef10eafc0c270e41af255502f) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Frontmatter pre-validator surfaces actionable error copy for non-string YAML values ([#649](https://github.com/ChronoAIProject/Ornn/issues/649)).
+
+  PR [#672](https://github.com/ChronoAIProject/Ornn/issues/672) landed the actionable `invalid_type` callbacks on the backend Zod schema at `ornn-api/src/shared/schemas/skillFrontmatter.ts`, but the SPA carries a separate pre-upload validator at `ornn-web/src/utils/skillFrontmatterSchema.ts` that still used bare `z.string()`. The frontend gate fires first on the client, so users who uploaded a SKILL.md with `version: 0.1` (unquoted, YAML → number) still saw the unhelpful default `version: Invalid input` — the backend's friendly message never reached the page.
+
+  Mirrors the backend pattern on the frontend for the six affected fields (`version`, `tag`, `runtime-env-var`, `tool-list`, `runtime`, `runtime-dependency`). Each schema now carries an `error: (issue) => issue.code === "invalid_type" ? issueMessage({ key: "errors.frontmatter.…InvalidType" }) : undefined` callback. Six new i18n keys land in both `en.json` and `zh.json` so Chinese users see localized copy too.
+
+  Author-visible result: uploading a ZIP with `version: 0.1` now shows "version must be a quoted string — write `version: \"0.1\"` in SKILL.md, not `version: 0.1` (YAML parses the unquoted form as a number…)". Existing `versionFormat` / `tagFormat` / `envVarFormat` messages still fire for wrong-shape strings — only the wrong-type path was missing actionable copy.
+
+  Coverage: new `skillFrontmatterSchema.test.ts` pins all six `invalid_type` branches plus three regression-guard cases (string-shape errors still route through the original keys; happy path still parses).
+
+- [#737](https://github.com/ChronoAIProject/Ornn/pull/737) [`efd0f32`](https://github.com/ChronoAIProject/Ornn/commit/efd0f32d9aeb0b712a6918ff5afe2fa9b4e439b9) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - P1 i18n cluster: 6 admin/creation surfaces now follow the active UI language ([#695](https://github.com/ChronoAIProject/Ornn/issues/695), [#696](https://github.com/ChronoAIProject/Ornn/issues/696), [#697](https://github.com/ChronoAIProject/Ornn/issues/697), [#719](https://github.com/ChronoAIProject/Ornn/issues/719), [#722](https://github.com/ChronoAIProject/Ornn/issues/722), [#731](https://github.com/ChronoAIProject/Ornn/issues/731)).
+
+  Background: the global language switch translated the outer chrome but several surfaces leaked English (or in [#731](https://github.com/ChronoAIProject/Ornn/issues/731)'s case, Chinese) literals through `placeholder=`, `aria-label=`, hardcoded JSX text, and Zod inline messages. None of these are user-authored copy; they're application chrome.
+
+  Fixes:
+
+  - **[#731](https://github.com/ChronoAIProject/Ornn/issues/731) Broadcasts list dates**: `BroadcastsPage` rendered `createdAt`/`updatedAt` with `toLocaleString(undefined, ROW_DATE_FMT)`, so `Intl` fell back to the browser locale. Switched the first arg to `i18n.language` (already in scope as `lang`) so the date format follows the Ornn UI language.
+
+  - **[#695](https://github.com/ChronoAIProject/Ornn/issues/695) Guided Create validation errors**: `skillCreateSchemas` had hardcoded English Zod messages (`"Name must be at least 2 characters"`, etc.). Introduced `makeBasicInfoSchema(t)` / `makeContentSchema(t)` factories; messages route through `guided.validation.*` keys. The static `basicInfoSchema` / `contentSchema` exports stay for type derivation and tests. `CreateSkillGuidedPage` memoizes a per-`t` localized schema and passes it to `useForm` so a language switch rebuilds the resolver.
+
+  - **[#696](https://github.com/ChronoAIProject/Ornn/issues/696) Markdown editor (used by Broadcast drawer)**: three hardcoded strings in `MarkdownEditor.tsx` — `"Preview"`, `"Nothing to preview yet..."`, and the Markdown help-text — now route through `markdownEditor.*`. `BroadcastEditDrawer` itself was already fully `t()`-ified.
+
+  - **[#697](https://github.com/ChronoAIProject/Ornn/issues/697) Admin Users table**: column header labels (`Username`, `Email`, `Skills`, `Last active`, `Activities`, `First joined`), the filter placeholder, the empty-state copy (`No users found.`), the row action label (`Grant quota`), the formatted-date null fallback (`Never`), and the sort `aria-label` (`Sort by ${col.label}`) all route through `adminUsersTable.*`. `COLUMNS` moved inside the component as a `useMemo` keyed on `t`.
+
+  - **[#719](https://github.com/ChronoAIProject/Ornn/issues/719) NyxID service binding panel**: `AdvancedOptionsModal` already used `t()` with English string fallbacks for the binding intro, unbound option, unbound description, admin/personal tier labels, empty-state, and force-public warning — but the `nyxidService.*` keys were never added to either JSON. Added the full Chinese set (and codified the English fallback as the official `en.json` entry) so the translations actually resolve at runtime.
+
+  - **[#722](https://github.com/ChronoAIProject/Ornn/issues/722) Admin shell**: `Sidebar` mobile header (`"Navigation"`) and `SettingsNav`'s 9 hardcoded entries (`"LLM Providers"`, `"Playground"`, `"Skill Generation"`, `"GitHub Mirror"`, `"NyxID Integration"`, `"Skill Auditing"`, `"PostHog"`, `"Service Binding List"`, `"Export / Import"`) now route through `sidebar.navigation` / `adminSettingsNav.*`.
+
+  JSON additions: 5 new top-level namespaces in both `en.json` and `zh.json` — `nyxidService`, `markdownEditor`, `adminUsersTable`, `sidebar`, `adminSettingsNav` — plus a `guided.validation` block. No deletions or renames in existing keys.
+
+  Out of scope: `AnnouncementsPage` shares the same `ROW_DATE_FMT, undefined)` pattern as the Broadcasts page; can ride a follow-up since [#731](https://github.com/ChronoAIProject/Ornn/issues/731) only names Broadcasts. Pre-existing `validateSkillFrontmatter [#649](https://github.com/ChronoAIProject/Ornn/issues/649)` test failures (6) are unrelated.
+
+- [#673](https://github.com/ChronoAIProject/Ornn/pull/673) [`38c875b`](https://github.com/ChronoAIProject/Ornn/commit/38c875b646dbfcb2a012ac4084c7e885b96ddc79) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Install-card prompt now pins to the viewed version ([#639](https://github.com/ChronoAIProject/Ornn/issues/639)).
+
+  When a user opened an older skill version (`?version=0.2`) the URL + file viewer correctly switched to that version, but the install card's prompt was still latest-shaped:
+
+  - The pull commands (`nyxid proxy request …/json` + the `curl …/json` line) had no `?version=…`, so an agent following the prompt would silently install `latest` at install time instead of the version the user was actually looking at.
+  - The prompt header didn't mention which version the user had viewed, so even careful agents couldn't tell.
+
+  Fix is end-to-end:
+
+  **Backend (`ornn-api`)**
+
+  - `getSkillJson(idOrName, version?)` now accepts an optional `version` query — literal `<major>.<minor>` OR a dist-tag ([#463](https://github.com/ChronoAIProject/Ornn/issues/463)). When set, the response uses that version's `storageKey` + `metadata`; otherwise the latest package is returned (unchanged behaviour for legacy callers).
+  - Returns a new top-level `version` field so callers can confirm exactly which package they got.
+  - `GET /api/v1/skills/:idOrName/json` reads `?version=` and threads it through. Bad version → `400 invalid_version`; missing version → `404 skill_version_not_found` (RFC 7807). Visibility check unchanged.
+  - Bumped to **minor** because the response shape gains a new field.
+
+  **Frontend (`ornn-web`)**
+
+  - `buildTrySkillPrompt({…, version })` adds `?version=` to both pull URLs (curl + NyxID CLI via `--query version=…`), and to the footer `Ornn URL:`. Header line becomes `# Install Ornn skill: <name> @ <version>` and a "Pinned to version `<X>`" paragraph spells out why the URLs carry the query.
+  - `SkillInstallCard` passes the currently-viewed `skill.version` straight through, so the prompt always matches the page.
+  - No-version callers (theoretical "always pull latest" surfaces) are unaffected — the version is opt-in.
+
+  Pinned with 3 new `buildTrySkillPrompt.test.ts` assertions (version-pinning surfaces, no-pin parity, dist-tag passes through unchanged) and the existing 9 cases re-verified.
+
+- [#609](https://github.com/ChronoAIProject/Ornn/pull/609) [`4bb2587`](https://github.com/ChronoAIProject/Ornn/commit/4bb25875816b49e9269d8221389410ea757110d5) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Replace hardcoded hex literals on the landing pages with design tokens ([#452](https://github.com/ChronoAIProject/Ornn/issues/452)). `PhoneMockup` (bezel edges, side buttons, camera lens) and `AnimatedTerminal` (traffic-light dots, terminal-output green) previously inlined `#1a1713`, `#2a2620`, `#0b1520`, `#3a5060`, `#c94a4a`, `#c9a64a`, `#5a9b5a`, `#7dc97d` in `bg-[…]` / `shadow-[…]` / arbitrary-gradient strings. Adds eight tokens under `@theme` in `neon.css` (`--color-bezel-edge`, `-rim`, `-lens-deep`, `-lens-rim`, `-traffic-{red,amber,green}`, `-terminal-ok`) and rewires both files to use the generated `bg-bezel-edge` / `text-terminal-ok` / `var(--color-…)` utilities. Visual output unchanged.
+
+- [#738](https://github.com/ChronoAIProject/Ornn/pull/738) [`1cb7a4f`](https://github.com/ChronoAIProject/Ornn/commit/1cb7a4f26eb3f857780c350ae184e86dcb62f534) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - `logActivity` no longer sets `credentials: "include"`, unblocking the post-OAuth `POST /api/v1/activity/login` call on the hosted environment ([#709](https://github.com/ChronoAIProject/Ornn/issues/709)).
+
+  The endpoint is Bearer-token-authenticated; it never read cookies. The lone `credentials: "include"` set in `activityApi.ts` (the rest of the SPA's `apiClient` calls never set it) forced the browser to demand `Access-Control-Allow-Credentials: true` plus a specific (non-`*`) `Access-Control-Allow-Origin` on the preflight response. The NyxID proxy doesn't emit those for this endpoint, so the preflight failed and every login on `ornn.chrono-ai.fun` ate a `TypeError: Failed to fetch`. Authenticated GETs through the same proxy keep working because they're simple requests (no preflight) and the rest of the POST endpoints don't set `credentials`.
+
+  Dropping the flag brings this call into line with every other authenticated POST in the SPA and the preflight succeeds.
+
+- [#621](https://github.com/ChronoAIProject/Ornn/pull/621) [`72ae5d3`](https://github.com/ChronoAIProject/Ornn/commit/72ae5d3a300e1c2a3ffb9ce4bd95148fdedd203f) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - **BREAKING:** every error `code` emitted by `/api/v1/*` is now `lowercase_snake_case` per CONVENTIONS.md §1.4 ([#585](https://github.com/ChronoAIProject/Ornn/issues/585)). `SKILL_NOT_FOUND` → `skill_not_found`, `INVALID_BODY` → `invalid_body`, `FORBIDDEN` → `forbidden`, etc. One-for-one lowercase translation: every existing code keeps its specificity, the parent §1.4 catalog (`validation_error`, `permission_denied`, `resource_not_found`, …) is the taxonomy these subcodes hang under. Clients pinned to the old strings need to switch — `docs/ERRORS.md` ships the full migration map.
+
+  Web call sites that branch on specific codes (`AGENTSEAL_DISABLED`, `OLD_REPO_NOT_CONFIRMED`, `AUDIT_NOT_FOUND`) migrated to the lowercase equivalents in the same PR. No code-aware logic in the published SDK code paths today, so SDK consumers only need to update their own catch-by-code handlers.
+
+- [#604](https://github.com/ChronoAIProject/Ornn/pull/604) [`924b88d`](https://github.com/ChronoAIProject/Ornn/commit/924b88daf0fe4bec930a121ebeba12af9e0a3682) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Render Mermaid SVG inside a sandboxed iframe ([#440](https://github.com/ChronoAIProject/Ornn/issues/440)). The DocsPage previously injected the rendered SVG via `dangerouslySetInnerHTML`. Mermaid is the only producer today and its input is trusted in-repo markdown, so this is purely defence-in-depth — but if any future code path ever feeds user-controlled diagram source (e.g. user-authored skill READMEs with mermaid blocks), the strict `sandbox=""` boundary already prevents script execution, form submission, navigation, and storage access. The lightbox pan/zoom transform is owned by the parent `<div>`, so interaction is unchanged.
+
+- [#741](https://github.com/ChronoAIProject/Ornn/pull/741) [`89cbc29`](https://github.com/ChronoAIProject/Ornn/commit/89cbc2992597a7c15990740726f9e6224151bd1f) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - `useNotifications` now polls on the same 30s interval as the unread-count query, so the bell dropdown stays in sync with the badge ([#728](https://github.com/ChronoAIProject/Ornn/issues/728)).
+
+  Background: the bell badge subscribes to `useUnreadNotificationCount` (polled every `UNREAD_POLL_MS` = 30s) and the dropdown list to `useNotifications` (no `refetchInterval`, only `staleTime: 10_000`). When a new targeted broadcast lands, the count poll ticks to `1` and the badge updates — but `useNotifications` only re-fetches on remount/invalidation, so an open (or just-mounted-but-still-fresh) dropdown showed the pre-broadcast list. Users saw "1 unread" + a list that didn't contain it.
+
+  Fix: add `refetchInterval: UNREAD_POLL_MS` to `useNotifications` so the two queries tick together. `refetchIntervalInBackground: false` mirrors the count query — no traffic when the tab is hidden. `staleTime` stays at 10s so quick remounts (e.g. dropdown toggle) still serve cached data without an extra round-trip.
+
+- [#745](https://github.com/ChronoAIProject/Ornn/pull/745) [`8f85c8f`](https://github.com/ChronoAIProject/Ornn/commit/8f85c8f26a3a7cf5ff1d851b902eebaca6852b10) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - P2 UX cluster: four small admin/registry papercuts ([#716](https://github.com/ChronoAIProject/Ornn/issues/716), [#725](https://github.com/ChronoAIProject/Ornn/issues/725), [#727](https://github.com/ChronoAIProject/Ornn/issues/727), [#729](https://github.com/ChronoAIProject/Ornn/issues/729)).
+
+  - **[#716](https://github.com/ChronoAIProject/Ornn/issues/716) Admin Mirror dashboard route**: `/admin/mirror` used to redirect to `/admin/settings/mirror`, and the section's "Open mirror dashboard" link pointed at `/admin/skills`. Net effect: no reachable UI for manual reconcile / status counts. `MirrorPage` (full operations console — counts grid, reconcile button, status header) is now lazy-mounted at `/admin/mirror` again, and the section link points there instead of Admin Skills.
+
+  - **[#725](https://github.com/ChronoAIProject/Ornn/issues/725) Mode-selection cards alignment**: the four mode cards on `/skills/new` share a layout but the description paragraph had no min-height, so a shorter copy (Free Mode) shifted the bullet list up versus its neighbours. Added `min-h-[3rem] sm:min-h-[3.5rem]` to the description `<p>` so all four bullet lists start on the same baseline.
+
+  - **[#727](https://github.com/ChronoAIProject/Ornn/issues/727) Keyword search placeholder lied about tags**: the placeholder advertised "name, description, or tags" but the backend keyword search doesn't match tags (the tag chip facet is the supported path). Updated `search.placeholderKeyword` in both en and zh to drop "or tags" — and the in-component fallback string to match.
+
+  - **[#729](https://github.com/ChronoAIProject/Ornn/issues/729) Shared With Me cards now show the org name**: the access-reason sub-line on `SkillCard` rendered a generic "Via organization" even though `skill.sharedViaOrgId` was already populated. Look it up against `useMyOrgs()`'s membership list and render the new `viaOrganizationNamed` key (`Via {{org}}` / `通过 {{org}} 共享`). Falls back to the old generic copy when the org isn't in the caller's memberships (rare — server only sets `sharedViaOrgId` to an org the caller belongs to, but defence-in-depth).
+
+  Out of scope:
+
+  - **[#723](https://github.com/ChronoAIProject/Ornn/issues/723)** (Notifications page can't scroll past viewport) — needs investigation of `RootLayout`'s `overflow-hidden` policy and any layout regressions adjacent pages might depend on.
+  - **[#726](https://github.com/ChronoAIProject/Ornn/issues/726)** (Registry semantic search with empty query renders the no-skills empty state instead of "enter a description") — needs a small UX state in the search component to distinguish "validation gate hit" from "no matches". Both will follow up.
+
+- [#747](https://github.com/ChronoAIProject/Ornn/pull/747) [`fb7c06b`](https://github.com/ChronoAIProject/Ornn/commit/fb7c06b05e299621bf27ae039ffc121afa528fff) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - P2 follow-up: notifications page can scroll past the viewport and Registry semantic search with an empty query shows an actionable validation message instead of the generic empty state ([#723](https://github.com/ChronoAIProject/Ornn/issues/723), [#726](https://github.com/ChronoAIProject/Ornn/issues/726)).
+
+  - **[#723](https://github.com/ChronoAIProject/Ornn/issues/723)** — `RootLayout`'s `<main>` is `overflow-hidden`; `NotificationsPage` had no own scroll container, so once the list exceeded the viewport, older notifications were clipped and unreachable via wheel/touch scroll. Wrapped the page body in an `h-full overflow-y-auto` shell — same pattern `UploadSkillPage` uses for the same root-layout constraint.
+
+  - **[#726](https://github.com/ChronoAIProject/Ornn/issues/726)** — Registry's semantic-search button could flip on while the input was empty; the backend correctly returned `400 QUERY_REQUIRED` but `ExplorePage` rendered the regular "No public skills match" empty state, indistinguishable from a legitimate zero-result search. Added a `semanticGateUnmet = mode === "semantic" && !query.trim()` check that swaps the empty state for an `EmptyState` with explicit copy: `Enter a search description / Semantic search needs a description of what you're looking for. Type a phrase in the search box above, or switch back to Keyword mode.` (+ Chinese translation). The backend queries keep firing (cheap, cached) but the user sees a clear validation hint instead of a misleading null result.
+
+- [#619](https://github.com/ChronoAIProject/Ornn/pull/619) [`d67d3da`](https://github.com/ChronoAIProject/Ornn/commit/d67d3da474a007ef1f2d7f9638855f0eafdeaafe) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Render a "Skill not found" state on Playground when the API returns 404 ([#563](https://github.com/ChronoAIProject/Ornn/issues/563)). The page previously gated only on `skillLoading` — once loading completed, missing `skill` data still rendered the full playground UI (starter prompts, chat input, ENV drawer chrome) for unauthorized users hitting a private skill's URL directly. Backend already returned `SKILL_NOT_FOUND` via the [#567](https://github.com/ChronoAIProject/issues/567) visibility check; this PR is the matching client gate that doesn't paint the surface when the data isn't allowed. New i18n keys `playground.notFoundTitle` / `playground.notFoundBody` (EN + ZH).
+
+- [#660](https://github.com/ChronoAIProject/Ornn/pull/660) [`e97dfdd`](https://github.com/ChronoAIProject/Ornn/commit/e97dfddcc43881891d76fc7412050ff2f1f6a19f) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Decompose PlaygroundPage into 6 colocated components ([#453](https://github.com/ChronoAIProject/Ornn/issues/453)).
+
+  `pages/PlaygroundPage.tsx`: **813 → 518 lines (−36%)**. Six new components under `components/playground/`:
+
+  - `PlaygroundHelpers` (101L) — pure helpers + `ThinkingBubble` indicator
+  - `PlaygroundEmptyHero` (86L) — centered welcome flag + 3 suggestion chips
+  - `PlaygroundConversation` (109L) — forwardRef: turns + streaming buffer + file outputs + error banner + scroll anchor
+  - `PlaygroundRail` (101L) — fixed right-edge rail with hover-peek + click-to-pin
+  - `PlaygroundEnvDrawerBody` (81L) — per-key input list + lock hint
+  - `PlaygroundPackageDrawerBody` (79L) — SkillPackagePreview + registry-link footer
+
+  PlaygroundPage now carries state plumbing (hooks for skill / package / chat / quota), the drawer outer container, the composer (ChatInput + ModelPicker + QuotaInline), and the early-return states (no-skill / loading / 404 / over-limit). The suggested `usePlaygroundSession()` hook extraction is deferred — would pull queries / chat state / handlers out and likely bring the page under 300L, but the data flow doesn't bisect into a small commit.
+
+  Closes the page-component portion of [#453](https://github.com/ChronoAIProject/Ornn/issues/453) (SkillDetailPage in [#651](https://github.com/ChronoAIProject/Ornn/issues/651), DocsPage in [#659](https://github.com/ChronoAIProject/Ornn/issues/659), this PR). Issue stays open for the deferred hook-extraction work.
+
+- [#676](https://github.com/ChronoAIProject/Ornn/pull/676) [`2033791`](https://github.com/ChronoAIProject/Ornn/commit/20337911f2a7ee08d41dc96e029c580c00e5244d) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Fix three Playground / Skill-Gen quota refresh races ([#629](https://github.com/ChronoAIProject/Ornn/issues/629) + [#630](https://github.com/ChronoAIProject/Ornn/issues/630) + [#624](https://github.com/ChronoAIProject/Ornn/issues/624)).
+
+  All three were the same family of "the chrome and the truth disagree":
+
+  - **[#629](https://github.com/ChronoAIProject/Ornn/issues/629)** — `QuotaInline` warning banner and `QuotaSummary` row both rendered `Math.round((used / ceiling) * 100)`. With `used=199, ceiling=200, remaining=1`, that's `99.5 → 100%` even though the chip next to it showed `1 Playground calls left`. New shared `displayUsagePercent(used, ceiling, remaining)` uses `Math.floor`, clamps to `[0, 99]` whenever `remaining > 0`, and only returns `100` when `remaining <= 0`. Pinned with 6 unit assertions.
+  - **[#630](https://github.com/ChronoAIProject/Ornn/issues/630)** — `usePlaygroundChat`'s `finish` / `error` handlers didn't invalidate `MY_QUOTA_KEY`. The page kept showing the pre-charge snapshot for up to 60 seconds (the next poll). Added `qc.invalidateQueries({ queryKey: MY_QUOTA_KEY })` on both terminal events so the chip / banner / over-limit gate reflect the actual remaining count immediately.
+  - **[#624](https://github.com/ChronoAIProject/Ornn/issues/624)** — `CreateSkillGenerativePage` (and `PlaygroundPage`) routed to `OverLimitPage` whenever `isOverLimit` flipped true, even if the user had a generated result / live conversation on screen. The post-charge quota poll arriving after the _final_ allowed run would yank the result away. Now the over-limit redirect only fires on a _fresh_ arrival (no preview / no messages); the Send button's existing `isOverLimit` disable still prevents new runs.
+
+  Net effect: the user's last allowed run lands, the result stays visible, the chip flips to 0/N right away, and the banner copy stops contradicting the chip.
+
+- [#601](https://github.com/ChronoAIProject/Ornn/pull/601) [`c0b4716`](https://github.com/ChronoAIProject/Ornn/commit/c0b47161eaf9e4cf19010c4660cca257ec9419d0) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Document or replace `key={i}` on `Array.map` lists across the web app ([#451](https://github.com/ChronoAIProject/Ornn/issues/451)). Every site flagged in the audit was reviewed: positional lists that never reorder (skeleton cards, OTP cells, code-editor line numbers, table skeletons) keep `key={i}` but now carry a one-line comment so a future audit doesn't churn the file. Data-driven lists that can re-shape (RootLayout breadcrumbs, CreateSkillFreePage validation messages) switch to composite keys that include the data identity, so reconciliation doesn't preserve hover/focus state on the wrong element when the source array changes shape.
+
+- [#674](https://github.com/ChronoAIProject/Ornn/pull/674) [`1cbe0ea`](https://github.com/ChronoAIProject/Ornn/commit/1cbe0ea4bbcbef8a9812b65130cf9d84def5dc74) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Replace the BroadcastsPage recipients tooltip with a real popover ([#507](https://github.com/ChronoAIProject/Ornn/issues/507)).
+
+  The recipients column rendered the email list inside the native HTML `title` attribute as a `\n`-joined string. That broke two ways:
+
+  - **Safari** collapses `\n` to a single space inside `title`, so all emails ran together as one unreadable line.
+  - **All browsers** truncate / flicker the multi-line native tooltip past ~20 entries — long broadcast lists were unusable.
+
+  Replaced with an inline `RecipientsPopover` that mirrors `CategoryTooltip`'s pattern: hover OR click opens, click-outside / Esc / second-click closes, `aria-expanded` reflects state. The list is `max-h-64 overflow-y-auto` so 20+ recipients stay readable. Component is kept inline (BroadcastsPage is the only consumer) — promoting to `components/ui/` would be premature.
+
+  Kept the inline anchor as a `<button>` rather than a `<span>` so it's keyboard-focusable + screen-reader-announceable.
+
+- [#687](https://github.com/ChronoAIProject/Ornn/pull/687) [`837933a`](https://github.com/ChronoAIProject/Ornn/commit/837933a760479edf6b34ca8e7d0f10915376f768) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Registry page now respects Chinese locale across every tab ([#682](https://github.com/ChronoAIProject/Ornn/issues/682)).
+
+  Two classes of bug, both mass-bleeding English copy into the Chinese UI:
+
+  **Class 1 — keys called from source never existed in either locale file.** `ExplorePage.tsx` reads `t("explore.filterTags", "Tag")`, `t("explore.noServices", "No system services yet.")`, `t("explore.systemSkillsHint", "…")`, etc. through 14 distinct keys that were never added to `en.json` or `zh.json`. Without a matching key in either locale, i18n falls back to the second arg (the English literal) regardless of language. ZH users saw English literals everywhere. Added the missing keys to BOTH locale files. Also renamed the source's two intro paragraphs (`systemSkillsHint` → `systemSkillsIntro`, `sharedHint` → `sharedWithMeIntro`) to match the new canonical key names so future readers don't trip on the legacy fallback-only labels.
+
+  **Class 2 — literal strings never wired through i18n.** `SearchBar.tsx` had 5 hardcoded English strings (`Keyword`, `Semantic`, the two placeholders, the two `title=` tooltips). `SkillCard.tsx` had `Public`, `Private`, `Via organization`, `Shared by {name}` baked in. `Pagination.tsx` had `Prev` / `Next` baked in (used on every paginated list — Registry, admin tables, lifetime drawer). All converted to `t("…")` calls; new keys added to both locale files; `Public` / `Private` / `Prev` / `Next` reuse the existing `common.*` keys (already translated in ZH).
+
+  Net result: Registry page reads end-to-end Chinese in ZH mode — search bar, all four tabs' filter headings + empty states, skill-card badges, and pagination. Product names (`NyxID`) stay untranslated per the issue's guidance. Date formatting is not addressed here — Intl `toLocaleString` already respects the system locale on the browser side; the calling pages set their own `locale` param if they want to force `zh-CN`.
+
+  139 / 0 fail ornn-web tests; typecheck clean.
+
+- [#625](https://github.com/ChronoAIProject/Ornn/pull/625) [`cfedcec`](https://github.com/ChronoAIProject/Ornn/commit/cfedcec05c9726d8c3f1fe8b681672ab8a78cc6b) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - **BREAKING:** error responses now ship as RFC 7807 `application/problem+json` per CONVENTIONS.md §1.3 ([#456](https://github.com/ChronoAIProject/Ornn/issues/456)). The legacy `{ data: null, error: { code, message } }` envelope is gone on error paths; the fields live at the body root now:
+
+  ```http
+  HTTP/1.1 404 Not Found
+  Content-Type: application/problem+json
+
+  {
+    "type": "https://github.com/ChronoAIProject/Ornn/blob/main/docs/ERRORS.md#skill_not_found",
+    "title": "Resource not found",
+    "status": 404,
+    "detail": "Skill 'foo' not found",
+    "instance": "/v1/skills/foo",
+    "code": "skill_not_found",
+    "requestId": "req_01HXYZ..."
+  }
+  ```
+
+  Success responses keep the `{ data, error: null }` envelope — only errors change.
+
+  `buildProblemJsonBody` helper added to `shared/types/index.ts`; bootstrap and every per-domain test stub use it so wire shape can never drift between dev and CI. Both SDKs (TS + Python) and `ornn-web`'s `apiClient` parse the new shape; error tests across all three pin the new fixture.
+
+- [#651](https://github.com/ChronoAIProject/Ornn/pull/651) [`a3476ac`](https://github.com/ChronoAIProject/Ornn/commit/a3476ac27d914466f3f1406a4ccdffd3254f0892) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - First-pass decomposition of `SkillDetailPage` ([#453](https://github.com/ChronoAIProject/Ornn/issues/453)).
+
+  `SkillDetailPage.tsx` was 1133 lines — well over the 300-line target the issue sets. This PR pulls 7 self-contained chunks into colocated components under `components/skill/`:
+
+  - `SkillSaveConfirmModal` — save-with-skip-validation toggle
+  - `SkillDeleteConfirmModal` — whole-skill delete confirmation
+  - `SkillAuditStartedModal` — post-audit-kickoff acknowledgement
+  - `SkillVersionsBrowserModal` — all-versions list + Compare button + per-row delete toast
+  - `AuditVerdictPill` — right-rail audit verdict tile (3 visual states)
+  - `SkillDetailStates` — loading skeleton + 404 not-found shells
+  - `SkillVersionsCard` + `SkillVisibilityCard` — right-rail cards
+
+  Net: `SkillDetailPage.tsx` from **1133 → 868 lines** (-23%). 9 new component files at 41-124 lines each.
+
+  Behavior unchanged. Each new component is stateless except for the toast-emitting delete handler inside the versions browser (kept colocated so the parent doesn't need to thread it through). All 110 frontend tests still pass; typecheck clean.
+
+  Per the issue's "one PR per page" guidance, DocsPage (901L) and PlaygroundPage (813L) get their own PRs. A follow-up will also extract the `useSkillDetail()` hook to pull the queries / mutations / derived state out of the page entirely — that's the biggest remaining lever, but the data flow is too entangled with the JSX layout to bisect cleanly in this PR.
+
+- [#748](https://github.com/ChronoAIProject/Ornn/pull/748) [`3bfc7a0`](https://github.com/ChronoAIProject/Ornn/commit/3bfc7a031aa40abe407f0911f7b4aa38415010e7) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Stale share-target grants are now visible-but-flagged in the Permissions modal, and `skill-search?scope=shared-with-me` defensively drops results pointing at orgs the caller is no longer in ([#720](https://github.com/ChronoAIProject/Ornn/issues/720)).
+
+  **Backend (`SearchService.search`):** after `enrichItem` builds the items, when `scope === "shared-with-me"` a zero-trust pass drops any item whose `myAccessReason === "shared-via-org"` but whose `sharedViaOrgId` isn't in the caller's current `userOrgIds`. `applyScope` already gates this at the DB layer, so this is defence-in-depth against cache lag / partially-replicated writes / future query regressions — and a `warn`-level Pino entry tags any drop so data drift is visible.
+
+  **Frontend (`PermissionsModal`):**
+
+  - Orgs: `fetchOrgSummary` previously back-filled a `null` lookup with the raw org id as the display name, silently hiding the staleness. Now each entry carries `isUnresolved: boolean` (true when NyxID can't resolve the id). Unresolved rows render with a warning-toned row background, an "unresolved" badge with a triangle icon, and a tooltip pointing the owner at the uncheck box to revoke. Click-to-revoke flows through the existing `toggleOrg` path.
+  - Users: when `resolveUsers` doesn't return a row for an id, the placeholder `{ userId, email: "", displayName: userId }` survives — that signal now drives a danger-toned chip + triangle icon + tooltip explaining the user is gone, with the existing `×` button revoking.
+
+  Net effect: owners see exactly what they've granted, see which grants point at entities that no longer resolve, and can clean them up in two clicks. The `skill-search` zero-trust filter ensures the calling user never sees a shared-with-me skill they can't actually open even if the underlying DB / cache disagrees with effective org membership.
+
+- [#658](https://github.com/ChronoAIProject/Ornn/pull/658) [`3eeb787`](https://github.com/ChronoAIProject/Ornn/commit/3eeb7875775ca37faa823c627e6570dbead757cc) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Enable stricter TS flags across all three packages ([#450](https://github.com/ChronoAIProject/Ornn/issues/450)).
+
+  [#450](https://github.com/ChronoAIProject/Ornn/issues/450) part 1 (`noImplicitOverride`) landed in [#638](https://github.com/ChronoAIProject/Ornn/issues/638). This PR closes the bulk of parts 2 + 3:
+
+  - **All 3 packages now have `noUncheckedIndexedAccess: true`.** Array/object bracket access now widens to `T | undefined`, forcing explicit handling. Fix patterns by category:
+
+    - **Length-guarded accesses** — `if (xs.length > 0)` followed by `xs[len-1]`, `findIndex` followed by `arr[idx]`. Marked `!` with a comment naming the guard. Most cases.
+    - **Regex capture groups** — every `match[1]` / `match[2]` followed by a `match` check. Marked `!` with the regex-shape note.
+    - **Defensive `if (!entry)` skips** — `zip.files[path]` where `path` came from `Object.keys(zip.files)`. Switched from `if (entry.dir)` to `if (!entry || entry.dir)` so a future zip-lib refactor that breaks the round-trip drops the file rather than crashes.
+    - **Two non-mechanical fixes**: GenerateSkillModal.STEP_MESSAGES switched from `Record<string, string>` to `as const` (compile-time keys now return `string`, not `string | undefined`); SkillDetailPage.latestVersion now passed as `latestVersion ?? ""`.
+
+  - **SDK only: `exactOptionalPropertyTypes: true`.** The SDK had 4 errors total; all 4 were `{ requestId: undefined }`-style fields that violated the stricter `{ requestId?: string }` contract. Fixed with conditional spread (only set the key when the upstream actually has the value).
+
+  ### Deferred
+
+  `exactOptionalPropertyTypes` on ornn-api (~77 errors) and ornn-web (~134 errors) — tracked as [#657](https://github.com/ChronoAIProject/Ornn/issues/657). These need per-site decisions (conditional spread vs widened field type vs constructor refactor), not mechanical fixes, so they don't fit a single-session PR.
+
+  ### Net
+
+  - 3 tsconfig.json files updated.
+  - ornn-api: 26 files touched (68 fix sites + 1 tsconfig).
+  - ornn-web: 22 files touched (57 fix sites + 1 tsconfig).
+  - sdk/typescript: 3 files touched (4 fix sites + 1 tsconfig).
+  - 798 backend + 110 web + 17 sdk tests all still pass.
+
+- [#668](https://github.com/ChronoAIProject/Ornn/pull/668) [`da38626`](https://github.com/ChronoAIProject/Ornn/commit/da38626b41b2c1d69a666ff3ec74c0f562562c36) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Fix Guided-create TagInput duplicate handling ([#650](https://github.com/ChronoAIProject/Ornn/issues/650) + [#653](https://github.com/ChronoAIProject/Ornn/issues/653)).
+
+  Two bugs against the same code path:
+
+  - **[#650](https://github.com/ChronoAIProject/Ornn/issues/650)** — typing a duplicate tag and pressing Enter left the rejected value in the input. The next typed character concatenated onto it, so `alpha` (rejected) + typing `beta` produced the tag `alphabeta`.
+  - **[#653](https://github.com/ChronoAIProject/Ornn/issues/653)** — the duplicate was rejected silently with no feedback, so the user couldn't tell whether the tag was added or eaten.
+
+  Both fixed by:
+
+  1. Clearing the input on duplicate (nothing to fix — the existing tag is valid), matching the success path.
+  2. Surfacing `Already added` below the input on duplicate, mirroring `MultiValueInput`'s wording so the two multi-value components read the same.
+  3. Clearing the transient error on the next keystroke so it never blocks editing.
+
+  Pinned with a new `TagInput.test.tsx` (7 assertions covering the duplicate-clear-input contract, case/whitespace normalization, transient-error clearing, empty submissions, comma-commit, and Backspace removal).
+
+  `MultiValueInput` (env vars, runtime deps) has the same `input stays after duplicate` pattern but rejects different cases (e.g. validation errors where keeping the typo visible helps the user fix it). Out of scope here; if surfaced by users will be a separate ticket.
+
+- [#622](https://github.com/ChronoAIProject/Ornn/pull/622) [`096a103`](https://github.com/ChronoAIProject/Ornn/commit/096a103d4e5efdfb42ec490287566a9f1985bddc) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - **BREAKING** for two of the three changes — bring URL + header surface in line with CONVENTIONS.md §2/§4/§7 ([#586](https://github.com/ChronoAIProject/Ornn/issues/586)):
+
+  1. **`PATCH /skills/:id/versions/:version` + `DELETE /skills/:id/versions/:version`** — write operations now accept the stable GUID only, not `:idOrName`. Callers passing a name should resolve it via `GET /skills/lookup?name=…` first. (§2.2)
+  2. **`?q=` is the canonical search param** (§4.1). The legacy `?query=` keeps working as a fallback during the alpha grace window — `q` wins when both are present. Both SDKs and ornn-web migrated to send `q`.
+  3. **Deprecation signal is RFC 8594 (`Deprecation: true` + `Link: rel="deprecation"`)** — replaces `X-Skill-Deprecated` / `X-Skill-Deprecation-Note` custom headers (§7).
+
+  The fourth violation flagged in the issue — `/skills/:id/json` → content negotiation via `Accept` header (§3.3) — is **deferred** to a focused follow-up PR. That one rewires the playground and several SDK paths and deserves its own review.
+
+- [#665](https://github.com/ChronoAIProject/Ornn/pull/665) [`f036395`](https://github.com/ChronoAIProject/Ornn/commit/f0363952b9db6b26f5728ab30462afa516388fde) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Extract `usePlaygroundSession()` hook from PlaygroundPage ([#453](https://github.com/ChronoAIProject/Ornn/issues/453)).
+
+  The second hook-extraction follow-up — parallel to `useSkillDetail()` from [#664](https://github.com/ChronoAIProject/Ornn/issues/664). The hook owns every query, ref, derived value, drawer state, and handler callback; the page is left with the JSX layout shell + prop wiring.
+
+  Net delta: `PlaygroundPage.tsx` **518 → 386 lines** (−25%). Cumulative [#453](https://github.com/ChronoAIProject/Ornn/issues/453) progress on PlaygroundPage: **813 → 386** (−53% across [#660](https://github.com/ChronoAIProject/Ornn/issues/660) + this PR).
+
+  Closes the page-component + hook-extraction portions of [#453](https://github.com/ChronoAIProject/Ornn/issues/453) across all three pages (SkillDetailPage 1133→625, DocsPage 905→303, PlaygroundPage 813→386). DocsPage is already under the 300L target; the two larger pages now have their data flow cleanly split — state lives in hooks, layout lives in pages.
+
+  Behavior unchanged; 110 web tests still pass.
+
+- [#664](https://github.com/ChronoAIProject/Ornn/pull/664) [`6752f42`](https://github.com/ChronoAIProject/Ornn/commit/6752f42fc27abe9b58b8bdfa0b5592c78f527c20) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Extract `useSkillDetail()` hook from SkillDetailPage ([#453](https://github.com/ChronoAIProject/Ornn/issues/453)).
+
+  The deferred follow-up from [#651](https://github.com/ChronoAIProject/Ornn/issues/651): pull every query, mutation, derived value, local UI state, and handler callback out of the page into a single `useSkillDetail(idOrName)` hook. The page is a thin shell that destructures the hook and wires props into the already-extracted subcomponents.
+
+  Net delta: `SkillDetailPage.tsx` **873 → 625 lines** (−28%). Cumulative [#453](https://github.com/ChronoAIProject/Ornn/issues/453) progress on SkillDetailPage: **1133 → 625** (−45% across [#651](https://github.com/ChronoAIProject/Ornn/issues/651) + this PR).
+
+  What the hook owns: 6 queries (skill, versions, audit summary + history, 7d pulls, package), 6 mutations (delete, delete version, update package, deprecation, refresh-from-source, start audit), all derived state (isOwner, isAdmin, mergedContents, mergedFiles, etc.), 11 pieces of local UI state (7 modal toggles + skipValidation + 3 edit-state maps), 10 useCallback handlers, and the skill-id-change effect that resets modal toggles.
+
+  Behavior unchanged; 110 web tests still pass.
+
+- [#740](https://github.com/ChronoAIProject/Ornn/pull/740) [`8d29da8`](https://github.com/ChronoAIProject/Ornn/commit/8d29da8351781b279e2b6303ec8fb1fc744f6f92) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - The All-versions modal now drops a deleted version row immediately, and the result toast renders above any open modal ([#699](https://github.com/ChronoAIProject/Ornn/issues/699)).
+
+  Two distinct issues piled up after a version delete:
+
+  1. **Stale list**: `useDeleteSkillVersion` invalidated `[SKILLS_KEY, idOrName]`, `[SKILLS_KEY]`, `[MY_SKILLS_KEY]`, and per-version audit caches, but not `[SKILL_VERSIONS_KEY, idOrName]` — the very query the All-versions modal subscribes to. So the deleted row stayed visible, and a second click on its delete button hit the backend with `SKILL_VERSION_NOT_FOUND`. Added the missing invalidation.
+
+  2. **Obscured toast**: `ToastContainer` portal and the `Modal` portal both sit at `z-50`, so when both are mounted the toast is rendered behind the modal overlay and the success/error feedback for an in-modal action (delete or deprecate from the All-versions modal) becomes dim and unreadable. Bumped `ToastContainer` to `z-[60]` so toasts always sit above modals — single source of truth, no per-call escape hatches needed.
+
+- [#600](https://github.com/ChronoAIProject/Ornn/pull/600) [`42957ad`](https://github.com/ChronoAIProject/Ornn/commit/42957ad573aba12d101748147810cc22bbcddd06) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Harden the client-side ZIP validator with two new guards ([#443](https://github.com/ChronoAIProject/Ornn/issues/443)): (1) explicit zip-slip / unsafe-path rejection (entries with `..` segments, leading `/`, backslashes, or Windows drive letters) — defence-in-depth on top of JSZip's internal handling so a future unzip-library swap doesn't quietly turn into a path-traversal bug; (2) cumulative uncompressed-size cap (50 MB) read off `_data.uncompressedSize` during `forEach` so a zip-bomb never enters the extraction loop. New i18n keys `errors.zip.unsafePath` and `errors.zip.uncompressedTooLarge` (EN + ZH). 6 unit tests cover both guards.
+
 ## 0.8.0
 
 ### Minor Changes

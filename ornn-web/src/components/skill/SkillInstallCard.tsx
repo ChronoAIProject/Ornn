@@ -194,6 +194,11 @@ export function SkillInstallCard({ skill, className }: SkillInstallCardProps) {
 
   // The prompt is universally available — works for any skill the caller
   // can see. Memoised so flipping tabs doesn't re-stringify on every render.
+  //
+  // #639 — pass the version the user is currently viewing so the pull
+  // URLs include `?version=…`. Without this, copying the prompt from
+  // an older-version page would silently install whatever's `latest`
+  // at install time — the version dropdown on the page would lie.
   const prompt = useMemo(
     () =>
       buildTrySkillPrompt({
@@ -202,8 +207,9 @@ export function SkillInstallCard({ skill, className }: SkillInstallCardProps) {
         description: skill.description,
         metadata: skill.metadata ?? {},
         ornnOrigin: window.location.origin,
+        ...(skill.version ? { version: skill.version } : {}),
       }),
-    [skill.guid, skill.name, skill.description, skill.metadata],
+    [skill.guid, skill.name, skill.description, skill.metadata, skill.version],
   );
 
   // The npx path needs all three of: mirror feature on, skill public,

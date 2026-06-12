@@ -6,6 +6,7 @@
 
 import { describe, expect, it } from "bun:test";
 import {
+  assistantSection,
   extrasSection,
   mirrorSection,
   nyxidSection,
@@ -100,6 +101,60 @@ describe("section schemas", () => {
     expect(
       skillGenSection.schema.safeParse({
         ...skillGenSection.defaults,
+        defaultMonthlyQuota: 1_000_001,
+      }).success,
+    ).toBe(false);
+  });
+
+  // -------- assistant (#970) --------
+  it("UT-SCHEMA-ASST-001: assistant defaults are valid + nullable provider/model", () => {
+    expect(
+      assistantSection.schema.safeParse(assistantSection.defaults).success,
+    ).toBe(true);
+    expect(assistantSection.defaults.defaultProviderId).toBeNull();
+    expect(assistantSection.defaults.defaultModelId).toBeNull();
+    expect(assistantSection.id).toBe("assistant");
+    expect(assistantSection.publicPath).toBe("assistant");
+    expect(assistantSection.secretFields).toEqual([]);
+  });
+
+  it("UT-SCHEMA-ASST-002: assistant sseKeepAliveMs bounds", () => {
+    expect(
+      assistantSection.schema.safeParse({
+        ...assistantSection.defaults,
+        sseKeepAliveMs: 15_000,
+      }).success,
+    ).toBe(true);
+    expect(
+      assistantSection.schema.safeParse({
+        ...assistantSection.defaults,
+        sseKeepAliveMs: 999,
+      }).success,
+    ).toBe(false);
+    expect(
+      assistantSection.schema.safeParse({
+        ...assistantSection.defaults,
+        sseKeepAliveMs: 600_001,
+      }).success,
+    ).toBe(false);
+  });
+
+  it("UT-SCHEMA-ASST-003: assistant defaultMonthlyQuota bounds", () => {
+    expect(
+      assistantSection.schema.safeParse({
+        ...assistantSection.defaults,
+        defaultMonthlyQuota: 0,
+      }).success,
+    ).toBe(true);
+    expect(
+      assistantSection.schema.safeParse({
+        ...assistantSection.defaults,
+        defaultMonthlyQuota: -1,
+      }).success,
+    ).toBe(false);
+    expect(
+      assistantSection.schema.safeParse({
+        ...assistantSection.defaults,
         defaultMonthlyQuota: 1_000_001,
       }).success,
     ).toBe(false);
@@ -333,6 +388,35 @@ describe("section schemas", () => {
       true,
     );
     expect(mirrorSection.defaults.reconcileSchedule).toBe("0 2 * * *");
+  });
+
+  it("UT-SCHEMA-MIRROR-005: owner/repo enforce GitHub naming, empty stays valid (#818)", () => {
+    // Path-traversal / slash-bearing repo rejected by REPO_RE.
+    expect(
+      mirrorSection.schema.safeParse({
+        ...mirrorSection.defaults,
+        owner: "ChronoAIProject",
+        repo: "a/../b",
+      }).success,
+    ).toBe(false);
+    // Empty owner + empty repo = unset state, still valid.
+    expect(
+      mirrorSection.schema.safeParse({
+        ...mirrorSection.defaults,
+        owner: "",
+        repo: "",
+      }).success,
+    ).toBe(true);
+    // Dotted + dashed repo names are valid GitHub repos.
+    for (const repo of ["repo.name", "repo-1"]) {
+      expect(
+        mirrorSection.schema.safeParse({
+          ...mirrorSection.defaults,
+          owner: "ChronoAIProject",
+          repo,
+        }).success,
+      ).toBe(true);
+    }
   });
 
   // -------- telemetry --------

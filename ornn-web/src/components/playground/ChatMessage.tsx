@@ -153,7 +153,8 @@ function ToolResultMessage({
   toolCallId,
 }: {
   content: string;
-  toolCallId?: string;
+  // exactOptionalPropertyTypes (#657)
+  toolCallId?: string | undefined;
 }) {
   const isRejection = content.startsWith("User rejected execution");
 

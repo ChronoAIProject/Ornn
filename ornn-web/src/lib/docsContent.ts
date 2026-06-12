@@ -106,8 +106,10 @@ function parseReleaseFrontmatter(content: string): ParsedRelease | null {
   const match = content.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
   if (!match) return null;
 
-  const frontmatter = match[1];
-  const body = match[2].trim();
+  // Regex has two capture groups; both are guaranteed present on
+  // match. `!` is safe under noUncheckedIndexedAccess (#450).
+  const frontmatter = match[1]!;
+  const body = match[2]!.trim();
 
   const versionMatch = frontmatter.match(/^version:\s*(.+)$/m);
   const dateMatch = frontmatter.match(/^date:\s*(.+)$/m);
@@ -117,8 +119,8 @@ function parseReleaseFrontmatter(content: string): ParsedRelease | null {
   if (!versionMatch || !dateMatch) return null;
 
   return {
-    version: versionMatch[1].trim(),
-    date: dateMatch[1].trim(),
+    version: versionMatch[1]!.trim(),
+    date: dateMatch[1]!.trim(),
     title: {
       en: enTitleMatch?.[1]?.trim() ?? "",
       zh: zhTitleMatch?.[1]?.trim() ?? "",
