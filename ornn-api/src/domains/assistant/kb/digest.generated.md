@@ -3,9 +3,9 @@
   Produced by ornn-api/scripts/build-assistant-kb.ts (#970).
   Re-run: `bun run scripts/build-assistant-kb.ts` from ornn-api/.
   budgetTokens: 18000
-  estimatedTokens: 10994
+  estimatedTokens: 11360
   sources:
-  - readme: ~1883 tok
+  - readme: ~2250 tok
   - claude-positioning: ~272 tok
   - architecture: ~219 tok
   - agent-manual-http: ~5486 tok (clipped)
@@ -25,30 +25,48 @@
   <a href="https://github.com/ChronoAIProject/Ornn/actions/workflows/ci.yml"><img src="https://github.com/ChronoAIProject/Ornn/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <a href="https://github.com/ChronoAIProject/Ornn/releases"><img src="https://img.shields.io/github/v/release/ChronoAIProject/Ornn" alt="Latest release" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/github/license/ChronoAIProject/Ornn" alt="License" /></a>
-  &nbsp;<strong>The skill lifecycle API for AI agents, not another marketplace.</strong>
+  <a href="https://github.com/ChronoAIProject/Ornn/commits/develop"><img src="https://img.shields.io/github/last-commit/ChronoAIProject/Ornn/develop" alt="Last commit" /></a>
+  <a href="https://github.com/ChronoAIProject/Ornn/discussions"><img src="https://img.shields.io/github/discussions/ChronoAIProject/Ornn" alt="Discussions" /></a>
+  <a href="https://github.com/ChronoAIProject/Ornn/stargazers"><img src="https://img.shields.io/github/stars/ChronoAIProject/Ornn?style=flat" alt="Stars" /></a>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/status-alpha-orange" alt="Project status: alpha" />
+  <img src="https://img.shields.io/badge/model-agnostic-blue" alt="Model-agnostic" />
+  <img src="https://img.shields.io/badge/transport-HTTP%20%7C%20MCP-blueviolet" alt="HTTP and MCP" />
+</p>
+
+<p align="center"><strong>The agent-facing skill-lifecycle API for AI agents.</strong></p>
+
+<p align="center">
+  Ornn official website — <a href="https://ornn.chrono-ai.fun">ornn.chrono-ai.fun</a>
+</p>
+
+<p align="center">
+  <a href="#what-is-ornn">What is Ornn</a> ·
+  <a href="#how-it-works">How it works</a> ·
+  <a href="#sdk-quickstart">SDK quickstart</a> ·
+  <a href="#quickstart">Quickstart</a> ·
+  <a href="#try-ornn-free">Try Ornn free</a> ·
+  <a href="#how-ornn-compares">How Ornn compares</a> ·
+  <a href="#examples">Examples</a> ·
+  <a href="#documentation">Docs</a> ·
+  <a href="#roadmap">Roadmap</a> ·
+  <a href="#community">Community</a> ·
+  <a href="#contributing">Contributing</a>
 </p>
 
 ---
 
 ## What is Ornn
 
-Ornn is an **agent-facing skill-lifecycle API**. AI agents call Ornn directly — over HTTPS — to manage the full lifecycle of their skills:
+Ornn is an **agent-facing skill-lifecycle API**, not a human marketplace.
 
-```
-search → pull → install → execute → audit → build → upload → share
-```
+- 🤖 **Agents call it directly** — over HTTP or MCP, no human-in-the-loop UI required.
+- 🌐 **Model + runtime agnostic** — Claude, GPT, Gemini, or your own runtime; stable schemas so swapping doesn't break the stack.
+- 🔁 **Whole lifecycle in one API** — `search → pull → install → execute → build → upload → share`.
 
-Closest analog: **npm registry + npm CLI, fused, model-agnostic.** It works for Claude, GPT, Gemini, or any custom agent runtime. Not locked to a single model.
-
-### Why we built it
-
-Modern AI agents do real work by composing **skills** — packaged prompts, scripts, and tools the agent invokes on demand. As soon as you build more than one agent, the same gaps show up:
-
-- **No shared registry.** Skills live in private repos, gists, and one-off config files. There's no way for an agent to discover one it doesn't already know about.
-- **Model-locked alternatives.** Anthropic Skills, OpenAI custom GPTs, and Gemini Gems each ship a registry — but only for their own runtime. Skills don't cross.
-- **No lifecycle.** Versioning, sandboxed execution, security audit, publish — every team rebuilds these from scratch.
-
-Ornn closes the gaps. One model-agnostic registry, one API surface, and a CLI (`nyxid`) every agent can drive end-to-end. The web UI at [ornn.chrono-ai.fun](https://ornn.chrono-ai.fun) is a thin admin layer for skill owners; the API is the product.
+Closest analog: **npm registry + npm CLI fused, model-agnostic**. The primary consumer is the AI agent developer / agentic-system builder; `ornn-web` is a secondary surface for skill owners and platform admins.
 
 ## How it works
 
@@ -128,7 +146,17 @@ Open [**`ornn-agent-manual-cli`**](https://ornn.chrono-ai.fun/skills/ornn-agent-
 
 Partway through setup, your agent will prompt you to install [**`nyxid`**](https://github.com/ChronoAIProject/NyxID) — the CLI Ornn calls under the hood to broker authenticated requests. Approve the prompt; the agent finishes onboarding itself.
 
-### 3. Talk to your agent
+## Try Ornn free
+
+Early-user perk to test the full Playground + Skill Generation flow without a credit card:
+
+1. ⭐ Star this repo
+2. Sign in to [ornn.chrono-ai.fun](https://ornn.chrono-ai.fun) with the same GitHub account
+3. On first sign-in, enter NyxID invite code **`NYX-2XXJI08A`**
+
+Your redemption code lands in the Ornn notification inbox within 24h. **First 500 users · 400 free GPT-5.5 conversations** (200 Playground + 200 Skill Generation, no card, no expiry).
+
+## How Ornn compares
 
 That's it. Your agent now has the full Ornn lifecycle. Try any of these in plain language — no special syntax, no flags to memorise:
 
@@ -164,6 +192,10 @@ For the full API contract (every endpoint, every error code), see [**ornn.chrono
 - **Security report** → [Private Vulnerability Reporting](https://github.com/ChronoAIProject/Ornn/security/advisories/new) (see [SECURITY.md](SECURITY.md))
 - **Support guide** → [SUPPORT.md](SUPPORT.md)
 - **Pull requests** → read [CONTRIBUTING.md](CONTRIBUTING.md) first — it covers the issue-first workflow, branching, commit decomposition, and the changeset rule (CI blocks PRs without one). By participating you agree to follow our [Code of Conduct](CODE_OF_CONDUCT.md).
+
+## Like what you see?
+
+⭐ If Ornn looks like the primitive your agent stack has been missing, a star helps a lot at this stage — it tells us we're solving a real problem, and it's the threshold most awesome-list maintainers check before accepting a project.
 
 ## License
 
