@@ -427,6 +427,7 @@
     "privateTitle": "私有",
     "privateDesc": "只有你和平台管理员能看到此技能。当上面所有选项都未启用时自动生效。",
     "searchPlaceholder": "输入邮箱查找用户…",
+    "searchHint": "请输入至少 2 个字符进行搜索。",
     "removeUser": "移除",
     "noOrgs": "没有可选择的组织。",
     "noUsersYet": "还没有添加用户。",
