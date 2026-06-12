@@ -87,7 +87,7 @@ function wrap(node: ReactNode) {
 
 /** Add a member ref via the picker's raw-ref Enter path. */
 function addMember(ref: string) {
-  const input = screen.getByPlaceholderText(/search a skill/);
+  const input = screen.getByPlaceholderText(/Search skills|search a skill/i);
   fireEvent.change(input, { target: { value: ref } });
   fireEvent.keyDown(input, { key: "Enter" });
 }

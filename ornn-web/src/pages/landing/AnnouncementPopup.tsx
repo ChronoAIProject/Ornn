@@ -130,24 +130,19 @@ export function AnnouncementPopup() {
         // non-blocking notification card — no page-dimming backdrop, so the
         // hero + lifecycle ring stay visible and interactive. Dismiss via the
         // X / Dismiss buttons or Escape.
-        <div className="pointer-events-none fixed z-50" style={{ top: '10vh', bottom: '10vh', left: '15vw', right: '15vw' }}>
+        <div
+          className="pointer-events-auto fixed z-50 rounded-[3px] border border-white/15 bg-black/40 backdrop-blur-2xl"
+          style={{ top: '10vh', bottom: '10vh', left: '15vw', right: '15vw' }}
+        >
           <motion.div
-            initial={{ opacity: 0, x: 28, scale: 0.98 }}
-            animate={{ opacity: 1, x: 0, scale: 1 }}
-            exit={{ opacity: 0, x: 28, scale: 0.98 }}
-            transition={{ type: "spring", stiffness: 240, damping: 24, mass: 0.9 }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
             role="dialog"
             aria-labelledby="announcement-title"
-            // exactOptionalPropertyTypes (#657): framer-motion's
-            // `MotionStyle` rejects React.CSSProperties under the
-            // stricter flag (incompatible optionals on transform/etc.).
-            // Cast to `never` to bridge — runtime shape is unchanged.
             style={GLASS_OVERRIDES as unknown as never}
-            className="
-              pointer-events-auto relative h-full w-full overflow-y-auto
-              rounded-[3px] border border-white/15 bg-black/40 backdrop-blur-2xl
-              p-8 sm:p-10
-            "
+            className="relative h-full w-full overflow-y-auto p-8 sm:p-10"
           >
 
             {/* Bracketed mono micro-label — Forge Workshop section signature. */}
