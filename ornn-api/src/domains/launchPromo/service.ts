@@ -180,7 +180,7 @@ export class LaunchPromoService {
       const code = (err as { code?: number }).code;
       if (code === 11000) {
         // Race: someone else awarded in between our two queries.
-        throw new Error(`ALREADY_CLAIMED: user '${params.userId}' claim landed in a race`);
+        throw new Error(`ALREADY_CLAIMED: user '${params.userId}' claim landed in a race`, { cause: err });
       }
       throw err;
     }

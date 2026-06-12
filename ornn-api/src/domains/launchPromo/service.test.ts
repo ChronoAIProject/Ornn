@@ -49,8 +49,8 @@ function makeService(opts: {
   const repo: LaunchPromoRepository = {
     ensureIndexes: async () => {},
     hasClaimed: async () => opts.hasClaimed ?? false,
-    findByUserId: async (id) => claims.find((c) => c._id === id) ?? null,
-    insert: async (doc) => {
+    findByUserId: async (id: string) => claims.find((c) => c._id === id) ?? null,
+    insert: async (doc: LaunchPromoClaimDoc) => {
       if (opts.insertShouldFail === "duplicate") {
         const err: Error & { code?: number } = new Error("dup");
         err.code = 11000;
@@ -94,7 +94,7 @@ function makeService(opts: {
   } as unknown as RedemptionCodeService;
 
   const notificationRepo: NotificationRepository = {
-    create: async (input) => {
+    create: async (input: { userId: string; title: string; data?: unknown }) => {
       notifications.push({ userId: input.userId, title: input.title });
       return { _id: "n1", ...input, data: input.data ?? {}, readAt: null, createdAt: new Date() } as never;
     },
@@ -191,13 +191,13 @@ describe("LaunchPromoService.awardUser", () => {
   it("notification failure does NOT throw — claim still recorded", async () => {
     const fx = makeService({ rank: 5 });
     // Sabotage notification repo with a throwing create.
-    (fx as never as { /* hack: replace */ }) // not used
+    void fx; // fx used for claims assertion below
     const svc = new LaunchPromoService({
       repo: {
         ensureIndexes: async () => {},
         hasClaimed: async () => false,
         findByUserId: async () => null,
-        insert: async (doc) => fx.claims.push(doc),
+        insert: async (doc: LaunchPromoClaimDoc) => fx.claims.push(doc),
         countAwarded: async () => 0,
         listRecent: async () => fx.claims.slice(),
       } as unknown as LaunchPromoRepository,

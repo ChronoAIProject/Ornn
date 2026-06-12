@@ -50,22 +50,16 @@ export class LaunchPromoRepository {
    * as "someone else's race won" and skips).
    */
   async insert(doc: LaunchPromoClaimDoc): Promise<void> {
-    try {
-      await this.collection.insertOne(doc);
-      logger.info(
-        {
-          userId: doc._id,
-          rank: doc.eligibilityRank,
-          redemptionCodeId: doc.redemptionCodeId,
-          awardedBy: doc.awardedBy,
-        },
-        "Launch-promo claim recorded",
-      );
-    } catch (err) {
-      // Duplicate-key error code is 11000. Bubble up so the service
-      // can short-circuit cleanly.
-      throw err;
-    }
+    await this.collection.insertOne(doc);
+    logger.info(
+      {
+        userId: doc._id,
+        rank: doc.eligibilityRank,
+        redemptionCodeId: doc.redemptionCodeId,
+        awardedBy: doc.awardedBy,
+      },
+      "Launch-promo claim recorded",
+    );
   }
 
   /** Count of awarded claims — the slot-utilisation gate. */

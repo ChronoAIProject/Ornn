@@ -42,6 +42,7 @@ function fakeSettingsService(): SettingsService {
     },
     listLlmProviders: async () => [],
     getLlmProvider: async () => null,
+    getLaunchPromo: async () => store.get("launchPromo") as never,
     invalidateCache: () => {},
   };
 }
