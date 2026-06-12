@@ -249,10 +249,7 @@ export function SkillsetMemberPicker({
             onKeyDown={(e) => {
               if (e.key === "Enter") {
                 e.preventDefault();
-                // Allow raw name@version entry via Enter.
-                if (query.includes("@")) {
-                  tryAdd(query);
-                }
+                tryAdd(query);
               }
             }}
             placeholder={
