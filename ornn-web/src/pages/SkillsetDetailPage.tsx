@@ -247,9 +247,9 @@ export function SkillsetDetailPage() {
                     SVG/Mermaid). Dismiss on mouseleave of the popup. */}
                 {hoveredMemberRef && hoveredPos && (
                   <div
-                    className="fixed z-[100] flex w-[600px] max-w-[calc(100vw-2rem)] max-h-[70vh] flex-col overflow-hidden rounded-md border border-subtle bg-card card-impression text-sm shadow-xl"
+                    className="fixed z-[100] flex w-[800px] max-w-[calc(100vw-2rem)] h-[40vh] flex-col overflow-hidden rounded-md border border-subtle bg-card card-impression text-sm shadow-xl"
                     style={{
-                      left: Math.min((hoveredPos.clientX ?? 0) + 18, window.innerWidth - 616),
+                      left: Math.min((hoveredPos.clientX ?? 0) + 18, window.innerWidth - 816),
                       top: Math.min((hoveredPos.clientY ?? 0) + 8, window.innerHeight - 120),
                     }}
                     onMouseEnter={cancelClose}
@@ -266,7 +266,7 @@ export function SkillsetDetailPage() {
                         ×
                       </button>
                     </div>
-                    <div className="min-h-0 flex-1 overflow-auto p-2">
+                    <div className="min-h-0 flex-1 p-2">
                       <SkillsetMemberViewer
                         members={skillset.members}
                         previewRef={hoveredMemberRef}

@@ -350,37 +350,16 @@ export function SkillsetDependencyGraphCanvas({
     });
   }, [members, edges, setNodes]);
 
-  // Read-only specific memos (also unconditional hooks for consistent hook order).
-  const staticNodes = useMemo(
-    () =>
-      buildNodes(members, columns).map((n) => ({
-        ...n,
-        draggable: false,
-        connectable: false,
-        selectable: false,
-      })),
-    [members, columns]
-  );
-  const readOnlyFlowEdges: FlowEdge[] = useMemo(
-    () =>
-      edges.map((e) => ({
-        id: `${e.from}->${e.to}`,
-        source: e.from,
-        target: e.to,
-        label: edgeLabel,
-      })),
-    [edges, edgeLabel]
-  );
-
   if (readOnly) {
-    // Read-only display for detail page: static topo layout, no editing, hover support
-    // for the package preview dialog.
+    // Read-only display for detail page: nodes are draggable for repositioning
+    // but no connect/edit. Hover support for the package preview dialog.
     return (
       <div className="skillset-depgraph-canvas h-full min-h-[200px] overflow-hidden rounded-sm border border-subtle bg-elevated/30">
         <ReactFlow
-          nodes={staticNodes}
-          edges={readOnlyFlowEdges}
+          nodes={nodes}
+          edges={flowEdges}
           nodeTypes={NODE_TYPES}
+          onNodesChange={onNodesChange}
           defaultEdgeOptions={DEFAULT_EDGE_OPTIONS}
           onNodeMouseEnter={(event, node) => {
             if (onHoverMember && node?.id) {
@@ -394,7 +373,6 @@ export function SkillsetDependencyGraphCanvas({
           fitView
           fitViewOptions={FIT_VIEW_OPTIONS}
           proOptions={PRO_OPTIONS}
-          nodesDraggable={false}
           nodesConnectable={false}
           elementsSelectable={false}
           panOnDrag
