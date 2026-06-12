@@ -9,8 +9,8 @@ metadata:
     - manual
     - skill-lifecycle
     - cli
-version: "1.2"
-lastUpdated: 2026-05-14
+version: "1.3"
+lastUpdated: 2026-06-11
 ---
 
 # Agent Manual (NyxID CLI variant)
@@ -48,6 +48,7 @@ lastUpdated: 2026-05-14
 > - **Pull your Ornn notifications** (audit fan-out, broadcasts, etc.) — §2.13.
 > - **Link a skill to GitHub** or **trigger a sync** from the linked source — §2.14.
 > - **Check your monthly quota** or **pick a valid LLM model** before calling an SSE endpoint — §2.15.
+> - **Work with skillsets** (curated bundles + required master prompt / instructions, one-call closure) — §2.16.
 >
 > Without this manual loaded, you do not know which endpoint to call, how to authenticate, or how to read the response shapes.
 >
@@ -722,3 +723,20 @@ Quota refills automatically at `nextMonthlyResetAt`. If a user is low and needs 
 - `GET /api/v1/announcements/active` — public, anonymous platform-wide notice (separate from `/notifications`). Useful when you want to know about maintenance windows or pricing changes before kicking off long workflows.
 
 If you find a discrepancy between this manual and the actual API behaviour, the API is right and the manual is stale — re-pull the skill (§0) before assuming a bug.
+
+### 2.16 Work with skillsets (curated bundles + master prompts)
+
+See the authoritative recipes and examples in the preferred unified manual `chrono-ai-service-manual` §2.15 (or pull its `references/ornn-api-reference.md` §5a for the exact contract).
+
+Quick hits (all via `nyxid proxy request ornn-api` or direct HTTPS with NyxID bearer):
+
+- Search: `/api/v1/skillset-search?kind=consensus-supported&tags=...&scope=mixed`
+- Detail (includes current `instructions`): `GET /api/v1/skillsets/<name-or-guid>`
+- One-call closure (the main agent payload): `GET /api/v1/skillsets/<name-or-guid>/closure` → `{ instructions: "…", items: [...] }`
+- Create: `POST /api/v1/skillsets` (body requires `instructions`; members 2..N using the same ref grammar as `depends-on`).
+- Publish new version: `PUT /api/v1/skillsets/<id>` (re-supply `instructions` — no carry-forward).
+- Permissions and delete mirror the skill endpoints exactly (reuse `ornn:skill:*` scopes today).
+
+`kind: "consensus-supported"` is an author claim only. Ornn validates member existence + conflict-free union closure at publish time and on `/closure`.
+
+After operating on a skillset you authored, update `~/.ornn/installed-skills.json` exactly as you would for a skill.

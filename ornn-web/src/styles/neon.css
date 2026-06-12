@@ -482,6 +482,18 @@ html {
 .markdown-body h2 { font-size: 1.5rem; }
 .markdown-body h3 { font-size: 1.25rem; }
 
+/* Compact master prompt on skillset detail page (#1084): much smaller body + headings
+   so the instructions don't dominate vertical space in the RailCard. */
+.text-\[13px\] .markdown-body,
+.text-\[13px\] .markdown-body p,
+.text-\[13px\] .markdown-body li {
+  font-size: inherit;
+  line-height: inherit;
+}
+.text-\[13px\] .markdown-body h1 { font-size: 1.05rem; }
+.text-\[13px\] .markdown-body h2 { font-size: 0.95rem; }
+.text-\[13px\] .markdown-body h3 { font-size: 0.875rem; }
+
 .markdown-body p {
   margin-bottom: 1em;
 }
@@ -906,6 +918,30 @@ html {
   outline: none;
   box-shadow: var(--button-focus-ring);
   border-radius: 2px;
+}
+
+/* Assistant launcher — forge-clip loop-seam mask (#976). The ~2.4s clip
+   pans slightly, so the hard `loop` cut is visible; a brief opacity dip
+   timed near the boundary softens the seam into a quiet crossfade. The
+   animation period tracks the clip length and starts with it on mount, so
+   the dip lands at the cut. motion-safe only — reduced-motion renders the
+   static poster instead of the video, so this never runs there. */
+@media (prefers-reduced-motion: no-preference) {
+  .forge-loop-mask {
+    animation: forge-loop-dip 2.4s linear infinite;
+  }
+}
+@keyframes forge-loop-dip {
+  0%,
+  88% {
+    opacity: 1;
+  }
+  95% {
+    opacity: 0.5;
+  }
+  100% {
+    opacity: 1;
+  }
 }
 
 /* ───────────────────────────────────────────────────────────────────────

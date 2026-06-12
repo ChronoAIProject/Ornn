@@ -161,6 +161,35 @@ export function useAssistantChat() {
     s.setStreaming(false);
   }, [drainAll]);
 
+  /**
+   * Retry the last turn after an error. The transcript already ends on
+   * the unanswered user message (the error path never finalized an
+   * assistant turn), so we re-stream the existing conversation as-is
+   * rather than appending a duplicate user message. No-op if the
+   * conversation does not end on a user turn.
+   */
+  const retry = useCallback(() => {
+    const s = useAssistantStore.getState();
+    const msgs = s.messages;
+    const last = msgs[msgs.length - 1];
+    if (!last || last.role !== "user") return;
+
+    streamRef.current?.abort();
+    pendingTokensRef.current = "";
+    if (paceTimerRef.current !== null) {
+      clearInterval(paceTimerRef.current);
+      paceTimerRef.current = null;
+    }
+
+    s.setStreaming(true);
+    s.setError(null);
+    s.startAssistantMessage();
+
+    const payload = msgs.map((m) => ({ role: m.role, content: m.content }));
+    logger.info("retrying assistant turn", { turns: payload.length });
+    streamRef.current = streamAssistantChat({ messages: payload }, handleEvent);
+  }, [handleEvent]);
+
   const clearChat = useCallback(() => {
     streamRef.current?.abort();
     streamRef.current = null;
@@ -188,5 +217,6 @@ export function useAssistantChat() {
     sendMessage,
     abort,
     clearChat,
+    retry,
   };
 }

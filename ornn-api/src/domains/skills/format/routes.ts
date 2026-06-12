@@ -60,6 +60,7 @@ export const SKILL_FORMAT_RULES = `# Ornn Skill Package Format Rules
   - **runtime-env-var** (array, optional): environment variable names in UPPER_SNAKE_CASE.
   - **tool-list** (array): required when category is \`tool-based\` or \`mixed\`. Array of tool name strings.
   - **tag** (array, optional): array of lowercase kebab-case tags.
+  - **depends-on** (array, optional): other skills this skill depends on, max 50. Each entry pins one skill by \`<name-or-guid>@<major.minor>\` (e.g. \`pdf-tools@1.0\`) or \`<name>@<dist-tag>\` (e.g. \`pdf-tools@beta\`). Semver ranges (\`^1.0\`, \`~1.0\`, \`1.2.3\`) are **not** allowed. A skill must not depend on itself. The full transitive closure is validated at publish time (no missing deps, no cycles, no conflicting versions of the same skill) and can be read via \`GET /api/v1/skills/{id}/closure\`.
 
 ### Optional Frontmatter Fields
 

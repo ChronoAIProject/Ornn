@@ -116,6 +116,24 @@ describe("useAssistantChat", () => {
     expect(addToast).toHaveBeenCalledWith({ type: "error", message: "Slow down" });
   });
 
+  it("retry re-streams the last turn after an error without duplicating it", () => {
+    const { result } = renderHook(() => useAssistantChat());
+
+    act(() => result.current.sendMessage("hi"));
+    emit({ type: "chat_error", code: "model_unavailable", message: "No model enabled" });
+    expect(result.current.error).toBe("No model enabled");
+    expect(result.current.messages).toHaveLength(1);
+
+    act(() => result.current.retry());
+
+    // Same single user turn re-sent (no duplicate), streaming resumed,
+    // error cleared.
+    expect(result.current.messages).toHaveLength(1);
+    expect(result.current.isStreaming).toBe(true);
+    expect(result.current.error).toBeNull();
+    expect(lastParams?.messages).toEqual([{ role: "user", content: "hi" }]);
+  });
+
   it("ignores keepalive heartbeats", () => {
     const { result } = renderHook(() => useAssistantChat());
     act(() => result.current.sendMessage("hi"));

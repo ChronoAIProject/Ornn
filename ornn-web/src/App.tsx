@@ -21,6 +21,7 @@ import {
   Outlet,
   Route,
   RouterProvider,
+  useLocation,
 } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { RootLayout } from "@/components/layout/RootLayout";
@@ -33,14 +34,22 @@ import { HighlighterMarkFilter } from "@/pages/landing/HighlighterMark";
 import { VersionUpdateBanner } from "@/components/layout/VersionUpdateBanner";
 import { PostHogProvider } from "@/components/analytics/PostHogProvider";
 import { CookieConsentBanner } from "@/components/analytics/CookieConsentBanner";
+import { AssistantWidget } from "@/components/assistant/AssistantWidget";
 
 /**
  * Top-level wrapper rendered as the root route's element. Lives INSIDE
  * the router tree so child analytics hooks (`useLocation`) work, and
  * renders the consent banner above every page. PostHogProvider has no
  * DOM output — it just wires init / identify / pageview tracking.
+ *
+ * The Ornn Assistant mounts here (not RootLayout) so its mascot launcher
+ * floats over EVERY page — including the landing page and for anonymous
+ * visitors (#976). Suppressed only on the auth handshake routes
+ * (`/login`, `/oauth/*`) where a floating chatbot would be noise.
  */
 function AnalyticsRoot() {
+  const { pathname } = useLocation();
+  const hideAssistant = pathname === "/login" || pathname.startsWith("/oauth");
   return (
     <>
       <PostHogProvider />
@@ -48,6 +57,7 @@ function AnalyticsRoot() {
       <CookieConsentBanner />
       {/* Global announcement surface — top-right headline pill on every page. */}
       <AnnouncementBanner />
+      {!hideAssistant && <AssistantWidget />}
     </>
   );
 }
@@ -123,6 +133,21 @@ const PlaygroundPage = lazy(() =>
 );
 const MySkillsPage = lazy(() =>
   import("@/pages/skill/MySkillsPage").then((m) => ({ default: m.MySkillsPage })),
+);
+const SkillsetExplorePage = lazy(() =>
+  import("@/pages/SkillsetExplorePage").then((m) => ({ default: m.SkillsetExplorePage })),
+);
+const SkillsetDetailPage = lazy(() =>
+  import("@/pages/SkillsetDetailPage").then((m) => ({ default: m.SkillsetDetailPage })),
+);
+const SkillsetNewPage = lazy(() =>
+  import("@/pages/SkillsetNewPage").then((m) => ({ default: m.SkillsetNewPage })),
+);
+const SkillsetEditPage = lazy(() =>
+  import("@/pages/SkillsetEditPage").then((m) => ({ default: m.SkillsetEditPage })),
+);
+const MySkillsetsPage = lazy(() =>
+  import("@/pages/MySkillsetsPage").then((m) => ({ default: m.MySkillsetsPage })),
 );
 const ServiceDetailPage = lazy(() =>
   import("@/pages/ServiceDetailPage").then((m) => ({ default: m.ServiceDetailPage })),
@@ -259,6 +284,11 @@ const router = createBrowserRouter(
           path="/skills/:idOrName/audits"
           element={<SkillAuditHistoryPage />}
         />
+        {/* Skillsets registry (#1059). `/skillsets/new` + `/skillsets/:id/edit`
+            are auth-guarded below; static segments win the match over the
+            `:idOrName` capture regardless of declaration group. */}
+        <Route path="/skillsets" element={<SkillsetExplorePage />} />
+        <Route path="/skillsets/:idOrName" element={<SkillsetDetailPage />} />
       </Route>
 
       {/* Protected routes */}
@@ -273,6 +303,12 @@ const router = createBrowserRouter(
           <Route path="/playground" element={<PlaygroundPage />} />
 
           <Route path="/my-skills" element={<MySkillsPage />} />
+
+          {/* Skillsets create/edit/mine (#1059) — auth-guarded. */}
+          <Route path="/skillsets/new" element={<SkillsetNewPage />} />
+          <Route path="/skillsets/:id/edit" element={<SkillsetEditPage />} />
+          <Route path="/my-skillsets" element={<MySkillsetsPage />} />
+
           <Route path="/services/:id" element={<ServiceDetailPage />} />
           <Route path="/notifications" element={<NotificationsPage />} />
           <Route path="/settings" element={<SettingsPage />} />
