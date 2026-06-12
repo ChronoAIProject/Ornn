@@ -11,13 +11,10 @@
  * `ResponsesApiStreamEvent`). For chat-completion providers the client
  * translates the request body on the way out and normalizes the SSE
  * stream / completion payload back into Responses-API event shape on
- * the way in, so consumers (skill generation + playground) do not need
- * to branch on apiFormat (#574).
- *
- * Chat-completion tool-call normalization is implemented: streamed
- * `choices[].delta.tool_calls[]` fragments are accumulated and flushed
- * as `response.output_item.done` function_call events, and non-streamed
- * `choices[].message.tool_calls[]` map to `function_call` outputs (#608).
+ * the way in — both text deltas (#574) and accumulated tool-call
+ * deltas synthesized into `response.output_item.done` /
+ * `function_call` events (#608) — so consumers (skill generation +
+ * playground tool loop) never branch on apiFormat.
  *
  * Authenticates using a Service Account (SA) token obtained via
  * client_credentials grant when the resolved provider has no direct
@@ -188,56 +185,76 @@ async function* parseResponsesStream(
 }
 
 /**
- * Parse Chat Completions SSE and translate both text deltas and
- * tool-call deltas into Responses-API event shape so consumers stay
- * format-agnostic.
+ * Internal accumulator for a single OpenAI Chat Completions tool call
+ * as it streams in. `id` + `name` arrive on the first delta for that
+ * tool-call index; `arguments` is a JSON string that accumulates
+ * across many chunks before the model finishes emitting it.
+ */
+interface ToolCallAccumulator {
+  id: string;
+  name: string;
+  arguments: string;
+}
+
+/**
+ * Parse Chat Completions SSE and translate it into Responses-API
+ * event shape so downstream consumers (skill generation, playground
+ * tool-use loop) stay format-agnostic.
  *
- * Text deltas (`choices[].delta.content`) pass through as
- * `response.output_text.delta`. Tool-call fragments
- * (`choices[].delta.tool_calls[]`) arrive incrementally — `id`/`name`
- * land on the first fragment, `function.arguments` streams across many
- * — so we accumulate per `index` and flush each completed call as a
- * single `response.output_item.done` function_call event (matching the
- * Responses-API shape the playground consumer reads). We never parse the
- * arguments mid-stream; the consumer parses the assembled JSON (#608).
+ * - `choices[].delta.content` chunks → `response.output_text.delta`
+ *   events (#574).
+ * - `choices[].delta.tool_calls` chunks are buffered per tool-call
+ *   index (id + name + accumulated JSON arguments). When the turn
+ *   completes (explicit `finish_reason` of `"tool_calls"` /
+ *   `"stop"`, upstream `[DONE]`, or EOF), each buffered tool call is
+ *   emitted as a synthesized `response.output_item.done` event with
+ *   `item.type === "function_call"` — the exact shape the playground
+ *   loop already consumes (#608). Without this the playground never
+ *   sees a tool call from chat-completion providers and renders
+ *   `execute_in_sandbox(...)` as plain text instead of running it.
  */
 async function* parseChatCompletionStream(
   response: Response,
 ): AsyncIterable<ResponsesApiStreamEvent> {
-  const toolCalls = new Map<number, { id: string; name: string; argsBuffer: string }>();
+  const toolCalls = new Map<number, ToolCallAccumulator>();
   let flushed = false;
 
-  function* flush(): Generator<ResponsesApiStreamEvent> {
+  function* flushToolCalls(): Generator<ResponsesApiStreamEvent> {
     if (flushed) return;
     flushed = true;
-    for (const index of [...toolCalls.keys()].sort((a, b) => a - b)) {
-      const call = toolCalls.get(index)!;
+    const indices = [...toolCalls.keys()].sort((a, b) => a - b);
+    for (const idx of indices) {
+      const tc = toolCalls.get(idx)!;
       yield {
         type: "response.output_item.done",
         item: {
           type: "function_call",
-          id: call.id,
-          call_id: call.id,
-          name: call.name,
-          arguments: call.argsBuffer,
+          id: tc.id,
+          call_id: tc.id,
+          name: tc.name,
+          arguments: tc.arguments,
         },
       };
     }
   }
 
   for await (const { data } of parseSSELines(response)) {
-    if (data === "[DONE]") break;
+    if (data === "[DONE]") {
+      yield* flushToolCalls();
+      return;
+    }
     let chunk: {
       choices?: Array<{
         delta?: {
           content?: string | null;
           tool_calls?: Array<{
-            index: number;
+            index?: number;
             id?: string;
+            type?: string;
             function?: { name?: string; arguments?: string };
           }>;
         };
-        finish_reason?: string;
+        finish_reason?: string | null;
       }>;
     };
     try {
@@ -248,34 +265,45 @@ async function* parseChatCompletionStream(
     }
 
     const choice = chunk.choices?.[0];
-    const textDelta = choice?.delta?.content;
-    if (typeof textDelta === "string" && textDelta.length > 0) {
-      yield { type: "response.output_text.delta", delta: textDelta };
+    if (!choice) continue;
+
+    const text = choice.delta?.content;
+    if (typeof text === "string" && text.length > 0) {
+      yield { type: "response.output_text.delta", delta: text };
     }
 
-    const fragments = choice?.delta?.tool_calls;
-    if (fragments) {
-      for (const frag of fragments) {
-        const existing = toolCalls.get(frag.index) ?? { id: "", name: "", argsBuffer: "" };
-        if (frag.id) existing.id = frag.id;
-        if (frag.function?.name) existing.name = frag.function.name;
-        if (typeof frag.function?.arguments === "string") {
-          existing.argsBuffer += frag.function.arguments;
+    const deltaToolCalls = choice.delta?.tool_calls;
+    if (Array.isArray(deltaToolCalls)) {
+      for (const piece of deltaToolCalls) {
+        // OpenAI uses `index` to disambiguate parallel tool calls
+        // within one assistant turn. Missing index → assume a single
+        // tool call at index 0.
+        const idx = typeof piece.index === "number" ? piece.index : 0;
+        const acc = toolCalls.get(idx) ?? { id: "", name: "", arguments: "" };
+        if (piece.id) acc.id = piece.id;
+        if (piece.function?.name) acc.name = piece.function.name;
+        if (typeof piece.function?.arguments === "string") {
+          acc.arguments += piece.function.arguments;
         }
-        toolCalls.set(frag.index, existing);
+        toolCalls.set(idx, acc);
       }
     }
 
-    if (choice?.finish_reason === "tool_calls") {
-      yield* flush();
+    // Some providers (DeepSeek, Together, …) terminate a tool-call
+    // turn with finish_reason=tool_calls; others emit
+    // finish_reason=stop alongside the final tool-call delta. Treat
+    // any non-null finish_reason as "no more deltas this turn" and
+    // flush so the playground loop sees the tool call before
+    // [DONE] / EOF.
+    if (choice.finish_reason && toolCalls.size > 0) {
+      yield* flushToolCalls();
     }
   }
 
-  // Flush on stream end / [DONE] in case the upstream omitted the
-  // `finish_reason: "tool_calls"` chunk but still streamed tool calls.
-  if (toolCalls.size > 0) {
-    yield* flush();
-  }
+  // Stream ended without a [DONE] sentinel (some upstreams just
+  // close the body). Flush any pending tool calls so we don't drop
+  // them on the floor.
+  yield* flushToolCalls();
 }
 
 // ---------------------------------------------------------------------------

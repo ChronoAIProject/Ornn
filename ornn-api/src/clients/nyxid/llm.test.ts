@@ -644,3 +644,211 @@ describe("NyxLlmClient.complete() routing on apiFormat", () => {
     ]);
   });
 });
+
+// ---------------------------------------------------------------------------
+// #608 — chat-completion tool-call delta normalization
+// ---------------------------------------------------------------------------
+
+describe("chat-completion stream tool-call normalization (#608)", () => {
+  function makeClient(): NyxLlmClient {
+    return new NyxLlmClient({
+      resolver: makeResolver({
+        gatewayUrl: "https://api.example.com",
+        apiKey: "sk-x",
+        apiFormat: "chat-completion",
+      }),
+      saTokenProvider: STUB_SA_TOKEN,
+    });
+  }
+
+  it("accumulates tool_calls across chunks and emits one output_item.done on finish_reason=tool_calls", async () => {
+    fetchHandler = () =>
+      sseResponse([
+        JSON.stringify({
+          choices: [{
+            delta: {
+              tool_calls: [{
+                index: 0,
+                id: "call_abc",
+                type: "function",
+                function: { name: "execute_in_sandbox", arguments: "" },
+              }],
+            },
+          }],
+        }),
+        JSON.stringify({
+          choices: [{
+            delta: { tool_calls: [{ index: 0, function: { arguments: "{\"scr" } }] },
+          }],
+        }),
+        JSON.stringify({
+          choices: [{
+            delta: { tool_calls: [{ index: 0, function: { arguments: "ipt\":\"x\"}" } }] },
+          }],
+        }),
+        JSON.stringify({ choices: [{ delta: {}, finish_reason: "tool_calls" }] }),
+      ]);
+
+    const events: ResponsesApiStreamEvent[] = [];
+    for await (const e of makeClient().stream({
+      model: "deepseek-v4",
+      input: [{ role: "user", content: "run x" }],
+      tools: [{
+        type: "function",
+        name: "execute_in_sandbox",
+        description: "run",
+        parameters: { type: "object" },
+      }],
+    })) events.push(e);
+
+    const done = events.filter((e) => e.type === "response.output_item.done");
+    expect(done).toHaveLength(1);
+    expect(done[0]).toEqual({
+      type: "response.output_item.done",
+      item: {
+        type: "function_call",
+        id: "call_abc",
+        call_id: "call_abc",
+        name: "execute_in_sandbox",
+        arguments: "{\"script\":\"x\"}",
+      },
+    });
+  });
+
+  it("flushes a buffered tool call when stream ends without [DONE] or finish_reason", async () => {
+    // Body has no [DONE] sentinel and no finish_reason — just an EOF.
+    fetchHandler = () =>
+      new Response(
+        `data: ${JSON.stringify({
+          choices: [{
+            delta: {
+              tool_calls: [{
+                index: 0,
+                id: "call_z",
+                function: { name: "t", arguments: "{\"a\":1}" },
+              }],
+            },
+          }],
+        })}\n\n`,
+        { status: 200, headers: { "Content-Type": "text/event-stream" } },
+      );
+
+    const events: ResponsesApiStreamEvent[] = [];
+    for await (const e of makeClient().stream({
+      model: "m",
+      input: [{ role: "user", content: "go" }],
+    })) events.push(e);
+
+    const done = events.find((e) => e.type === "response.output_item.done");
+    expect(done).toEqual({
+      type: "response.output_item.done",
+      item: {
+        type: "function_call",
+        id: "call_z",
+        call_id: "call_z",
+        name: "t",
+        arguments: "{\"a\":1}",
+      },
+    });
+  });
+
+  it("supports parallel tool calls — one done event per index", async () => {
+    fetchHandler = () =>
+      sseResponse([
+        JSON.stringify({
+          choices: [{
+            delta: {
+              tool_calls: [
+                { index: 0, id: "call_a", function: { name: "fn_a", arguments: "{}" } },
+                { index: 1, id: "call_b", function: { name: "fn_b", arguments: "{}" } },
+              ],
+            },
+          }],
+        }),
+        JSON.stringify({ choices: [{ delta: {}, finish_reason: "tool_calls" }] }),
+      ]);
+
+    const events: ResponsesApiStreamEvent[] = [];
+    for await (const e of makeClient().stream({
+      model: "m",
+      input: [{ role: "user", content: "go" }],
+    })) events.push(e);
+
+    const done = events.filter((e) => e.type === "response.output_item.done");
+    expect(done).toHaveLength(2);
+    expect((done[0]!.item as { id: string }).id).toBe("call_a");
+    expect((done[1]!.item as { id: string }).id).toBe("call_b");
+  });
+
+  it("only flushes once when finish_reason and [DONE] both arrive", async () => {
+    fetchHandler = () =>
+      sseResponse([
+        JSON.stringify({
+          choices: [{
+            delta: {
+              tool_calls: [{ index: 0, id: "call_x", function: { name: "fn", arguments: "{}" } }],
+            },
+            finish_reason: "tool_calls",
+          }],
+        }),
+      ]);
+
+    const events: ResponsesApiStreamEvent[] = [];
+    for await (const e of makeClient().stream({
+      model: "m",
+      input: [{ role: "user", content: "go" }],
+    })) events.push(e);
+
+    const done = events.filter((e) => e.type === "response.output_item.done");
+    expect(done).toHaveLength(1);
+  });
+
+  it("intermixed text + tool_call deltas produce text-delta then done event in order", async () => {
+    fetchHandler = () =>
+      sseResponse([
+        JSON.stringify({ choices: [{ delta: { content: "thinking…" } }] }),
+        JSON.stringify({
+          choices: [{
+            delta: {
+              tool_calls: [{ index: 0, id: "call_q", function: { name: "fn", arguments: "{}" } }],
+            },
+          }],
+        }),
+        JSON.stringify({ choices: [{ delta: {}, finish_reason: "tool_calls" }] }),
+      ]);
+
+    const events: ResponsesApiStreamEvent[] = [];
+    for await (const e of makeClient().stream({
+      model: "m",
+      input: [{ role: "user", content: "go" }],
+    })) events.push(e);
+
+    expect(events.map((e) => e.type)).toEqual([
+      "response.output_text.delta",
+      "response.output_item.done",
+    ]);
+  });
+
+  it("tool_calls.index missing → falls back to index 0", async () => {
+    fetchHandler = () =>
+      sseResponse([
+        JSON.stringify({
+          choices: [{
+            delta: {
+              tool_calls: [{ id: "call_noix", function: { name: "fn", arguments: "{}" } }],
+            },
+            finish_reason: "tool_calls",
+          }],
+        }),
+      ]);
+
+    const events: ResponsesApiStreamEvent[] = [];
+    for await (const e of makeClient().stream({
+      model: "m",
+      input: [{ role: "user", content: "go" }],
+    })) events.push(e);
+
+    const done = events.find((e) => e.type === "response.output_item.done");
+    expect((done?.item as { id: string }).id).toBe("call_noix");
+  });
+});
