@@ -1,5 +1,70 @@
 # ornn-api
 
+## 0.12.0
+
+### Minor Changes
+
+- [#982](https://github.com/ChronoAIProject/Ornn/pull/982) [`c4537fc`](https://github.com/ChronoAIProject/Ornn/commit/c4537fc952b5a925c833d5eaf28898e4284625b6) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Skill dependencies ([#968](https://github.com/ChronoAIProject/Ornn/issues/968)). Skills can now declare other skills they depend on via the `metadata.depends-on` SKILL.md frontmatter field — each entry pins one skill by `<name-or-guid>@<major.minor>` or `<name>@<dist-tag>` (no semver ranges, no self-references; max 50 direct deps). The full transitive closure is validated at publish time (`POST /skills`, `PUT /skills/:id`): missing dependencies, cycles, and conflicting versions of the same skill are rejected before the version is committed. A new `GET /api/v1/skills/:idOrName/closure` endpoint resolves and returns the full closure in deps-first topological order, scoped to what the caller may read. Three new error codes: `dependency_cycle` (409), `dependency_conflict` (409), `skill_dependency_not_found` (404). The TypeScript SDK gains `resolveClosure` / `pullClosure`; the Python SDK gains `resolve_closure` / `pull_closure`.
+
+- [#982](https://github.com/ChronoAIProject/Ornn/pull/982) [`7fe3558`](https://github.com/ChronoAIProject/Ornn/commit/7fe3558ad81c5e19d761a5c0c0a3ac6b5c1ca0f9) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Skillsets ([#969](https://github.com/ChronoAIProject/Ornn/issues/969)). A **skillset** is a named, versioned, owned, visibility-scoped meta-package that references N member skills and carries a `kind` (`generic` | `consensus-supported`). Skillsets mirror the skill ownership/visibility/immutable-versioning model and reuse the `ornn:skill:{create,read,update,delete}` permission scopes. New endpoints: `POST /api/v1/skillsets` (create, private by default), `GET /api/v1/skillsets/:idOrName` (detail), `GET /api/v1/skillsets/:idOrName/versions`, `GET /api/v1/skillsets/:idOrName/closure` (one-call resolve — the union of all members plus each member's [#968](https://github.com/ChronoAIProject/Ornn/issues/968) dependency closure, deduplicated + topo-sorted), `PUT /api/v1/skillsets/:id` (publish a new immutable version), `PUT /api/v1/skillsets/:id/permissions`, `DELETE /api/v1/skillsets/:id`, and `GET /api/v1/skillset-search` (discovery by kind / tags / scope). Members (2..N) are validated at publish time against the live skill graph via the [#968](https://github.com/ChronoAIProject/Ornn/issues/968) closure resolver — a missing/unreadable member or a conflicting union closure rejects the publish, reusing the `skill_dependency_not_found` / `dependency_cycle` / `dependency_conflict` codes verbatim. The TypeScript SDK gains `createSkillset` / `getSkillset` / `publishSkillset` / `setSkillsetPermissions` / `deleteSkillset` / `getSkillsetClosure` / `searchSkillsets`; the Python SDK gains `create_skillset` / `get_skillset` / `publish_skillset` / `set_skillset_permissions` / `delete_skillset` / `resolve_skillset_closure` / `search_skillsets`.
+
+- [#975](https://github.com/ChronoAIProject/Ornn/pull/975) [`d641c97`](https://github.com/ChronoAIProject/Ornn/commit/d641c97d7c4e1a8ccfc721840f2ca4ace8191365) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Add Ornn Assistant — an authenticated, repo-aware Q&A assistant. A new `/api/v1/assistant/chat` SSE endpoint and an in-app chat widget answer questions about Ornn and the skill catalog, grounded in a curated knowledge base plus visibility-scoped skill search (no private or PII data exposed). Admins can select the assistant model per provider. ([#970](https://github.com/ChronoAIProject/Ornn/issues/970))
+
+- [#982](https://github.com/ChronoAIProject/Ornn/pull/982) [`0eae4a2`](https://github.com/ChronoAIProject/Ornn/commit/0eae4a23b2e6b9046f2d0bfce708bee65515e1db) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Skillset master prompt ([#978](https://github.com/ChronoAIProject/Ornn/issues/978)). Skillsets now carry a **REQUIRED**, versioned `instructions` field — a markdown master prompt telling an agent HOW to use the set (orchestration, ordering, which member to pick when). It is required on BOTH create (`POST /api/v1/skillsets`) and publish (`PUT /api/v1/skillsets/:id`) with NO carry-forward: every published version explicitly restates its own master prompt (unlike `description`/`kind`/`tags`, which a publish may omit to inherit the prior value). `instructions` is 1..8000 chars, trimmed server-side (a whitespace-only body is rejected), and is distinct from the short `description` (≤1024 chars). It is stored opaque — Ornn does not render, sanitize, template, lint, or search-index it — and is surfaced verbatim on `GET /api/v1/skillsets/:idOrName` and as a root sibling of `items` on `GET /api/v1/skillsets/:idOrName/closure` (`{ data: { instructions, items }, error: null }`). The skill `/skills/:id/closure` envelope is unchanged. The TypeScript SDK adds `instructions` to `CreateSkillsetInput` / `PublishSkillsetInput` / `SkillsetDetail` and a new `SkillsetClosureResult` type returned by `getSkillsetClosure`; the Python SDK requires an `instructions` kwarg on `create_skillset` / `publish_skillset` and adds a new `SkillsetClosureResult` returned by `resolve_skillset_closure`.
+
+- [#749](https://github.com/ChronoAIProject/Ornn/pull/749) [`041edec`](https://github.com/ChronoAIProject/Ornn/commit/041edecb4a29fe545acb94f756e32d44e2ae5217) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Launch-promo foundation — admin-driven manual award flow + caller status ([#724](https://github.com/ChronoAIProject/Ornn/issues/724), PR 1 of 2).
+
+  The landing/news page promises that the first 500 Ornn users who star the GitHub repo and sign in receive a redemption code (200 Playground + 200 Skill Generation credits) plus the NyxID invite code, delivered to the Ornn notification inbox within 24 h. This PR lands the foundation that lets an admin honour that promise today, and gives the calling user a way to see their eligibility.
+
+  What ships:
+
+  - **`launchPromo` settings section** — `enabled`, `repoOwner`, `repoName`, `totalSlots` (default 500), `awardPlayground` / `awardSkillGen` (default 200), `pollIntervalMs`, `codeExpiryDays`, `nyxidInviteCode`. Defaults are conservative (`enabled: false`, empty repo, empty invite code) so the promo stays dormant until an admin explicitly turns it on.
+  - **`launch_promo_claims` collection + repo** — one doc per awarded user, keyed on `_id = userId` for primary-key idempotency. Fields: `eligibilityRank`, `redemptionCodeId`, `awardedAt`, `awardedBy`, optional `githubLogin`. Index on `awardedAt desc` for admin observability.
+  - **`LaunchPromoService.awardUser({ userId, awardedBy, githubLogin? })`** — gates on enabled + rank ≤ `totalSlots` + slots remaining + not-already-claimed, mints a redemption code via the existing redemption-codes service (no quota write — user redeems themselves through Settings → Redeem), drops a `launchPromo.codeDelivered` notification containing the code + NyxID invite code, then records the claim. Duplicate-key during insert (race) cleanly resolves to `ALREADY_CLAIMED`. Notification failure is logged but doesn't roll back the claim — the user already has the grant; admins can resend.
+  - **`LaunchPromoService.getStatusForUser(userId)`** — composes `{ promoEnabled, claimed, rank, totalSlots, slotsRemaining, awardedAt }` for the `/me/launch-promo` endpoint.
+  - **`UserDirectoryRepository.getRegistrationRank(userId)`** — 1-based ordering by `firstSeenAt asc`. Two queries (PK lookup + filter count), no scan.
+  - **New `launchPromo.codeDelivered` NotificationCategory.**
+  - **Routes** — `GET /me/launch-promo`, `POST /admin/launch-promo/award/:userId` (gated on `ornn:admin:skill`), `GET /admin/launch-promo/recent` for observability. Service-layer error sentinels (`PROMO_DISABLED`, `RANK_EXCEEDED`, `SLOTS_EXHAUSTED`, `ALREADY_CLAIMED`, `USER_NOT_FOUND`) map to 400 / 403 / 409 / 404.
+
+  What is **deferred to PR 2** (clearly TODO in the design comments):
+
+  - GitHub stargazers HTTP client (public API, no auth) + cron loop driven by `pollIntervalMs`.
+  - NyxID → GitHub-login resolution (currently the manual admin flow doesn't need this; the cron path will once it lands).
+  - Frontend admin UI for the settings section + "recent awards" panel.
+  - Frontend caller-side display ("you're in the first N — claim ready / claimed").
+
+  Coverage: 12 colocated unit tests on `LaunchPromoService` covering the happy path, every error sentinel, race-on-insert resolving to `ALREADY_CLAIMED`, and notification-failure-does-not-rollback. All green.
+
+- [#1081](https://github.com/ChronoAIProject/Ornn/pull/1081) [`cfef24f`](https://github.com/ChronoAIProject/Ornn/commit/cfef24fe014050c2868ff8d2a508e67c0349a80c) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Skillset browse + detail upgrades ([#1080](https://github.com/ChronoAIProject/Ornn/issues/1080)): the browse page gains a keyword search box (new `q` param on `GET /skillset-search` — case-insensitive substring on name + description) and drops the per-card edit button (manage from the detail page). The skillset detail page's left pane becomes a member skill-package viewer — click any member skill in the set to view its files read-only, mirroring the skill detail page — and the master prompt moves into the top metadata card. The dependency graph and resolved closure are preserved as read-only rail cards.
+
+### Patch Changes
+
+- [#845](https://github.com/ChronoAIProject/Ornn/pull/845) [`f1ad2f7`](https://github.com/ChronoAIProject/Ornn/commit/f1ad2f775362bdc66bdb267c04bf026146e24fa7) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Harden the user-directory endpoints against enumeration: /users/search now rejects empty and single-character queries, and both /users/search and /users/resolve are rate-limited per user. The collaborator typeahead asks for at least 2 characters before searching.
+
+- [#735](https://github.com/ChronoAIProject/Ornn/pull/735) [`850eef7`](https://github.com/ChronoAIProject/Ornn/commit/850eef7b720b6cec769e44378ad1ca7005d1c968) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - NyxLlmClient now normalizes Chat Completions tool-call deltas into the same Responses-API `response.output_item.done` / `function_call` events the playground tool loop already consumes ([#608](https://github.com/ChronoAIProject/Ornn/issues/608)).
+
+  Background: [#574](https://github.com/ChronoAIProject/Ornn/issues/574) routed chat-completion providers to `/chat/completions` and translated text deltas, but the stream parser ignored `choices[].delta.tool_calls`. The playground tool-use loop in `chatService.ts` only matches on Responses-API `response.output_item.done` with `item.type === "function_call"`, so when a chat-completion provider (DeepSeek, Together, any OpenAI-compat gateway) responded with a tool call, no `function_call` event ever reached the loop. The model's `execute_in_sandbox(...)` invocation arrived as plain assistant text and got rendered as JSON in the chat instead of being executed — runtime-based and mixed skills appeared to "respond" without ever running the sandbox.
+
+  Fix: `parseChatCompletionStream` keeps a per-index `Map<number, ToolCallAccumulator>` carrying `{id, name, arguments}`. Each `choices[].delta.tool_calls[]` chunk merges into its index buffer (id + name arrive on the first chunk for that call; the `arguments` JSON string accumulates across many chunks). A turn flushes when any of: explicit `finish_reason` (`tool_calls`, `stop`, anything non-null), upstream `[DONE]` sentinel, or stream EOF — whichever fires first. A `flushed` guard makes flush idempotent so we never double-emit if multiple end signals fire.
+
+  The synthesized event matches the Responses-API shape `chatService.ts` already validates with Zod (`outputItemDoneEventSchema`):
+
+  ```js
+  {
+    type: "response.output_item.done",
+    item: {
+      type: "function_call",
+      id, call_id, name, arguments,  // arguments is the accumulated JSON string
+    },
+  }
+  ```
+
+  This way zero changes are needed in `chatService.ts` — its existing `pendingToolCall` capture + `executeToolCall` dispatch path works for both upstream formats now.
+
+  Parallel tool calls within one assistant turn are supported (one done event per index, emitted in index order). Missing `index` falls back to 0 (treated as a single tool call). Streams that close without `[DONE]` or `finish_reason` still flush at EOF so a buffered call is never lost.
+
+  Coverage: 6 new tests appended to `src/clients/nyxid/llm.test.ts` — chunked accumulation + finish_reason flush, EOF flush without [DONE], parallel tool calls, idempotent flush across finish_reason+[DONE], intermixed text+tool deltas (correct event order), missing `index` fallback. All 17 tests in the file green; full ornn-api suite has no new regressions.
+
 ## 0.11.0
 
 ### Patch Changes
