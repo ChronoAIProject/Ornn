@@ -367,6 +367,7 @@ export function SkillDetailPage() {
               isPrivate={skill.isPrivate}
               sharedWithUsersCount={skill.sharedWithUsers.length}
               sharedWithOrgsCount={skill.sharedWithOrgs.length}
+              readWriteCount={(skill.grants ?? []).filter((g) => g.level === "read_write").length}
               isOwner={isOwner}
               onManagePermissions={() => setShowPermissionsModal(true)}
             />

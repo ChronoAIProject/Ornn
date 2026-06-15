@@ -31,8 +31,29 @@ import {
   fetchOrgSummary,
   type UserDirectoryEntry,
 } from "@/services/usersApi";
-import type { SkillDetail } from "@/types/domain";
+import type { SkillDetail, SkillGrant, SkillPermissionLevel } from "@/types/domain";
 import { translateError } from "@/utils/translateError";
+
+/** A selected user grant carries its permission level alongside the label. */
+type UserGrantEntry = UserDirectoryEntry & { level: SkillPermissionLevel };
+
+/**
+ * Resolve the skill's initial typed grants. Prefers the canonical `grants`
+ * field; falls back to deriving READ-level grants from the legacy lists for
+ * older cached payloads (#1123).
+ */
+function initialGrantsOf(skill: SkillDetail): SkillGrant[] {
+  if (skill.grants) return skill.grants;
+  return [
+    ...skill.sharedWithUsers.map((id) => ({ type: "user" as const, id, level: "read" as const })),
+    ...skill.sharedWithOrgs.map((id) => ({ type: "org" as const, id, level: "read" as const })),
+  ];
+}
+
+/** Stable signature of a grant set for change-detection (order-independent). */
+function grantSignature(grants: SkillGrant[]): string {
+  return grants.map((g) => `${g.type}:${g.id}:${g.level}`).sort().join("|");
+}
 
 interface PermissionsModalProps {
   isOpen: boolean;
@@ -64,7 +85,7 @@ export function PermissionsModal({ isOpen, onClose, skill }: PermissionsModalPro
           cascading render (#888). The outer Modal owns the open/close
           animation, so its AnimatePresence stays stable. */}
       <PermissionsForm
-        key={`${isOpen ? "open" : "closed"}:${skill.guid}:${skill.isPrivate}:${skill.sharedWithOrgs.join(",")}:${skill.sharedWithUsers.join(",")}`}
+        key={`${isOpen ? "open" : "closed"}:${skill.guid}:${skill.isPrivate}:${grantSignature(initialGrantsOf(skill))}`}
         skill={skill}
         onClose={onClose}
         t={t}
@@ -84,14 +105,25 @@ function PermissionsForm({ skill, onClose, t }: PermissionsFormProps) {
   const { data: myOrgs = [] } = useMyOrgs();
   const permissionsMutation = useUpdateSkillPermissions(skill.guid);
 
-  // Lazy init from the skill ACLs — the very first render is already in
-  // the reset state, so no synchronous setState-in-effect is needed.
-  // Re-open / ACL-change resets via the `key` at the call site.
+  // Lazy init from the skill's typed grants — the very first render is
+  // already in the reset state, so no synchronous setState-in-effect is
+  // needed. Re-open / ACL-change resets via the `key` at the call site.
+  const initialGrants = initialGrantsOf(skill);
   const [isPublic, setIsPublic] = useState<boolean>(!skill.isPrivate);
-  const [sharedUsers, setSharedUsers] = useState<UserDirectoryEntry[]>(() =>
-    skill.sharedWithUsers.map((id) => ({ userId: id, email: "", displayName: id })),
+  const [sharedUsers, setSharedUsers] = useState<UserGrantEntry[]>(() =>
+    initialGrants
+      .filter((g) => g.type === "user")
+      .map((g) => ({ userId: g.id, email: "", displayName: g.id, level: g.level })),
   );
-  const [sharedOrgIds, setSharedOrgIds] = useState<string[]>(skill.sharedWithOrgs);
+  const [sharedOrgIds, setSharedOrgIds] = useState<string[]>(() =>
+    initialGrants.filter((g) => g.type === "org").map((g) => g.id),
+  );
+  // Per-org level, keyed by org id. Only checked orgs are read on save.
+  const [orgLevels, setOrgLevels] = useState<Record<string, SkillPermissionLevel>>(() =>
+    Object.fromEntries(
+      initialGrants.filter((g) => g.type === "org").map((g) => [g.id, g.level]),
+    ),
+  );
   const [userQuery, setUserQuery] = useState("");
   const [userInputFocused, setUserInputFocused] = useState(false);
   const userInputRef = useRef<HTMLInputElement>(null);
@@ -109,7 +141,11 @@ function PermissionsForm({ skill, onClose, t }: PermissionsFormProps) {
       if (cancelled || resolved.length === 0) return;
       const byId = new Map(resolved.map((r) => [r.userId, r]));
       setSharedUsers((prev) =>
-        prev.map((existing) => byId.get(existing.userId) ?? existing),
+        prev.map((existing) => {
+          const hit = byId.get(existing.userId);
+          // Merge the resolved label but PRESERVE the grant's level (#1123).
+          return hit ? { ...hit, level: existing.level } : existing;
+        }),
       );
     })();
     return () => {
@@ -179,14 +215,25 @@ function PermissionsForm({ skill, onClose, t }: PermissionsFormProps) {
     setSharedOrgIds((prev) =>
       prev.includes(orgId) ? prev.filter((id) => id !== orgId) : [...prev, orgId],
     );
+    // New grants default to read; preserve an existing level on re-check.
+    setOrgLevels((prev) => (prev[orgId] ? prev : { ...prev, [orgId]: "read" }));
+  };
+
+  const setOrgLevel = (orgId: string, level: SkillPermissionLevel) => {
+    setOrgLevels((prev) => ({ ...prev, [orgId]: level }));
   };
 
   const addUser = (entry: UserDirectoryEntry) => {
     if (sharedUsers.some((u) => u.userId === entry.userId)) return;
-    setSharedUsers((prev) => [...prev, entry]);
+    // New per-user grants default to read.
+    setSharedUsers((prev) => [...prev, { ...entry, level: "read" }]);
     setUserQuery("");
     setUserInputFocused(false);
     userInputRef.current?.blur();
+  };
+
+  const setUserLevel = (userId: string, level: SkillPermissionLevel) => {
+    setSharedUsers((prev) => prev.map((u) => (u.userId === userId ? { ...u, level } : u)));
   };
 
   const removeUser = (userId: string) => {
@@ -197,22 +244,26 @@ function PermissionsForm({ skill, onClose, t }: PermissionsFormProps) {
   const usersActive = !isPublic && sharedUsers.length > 0;
   const privateActive = !isPublic && !orgsActive && !usersActive;
 
+  // The canonical typed grants this form would persist (#1123).
+  const buildGrants = (): SkillGrant[] => [
+    ...sharedUsers.map((u) => ({ type: "user" as const, id: u.userId, level: u.level })),
+    ...sharedOrgIds.map((id) => ({
+      type: "org" as const,
+      id,
+      level: orgLevels[id] ?? "read",
+    })),
+  ];
+
   const handleSave = async () => {
-    // Quick client-side "nothing changed" short-circuit.
-    const beforePrivate = skill.isPrivate;
-    const beforeUsers = new Set(skill.sharedWithUsers);
-    const beforeOrgs = new Set(skill.sharedWithOrgs);
     const afterPrivate = !isPublic;
+    const grants = buildGrants();
 
-    const privateChanged = beforePrivate !== afterPrivate;
-    const usersChanged =
-      sharedUsers.length !== beforeUsers.size ||
-      sharedUsers.some((u) => !beforeUsers.has(u.userId));
-    const orgsChanged =
-      sharedOrgIds.length !== beforeOrgs.size ||
-      sharedOrgIds.some((id) => !beforeOrgs.has(id));
+    // Level-aware "nothing changed" short-circuit (covers a level flip,
+    // not just add/remove).
+    const privateChanged = skill.isPrivate !== afterPrivate;
+    const grantsChanged = grantSignature(grants) !== grantSignature(initialGrants);
 
-    if (!privateChanged && !usersChanged && !orgsChanged) {
+    if (!privateChanged && !grantsChanged) {
       addToast({
         type: "info",
         message: t("permissions.noChanges", "No changes to save."),
@@ -223,9 +274,8 @@ function PermissionsForm({ skill, onClose, t }: PermissionsFormProps) {
 
     try {
       await permissionsMutation.mutateAsync({
-        isPrivate: !isPublic,
-        sharedWithUsers: sharedUsers.map((u) => u.userId),
-        sharedWithOrgs: sharedOrgIds,
+        isPrivate: afterPrivate,
+        grants,
       });
       addToast({
         type: "success",
@@ -339,19 +389,28 @@ function PermissionsForm({ skill, onClose, t }: PermissionsFormProps) {
                       <span className="font-text text-sm text-strong truncate">
                         {org.displayName}
                       </span>
-                      {org.isUnresolved ? (
-                        <span className="ml-auto inline-flex items-center gap-1 rounded-sm border border-warning/40 px-1.5 py-[1px] font-mono text-[10px] uppercase tracking-wider text-warning">
-                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                            <path d="M12 9v2m0 4h.01" />
-                            <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
-                          </svg>
-                          {t("permissions.orgUnresolved", "unresolved")}
-                        </span>
-                      ) : !org.isMember ? (
-                        <span className="font-mono text-[10px] text-meta ml-auto">
-                          {t("permissions.notMember", "not member")}
-                        </span>
-                      ) : null}
+                      <span className="ml-auto flex items-center gap-1.5 shrink-0">
+                        {checked && (
+                          <LevelToggle
+                            level={orgLevels[org.userId] ?? "read"}
+                            onChange={(lvl) => setOrgLevel(org.userId, lvl)}
+                            t={t}
+                          />
+                        )}
+                        {org.isUnresolved ? (
+                          <span className="inline-flex items-center gap-1 rounded-sm border border-warning/40 px-1.5 py-[1px] font-mono text-[10px] uppercase tracking-wider text-warning">
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                              <path d="M12 9v2m0 4h.01" />
+                              <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                            </svg>
+                            {t("permissions.orgUnresolved", "unresolved")}
+                          </span>
+                        ) : !org.isMember ? (
+                          <span className="font-mono text-[10px] text-meta">
+                            {t("permissions.notMember", "not member")}
+                          </span>
+                        ) : null}
+                      </span>
                     </label>
                   );
                 })}
@@ -410,6 +469,13 @@ function PermissionsForm({ skill, onClose, t }: PermissionsFormProps) {
                         </svg>
                       )}
                       <span>{u.email || u.displayName || u.userId}</span>
+                      {!isUnresolved && (
+                        <LevelToggle
+                          level={u.level}
+                          onChange={(lvl) => setUserLevel(u.userId, lvl)}
+                          t={t}
+                        />
+                      )}
                       <button
                         type="button"
                         onClick={() => removeUser(u.userId)}
@@ -507,6 +573,49 @@ function PermissionsForm({ skill, onClose, t }: PermissionsFormProps) {
         </Button>
       </div>
     </>
+  );
+}
+
+/**
+ * Compact read / read-write level switch for one grant (#1123). Clicking
+ * flips the level. `stopPropagation` keeps a click off the surrounding
+ * checkbox label / tier card. read-write is accent-highlighted; read is
+ * muted (the default, lowest-privilege state).
+ */
+function LevelToggle({
+  level,
+  onChange,
+  t,
+}: {
+  level: SkillPermissionLevel;
+  onChange: (level: SkillPermissionLevel) => void;
+  t: ReturnType<typeof useTranslation>["t"];
+}) {
+  const isWrite = level === "read_write";
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        onChange(isWrite ? "read" : "read_write");
+      }}
+      title={
+        t(
+          "permissions.levelToggleTip",
+          "Read = view/pull/execute. Read-write also lets them update this skill (no admin). Click to switch.",
+        ) as string
+      }
+      className={`shrink-0 cursor-pointer rounded-sm border px-1.5 py-[1px] font-mono text-[10px] uppercase tracking-wider transition-colors ${
+        isWrite
+          ? "border-accent/50 bg-accent/10 text-accent"
+          : "border-subtle text-meta hover:text-strong"
+      }`}
+    >
+      {isWrite
+        ? t("permissions.levelReadWrite", "read-write")
+        : t("permissions.levelRead", "read")}
+    </button>
   );
 }
 
