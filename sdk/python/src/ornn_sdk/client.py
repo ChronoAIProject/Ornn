@@ -14,6 +14,7 @@ for ``httpx.AsyncClient``; the shape is identical.
 
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Callable
 from typing import Any
 from urllib.parse import urlencode
@@ -75,6 +76,10 @@ class OrnnClient:
         self._base_url = base_url.rstrip("/")
         self._static_token = token
         self._token_resolver = token_resolver
+        # Retained for the one-shot presigned-URL fetch in
+        # download_package, which bypasses self._http (object storage is
+        # outside /api/v1 and unauthenticated).
+        self._timeout = timeout
         self._http = httpx.Client(
             base_url=f"{self._base_url}/api/v1",
             transport=transport,
@@ -143,16 +148,59 @@ class OrnnClient:
         data = self.request("GET", f"/skills/{_quote(guid_or_name)}/versions")
         return [SkillVersionEntry.from_dict(v) for v in data.get("items") or []]
 
-    def download_package(self, guid: str, version: str) -> bytes:
-        """Download a skill package ZIP. Returns raw bytes."""
-        path = f"/skills/{_quote(guid)}/versions/{_quote(version)}/download"
-        res = self._raw_request("GET", path)
+    def download_package(self, guid: str, version: str | None = None) -> bytes:
+        """Download a skill package ZIP. Returns raw bytes.
+
+        There is no ``/api/v1`` download endpoint: the bytes live in
+        object storage behind a time-limited presigned URL. This resolves
+        that URL via the skill-detail read (:meth:`get`), then fetches the
+        absolute URL directly with a one-shot ``httpx.get`` — NOT through
+        :meth:`_raw_request`, which would wrongly prefix ``/api/v1`` and
+        attach the NyxID bearer to an object-storage request.
+
+        When the detail carries ``skill_hash`` (hex SHA-256), the
+        downloaded bytes are re-hashed and compared (SRI-style); a
+        mismatch raises :class:`OrnnError` with code ``integrity_mismatch``.
+
+        ``version`` is optional — defaults to the skill's latest version
+        (resolved server-side) when omitted.
+        """
+        detail = self.get(guid, version=version)
+        url = detail.presigned_package_url
+        if not url:
+            ref = f"{guid}@{version}" if version else guid
+            raise OrnnError(
+                status=404,
+                code="package_not_found",
+                message=f"Ornn: no downloadable package for skill {ref}",
+            )
+        # Bare httpx.get — the presigned URL is absolute object storage,
+        # outside the /api/v1 surface and not authenticated with the
+        # NyxID bearer.
+        res = httpx.get(url, timeout=self._timeout, follow_redirects=True)
         if res.status_code >= 400:
-            raise _build_error(res)
+            raise OrnnError(
+                status=res.status_code,
+                code="package_download_failed",
+                message=f"Ornn: package download failed with HTTP {res.status_code}",
+            )
         # httpx exposes res.content as bytes at runtime; the typeshed
         # stub annotates it as Any. Cast explicitly so strict mypy is
         # happy without disabling the rule.
-        return bytes(res.content)
+        data = bytes(res.content)
+        if detail.skill_hash:
+            actual = hashlib.sha256(data).hexdigest()
+            if actual != detail.skill_hash:
+                ref = f"{guid}@{version}" if version else guid
+                raise OrnnError(
+                    status=0,
+                    code="integrity_mismatch",
+                    message=(
+                        f"Ornn: package integrity check failed for {ref} "
+                        f"(expected {detail.skill_hash}, got {actual})"
+                    ),
+                )
+        return data
 
     def resolve_closure(self, guid_or_name: str, *, version: str | None = None) -> ClosureResult:
         """Resolve the full transitive dependency closure of a skill (#968).

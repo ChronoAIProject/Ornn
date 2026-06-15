@@ -226,26 +226,73 @@ describe("OrnnClient", () => {
     expect(capturedUrl).toContain("/skills?skip_validation=true");
   });
 
-  test("downloadPackage(): returns the raw bytes, not JSON", async () => {
+  test("downloadPackage(): resolves the presigned URL via detail, fetches the bytes (#1011)", async () => {
     const zipBytes = new Uint8Array([80, 75, 3, 4, 1, 2, 3]);
-    const fetchMock = mockFetch(
-      () => new Response(zipBytes, { status: 200, headers: { "Content-Type": "application/zip" } }),
-    );
+    const presignedUrl = "https://obj.example.com/bucket/abc-1.0.zip?sig=xyz";
+    let detailUrl = "";
+    let fetchedPresigned = "";
+    const fetchMock = mockFetch((url) => {
+      if (url.includes("/api/v1/skills/")) {
+        detailUrl = url;
+        // Skill-detail read — carries the presigned URL, no skillHash.
+        return jsonResponse(200, {
+          data: { id: "abc", name: "abc", presignedPackageUrl: presignedUrl },
+          error: null,
+        });
+      }
+      // The absolute object-storage URL — returns the raw package bytes.
+      fetchedPresigned = url;
+      return new Response(zipBytes, {
+        status: 200,
+        headers: { "Content-Type": "application/zip" },
+      });
+    });
     const client = new OrnnClient({ baseUrl: "https://x", fetch: fetchMock });
     const buf = await client.downloadPackage("abc", "1.0");
+    // Detail read threads ?version= ; the presigned fetch is the bare URL.
+    expect(detailUrl).toBe("https://x/api/v1/skills/abc?version=1.0");
+    expect(fetchedPresigned).toBe(presignedUrl);
     expect(buf.byteLength).toBe(zipBytes.byteLength);
     expect(new Uint8Array(buf)[0]).toBe(80);
   });
 
-  test("downloadPackage(): throws OrnnError on 404", async () => {
-    // 404 body is RFC 7807 problem+json (#456) — fields at the root.
+  test("downloadPackage(): version is optional — omits ?version= (#1011)", async () => {
+    let detailUrl = "";
+    const fetchMock = mockFetch((url) => {
+      if (url.includes("/api/v1/skills/")) {
+        detailUrl = url;
+        return jsonResponse(200, {
+          data: { id: "abc", name: "abc", presignedPackageUrl: "https://obj.example.com/z.zip" },
+          error: null,
+        });
+      }
+      return new Response(new Uint8Array([80, 75]), { status: 200 });
+    });
+    const client = new OrnnClient({ baseUrl: "https://x", fetch: fetchMock });
+    await client.downloadPackage("abc");
+    expect(detailUrl).toBe("https://x/api/v1/skills/abc");
+  });
+
+  test("downloadPackage(): throws package_not_found when detail has no presigned URL (#1011)", async () => {
+    const fetchMock = mockFetch(() =>
+      jsonResponse(200, { data: { id: "abc", name: "abc" }, error: null }),
+    );
+    const client = new OrnnClient({ baseUrl: "https://x", fetch: fetchMock });
+    const err = (await client.downloadPackage("abc", "1.0").catch((e) => e)) as OrnnError;
+    expect(err).toBeInstanceOf(OrnnError);
+    expect(err.status).toBe(404);
+    expect(err.code).toBe("package_not_found");
+  });
+
+  test("downloadPackage(): throws OrnnError when the underlying skill read 404s (#1011)", async () => {
+    // The detail read is the first hop; its 404 (RFC 7807) propagates.
     const fetchMock = mockFetch(() =>
       jsonResponse(404, {
         type: "https://github.com/.../ERRORS.md#resource_not_found",
         title: "Resource not found",
         status: 404,
         code: "resource_not_found",
-        detail: "no such version",
+        detail: "no such skill",
       }),
     );
     const client = new OrnnClient({ baseUrl: "https://x", fetch: fetchMock });
@@ -253,6 +300,72 @@ describe("OrnnClient", () => {
     expect(err).toBeInstanceOf(OrnnError);
     expect(err.status).toBe(404);
     expect(err.code).toBe("resource_not_found");
+  });
+
+  test("downloadPackage(): throws package_download_failed on a non-2xx presigned fetch (#1011)", async () => {
+    const fetchMock = mockFetch((url) => {
+      if (url.includes("/api/v1/skills/")) {
+        return jsonResponse(200, {
+          data: { id: "abc", name: "abc", presignedPackageUrl: "https://obj.example.com/z.zip" },
+          error: null,
+        });
+      }
+      // Object storage rejects the (now-expired) presigned URL.
+      return new Response("expired", { status: 403 });
+    });
+    const client = new OrnnClient({ baseUrl: "https://x", fetch: fetchMock });
+    const err = (await client.downloadPackage("abc", "1.0").catch((e) => e)) as OrnnError;
+    expect(err).toBeInstanceOf(OrnnError);
+    expect(err.status).toBe(403);
+    expect(err.code).toBe("package_download_failed");
+  });
+
+  test("downloadPackage(): verifies skillHash and returns the bytes on match (#1011)", async () => {
+    const zipBytes = new Uint8Array([80, 75, 3, 4]);
+    // Pre-computed SHA-256 of the four bytes below, asserted at runtime
+    // against the SDK's own WebCrypto digest so the test is self-checking.
+    const digest = await crypto.subtle.digest("SHA-256", zipBytes);
+    const expectedHash = Array.from(new Uint8Array(digest))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+    const fetchMock = mockFetch((url) => {
+      if (url.includes("/api/v1/skills/")) {
+        return jsonResponse(200, {
+          data: {
+            id: "abc",
+            name: "abc",
+            presignedPackageUrl: "https://obj.example.com/z.zip",
+            skillHash: expectedHash,
+          },
+          error: null,
+        });
+      }
+      return new Response(zipBytes, { status: 200 });
+    });
+    const client = new OrnnClient({ baseUrl: "https://x", fetch: fetchMock });
+    const buf = await client.downloadPackage("abc", "1.0");
+    expect(new Uint8Array(buf)).toEqual(zipBytes);
+  });
+
+  test("downloadPackage(): throws integrity_mismatch when skillHash disagrees (#1011)", async () => {
+    const fetchMock = mockFetch((url) => {
+      if (url.includes("/api/v1/skills/")) {
+        return jsonResponse(200, {
+          data: {
+            id: "abc",
+            name: "abc",
+            presignedPackageUrl: "https://obj.example.com/z.zip",
+            skillHash: "deadbeef", // deliberately wrong
+          },
+          error: null,
+        });
+      }
+      return new Response(new Uint8Array([80, 75, 3, 4]), { status: 200 });
+    });
+    const client = new OrnnClient({ baseUrl: "https://x", fetch: fetchMock });
+    const err = (await client.downloadPackage("abc", "1.0").catch((e) => e)) as OrnnError;
+    expect(err).toBeInstanceOf(OrnnError);
+    expect(err.code).toBe("integrity_mismatch");
   });
 
   test("resolveClosure(): parses the topo-ordered items envelope (#968)", async () => {
@@ -318,9 +431,22 @@ describe("OrnnClient", () => {
           error: null,
         });
       }
-      // download path: /skills/:guid/versions/:version/download
-      const match = url.match(/\/skills\/([^/]+)\/versions\//);
-      downloadOrder.push(match?.[1] ?? "?");
+      // Per-node skill-detail read (#1011) — record order, hand back a
+      // presigned URL pointing at that node's object-storage artifact.
+      const detailMatch = url.match(/\/api\/v1\/skills\/([^/?]+)/);
+      if (detailMatch) {
+        const guid = detailMatch[1]!;
+        downloadOrder.push(guid);
+        return jsonResponse(200, {
+          data: {
+            id: guid,
+            name: guid,
+            presignedPackageUrl: `https://obj.example.com/${guid}.zip`,
+          },
+          error: null,
+        });
+      }
+      // The absolute presigned-URL fetch — raw bytes.
       return new Response(new Uint8Array([80, 75, 3, 4]), {
         status: 200,
         headers: { "Content-Type": "application/zip" },
