@@ -289,6 +289,44 @@ export class SkillRepository {
     logger.info({ guid, tag }, "Dist-tag deleted");
   }
 
+  /**
+   * Reassign a skill's owner (#1123). `createdBy` is otherwise immutable —
+   * this is the single explicit exception, so it lives in a dedicated method
+   * rather than widening `UpdateSkillData`. Refreshes the cached owner-label
+   * fields and replaces the ACL with the caller-computed `grants` (the
+   * service appends the prior owner as a read grant and drops the new owner),
+   * dual-writing the legacy lists for rolling-deploy read compat.
+   */
+  async transferOwnership(
+    guid: string,
+    data: {
+      newOwnerId: string;
+      newOwnerEmail: string | null;
+      newOwnerDisplayName: string | null;
+      grants: SkillGrant[];
+      updatedBy: string;
+    },
+  ): Promise<SkillDocument> {
+    const legacy = legacyListsFromGrants(data.grants);
+    await this.collection.updateOne(
+      { _id: skillId(guid) },
+      {
+        $set: {
+          createdBy: data.newOwnerId,
+          createdByEmail: data.newOwnerEmail,
+          createdByDisplayName: data.newOwnerDisplayName,
+          grants: data.grants,
+          sharedWithUsers: legacy.sharedWithUsers,
+          sharedWithOrgs: legacy.sharedWithOrgs,
+          updatedBy: data.updatedBy,
+          updatedOn: new Date(),
+        },
+      },
+    );
+    logger.info({ guid, newOwnerId: data.newOwnerId }, "Skill ownership transferred");
+    return (await this.findByGuid(guid))!;
+  }
+
   async hardDelete(guid: string): Promise<void> {
     await this.collection.deleteOne({ _id: skillId(guid) });
     logger.info({ guid }, "Skill hard-deleted");

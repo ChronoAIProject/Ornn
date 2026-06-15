@@ -59,6 +59,7 @@ export type PlatformActivityAction =
   | "skill.version_deleted"
   | "skill.visibility_changed"
   | "skill.permissions_changed"
+  | "skill.ownership_transferred"
   | "skill.refresh"
   | "skill.nyxid_service_tied"
   | "skill.source_linked"

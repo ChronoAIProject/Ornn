@@ -15,7 +15,7 @@ import { fetchSkillFromGitHub, parseGithubUrl, type GitHubPullInput } from "./ut
 import { computeVersionDiff, type VersionDiffResult } from "./utils/versionDiff";
 import { isReservedVerb } from "../../../shared/reservedVerbs";
 import { canReadSkill, isMemberOfOrg, SYSTEM_ACTOR, type ActorContext } from "./authorize";
-import { effectiveGrants, resolvePermissionGrants, type PermissionsPayload } from "./grants";
+import { effectiveGrants, normalizeGrants, resolvePermissionGrants, type PermissionsPayload } from "./grants";
 import {
   resolveClosure,
   type LoadVersion,
@@ -626,6 +626,55 @@ export class SkillService {
       grants,
       updatedBy: userId,
     });
+    return this.buildDetailResponse(updated);
+  }
+
+  /**
+   * Transfer skill ownership to another user (#1123).
+   *
+   * The caller (route) has already gated `canManageSkill` (owner / platform
+   * admin) and resolved the target's identity from the user directory. Here
+   * we own the data mutation: reassign `createdBy`, refresh the cached owner
+   * labels, and recompute the ACL so the prior owner keeps READ access while
+   * the new owner is dropped from any grant (they now hold implicit ADMIN).
+   *
+   * Rejects a no-op transfer (target already owns it) with `ownership_conflict`.
+   */
+  async transferSkillOwnership(
+    guid: string,
+    newOwner: { userId: string; email?: string | undefined; displayName?: string | undefined },
+    actor: ActorContext,
+  ): Promise<SkillDetailResponse> {
+    const existing = await this.skillRepo.findByGuid(guid);
+    if (!existing) {
+      throw AppError.notFound("skill_not_found", `Skill '${guid}' not found`);
+    }
+    if (newOwner.userId === existing.createdBy) {
+      throw AppError.conflict("ownership_conflict", "This user already owns the skill");
+    }
+
+    // New ACL: keep every existing grant EXCEPT one naming the new owner
+    // (they become owner → implicit ADMIN), and append the prior owner as a
+    // READ grantee so they retain visibility but not edit/admin rights.
+    const priorOwner = existing.createdBy;
+    const grants = normalizeGrants([
+      ...effectiveGrants(existing).filter(
+        (g) => !(g.type === "user" && g.id === newOwner.userId),
+      ),
+      { type: "user", id: priorOwner, level: "read" },
+    ]);
+
+    const updated = await this.skillRepo.transferOwnership(guid, {
+      newOwnerId: newOwner.userId,
+      newOwnerEmail: newOwner.email ?? null,
+      newOwnerDisplayName: newOwner.displayName ?? null,
+      grants,
+      updatedBy: actor.userId,
+    });
+    logger.info(
+      { guid, priorOwner, newOwnerId: newOwner.userId, by: actor.userId },
+      "Skill ownership transferred",
+    );
     return this.buildDetailResponse(updated);
   }
 

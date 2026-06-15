@@ -767,6 +767,10 @@ export async function bootstrap(
     // wrapper here.
     extraNyxidServicesResolver: () => resolveExtraNyxidServiceNames(),
     mirrorService,
+    // #1123 — transfer-ownership target validation + owner-label refresh,
+    // backed by the lazily-populated user directory.
+    resolveUser: async (userId) =>
+      (await userDirectoryRepo.findByUserIds([userId]))[0] ?? null,
   });
 
   // ---- Domain: Skill Search ----

@@ -52,6 +52,11 @@ const permissionsPatchSchema = z.object({
   sharedWithOrgs: z.array(z.string().min(1).max(128)).max(100).default([]),
 });
 
+/** Body for `POST /skills/:id/transfer-ownership` (#1123). */
+const transferOwnershipSchema = z.object({
+  newOwnerUserId: z.string().min(1).max(128),
+});
+
 /**
  * Body for `PUT /api/v1/skills/:id/nyxid-service`. `nyxidServiceId: null`
  * untie; a string ties to that catalog row. The service is validated +
@@ -162,6 +167,16 @@ export interface SkillRoutesConfig {
    * with Ornn's public + system skill set.
    */
   mirrorService?: import("../mirror/mirrorService").MirrorService;
+  /**
+   * Resolve a userId to its directory identity (#1123). Used by
+   * `POST /skills/:id/transfer-ownership` to validate that the transfer
+   * target is a known Ornn user (signed in at least once) and to refresh
+   * the cached owner labels. When unset, transfer rejects every target as
+   * `invalid_transfer_target`.
+   */
+  resolveUser?: (
+    userId: string,
+  ) => Promise<{ userId: string; email: string; displayName: string } | null>;
 }
 
 /** Marker prefix for synthetic NyxID-service ids. See `extraNyxidServices`. */
@@ -177,6 +192,7 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
     nyxidServiceClient,
     extraNyxidServicesResolver,
     mirrorService,
+    resolveUser,
   } = config;
   const app = new Hono<{ Variables: AuthVariables }>();
 
@@ -1157,6 +1173,73 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
 
       // Permissions change can flip eligibility — sync handles both
       // public→private (remove from mirror) and private→public (add).
+      fireMirrorSync(guid);
+
+      return c.json({ data: { skill: updated }, error: null });
+    },
+  );
+
+  /**
+   * POST /skills/:id/transfer-ownership — hand the skill to another Ornn
+   * user (#1123). ADMIN-tier: author or platform admin only.
+   *
+   * Body: `{ newOwnerUserId }`. The target must be a known Ornn user
+   * (resolvable in the directory — i.e. signed in at least once) or the
+   * call 400s with `invalid_transfer_target`. Transfer is immediate: the
+   * new owner becomes the owner synchronously and the prior owner is kept
+   * as a READ grantee (they retain visibility, not edit/admin rights).
+   */
+  app.post(
+    "/skills/:id/transfer-ownership",
+    auth,
+    requirePermission("ornn:skill:update"),
+    validateBody(transferOwnershipSchema, "invalid_transfer"),
+    async (c) => {
+      const guid = c.req.param("id");
+      const authCtx = getAuth(c);
+      const body = getValidatedBody<z.infer<typeof transferOwnershipSchema>>(c);
+
+      const existing = await skillRepo.findByGuid(guid);
+      if (!existing) {
+        throw AppError.notFound("skill_not_found", `Skill '${guid}' not found`);
+      }
+      const actor = await buildActorContext(c);
+      // ADMIN tier — transfer is a danger-zone op, never a read_write grant.
+      if (!canManageSkill(existing, actor)) {
+        throw AppError.forbidden(
+          "forbidden",
+          "Only the skill owner or a platform admin can transfer ownership",
+        );
+      }
+      if (body.newOwnerUserId === existing.createdBy) {
+        throw AppError.conflict("ownership_conflict", "This user already owns the skill");
+      }
+
+      // Resolve + validate the target against the user directory. A user who
+      // never signed in to Ornn isn't resolvable, so reject before mutating.
+      const target = resolveUser ? await resolveUser(body.newOwnerUserId) : null;
+      if (!target) {
+        throw AppError.badRequest(
+          "invalid_transfer_target",
+          "Transfer target is not a known Ornn user. They must have signed in to Ornn at least once.",
+        );
+      }
+
+      const updated = await skillService.transferSkillOwnership(
+        guid,
+        { userId: target.userId, email: target.email, displayName: target.displayName },
+        actor,
+      );
+
+      trackActivity(authCtx.userId, authCtx.email, authCtx.displayName, "skill.ownership_transferred", {
+        skillId: guid,
+        skillName: updated.name,
+        priorOwnerId: existing.createdBy,
+        newOwnerId: target.userId,
+      });
+
+      // Owner change doesn't affect mirror eligibility, but the cached author
+      // labels on the mirror copy are now stale — resync to refresh them.
       fireMirrorSync(guid);
 
       return c.json({ data: { skill: updated }, error: null });
