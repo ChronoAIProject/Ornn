@@ -23,7 +23,7 @@ SkillsetKind = Literal["generic", "consensus-supported"]
 
 @dataclass
 class SkillSummary:
-    id: str
+    guid: str
     name: str
     description: str
     is_private: bool
@@ -37,7 +37,12 @@ class SkillSummary:
 
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> SkillSummary:
+        # The wire identifier is `guid` — both search `enrichItem` and the
+        # detail `buildDetailResponse` emit it (never `id`). The legacy `id`
+        # fallback keeps old/hand-rolled payloads from KeyError-ing, and
+        # `id` stays in `known` so a stray legacy key never leaks into `_extra`.
         known = {
+            "guid",
             "id",
             "name",
             "description",
@@ -51,7 +56,7 @@ class SkillSummary:
         }
         extra = {k: v for k, v in raw.items() if k not in known}
         return cls(
-            id=raw["id"],
+            guid=raw.get("guid") or raw.get("id", ""),
             name=raw["name"],
             description=raw.get("description", ""),
             is_private=bool(raw.get("isPrivate", False)),
@@ -92,6 +97,7 @@ class SkillDetail(SkillSummary):
             "skillHash",
         }
         summary_known = {
+            "guid",
             "id",
             "name",
             "description",

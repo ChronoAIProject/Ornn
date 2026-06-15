@@ -51,7 +51,7 @@ class OrnnClient:
         ... )
         >>> result = ornn.search(q="pdf", scope="public")
         >>> for skill in result.items:
-        ...     print(skill.id, skill.name)
+        ...     print(skill.guid, skill.name)
 
     For dynamic token refresh, pass a ``token_resolver`` callable instead
     of a static ``token``::

@@ -10,8 +10,8 @@ Quickstart::
     )
 
     result = ornn.search(q="pdf", scope="public")
-    detail = ornn.get(result.items[0].id)
-    pkg = ornn.download_package(detail.id, detail.latest_version)
+    detail = ornn.get(result.items[0].guid)
+    pkg = ornn.download_package(detail.guid, detail.latest_version)
 
     ornn.close()  # or use ``with OrnnClient(...) as ornn: ...``
 

@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+from typing import Any
+
 import pytest
 import respx
 
@@ -14,6 +18,13 @@ from ornn_sdk import (
 )
 
 BASE = "https://ornn.example.com"
+
+FIXTURES_DIR = Path(__file__).parent / "fixtures"
+
+
+def load_fixture(name: str) -> dict[str, Any]:
+    """Load a JSON fixture captured from a real API response shape."""
+    return json.loads((FIXTURES_DIR / name).read_text())
 
 
 def make_client(**kwargs) -> OrnnClient:
@@ -162,7 +173,7 @@ class TestSearch:
                 "data": {
                     "items": [
                         {
-                            "id": "abc",
+                            "guid": "abc",
                             "name": "pdf-extract",
                             "description": "Extract pdf text",
                             "isPrivate": False,
@@ -184,9 +195,41 @@ class TestSearch:
             result = ornn.search()
         assert result.total == 1
         assert result.mode == "keyword"
-        assert result.items[0].id == "abc"
+        assert result.items[0].guid == "abc"
         assert result.items[0].latest_version == "1.2"
         assert result.items[0].is_private is False
+
+    @respx.mock
+    def test_legacy_id_only_payload_populates_guid(self) -> None:
+        # Defensive: a hand-rolled / pre-#1012 payload that carries only the
+        # old `id` key (no `guid`) must still parse — the fallback maps `id`
+        # onto `guid` rather than KeyError-ing, and `id` is not leaked to _extra.
+        respx.get(f"{BASE}/api/v1/skill-search").respond(
+            200,
+            json={
+                "data": {
+                    "items": [
+                        {
+                            "id": "legacy-id",
+                            "name": "legacy-skill",
+                            "description": "",
+                            "isPrivate": False,
+                            "createdBy": "u1",
+                            "createdOn": "2026-01-01T00:00:00Z",
+                        }
+                    ],
+                    "total": 1,
+                    "page": 1,
+                    "pageSize": 20,
+                    "totalPages": 1,
+                },
+                "error": None,
+            },
+        )
+        with make_client() as ornn:
+            result = ornn.search()
+        assert result.items[0].guid == "legacy-id"
+        assert "id" not in result.items[0]._extra
 
 
 class TestGet:
@@ -196,7 +239,7 @@ class TestGet:
             200,
             json={
                 "data": {
-                    "id": "x",
+                    "guid": "x",
                     "name": "my/weird name",
                     "description": "",
                     "isPrivate": False,
@@ -211,6 +254,25 @@ class TestGet:
         assert isinstance(detail, SkillDetail)
         assert detail.created_by == "u1"
         assert route.called
+
+    @respx.mock
+    def test_parses_real_api_detail_shape(self) -> None:
+        # Fixture mirrors the genuine wire shape emitted by the API's
+        # `buildDetailResponse` — `guid`-keyed, NO `id` key. This is the
+        # exact payload that used to KeyError before #1012.
+        raw = load_fixture("skill_detail_real.json")
+        assert "id" not in raw  # guard: the real shape never carries `id`
+        respx.get(f"{BASE}/api/v1/skills/pdf-extract").respond(
+            200, json={"data": raw, "error": None}
+        )
+        with make_client() as ornn:
+            detail = ornn.get("pdf-extract")
+        assert isinstance(detail, SkillDetail)
+        assert detail.guid == raw["guid"]
+        assert detail.name == "pdf-extract"
+        assert detail.presigned_package_url == raw["presignedPackageUrl"]
+        assert detail.skill_hash == raw["skillHash"]
+        assert detail.shared_with_users == []
 
     @respx.mock
     def test_raises_ornn_error_on_404(self) -> None:
@@ -255,7 +317,7 @@ class TestVersions:
 
 def _detail_data(**overrides: object) -> dict[str, object]:
     base: dict[str, object] = {
-        "id": "abc",
+        "guid": "abc",
         "name": "abc",
         "description": "",
         "isPrivate": False,
@@ -477,14 +539,14 @@ class TestClosure:
         detail_c = respx.get(f"{BASE}/api/v1/skills/g-c").respond(
             200,
             json={
-                "data": _detail_data(id="g-c", name="g-c", presignedPackageUrl=url_c),
+                "data": _detail_data(guid="g-c", name="g-c", presignedPackageUrl=url_c),
                 "error": None,
             },
         )
         detail_b = respx.get(f"{BASE}/api/v1/skills/g-b").respond(
             200,
             json={
-                "data": _detail_data(id="g-b", name="g-b", presignedPackageUrl=url_b),
+                "data": _detail_data(guid="g-b", name="g-b", presignedPackageUrl=url_b),
                 "error": None,
             },
         )
@@ -511,7 +573,7 @@ class TestPublish:
             200,
             json={
                 "data": {
-                    "id": "new_abc",
+                    "guid": "new_abc",
                     "name": "my-skill",
                     "description": "",
                     "isPrivate": True,
@@ -524,7 +586,7 @@ class TestPublish:
         zip_bytes = b"PK\x03\x04fakezip"
         with make_client() as ornn:
             detail = ornn.publish(zip_bytes)
-        assert detail.id == "new_abc"
+        assert detail.guid == "new_abc"
         req = route.calls.last.request
         assert req.headers["content-type"] == "application/zip"
         assert req.content == zip_bytes
@@ -535,7 +597,7 @@ class TestPublish:
             200,
             json={
                 "data": {
-                    "id": "admin_x",
+                    "guid": "admin_x",
                     "name": "admin-skill",
                     "description": "",
                     "isPrivate": False,
@@ -559,7 +621,7 @@ class TestUpdate:
             200,
             json={
                 "data": {
-                    "id": "abc",
+                    "guid": "abc",
                     "name": "abc",
                     "description": "updated",
                     "isPrivate": False,
@@ -581,7 +643,7 @@ class TestUpdate:
             200,
             json={
                 "data": {
-                    "id": "abc",
+                    "guid": "abc",
                     "name": "abc",
                     "description": "",
                     "isPrivate": False,

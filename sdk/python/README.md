@@ -41,10 +41,10 @@ with OrnnClient(
     result = ornn.search(q="pdf", scope="public")
 
     # Read
-    skill = ornn.get(result.items[0].id)
+    skill = ornn.get(result.items[0].guid)
 
     # Pull
-    pkg = ornn.download_package(skill.id, skill.latest_version)
+    pkg = ornn.download_package(skill.guid, skill.latest_version)
     # pkg is raw bytes — write to disk, pass to zipfile, etc. Resolves the
     # version's presigned package URL from the skill detail and fetches it
     # directly; verifies the bytes against `skill_hash` (SRI) when present.

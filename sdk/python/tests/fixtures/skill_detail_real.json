@@ -1,0 +1,24 @@
+{
+  "guid": "01HZ8K9QABCDEF0123456789AB",
+  "name": "pdf-extract",
+  "description": "Extract text and tables from PDF documents",
+  "license": "MIT",
+  "compatibility": {},
+  "metadata": {
+    "tags": ["pdf", "extraction"]
+  },
+  "tags": ["pdf", "extraction"],
+  "skillHash": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+  "presignedPackageUrl": "https://obj.example.com/bucket/01HZ8K9Q-1.0.zip?sig=abc123",
+  "isPrivate": false,
+  "createdBy": "user-42",
+  "createdByEmail": "owner@example.com",
+  "createdByDisplayName": "Skill Owner",
+  "createdOn": "2026-01-01T00:00:00.000Z",
+  "updatedOn": "2026-01-02T00:00:00.000Z",
+  "sharedWithUsers": [],
+  "sharedWithOrgs": [],
+  "version": "1.0",
+  "isDeprecated": false,
+  "deprecationNote": null
+}
