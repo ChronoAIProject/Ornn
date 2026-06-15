@@ -45,7 +45,10 @@ with OrnnClient(
 
     # Pull
     pkg = ornn.download_package(skill.id, skill.latest_version)
-    # pkg is raw bytes — write to disk, pass to zipfile, etc.
+    # pkg is raw bytes — write to disk, pass to zipfile, etc. Resolves the
+    # version's presigned package URL from the skill detail and fetches it
+    # directly; verifies the bytes against `skill_hash` (SRI) when present.
+    # version is optional — omit it to pull the latest.
 
     # Publish
     new_skill = ornn.publish(pkg)
@@ -88,7 +91,7 @@ Error codes follow [`docs/CONVENTIONS.md` §1.4](../../docs/CONVENTIONS.md) (low
 | `search(...)` | `GET /skill-search` — returns `SkillSearchResult` |
 | `get(guid_or_name, version=None)` | `GET /skills/:id` — returns `SkillDetail` |
 | `list_versions(guid_or_name)` | `GET /skills/:id/versions` — returns `list[SkillVersionEntry]` |
-| `download_package(guid, version)` | `GET /skills/:id/versions/:v/download` — returns `bytes` |
+| `download_package(guid, version=None)` | `GET /skills/:id` → fetch `presigned_package_url` (SRI-verified) — returns `bytes` |
 | `publish(zip_bytes, skip_validation=False)` | `POST /skills` — returns `SkillDetail` |
 | `update(id, metadata=..., zip_bytes=..., skip_validation=False)` | `PUT /skills/:id` — returns `SkillDetail` |
 | `delete(id)` | `DELETE /skills/:id` |

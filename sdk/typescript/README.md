@@ -46,8 +46,11 @@ const { items } = await ornn.search({ q: "pdf", scope: "public" });
 const skill = await ornn.get(items[0]!.id);
 
 // Pull
-const pkg = await ornn.downloadPackage(skill.id, skill.latestVersion!);
-// pkg is an ArrayBuffer — write to disk, unzip, etc.
+const pkg = await ornn.downloadPackage(skill.id, skill.latestVersion);
+// pkg is an ArrayBuffer — write to disk, unzip, etc. Resolves the
+// version's presigned package URL from the skill detail and fetches it
+// directly; verifies the bytes against `skillHash` (SRI) when present.
+// version is optional — omit it to pull the latest.
 
 // Publish
 const newSkill = await ornn.publish(pkg); // or a Blob / Uint8Array
@@ -93,7 +96,7 @@ Error codes follow [`docs/CONVENTIONS.md` §1.4](../../docs/CONVENTIONS.md) (low
 | `search(params)` | `GET /skill-search` |
 | `get(guidOrName, version?)` | `GET /skills/:id` |
 | `listVersions(guidOrName)` | `GET /skills/:id/versions` |
-| `downloadPackage(guid, version)` | `GET /skills/:id/versions/:version/download` (returns `ArrayBuffer`) |
+| `downloadPackage(guid, version?)` | `GET /skills/:id` → fetch `presignedPackageUrl` (SRI-verified; returns `ArrayBuffer`) |
 | `publish(zip, options?)` | `POST /skills` (`application/zip` body) |
 | `update(id, { metadata? | zip? }, options?)` | `PUT /skills/:id` |
 | `delete(id)` | `DELETE /skills/:id` |
