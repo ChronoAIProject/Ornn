@@ -253,30 +253,79 @@ class TestVersions:
         assert versions[0].is_latest is True
 
 
+def _detail_data(**overrides: object) -> dict[str, object]:
+    base: dict[str, object] = {
+        "id": "abc",
+        "name": "abc",
+        "description": "",
+        "isPrivate": False,
+        "createdBy": "u1",
+        "createdOn": "2026-01-01T00:00:00Z",
+    }
+    base.update(overrides)
+    return base
+
+
+PRESIGNED = "https://obj.example.com/bucket/abc-1.0.zip?sig=xyz"
+
+
 class TestDownload:
     @respx.mock
-    def test_download_returns_raw_bytes(self) -> None:
+    def test_download_resolves_presigned_url_and_fetches_bytes(self) -> None:
+        # download_package now reads the skill detail for the presigned
+        # URL (#1011), then fetches that absolute object-storage URL.
         zip_bytes = b"PK\x03\x04\x01\x02\x03"
-        respx.get(f"{BASE}/api/v1/skills/abc/versions/1.0/download").respond(
+        detail = respx.get(f"{BASE}/api/v1/skills/abc").respond(
             200,
-            content=zip_bytes,
-            headers={"Content-Type": "application/zip"},
+            json={
+                "data": _detail_data(presignedPackageUrl=PRESIGNED),
+                "error": None,
+            },
+        )
+        obj = respx.get(PRESIGNED).respond(
+            200, content=zip_bytes, headers={"Content-Type": "application/zip"}
         )
         with make_client() as ornn:
             result = ornn.download_package("abc", "1.0")
         assert result == zip_bytes
+        # Detail read threads ?version= ; the object fetch is the bare URL.
+        assert detail.calls.last.request.url.params["version"] == "1.0"
+        assert obj.called
 
     @respx.mock
-    def test_download_raises_on_error(self) -> None:
-        respx.get(f"{BASE}/api/v1/skills/abc/versions/9.9/download").respond(
+    def test_download_version_optional_omits_version_param(self) -> None:
+        detail = respx.get(f"{BASE}/api/v1/skills/abc").respond(
+            200,
+            json={"data": _detail_data(presignedPackageUrl=PRESIGNED), "error": None},
+        )
+        respx.get(PRESIGNED).respond(200, content=b"PK")
+        with make_client() as ornn:
+            ornn.download_package("abc")
+        assert "version" not in detail.calls.last.request.url.params
+
+    @respx.mock
+    def test_download_raises_package_not_found_without_presigned_url(self) -> None:
+        respx.get(f"{BASE}/api/v1/skills/abc").respond(
+            200, json={"data": _detail_data(), "error": None}
+        )
+        with make_client() as ornn:
+            with pytest.raises(OrnnError) as excinfo:
+                ornn.download_package("abc", "1.0")
+        assert excinfo.value.status == 404
+        assert excinfo.value.code == "package_not_found"
+
+    @respx.mock
+    def test_download_raises_when_skill_read_404s(self) -> None:
+        # The detail read is the first hop; its 404 (RFC 7807) propagates.
+        respx.get(f"{BASE}/api/v1/skills/abc").respond(
             404,
             json={
                 "type": "https://github.com/.../ERRORS.md#resource_not_found",
                 "title": "Resource not found",
                 "status": 404,
                 "code": "resource_not_found",
-                "detail": "no such version",
-                "instance": "/v1/skills/abc/versions/9.9/download",
+                "detail": "no such skill",
+                "instance": "/v1/skills/abc",
             },
         )
         with make_client() as ornn:
@@ -284,6 +333,53 @@ class TestDownload:
                 ornn.download_package("abc", "9.9")
         assert excinfo.value.status == 404
         assert excinfo.value.code == "resource_not_found"
+
+    @respx.mock
+    def test_download_raises_package_download_failed_on_non_2xx(self) -> None:
+        respx.get(f"{BASE}/api/v1/skills/abc").respond(
+            200,
+            json={"data": _detail_data(presignedPackageUrl=PRESIGNED), "error": None},
+        )
+        # Object storage rejects the (now-expired) presigned URL.
+        respx.get(PRESIGNED).respond(403, text="expired")
+        with make_client() as ornn:
+            with pytest.raises(OrnnError) as excinfo:
+                ornn.download_package("abc", "1.0")
+        assert excinfo.value.status == 403
+        assert excinfo.value.code == "package_download_failed"
+
+    @respx.mock
+    def test_download_verifies_skill_hash_and_returns_bytes(self) -> None:
+        import hashlib
+
+        zip_bytes = b"PK\x03\x04"
+        expected = hashlib.sha256(zip_bytes).hexdigest()
+        respx.get(f"{BASE}/api/v1/skills/abc").respond(
+            200,
+            json={
+                "data": _detail_data(presignedPackageUrl=PRESIGNED, skillHash=expected),
+                "error": None,
+            },
+        )
+        respx.get(PRESIGNED).respond(200, content=zip_bytes)
+        with make_client() as ornn:
+            result = ornn.download_package("abc", "1.0")
+        assert result == zip_bytes
+
+    @respx.mock
+    def test_download_raises_integrity_mismatch_on_bad_hash(self) -> None:
+        respx.get(f"{BASE}/api/v1/skills/abc").respond(
+            200,
+            json={
+                "data": _detail_data(presignedPackageUrl=PRESIGNED, skillHash="deadbeef"),
+                "error": None,
+            },
+        )
+        respx.get(PRESIGNED).respond(200, content=b"PK\x03\x04")
+        with make_client() as ornn:
+            with pytest.raises(OrnnError) as excinfo:
+                ornn.download_package("abc", "1.0")
+        assert excinfo.value.code == "integrity_mismatch"
 
 
 class TestClosure:
@@ -374,10 +470,28 @@ class TestClosure:
                 "error": None,
             },
         )
-        dl_c = respx.get(f"{BASE}/api/v1/skills/g-c/versions/1.0/download").respond(
+        # Per-node skill-detail reads (#1011) resolve each node's
+        # presigned URL; the bytes then come from object storage.
+        url_c = "https://obj.example.com/g-c.zip"
+        url_b = "https://obj.example.com/g-b.zip"
+        detail_c = respx.get(f"{BASE}/api/v1/skills/g-c").respond(
+            200,
+            json={
+                "data": _detail_data(id="g-c", name="g-c", presignedPackageUrl=url_c),
+                "error": None,
+            },
+        )
+        detail_b = respx.get(f"{BASE}/api/v1/skills/g-b").respond(
+            200,
+            json={
+                "data": _detail_data(id="g-b", name="g-b", presignedPackageUrl=url_b),
+                "error": None,
+            },
+        )
+        dl_c = respx.get(url_c).respond(
             200, content=b"PKc", headers={"Content-Type": "application/zip"}
         )
-        dl_b = respx.get(f"{BASE}/api/v1/skills/g-b/versions/1.0/download").respond(
+        dl_b = respx.get(url_b).respond(
             200, content=b"PKb", headers={"Content-Type": "application/zip"}
         )
         with make_client() as ornn:
@@ -386,6 +500,7 @@ class TestClosure:
         # Downloads follow the closure order — c (deps-first) before b.
         assert [node.name for node, _ in packages] == ["c", "b"]
         assert packages[0][1] == b"PKc"
+        assert detail_c.called and detail_b.called
         assert dl_c.called and dl_b.called
 
 

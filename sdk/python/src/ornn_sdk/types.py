@@ -70,6 +70,13 @@ class SkillDetail(SkillSummary):
     storage_key: str | None = None
     shared_with_users: list[str] = field(default_factory=list)
     shared_with_orgs: list[str] = field(default_factory=list)
+    # Absolute, time-limited object-storage URL for the version's package
+    # ZIP (resolved server-side per ?version=). `download_package` fetches
+    # it directly (not via /api/v1). Absent when unreadable / no package.
+    presigned_package_url: str | None = None
+    # Hex SHA-256 of the package bytes — `download_package` verifies the
+    # downloaded bytes against it (SRI) when present.
+    skill_hash: str | None = None
 
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> SkillDetail:
@@ -77,7 +84,13 @@ class SkillDetail(SkillSummary):
         base.pop("_extra")
         # `ownerId` was removed from the wire in #581 — tolerate it
         # showing up on old API responses (treat as unknown extra).
-        known_extra = {"storageKey", "sharedWithUsers", "sharedWithOrgs"}
+        known_extra = {
+            "storageKey",
+            "sharedWithUsers",
+            "sharedWithOrgs",
+            "presignedPackageUrl",
+            "skillHash",
+        }
         summary_known = {
             "id",
             "name",
@@ -100,6 +113,8 @@ class SkillDetail(SkillSummary):
             storage_key=raw.get("storageKey"),
             shared_with_users=list(raw.get("sharedWithUsers") or []),
             shared_with_orgs=list(raw.get("sharedWithOrgs") or []),
+            presigned_package_url=raw.get("presignedPackageUrl"),
+            skill_hash=raw.get("skillHash"),
             _extra=extra,
         )
 
