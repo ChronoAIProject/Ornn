@@ -75,21 +75,21 @@ jobs:
       # because a single codecov-action invocation applies one flag set to
       # every file it uploads.
       - name: Upload ornn-api coverage to Codecov
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v7
         if: ${{ !cancelled() }}
         with:
           flags: api
           fail_ci_if_error: false
           files: ./ornn-api/coverage/lcov.info
       - name: Upload ornn-web coverage to Codecov
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v7
         if: ${{ !cancelled() }}
         with:
           flags: web
           fail_ci_if_error: false
           files: ./ornn-web/coverage/lcov.info
       - name: Upload TS SDK coverage to Codecov
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v7
         if: ${{ !cancelled() }}
         with:
           flags: sdk-ts
@@ -123,7 +123,7 @@ jobs:
       # Codecov upload (#471) — same as the bun job but for the
       # Python SDK's coverage.xml.
       - name: Upload Python coverage to Codecov
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v7
         if: ${{ !cancelled() }}
         with:
           flags: python
