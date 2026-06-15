@@ -146,6 +146,7 @@ import { wireAdmin } from "./domains/admin/bootstrap";
 // per-provider arrays). One-time, idempotent, runs before any
 // LlmProvidersService consumer reads from disk.
 import { migrateModelCatalogIntoProviders } from "./domains/settings/llmProviders/migration";
+import { backfillTypedGrants } from "./domains/skills/crud/grants.migration";
 import { createLlmPickerRoutes } from "./domains/settings/llmProviders/routes";
 
 // OpenAPI spec
@@ -671,6 +672,21 @@ export async function bootstrap(
     logger.error(
       { err: err instanceof Error ? err.message : String(err) },
       "model-catalog migration failed — providers will read pre-migration shape via the repo's normalize shim, no data loss",
+    ),
+  );
+
+  // ---- Typed-grants backfill (#1123) ----
+  // Fold the legacy read-only `sharedWithUsers` / `sharedWithOrgs` lists into
+  // the typed `grants` array (every legacy grant → `read` level). One-time,
+  // idempotent, non-disruptive (legacy lists preserved, nobody escalated to
+  // write). Runs before any skill/skillset read so the authz gates + scope
+  // filters can rely on `grants`. Failure is non-fatal: the read-time
+  // fallback in `effectiveGrants` keeps un-migrated docs authorizing
+  // correctly off the legacy lists.
+  await backfillTypedGrants(db).catch((err) =>
+    logger.error(
+      { err: err instanceof Error ? err.message : String(err) },
+      "typed-grants backfill failed — gates fall back to legacy read lists via effectiveGrants, no data loss",
     ),
   );
 
