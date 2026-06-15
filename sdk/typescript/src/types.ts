@@ -30,6 +30,19 @@ export interface SkillDetail extends SkillSummary {
   readonly storageKey?: string;
   readonly sharedWithUsers?: readonly string[];
   readonly sharedWithOrgs?: readonly string[];
+  /**
+   * Absolute, time-limited object-storage URL for the version's package
+   * ZIP. Resolved by the server per `?version=`; download the bytes by
+   * fetching this URL directly (NOT through `/api/v1`). Absent when the
+   * caller can't read the package or no package exists.
+   */
+  readonly presignedPackageUrl?: string;
+  /**
+   * Hex SHA-256 of the package bytes for this version. When present,
+   * {@link OrnnClient.downloadPackage} verifies the downloaded bytes
+   * against it (SRI-style) and throws on mismatch.
+   */
+  readonly skillHash?: string;
 }
 
 export interface SkillVersionEntry {

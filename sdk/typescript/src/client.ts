@@ -16,6 +16,7 @@
  */
 
 import { OrnnError, type OrnnErrorPayload } from "./errors";
+import { sha256Hex } from "./integrity";
 import type {
   ClosureNode,
   ClosureResult,
@@ -177,16 +178,57 @@ export class OrnnClient {
    *
    * Returns the raw package bytes. Callers typically pipe this into
    * JSZip, write it to disk, or upload it elsewhere.
+   *
+   * There is no `/api/v1` download endpoint: the bytes live in object
+   * storage behind a time-limited presigned URL. This resolves that URL
+   * via the skill-detail read (`get(guid, version)`), then fetches the
+   * absolute URL directly with the global/injected fetch — NOT through
+   * {@link rawRequest}, which would wrongly prefix `/api/v1` and attach
+   * the NyxID bearer to an object-storage request.
+   *
+   * When the detail carries `skillHash` (hex SHA-256), the downloaded
+   * bytes are re-hashed and compared (SRI-style); a mismatch throws
+   * `OrnnError` with code `integrity_mismatch`.
+   *
+   * @param version Optional. Defaults to the skill's latest version
+   *   (resolved server-side) when omitted.
    */
-  async downloadPackage(guid: string, version: string): Promise<ArrayBuffer> {
-    const res = await this.rawRequest(
-      "GET",
-      `/skills/${encodeURIComponent(guid)}/versions/${encodeURIComponent(version)}/download`,
-    );
-    if (!res.ok) {
-      throw await parseError(res);
+  async downloadPackage(guid: string, version?: string): Promise<ArrayBuffer> {
+    const detail = await this.get(guid, version);
+    const url = detail.presignedPackageUrl;
+    if (!url) {
+      throw new OrnnError({
+        status: 404,
+        code: "package_not_found",
+        message: `Ornn: no downloadable package for skill ${guid}${
+          version ? `@${version}` : ""
+        }`,
+      });
     }
-    return res.arrayBuffer();
+    // Bare fetch — the presigned URL is absolute object storage, outside
+    // the `/api/v1` surface and not authenticated with the NyxID bearer.
+    const res = await this.fetchImpl(url);
+    if (!res.ok) {
+      throw new OrnnError({
+        status: res.status,
+        code: "package_download_failed",
+        message: `Ornn: package download failed with HTTP ${res.status}`,
+      });
+    }
+    const bytes = await res.arrayBuffer();
+    if (detail.skillHash) {
+      const actual = await sha256Hex(bytes);
+      if (actual !== detail.skillHash) {
+        throw new OrnnError({
+          status: 0,
+          code: "integrity_mismatch",
+          message: `Ornn: package integrity check failed for ${guid}${
+            version ? `@${version}` : ""
+          } (expected ${detail.skillHash}, got ${actual})`,
+        });
+      }
+    }
+    return bytes;
   }
 
   /**
@@ -431,11 +473,6 @@ export class OrnnClient {
 function zipToBlob(zip: Blob | ArrayBuffer | Uint8Array): Blob {
   if (zip instanceof Blob) return zip;
   return new Blob([zip as BlobPart], { type: "application/zip" });
-}
-
-async function parseError(res: Response): Promise<OrnnError> {
-  const body = (await res.json().catch(() => null)) as ProblemJson | null;
-  return buildError(res.status, body);
 }
 
 function buildError(status: number, body: ProblemJson | null): OrnnError {
