@@ -40,6 +40,20 @@ export type SkillSource =
       lastSyncedCommit?: string;
     };
 
+/**
+ * Permission level a grant confers (#1123). `read` = view/pull/execute;
+ * `read_write` = also update the skill's content & metadata (no admin —
+ * permission management, transfer, and delete stay with the owner + admins).
+ */
+export type SkillPermissionLevel = "read" | "read_write";
+
+/** One typed access grant on a skill / skillset (#1123). */
+export interface SkillGrant {
+  type: "user" | "org";
+  id: string;
+  level: SkillPermissionLevel;
+}
+
 export interface SkillDetail extends SkillSummary {
   updatedOn: string;
   presignedPackageUrl: string;
@@ -54,6 +68,12 @@ export interface SkillDetail extends SkillSummary {
   sharedWithUsers: string[];
   /** Org user_ids this skill has been explicitly shared with. */
   sharedWithOrgs: string[];
+  /**
+   * Typed access grants (#1123) — the canonical read/read-write ACL. Always
+   * present in API responses; the legacy `sharedWith*` arrays above mirror
+   * the read-visibility of these for back-compat.
+   */
+  grants?: SkillGrant[];
   /** Present when the skill was created (or last refreshed) by pulling from an external source. */
   source?: SkillSource;
   /** Optional license string from `SKILL.md` frontmatter (e.g. "MIT"). */
