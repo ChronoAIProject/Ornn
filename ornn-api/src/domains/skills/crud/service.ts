@@ -15,6 +15,7 @@ import { fetchSkillFromGitHub, parseGithubUrl, type GitHubPullInput } from "./ut
 import { computeVersionDiff, type VersionDiffResult } from "./utils/versionDiff";
 import { isReservedVerb } from "../../../shared/reservedVerbs";
 import { canReadSkill, isMemberOfOrg, SYSTEM_ACTOR, type ActorContext } from "./authorize";
+import { effectiveGrants } from "./grants";
 import {
   resolveClosure,
   type LoadVersion,
@@ -1989,6 +1990,10 @@ export class SkillService {
       updatedOn: skill.updatedOn instanceof Date ? skill.updatedOn.toISOString() : String(skill.updatedOn),
       sharedWithUsers: skill.sharedWithUsers,
       sharedWithOrgs: skill.sharedWithOrgs,
+      // Canonical typed ACL (#1123). `effectiveGrants` falls back to deriving
+      // read grants from the legacy lists for un-migrated skills, so the
+      // response shape is identical regardless of migration state.
+      grants: effectiveGrants(skill),
       version,
       isDeprecated,
       deprecationNote,

@@ -373,6 +373,12 @@ export interface SkillDetailResponse {
   /** Org user_ids granted access — every admin/member of these orgs can read the skill. */
   sharedWithOrgs: string[];
   /**
+   * Typed access grants (#1123) — the canonical read/read-write ACL. Always
+   * present in responses (the service emits `effectiveGrants(skill)` so even
+   * an un-migrated skill surfaces its legacy lists as read grants here).
+   */
+  grants?: SkillGrant[] | undefined;
+  /**
    * Version of this skill payload: latest when no `?version=` query was
    * passed, otherwise the specifically requested version.
    */
