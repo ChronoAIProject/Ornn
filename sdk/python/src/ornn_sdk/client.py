@@ -27,6 +27,7 @@ from .types import (
     SearchMode,
     SearchScope,
     SkillDetail,
+    SkillGrant,
     SkillSearchResult,
     SkillsetClosureResult,
     SkillsetDetail,
@@ -239,6 +240,50 @@ class OrnnClient:
         """Delete a skill by ID."""
         self.request("DELETE", f"/skills/{_quote(skill_id)}")
 
+    def set_skill_permissions(
+        self,
+        skill_id: str,
+        *,
+        is_private: bool,
+        grants: list[SkillGrant] | None = None,
+        shared_with_users: list[str] | None = None,
+        shared_with_orgs: list[str] | None = None,
+    ) -> SkillDetail:
+        """Apply a new ACL state to a skill (#1123).
+
+        ``grants`` is the canonical typed ACL — each entry confers ``read``
+        or ``read_write`` to one user or org. The legacy ``shared_with_*``
+        lists are still accepted (the server maps each entry to a
+        ``read``-level grant) but are superseded by ``grants``; pass one or
+        the other, not both. ``is_private=False`` makes the skill fully
+        public — grants are still persisted so the author can flip back to
+        private without losing their collaborator list.
+        """
+        payload = _permissions_payload(
+            is_private=is_private,
+            grants=grants,
+            shared_with_users=shared_with_users,
+            shared_with_orgs=shared_with_orgs,
+        )
+        data = self.request("PUT", f"/skills/{_quote(skill_id)}/permissions", json=payload)
+        return SkillDetail.from_dict(data["skill"])
+
+    def transfer_skill_ownership(self, skill_id: str, new_owner_user_id: str) -> SkillDetail:
+        """Hand a skill to another Ornn user (#1123).
+
+        ADMIN-tier: only the skill's author or a platform admin may transfer.
+        The target must be a known Ornn user (signed in at least once) or the
+        call raises :class:`OrnnError` with code ``invalid_transfer_target``.
+        Transfer is immediate — the new owner becomes the owner synchronously
+        and the prior owner is kept as a ``read`` grantee.
+        """
+        data = self.request(
+            "POST",
+            f"/skills/{_quote(skill_id)}/transfer-ownership",
+            json={"newOwnerUserId": new_owner_user_id},
+        )
+        return SkillDetail.from_dict(data["skill"])
+
     # ---- Skillsets (#969) ---------------------------------------------------
 
     def create_skillset(
@@ -320,16 +365,44 @@ class OrnnClient:
         skillset_id: str,
         *,
         is_private: bool,
+        grants: list[SkillGrant] | None = None,
         shared_with_users: list[str] | None = None,
         shared_with_orgs: list[str] | None = None,
     ) -> SkillsetDetail:
-        """Update a skillset's visibility / sharing lists."""
-        payload: dict[str, Any] = {
-            "isPrivate": is_private,
-            "sharedWithUsers": shared_with_users or [],
-            "sharedWithOrgs": shared_with_orgs or [],
-        }
+        """Update a skillset's visibility / ACL (#1123).
+
+        ``grants`` is the canonical typed ACL — each entry confers ``read``
+        or ``read_write`` to one user or org. The legacy ``shared_with_*``
+        lists are still accepted (the server maps each entry to a
+        ``read``-level grant) but are superseded by ``grants``; pass one or
+        the other, not both.
+        """
+        payload = _permissions_payload(
+            is_private=is_private,
+            grants=grants,
+            shared_with_users=shared_with_users,
+            shared_with_orgs=shared_with_orgs,
+        )
         data = self.request("PUT", f"/skillsets/{_quote(skillset_id)}/permissions", json=payload)
+        return SkillsetDetail.from_dict(data["skillset"])
+
+    def transfer_skillset_ownership(
+        self, skillset_id: str, new_owner_user_id: str
+    ) -> SkillsetDetail:
+        """Hand a skillset to another Ornn user (#1123).
+
+        ADMIN-tier: only the skillset's author or a platform admin may
+        transfer. The target must be a known Ornn user (signed in at least
+        once) or the call raises :class:`OrnnError` with code
+        ``invalid_transfer_target``. Transfer is immediate — the new owner
+        becomes the owner synchronously and the prior owner is kept as a
+        ``read`` grantee.
+        """
+        data = self.request(
+            "POST",
+            f"/skillsets/{_quote(skillset_id)}/transfer-ownership",
+            json={"newOwnerUserId": new_owner_user_id},
+        )
         return SkillsetDetail.from_dict(data["skillset"])
 
     def delete_skillset(self, skillset_id: str) -> None:
@@ -420,6 +493,30 @@ def _quote(segment: str) -> str:
     from urllib.parse import quote
 
     return quote(segment, safe="")
+
+
+def _permissions_payload(
+    *,
+    is_private: bool,
+    grants: list[SkillGrant] | None,
+    shared_with_users: list[str] | None,
+    shared_with_orgs: list[str] | None,
+) -> dict[str, Any]:
+    """Build the shared body for the skill / skillset permissions endpoints (#1123).
+
+    ``grants`` is the canonical typed ACL and is omitted from the wire when
+    not supplied so the server falls back to the legacy ``sharedWith*``
+    lists (mapping each entry to a ``read``-level grant) for pre-#1123
+    callers.
+    """
+    payload: dict[str, Any] = {
+        "isPrivate": is_private,
+        "sharedWithUsers": shared_with_users or [],
+        "sharedWithOrgs": shared_with_orgs or [],
+    }
+    if grants is not None:
+        payload["grants"] = [g.to_json() for g in grants]
+    return payload
 
 
 def _build_error(res: httpx.Response, body: Any | None = None) -> OrnnError:
