@@ -35,7 +35,12 @@ import {
 } from "../skills/crud/authorize";
 import type { SkillService } from "../skills/crud/service";
 import { isGreater, parseVersion } from "../skills/crud/version";
-import { effectiveGrants, resolvePermissionGrants, type PermissionsPayload } from "../skills/crud/grants";
+import {
+  effectiveGrants,
+  normalizeGrants,
+  resolvePermissionGrants,
+  type PermissionsPayload,
+} from "../skills/crud/grants";
 import type { SkillsetRepository } from "./repository";
 import type { SkillsetVersionRepository } from "./skillsetVersionRepository";
 import type {
@@ -68,17 +73,29 @@ export interface SkillsetServiceDeps {
   skillsetVersionRepo: SkillsetVersionRepository;
   /** Injected to reuse the member-ref loader + closure resolution (#968). */
   skillService: SkillService;
+  /**
+   * Resolve a userId to its directory identity (#1123). Used by ownership
+   * transfer to validate the target is a known Ornn user. When unset,
+   * transfer rejects every target as `invalid_transfer_target`.
+   */
+  resolveUser?: (
+    userId: string,
+  ) => Promise<{ userId: string; email: string; displayName: string } | null>;
 }
 
 export class SkillsetService {
   private readonly skillsetRepo: SkillsetRepository;
   private readonly skillsetVersionRepo: SkillsetVersionRepository;
   private readonly skillService: SkillService;
+  private readonly resolveUser?:
+    | ((userId: string) => Promise<{ userId: string; email: string; displayName: string } | null>)
+    | undefined;
 
   constructor(deps: SkillsetServiceDeps) {
     this.skillsetRepo = deps.skillsetRepo;
     this.skillsetVersionRepo = deps.skillsetVersionRepo;
     this.skillService = deps.skillService;
+    this.resolveUser = deps.resolveUser;
   }
 
   // ==========================================================================
@@ -333,6 +350,65 @@ export class SkillsetService {
       updatedBy: actor.userId,
     });
     logger.info({ guid, isPrivate: permissions.isPrivate }, "Skillset permissions changed");
+    return this.getSkillset(guid);
+  }
+
+  /**
+   * Transfer skillset ownership to another user (#1123). Mirrors
+   * `SkillService.transferSkillOwnership`, but — because the skillset routes
+   * delegate authorization to the service — this method owns the full flow:
+   * ADMIN gate (`canManageSkill`), no-op rejection (`ownership_conflict`),
+   * target validation against the directory (`invalid_transfer_target`,
+   * resolved internally so a non-owner can't enumerate users), then the
+   * mutation (reassign `createdBy`, refresh labels, keep the prior owner as
+   * a READ grantee, drop the new owner from any prior grant).
+   */
+  async transferOwnership(
+    guid: string,
+    newOwnerUserId: string,
+    actor: ActorContext,
+  ): Promise<SkillsetDetailResponse> {
+    const existing = await this.skillsetRepo.findByGuid(guid);
+    if (!existing) {
+      throw AppError.notFound("skillset_not_found", `Skillset '${guid}' not found`);
+    }
+    if (!canManageSkill(existing, actor)) {
+      throw AppError.forbidden(
+        "forbidden",
+        "Only the skillset owner or a platform admin can transfer ownership",
+      );
+    }
+    if (newOwnerUserId === existing.createdBy) {
+      throw AppError.conflict("ownership_conflict", "This user already owns the skillset");
+    }
+
+    const target = this.resolveUser ? await this.resolveUser(newOwnerUserId) : null;
+    if (!target) {
+      throw AppError.badRequest(
+        "invalid_transfer_target",
+        "Transfer target is not a known Ornn user. They must have signed in to Ornn at least once.",
+      );
+    }
+
+    const priorOwner = existing.createdBy;
+    const grants = normalizeGrants([
+      ...effectiveGrants(existing).filter(
+        (g) => !(g.type === "user" && g.id === target.userId),
+      ),
+      { type: "user", id: priorOwner, level: "read" },
+    ]);
+
+    await this.skillsetRepo.transferOwnership(guid, {
+      newOwnerId: target.userId,
+      newOwnerEmail: target.email,
+      newOwnerDisplayName: target.displayName,
+      grants,
+      updatedBy: actor.userId,
+    });
+    logger.info(
+      { guid, priorOwner, newOwnerId: target.userId, by: actor.userId },
+      "Skillset ownership transferred",
+    );
     return this.getSkillset(guid);
   }
 

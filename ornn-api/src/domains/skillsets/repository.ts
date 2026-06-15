@@ -176,6 +176,41 @@ export class SkillsetRepository {
     return (await this.findByGuid(guid))!;
   }
 
+  /**
+   * Reassign a skillset's owner (#1123). Mirrors `SkillRepository`: the
+   * single explicit `createdBy` write, refreshing cached owner labels and
+   * replacing the ACL with the caller-computed grants (dual-writing legacy).
+   */
+  async transferOwnership(
+    guid: string,
+    data: {
+      newOwnerId: string;
+      newOwnerEmail: string | null;
+      newOwnerDisplayName: string | null;
+      grants: SkillGrant[];
+      updatedBy: string;
+    },
+  ): Promise<SkillsetDocument> {
+    const legacy = legacyListsFromGrants(data.grants);
+    await this.collection.updateOne(
+      { _id: skillsetId(guid) },
+      {
+        $set: {
+          createdBy: data.newOwnerId,
+          createdByEmail: data.newOwnerEmail,
+          createdByDisplayName: data.newOwnerDisplayName,
+          grants: data.grants,
+          sharedWithUsers: legacy.sharedWithUsers,
+          sharedWithOrgs: legacy.sharedWithOrgs,
+          updatedBy: data.updatedBy,
+          updatedOn: new Date(),
+        },
+      },
+    );
+    logger.info({ guid, newOwnerId: data.newOwnerId }, "Skillset ownership transferred");
+    return (await this.findByGuid(guid))!;
+  }
+
   async hardDelete(guid: string): Promise<void> {
     await this.collection.deleteOne({ _id: skillsetId(guid) });
     logger.info({ guid }, "Skillset hard-deleted");

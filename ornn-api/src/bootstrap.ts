@@ -790,7 +790,13 @@ export async function bootstrap(
   // A skillset is a curated, versioned meta-package over N member skills.
   // The service injects `skillService` so member resolution + the #968
   // closure walk stay single-sourced.
-  const skillsets = wireSkillsets({ db, skillService });
+  const skillsets = wireSkillsets({
+    db,
+    skillService,
+    // #1123 — transfer-ownership target validation, shared resolver.
+    resolveUser: async (userId) =>
+      (await userDirectoryRepo.findByUserIds([userId]))[0] ?? null,
+  });
   await skillsets.ensureIndexes();
 
   // ---- Domain: Skill Generation ----
