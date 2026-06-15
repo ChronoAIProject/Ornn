@@ -17,10 +17,44 @@
  * @module domains/skills/crud/grants
  */
 
+import { z } from "zod";
 import type {
   SkillGrant,
   SkillPermissionLevel,
 } from "../../../shared/types/index";
+
+/**
+ * Canonical Zod schema for one typed grant on the wire (#1123). Shared by
+ * the skills + skillsets permission endpoints so the request shape is
+ * defined exactly once. Caps mirror the legacy id-length bound (128).
+ */
+export const skillGrantSchema = z.object({
+  type: z.enum(["user", "org"]),
+  id: z.string().min(1).max(128),
+  level: z.enum(["read", "read_write"]),
+});
+
+/**
+ * A permissions request payload: the canonical `grants` array, with the
+ * legacy `sharedWithUsers` / `sharedWithOrgs` lists accepted for
+ * backward-compatibility (older SDK / API callers).
+ */
+export interface PermissionsPayload {
+  grants?: SkillGrant[] | undefined;
+  sharedWithUsers?: string[] | undefined;
+  sharedWithOrgs?: string[] | undefined;
+}
+
+/**
+ * Resolve an incoming permissions payload into the canonical, normalized
+ * grants list. Prefers the typed `grants` field; falls back to deriving
+ * READ-level grants from the legacy lists so a pre-#1123 caller that still
+ * sends `sharedWithUsers` / `sharedWithOrgs` behaves exactly as before.
+ */
+export function resolvePermissionGrants(payload: PermissionsPayload): SkillGrant[] {
+  if (payload.grants !== undefined) return normalizeGrants(payload.grants);
+  return deriveGrantsFromLegacy(payload.sharedWithUsers ?? [], payload.sharedWithOrgs ?? []);
+}
 
 /** The legacy read-only allow-list pair carried by pre-#1123 docs. */
 export interface LegacyShareLists {

@@ -415,7 +415,8 @@ describe("SkillsetService — visibility transitions (mirror skills)", () => {
       OWNER,
     );
     expect(updated.isPrivate).toBe(false);
-    expect(updated.sharedWithUsers).toEqual(["u2"]);
+    // Canonical ACL now carries the user as a read grant (#1123).
+    expect(updated.grants).toContainEqual({ type: "user", id: "u2", level: "read" });
   });
 
   it("setPermissions 403s a non-owner", async () => {

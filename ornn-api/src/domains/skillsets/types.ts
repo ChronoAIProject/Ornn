@@ -23,6 +23,7 @@
 
 import { z } from "zod";
 import type { SkillGrant } from "../../shared/types/index";
+import { skillGrantSchema } from "../skills/crud/grants";
 import {
   DEPENDS_ON_REF_REGEX,
   SKILL_NAME_REGEX,
@@ -165,9 +166,15 @@ export const publishSkillsetSchema = z.object({
   version: z.string().regex(SKILL_VERSION_REGEX, "version must be `<major>.<minor>`"),
 });
 
-/** Body schema for `PUT /skillsets/:id/permissions` — mirrors skills. */
+/**
+ * Body schema for `PUT /skillsets/:id/permissions` — mirrors skills. `grants`
+ * (#1123) is the canonical typed ACL; the legacy `sharedWith*` lists are
+ * accepted for back-compat and map to READ-level grants when `grants` is
+ * omitted.
+ */
 export const skillsetPermissionsSchema = z.object({
   isPrivate: z.boolean(),
+  grants: z.array(skillGrantSchema).max(600).optional(),
   sharedWithUsers: z.array(z.string().min(1).max(128)).max(500).default([]),
   sharedWithOrgs: z.array(z.string().min(1).max(128)).max(100).default([]),
 });

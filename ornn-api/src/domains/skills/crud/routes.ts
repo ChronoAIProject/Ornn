@@ -25,6 +25,7 @@ import {
 import { validateBody, getValidatedBody } from "../../../middleware/validate";
 import { AppError } from "../../../shared/types/index";
 import { canReadSkill, canWriteSkill, canManageSkill, buildActorContext } from "./authorize";
+import { skillGrantSchema } from "./grants";
 import { parseGithubUrl } from "./utils/githubPull";
 import { rateLimit } from "../../../middleware/rateLimit";
 import { createLogger } from "../../../shared/logger";
@@ -35,12 +36,18 @@ const deprecationPatchSchema = z.object({
 
 /**
  * Schema for `PUT /api/skills/:id/permissions`. `isPrivate === false`
- * means fully public; the shared-with lists are still persisted in that
- * case (no reason to wipe them — the author can flip back to private
- * without losing their collaborator list).
+ * means fully public; the grants are still persisted in that case (no
+ * reason to wipe them — the author can flip back to private without losing
+ * their collaborator list).
+ *
+ * `grants` (#1123) is the canonical typed ACL. The legacy `sharedWithUsers`
+ * / `sharedWithOrgs` arrays are still accepted for backward-compatibility
+ * (older SDK / API callers) and map to READ-level grants when `grants` is
+ * omitted — see `resolvePermissionGrants`.
  */
 const permissionsPatchSchema = z.object({
   isPrivate: z.boolean(),
+  grants: z.array(skillGrantSchema).max(600).optional(),
   sharedWithUsers: z.array(z.string().min(1).max(128)).max(500).default([]),
   sharedWithOrgs: z.array(z.string().min(1).max(128)).max(100).default([]),
 });
@@ -1125,20 +1132,27 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
 
       const body = getValidatedBody<z.infer<typeof permissionsPatchSchema>>(c);
 
+      // Pass the raw payload through — the service resolves the canonical
+      // `grants` (preferring the typed field, falling back to the legacy
+      // lists for older callers) and validates org membership.
       await skillService.setSkillPermissions(guid, authCtx.userId, {
         isPrivate: body.isPrivate,
+        grants: body.grants,
         sharedWithUsers: body.sharedWithUsers,
         sharedWithOrgs: body.sharedWithOrgs,
       }, actor);
 
       const updated = await skillService.getSkill(guid);
 
+      const readWriteGrants = (updated.grants ?? []).filter((g) => g.level === "read_write").length;
       trackActivity(authCtx.userId, authCtx.email, authCtx.displayName, "skill.permissions_changed", {
         skillId: guid,
         skillName: updated.name,
         isPrivate: updated.isPrivate,
         sharedWithUsers: updated.sharedWithUsers.length,
         sharedWithOrgs: updated.sharedWithOrgs.length,
+        // #1123 — richer payload: how many grants confer write.
+        readWriteGrants,
       });
 
       // Permissions change can flip eligibility — sync handles both

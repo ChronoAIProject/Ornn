@@ -286,7 +286,8 @@ describe("SkillService.setSkillPermissions — org-membership gate (#815)", () =
       actor,
     );
     expect(state.updateCalled).toBe(true);
-    expect(result.sharedWithOrgs).toContain("org-A");
+    // The canonical ACL now carries the org as a read grant (#1123).
+    expect(result.grants).toContainEqual({ type: "org", id: "org-A", level: "read" });
   });
 
   it("platform admin may share into any org", async () => {
@@ -303,7 +304,7 @@ describe("SkillService.setSkillPermissions — org-membership gate (#815)", () =
       actor,
     );
     expect(state.updateCalled).toBe(true);
-    expect(result.sharedWithOrgs).toContain("org-A");
+    expect(result.grants).toContainEqual({ type: "org", id: "org-A", level: "read" });
   });
 
   it("a rejected share does not leak read access (AC#2)", () => {
@@ -457,6 +458,78 @@ describe("SkillService.setSkillPermissions — org-membership gate (#815)", () =
     expect(msg).not.toContain("org-A");
     // Atomic — no partial persistence of the member org.
     expect(state.updateCalled).toBe(false);
+  });
+
+  it("(e) accepts typed grants directly, including read_write (#1123)", async () => {
+    const { service, state } = makePermissionsService(
+      makeSkillDoc({ guid: "guid-1", createdBy: "owner-1", isPrivate: true }),
+    );
+    const actor: ActorContext = {
+      userId: "owner-1",
+      memberships: [{ userId: "org-A", role: "member", displayName: "" }],
+      isPlatformAdmin: false,
+      membershipsResolved: true,
+    };
+    const result = await service.setSkillPermissions(
+      "guid-1",
+      "owner-1",
+      {
+        isPrivate: true,
+        grants: [
+          { type: "user", id: "editor", level: "read_write" },
+          { type: "org", id: "org-A", level: "read_write" },
+        ],
+      },
+      actor,
+    );
+    expect(state.updateCalled).toBe(true);
+    expect(result.grants).toContainEqual({ type: "user", id: "editor", level: "read_write" });
+    expect(result.grants).toContainEqual({ type: "org", id: "org-A", level: "read_write" });
+  });
+
+  it("(f) a read_write org grant still honours the #815 non-member gate (#1123)", async () => {
+    const { service, state } = makePermissionsService(
+      makeSkillDoc({ guid: "guid-1", createdBy: "owner-1", isPrivate: true }),
+    );
+    const actor: ActorContext = {
+      userId: "owner-1",
+      memberships: [],
+      isPlatformAdmin: false,
+      membershipsResolved: true,
+    };
+    let thrown: unknown;
+    try {
+      await service.setSkillPermissions(
+        "guid-1",
+        "owner-1",
+        { isPrivate: true, grants: [{ type: "org", id: "org-Z", level: "read_write" }] },
+        actor,
+      );
+    } catch (err) {
+      thrown = err;
+    }
+    expect((thrown as AppError).code).toBe("not_org_member");
+    expect(state.updateCalled).toBe(false);
+  });
+
+  it("(g) drops a grant that names the author themselves (#1123)", async () => {
+    const { service } = makePermissionsService(
+      makeSkillDoc({ guid: "guid-1", createdBy: "owner-1", isPrivate: true }),
+    );
+    const actor: ActorContext = {
+      userId: "owner-1",
+      memberships: [],
+      isPlatformAdmin: false,
+      membershipsResolved: true,
+    };
+    const result = await service.setSkillPermissions(
+      "guid-1",
+      "owner-1",
+      { isPrivate: true, grants: [{ type: "user", id: "owner-1", level: "read_write" }] },
+      actor,
+    );
+    // The author holds implicit ADMIN — a self-grant is redundant and dropped.
+    expect(result.grants).toEqual([]);
   });
 });
 

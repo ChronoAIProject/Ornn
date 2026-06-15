@@ -187,6 +187,7 @@ export function createSkillsetRoutes(
         id,
         {
           isPrivate: body.isPrivate,
+          grants: body.grants,
           sharedWithUsers: body.sharedWithUsers,
           sharedWithOrgs: body.sharedWithOrgs,
         },

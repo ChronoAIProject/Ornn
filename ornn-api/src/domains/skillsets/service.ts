@@ -35,7 +35,7 @@ import {
 } from "../skills/crud/authorize";
 import type { SkillService } from "../skills/crud/service";
 import { isGreater, parseVersion } from "../skills/crud/version";
-import { effectiveGrants } from "../skills/crud/grants";
+import { effectiveGrants, resolvePermissionGrants, type PermissionsPayload } from "../skills/crud/grants";
 import type { SkillsetRepository } from "./repository";
 import type { SkillsetVersionRepository } from "./skillsetVersionRepository";
 import type {
@@ -291,7 +291,9 @@ export class SkillsetService {
    */
   async setPermissions(
     guid: string,
-    permissions: { isPrivate: boolean; sharedWithUsers: string[]; sharedWithOrgs: string[] },
+    // Accept typed `grants` or the legacy lists (back-compat); both resolve
+    // to the same normalized grants (#1123). Mirrors the skills service.
+    permissions: { isPrivate: boolean } & PermissionsPayload,
     actor: ActorContext,
   ): Promise<SkillsetDetailResponse> {
     const existing = await this.skillsetRepo.findByGuid(guid);
@@ -302,20 +304,20 @@ export class SkillsetService {
       throw AppError.forbidden("forbidden", "You do not have permission to manage this skillset");
     }
 
-    const sharedWithUsers = Array.from(
-      new Set(permissions.sharedWithUsers.filter((id) => id && id !== existing.createdBy)),
+    const grants = resolvePermissionGrants(permissions).filter(
+      (g) => !(g.type === "user" && g.id === existing.createdBy),
     );
-    const sharedWithOrgs = Array.from(new Set(permissions.sharedWithOrgs.filter((id) => !!id)));
+    const orgGrantIds = grants.filter((g) => g.type === "org").map((g) => g.id);
 
     if (!actor.isPlatformAdmin) {
-      if (sharedWithOrgs.length > 0 && !actor.membershipsResolved) {
+      if (orgGrantIds.length > 0 && !actor.membershipsResolved) {
         logger.warn({ guid }, "Org membership unresolved; cannot validate share into orgs");
         throw AppError.serviceUnavailable(
           "org_membership_unavailable",
           "Could not verify your organization memberships right now. Retry shortly.",
         );
       }
-      const nonMember = sharedWithOrgs.filter((orgId) => !isMemberOfOrg(actor, orgId));
+      const nonMember = orgGrantIds.filter((orgId) => !isMemberOfOrg(actor, orgId));
       if (nonMember.length > 0) {
         logger.warn({ guid, nonMember }, "Rejected skillset share into non-member org(s)");
         throw AppError.forbidden(
@@ -327,8 +329,7 @@ export class SkillsetService {
 
     await this.skillsetRepo.update(guid, {
       isPrivate: permissions.isPrivate,
-      sharedWithUsers,
-      sharedWithOrgs,
+      grants,
       updatedBy: actor.userId,
     });
     logger.info({ guid, isPrivate: permissions.isPrivate }, "Skillset permissions changed");

@@ -15,7 +15,7 @@ import { fetchSkillFromGitHub, parseGithubUrl, type GitHubPullInput } from "./ut
 import { computeVersionDiff, type VersionDiffResult } from "./utils/versionDiff";
 import { isReservedVerb } from "../../../shared/reservedVerbs";
 import { canReadSkill, isMemberOfOrg, SYSTEM_ACTOR, type ActorContext } from "./authorize";
-import { effectiveGrants } from "./grants";
+import { effectiveGrants, resolvePermissionGrants, type PermissionsPayload } from "./grants";
 import {
   resolveClosure,
   type LoadVersion,
@@ -561,11 +561,9 @@ export class SkillService {
   async setSkillPermissions(
     guid: string,
     userId: string,
-    permissions: {
-      isPrivate: boolean;
-      sharedWithUsers: string[];
-      sharedWithOrgs: string[];
-    },
+    // Accept either the canonical typed `grants` or the legacy lists
+    // (back-compat); both resolve to the same normalized grants (#1123).
+    permissions: { isPrivate: boolean } & PermissionsPayload,
     actor: ActorContext,
   ): Promise<SkillDetailResponse> {
     const existing = await this.skillRepo.findByGuid(guid);
@@ -584,15 +582,13 @@ export class SkillService {
       );
     }
 
-    // Dedupe the lists + drop any self-references. The author always has
-    // access; including their id in `sharedWithUsers` is redundant and
-    // noisy for downstream debugging.
-    const sharedWithUsers = Array.from(
-      new Set(permissions.sharedWithUsers.filter((id) => id && id !== existing.createdBy)),
+    // Resolve to canonical normalized grants, then drop any self-reference:
+    // the author always has implicit ADMIN, so a grant naming them is
+    // redundant and noisy for downstream debugging.
+    const grants = resolvePermissionGrants(permissions).filter(
+      (g) => !(g.type === "user" && g.id === existing.createdBy),
     );
-    const sharedWithOrgs = Array.from(
-      new Set(permissions.sharedWithOrgs.filter((id) => !!id)),
-    );
+    const orgGrantIds = grants.filter((g) => g.type === "org").map((g) => g.id);
 
     // CWE-862 (#815): an owner may only share into orgs they belong to.
     // isMemberOfOrg is membership-only (does not consider platform admin), so
@@ -603,9 +599,9 @@ export class SkillService {
       // reason. Validating a share into orgs against that empty list would
       // wrongly 403 a legitimate member, so fail closed with a retryable 503
       // instead — but only when the caller actually asked to share into an
-      // org. A public / user-only change (empty sharedWithOrgs) needs no
-      // membership data and proceeds even while the lookup is unresolved.
-      if (sharedWithOrgs.length > 0 && !actor.membershipsResolved) {
+      // org. A public / user-only change (no org grants) needs no membership
+      // data and proceeds even while the lookup is unresolved.
+      if (orgGrantIds.length > 0 && !actor.membershipsResolved) {
         logger.warn(
           { guid, userId },
           "Org membership unresolved; cannot validate share into orgs (#842)",
@@ -615,7 +611,7 @@ export class SkillService {
           "Could not verify your organization memberships right now. Retry shortly.",
         );
       }
-      const nonMember = sharedWithOrgs.filter((orgId) => !isMemberOfOrg(actor, orgId));
+      const nonMember = orgGrantIds.filter((orgId) => !isMemberOfOrg(actor, orgId));
       if (nonMember.length > 0) {
         logger.warn({ guid, userId, nonMember }, "Rejected skill share into non-member org(s) (#815)");
         throw AppError.forbidden(
@@ -627,8 +623,7 @@ export class SkillService {
 
     const updated = await this.skillRepo.update(guid, {
       isPrivate: permissions.isPrivate,
-      sharedWithUsers,
-      sharedWithOrgs,
+      grants,
       updatedBy: userId,
     });
     return this.buildDetailResponse(updated);
