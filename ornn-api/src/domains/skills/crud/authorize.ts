@@ -5,23 +5,35 @@
  * topic domain all converge on these so tests only need to exercise the
  * policy once.
  *
- * Read (visibility):
+ * Three permission tiers (#1123), all derived from one typed `grants` ACL
+ * (with a fallback to the legacy read-only lists for un-migrated docs — see
+ * `effectiveGrants` in `grants.ts`):
+ *
+ * READ — `canReadSkill`:
  *   - PUBLIC skill → anyone.
  *   - PRIVATE skill:
  *     - author (`createdBy === actor.userId`) → yes
- *     - actor's user_id is in `sharedWithUsers` → yes
- *     - actor is admin/member of any org in `sharedWithOrgs` → yes
  *     - platform admin (`ornn:admin:skill`) → yes
+ *     - actor holds ANY grant (read or read_write), directly or via
+ *       membership of a granted org → yes
  *     - else → no
  *
- * Write (update / delete / change-permissions / deprecation-toggle):
+ * READ_WRITE — `canWriteSkill` (update content + metadata only):
  *   - author → yes
  *   - platform admin → yes
- *   - else → 403
+ *   - actor holds a `read_write` grant, directly or via a granted org → yes
+ *   - else → no
  *
- *   Note: org-admins no longer automatically inherit write access. If an
- *   author wants collaborators to edit, they can grant the user directly
- *   (future work — the current ACL is read-only).
+ * ADMIN — `canManageSkill` (change permissions, transfer ownership, delete
+ * skill/version, toggle deprecation, manage dist-tags, bind NyxID service):
+ *   - author → yes
+ *   - platform admin → yes
+ *   - else → 403. A `read_write` grantee is deliberately NOT an admin.
+ *
+ * Org grants resolve uniformly: every admin/member of a granted org inherits
+ * the grant's level. The org-membership-based gates fail soft on an
+ * unresolved NyxID lookup (deny), matching the read path — they never grant
+ * on a "couldn't ask" result.
  *
  * @module domains/skills/crud/authorize
  */
@@ -33,14 +45,22 @@ import {
   type AuthVariables,
   type OrgMembershipFact,
 } from "../../../middleware/nyxidAuth";
+import type { SkillGrant } from "../../../shared/types/index";
+import { effectiveGrants } from "./grants";
 
 export interface SkillOwnership {
   /** Author (person user_id). Always present. */
   createdBy: string;
   isPrivate: boolean;
-  /** Explicit per-user allow-list. Empty = nobody extra beyond author. */
+  /**
+   * Typed access grants (#1123) — the canonical ACL. Optional: when absent
+   * the gates derive read-level grants from the legacy lists below via
+   * `effectiveGrants`, so a pre-#1123 doc authorizes exactly as before.
+   */
+  grants?: SkillGrant[] | undefined;
+  /** Legacy per-user read allow-list. Read-fallback source when `grants` absent. */
   sharedWithUsers: string[];
-  /** Explicit per-org allow-list. Empty = nobody extra beyond author. */
+  /** Legacy per-org read allow-list. Read-fallback source when `grants` absent. */
   sharedWithOrgs: string[];
 }
 
@@ -95,28 +115,64 @@ export async function buildActorContext(
   };
 }
 
-/** Returns true when `actor` is allowed to read the skill. */
+/**
+ * Returns true when `actor` is allowed to READ the skill. Any grant level
+ * (read or read_write) confers read — a read_write grantee is always also a
+ * reader. Public skills are readable by everyone.
+ */
 export function canReadSkill(skill: SkillOwnership, actor: ActorContext): boolean {
   if (!skill.isPrivate) return true;
   if (actor.isPlatformAdmin) return true;
   if (skill.createdBy === actor.userId) return true;
-  if (skill.sharedWithUsers.includes(actor.userId)) return true;
-  if (skill.sharedWithOrgs.length > 0) {
-    for (const m of actor.memberships) {
-      if (skill.sharedWithOrgs.includes(m.userId)) return true;
-    }
-  }
-  return false;
+  return actorMatchesGrant(skill, actor, () => true);
 }
 
 /**
- * Returns true when `actor` is allowed to mutate the skill — update
- * package, change permissions, toggle deprecation, or delete. Author-only
- * plus platform admin.
+ * Returns true when `actor` may UPDATE the skill's content + metadata — the
+ * READ_WRITE tier (#1123). Author + platform admin always qualify; otherwise
+ * a `read_write` grant (direct, or via membership of a granted org) is
+ * required. Deliberately NOT sufficient for admin/danger-zone ops — those
+ * gate on `canManageSkill`.
+ */
+export function canWriteSkill(skill: SkillOwnership, actor: ActorContext): boolean {
+  if (actor.isPlatformAdmin) return true;
+  if (skill.createdBy === actor.userId) return true;
+  return actorMatchesGrant(skill, actor, (g) => g.level === "read_write");
+}
+
+/**
+ * Returns true when `actor` may ADMINISTER the skill — change permissions,
+ * transfer ownership, delete skill/version, toggle deprecation, manage
+ * dist-tags, bind a NyxID service. Author + platform admin only; a
+ * read_write grantee can never administer.
  */
 export function canManageSkill(skill: SkillOwnership, actor: ActorContext): boolean {
   if (actor.isPlatformAdmin) return true;
   return skill.createdBy === actor.userId;
+}
+
+/**
+ * Shared grant-matching core: does `actor` hold a grant (passing `accept`)
+ * either directly as a user or via membership of a granted org? Walks the
+ * effective grants once so read/write gates can never diverge on the
+ * matching rules. Fails soft on org grants when the membership lookup was
+ * unresolved (actor.memberships is `[]`), matching the read path.
+ */
+function actorMatchesGrant(
+  skill: SkillOwnership,
+  actor: ActorContext,
+  accept: (grant: SkillGrant) => boolean,
+): boolean {
+  const grants = effectiveGrants(skill);
+  for (const g of grants) {
+    if (!accept(g)) continue;
+    if (g.type === "user") {
+      if (g.id === actor.userId) return true;
+    } else if (actor.memberships.some((m) => m.userId === g.id)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /**
