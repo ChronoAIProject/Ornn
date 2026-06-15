@@ -118,7 +118,11 @@ function PermissionsForm({ skill, onClose, t }: PermissionsFormProps) {
   }, [skill]);
 
   const debouncedQuery = useDebouncedValue(userQuery.trim(), 200);
-  const shouldSearch = !isPublic && (userInputFocused || debouncedQuery.length > 0);
+  // Only query at 2+ chars. The backend now rejects empty/1-char `q` with
+  // 400 (#816), so firing on bare focus or a single keystroke would surface
+  // an error toast for a query the user never finished typing. Below the
+  // threshold we render a "keep typing" hint instead of a results list.
+  const shouldSearch = !isPublic && debouncedQuery.length >= 2;
   const { data: suggestions = [] } = useQuery({
     queryKey: ["users-search", debouncedQuery],
     queryFn: () => searchUsersByEmail(debouncedQuery, 8),
@@ -437,6 +441,19 @@ function PermissionsForm({ skill, onClose, t }: PermissionsFormProps) {
                   className="w-full bg-card rounded border border-accent/20 bg-elevated px-3 py-2 font-text text-sm text-strong focus:outline-none focus:border-accent/60"
                   disabled={isPublic}
                 />
+                {userInputFocused &&
+                  !isPublic &&
+                  debouncedQuery.length < 2 &&
+                  userQuery.trim().length < 2 && (
+                    <div className="absolute left-0 right-0 bottom-full mb-1 z-10 rounded bg-card border border-accent/20 card-impression">
+                      <p className="px-3 py-2 font-text text-xs text-meta italic">
+                        {t(
+                          "permissions.searchHint",
+                          "Type at least 2 characters to search.",
+                        )}
+                      </p>
+                    </div>
+                  )}
                 {userInputFocused && suggestions.length > 0 && (
                   <div className="absolute left-0 right-0 bottom-full mb-1 z-10 rounded bg-card border border-accent/20 card-impression max-h-52 overflow-y-auto">
                     {suggestions.map((s) => (

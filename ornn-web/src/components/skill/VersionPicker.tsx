@@ -1,12 +1,23 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AnimatePresence, motion } from "framer-motion";
-import type { SkillVersionEntry } from "@/types/domain";
 import { formatVersionLabel } from "@/lib/versionLabel";
+
+/**
+ * Minimal version shape the picker needs. Structurally satisfied by both
+ * `SkillVersionEntry` (skills) and `SkillsetVersionEntry` (skillsets, #1059) —
+ * skillset versions carry no `isDeprecated` flag, so it's optional here. The
+ * picker reads only `version` (required) and `isDeprecated` (for the label).
+ */
+export interface VersionPickerEntry {
+  version: string;
+  // exactOptionalPropertyTypes (#657)
+  isDeprecated?: boolean | undefined;
+}
 
 export interface VersionPickerProps {
   /** All available versions, already sorted newest-first. */
-  versions: SkillVersionEntry[];
+  versions: VersionPickerEntry[];
   /** Version currently shown on the page (may be latest or a specific pick). */
   currentVersion: string;
   /**
@@ -60,7 +71,9 @@ export function VersionPicker({
   const buttonLabel = current
     ? formatVersionLabel(current.version, {
         isLatest: current.version === latestVersion,
-        isDeprecated: current.isDeprecated,
+        // Skillset versions carry no `isDeprecated` flag (optional in
+        // `VersionPickerEntry`); default to false for the label flags.
+        isDeprecated: current.isDeprecated ?? false,
         latestText: t("skillDetail.latest"),
         deprecatedText: t("skillDetail.deprecated"),
       })
@@ -118,7 +131,7 @@ export function VersionPicker({
               const isCurrent = v.version === currentVersion;
               const label = formatVersionLabel(v.version, {
                 isLatest: v.version === latestVersion,
-                isDeprecated: v.isDeprecated,
+                isDeprecated: v.isDeprecated ?? false,
                 latestText: t("skillDetail.latest"),
                 deprecatedText: t("skillDetail.deprecated"),
               });

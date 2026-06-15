@@ -11,8 +11,8 @@ metadata:
     - manual
     - identity
     - skill-lifecycle
-version: "1.0"
-lastUpdated: 2026-05-04
+version: "1.1"
+lastUpdated: 2026-06-11
 ---
 
 # Chrono AI Service Manual
@@ -63,6 +63,7 @@ lastUpdated: 2026-05-04
 > - **Find skills** (by tag, author, system, shared, etc.) — §2.12.
 > - **Pull your Ornn notifications** (audit fan-out, etc.) — §2.13.
 > - **Link a skill to GitHub** or **trigger a sync** from the linked source — §2.14.
+> - **Work with skillsets** (curated bundles of skills + required master prompt / instructions for orchestration, one-call closure, kinds including consensus-supported) — §2.15.
 > - **Diagnose any failure** that involves NyxID, Ornn, the proxy, or token forwarding — §3.
 >
 > Without this manual loaded, you do not know which endpoint to call, how to authenticate, or how to read the response shapes.
@@ -529,7 +530,7 @@ Ornn is the skill lifecycle layer. Every endpoint below is reached **through Nyx
 
 > Through the rest of §2, the **CLI form** is shown — it's the canonical recipe. The **HTTP form** is identical except for wrapping; substitute as documented in §0.6 and `references/ornn-api-reference.md`. Per-endpoint contracts (request body, full response shape, every error code) live in `references/ornn-api-reference.md` — pull it whenever you need the exact spec.
 
-You (the agent) are **highly encouraged to connect with Ornn for any skill-related operation**, including but not limited to the fourteen use cases below. Each is a recipe — read top-to-bottom and execute the calls in order.
+You (the agent) are **highly encouraged to connect with Ornn for any skill-related operation**, including but not limited to the use cases below (now including skillsets). Each is a recipe — read top-to-bottom and execute the calls in order.
 
 ### 2.1 Performing a task — find or build the right skill — *spec: `ornn-api-reference.md` §3, §5, §6, §7, §8*
 
@@ -883,6 +884,113 @@ Response: refreshed `SkillDetail`. `source.lastSyncedAt` and `source.lastSyncedC
 - `NO_SOURCE` (400) on flow C — no link attached. Run flow B first.
 - `REFRESH_FAILED` / `REFRESH_PREVIEW_FAILED` (400) — upstream folder gone or pulled package failed validation. Retry with `skipValidation: true` if you trust upstream.
 - `NOT_SKILL_OWNER` (403) — caller isn't the author and lacks `ornn:admin:skill`.
+
+---
+
+### 2.15 Work with skillsets (curated bundles + master prompts) — *spec: `ornn-api-reference.md` §5a*
+
+A **skillset** is a named, versioned, owned, visibility-scoped meta-package over 2..N member skills. It carries:
+
+- A required per-version **master prompt** (`instructions`, 1..8000 chars) — the authoritative instructions telling an agent *how* to use the set (orchestration order, when to pick which member, composition rules). This is surfaced verbatim on detail reads and as a root sibling on the closure response.
+- `kind`: `"generic"` (default) or `"consensus-supported"` (author's claim that the members form a coherent, comparable set suitable for agent-side consensus/bake-off; Ornn only delivers the bundle — the agent runs any consensus logic itself).
+- `members`: 2..N refs using the exact same grammar as skill `depends-on` (`<name-or-guid>@<major.minor>` or `<name>@<dist-tag>`). No nested skillsets in v1.
+
+All ownership, visibility, and immutable versioning rules are identical to skills. Permission scopes are currently reused (`ornn:skill:{create,read,update,delete}`); a dedicated split is a tracked follow-up.
+
+**One-call delivery:** `GET /skillsets/:idOrName/closure?version=...` returns the union of the declared members **plus** each member's full transitive dependency closure (deduped, topo-sorted deps-first) **plus** the version's `instructions` at the root of the envelope. Same conflict/cycle/not-found errors as skill closures (`dependency_conflict`, `dependency_cycle`, `skill_dependency_not_found`).
+
+#### Search skillsets
+```bash
+# Keyword + filters (kind, tags, scope). No semantic ranking.
+nyxid proxy request ornn-api \
+  "/api/v1/skillset-search?kind=consensus-supported&tags=review,consensus&scope=mixed&pageSize=20" \
+  --method GET --output json
+```
+(See `references/ornn-api-reference.md` §5a.8 for all filters and the `SkillsetSearchItem` shape.)
+
+#### Inspect a skillset (gets the current `instructions` + member list)
+```bash
+nyxid proxy request ornn-api \
+  "/api/v1/skillsets/<name-or-guid>" \
+  --method GET --output json
+
+# Specific version
+nyxid proxy request ornn-api \
+  "/api/v1/skillsets/<name-or-guid>?version=1.2" \
+  --method GET --output json
+```
+
+#### Resolve the full deliverable (the main agent entry point)
+```bash
+nyxid proxy request ornn-api \
+  "/api/v1/skillsets/<name-or-guid>/closure" \
+  --method GET --output json
+```
+Response shape (note `instructions` at the same level as `items`):
+```jsonc
+{
+  "data": {
+    "instructions": "Run pdf-tools first to extract tables, then feed the CSV output to csv-processor. Use consensus across members for the final verdict.",
+    "items": [ /* topo-sorted ClosureNode[] — every member + their full dep trees */ ]
+  },
+  "error": null
+}
+```
+Use the `instructions` to drive your orchestration. The `items` give you every concrete skill package you may need to pull.
+
+#### Create a new skillset (private by default)
+```bash
+nyxid proxy request ornn-api "/api/v1/skillsets" \
+  --method POST \
+  --data '{
+    "name": "review-consensus-set",
+    "description": "Independent reviewers for document QA.",
+    "instructions": "1. Run pdf-tools to extract text/tables.\n2. Run text-summarizer on the extracted content.\n3. Run csv-processor if tabular data is present.\n4. Cross-validate outputs; surface disagreements to the user.",
+    "kind": "consensus-supported",
+    "tags": ["review", "consensus"],
+    "members": ["pdf-tools@1.0", "text-summarizer@2.1", "csv-processor@1.3"],
+    "version": "1.0"
+  }' \
+  --output json
+```
+`instructions` is **mandatory**. Validation happens before the write (members must resolve and produce a conflict-free union closure).
+
+#### Publish a new version (must re-supply `instructions`)
+```bash
+nyxid proxy request ornn-api "/api/v1/skillsets/<guid>" \
+  --method PUT \
+  --data '{
+    "members": ["pdf-tools@1.1", "text-summarizer@2.1", "csv-processor@1.3"],
+    "version": "1.1",
+    "instructions": "Updated flow: pdf-tools → text-summarizer (v2.1 handles longer inputs) → csv-processor. Consensus across all three for the final answer.",
+    "description": "Independent reviewers for document QA (v1.1).",
+    "kind": "consensus-supported",
+    "tags": ["review", "consensus"]
+  }' \
+  --output json
+```
+Prior versions are immutable. Re-using an existing `version` string returns `skillset_version_exists`.
+
+#### Permissions / visibility (identical to skills)
+```bash
+# Make public
+nyxid proxy request ornn-api "/api/v1/skillsets/<guid>/permissions" \
+  --method PUT \
+  --data '{"isPrivate":false,"sharedWithUsers":[],"sharedWithOrgs":[]}' \
+  --output json
+
+# Limited or private — same shape as skills /permissions
+```
+
+#### Delete
+```bash
+nyxid proxy request ornn-api "/api/v1/skillsets/<guid>" --method DELETE --output json
+```
+Cascades all versions. Irreversible.
+
+**SDK helpers** (when available in your runtime): `createSkillset`, `getSkillset`, `publishSkillset`, `getSkillsetClosure` / `resolve_skillset_closure`, `searchSkillsets`, etc.
+
+After creating/publishing a skillset you own, treat it like any other Ornn skill for local install tracking in `~/.ornn/installed-skills.json` (use the skillset name/guid + the version you resolved).
 
 ---
 

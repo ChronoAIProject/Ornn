@@ -31,7 +31,9 @@ import type { LlmProvider } from "./llmProviders/types";
 import type { SettingsRepository } from "./repository";
 import {
   sections,
+  type AssistantSection,
   type ExtrasSection,
+  type LaunchPromoSection,
   type MirrorSection,
   type NyxidSection,
   type PlaygroundSection,
@@ -98,6 +100,9 @@ export class SettingsServiceImpl implements SettingsService {
   async getSkillGen(): Promise<SkillGenSection> {
     return this.getSection<SkillGenSection>("skillGen");
   }
+  async getAssistant(): Promise<AssistantSection> {
+    return this.getSection<AssistantSection>("assistant");
+  }
   async getMirror(): Promise<MirrorSection> {
     return this.getSection<MirrorSection>("mirror");
   }
@@ -112,6 +117,9 @@ export class SettingsServiceImpl implements SettingsService {
   }
   async getExtras(): Promise<ExtrasSection> {
     return this.getSection<ExtrasSection>("extras");
+  }
+  async getLaunchPromo(): Promise<LaunchPromoSection> {
+    return this.getSection<LaunchPromoSection>("launchPromo");
   }
 
   async getSection<T>(id: SectionId): Promise<T> {

@@ -15,7 +15,7 @@
  */
 
 import { z } from "zod";
-import { SURFACES, type Surface } from "../quota/types";
+import { SURFACES, type GrantableSurface } from "../quota/types";
 
 /**
  * Length of the random portion of a redemption code. 16 chars over a
@@ -41,7 +41,9 @@ export type RedemptionCodeStatus = "active" | "redeemed" | "invalidated";
  * the redeem path can apply each grant independently.
  */
 export interface RedemptionGrantEntry {
-  surface: Surface;
+  // Redemption codes target only admin-grantable surfaces (the assistant
+  // surface isn't redeemable in v1 — see quota/types `GrantableSurface`).
+  surface: GrantableSurface;
   amount: number;
 }
 

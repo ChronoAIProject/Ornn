@@ -1,0 +1,138 @@
+/**
+ * SkillsetMemberViewer — the skillset detail page's left pane (#1080).
+ *
+ * A vertical skills selector (far-left column) + a READ-ONLY
+ * `SkillPackagePreview` of the selected member skill's files — so the viewer
+ * reads skills | file tree | content. The user clicks a skill in the set to
+ * view its content, mirroring the skill detail page's package pane.
+ *
+ * Data path (all read-only — NO skill mutation, NO closure write):
+ *   member ref `name@version`
+ *     → `useSkill(name, version)`        → SkillDetail (carries presigned URL)
+ *     → `useSkillPackage(presignedUrl)`  → FileNode tree + text contents map
+ *     → `<SkillPackagePreview>`          → file tree + viewer
+ *
+ * ACL is enforced upstream: a member the caller can't see (private / removed)
+ * surfaces an access message rather than its files.
+ *
+ * @module components/skillset/SkillsetMemberViewer
+ */
+
+import { useState } from "react";
+import { useTranslation } from "react-i18next";
+import { SkillPackagePreview } from "@/components/skill/SkillPackagePreview";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { useSkill } from "@/hooks/useSkills";
+import { useSkillPackage } from "@/hooks/useSkillPackage";
+import { parseMemberRef } from "@/types/skillset";
+
+export interface SkillsetMemberViewerProps {
+  /** Member refs (`name@version`) of the skillset version being viewed. */
+  members: string[];
+  /** If provided, render *only* the package preview for this ref (hides the left selector). Outer height becomes content-based. Used for graph hover dialogs. */
+  previewRef?: string | null | undefined;
+}
+
+export function SkillsetMemberViewer({ members, previewRef }: SkillsetMemberViewerProps) {
+  const { t } = useTranslation();
+  const [selectedRef, setSelectedRef] = useState<string | null>(members[0] ?? null);
+
+  // Keep the selection valid if `members` changes (version switch / edit).
+  const activeRef =
+    previewRef ?? (selectedRef && members.includes(selectedRef) ? selectedRef : (members[0] ?? null));
+  const parsed = activeRef ? parseMemberRef(activeRef) : null;
+
+  const {
+    data: skill,
+    isLoading: skillLoading,
+    error: skillError,
+  } = useSkill(parsed?.name ?? "", parsed?.version || undefined);
+  const {
+    files,
+    fileContents,
+    isLoading: pkgLoading,
+    error: pkgError,
+  } = useSkillPackage(skill?.presignedPackageUrl);
+
+  const loading = skillLoading || (!!skill && pkgLoading);
+
+  return (
+    <section
+      className={`card-impression flex ${previewRef ? 'h-full' : 'h-[280px]'} flex-row overflow-hidden rounded border border-subtle bg-card`}
+      data-testid="skillset-member-viewer"
+    >
+      {/* Skills selector — a vertical list on the far LEFT (#1082), so the
+          viewer reads skills | file tree | content. Click a skill in the set to
+          view its package. Hidden in preview-only mode (e.g. graph hover dialog). */}
+      {!previewRef && (
+      <div
+        className="flex w-[168px] shrink-0 flex-col gap-1 overflow-y-auto border-r border-subtle bg-elevated p-2"
+        data-testid="member-tabs"
+      >
+        <span className="px-1 pb-1 font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
+          {t("skillsetDetail.membersLabel", "Members")}
+        </span>
+        {members.map((ref) => {
+          const { name, version } = parseMemberRef(ref);
+          const isActive = ref === activeRef;
+          return (
+            <button
+              key={ref}
+              type="button"
+              onClick={() => setSelectedRef(ref)}
+              aria-pressed={isActive}
+              className={`w-full rounded-sm border px-2 py-1.5 text-left font-mono text-xs transition-colors cursor-pointer ${
+                isActive
+                  ? "border-accent bg-accent/15 text-strong"
+                  : "border-transparent text-meta hover:border-subtle hover:text-strong"
+              }`}
+            >
+              <span className="block truncate">{name}</span>
+              {version && <span className="text-[10px] text-meta">@{version}</span>}
+            </button>
+          );
+        })}
+      </div>
+      )}
+
+      {/* Selected member's package — read-only file tree + content. */}
+      <div className={`min-w-0 flex-1 ${previewRef ? 'w-full' : ''}`}>
+        {!activeRef ? (
+          <p className="py-12 text-center font-text text-sm text-meta">
+            {t("skillsetDetail.noMembers", "This skillset has no members.")}
+          </p>
+        ) : loading ? (
+          <div className="p-6">
+            <Skeleton lines={8} />
+          </div>
+        ) : skillError || !skill ? (
+          <p className="px-6 py-12 text-center font-text text-sm text-meta">
+            {t(
+              "skillsetDetail.memberUnavailable",
+              "This member skill isn't available to you — it may be private or removed.",
+            )}
+          </p>
+        ) : pkgError ? (
+          <p className="px-6 py-12 text-center font-text text-sm text-meta">
+            {t("skillsetDetail.memberPackageError", "Couldn't load this skill's files.")}
+          </p>
+        ) : files.length > 0 ? (
+          // key on the member ref so switching remounts the preview — avoids a
+          // one-frame flash of the previous member's files while the new
+          // package effect kicks in.
+          <SkillPackagePreview
+            key={activeRef}
+            files={files}
+            fileContents={fileContents}
+            metadata={null}
+            className="h-full"
+          />
+        ) : (
+          <p className="px-6 py-12 text-center font-text text-sm text-meta">
+            {t("skillsetDetail.memberNoFiles", "This skill has no viewable files.")}
+          </p>
+        )}
+      </div>
+    </section>
+  );
+}

@@ -32,6 +32,7 @@ function fakeSettingsService(initial?: Partial<Record<string, Record<string, unk
   const svc: SettingsService = {
     getPlayground: async () => store.get("playground") as never,
     getSkillGen: async () => store.get("skillGen") as never,
+    getAssistant: async () => store.get("assistant") as never,
     getMirror: async () => store.get("mirror") as never,
     getNyxid: async () => store.get("nyxid") as never,
     getSkillAudit: async () => store.get("skillAudit") as never,
@@ -47,6 +48,7 @@ function fakeSettingsService(initial?: Partial<Record<string, Record<string, unk
     },
     listLlmProviders: async () => [],
     getLlmProvider: async () => null,
+    getLaunchPromo: async () => store.get("launchPromo") as never,
     invalidateCache: () => {},
   };
   return Object.assign(svc, {

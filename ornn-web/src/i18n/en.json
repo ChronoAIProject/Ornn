@@ -77,6 +77,7 @@
     "home": "Home",
     "registry": "Registry",
     "build": "Build",
+    "skillsets": "Skillsets",
     "docs": "Docs",
     "news": "News",
     "contact": "Contact",
@@ -90,6 +91,7 @@
     "lightMode": "Light Mode",
     "darkMode": "Dark Mode",
     "myProfile": "My Profile",
+    "mySkillsets": "My Skillsets",
     "myOrgs": "My Organizations",
     "myServices": "My Services",
     "adminServices": "Admin Services",
@@ -112,7 +114,11 @@
     "admin": "admin",
     "categories": "categories",
     "tags": "tags",
-    "auditHistory": "Audit history"
+    "auditHistory": "Audit history",
+    "skillsets": "skillsets",
+    "mySkillsets": "my skillsets",
+    "newSkillset": "new skillset",
+    "editSkillset": "edit skillset"
   },
   "explore": {
     "semanticQueryRequiredTitle": "Enter a search description",
@@ -421,6 +427,7 @@
     "privateTitle": "Private",
     "privateDesc": "Only you and platform admins can see this skill. Active when nothing above is set.",
     "searchPlaceholder": "type an email to find a user...",
+    "searchHint": "Type at least 2 characters to search.",
     "removeUser": "Remove",
     "noOrgs": "No organizations to choose from.",
     "noUsersYet": "No users added yet.",
@@ -686,6 +693,35 @@
     "nowPrivate": "Skill is now private. Only you can view it.",
     "nowPublic": "Skill is now public. All users can view it.",
     "failed": "Failed to update skill visibility"
+  },
+  "assistant": {
+    "launch": "Ask Ornn",
+    "title": "Ornn Assistant",
+    "subtitle": "Repo-aware answers",
+    "placeholder": "Ask about Ornn…",
+    "close": "Close assistant",
+    "clear": "Clear conversation",
+    "thinking": "Thinking…",
+    "retry": "Try again",
+    "errorTitle": "Something went wrong",
+    "mascotAlt": "Ornn mascot",
+    "greeting": "Hi, I'm Ornn 👋",
+    "empty": {
+      "title": "Ask Ornn anything",
+      "subtitle": "Repo-aware answers about what Ornn is, how it works, and which skills fit your agent.",
+      "hint": "Try asking"
+    },
+    "suggestions": {
+      "what": "What is Ornn?",
+      "different": "How is Ornn different?",
+      "findSkill": "Find a skill that does X"
+    },
+    "signIn": {
+      "title": "Sign in to chat with Ornn",
+      "body": "Ornn's repo-aware answers are for signed-in builders. Sign in to start the conversation.",
+      "cta": "Sign in",
+      "dismiss": "Maybe later"
+    }
   },
   "chatInput": {
     "model": "Model",
@@ -1547,7 +1583,7 @@
           "models": "Models",
           "actions": "Actions"
         },
-        "modelCounts": "{{playground}} playground · {{skillGen}} skillGen · {{total}} total",
+        "modelCounts": "{{playground}} playground · {{skillGen}} skillGen · {{assistant}} assistant · {{total}} total",
         "archivedCount": "{{count}} archived",
         "toast": {
           "synced": "Synced {{name}}: +{{added}} added, {{updated}} updated, {{removed}} removed.",
@@ -1632,6 +1668,136 @@
     "fieldPrivateKey": "App private key (PEM)",
     "confirmTitle": "Confirm: abandon current mirror repo",
     "confirmConfirm": "Yes, change repo"
+  },
+  "skillsetKind": {
+    "generic": "Bundle",
+    "genericLong": "Generic bundle",
+    "consensusSupported": "Consensus",
+    "consensusSupportedLong": "Consensus-supported"
+  },
+  "skillsetExplore": {
+    "publicTab": "Public Skillsets",
+    "mineTab": "My Skillsets",
+    "sharedTab": "Shared with me",
+    "kindLabel": "Kind",
+    "kindAll": "All kinds",
+    "tagsLabel": "Tags",
+    "addTag": "add tag…",
+    "searchPlaceholder": "Search skillsets by name or description...",
+    "searchAria": "Search skillsets",
+    "create": "New skillset",
+    "nonePublic": "No public skillsets match",
+    "noneMine": "You haven't created any skillsets yet",
+    "noneShared": "Nothing has been shared with you yet",
+    "tryAdjusting": "Try adjusting the kind or tag filters.",
+    "createFirst": "Bundle two or more skills into your first skillset.",
+    "sharedIntro": "When someone grants you access to a private skillset, it shows up here."
+  },
+  "skillsetDetail": {
+    "notFoundTitle": "Skillset not found",
+    "notFoundDesc": "It may have been deleted, or you may not have access to it.",
+    "backToRegistry": "Back to skillsets",
+    "consensusNote": "The author asserts these members are an independent, comparable set suitable for agent-side consensus. This is a claim, not a platform guarantee.",
+    "managePermissions": "Permissions",
+    "masterPrompt": "Master prompt",
+    "noPrompt": "No master prompt for this version.",
+    "resolvedClosure": "Closure",
+    "members": "Members",
+    "membersLabel": "Members",
+    "noMembers": "This skillset has no members.",
+    "memberUnavailable": "This member skill isn't available to you — it may be private or removed.",
+    "memberPackageError": "Couldn't load this skill's files.",
+    "memberNoFiles": "This skill has no viewable files.",
+    "metadata": "Metadata",
+    "version": "Version",
+    "latest": "latest",
+    "versionsCount": "Versions",
+    "updated": "Updated",
+    "guid": "GUID",
+    "guidCopied": "GUID copied",
+    "visibility": "Visibility",
+    "visPublic": "Public",
+    "visPrivate": "Private",
+    "sharedWith": "Shared with {{users}} users · {{orgs}} orgs",
+    "dangerZone": "Danger zone",
+    "dangerExplain": "Permanently delete this skillset and every version. This cannot be undone.",
+    "deleteSkillset": "Delete skillset",
+    "deleteTitle": "Delete this skillset?",
+    "deleteConfirm": "This permanently deletes {{name}} and all its versions.",
+    "deleteSuccess": "Skillset deleted"
+  },
+  "skillsetForm": {
+    "name": "Name",
+    "nameLocked": "locked",
+    "nameError": "Name must be kebab-case (a-z, 0-9, hyphens).",
+    "description": "Description",
+    "descriptionPlaceholder": "A short, human-readable summary",
+    "descriptionError": "Description is required (1–1024 chars).",
+    "kind": "Kind",
+    "tags": "Tags",
+    "addTag": "add tag…",
+    "membersError": "Add at least {{min}} members.",
+    "promptError": "A master prompt is required.",
+    "version": "Version",
+    "versionError": "Version must be <major>.<minor> (e.g. 1.0).",
+    "versionBumpError": "Publish requires a new, bumped version (e.g. 1.1).",
+    "editHint": "Publishing creates a new immutable version. The name cannot change.",
+    "createSubmit": "Create skillset",
+    "publishSubmit": "Publish version"
+  },
+  "skillsetNew": {
+    "title": "New skillset",
+    "subtitle": "Bundle two or more skills with a master prompt that tells agents how to use them together.",
+    "created": "Skillset created"
+  },
+  "skillsetEdit": {
+    "title": "Edit skillset",
+    "subtitle": "Revise the members, prompt, kind, or tags and publish a new version.",
+    "published": "New version published"
+  },
+  "skillsetMembers": {
+    "label": "Members",
+    "count": "{{count}} / {{max}}",
+    "empty": "No members yet. Add at least {{min}} skills.",
+    "placeholder": "search a skill, or type name@1.0 then Enter",
+    "remove": "Remove {{ref}}",
+    "errorEmpty": "Enter a skill ref.",
+    "errorNested": "A skillset cannot reference another skillset. Remove the skillset: prefix.",
+    "errorSelf": "A skillset cannot include itself as a member.",
+    "errorNoVersion": "Include a version, e.g. name@1.0.",
+    "errorDuplicate": "That member is already added.",
+    "errorMax": "A skillset may have at most {{max}} members."
+  },
+  "skillsetPrompt": {
+    "label": "Master prompt",
+    "count": "{{count}} / {{max}}",
+    "help": "Required. Tell an agent how to use this set — orchestration, ordering, and when to pick which member.",
+    "placeholder": "# How to use this set\n\n1. Start with ...",
+    "errorTooLong": "Master prompt must be at most {{max}} characters."
+  },
+  "skillsetClosure": {
+    "empty": "No resolved members yet.",
+    "member": "member",
+    "dependency": "dep"
+  },
+  "skillsetGraph": {
+    "sectionTitle": "Member dependencies",
+    "label": "Dependency graph",
+    "help": "Optional. Drag between members (or click a member, then another) to declare “runs before”. Edges are stored inside the master prompt — no skill is modified.",
+    "needMembers": "Add at least two members to draw dependencies.",
+    "loadingCanvas": "Loading graph editor…",
+    "pickTarget": "Pick a target for {{ref}}…",
+    "removeEdge": "Remove edge {{from}} → {{to}}",
+    "tidy": "Tidy",
+    "edgeLabel": "runs before",
+    "cycleWarning": "Members form a cycle — order is advisory.",
+    "emptyReadonly": "No members to graph.",
+    "emptyDeps": "No dependencies declared between members."
+  },
+  "skillsetPermissions": {
+    "publicDesc": "Anyone on Ornn can find and use this skillset, including unauthenticated visitors.",
+    "orgsDesc": "Every admin and member of a checked org can see and use this skillset.",
+    "privateDesc": "Only you and platform admins can see this skillset. Active when nothing above is set."
   },
   "errors": {
     "generic": {

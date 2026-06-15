@@ -59,6 +59,9 @@ import { SkillVersionRepository } from "./domains/skills/crud/skillVersionReposi
 import { SkillService } from "./domains/skills/crud/service";
 import { createSkillRoutes } from "./domains/skills/crud/routes";
 
+// Domain: Skillsets (#969)
+import { wireSkillsets } from "./domains/skillsets/bootstrap";
+
 // Domain: Skill Audit
 import { AuditRepository } from "./domains/skills/audit/repository";
 import { AuditService } from "./domains/skills/audit/service";
@@ -67,6 +70,7 @@ import { createAuditRoutes } from "./domains/skills/audit/routes";
 
 // Domain: Notifications
 import { wireNotifications } from "./domains/notifications/bootstrap";
+import { wireLaunchPromo } from "./domains/launchPromo/bootstrap";
 
 // Domain: Announcements (landing-page popup)
 import { wireAnnouncements } from "./domains/announcements/bootstrap";
@@ -88,6 +92,9 @@ import { wireSkillGeneration } from "./domains/skills/generation/bootstrap";
 
 // Domain: Playground
 import { wirePlayground } from "./domains/playground/bootstrap";
+
+// Domain: Assistant (#970 — repo-aware Q&A chatbot)
+import { wireAssistant } from "./domains/assistant/bootstrap";
 
 // Domain: Admin
 import { createAdminRoutes } from "./domains/admin/routes";
@@ -332,12 +339,14 @@ export async function bootstrap(
   // shape stays narrow — the empty `gatewayUrl` is what triggers the
   // fail-closed branch downstream.
   const resolveLlmProviderForSurface = async (
-    surface: "playground" | "skillGen",
+    surface: "playground" | "skillGen" | "assistant",
   ): Promise<{ gatewayUrl: string; apiKey: string; apiFormat: ApiFormat }> => {
     const sec =
       surface === "playground"
         ? await settingsService.getPlayground()
-        : await settingsService.getSkillGen();
+        : surface === "skillGen"
+          ? await settingsService.getSkillGen()
+          : await settingsService.getAssistant();
     if (!sec.defaultProviderId) {
       return { gatewayUrl: "", apiKey: "", apiFormat: "responses" };
     }
@@ -362,12 +371,14 @@ export async function bootstrap(
   // override for callers that want to pin a specific model regardless
   // of the cross-provider default.
   const resolveSurfaceDefaults = async (
-    surface: "playground" | "skillGen",
+    surface: "playground" | "skillGen" | "assistant",
   ): Promise<{ model: string; maxOutputTokens: number; temperature: number }> => {
     const sec =
       surface === "playground"
         ? await settingsService.getPlayground()
-        : await settingsService.getSkillGen();
+        : surface === "skillGen"
+          ? await settingsService.getSkillGen()
+          : await settingsService.getAssistant();
     let model = sec.defaultModelId ?? "";
     if (!model) {
       const resolution = await llmProvidersService.resolveModel({ surface });
@@ -490,12 +501,15 @@ export async function bootstrap(
     db,
     logger,
   });
-  const { service: notificationService, routes: notificationRoutes } =
-    await wireNotifications({
-      db,
-      logger,
-      broadcastRepo: broadcastRepoForNotifications,
-    });
+  const {
+    service: notificationService,
+    routes: notificationRoutes,
+    repo: notificationRepo,
+  } = await wireNotifications({
+    db,
+    logger,
+    broadcastRepo: broadcastRepoForNotifications,
+  });
 
   // ---- Domain: Announcements (landing-page popup, issue #307) ----
   const { routes: announcementRoutes } = await wireAnnouncements({ db, logger });
@@ -627,9 +641,25 @@ export async function bootstrap(
 
   // ---- Domain: Redemption codes (single-use admin-issued quota grants) ----
   const {
+    service: redemptionCodeService,
     adminRoutes: adminRedemptionCodesRoutes,
     meRoutes: meRedemptionCodesRoutes,
   } = wireRedemptionCodes({ db, logger, quotaService });
+
+  // ---- Domain: Launch promo (#724) ----
+  // Sits on top of redemption codes + notifications: when an admin
+  // (or, in a follow-up PR, the cron loop) awards an eligible user,
+  // the service mints a code via redemptionCodeService.mint and drops
+  // it into the user's notification inbox.
+  const { service: launchPromoService, routes: launchPromoRoutes } =
+    await wireLaunchPromo({
+      db,
+      settingsService,
+      redemptionCodeService,
+      notificationRepo,
+      userDirectoryRepo,
+    });
+  void launchPromoService;
 
   // ---- Per-provider model catalog migration (#270) ----
   // Fold the standalone `models` collection into `llm_providers.models[]`
@@ -736,6 +766,13 @@ export async function bootstrap(
     getSaAccessToken,
   });
 
+  // ---- Domain: Skillsets (#969) ----
+  // A skillset is a curated, versioned meta-package over N member skills.
+  // The service injects `skillService` so member resolution + the #968
+  // closure walk stay single-sourced.
+  const skillsets = wireSkillsets({ db, skillService });
+  await skillsets.ensureIndexes();
+
   // ---- Domain: Skill Generation ----
   const { service: generationService, routes: generationRoutes } =
     wireSkillGeneration({
@@ -758,6 +795,20 @@ export async function bootstrap(
     analyticsService,
     quotaService,
     llmProvidersService,
+  });
+
+  // ---- Domain: Assistant (#970) ----
+  // Repo-aware Q&A chatbot. Reuses the shared NyxLlmClient, the assistant
+  // LLM surface (resolver + quota), and a visibility-scoped retrieval over
+  // the same SkillRepository. Pure Q&A — no agentic tool loop.
+  const { routes: assistantRoutes } = wireAssistant({
+    llmClient: nyxLlmClient,
+    skillRepo,
+    quotaService,
+    llmProvidersService,
+    defaultsResolver: async () => resolveSurfaceDefaults("assistant"),
+    keepAliveIntervalMsResolver: async () =>
+      (await settingsService.getAssistant()).sseKeepAliveMs,
   });
 
   // ---- Domain: Admin ----
@@ -905,15 +956,19 @@ export async function bootstrap(
     quotaRoutes: adminQuotaRoutes,
   } = wireAdmin({ db, userDirectoryRepo, quotaService });
   apiApp.route("/", skillRoutes);
+  apiApp.route("/", skillsets.routes);
+  apiApp.route("/", skillsets.searchRoutes);
   apiApp.route("/", mirrorRoutes);
   apiApp.route("/", auditRoutes);
   apiApp.route("/", notificationRoutes);
+  apiApp.route("/", launchPromoRoutes);
   apiApp.route("/", announcementRoutes);
   apiApp.route("/", broadcastRoutes);
   apiApp.route("/", analyticsRoutes);
   apiApp.route("/", searchRoutes);
   apiApp.route("/", generationRoutes);
   apiApp.route("/", playgroundRoutes);
+  apiApp.route("/", assistantRoutes);
   apiApp.route("/", adminRoutes);
   apiApp.route("/", adminDashboardRoutes);
   apiApp.route("/", adminUsersRoutes);

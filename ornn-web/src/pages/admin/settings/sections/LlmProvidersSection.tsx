@@ -210,6 +210,7 @@ function ProviderRow({
   const active = provider.models.filter((m) => !m.removed);
   const playground = active.filter((m) => m.enabledForPlayground).length;
   const skillGen = active.filter((m) => m.enabledForSkillGen).length;
+  const assistant = active.filter((m) => m.enabledForAssistant).length;
   const removedCount = provider.models.length - active.length;
 
   return (
@@ -225,6 +226,7 @@ function ProviderRow({
         {t("adminSettings.sections.llmProviders.modelCounts", {
           playground,
           skillGen,
+          assistant,
           total: active.length,
         })}
         {removedCount > 0 && (

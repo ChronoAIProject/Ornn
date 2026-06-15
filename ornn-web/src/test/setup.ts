@@ -2,6 +2,18 @@ import "@testing-library/jest-dom/vitest";
 import { vi } from "vitest";
 import en from "../i18n/en.json";
 
+// jsdom ships no ResizeObserver; react-flow (@xyflow/react, #1067) reads it on
+// mount. A no-op stub keeps the lazy dependency-graph canvas from crashing the
+// test render — the canvas's edit wiring is asserted via the click-to-connect
+// node grid, not via react-flow's measured layout.
+if (typeof globalThis.ResizeObserver === "undefined") {
+  globalThis.ResizeObserver = class {
+    observe(): void {}
+    unobserve(): void {}
+    disconnect(): void {}
+  } as unknown as typeof ResizeObserver;
+}
+
 function lookupKey(path: string): string | undefined {
   const value = path
     .split(".")

@@ -1,4 +1,4 @@
-node_modules/
+node_modules
 dist/
 coverage/
 .env
@@ -21,3 +21,8 @@ __pycache__/
 .pytest_cache/
 build/
 .gstack/
+
+# Local agent / orchestrator runtime artifacts — disposable, never committed.
+.auto/
+.agents/
+skills-lock.json

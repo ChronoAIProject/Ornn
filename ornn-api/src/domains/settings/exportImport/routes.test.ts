@@ -27,6 +27,7 @@ function fakeSettingsService(): SettingsService {
   return {
     getPlayground: async () => store.get("playground") as never,
     getSkillGen: async () => store.get("skillGen") as never,
+    getAssistant: async () => store.get("assistant") as never,
     getMirror: async () => store.get("mirror") as never,
     getNyxid: async () => store.get("nyxid") as never,
     getSkillAudit: async () => store.get("skillAudit") as never,
@@ -41,6 +42,7 @@ function fakeSettingsService(): SettingsService {
     },
     listLlmProviders: async () => [],
     getLlmProvider: async () => null,
+    getLaunchPromo: async () => store.get("launchPromo") as never,
     invalidateCache: () => {},
   };
 }

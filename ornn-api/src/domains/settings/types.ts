@@ -13,7 +13,9 @@
  */
 
 import type {
+  AssistantSection,
   ExtrasSection,
+  LaunchPromoSection,
   MirrorSection,
   NyxidSection,
   PlaygroundSection,
@@ -51,11 +53,13 @@ export interface SettingsService {
   // ---- Per-section typed accessors ----
   getPlayground(): Promise<PlaygroundSection>;
   getSkillGen(): Promise<SkillGenSection>;
+  getAssistant(): Promise<AssistantSection>;
   getMirror(): Promise<MirrorSection>;
   getNyxid(): Promise<NyxidSection>;
   getSkillAudit(): Promise<SkillAuditSection>;
   getTelemetry(): Promise<TelemetrySection>;
   getExtras(): Promise<ExtrasSection>;
+  getLaunchPromo(): Promise<LaunchPromoSection>;
 
   /**
    * Read a section by id. Returns the typed payload, applying defaults

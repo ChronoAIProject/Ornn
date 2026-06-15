@@ -26,6 +26,9 @@ import type { BroadcastRepository } from "../broadcasts/repository";
 export interface NotificationsWiring {
   readonly service: NotificationService;
   readonly routes: Hono<{ Variables: AuthVariables }>;
+  /** Exposed so other domains (e.g. launch-promo) can publish per-user
+   *  notifications without re-instantiating the repo. */
+  readonly repo: NotificationRepository;
 }
 
 export async function wireNotifications(deps: {
@@ -55,5 +58,5 @@ export async function wireNotifications(deps: {
     broadcastRepo: deps.broadcastRepo,
   });
   const routes = createNotificationRoutes({ notificationService: service });
-  return { service, routes };
+  return { service, routes, repo };
 }
