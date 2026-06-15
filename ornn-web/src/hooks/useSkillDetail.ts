@@ -158,6 +158,7 @@ export function useSkillDetail(idOrName: string | undefined) {
   // ── Modal + file-edit state ─────────────────────────────────
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showPermissionsModal, setShowPermissionsModal] = useState(false);
+  const [showTransferModal, setShowTransferModal] = useState(false);
   const [showAdvancedModal, setShowAdvancedModal] = useState(false);
   const [showSaveConfirm, setShowSaveConfirm] = useState(false);
   const [showAuditStartedModal, setShowAuditStartedModal] = useState(false);
@@ -423,6 +424,8 @@ export function useSkillDetail(idOrName: string | undefined) {
     setShowDeleteConfirm,
     showPermissionsModal,
     setShowPermissionsModal,
+    showTransferModal,
+    setShowTransferModal,
     showAdvancedModal,
     setShowAdvancedModal,
     showSaveConfirm,
