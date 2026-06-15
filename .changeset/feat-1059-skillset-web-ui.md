@@ -1,5 +1,0 @@
----
-"ornn-web": minor
----
-
-Skillset web UI (#1059). A full web surface for the #969 skillsets backend, mirroring the existing skills UI. Browse skillsets at `/skillsets` (one page, tabs Public / Mine / Shared-with-me via `?scope`, with `kind` + `tag` filters and pagination), open a skillset at `/skillsets/:idOrName` (`?version` resolves a specific published version; the page surfaces the name, description, kind, the rendered master prompt, the member list, the server-flattened dependency closure, visibility, and a version picker), create at `/skillsets/new`, publish a new version at `/skillsets/:id/edit` (name locked, version required + bumped), and manage your own at `/my-skillsets`. Owners get a per-skillset permissions editor (public / org / user grants) and a delete flow. The member picker enforces the v1 rules client-side (2–100 members, no nested `skillset:` refs, no self-reference), and the master-prompt editor enforces the required, trimmed 1–8000-char body. New nav entries: "Skillsets" in the top nav and "My Skillsets" in the account menu. All copy is keyed under `skillset*` i18n namespaces in both English and Chinese.
