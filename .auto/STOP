@@ -1,0 +1,3 @@
+/auto kill-switch engaged via .auto/STOP fallback.
+Engaged by chronoai-shining on 2026-06-15 (UTC) at the maintainer's request.
+Delete this file on develop-auto to allow /auto runs to resume (remove before any develop-auto->develop promotion).
