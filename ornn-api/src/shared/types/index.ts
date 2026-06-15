@@ -71,6 +71,39 @@ export class AppError extends Error {
 // Skill Types
 // ---------------------------------------------------------------------------
 
+/**
+ * Permission level a grant confers on a skill / skillset (#1123).
+ * - `read`       → view / pull / execute / read versions.
+ * - `read_write` → READ plus update the skill's content & metadata. Does
+ *   NOT include any admin / danger-zone operation (change permissions,
+ *   transfer ownership, delete skill/version, toggle deprecation, manage
+ *   dist-tags, bind NyxID service) — those stay with the owner (`createdBy`)
+ *   and platform admins only.
+ */
+export type SkillPermissionLevel = "read" | "read_write";
+
+/** The kind of principal a grant targets. */
+export type SkillGrantPrincipalType = "user" | "org";
+
+/**
+ * One typed access grant on a skill / skillset (#1123). The canonical shape
+ * that replaces the legacy read-only `sharedWithUsers` / `sharedWithOrgs`
+ * allow-lists: every grant pairs a principal with a permission `level`.
+ *
+ * - `type` — `user` (NyxID person user_id) or `org` (NyxID org user_id).
+ * - `id`   — the principal's NyxID id.
+ * - `level`— `read` or `read_write`.
+ *
+ * The author (`createdBy`) is never represented here — they hold implicit
+ * ADMIN. Public skills (`isPrivate === false`) are readable by everyone
+ * regardless of grants; `read_write` only ever applies to explicit grants.
+ */
+export interface SkillGrant {
+  type: SkillGrantPrincipalType;
+  id: string;
+  level: SkillPermissionLevel;
+}
+
 export interface SkillDocument {
   guid: string;
   name: string;
@@ -113,6 +146,18 @@ export interface SkillDocument {
    * membership is resolved per-request via the NyxID lookup middleware.
    */
   sharedWithOrgs: string[];
+  /**
+   * Typed access grants (#1123) — the canonical source of truth for who can
+   * read vs. read-write the skill, beyond the author + platform admin.
+   *
+   * Optional for back-compat: skills created before #1123 carry only the
+   * legacy `sharedWithUsers` / `sharedWithOrgs` read lists. Readers MUST fall
+   * back to deriving read-level grants from those lists when this field is
+   * absent — see `effectiveGrants` in `crud/grants.ts`. The boot migration
+   * backfills it; the repository dual-writes the legacy lists so older code
+   * keeps resolving read visibility during a rolling deploy.
+   */
+  grants?: SkillGrant[] | undefined;
   /**
    * Cached pointer to the highest version published for this skill, e.g. "1.2".
    * The `skill_versions` collection is the source of truth; this field exists
