@@ -22,6 +22,7 @@
  */
 
 import { z } from "zod";
+import type { SkillGrant } from "../../shared/types/index";
 import {
   DEPENDS_ON_REF_REGEX,
   SKILL_NAME_REGEX,
@@ -202,6 +203,12 @@ export interface SkillsetDocument {
   sharedWithUsers: string[];
   /** Explicit per-org grants (NyxID org user_ids). */
   sharedWithOrgs: string[];
+  /**
+   * Typed access grants (#1123) — canonical read/read-write ACL, mirroring
+   * `SkillDocument.grants`. Optional for back-compat; readers fall back to
+   * deriving read grants from the legacy lists via `effectiveGrants`.
+   */
+  grants?: SkillGrant[] | undefined;
   /** Cached pointer to the highest published version, e.g. "1.2". */
   latestVersion: string;
 }
@@ -255,6 +262,8 @@ export interface SkillsetDetailResponse {
   createdByDisplayName?: string | undefined;
   sharedWithUsers: string[];
   sharedWithOrgs: string[];
+  /** Typed access grants (#1123). Always present in responses via `effectiveGrants`. */
+  grants?: SkillGrant[] | undefined;
   createdOn: string;
   updatedOn: string;
 }

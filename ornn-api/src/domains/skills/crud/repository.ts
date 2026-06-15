@@ -7,7 +7,7 @@ import type { Collection, Db, Document } from "mongodb";
 import type { SkillDocument, SkillGrant, SkillMetadata } from "../../../shared/types/index";
 import { AppError } from "../../../shared/types/index";
 import { createLogger } from "../../../shared/logger";
-import { legacyListsFromGrants } from "./grants";
+import { coerceStoredGrants, legacyListsFromGrants } from "./grants";
 // `applyScope` / `applyExtraFilters` were lifted into `scopeFilter.ts`
 // (#969) so the skillsets repository can reuse the exact same visibility
 // matrix + registry-chip filters. Re-import them here — pure move, no
@@ -879,7 +879,7 @@ function mapDoc(doc: Document | null): SkillDocument | null {
     // Typed grants (#1123). Absent on un-migrated docs — left undefined here
     // so the doc faithfully reflects storage; callers use `effectiveGrants`
     // to fall back to read-grants derived from the legacy lists.
-    grants: mapGrants(doc.grants),
+    grants: coerceStoredGrants(doc.grants),
     latestVersion: doc.latestVersion ?? "0.1",
     source: doc.source
       ? {
@@ -922,28 +922,6 @@ function mapDoc(doc: Document | null): SkillDocument | null {
     // field; corrupted entries with non-string values get filtered.
     distTags: mapDistTags(doc.distTags),
   };
-}
-
-/**
- * Coerce the stored `grants` array defensively (#1123). Returns `undefined`
- * when the field is absent (un-migrated doc) so `effectiveGrants` falls back
- * to the legacy lists. Drops malformed entries (bad type/level, blank id)
- * rather than trusting raw Mongo data across the trust boundary.
- */
-function mapGrants(raw: unknown): SkillGrant[] | undefined {
-  if (!Array.isArray(raw)) return undefined;
-  const out: SkillGrant[] = [];
-  for (const entry of raw) {
-    if (!entry || typeof entry !== "object") continue;
-    const e = entry as Record<string, unknown>;
-    const type = e.type;
-    const id = typeof e.id === "string" ? e.id.trim() : "";
-    const level = e.level;
-    if ((type !== "user" && type !== "org") || !id) continue;
-    if (level !== "read" && level !== "read_write") continue;
-    out.push({ type, id, level });
-  }
-  return out;
 }
 
 function mapDistTags(raw: unknown): Record<string, string> | undefined {

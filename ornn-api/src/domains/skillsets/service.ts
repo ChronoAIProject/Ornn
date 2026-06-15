@@ -34,6 +34,7 @@ import {
 } from "../skills/crud/authorize";
 import type { SkillService } from "../skills/crud/service";
 import { isGreater, parseVersion } from "../skills/crud/version";
+import { effectiveGrants } from "../skills/crud/grants";
 import type { SkillsetRepository } from "./repository";
 import type { SkillsetVersionRepository } from "./skillsetVersionRepository";
 import type {
@@ -453,6 +454,8 @@ function toDetail(
     createdByDisplayName: skillset.createdByDisplayName,
     sharedWithUsers: skillset.sharedWithUsers,
     sharedWithOrgs: skillset.sharedWithOrgs,
+    // Canonical typed ACL (#1123) — identical shape regardless of migration.
+    grants: effectiveGrants(skillset),
     createdOn:
       skillset.createdOn instanceof Date ? skillset.createdOn.toISOString() : String(skillset.createdOn),
     updatedOn:

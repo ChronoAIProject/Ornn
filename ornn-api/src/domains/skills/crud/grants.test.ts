@@ -12,6 +12,7 @@
 import { describe, expect, it } from "bun:test";
 import type { SkillGrant } from "../../../shared/types/index";
 import {
+  coerceStoredGrants,
   deriveGrantsFromLegacy,
   effectiveGrants,
   legacyListsFromGrants,
@@ -130,5 +131,42 @@ describe("levelAllowsWrite", () => {
   it("only read_write permits writing", () => {
     expect(levelAllowsWrite("read_write")).toBe(true);
     expect(levelAllowsWrite("read")).toBe(false);
+  });
+});
+
+describe("coerceStoredGrants", () => {
+  it("returns undefined for a non-array (un-migrated doc)", () => {
+    expect(coerceStoredGrants(undefined)).toBeUndefined();
+    expect(coerceStoredGrants(null)).toBeUndefined();
+    expect(coerceStoredGrants("nope")).toBeUndefined();
+  });
+
+  it("keeps well-formed entries and trims ids", () => {
+    expect(
+      coerceStoredGrants([
+        { type: "user", id: " u1 ", level: "read" },
+        { type: "org", id: "o1", level: "read_write" },
+      ]),
+    ).toEqual([
+      { type: "user", id: "u1", level: "read" },
+      { type: "org", id: "o1", level: "read_write" },
+    ]);
+  });
+
+  it("drops malformed entries (bad type, bad level, blank id, non-object)", () => {
+    expect(
+      coerceStoredGrants([
+        { type: "team", id: "x", level: "read" },
+        { type: "user", id: "", level: "read" },
+        { type: "user", id: "u1", level: "admin" },
+        42,
+        null,
+        { type: "user", id: "u2", level: "read_write" },
+      ]),
+    ).toEqual([{ type: "user", id: "u2", level: "read_write" }]);
+  });
+
+  it("returns an empty array for an empty stored array (explicit no-grants)", () => {
+    expect(coerceStoredGrants([])).toEqual([]);
   });
 });

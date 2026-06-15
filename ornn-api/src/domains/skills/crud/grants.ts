@@ -113,6 +113,29 @@ export function levelAllowsWrite(level: SkillPermissionLevel): boolean {
   return level === "read_write";
 }
 
+/**
+ * Coerce a raw stored `grants` value (straight off Mongo) into a typed array,
+ * dropping malformed entries across the trust boundary. Returns `undefined`
+ * when the field is absent (un-migrated doc) so `effectiveGrants` falls back
+ * to the legacy lists. Shared by the skills + skillsets repositories so both
+ * collections coerce identically.
+ */
+export function coerceStoredGrants(raw: unknown): SkillGrant[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const out: SkillGrant[] = [];
+  for (const entry of raw) {
+    if (!entry || typeof entry !== "object") continue;
+    const e = entry as Record<string, unknown>;
+    const type = e.type;
+    const id = typeof e.id === "string" ? e.id.trim() : "";
+    const level = e.level;
+    if ((type !== "user" && type !== "org") || !id) continue;
+    if (level !== "read" && level !== "read_write") continue;
+    out.push({ type, id, level });
+  }
+  return out;
+}
+
 function dedupe(ids: readonly string[]): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
