@@ -24,7 +24,8 @@ import {
 } from "../../../middleware/nyxidAuth";
 import { validateBody, getValidatedBody } from "../../../middleware/validate";
 import { AppError } from "../../../shared/types/index";
-import { canReadSkill, canManageSkill, buildActorContext } from "./authorize";
+import { canReadSkill, canWriteSkill, canManageSkill, buildActorContext } from "./authorize";
+import { skillGrantSchema } from "./grants";
 import { parseGithubUrl } from "./utils/githubPull";
 import { rateLimit } from "../../../middleware/rateLimit";
 import { createLogger } from "../../../shared/logger";
@@ -35,14 +36,25 @@ const deprecationPatchSchema = z.object({
 
 /**
  * Schema for `PUT /api/skills/:id/permissions`. `isPrivate === false`
- * means fully public; the shared-with lists are still persisted in that
- * case (no reason to wipe them — the author can flip back to private
- * without losing their collaborator list).
+ * means fully public; the grants are still persisted in that case (no
+ * reason to wipe them — the author can flip back to private without losing
+ * their collaborator list).
+ *
+ * `grants` (#1123) is the canonical typed ACL. The legacy `sharedWithUsers`
+ * / `sharedWithOrgs` arrays are still accepted for backward-compatibility
+ * (older SDK / API callers) and map to READ-level grants when `grants` is
+ * omitted — see `resolvePermissionGrants`.
  */
 const permissionsPatchSchema = z.object({
   isPrivate: z.boolean(),
+  grants: z.array(skillGrantSchema).max(600).optional(),
   sharedWithUsers: z.array(z.string().min(1).max(128)).max(500).default([]),
   sharedWithOrgs: z.array(z.string().min(1).max(128)).max(100).default([]),
+});
+
+/** Body for `POST /skills/:id/transfer-ownership` (#1123). */
+const transferOwnershipSchema = z.object({
+  newOwnerUserId: z.string().min(1).max(128),
 });
 
 /**
@@ -155,6 +167,16 @@ export interface SkillRoutesConfig {
    * with Ornn's public + system skill set.
    */
   mirrorService?: import("../mirror/mirrorService").MirrorService;
+  /**
+   * Resolve a userId to its directory identity (#1123). Used by
+   * `POST /skills/:id/transfer-ownership` to validate that the transfer
+   * target is a known Ornn user (signed in at least once) and to refresh
+   * the cached owner labels. When unset, transfer rejects every target as
+   * `invalid_transfer_target`.
+   */
+  resolveUser?: (
+    userId: string,
+  ) => Promise<{ userId: string; email: string; displayName: string } | null>;
 }
 
 /** Marker prefix for synthetic NyxID-service ids. See `extraNyxidServices`. */
@@ -170,6 +192,7 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
     nyxidServiceClient,
     extraNyxidServicesResolver,
     mirrorService,
+    resolveUser,
   } = config;
   const app = new Hono<{ Variables: AuthVariables }>();
 
@@ -976,7 +999,10 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
         throw AppError.notFound("skill_not_found", `Skill '${guid}' not found`);
       }
       const actor = await buildActorContext(c);
-      if (!canManageSkill(existing, actor)) {
+      // Updating content + metadata is the READ_WRITE tier (#1123): author,
+      // platform admin, or a read_write grantee. Changing `isPrivate` is a
+      // permission change (ADMIN tier) — gated separately below once parsed.
+      if (!canWriteSkill(existing, actor)) {
         throw AppError.forbidden(
           "forbidden",
           "You do not have permission to update this skill",
@@ -1037,6 +1063,21 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
 
       if (zipBuffer === undefined && isPrivate === undefined) {
         throw AppError.badRequest("no_update", "No update data provided. Send a ZIP file and/or isPrivate field.");
+      }
+
+      // Visibility is an ADMIN-tier change (#1123): a read_write grantee may
+      // replace content but must not flip public/private. Enforce only when
+      // `isPrivate` is actually being changed so a no-op resend by an editor
+      // doesn't 403.
+      if (
+        isPrivate !== undefined &&
+        isPrivate !== existing.isPrivate &&
+        !canManageSkill(existing, actor)
+      ) {
+        throw AppError.forbidden(
+          "forbidden",
+          "Only the skill owner or a platform admin can change a skill's visibility",
+        );
       }
 
       // Zip-bomb defense (#632/#633) now runs at the service chokepoint
@@ -1107,24 +1148,98 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
 
       const body = getValidatedBody<z.infer<typeof permissionsPatchSchema>>(c);
 
+      // Pass the raw payload through — the service resolves the canonical
+      // `grants` (preferring the typed field, falling back to the legacy
+      // lists for older callers) and validates org membership.
       await skillService.setSkillPermissions(guid, authCtx.userId, {
         isPrivate: body.isPrivate,
+        grants: body.grants,
         sharedWithUsers: body.sharedWithUsers,
         sharedWithOrgs: body.sharedWithOrgs,
       }, actor);
 
       const updated = await skillService.getSkill(guid);
 
+      const readWriteGrants = (updated.grants ?? []).filter((g) => g.level === "read_write").length;
       trackActivity(authCtx.userId, authCtx.email, authCtx.displayName, "skill.permissions_changed", {
         skillId: guid,
         skillName: updated.name,
         isPrivate: updated.isPrivate,
         sharedWithUsers: updated.sharedWithUsers.length,
         sharedWithOrgs: updated.sharedWithOrgs.length,
+        // #1123 — richer payload: how many grants confer write.
+        readWriteGrants,
       });
 
       // Permissions change can flip eligibility — sync handles both
       // public→private (remove from mirror) and private→public (add).
+      fireMirrorSync(guid);
+
+      return c.json({ data: { skill: updated }, error: null });
+    },
+  );
+
+  /**
+   * POST /skills/:id/transfer-ownership — hand the skill to another Ornn
+   * user (#1123). ADMIN-tier: author or platform admin only.
+   *
+   * Body: `{ newOwnerUserId }`. The target must be a known Ornn user
+   * (resolvable in the directory — i.e. signed in at least once) or the
+   * call 400s with `invalid_transfer_target`. Transfer is immediate: the
+   * new owner becomes the owner synchronously and the prior owner is kept
+   * as a READ grantee (they retain visibility, not edit/admin rights).
+   */
+  app.post(
+    "/skills/:id/transfer-ownership",
+    auth,
+    requirePermission("ornn:skill:update"),
+    validateBody(transferOwnershipSchema, "invalid_transfer"),
+    async (c) => {
+      const guid = c.req.param("id");
+      const authCtx = getAuth(c);
+      const body = getValidatedBody<z.infer<typeof transferOwnershipSchema>>(c);
+
+      const existing = await skillRepo.findByGuid(guid);
+      if (!existing) {
+        throw AppError.notFound("skill_not_found", `Skill '${guid}' not found`);
+      }
+      const actor = await buildActorContext(c);
+      // ADMIN tier — transfer is a danger-zone op, never a read_write grant.
+      if (!canManageSkill(existing, actor)) {
+        throw AppError.forbidden(
+          "forbidden",
+          "Only the skill owner or a platform admin can transfer ownership",
+        );
+      }
+      if (body.newOwnerUserId === existing.createdBy) {
+        throw AppError.conflict("ownership_conflict", "This user already owns the skill");
+      }
+
+      // Resolve + validate the target against the user directory. A user who
+      // never signed in to Ornn isn't resolvable, so reject before mutating.
+      const target = resolveUser ? await resolveUser(body.newOwnerUserId) : null;
+      if (!target) {
+        throw AppError.badRequest(
+          "invalid_transfer_target",
+          "Transfer target is not a known Ornn user. They must have signed in to Ornn at least once.",
+        );
+      }
+
+      const updated = await skillService.transferSkillOwnership(
+        guid,
+        { userId: target.userId, email: target.email, displayName: target.displayName },
+        actor,
+      );
+
+      trackActivity(authCtx.userId, authCtx.email, authCtx.displayName, "skill.ownership_transferred", {
+        skillId: guid,
+        skillName: updated.name,
+        priorOwnerId: existing.createdBy,
+        newOwnerId: target.userId,
+      });
+
+      // Owner change doesn't affect mirror eligibility, but the cached author
+      // labels on the mirror copy are now stale — resync to refresh them.
       fireMirrorSync(guid);
 
       return c.json({ data: { skill: updated }, error: null });

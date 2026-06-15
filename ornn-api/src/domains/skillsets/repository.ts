@@ -15,6 +15,8 @@ import type { Collection, Db, Document } from "mongodb";
 import { AppError } from "../../shared/types/index";
 import { createLogger } from "../../shared/logger";
 import { applyScope, applyExtraFilters, type SkillScope } from "../skills/crud/scopeFilter";
+import { coerceStoredGrants, legacyListsFromGrants } from "../skills/crud/grants";
+import type { SkillGrant } from "../../shared/types/index";
 import type { SkillsetDocument, SkillsetKind } from "./types";
 
 const logger = createLogger("skillsetRepository");
@@ -41,6 +43,8 @@ export interface CreateSkillsetData {
   createdByEmail?: string | undefined;
   createdByDisplayName?: string | undefined;
   isPrivate?: boolean | undefined;
+  /** Initial typed grants (#1123). Omitted for a fresh skillset (born empty). */
+  grants?: SkillGrant[] | undefined;
   /** Initial version, e.g. "1.0". Required. */
   latestVersion: string;
 }
@@ -50,8 +54,15 @@ export interface UpdateSkillsetData {
   kind?: SkillsetKind;
   tags?: string[];
   isPrivate?: boolean;
+  /** @deprecated (#1123) Prefer `grants`; still dual-written for rolling-deploy read compat. */
   sharedWithUsers?: string[];
+  /** @deprecated (#1123) Prefer `grants`. */
   sharedWithOrgs?: string[];
+  /**
+   * Full replacement of the typed grants (#1123). Canonical ACL write — when
+   * set, `update` dual-writes the legacy lists from it. Mirrors skills.
+   */
+  grants?: SkillGrant[];
   latestVersion?: string;
   updatedBy: string;
 }
@@ -104,6 +115,8 @@ export class SkillsetRepository {
 
   async create(data: CreateSkillsetData): Promise<SkillsetDocument> {
     const now = new Date();
+    const initialGrants = data.grants ?? [];
+    const legacy = legacyListsFromGrants(initialGrants);
     const doc: Record<string, unknown> = {
       _id: skillsetId(data.guid),
       name: data.name,
@@ -117,8 +130,10 @@ export class SkillsetRepository {
       updatedBy: data.createdBy,
       updatedOn: now,
       isPrivate: data.isPrivate ?? true,
-      sharedWithUsers: [],
-      sharedWithOrgs: [],
+      // Born "migrated" (#1123): empty typed grants + legacy lists in lock-step.
+      grants: initialGrants,
+      sharedWithUsers: legacy.sharedWithUsers,
+      sharedWithOrgs: legacy.sharedWithOrgs,
       latestVersion: data.latestVersion,
     };
 
@@ -143,12 +158,56 @@ export class SkillsetRepository {
     if (data.kind !== undefined) setFields.kind = data.kind;
     if (data.tags !== undefined) setFields.tags = data.tags;
     if (data.isPrivate !== undefined) setFields.isPrivate = data.isPrivate;
-    if (data.sharedWithUsers !== undefined) setFields.sharedWithUsers = data.sharedWithUsers;
-    if (data.sharedWithOrgs !== undefined) setFields.sharedWithOrgs = data.sharedWithOrgs;
+    // Typed grants are the canonical ACL write (#1123); dual-write legacy
+    // lists from them. Legacy `sharedWith*` apply only when `grants` is absent.
+    if (data.grants !== undefined) {
+      const legacy = legacyListsFromGrants(data.grants);
+      setFields.grants = data.grants;
+      setFields.sharedWithUsers = legacy.sharedWithUsers;
+      setFields.sharedWithOrgs = legacy.sharedWithOrgs;
+    } else {
+      if (data.sharedWithUsers !== undefined) setFields.sharedWithUsers = data.sharedWithUsers;
+      if (data.sharedWithOrgs !== undefined) setFields.sharedWithOrgs = data.sharedWithOrgs;
+    }
     if (data.latestVersion !== undefined) setFields.latestVersion = data.latestVersion;
 
     await this.collection.updateOne({ _id: skillsetId(guid) }, { $set: setFields });
     logger.info({ guid }, "Skillset updated");
+    return (await this.findByGuid(guid))!;
+  }
+
+  /**
+   * Reassign a skillset's owner (#1123). Mirrors `SkillRepository`: the
+   * single explicit `createdBy` write, refreshing cached owner labels and
+   * replacing the ACL with the caller-computed grants (dual-writing legacy).
+   */
+  async transferOwnership(
+    guid: string,
+    data: {
+      newOwnerId: string;
+      newOwnerEmail: string | null;
+      newOwnerDisplayName: string | null;
+      grants: SkillGrant[];
+      updatedBy: string;
+    },
+  ): Promise<SkillsetDocument> {
+    const legacy = legacyListsFromGrants(data.grants);
+    await this.collection.updateOne(
+      { _id: skillsetId(guid) },
+      {
+        $set: {
+          createdBy: data.newOwnerId,
+          createdByEmail: data.newOwnerEmail,
+          createdByDisplayName: data.newOwnerDisplayName,
+          grants: data.grants,
+          sharedWithUsers: legacy.sharedWithUsers,
+          sharedWithOrgs: legacy.sharedWithOrgs,
+          updatedBy: data.updatedBy,
+          updatedOn: new Date(),
+        },
+      },
+    );
+    logger.info({ guid, newOwnerId: data.newOwnerId }, "Skillset ownership transferred");
     return (await this.findByGuid(guid))!;
   }
 
@@ -242,6 +301,9 @@ function mapDoc(doc: Document | null): SkillsetDocument | null {
     isPrivate: doc.isPrivate ?? true,
     sharedWithUsers: Array.isArray(doc.sharedWithUsers) ? (doc.sharedWithUsers as string[]) : [],
     sharedWithOrgs: Array.isArray(doc.sharedWithOrgs) ? (doc.sharedWithOrgs as string[]) : [],
+    // Typed grants (#1123) — undefined on un-migrated docs (callers use
+    // `effectiveGrants` to fall back to the legacy lists).
+    grants: coerceStoredGrants(doc.grants),
     latestVersion: doc.latestVersion ?? "1.0",
   };
 }

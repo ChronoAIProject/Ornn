@@ -115,7 +115,12 @@ interface SkillsetState {
   versions: SkillsetVersionDocument[];
 }
 
-function makeSkillsetDeps(skillService: SkillService) {
+function makeSkillsetDeps(
+  skillService: SkillService,
+  resolveUser?: (
+    userId: string,
+  ) => Promise<{ userId: string; email: string; displayName: string } | null>,
+) {
   const state: SkillsetState = {
     skillsets: new Map(),
     byName: new Map(),
@@ -157,6 +162,28 @@ function makeSkillsetDeps(skillService: SkillService) {
     update: async (g: string, patch: Record<string, unknown>) => {
       const cur = state.skillsets.get(g)!;
       const next = { ...cur, ...patch, updatedOn: new Date() } as SkillsetDocument;
+      state.skillsets.set(g, next);
+      state.byName.set(next.name, next);
+      return next;
+    },
+    transferOwnership: async (
+      g: string,
+      data: {
+        newOwnerId: string;
+        newOwnerEmail: string | null;
+        newOwnerDisplayName: string | null;
+        grants: SkillsetDocument["grants"];
+      },
+    ) => {
+      const cur = state.skillsets.get(g)!;
+      const next = {
+        ...cur,
+        createdBy: data.newOwnerId,
+        createdByEmail: data.newOwnerEmail ?? undefined,
+        createdByDisplayName: data.newOwnerDisplayName ?? undefined,
+        grants: data.grants,
+        updatedOn: new Date(),
+      } as SkillsetDocument;
       state.skillsets.set(g, next);
       state.byName.set(next.name, next);
       return next;
@@ -221,7 +248,7 @@ function makeSkillsetDeps(skillService: SkillService) {
   } as unknown as import("./skillsetVersionRepository").SkillsetVersionRepository;
 
   return {
-    deps: { skillsetRepo, skillsetVersionRepo, skillService },
+    deps: { skillsetRepo, skillsetVersionRepo, skillService, ...(resolveUser ? { resolveUser } : {}) },
     state,
   };
 }
@@ -415,7 +442,8 @@ describe("SkillsetService — visibility transitions (mirror skills)", () => {
       OWNER,
     );
     expect(updated.isPrivate).toBe(false);
-    expect(updated.sharedWithUsers).toEqual(["u2"]);
+    // Canonical ACL now carries the user as a read grant (#1123).
+    expect(updated.grants).toContainEqual({ type: "user", id: "u2", level: "read" });
   });
 
   it("setPermissions 403s a non-owner", async () => {
@@ -452,6 +480,80 @@ describe("SkillsetService — visibility transitions (mirror skills)", () => {
       code = (err as AppError).code;
     }
     expect(code).toBe("forbidden");
+  });
+});
+
+describe("SkillsetService.transferOwnership (#1123)", () => {
+  const ALICE = { userId: "alice", email: "alice@x.io", displayName: "Alice" };
+
+  async function seedSkillset(
+    resolveUser?: (
+      userId: string,
+    ) => Promise<{ userId: string; email: string; displayName: string } | null>,
+  ) {
+    const { skills, versions } = twoMemberSkills();
+    const skillService = makeSkillService(skills, versions);
+    const { deps, state } = makeSkillsetDeps(skillService, resolveUser);
+    const service = new SkillsetService(deps);
+    const created = await service.createSkillset(
+      {
+        name: "review-set",
+        description: "d",
+        instructions: "p",
+        kind: "generic",
+        tags: [],
+        members: ["pdf-tools@1.0", "csv-tools@1.0"],
+        version: "1.0",
+      },
+      { userId: "owner-1" },
+    );
+    return { service, state, guid: created.guid };
+  }
+
+  it("reassigns the owner and keeps the prior owner as a read grantee", async () => {
+    const { service, guid } = await seedSkillset(async () => ALICE);
+    const updated = await service.transferOwnership(guid, "alice", OWNER);
+    expect(updated.createdBy).toBe("alice");
+    expect(updated.grants).toContainEqual({ type: "user", id: "owner-1", level: "read" });
+  });
+
+  it("403s a non-owner", async () => {
+    const { service, guid } = await seedSkillset(async () => ALICE);
+    const stranger: ActorContext = {
+      userId: "stranger",
+      memberships: [],
+      isPlatformAdmin: false,
+      membershipsResolved: true,
+    };
+    let code = "";
+    try {
+      await service.transferOwnership(guid, "alice", stranger);
+    } catch (err) {
+      code = (err as AppError).code;
+    }
+    expect(code).toBe("forbidden");
+  });
+
+  it("409s a no-op transfer to the current owner", async () => {
+    const { service, guid } = await seedSkillset(async () => ALICE);
+    let code = "";
+    try {
+      await service.transferOwnership(guid, "owner-1", OWNER);
+    } catch (err) {
+      code = (err as AppError).code;
+    }
+    expect(code).toBe("ownership_conflict");
+  });
+
+  it("400s an unresolvable transfer target", async () => {
+    const { service, guid } = await seedSkillset(async () => null);
+    let code = "";
+    try {
+      await service.transferOwnership(guid, "ghost", OWNER);
+    } catch (err) {
+      code = (err as AppError).code;
+    }
+    expect(code).toBe("invalid_transfer_target");
   });
 });
 

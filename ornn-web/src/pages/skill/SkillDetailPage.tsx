@@ -33,6 +33,7 @@ import { AdvancedOptionsModal } from "@/components/skill/AdvancedOptionsModal";
 import { VersionDiffModal } from "@/components/skill/VersionDiffModal";
 import { SkillSaveConfirmModal } from "@/components/skill/SkillSaveConfirmModal";
 import { SkillDeleteConfirmModal } from "@/components/skill/SkillDeleteConfirmModal";
+import { TransferOwnershipModal } from "@/components/skill/TransferOwnershipModal";
 import { SkillAuditStartedModal } from "@/components/skill/SkillAuditStartedModal";
 import { SkillVersionsBrowserModal } from "@/components/skill/SkillVersionsBrowserModal";
 import { AuditVerdictPill } from "@/components/skill/AuditVerdictPill";
@@ -91,6 +92,8 @@ export function SkillDetailPage() {
     setShowDeleteConfirm,
     showPermissionsModal,
     setShowPermissionsModal,
+    showTransferModal,
+    setShowTransferModal,
     showAdvancedModal,
     setShowAdvancedModal,
     showSaveConfirm,
@@ -364,6 +367,7 @@ export function SkillDetailPage() {
               isPrivate={skill.isPrivate}
               sharedWithUsersCount={skill.sharedWithUsers.length}
               sharedWithOrgsCount={skill.sharedWithOrgs.length}
+              readWriteCount={(skill.grants ?? []).filter((g) => g.level === "read_write").length}
               isOwner={isOwner}
               onManagePermissions={() => setShowPermissionsModal(true)}
             />
@@ -520,6 +524,17 @@ export function SkillDetailPage() {
                   {t("skillDetail.cardDanger", "Danger zone")}
                 </h3>
                 <p className="mb-3 font-mono text-[11px] leading-relaxed text-meta">
+                  {t("skillDetail.transferExplain", "Transfer this skill to another Ornn user. They become the owner; you keep read access only.")}
+                </p>
+                <Button
+                  variant="danger"
+                  size="sm"
+                  className="mb-4 w-full"
+                  onClick={() => setShowTransferModal(true)}
+                >
+                  {t("skillDetail.transferOwnership", "Transfer ownership")}
+                </Button>
+                <p className="mb-3 font-mono text-[11px] leading-relaxed text-meta">
                   {t("skillDetail.dangerExplain", "Permanently delete this skill and every version. This cannot be undone.")}
                 </p>
                 <Button
@@ -592,6 +607,15 @@ export function SkillDetailPage() {
         <PermissionsModal
           isOpen={showPermissionsModal}
           onClose={() => setShowPermissionsModal(false)}
+          skill={skill}
+        />
+      )}
+
+      {/* ── Ownership transfer (danger zone) ── */}
+      {isOwner && (
+        <TransferOwnershipModal
+          isOpen={showTransferModal}
+          onClose={() => setShowTransferModal(false)}
           skill={skill}
         />
       )}

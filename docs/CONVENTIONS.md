@@ -200,6 +200,7 @@ GET    /v1/skillsets/{idOrName}/versions   — list versions (optional auth)
 GET    /v1/skillsets/{idOrName}/closure    — one-call resolve (optional auth)
 PUT    /v1/skillsets/{id}                  — publish a new immutable version (ornn:skill:update)
 PUT    /v1/skillsets/{id}/permissions      — visibility / sharing (ornn:skill:update)
+POST   /v1/skillsets/{id}/transfer-ownership — hand to another user (ornn:skill:update; ADMIN tier — §5.4)
 DELETE /v1/skillsets/{id}                  — delete + cascade versions (ornn:skill:delete)
 GET    /v1/skillset-search                 — discovery by kind / tags / scope (optional auth)
 ```
@@ -340,19 +341,25 @@ Endpoint-specific. Rules:
 - `X-NyxID-Identity-Token` and `X-NyxID-*` headers between proxy and `ornn-api` (internal).
 - OpenAPI declares one `bearerAuth` scheme; `X-NyxID-*` is not part of the public contract.
 
-### 5.2 Permission strings
+### 5.2 NyxID request scopes (route-level)
 
-Format: `ornn:<resource>:<action>`.
-
-Actions: `read`, `write`, `admin`, plus resource-specific high-cost actions when needed.
+Format: `ornn:<resource>:<action>`. These are the **request scopes** NyxID
+mints onto an access token — `requirePermission(...)` middleware checks them
+per route. They gate *who may call an endpoint at all*; they are **distinct
+from** the per-object READ / READ_WRITE / ADMIN tier (§5.4), which decides
+*what the caller may do to a specific skill/skillset*. A caller needs both:
+the route scope to reach the handler, and the object tier to act on the
+target.
 
 | Permission | Grants |
 |---|---|
 | `ornn:skill:read` | Read skills (respects visibility) |
-| `ornn:skill:write` | Create, update, delete own skills |
-| `ornn:skill:admin` | Manage any skill (override ownership); delete any skill |
-| `ornn:skill:generate` | Invoke skill generation endpoints (high LLM cost) |
-| `ornn:skill:execute` | Invoke playground chat (runs user code) |
+| `ornn:skill:create` | Create skills (upload, pull from GitHub) |
+| `ornn:skill:update` | Update / publish / refresh / change permissions / transfer ownership / toggle deprecation / bind NyxID service (+ object ADMIN/READ_WRITE per §5.4) |
+| `ornn:skill:delete` | Delete a skill or a single version (+ object ADMIN per §5.4) |
+| `ornn:skill:build` | Invoke skill generation endpoints (high LLM cost) |
+| `ornn:playground:use` | Invoke playground chat (runs user code) |
+| `ornn:admin:skill` | Platform-admin bypass — manage any skill/skillset (override ownership), plus all `/admin/*`, force-audit, and platform settings |
 | `ornn:category:read` | List categories |
 | `ornn:category:admin` | Manage categories |
 | `ornn:tag:read` | List tags |
@@ -361,13 +368,89 @@ Actions: `read`, `write`, `admin`, plus resource-specific high-cost actions when
 | `ornn:activity:read` | Platform activity log read access |
 | `ornn:stats:read` | Platform-wide dashboard aggregates |
 
-NyxID composes a **"Platform Admin"** role that grants all `*:admin` + `*:read` permissions above; current platform admins inherit this role with zero UX change. Sub-admin roles (content moderator, tag curator, support) can be composed from subsets when needed.
+Skillset endpoints **reuse** the `ornn:skill:{create,read,update,delete}`
+scopes verbatim (§2.6) — there is no `ornn:skillset:*` scope split in v1.
 
-Adding a new permission requires convention-doc update. NyxID role → permission mapping is owned by NyxID config; this doc is the permission catalog.
+NyxID composes a **"Platform Admin"** role around `ornn:admin:skill` (plus the
+`*:admin` + `*:read` scopes above); a token carrying `ornn:admin:skill`
+bypasses object ownership on every skill/skillset operation. Current platform
+admins inherit this role with zero UX change. Sub-admin roles (content
+moderator, tag curator, support) can be composed from subsets when needed.
+
+Adding a new permission requires convention-doc update. NyxID role →
+permission mapping is owned by NyxID config; this doc is the permission
+catalog.
 
 ### 5.3 Scope declaration
 
 Every route in OpenAPI tagged with its required scopes. Public endpoints explicitly declare `security: []`.
+
+### 5.4 Object-level permission tiers (#1123)
+
+Independent of the request scopes above, every **skill AND skillset** carries
+a three-tier object-permission model. All three gates derive from one source
+of truth — `ornn-api/src/domains/skills/crud/authorize.ts` (`canReadSkill` /
+`canWriteSkill` / `canManageSkill`) — and skillsets reuse the same gates. A
+request scope decides whether the caller may *call* the endpoint; the object
+tier decides whether they may act on *this specific* skill/skillset.
+
+| Tier | Gate | Who qualifies | What it grants |
+|---|---|---|---|
+| **READ** | `canReadSkill` | Public skill → anyone. Private → author, platform admin, or any grantee (`read` **or** `read_write`), directly or via a granted org. | View / pull / execute / list versions. |
+| **READ_WRITE** | `canWriteSkill` | Author **OR** platform admin **OR** a `read_write` grantee (direct or via a granted org). | READ, plus update the skill's **content + metadata only** (publish a new version). |
+| **ADMIN** | `canManageSkill` | Author **OR** platform admin **only**. | Change permissions, transfer ownership, delete skill/version, toggle deprecation, manage dist-tags, bind a NyxID service. |
+
+A `read_write` grantee is **never** an admin — the danger-zone operations stay
+with the author (`createdBy`) and platform admins (`ornn:admin:skill`). Org
+grants resolve uniformly: every admin/member of a granted org inherits the
+grant's level. The org-membership gates fail soft on an unresolved NyxID
+lookup (deny) — they never grant on a "couldn't ask" result.
+
+#### Typed grant ACL (`grants`)
+
+The canonical access-control list is a typed `grants` array, exposed on
+skill/skillset detail responses and accepted by the permissions endpoints
+(`PUT /v1/skills/:id/permissions`, `PUT /v1/skillsets/:id/permissions`):
+
+```json
+{
+  "grants": [
+    { "type": "user", "id": "<nyxid-person-user-id>", "level": "read" },
+    { "type": "org",  "id": "<nyxid-org-user-id>",    "level": "read_write" }
+  ]
+}
+```
+
+- `type` — `"user"` (a NyxID person user_id) or `"org"` (a NyxID org user_id).
+- `id` — the principal's NyxID id (1..128 chars).
+- `level` — `"read"` or `"read_write"`. An invalid value is rejected with
+  `invalid_permission_level` (a `validation_error` subcode — see `docs/ERRORS.md`).
+
+The author (`createdBy`) is never represented in `grants` — they hold implicit
+ADMIN. The legacy read-only `sharedWithUsers` / `sharedWithOrgs` arrays are
+still **accepted** on the permissions endpoints and still **returned** for
+back-compat; any principal supplied through them is treated as a `read`-level
+grant. A skill predating typed grants authorizes exactly as before.
+
+#### Ownership transfer
+
+```
+POST /v1/skills/:id/transfer-ownership      { "newOwnerUserId": "<id>" }
+POST /v1/skillsets/:id/transfer-ownership    { "newOwnerUserId": "<id>" }
+```
+
+- **Auth:** ADMIN tier (`canManageSkill`) — author or platform admin only. A
+  `read_write` grantee can never transfer. Rides on the existing
+  `ornn:skill:update` request scope; **no new scope** was added.
+- **Behavior:** immediate, synchronous transfer. The target becomes the new
+  owner (`createdBy`); the prior owner is kept as a **READ** grantee (retains
+  visibility, loses edit/admin rights).
+- **Target validation:** `newOwnerUserId` must resolve to a known Ornn user —
+  someone who has signed in to Ornn at least once. An unresolvable target is
+  rejected with `invalid_transfer_target` (400).
+- **No-op guard:** transferring to the current owner returns
+  `ownership_conflict` (409).
+- Returns the updated resource (`{ data: { skill | skillset }, error: null }`).
 
 ---
 
@@ -543,7 +626,8 @@ Per-test teardown is the test's responsibility; shared fixtures live in `tests/f
 - [ ] Error response uses `application/problem+json` with a code from the catalog
 - [ ] `X-Request-ID` on every response; `requestId` in every error body
 - [ ] Query params camelCase; arrays as repeated keys; `q` for search
-- [ ] Required permissions from the catalog declared in OpenAPI `security`
+- [ ] Required request scopes from the catalog declared in OpenAPI `security` (§5.2)
+- [ ] Object-level authz, where the target is an owned resource, gates on the READ / READ_WRITE / ADMIN tier (§5.4) — distinct from the route scope
 - [ ] Content negotiation for multi-representation resources
 - [ ] SSE events named `<resource>_<event>` snake_case
 - [ ] Deprecation uses RFC 8594 headers

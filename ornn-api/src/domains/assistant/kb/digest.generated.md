@@ -792,6 +792,7 @@ GET    /v1/skillsets/{idOrName}/versions   — list versions (optional auth)
 GET    /v1/skillsets/{idOrName}/closure    — one-call resolve (optional auth)
 PUT    /v1/skillsets/{id}                  — publish a new immutable version (ornn:skill:update)
 PUT    /v1/skillsets/{id}/permissions      — visibility / sharing (ornn:skill:update)
+POST   /v1/skillsets/{id}/transfer-ownership — hand to another user (ornn:skill:update; ADMIN tier — §5.4)
 DELETE /v1/skillsets/{id}                  — delete + cascade versions (ornn:skill:delete)
 GET    /v1/skillset-search                 — discovery by kind / tags / scope (optional auth)
 ```
@@ -811,7 +812,7 @@ POST /v1/skillsets
 
 `GET /v1/skillsets/{idOrName}` returns the detail object including the version's `instructions`.
 
-- **Closure:** `GET /v1/skillsets/{idOrName}/closure` resolves `roots = members` through the **same** §2.5 resolver — the union of all members plus each member's transitive dependency closure, deduplicated and topo-sorted (deps-first). The success body carries the version's master prompt as a **root sibling** of `items`: `{ "data": { "instructions": "…", "items": [ … ] }, "error": null }` (the skill `/skills/:id/closure` envelope stays `{ items }`, unchanged). Same error codes as §2.5: `dependency_cycle` (409), `dependency_conflict` (409), `skill_dependency_not_found` (404). Anonymous callers resolving a public skillset whose member transitively pins a private skill get `skill_dependency_not_found`
+- **Closure:** `GET /v1/skillsets/{idOrName}/closure` resolves `roots = members` through the **same** §2.5 resolver — the union of all members plus each member's transitive dependency closure, deduplicated and topo-sorted (deps-first). The success body carries the version's master prompt as a **root sibling** of `items`: `{ "data": { "instructions": "…", "items": [ … ] }, "error": null }` (the skill `/skills/:id/closure` envelope stays `{ items }`, unchanged). Same error codes as §2.5: `dependency_cycle` (409), `dependency_conflict` (409), `skill_dependency_not_found` (404). Anonymous callers
 
 ---
 

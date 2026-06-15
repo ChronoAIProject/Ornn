@@ -49,6 +49,11 @@ export interface SkillsetRoutesConfig {
   skillsetService: SkillsetService;
 }
 
+/** Body for `POST /skillsets/:id/transfer-ownership` (#1123). */
+const transferOwnershipSchema = z.object({
+  newOwnerUserId: z.string().min(1).max(128),
+});
+
 /** Anonymous read actor — sees public skillsets only. Fresh per call so
  * the mutable `memberships` array is never shared. */
 function anonActor(): ActorContext {
@@ -187,6 +192,7 @@ export function createSkillsetRoutes(
         id,
         {
           isPrivate: body.isPrivate,
+          grants: body.grants,
           sharedWithUsers: body.sharedWithUsers,
           sharedWithOrgs: body.sharedWithOrgs,
         },
@@ -209,6 +215,28 @@ export function createSkillsetRoutes(
       const actor = await buildActorContext(c);
       await skillsetService.deleteSkillset(id, actor);
       return c.json({ data: { success: true }, error: null });
+    },
+  );
+
+  /**
+   * POST /skillsets/:id/transfer-ownership — hand the skillset to another
+   * Ornn user (#1123). ADMIN-tier; immediate; prior owner kept as READ.
+   * Mirrors the skills endpoint.
+   */
+  app.post(
+    "/skillsets/:id/transfer-ownership",
+    auth,
+    requirePermission("ornn:skill:update"),
+    validateBody(transferOwnershipSchema, "invalid_transfer"),
+    async (c) => {
+      const id = c.req.param("id");
+      const body = getValidatedBody<z.infer<typeof transferOwnershipSchema>>(c);
+      const actor = await buildActorContext(c);
+      // The service owns the full flow (ADMIN gate + target validation +
+      // mutation) so a non-owner can't enumerate users via the response.
+      const updated = await skillsetService.transferOwnership(id, body.newOwnerUserId, actor);
+      logger.info({ guid: id, newOwnerId: body.newOwnerUserId }, "Skillset ownership transferred via API");
+      return c.json({ data: { skillset: updated }, error: null });
     },
   );
 

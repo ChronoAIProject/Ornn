@@ -276,4 +276,44 @@ describe("PUT/DELETE /skillsets/:id — scope gating", () => {
     const res = await app.request("/api/v1/skillsets/ss-1", { method: "DELETE" });
     expect(res.status).toBe(200);
   });
+
+  test("transfer-ownership 403 without ornn:skill:update", async () => {
+    const app = buildApp({ permissions: [] });
+    const res = await app.request("/api/v1/skillsets/ss-1/transfer-ownership", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ newOwnerUserId: "alice" }),
+    });
+    expect(res.status).toBe(403);
+  });
+
+  test("transfer-ownership 200 delegating to the service", async () => {
+    const calls: string[] = [];
+    const app = buildApp({
+      permissions: [UPDATE],
+      service: {
+        transferOwnership: async () => {
+          calls.push("transferOwnership");
+          return { guid: "ss-1", createdBy: "alice" };
+        },
+      },
+    });
+    const res = await app.request("/api/v1/skillsets/ss-1/transfer-ownership", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ newOwnerUserId: "alice" }),
+    });
+    expect(res.status).toBe(200);
+    expect(calls).toEqual(["transferOwnership"]);
+  });
+
+  test("transfer-ownership 400 on a missing newOwnerUserId", async () => {
+    const app = buildApp({ permissions: [UPDATE] });
+    const res = await app.request("/api/v1/skillsets/ss-1/transfer-ownership", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    expect(res.status).toBe(400);
+  });
 });

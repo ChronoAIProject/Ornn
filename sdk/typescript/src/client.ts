@@ -15,7 +15,14 @@
  * @module client
  */
 
-import { OrnnError, type OrnnErrorPayload } from "./errors";
+import { OrnnError } from "./errors";
+import {
+  buildError,
+  parseError,
+  zipToBlob,
+  type EnvelopeSuccess,
+  type ProblemJson,
+} from "./http";
 import type {
   ClosureNode,
   ClosureResult,
@@ -23,6 +30,7 @@ import type {
   PublishOptions,
   PublishSkillsetInput,
   SkillDetail,
+  SkillPermissionsInput,
   SkillSearchParams,
   SkillSearchResult,
   SkillsetClosureResult,
@@ -43,27 +51,6 @@ export interface OrnnClientOptions {
   readonly getToken?: () => string | Promise<string>;
   /** Custom fetch implementation (useful for tests / Node versions without global fetch). Defaults to `globalThis.fetch`. */
   readonly fetch?: typeof fetch;
-}
-
-interface EnvelopeSuccess<T> {
-  readonly data: T;
-  readonly error: null;
-}
-
-/**
- * Wire shape for error responses post-#456 — RFC 7807
- * `application/problem+json`. Fields at the body root; `error` /
- * `data` are gone.
- */
-interface ProblemJson {
-  readonly type?: string;
-  readonly title?: string;
-  readonly status?: number;
-  readonly code?: string;
-  readonly detail?: string;
-  readonly instance?: string;
-  readonly requestId?: string;
-  readonly errors?: ReadonlyArray<{ path?: string; code?: string; message: string }>;
 }
 
 export class OrnnClient {
@@ -284,6 +271,45 @@ export class OrnnClient {
     await this.request<{ success: boolean }>("DELETE", `/skills/${encodeURIComponent(id)}`);
   }
 
+  /**
+   * Update a skill's visibility / sharing ACL (#1123). `grants` is the
+   * canonical typed ACL — each entry grants a user or org a `read` or
+   * `read_write` level. The legacy `sharedWith*` arrays are still accepted
+   * (mapped to `read`-level grants) for backward compat. Returns the
+   * refreshed skill detail.
+   */
+  async setSkillPermissions(
+    id: string,
+    input: SkillPermissionsInput,
+  ): Promise<SkillDetail> {
+    const res = await this.request<{ skill: SkillDetail }>(
+      "PUT",
+      `/skills/${encodeURIComponent(id)}/permissions`,
+      {
+        body: JSON.stringify(input),
+        headers: { "Content-Type": "application/json" },
+      },
+    );
+    return res.skill;
+  }
+
+  /**
+   * Transfer ownership of a skill to another user (#1123). The new owner
+   * becomes `createdBy`; the previous owner keeps no implicit access.
+   * Returns the refreshed skill detail.
+   */
+  async transferSkillOwnership(id: string, newOwnerUserId: string): Promise<SkillDetail> {
+    const res = await this.request<{ skill: SkillDetail }>(
+      "POST",
+      `/skills/${encodeURIComponent(id)}/transfer-ownership`,
+      {
+        body: JSON.stringify({ newOwnerUserId }),
+        headers: { "Content-Type": "application/json" },
+      },
+    );
+    return res.skill;
+  }
+
   // ---- Skillsets (#969) ----
 
   /**
@@ -316,7 +342,12 @@ export class OrnnClient {
     });
   }
 
-  /** Update a skillset's visibility / sharing lists. */
+  /**
+   * Update a skillset's visibility / sharing ACL (#1123). `grants` is the
+   * canonical typed ACL — each entry grants a user or org a `read` or
+   * `read_write` level. The legacy `sharedWith*` arrays are still accepted
+   * (mapped to `read`-level grants) for backward compat.
+   */
   async setSkillsetPermissions(
     id: string,
     input: SkillsetPermissionsInput,
@@ -326,6 +357,26 @@ export class OrnnClient {
       `/skillsets/${encodeURIComponent(id)}/permissions`,
       {
         body: JSON.stringify(input),
+        headers: { "Content-Type": "application/json" },
+      },
+    );
+    return res.skillset;
+  }
+
+  /**
+   * Transfer ownership of a skillset to another user (#1123). The new
+   * owner becomes `createdBy`; the previous owner keeps no implicit
+   * access. Returns the refreshed skillset detail.
+   */
+  async transferSkillsetOwnership(
+    id: string,
+    newOwnerUserId: string,
+  ): Promise<SkillsetDetail> {
+    const res = await this.request<{ skillset: SkillsetDetail }>(
+      "POST",
+      `/skillsets/${encodeURIComponent(id)}/transfer-ownership`,
+      {
+        body: JSON.stringify({ newOwnerUserId }),
         headers: { "Content-Type": "application/json" },
       },
     );
@@ -426,37 +477,4 @@ export class OrnnClient {
       ...(init.body !== undefined ? { body: init.body } : {}),
     });
   }
-}
-
-function zipToBlob(zip: Blob | ArrayBuffer | Uint8Array): Blob {
-  if (zip instanceof Blob) return zip;
-  return new Blob([zip as BlobPart], { type: "application/zip" });
-}
-
-async function parseError(res: Response): Promise<OrnnError> {
-  const body = (await res.json().catch(() => null)) as ProblemJson | null;
-  return buildError(res.status, body);
-}
-
-function buildError(status: number, body: ProblemJson | null): OrnnError {
-  if (body && (body.code || body.detail || body.title)) {
-    // exactOptionalPropertyTypes (#450): only stamp `requestId` /
-    // `errors` keys when the upstream actually provided them — the
-    // payload type is `requestId?: string`, not `string | undefined`,
-    // so `{ requestId: undefined }` is a type error under the
-    // stricter contract.
-    const payload: OrnnErrorPayload = {
-      status: body.status ?? status,
-      code: body.code ?? "unknown_error",
-      message: body.detail ?? body.title ?? `Ornn API returned ${status}`,
-      ...(body.requestId !== undefined ? { requestId: body.requestId } : {}),
-      ...(body.errors !== undefined ? { errors: body.errors } : {}),
-    };
-    return new OrnnError(payload);
-  }
-  return new OrnnError({
-    status,
-    code: "unknown_error",
-    message: `Ornn API returned ${status} without a recognized error body`,
-  });
 }

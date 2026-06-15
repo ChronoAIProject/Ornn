@@ -14,7 +14,14 @@
 
 import { describe, expect, it } from "bun:test";
 import type { Context } from "hono";
-import { buildActorContext } from "./authorize";
+import {
+  buildActorContext,
+  canManageSkill,
+  canReadSkill,
+  canWriteSkill,
+  type ActorContext,
+  type SkillOwnership,
+} from "./authorize";
 import {
   type AuthContext,
   type AuthVariables,
@@ -124,5 +131,104 @@ describe("buildActorContext", () => {
     const actor = await buildActorContext(c);
     expect(actor.membershipsResolved).toBe(true);
     expect(actor.memberships).toEqual([]);
+  });
+});
+
+/** Build an actor; `orgs` become member-role memberships. */
+function actor(userId: string, opts: { admin?: boolean; orgs?: string[] } = {}): ActorContext {
+  return {
+    userId,
+    isPlatformAdmin: opts.admin === true,
+    memberships: (opts.orgs ?? []).map((id) => ({ userId: id, role: "member", displayName: id })),
+    membershipsResolved: true,
+  };
+}
+
+/** A private skill owned by `owner` carrying the given typed grants. */
+function skill(owner: string, grants: SkillOwnership["grants"], isPrivate = true): SkillOwnership {
+  return { createdBy: owner, isPrivate, grants, sharedWithUsers: [], sharedWithOrgs: [] };
+}
+
+describe("canReadSkill (#1123 tiers)", () => {
+  it("public skill is readable by anyone, including anonymous", () => {
+    expect(canReadSkill(skill("owner", [], false), actor(""))).toBe(true);
+  });
+
+  it("private skill: author, platform admin read; a stranger does not", () => {
+    const s = skill("owner", []);
+    expect(canReadSkill(s, actor("owner"))).toBe(true);
+    expect(canReadSkill(s, actor("x", { admin: true }))).toBe(true);
+    expect(canReadSkill(s, actor("stranger"))).toBe(false);
+  });
+
+  it("any grant level confers read — read AND read_write grantees can read", () => {
+    const s = skill("owner", [
+      { type: "user", id: "reader", level: "read" },
+      { type: "user", id: "editor", level: "read_write" },
+    ]);
+    expect(canReadSkill(s, actor("reader"))).toBe(true);
+    expect(canReadSkill(s, actor("editor"))).toBe(true);
+  });
+
+  it("org grant confers read to a member", () => {
+    const s = skill("owner", [{ type: "org", id: "org-a", level: "read" }]);
+    expect(canReadSkill(s, actor("u", { orgs: ["org-a"] }))).toBe(true);
+    expect(canReadSkill(s, actor("u", { orgs: ["org-b"] }))).toBe(false);
+  });
+
+  it("falls back to legacy read lists when grants is absent (un-migrated doc)", () => {
+    const legacy: SkillOwnership = {
+      createdBy: "owner",
+      isPrivate: true,
+      sharedWithUsers: ["reader"],
+      sharedWithOrgs: ["org-a"],
+    };
+    expect(canReadSkill(legacy, actor("reader"))).toBe(true);
+    expect(canReadSkill(legacy, actor("u", { orgs: ["org-a"] }))).toBe(true);
+    expect(canReadSkill(legacy, actor("stranger"))).toBe(false);
+  });
+});
+
+describe("canWriteSkill (#1123 READ_WRITE tier)", () => {
+  it("author + platform admin may write", () => {
+    const s = skill("owner", []);
+    expect(canWriteSkill(s, actor("owner"))).toBe(true);
+    expect(canWriteSkill(s, actor("x", { admin: true }))).toBe(true);
+  });
+
+  it("a read grantee may NOT write; a read_write grantee may", () => {
+    const s = skill("owner", [
+      { type: "user", id: "reader", level: "read" },
+      { type: "user", id: "editor", level: "read_write" },
+    ]);
+    expect(canWriteSkill(s, actor("reader"))).toBe(false);
+    expect(canWriteSkill(s, actor("editor"))).toBe(true);
+  });
+
+  it("a read_write org grant lets every member write", () => {
+    const s = skill("owner", [{ type: "org", id: "org-a", level: "read_write" }]);
+    expect(canWriteSkill(s, actor("u", { orgs: ["org-a"] }))).toBe(true);
+    expect(canWriteSkill(s, actor("u", { orgs: ["org-b"] }))).toBe(false);
+  });
+
+  it("an un-migrated (legacy-only) doc grants nobody but author/admin write", () => {
+    const legacy: SkillOwnership = {
+      createdBy: "owner",
+      isPrivate: true,
+      sharedWithUsers: ["reader"],
+      sharedWithOrgs: [],
+    };
+    // Legacy lists derive to READ — so the shared reader cannot write.
+    expect(canWriteSkill(legacy, actor("reader"))).toBe(false);
+    expect(canWriteSkill(legacy, actor("owner"))).toBe(true);
+  });
+});
+
+describe("canManageSkill (#1123 ADMIN tier)", () => {
+  it("only author + platform admin administer — a read_write grantee never does", () => {
+    const s = skill("owner", [{ type: "user", id: "editor", level: "read_write" }]);
+    expect(canManageSkill(s, actor("owner"))).toBe(true);
+    expect(canManageSkill(s, actor("x", { admin: true }))).toBe(true);
+    expect(canManageSkill(s, actor("editor"))).toBe(false);
   });
 });

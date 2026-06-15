@@ -118,6 +118,9 @@ interface BuildOpts {
   }>;
   nyxidServiceClient?: { findVisibleToCaller: (...args: unknown[]) => Promise<unknown> };
   extraNyxidServices?: readonly string[];
+  resolveUser?: (
+    userId: string,
+  ) => Promise<{ userId: string; email: string; displayName: string } | null>;
 }
 
 function buildApp(opts: BuildOpts = {}) {
@@ -130,6 +133,7 @@ function buildApp(opts: BuildOpts = {}) {
     repo = {},
     nyxidServiceClient,
     extraNyxidServices = [],
+    resolveUser,
   } = opts;
 
   const skillRepo = {
@@ -145,6 +149,7 @@ function buildApp(opts: BuildOpts = {}) {
     nyxidServiceClient: (nyxidServiceClient ??
       { findVisibleToCaller: async () => null }) as unknown as SkillRoutesConfig["nyxidServiceClient"],
     extraNyxidServicesResolver: async () => extraNyxidServices,
+    ...(resolveUser ? { resolveUser } : {}),
   };
 
   const app = new Hono();
@@ -910,6 +915,77 @@ describe("PUT /skills/:id", () => {
     expect(res.status).toBe(200);
     expect(calls).toEqual(["updateSkill"]);
   });
+
+  test("200 ZIP republish for a read_write grantee — content edit is the write tier (#1123)", async () => {
+    const calls: string[] = [];
+    const app = buildApp({
+      userId: "editor",
+      permissions: [UPDATE],
+      repo: {
+        findByGuid: async () =>
+          skillDoc({
+            createdBy: OWNER,
+            isPrivate: true,
+            grants: [{ type: "user", id: "editor", level: "read_write" }],
+          }),
+      },
+      service: {
+        updateSkill: async () => {
+          calls.push("updateSkill");
+          return detail({ createdBy: OWNER });
+        },
+      },
+    });
+    const res = await app.request("/api/v1/skills/guid-1", {
+      method: "PUT",
+      headers: { "content-type": "application/zip" },
+      body: await skillZipBytes(),
+    });
+    expect(res.status).toBe(200);
+    expect(calls).toEqual(["updateSkill"]);
+  });
+
+  test("403 when a read_write grantee tries to flip visibility — that is admin-only (#1123)", async () => {
+    const app = buildApp({
+      userId: "editor",
+      permissions: [UPDATE],
+      repo: {
+        findByGuid: async () =>
+          skillDoc({
+            createdBy: OWNER,
+            isPrivate: true,
+            grants: [{ type: "user", id: "editor", level: "read_write" }],
+          }),
+      },
+    });
+    const res = await app.request("/api/v1/skills/guid-1", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ isPrivate: false }),
+    });
+    expect(res.status).toBe(403);
+  });
+
+  test("403 when a read-only grantee tries to republish content (#1123)", async () => {
+    const app = buildApp({
+      userId: "reader",
+      permissions: [UPDATE],
+      repo: {
+        findByGuid: async () =>
+          skillDoc({
+            createdBy: OWNER,
+            isPrivate: true,
+            grants: [{ type: "user", id: "reader", level: "read" }],
+          }),
+      },
+    });
+    const res = await app.request("/api/v1/skills/guid-1", {
+      method: "PUT",
+      headers: { "content-type": "application/zip" },
+      body: await skillZipBytes(),
+    });
+    expect(res.status).toBe(403);
+  });
 });
 
 // ======================================================================
@@ -952,6 +1028,104 @@ describe("PUT /skills/:id/permissions", () => {
     });
     expect(res.status).toBe(200);
     expect(calls).toContain("setSkillPermissions");
+  });
+});
+
+// ======================================================================
+// POST /skills/:id/transfer-ownership (#1123)
+// ======================================================================
+
+describe("POST /skills/:id/transfer-ownership", () => {
+  const ALICE = { userId: "alice", email: "alice@x.io", displayName: "Alice" };
+
+  function transferReq(app: Hono, newOwnerUserId: string) {
+    return app.request("/api/v1/skills/guid-1/transfer-ownership", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ newOwnerUserId }),
+    });
+  }
+
+  test("403 without ornn:skill:update", async () => {
+    const app = buildApp({ permissions: [READ] });
+    expect((await transferReq(app, "alice")).status).toBe(403);
+  });
+
+  test("404 when the skill is unknown", async () => {
+    const app = buildApp({ permissions: [UPDATE], repo: { findByGuid: async () => null } });
+    expect((await transferReq(app, "alice")).status).toBe(404);
+  });
+
+  test("403 when the caller is not the owner / admin", async () => {
+    const app = buildApp({
+      userId: "stranger",
+      permissions: [UPDATE],
+      repo: { findByGuid: async () => skillDoc({ createdBy: OWNER }) },
+    });
+    expect((await transferReq(app, "alice")).status).toBe(403);
+  });
+
+  test("409 ownership_conflict when transferring to the current owner", async () => {
+    const app = buildApp({
+      userId: OWNER,
+      permissions: [UPDATE],
+      repo: { findByGuid: async () => skillDoc({ createdBy: OWNER }) },
+      resolveUser: async () => ALICE,
+    });
+    const res = await transferReq(app, OWNER);
+    expect(res.status).toBe(409);
+    expect(((await res.json()) as { code: string }).code).toBe("ownership_conflict");
+  });
+
+  test("400 invalid_transfer_target when the target is not a known Ornn user", async () => {
+    const app = buildApp({
+      userId: OWNER,
+      permissions: [UPDATE],
+      repo: { findByGuid: async () => skillDoc({ createdBy: OWNER }) },
+      resolveUser: async () => null,
+    });
+    const res = await transferReq(app, "ghost");
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { code: string }).code).toBe("invalid_transfer_target");
+  });
+
+  test("200 delegating to transferSkillOwnership (owner)", async () => {
+    const calls: string[] = [];
+    const app = buildApp({
+      userId: OWNER,
+      permissions: [UPDATE],
+      repo: { findByGuid: async () => skillDoc({ createdBy: OWNER }) },
+      resolveUser: async () => ALICE,
+      service: {
+        transferSkillOwnership: async () => {
+          calls.push("transferSkillOwnership");
+          return detail({ createdBy: "alice" });
+        },
+      },
+    });
+    const res = await transferReq(app, "alice");
+    expect(res.status).toBe(200);
+    expect(calls).toEqual(["transferSkillOwnership"]);
+    expect(((await res.json()) as { data: { skill: { createdBy: string } } }).data.skill.createdBy).toBe("alice");
+  });
+
+  test("platform admin may force-transfer a skill they do not own", async () => {
+    const calls: string[] = [];
+    const app = buildApp({
+      userId: "admin-1",
+      permissions: [UPDATE, "ornn:admin:skill"],
+      repo: { findByGuid: async () => skillDoc({ createdBy: OWNER }) },
+      resolveUser: async () => ALICE,
+      service: {
+        transferSkillOwnership: async () => {
+          calls.push("transferSkillOwnership");
+          return detail({ createdBy: "alice" });
+        },
+      },
+    });
+    const res = await transferReq(app, "alice");
+    expect(res.status).toBe(200);
+    expect(calls).toEqual(["transferSkillOwnership"]);
   });
 });
 

@@ -4,9 +4,10 @@
  */
 
 import type { Collection, Db, Document } from "mongodb";
-import type { SkillDocument, SkillMetadata } from "../../../shared/types/index";
+import type { SkillDocument, SkillGrant, SkillMetadata } from "../../../shared/types/index";
 import { AppError } from "../../../shared/types/index";
 import { createLogger } from "../../../shared/logger";
+import { coerceStoredGrants, legacyListsFromGrants } from "./grants";
 // `applyScope` / `applyExtraFilters` were lifted into `scopeFilter.ts`
 // (#969) so the skillsets repository can reuse the exact same visibility
 // matrix + registry-chip filters. Re-import them here — pure move, no
@@ -69,6 +70,11 @@ export interface CreateSkillData {
   createdByEmail?: string | undefined;
   createdByDisplayName?: string | undefined;
   isPrivate?: boolean | undefined;
+  /**
+   * Initial typed grants (#1123). Omitted for a fresh skill — new skills are
+   * born private with no grants; the create path seeds an empty array.
+   */
+  grants?: SkillGrant[] | undefined;
   /** Initial version, e.g. "1.0". Required. */
   latestVersion: string;
   /** Origin metadata when the skill was created via a pull from an external source. */
@@ -87,10 +93,21 @@ export interface UpdateSkillData {
   /**
    * Full replacement of the explicit per-user grant list. When undefined the
    * existing value on the doc is preserved.
+   *
+   * @deprecated (#1123) Prefer `grants`. Still written for the transitional
+   * dual-write so older pods keep resolving read visibility; the permission
+   * path derives these from `grants` rather than setting them directly.
    */
   sharedWithUsers?: string[];
-  /** Full replacement of the explicit per-org grant list. */
+  /** Full replacement of the explicit per-org grant list. @deprecated — see `grants`. */
   sharedWithOrgs?: string[];
+  /**
+   * Full replacement of the typed grants (#1123). The canonical ACL write.
+   * When set, `update` also dual-writes the legacy `sharedWithUsers` /
+   * `sharedWithOrgs` lists (every grant id, read visibility) so a rolling
+   * deploy stays non-disruptive. When undefined the existing value is kept.
+   */
+  grants?: SkillGrant[];
   /** Cached latest-version pointer; update when a new package version is published. */
   latestVersion?: string;
   /** Origin metadata; bumped by the refresh-from-source path. */
@@ -163,6 +180,8 @@ export class SkillRepository {
 
   async create(data: CreateSkillData): Promise<SkillDocument> {
     const now = new Date();
+    const initialGrants = data.grants ?? [];
+    const legacy = legacyListsFromGrants(initialGrants);
     const doc: Record<string, unknown> = {
       _id: skillId(data.guid),
       name: data.name,
@@ -180,9 +199,12 @@ export class SkillRepository {
       updatedOn: now,
       isPrivate: data.isPrivate ?? true,
       // Explicit ACLs start empty — author + platform admin always have
-      // access; the shared-with lists are an additive allow-list.
-      sharedWithUsers: [],
-      sharedWithOrgs: [],
+      // access; the grants list is an additive allow-list. New skills are
+      // born "migrated" (#1123): an empty `grants` array plus the legacy
+      // lists kept in lock-step for the transitional dual-write.
+      grants: initialGrants,
+      sharedWithUsers: legacy.sharedWithUsers,
+      sharedWithOrgs: legacy.sharedWithOrgs,
       latestVersion: data.latestVersion,
     };
 
@@ -217,8 +239,20 @@ export class SkillRepository {
     if (data.skillHash !== undefined) setFields.skillHash = data.skillHash;
     if (data.storageKey !== undefined) setFields.storageKey = data.storageKey;
     if (data.isPrivate !== undefined) setFields.isPrivate = data.isPrivate;
-    if (data.sharedWithUsers !== undefined) setFields.sharedWithUsers = data.sharedWithUsers;
-    if (data.sharedWithOrgs !== undefined) setFields.sharedWithOrgs = data.sharedWithOrgs;
+    // Typed grants are the canonical write (#1123). When provided, dual-write
+    // the legacy lists from them (every grant id → read visibility) so an
+    // older pod mid-rolling-deploy still resolves correct read access. An
+    // explicit `sharedWith*` on the update wins only when `grants` is absent
+    // (legacy callers / un-migrated paths).
+    if (data.grants !== undefined) {
+      const legacy = legacyListsFromGrants(data.grants);
+      setFields.grants = data.grants;
+      setFields.sharedWithUsers = legacy.sharedWithUsers;
+      setFields.sharedWithOrgs = legacy.sharedWithOrgs;
+    } else {
+      if (data.sharedWithUsers !== undefined) setFields.sharedWithUsers = data.sharedWithUsers;
+      if (data.sharedWithOrgs !== undefined) setFields.sharedWithOrgs = data.sharedWithOrgs;
+    }
     if (data.source !== undefined) setFields.source = data.source;
     if (data.latestVersion !== undefined) setFields.latestVersion = data.latestVersion;
 
@@ -253,6 +287,44 @@ export class SkillRepository {
       { $unset: { [`distTags.${tag}`]: "" }, $set: { updatedOn: new Date() } },
     );
     logger.info({ guid, tag }, "Dist-tag deleted");
+  }
+
+  /**
+   * Reassign a skill's owner (#1123). `createdBy` is otherwise immutable —
+   * this is the single explicit exception, so it lives in a dedicated method
+   * rather than widening `UpdateSkillData`. Refreshes the cached owner-label
+   * fields and replaces the ACL with the caller-computed `grants` (the
+   * service appends the prior owner as a read grant and drops the new owner),
+   * dual-writing the legacy lists for rolling-deploy read compat.
+   */
+  async transferOwnership(
+    guid: string,
+    data: {
+      newOwnerId: string;
+      newOwnerEmail: string | null;
+      newOwnerDisplayName: string | null;
+      grants: SkillGrant[];
+      updatedBy: string;
+    },
+  ): Promise<SkillDocument> {
+    const legacy = legacyListsFromGrants(data.grants);
+    await this.collection.updateOne(
+      { _id: skillId(guid) },
+      {
+        $set: {
+          createdBy: data.newOwnerId,
+          createdByEmail: data.newOwnerEmail,
+          createdByDisplayName: data.newOwnerDisplayName,
+          grants: data.grants,
+          sharedWithUsers: legacy.sharedWithUsers,
+          sharedWithOrgs: legacy.sharedWithOrgs,
+          updatedBy: data.updatedBy,
+          updatedOn: new Date(),
+        },
+      },
+    );
+    logger.info({ guid, newOwnerId: data.newOwnerId }, "Skill ownership transferred");
+    return (await this.findByGuid(guid))!;
   }
 
   async hardDelete(guid: string): Promise<void> {
@@ -842,6 +914,10 @@ function mapDoc(doc: Document | null): SkillDocument | null {
     // we keep it here for safety against partial migrations.
     sharedWithUsers: Array.isArray(doc.sharedWithUsers) ? (doc.sharedWithUsers as string[]) : [],
     sharedWithOrgs: Array.isArray(doc.sharedWithOrgs) ? (doc.sharedWithOrgs as string[]) : [],
+    // Typed grants (#1123). Absent on un-migrated docs — left undefined here
+    // so the doc faithfully reflects storage; callers use `effectiveGrants`
+    // to fall back to read-grants derived from the legacy lists.
+    grants: coerceStoredGrants(doc.grants),
     latestVersion: doc.latestVersion ?? "0.1",
     source: doc.source
       ? {

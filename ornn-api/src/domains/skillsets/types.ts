@@ -22,6 +22,8 @@
  */
 
 import { z } from "zod";
+import type { SkillGrant } from "../../shared/types/index";
+import { skillGrantSchema } from "../skills/crud/grants";
 import {
   DEPENDS_ON_REF_REGEX,
   SKILL_NAME_REGEX,
@@ -164,9 +166,15 @@ export const publishSkillsetSchema = z.object({
   version: z.string().regex(SKILL_VERSION_REGEX, "version must be `<major>.<minor>`"),
 });
 
-/** Body schema for `PUT /skillsets/:id/permissions` — mirrors skills. */
+/**
+ * Body schema for `PUT /skillsets/:id/permissions` — mirrors skills. `grants`
+ * (#1123) is the canonical typed ACL; the legacy `sharedWith*` lists are
+ * accepted for back-compat and map to READ-level grants when `grants` is
+ * omitted.
+ */
 export const skillsetPermissionsSchema = z.object({
   isPrivate: z.boolean(),
+  grants: z.array(skillGrantSchema).max(600).optional(),
   sharedWithUsers: z.array(z.string().min(1).max(128)).max(500).default([]),
   sharedWithOrgs: z.array(z.string().min(1).max(128)).max(100).default([]),
 });
@@ -202,6 +210,12 @@ export interface SkillsetDocument {
   sharedWithUsers: string[];
   /** Explicit per-org grants (NyxID org user_ids). */
   sharedWithOrgs: string[];
+  /**
+   * Typed access grants (#1123) — canonical read/read-write ACL, mirroring
+   * `SkillDocument.grants`. Optional for back-compat; readers fall back to
+   * deriving read grants from the legacy lists via `effectiveGrants`.
+   */
+  grants?: SkillGrant[] | undefined;
   /** Cached pointer to the highest published version, e.g. "1.2". */
   latestVersion: string;
 }
@@ -255,6 +269,8 @@ export interface SkillsetDetailResponse {
   createdByDisplayName?: string | undefined;
   sharedWithUsers: string[];
   sharedWithOrgs: string[];
+  /** Typed access grants (#1123). Always present in responses via `effectiveGrants`. */
+  grants?: SkillGrant[] | undefined;
   createdOn: string;
   updatedOn: string;
 }
