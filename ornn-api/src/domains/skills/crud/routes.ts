@@ -24,7 +24,7 @@ import {
 } from "../../../middleware/nyxidAuth";
 import { validateBody, getValidatedBody } from "../../../middleware/validate";
 import { AppError } from "../../../shared/types/index";
-import { canReadSkill, canManageSkill, buildActorContext } from "./authorize";
+import { canReadSkill, canWriteSkill, canManageSkill, buildActorContext } from "./authorize";
 import { parseGithubUrl } from "./utils/githubPull";
 import { rateLimit } from "../../../middleware/rateLimit";
 import { createLogger } from "../../../shared/logger";
@@ -976,7 +976,10 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
         throw AppError.notFound("skill_not_found", `Skill '${guid}' not found`);
       }
       const actor = await buildActorContext(c);
-      if (!canManageSkill(existing, actor)) {
+      // Updating content + metadata is the READ_WRITE tier (#1123): author,
+      // platform admin, or a read_write grantee. Changing `isPrivate` is a
+      // permission change (ADMIN tier) — gated separately below once parsed.
+      if (!canWriteSkill(existing, actor)) {
         throw AppError.forbidden(
           "forbidden",
           "You do not have permission to update this skill",
@@ -1037,6 +1040,21 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
 
       if (zipBuffer === undefined && isPrivate === undefined) {
         throw AppError.badRequest("no_update", "No update data provided. Send a ZIP file and/or isPrivate field.");
+      }
+
+      // Visibility is an ADMIN-tier change (#1123): a read_write grantee may
+      // replace content but must not flip public/private. Enforce only when
+      // `isPrivate` is actually being changed so a no-op resend by an editor
+      // doesn't 403.
+      if (
+        isPrivate !== undefined &&
+        isPrivate !== existing.isPrivate &&
+        !canManageSkill(existing, actor)
+      ) {
+        throw AppError.forbidden(
+          "forbidden",
+          "Only the skill owner or a platform admin can change a skill's visibility",
+        );
       }
 
       // Zip-bomb defense (#632/#633) now runs at the service chokepoint

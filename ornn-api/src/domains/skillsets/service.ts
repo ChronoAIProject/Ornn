@@ -27,6 +27,7 @@ import { isReservedVerb } from "../../shared/reservedVerbs";
 import { resolveClosure, type ClosureNode } from "../skills/closure/resolver";
 import {
   canReadSkill,
+  canWriteSkill,
   canManageSkill,
   isMemberOfOrg,
   SYSTEM_ACTOR,
@@ -159,8 +160,10 @@ export class SkillsetService {
     if (!existing) {
       throw AppError.notFound("skillset_not_found", `Skillset '${guid}' not found`);
     }
-    if (!canManageSkill(existing, actor)) {
-      throw AppError.forbidden("forbidden", "You do not have permission to manage this skillset");
+    // Publishing a new version is a content/metadata edit — the READ_WRITE
+    // tier (#1123). Permissions/transfer/delete remain ADMIN-only below.
+    if (!canWriteSkill(existing, actor)) {
+      throw AppError.forbidden("forbidden", "You do not have permission to update this skillset");
     }
 
     const parsed = parseVersion(input.version);

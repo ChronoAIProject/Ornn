@@ -910,6 +910,77 @@ describe("PUT /skills/:id", () => {
     expect(res.status).toBe(200);
     expect(calls).toEqual(["updateSkill"]);
   });
+
+  test("200 ZIP republish for a read_write grantee — content edit is the write tier (#1123)", async () => {
+    const calls: string[] = [];
+    const app = buildApp({
+      userId: "editor",
+      permissions: [UPDATE],
+      repo: {
+        findByGuid: async () =>
+          skillDoc({
+            createdBy: OWNER,
+            isPrivate: true,
+            grants: [{ type: "user", id: "editor", level: "read_write" }],
+          }),
+      },
+      service: {
+        updateSkill: async () => {
+          calls.push("updateSkill");
+          return detail({ createdBy: OWNER });
+        },
+      },
+    });
+    const res = await app.request("/api/v1/skills/guid-1", {
+      method: "PUT",
+      headers: { "content-type": "application/zip" },
+      body: await skillZipBytes(),
+    });
+    expect(res.status).toBe(200);
+    expect(calls).toEqual(["updateSkill"]);
+  });
+
+  test("403 when a read_write grantee tries to flip visibility — that is admin-only (#1123)", async () => {
+    const app = buildApp({
+      userId: "editor",
+      permissions: [UPDATE],
+      repo: {
+        findByGuid: async () =>
+          skillDoc({
+            createdBy: OWNER,
+            isPrivate: true,
+            grants: [{ type: "user", id: "editor", level: "read_write" }],
+          }),
+      },
+    });
+    const res = await app.request("/api/v1/skills/guid-1", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ isPrivate: false }),
+    });
+    expect(res.status).toBe(403);
+  });
+
+  test("403 when a read-only grantee tries to republish content (#1123)", async () => {
+    const app = buildApp({
+      userId: "reader",
+      permissions: [UPDATE],
+      repo: {
+        findByGuid: async () =>
+          skillDoc({
+            createdBy: OWNER,
+            isPrivate: true,
+            grants: [{ type: "user", id: "reader", level: "read" }],
+          }),
+      },
+    });
+    const res = await app.request("/api/v1/skills/guid-1", {
+      method: "PUT",
+      headers: { "content-type": "application/zip" },
+      body: await skillZipBytes(),
+    });
+    expect(res.status).toBe(403);
+  });
 });
 
 // ======================================================================
