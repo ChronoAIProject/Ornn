@@ -183,7 +183,6 @@ export function ServiceDetailPage() {
             }}
             serviceId={service.id}
             serviceName={service.name}
-            proxyUrl={service.proxyUrl}
             openapiSpecUrl={service.openapiProxyUrl}
             repositoryUrl={service.repositoryUrl}
             homepageUrl={service.homepageUrl}

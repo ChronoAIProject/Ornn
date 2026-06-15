@@ -12,6 +12,9 @@ import { Badge } from "@/components/ui/Badge";
 import { Input } from "@/components/ui/Input";
 import { useAuthStore } from "@/stores/authStore";
 import { apiPost } from "@/services/apiClient";
+import { config } from "@/config";
+import { MAX_UPLOAD_FILE_SIZE_BYTES } from "@/utils/constants";
+import { formatFileSize } from "@/utils/formatters";
 import { translateError } from "@/utils/translateError";
 
 interface Reference {
@@ -29,7 +32,6 @@ interface GenerateSkillModalProps {
   onSuccess: (skillName: string) => void;
   serviceId: string;
   serviceName: string;
-  proxyUrl: string;
   openapiSpecUrl: string | null;
   repositoryUrl: string | null;
   homepageUrl: string | null;
@@ -58,13 +60,28 @@ function isValidUrl(str: string): boolean {
   }
 }
 
+/**
+ * The OpenAPI spec URL is built against the NyxID proxy host (a
+ * cross-origin host that legitimately needs the same bearer as the
+ * `/services/:id` fetch). The bearer must NEVER leak to any other host —
+ * a user-added reference URL could point anywhere. Gate the
+ * Authorization header on an exact origin match with the configured
+ * NyxID API base. Malformed URLs fail closed (no header attached).
+ */
+function isTrustedSpecHost(url: string): boolean {
+  try {
+    return new URL(url).origin === new URL(config.nyxidApiBaseUrl).origin;
+  } catch {
+    return false;
+  }
+}
+
 export function GenerateSkillModal({
   isOpen,
   onClose,
   onSuccess,
   serviceId,
   serviceName,
-  proxyUrl,
   openapiSpecUrl,
   repositoryUrl,
   homepageUrl,
@@ -128,6 +145,22 @@ export function GenerateSkillModal({
       setUrlError("Only .md (markdown) files are supported");
       return;
     }
+    // Reject oversize files BEFORE reading the whole thing into memory.
+    // FileReader.readAsText buffers the entire file, so a 100 MB upload
+    // would otherwise be read whole. Mirror FolderFileUpload's
+    // size-before-process ordering and the shared 10 MiB per-file cap.
+    if (file.size > MAX_UPLOAD_FILE_SIZE_BYTES) {
+      setUrlError(
+        t("guided.fileTooLarge", {
+          name: file.name,
+          size: formatFileSize(file.size),
+          max: formatFileSize(MAX_UPLOAD_FILE_SIZE_BYTES),
+        }),
+      );
+      // Reset the input so re-selecting the same file fires onChange again.
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
     const reader = new FileReader();
     reader.onload = () => {
       const content = reader.result as string;
@@ -155,8 +188,12 @@ export function GenerateSkillModal({
       if (openapiRef) {
         setCurrentStepMsg(STEP_MESSAGES.fetching_spec);
         try {
+          // Only forward the bearer to the trusted NyxID proxy host. A
+          // user-added spec URL could point anywhere — sending the token
+          // there would leak the user's credential cross-origin.
+          const useAuth = Boolean(accessToken) && isTrustedSpecHost(openapiRef.value);
           const specResp = await fetch(openapiRef.value, {
-            headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+            headers: useAuth ? { Authorization: `Bearer ${accessToken}` } : {},
           });
           if (specResp.ok) {
             const specJson = await specResp.json();
@@ -191,8 +228,6 @@ export function GenerateSkillModal({
       const res = await apiPost<{ guid: string; name: string; serviceId: string }>(
         `/api/v1/admin/system-skills/${serviceId}/generate`,
         {
-          userToken: accessToken,
-          proxyUrl,
           references: promptRefs,
           serviceName,
         },
