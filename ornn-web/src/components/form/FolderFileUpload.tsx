@@ -30,6 +30,7 @@
 import { useState, useRef, useCallback } from "react";
 import { UPLOADABLE_FOLDERS, type UploadableFolder } from "@/types/skillPackage";
 import { formatFileSize } from "@/utils/formatters";
+import { MAX_UPLOAD_FILE_SIZE_BYTES } from "@/utils/constants";
 import { useTranslation } from "react-i18next";
 
 export interface FolderFileUploadProps {
@@ -49,13 +50,6 @@ const FOLDER_LABELS: Record<UploadableFolder, string> = {
   assets: "assets/",
 };
 
-/**
- * Per-file size cap (#655). 10 MiB. Backend caps total uncompressed at
- * ~100 MB; per-file 10 MiB keeps a single oversize artifact from
- * eating the whole package budget and signals the limit early.
- */
-const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
-
 export function FolderFileUpload({
   files,
   onUpload,
@@ -72,12 +66,12 @@ export function FolderFileUpload({
     (file: File) => {
       // #655 guard 1 — size cap. Reject before the parent ever sees
       // the file, so its package-state stays clean.
-      if (file.size > MAX_FILE_SIZE_BYTES) {
+      if (file.size > MAX_UPLOAD_FILE_SIZE_BYTES) {
         setUploadError(
           t("guided.fileTooLarge", {
             name: file.name,
             size: formatFileSize(file.size),
-            max: formatFileSize(MAX_FILE_SIZE_BYTES),
+            max: formatFileSize(MAX_UPLOAD_FILE_SIZE_BYTES),
           }),
         );
         return;
@@ -195,7 +189,7 @@ export function FolderFileUpload({
       {/* Per-file size hint — always visible so users know the cap
           before they pick the file. */}
       <p className="font-text text-[11px] text-meta/60">
-        {t("guided.fileSizeHint", { max: formatFileSize(MAX_FILE_SIZE_BYTES) })}
+        {t("guided.fileSizeHint", { max: formatFileSize(MAX_UPLOAD_FILE_SIZE_BYTES) })}
       </p>
 
       {/* File list grouped by folder */}

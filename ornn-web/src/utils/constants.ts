@@ -76,3 +76,13 @@ export const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024;
 export const MAX_FILE_SIZE_LABEL = "50 MB";
 export const ACCEPTED_FILE_TYPES = [".tar.gz", ".zip"];
 export const MAX_TAGS = 10;
+
+/**
+ * Per-file upload cap (10 MiB) shared by the package builder's
+ * FolderFileUpload and the GenerateSkillModal markdown-reference upload.
+ * The backend / ZIP pipeline caps total uncompressed at ~100 MB; this
+ * per-file ceiling keeps a single oversize artifact (e.g. a 100 MB file
+ * read whole into memory via FileReader) from eating the whole budget
+ * and surfaces the limit before the user assembles a doomed package.
+ */
+export const MAX_UPLOAD_FILE_SIZE_BYTES = 10 * 1024 * 1024;
