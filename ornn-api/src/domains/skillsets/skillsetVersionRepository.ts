@@ -51,6 +51,29 @@ export class SkillsetVersionRepository {
       { skillsetGuid: 1, majorVersion: -1, minorVersion: -1 },
       { name: "skillset_versions_latest_lookup" },
     );
+    // Reverse index (#1136): "which skillset versions reference this skill?"
+    // Multikey over the member-ref array; powers `findSkillsetGuidsByMember`
+    // so a skill visibility change can recompute the skillsets containing it.
+    await this.collection.createIndex({ members: 1 }, { name: "skillset_versions_members" });
+  }
+
+  /**
+   * Distinct skillset guids whose ANY version references the given skill as a
+   * member (#1136). Member refs are `<name-or-guid>@<major.minor>` or
+   * `<name>@<dist-tag>`, so a skill is referenced if a ref begins with
+   * `<name>@` OR `<guid>@`. The `^(name|guid)@` regex covers every ref form
+   * (version and dist-tag) without enumerating them. Scans all versions
+   * (immutable, several may reference the skill); the caller recomputes only
+   * each skillset's latest version.
+   */
+  async findSkillsetGuidsByMember(skillName: string, skillGuid: string): Promise<string[]> {
+    const esc = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const pattern = `^(${esc(skillName)}|${esc(skillGuid)})@`;
+    const rows = await this.collection
+      .find({ members: { $regex: pattern } })
+      .project({ skillsetGuid: 1 })
+      .toArray();
+    return [...new Set(rows.map((r) => r.skillsetGuid as string))];
   }
 
   async create(data: CreateSkillsetVersionData): Promise<SkillsetVersionDocument> {

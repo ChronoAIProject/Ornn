@@ -210,3 +210,71 @@ describe("SkillsetVersionRepository — append-only", () => {
     expect(latest?.version).toBe("2.0");
   });
 });
+
+describe("SkillsetVersionRepository — findSkillsetGuidsByMember (#1136)", () => {
+  async function seedVersion(
+    skillsetGuid: string,
+    version: string,
+    members: string[],
+  ): Promise<void> {
+    const [major, minor] = version.split(".").map(Number);
+    await versionRepo.create({
+      skillsetGuid,
+      version,
+      majorVersion: major ?? 1,
+      minorVersion: minor ?? 0,
+      kind: "generic",
+      description: "d",
+      instructions: "p",
+      tags: [],
+      members,
+      createdBy: "owner-1",
+    });
+  }
+
+  test("matches a member referenced by name or by guid, across ref grammars", async () => {
+    // ss-a references the skill by name@version, ss-b by guid@version,
+    // ss-c by name@dist-tag — all three must be found for skill `review`.
+    await seedVersion("ss-a", "1.0", ["review@1.0", "other@1.0"]);
+    await seedVersion("ss-b", "1.0", ["skl-review-guid@2.1"]);
+    await seedVersion("ss-c", "1.0", ["review@latest"]);
+    await seedVersion("ss-d", "1.0", ["unrelated@1.0"]);
+
+    const guids = await versionRepo.findSkillsetGuidsByMember("review", "skl-review-guid");
+    expect(guids.sort()).toEqual(["ss-a", "ss-b", "ss-c"]);
+  });
+
+  test("dedupes a skill referenced by multiple versions of the same skillset", async () => {
+    await seedVersion("ss-x", "1.0", ["review@1.0"]);
+    await seedVersion("ss-x", "1.1", ["review@1.1"]);
+    await seedVersion("ss-x", "2.0", ["other@1.0"]);
+
+    const guids = await versionRepo.findSkillsetGuidsByMember("review", "skl-review-guid");
+    expect(guids).toEqual(["ss-x"]);
+  });
+
+  test("does not match a name that is only a prefix of another member ref", async () => {
+    // `rev` must not match `review@1.0` — the `@` boundary in the regex
+    // prevents prefix bleed.
+    await seedVersion("ss-p", "1.0", ["review@1.0"]);
+    const guids = await versionRepo.findSkillsetGuidsByMember("rev", "skl-rev-guid");
+    expect(guids).toEqual([]);
+  });
+
+  test("escapes regex metacharacters in the skill name", async () => {
+    // A name with a regex-special char must be matched literally, not as a pattern.
+    await seedVersion("ss-r", "1.0", ["a.b+c@1.0"]);
+    const guids = await versionRepo.findSkillsetGuidsByMember("a.b+c", "skl-dot-guid");
+    expect(guids).toEqual(["ss-r"]);
+    // The literal name must not act as a wildcard against a different ref.
+    await seedVersion("ss-s", "1.0", ["axbxc@1.0"]);
+    const again = await versionRepo.findSkillsetGuidsByMember("a.b+c", "skl-dot-guid");
+    expect(again).toEqual(["ss-r"]);
+  });
+
+  test("returns empty when no version references the skill", async () => {
+    await seedVersion("ss-z", "1.0", ["foo@1.0"]);
+    const guids = await versionRepo.findSkillsetGuidsByMember("bar", "skl-bar-guid");
+    expect(guids).toEqual([]);
+  });
+});
