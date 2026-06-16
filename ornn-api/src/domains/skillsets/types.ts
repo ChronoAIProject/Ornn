@@ -214,11 +214,34 @@ export interface SkillsetDocument {
    * Typed access grants (#1123) — canonical read/write ACL, mirroring
    * `SkillDocument.grants`. Optional for back-compat; readers fall back to
    * deriving read grants from the legacy lists via `effectiveGrants`.
+   *
+   * @deprecated (#1136) Skillset visibility is now DERIVED from its members
+   * (see `memberVisibilityState`), not owner-set. `isPrivate` / `sharedWith*`
+   * / `grants` on a skillset are inert — kept for rollback; no longer the
+   * authority for who-can-read.
    */
   grants?: SkillGrant[] | undefined;
+  /**
+   * Derived (#1136) — `true` iff EVERY member skill of the latest version is
+   * public. Cheap fast-path for discovery + drives the read-only visibility
+   * badge. Computed under SYSTEM_ACTOR, never owner-set; recomputed when a
+   * member's visibility or the member list changes. Optional for back-compat
+   * (absent ⇒ treated as `true` until the boot backfill runs).
+   */
+  membersAllPublic?: boolean | undefined;
+  /** Derived (#1136) member-visibility state of the latest version. */
+  memberVisibilityState?: SkillsetMemberVisibilityState | undefined;
   /** Cached pointer to the highest published version, e.g. "1.2". */
   latestVersion: string;
 }
+
+/**
+ * Member-derived visibility state of a skillset's latest version (#1136):
+ * - `all-public`   — every member skill is public; discoverable by everyone.
+ * - `restricted`   — ≥1 member is private/shared; discoverable only by callers who can read all members.
+ * - `unresolvable` — ≥1 member ref no longer resolves (e.g. deleted); only the owner sees it, with a warning.
+ */
+export type SkillsetMemberVisibilityState = "all-public" | "restricted" | "unresolvable";
 
 /**
  * Immutable record of one published skillset version (the

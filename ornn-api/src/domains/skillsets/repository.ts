@@ -17,7 +17,7 @@ import { createLogger } from "../../shared/logger";
 import { applyScope, applyExtraFilters, type SkillScope } from "../skills/crud/scopeFilter";
 import { coerceStoredGrants, legacyListsFromGrants } from "../skills/crud/grants";
 import type { SkillGrant } from "../../shared/types/index";
-import type { SkillsetDocument, SkillsetKind } from "./types";
+import type { SkillsetDocument, SkillsetKind, SkillsetMemberVisibilityState } from "./types";
 
 const logger = createLogger("skillsetRepository");
 
@@ -63,6 +63,9 @@ export interface UpdateSkillsetData {
    * set, `update` dual-writes the legacy lists from it. Mirrors skills.
    */
   grants?: SkillGrant[];
+  /** Derived visibility (#1136) — written by the recompute path, never by users. */
+  membersAllPublic?: boolean;
+  memberVisibilityState?: SkillsetMemberVisibilityState;
   latestVersion?: string;
   updatedBy: string;
 }
@@ -134,6 +137,10 @@ export class SkillsetRepository {
       grants: initialGrants,
       sharedWithUsers: legacy.sharedWithUsers,
       sharedWithOrgs: legacy.sharedWithOrgs,
+      // Derived visibility (#1136) — seeded all-public; the service recomputes
+      // from the actual members right after create/publish.
+      membersAllPublic: true,
+      memberVisibilityState: "all-public",
       latestVersion: data.latestVersion,
     };
 
@@ -170,6 +177,9 @@ export class SkillsetRepository {
       if (data.sharedWithOrgs !== undefined) setFields.sharedWithOrgs = data.sharedWithOrgs;
     }
     if (data.latestVersion !== undefined) setFields.latestVersion = data.latestVersion;
+    // Derived visibility (#1136) — written only by the recompute path.
+    if (data.membersAllPublic !== undefined) setFields.membersAllPublic = data.membersAllPublic;
+    if (data.memberVisibilityState !== undefined) setFields.memberVisibilityState = data.memberVisibilityState;
 
     await this.collection.updateOne({ _id: skillsetId(guid) }, { $set: setFields });
     logger.info({ guid }, "Skillset updated");
@@ -304,6 +314,11 @@ function mapDoc(doc: Document | null): SkillsetDocument | null {
     // Typed grants (#1123) — undefined on un-migrated docs (callers use
     // `effectiveGrants` to fall back to the legacy lists).
     grants: coerceStoredGrants(doc.grants),
+    // Derived visibility (#1136). Absent on un-backfilled docs → treat as
+    // all-public (the pre-#1136 default) so reads stay clean until backfill.
+    membersAllPublic: doc.membersAllPublic === undefined ? true : doc.membersAllPublic === true,
+    memberVisibilityState:
+      (doc.memberVisibilityState as SkillsetMemberVisibilityState | undefined) ?? "all-public",
     latestVersion: doc.latestVersion ?? "1.0",
   };
 }
