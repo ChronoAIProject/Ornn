@@ -15,6 +15,8 @@
  * @module types/skillset
  */
 
+import type { SkillGrant } from "@/types/domain";
+
 /**
  * Skillset kind (#969 v1). `generic` is the DEFAULT — a plain curated bundle.
  * `consensus-supported` is an author CLAIM that the members are an
@@ -79,6 +81,8 @@ export interface SkillsetDetail {
   createdByDisplayName?: string | undefined;
   sharedWithUsers: string[];
   sharedWithOrgs: string[];
+  /** Canonical typed ACL (#1123). Present in detail responses via effectiveGrants. */
+  grants?: SkillGrant[];
   createdOn: string;
   updatedOn: string;
 }
@@ -214,8 +218,10 @@ export interface PublishSkillsetInput {
 /** Body for PUT /api/v1/skillsets/:id/permissions. Mirrors skills. */
 export interface SkillsetPermissionsInput {
   isPrivate: boolean;
-  sharedWithUsers: string[];
-  sharedWithOrgs: string[];
+  /** Canonical typed ACL (#1123/#1125); legacy lists optional for back-compat. */
+  grants?: SkillGrant[];
+  sharedWithUsers?: string[];
+  sharedWithOrgs?: string[];
 }
 
 /**
