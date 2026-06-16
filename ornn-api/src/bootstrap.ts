@@ -741,9 +741,9 @@ export async function bootstrap(
   // #1136 — forward reference: the skill routes fire a reactive skillset
   // recompute on every visibility-affecting mutation, but `wireSkillsets`
   // (which owns that recompute) is built below since it injects this skill
-  // service. The hook below delegates to the real implementation once it's
-  // assigned; it's only ever invoked at request time, long after boot.
-  let fireSkillsetRecomputeImpl: ((s: { guid: string; name: string }) => void) | undefined;
+  // service. The holder is filled in once skillsets is wired; the hook is
+  // only ever invoked at request time, long after boot.
+  const skillsetRecomputeHook: { fire?: (s: { guid: string; name: string }) => void } = {};
   const skillRoutes = createSkillRoutes({
     skillService,
     skillRepo,
@@ -761,7 +761,7 @@ export async function bootstrap(
     // backed by the lazily-populated user directory.
     resolveUser: async (userId) =>
       (await userDirectoryRepo.findByUserIds([userId]))[0] ?? null,
-    fireSkillsetRecompute: (changedSkill) => fireSkillsetRecomputeImpl?.(changedSkill),
+    fireSkillsetRecompute: (changedSkill) => skillsetRecomputeHook.fire?.(changedSkill),
   });
 
   // ---- Domain: Skill Search ----
@@ -792,7 +792,7 @@ export async function bootstrap(
   });
   // #1136 — bind the skill routes' reactive-recompute hook now that the
   // skillset wiring (which owns it) exists.
-  fireSkillsetRecomputeImpl = skillsets.fireSkillsetRecompute;
+  skillsetRecomputeHook.fire = skillsets.fireSkillsetRecompute;
   await skillsets.ensureIndexes();
   // #1136 — one-shot, idempotent backfill of the derived-visibility cache so
   // skillsets created before the feature get correct `membersAllPublic` /
