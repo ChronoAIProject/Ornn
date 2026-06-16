@@ -63,9 +63,6 @@ export interface UpdateSkillsetData {
    * set, `update` dual-writes the legacy lists from it. Mirrors skills.
    */
   grants?: SkillGrant[];
-  /** Derived visibility (#1136) — written by the recompute path, never by users. */
-  membersAllPublic?: boolean;
-  memberVisibilityState?: SkillsetMemberVisibilityState;
   latestVersion?: string;
   updatedBy: string;
 }
@@ -177,13 +174,39 @@ export class SkillsetRepository {
       if (data.sharedWithOrgs !== undefined) setFields.sharedWithOrgs = data.sharedWithOrgs;
     }
     if (data.latestVersion !== undefined) setFields.latestVersion = data.latestVersion;
-    // Derived visibility (#1136) — written only by the recompute path.
-    if (data.membersAllPublic !== undefined) setFields.membersAllPublic = data.membersAllPublic;
-    if (data.memberVisibilityState !== undefined) setFields.memberVisibilityState = data.memberVisibilityState;
 
     await this.collection.updateOne({ _id: skillsetId(guid) }, { $set: setFields });
     logger.info({ guid }, "Skillset updated");
     return (await this.findByGuid(guid))!;
+  }
+
+  /**
+   * Write ONLY the derived-visibility cache (#1136). Deliberately does NOT
+   * touch `updatedBy` / `updatedOn`: these flags are a denormalized
+   * reflection of the member skills' own privacy, recomputed reactively
+   * whenever a member skill changes — not a user edit of the skillset, so
+   * they must not move the skillset's audit timestamps.
+   */
+  async setDerivedVisibility(
+    guid: string,
+    derived: {
+      membersAllPublic: boolean;
+      memberVisibilityState: SkillsetMemberVisibilityState;
+    },
+  ): Promise<void> {
+    await this.collection.updateOne(
+      { _id: skillsetId(guid) },
+      {
+        $set: {
+          membersAllPublic: derived.membersAllPublic,
+          memberVisibilityState: derived.memberVisibilityState,
+        },
+      },
+    );
+    logger.debug(
+      { guid, memberVisibilityState: derived.memberVisibilityState },
+      "Skillset derived visibility recomputed",
+    );
   }
 
   /**

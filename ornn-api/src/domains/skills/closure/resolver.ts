@@ -51,6 +51,13 @@ export interface ResolvedVersion {
   guid?: string;
   /** Package hash for the resolved version, when known. */
   skillHash?: string;
+  /**
+   * Whether the underlying skill is private, when known (#1136). Carried
+   * so callers resolving under SYSTEM can classify member visibility
+   * (public vs private vs unresolvable) without a second skill lookup.
+   * The closure algorithm itself ignores it.
+   */
+  isPrivate?: boolean;
   /** Direct dependency refs declared by this version. */
   dependsOn: string[];
 }
