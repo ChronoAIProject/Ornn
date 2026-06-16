@@ -5,7 +5,7 @@
  * wired over in-memory skill fakes so `createVersionLoader` resolves member
  * refs exactly as production does. Pins:
  *   - create → publish → re-publish bumps version; prior version immutable
- *   - visibility transitions mirror skills (setPermissions)
+ *   - visibility is derived from members (#1136) — no owner-set permissions
  *   - publish member validation: missing member → skill_dependency_not_found
  *   - conflicting member dep-closures → dependency_conflict
  *   - resolveClosure: members + their #968 dep closures topo-sorted
@@ -767,71 +767,6 @@ describe("SkillsetService — create / publish (immutable versioning)", () => {
   });
 });
 
-describe("SkillsetService — visibility transitions (mirror skills)", () => {
-  it("setPermissions flips public/private + persists shared lists", async () => {
-    const { skills, versions } = twoMemberSkills();
-    const skillService = makeSkillService(skills, versions);
-    const { deps } = makeSkillsetDeps(skillService);
-    const service = new SkillsetService(deps);
-    const created = await service.createSkillset(
-      {
-        name: "review-set",
-        description: "d",
-        instructions: "p",
-        kind: "generic",
-        tags: [],
-        members: ["pdf-tools@1.0", "csv-tools@1.0"],
-        version: "1.0",
-      },
-      { userId: "owner-1" },
-    );
-    const updated = await service.setPermissions(
-      created.guid,
-      { isPrivate: false, sharedWithUsers: ["u2"], sharedWithOrgs: [] },
-      OWNER,
-    );
-    expect(updated.isPrivate).toBe(false);
-    // Canonical ACL now carries the user as a read grant (#1123).
-    expect(updated.grants).toContainEqual({ type: "user", id: "u2", level: "read" });
-  });
-
-  it("setPermissions 403s a non-owner", async () => {
-    const { skills, versions } = twoMemberSkills();
-    const skillService = makeSkillService(skills, versions);
-    const { deps } = makeSkillsetDeps(skillService);
-    const service = new SkillsetService(deps);
-    const created = await service.createSkillset(
-      {
-        name: "review-set",
-        description: "d",
-        instructions: "p",
-        kind: "generic",
-        tags: [],
-        members: ["pdf-tools@1.0", "csv-tools@1.0"],
-        version: "1.0",
-      },
-      { userId: "owner-1" },
-    );
-    const stranger: ActorContext = {
-      userId: "stranger",
-      memberships: [],
-      isPlatformAdmin: false,
-      membershipsResolved: true,
-    };
-    let code = "";
-    try {
-      await service.setPermissions(
-        created.guid,
-        { isPrivate: true, sharedWithUsers: [], sharedWithOrgs: [] },
-        stranger,
-      );
-    } catch (err) {
-      code = (err as AppError).code;
-    }
-    expect(code).toBe("forbidden");
-  });
-});
-
 describe("SkillsetService.transferOwnership (#1123)", () => {
   const ALICE = { userId: "alice", email: "alice@x.io", displayName: "Alice" };
 
@@ -1050,7 +985,7 @@ describe("SkillsetService — resolveClosure (roots = members)", () => {
     const { deps } = makeSkillsetDeps(skillService);
     const service = new SkillsetService(deps);
     // Author creates it (publish validates as SYSTEM, so the private dep is fine).
-    const created = await service.createSkillset(
+    await service.createSkillset(
       {
         name: "review-set",
         description: "d",
@@ -1062,12 +997,9 @@ describe("SkillsetService — resolveClosure (roots = members)", () => {
       },
       { userId: "owner-1" },
     );
-    // Make the skillset public so the anon caller passes the entry gate.
-    await service.setPermissions(
-      created.guid,
-      { isPrivate: false, sharedWithUsers: [], sharedWithOrgs: [] },
-      OWNER,
-    );
+    // No owner-set visibility (#1136): the skillset has no entry gate. An
+    // anon caller resolving it walks each member under their own actor — the
+    // transitively-private `secret-lib` dep is what blocks them.
 
     let code = "";
     try {

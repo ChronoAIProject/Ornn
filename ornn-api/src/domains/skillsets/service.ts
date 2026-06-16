@@ -6,7 +6,8 @@
  *   - CRUD with immutable, append-only versioning (publish appends
  *     `guid@version`, advances `latestVersion`; prior versions never
  *     mutate).
- *   - Visibility transitions identical to skills (`setPermissions`).
+ *   - Visibility is DERIVED from members (#1136), never owner-set — there
+ *     is no `setPermissions`; the recompute keeps the cache in sync.
  *   - Publish-time member validation: every member ref must resolve to a
  *     readable skill version, AND each member's own #968 dependency
  *     closure must be conflict-free — reusing the SAME closure resolver.
@@ -28,18 +29,12 @@ import { resolveClosure, type ClosureNode } from "../skills/closure/resolver";
 import {
   canWriteSkill,
   canManageSkill,
-  isMemberOfOrg,
   SYSTEM_ACTOR,
   type ActorContext,
 } from "../skills/crud/authorize";
 import type { SkillService } from "../skills/crud/service";
 import { isGreater, parseVersion } from "../skills/crud/version";
-import {
-  effectiveGrants,
-  normalizeGrants,
-  resolvePermissionGrants,
-  type PermissionsPayload,
-} from "../skills/crud/grants";
+import { effectiveGrants, normalizeGrants } from "../skills/crud/grants";
 import { recomputeForSkill, recomputeSkillsetVisibility } from "./recompute";
 import type { SkillsetRepository } from "./repository";
 import type { SkillsetVersionRepository } from "./skillsetVersionRepository";
@@ -371,57 +366,9 @@ export class SkillsetService {
     logger.info({ guid }, "Skillset deleted");
   }
 
-  /**
-   * Replace the permission model in a single write. Mirrors
-   * `SkillService.setSkillPermissions` — author/admin only; an owner may
-   * only share into orgs they belong to (CWE-862).
-   */
-  async setPermissions(
-    guid: string,
-    // Accept typed `grants` or the legacy lists (back-compat); both resolve
-    // to the same normalized grants (#1123). Mirrors the skills service.
-    permissions: { isPrivate: boolean } & PermissionsPayload,
-    actor: ActorContext,
-  ): Promise<SkillsetDetailResponse> {
-    const existing = await this.skillsetRepo.findByGuid(guid);
-    if (!existing) {
-      throw AppError.notFound("skillset_not_found", `Skillset '${guid}' not found`);
-    }
-    if (!canManageSkill(existing, actor)) {
-      throw AppError.forbidden("forbidden", "You do not have permission to manage this skillset");
-    }
-
-    const grants = resolvePermissionGrants(permissions).filter(
-      (g) => !(g.type === "user" && g.id === existing.createdBy),
-    );
-    const orgGrantIds = grants.filter((g) => g.type === "org").map((g) => g.id);
-
-    if (!actor.isPlatformAdmin) {
-      if (orgGrantIds.length > 0 && !actor.membershipsResolved) {
-        logger.warn({ guid }, "Org membership unresolved; cannot validate share into orgs");
-        throw AppError.serviceUnavailable(
-          "org_membership_unavailable",
-          "Could not verify your organization memberships right now. Retry shortly.",
-        );
-      }
-      const nonMember = orgGrantIds.filter((orgId) => !isMemberOfOrg(actor, orgId));
-      if (nonMember.length > 0) {
-        logger.warn({ guid, nonMember }, "Rejected skillset share into non-member org(s)");
-        throw AppError.forbidden(
-          "not_org_member",
-          "You can only share a skillset into organizations you belong to.",
-        );
-      }
-    }
-
-    await this.skillsetRepo.update(guid, {
-      isPrivate: permissions.isPrivate,
-      grants,
-      updatedBy: actor.userId,
-    });
-    logger.info({ guid, isPrivate: permissions.isPrivate }, "Skillset permissions changed");
-    return this.getSkillset(guid);
-  }
+  // NOTE (#1136): there is deliberately NO setPermissions. A skillset has
+  // no owner-set visibility — its reach is derived from its members
+  // (`memberVisibilityState`). To widen it, expose the member skills.
 
   /**
    * Transfer skillset ownership to another user (#1123). Mirrors

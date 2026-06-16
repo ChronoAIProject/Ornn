@@ -16,8 +16,10 @@
  *   GET    /skillsets/:idOrName/versions    — list   (optional auth)
  *   GET    /skillsets/:idOrName             — read   (optional auth)
  *   PUT    /skillsets/:id                   — publish (ornn:skill:update)
- *   PUT    /skillsets/:id/permissions       — visibility (ornn:skill:update)
  *   DELETE /skillsets/:id                   — delete (ornn:skill:delete)
+ *
+ * There is NO permissions endpoint (#1136): a skillset's visibility is
+ * DERIVED from its members, never owner-set.
  *
  * @module domains/skillsets/routes
  */
@@ -35,11 +37,7 @@ import { validateBody, getValidatedBody } from "../../middleware/validate";
 import { buildActorContext, type ActorContext } from "../skills/crud/authorize";
 import { createLogger } from "../../shared/logger";
 import type { SkillsetService } from "./service";
-import {
-  createSkillsetSchema,
-  publishSkillsetSchema,
-  skillsetPermissionsSchema,
-} from "./types";
+import { createSkillsetSchema, publishSkillsetSchema } from "./types";
 
 const logger = createLogger("skillsetRoutes");
 
@@ -169,32 +167,10 @@ export function createSkillsetRoutes(
     },
   );
 
-  /**
-   * PUT /skillsets/:id/permissions — apply a new ACL state.
-   * Requires: ornn:skill:update + author/admin.
-   */
-  app.put(
-    "/skillsets/:id/permissions",
-    auth,
-    requirePermission("ornn:skill:update"),
-    validateBody(skillsetPermissionsSchema, "invalid_permissions"),
-    async (c) => {
-      const id = c.req.param("id");
-      const body = getValidatedBody<z.infer<typeof skillsetPermissionsSchema>>(c);
-      const actor = await buildActorContext(c);
-      const updated = await skillsetService.setPermissions(
-        id,
-        {
-          isPrivate: body.isPrivate,
-          grants: body.grants,
-          sharedWithUsers: body.sharedWithUsers,
-          sharedWithOrgs: body.sharedWithOrgs,
-        },
-        actor,
-      );
-      return c.json({ data: { skillset: updated }, error: null });
-    },
-  );
+  // NOTE (#1136): there is deliberately NO PUT /skillsets/:id/permissions.
+  // A skillset has no owner-set visibility — its reach is derived from its
+  // member skills' visibility. To widen a skillset's reach, expose the
+  // underlying skills to the intended audience.
 
   /**
    * DELETE /skillsets/:id — delete a skillset + all its versions.
