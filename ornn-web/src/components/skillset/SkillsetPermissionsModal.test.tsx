@@ -96,18 +96,16 @@ describe("SkillsetPermissionsModal", () => {
   it("saves the desired ACL state (flip private → public)", async () => {
     wrap(<SkillsetPermissionsModal isOpen onClose={() => {}} skillset={PRIVATE_SET} />);
 
-    // Check the Public checkbox (the first checkbox in the tier stack).
+    // Check the Public checkbox (the only checkbox on the Read tab when the
+    // caller has no orgs).
     const publicCheckbox = screen.getAllByRole("checkbox")[0]!;
     fireEvent.click(publicCheckbox);
 
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => expect(updateSkillsetPermissions).toHaveBeenCalledTimes(1));
-    expect(updateSkillsetPermissions).toHaveBeenCalledWith({
-      isPrivate: false,
-      sharedWithUsers: [],
-      sharedWithOrgs: [],
-    });
+    // New canonical payload (#1125): public, no grants.
+    expect(updateSkillsetPermissions).toHaveBeenCalledWith({ isPrivate: false, grants: [] });
   });
 
   it("short-circuits with no save when nothing changed", async () => {
