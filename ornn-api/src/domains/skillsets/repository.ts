@@ -3,10 +3,12 @@
  *
  * Thin Mongo wrapper mirroring `SkillRepository` for the skillset
  * identity document. Keys each skillset by its UUID-string `_id` (the
- * public GUID), exactly like skills. Reuses the shared `scopeFilter.ts`
- * predicates so the skillset visibility matrix can never drift from the
- * skill one; adds a `kind` equality filter + `tags $all` for skillset
- * search.
+ * public GUID), exactly like skills. Discovery is keyed off the derived
+ * `memberVisibilityState` (#1136) — NOT the shared skill `scopeFilter`,
+ * which assumes owner-set `isPrivate`: a skillset has no owner-set
+ * visibility, so cheap scopes (`public`/`mine`) paginate exactly while
+ * live scopes (`private`/`mixed`/`shared-with-me`) return candidates the
+ * service live-filters per caller. Adds `kind` equality + `tags $all`.
  *
  * @module domains/skillsets/repository
  */
@@ -14,7 +16,6 @@
 import type { Collection, Db, Document } from "mongodb";
 import { AppError } from "../../shared/types/index";
 import { createLogger } from "../../shared/logger";
-import { applyScope, applyExtraFilters, type SkillScope } from "../skills/crud/scopeFilter";
 import { coerceStoredGrants, legacyListsFromGrants } from "../skills/crud/grants";
 import type { SkillGrant } from "../../shared/types/index";
 import type { SkillsetDocument, SkillsetKind, SkillsetMemberVisibilityState } from "./types";
@@ -74,9 +75,6 @@ export interface SkillsetSearchFilters {
   tagsAll?: string[] | undefined;
   /** Free-text keyword — matched (case-insensitive) against name + description. */
   q?: string | undefined;
-  sharedWithOrgsAny?: string[] | undefined;
-  sharedWithUsersAny?: string[] | undefined;
-  createdByAny?: string[] | undefined;
 }
 
 export class SkillsetRepository {
@@ -260,70 +258,118 @@ export class SkillsetRepository {
   }
 
   /**
-   * Scoped + filtered paginated read. Visibility via the shared
-   * `applyScope` (identical to skills); `kind` equality + `tags $all` +
-   * the shared registry-chip filters layered on. Mirrors
-   * `SkillRepository.findByScope`.
+   * Build the content-filter clauses shared by every scope: `kind`
+   * equality, `tags $all`, and a case-insensitive `q` substring on
+   * name/description. Regex metachars in `q` are escaped so user input
+   * can't inject a (potentially catastrophic) pattern.
    */
-  async findByScope(
-    scope: SkillScope,
-    currentUserId: string,
-    userOrgIds: string[],
-    page: number,
-    pageSize: number,
-    filters?: SkillsetSearchFilters,
-  ): Promise<{ skillsets: SkillsetDocument[]; total: number }> {
-    const matchStage: Record<string, unknown> = {};
-    applyScope(matchStage, scope, currentUserId, userOrgIds);
-    // Scope resolved to "match nothing" — short-circuit.
-    if ((matchStage._id as { $in?: unknown[] } | undefined)?.$in?.length === 0) {
-      return { skillsets: [], total: 0 };
-    }
-
-    // Reuse the shared chip filters (`tags $all`, shared-with-*Any,
-    // createdByAny) verbatim; `tags` on a skillset lives at the top level
-    // (not under `metadata.tags`), so add the `tags $all` clause directly
-    // rather than via `applyExtraFilters`' `metadata.tags` path.
-    applyExtraFilters(matchStage, {
-      sharedWithOrgsAny: filters?.sharedWithOrgsAny,
-      sharedWithUsersAny: filters?.sharedWithUsersAny,
-      createdByAny: filters?.createdByAny,
-    });
-
-    const extra: Array<Record<string, unknown>> = [];
-    if (filters?.kind) extra.push({ kind: filters.kind });
+  private buildContentFilters(filters?: SkillsetSearchFilters): Array<Record<string, unknown>> {
+    const clauses: Array<Record<string, unknown>> = [];
+    if (filters?.kind) clauses.push({ kind: filters.kind });
     if (filters?.tagsAll && filters.tagsAll.length > 0) {
-      extra.push({ tags: { $all: filters.tagsAll } });
+      clauses.push({ tags: { $all: filters.tagsAll } });
     }
-    // Keyword: case-insensitive substring on name OR description. Escape regex
-    // metachars so user input can't inject a pattern (or a catastrophic one).
     if (filters?.q && filters.q.trim().length > 0) {
       const safe = filters.q.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      extra.push({
+      clauses.push({
         $or: [
           { name: { $regex: safe, $options: "i" } },
           { description: { $regex: safe, $options: "i" } },
         ],
       });
     }
-    if (extra.length > 0) {
-      const existingAnd = (matchStage.$and as Array<Record<string, unknown>> | undefined) ?? [];
-      matchStage.$and = [...existingAnd, ...extra];
-    }
+    return clauses;
+  }
 
-    const total = await this.collection.countDocuments(matchStage, {
+  /**
+   * Exact-paginated read for the scopes that need NO live member check
+   * (#1136): visibility is decided purely by denormalized fields, so Mongo
+   * paginates exactly (fast-path).
+   *   - `public` → all-public skillsets (readable by everyone, incl. anon).
+   *   - `mine`   → the caller's own skillsets, any visibility state.
+   */
+  async findCheapScope(
+    scope: "public" | "mine",
+    caller: string,
+    page: number,
+    pageSize: number,
+    filters?: SkillsetSearchFilters,
+  ): Promise<{ skillsets: SkillsetDocument[]; total: number }> {
+    const clauses = this.buildContentFilters(filters);
+    if (scope === "public") {
+      clauses.push({ memberVisibilityState: "all-public" });
+    } else {
+      // `mine` for an anonymous caller matches nothing.
+      if (!caller) return { skillsets: [], total: 0 };
+      clauses.push({ createdBy: caller });
+    }
+    const match = clauses.length === 1 ? clauses[0]! : { $and: clauses };
+
+    const total = await this.collection.countDocuments(match, {
       maxTimeMS: SkillsetRepository.MAX_QUERY_MS,
     });
     const offset = (page - 1) * pageSize;
     const docs = await this.collection
-      .find(matchStage)
+      .find(match)
       .sort({ createdOn: -1 })
       .skip(offset)
       .limit(pageSize)
       .maxTimeMS(SkillsetRepository.MAX_QUERY_MS)
       .toArray();
-
     return { skillsets: docs.map((d) => mapDoc(d)!), total };
+  }
+
+  /**
+   * Candidate docs for the scopes that REQUIRE a live per-caller member
+   * readability check (#1136): `private`, `mixed`, `shared-with-me`. The
+   * caller (search service) live-filters these against the actor and then
+   * paginates in-memory. Returns up to `cap` candidates (newest first); the
+   * `capped` flag is `true` when the candidate set was truncated so the
+   * caller can log it (no silent truncation).
+   *
+   * The Mongo prefilter is the cheapest SUPERSET of what the live check
+   * admits:
+   *   - shared-with-me → restricted skillsets authored by someone else.
+   *   - private        → caller's own (non-public) ∪ restricted-by-others.
+   *   - mixed          → all-public ∪ caller's own (non-public) ∪ restricted-by-others.
+   * `unresolvable` skillsets are excluded from others' discovery — only the
+   * owner sees them, via the `mine` scope.
+   */
+  async findLiveScopeCandidates(
+    scope: "private" | "mixed" | "shared-with-me",
+    caller: string,
+    filters: SkillsetSearchFilters | undefined,
+    cap: number,
+  ): Promise<{ candidates: SkillsetDocument[]; capped: boolean }> {
+    const clauses = this.buildContentFilters(filters);
+    const restrictedByOthers: Record<string, unknown> = caller
+      ? { memberVisibilityState: "restricted", createdBy: { $ne: caller } }
+      : { memberVisibilityState: "restricted" };
+
+    const scopeOr: Array<Record<string, unknown>> = [];
+    if (scope === "shared-with-me") {
+      // Strictly skillsets the caller did NOT author; anon has none.
+      if (!caller) return { candidates: [], capped: false };
+      scopeOr.push(restrictedByOthers);
+    } else {
+      // private + mixed: the caller's own non-public skillsets always show
+      // (theirs — no live check); restricted-by-others are live-checked.
+      if (caller) scopeOr.push({ createdBy: caller, memberVisibilityState: { $ne: "all-public" } });
+      scopeOr.push(restrictedByOthers);
+      if (scope === "mixed") scopeOr.push({ memberVisibilityState: "all-public" });
+    }
+    clauses.push(scopeOr.length === 1 ? scopeOr[0]! : { $or: scopeOr });
+    const match = clauses.length === 1 ? clauses[0]! : { $and: clauses };
+
+    // Over-fetch one past the cap to detect (and report) truncation.
+    const docs = await this.collection
+      .find(match)
+      .sort({ createdOn: -1 })
+      .limit(cap + 1)
+      .maxTimeMS(SkillsetRepository.MAX_QUERY_MS)
+      .toArray();
+    const capped = docs.length > cap;
+    return { candidates: docs.slice(0, cap).map((d) => mapDoc(d)!), capped };
   }
 }
 

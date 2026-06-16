@@ -54,7 +54,9 @@ export function wireSkillsets(deps: {
   });
   const routes = createSkillsetRoutes({ skillsetService: service });
 
-  const searchService = new SkillsetSearchService({ skillsetRepo });
+  // #1136 — the search service live-filters restricted candidates via the
+  // skillset service's per-caller member-readability check.
+  const searchService = new SkillsetSearchService({ skillsetRepo, skillsetService: service });
   const searchRoutes = createSkillsetSearchRoutes({ skillsetSearchService: searchService });
 
   return {

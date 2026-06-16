@@ -295,6 +295,20 @@ export class SkillsetService {
     return toDetail(skillset, versionDoc, unreadableMembers);
   }
 
+  /**
+   * Live discovery predicate (#1136): can `actor` read EVERY member of the
+   * skillset's latest version? Used by the search service to live-filter
+   * restricted candidates into a caller's browse/search results. A skillset
+   * with no published version, or any unreadable/unresolvable member, is not
+   * discoverable.
+   */
+  async canDiscoverSkillset(skillset: SkillsetDocument, actor: ActorContext): Promise<boolean> {
+    const latest = await this.skillsetVersionRepo.findLatestBySkillset(skillset.guid);
+    if (!latest) return false;
+    const unreadable = await this.resolveUnreadableMembers(latest.members, actor);
+    return unreadable.length === 0;
+  }
+
   /** List all published versions, newest first. */
   async listVersions(idOrName: string): Promise<
     Array<{

@@ -59,6 +59,8 @@ function makeDoc(overrides: Record<string, unknown> = {}): Record<string, unknow
     isPrivate: false,
     sharedWithUsers: [],
     sharedWithOrgs: [],
+    // Derived visibility (#1136) — the authoritative discovery key.
+    memberVisibilityState: "all-public",
     latestVersion: "1.0",
     ...overrides,
   };
@@ -124,36 +126,42 @@ describe("SkillsetRepository — CRUD", () => {
   });
 });
 
-describe("SkillsetRepository — findByScope visibility", () => {
-  test("anonymous public scope sees only public skillsets", async () => {
+describe("SkillsetRepository — findCheapScope (#1136 derived visibility)", () => {
+  test("public scope returns only all-public skillsets (anon-safe)", async () => {
     await seed(
-      { _id: "pub", name: "pub-set", isPrivate: false },
-      { _id: "priv", name: "priv-set", isPrivate: true },
+      { _id: "pub", name: "pub-set", memberVisibilityState: "all-public" },
+      { _id: "restr", name: "restr-set", memberVisibilityState: "restricted" },
+      { _id: "broken", name: "broken-set", memberVisibilityState: "unresolvable" },
     );
-    const { skillsets, total } = await repo.findByScope("public", "", [], 1, 20);
+    const { skillsets, total } = await repo.findCheapScope("public", "", 1, 20);
     expect(total).toBe(1);
     expect(skillsets.map((s) => s.guid)).toEqual(["pub"]);
   });
 
-  test("private scope honors author + shared-user + shared-org grants", async () => {
+  test("mine scope returns the caller's own skillsets in any visibility state", async () => {
     await seed(
-      { _id: "mine", name: "mine-set", isPrivate: true, createdBy: "u1" },
-      { _id: "shared-u", name: "su-set", isPrivate: true, createdBy: "other", sharedWithUsers: ["u1"] },
-      { _id: "shared-o", name: "so-set", isPrivate: true, createdBy: "other", sharedWithOrgs: ["org-a"] },
-      { _id: "hidden", name: "hidden-set", isPrivate: true, createdBy: "other" },
+      { _id: "mine-pub", name: "mp", createdBy: "u1", memberVisibilityState: "all-public" },
+      { _id: "mine-restr", name: "mr", createdBy: "u1", memberVisibilityState: "restricted" },
+      { _id: "mine-broken", name: "mb", createdBy: "u1", memberVisibilityState: "unresolvable" },
+      { _id: "others", name: "o", createdBy: "other", memberVisibilityState: "all-public" },
     );
-    const { skillsets } = await repo.findByScope("private", "u1", ["org-a"], 1, 20);
-    expect(skillsets.map((s) => s.guid).sort()).toEqual(["mine", "shared-o", "shared-u"]);
+    const { skillsets } = await repo.findCheapScope("mine", "u1", 1, 20);
+    expect(skillsets.map((s) => s.guid).sort()).toEqual(["mine-broken", "mine-pub", "mine-restr"]);
   });
-});
 
-describe("SkillsetRepository — kind + tags filters", () => {
-  test("kind filter narrows", async () => {
+  test("mine scope for an anonymous caller matches nothing", async () => {
+    await seed({ _id: "x", name: "x", createdBy: "u1" });
+    const { skillsets, total } = await repo.findCheapScope("mine", "", 1, 20);
+    expect(total).toBe(0);
+    expect(skillsets).toEqual([]);
+  });
+
+  test("kind filter narrows public results", async () => {
     await seed(
-      { _id: "g", name: "g-set", kind: "generic", isPrivate: false },
-      { _id: "c", name: "c-set", kind: "consensus-supported", isPrivate: false },
+      { _id: "g", name: "g-set", kind: "generic" },
+      { _id: "c", name: "c-set", kind: "consensus-supported" },
     );
-    const { skillsets } = await repo.findByScope("public", "", [], 1, 20, {
+    const { skillsets } = await repo.findCheapScope("public", "", 1, 20, {
       kind: "consensus-supported",
     });
     expect(skillsets.map((s) => s.guid)).toEqual(["c"]);
@@ -161,13 +169,62 @@ describe("SkillsetRepository — kind + tags filters", () => {
 
   test("tags $all requires every listed tag", async () => {
     await seed(
-      { _id: "ab", name: "ab-set", tags: ["a", "b"], isPrivate: false },
-      { _id: "a", name: "a-set", tags: ["a"], isPrivate: false },
+      { _id: "ab", name: "ab-set", tags: ["a", "b"] },
+      { _id: "a", name: "a-set", tags: ["a"] },
     );
-    const { skillsets } = await repo.findByScope("public", "", [], 1, 20, {
+    const { skillsets } = await repo.findCheapScope("public", "", 1, 20, {
       tagsAll: ["a", "b"],
     });
     expect(skillsets.map((s) => s.guid)).toEqual(["ab"]);
+  });
+});
+
+describe("SkillsetRepository — findLiveScopeCandidates (#1136)", () => {
+  test("shared-with-me returns restricted skillsets authored by others (live-checked downstream)", async () => {
+    await seed(
+      { _id: "mine-restr", name: "mr", createdBy: "u1", memberVisibilityState: "restricted" },
+      { _id: "others-restr", name: "or", createdBy: "other", memberVisibilityState: "restricted" },
+      { _id: "others-pub", name: "op", createdBy: "other", memberVisibilityState: "all-public" },
+      { _id: "others-broken", name: "ob", createdBy: "other", memberVisibilityState: "unresolvable" },
+    );
+    const { candidates } = await repo.findLiveScopeCandidates("shared-with-me", "u1", undefined, 100);
+    expect(candidates.map((s) => s.guid)).toEqual(["others-restr"]);
+  });
+
+  test("private returns the caller's own non-public + restricted-by-others", async () => {
+    await seed(
+      { _id: "mine-pub", name: "mp", createdBy: "u1", memberVisibilityState: "all-public" },
+      { _id: "mine-restr", name: "mr", createdBy: "u1", memberVisibilityState: "restricted" },
+      { _id: "mine-broken", name: "mb", createdBy: "u1", memberVisibilityState: "unresolvable" },
+      { _id: "others-restr", name: "or", createdBy: "other", memberVisibilityState: "restricted" },
+      { _id: "others-pub", name: "op", createdBy: "other", memberVisibilityState: "all-public" },
+    );
+    const { candidates } = await repo.findLiveScopeCandidates("private", "u1", undefined, 100);
+    // mine-pub excluded (that's "public", not "private"); others-pub excluded.
+    expect(candidates.map((s) => s.guid).sort()).toEqual(["mine-broken", "mine-restr", "others-restr"]);
+  });
+
+  test("mixed additionally includes all-public skillsets", async () => {
+    await seed(
+      { _id: "mine-restr", name: "mr", createdBy: "u1", memberVisibilityState: "restricted" },
+      { _id: "others-restr", name: "or", createdBy: "other", memberVisibilityState: "restricted" },
+      { _id: "others-pub", name: "op", createdBy: "other", memberVisibilityState: "all-public" },
+      { _id: "others-broken", name: "ob", createdBy: "other", memberVisibilityState: "unresolvable" },
+    );
+    const { candidates } = await repo.findLiveScopeCandidates("mixed", "u1", undefined, 100);
+    // unresolvable-by-others excluded (only owner sees those, via `mine`).
+    expect(candidates.map((s) => s.guid).sort()).toEqual(["mine-restr", "others-pub", "others-restr"]);
+  });
+
+  test("reports capped=true when the candidate set is truncated", async () => {
+    await seed(
+      { _id: "r1", name: "r1", createdBy: "other", memberVisibilityState: "restricted" },
+      { _id: "r2", name: "r2", createdBy: "other", memberVisibilityState: "restricted" },
+      { _id: "r3", name: "r3", createdBy: "other", memberVisibilityState: "restricted" },
+    );
+    const { candidates, capped } = await repo.findLiveScopeCandidates("shared-with-me", "u1", undefined, 2);
+    expect(candidates).toHaveLength(2);
+    expect(capped).toBe(true);
   });
 });
 
