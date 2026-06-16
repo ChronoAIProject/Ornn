@@ -43,7 +43,7 @@ so dashboards can disambiguate from frontend events of the same name):
 | `api.skill.published` | skill create + version publish | `skillId`, `skillVersion`, `isNewSkill` |
 | `user.login` / `user.logout` | session open / close | — |
 | `skill.created` / `.updated` / `.deleted` / `.version_deleted` | mutation routes | `skillId`, `skillName`, `version`, `adminAction?` |
-| `skill.visibility_changed` / `.permissions_changed` | visibility + sharing flips | `skillId`, `isPrivate`, `sharedWithUsers`, `sharedWithOrgs`, `readWriteGrants` (count of `read_write` grants, #1123) |
+| `skill.visibility_changed` / `.permissions_changed` | visibility + sharing flips | `skillId`, `isPrivate`, `sharedWithUsers`, `sharedWithOrgs`, `writeGrants` (count of `write` grants, #1123) |
 | `skill.ownership_transferred` | ownership handed to another user (#1123) | `skillId`, `skillName`, `priorOwnerId`, `newOwnerId` |
 | `skill.refresh` / `.source_linked` / `.source_unlinked` | source-pointer ops | `skillId`, `repo`, `ref`, `commit` |
 | `skill.nyxid_service_tied` / `.agentseal_rescanned` | tie + admin-rescan | `skillId`, `isSystemSkill`, `score` |

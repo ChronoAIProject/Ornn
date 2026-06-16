@@ -67,9 +67,9 @@ The uploaded payload is not a parseable ZIP — a malformed or unreadable archiv
 
 ### invalid_permission_level
 
-A typed `grants` entry on a permissions request (#1123) carried a `level` outside the allowed set. The only accepted values are `read` and `read_write` (see [`docs/CONVENTIONS.md`](CONVENTIONS.md) §5.4). Surfaced from `PUT /api/v1/skills/{id}/permissions` and `PUT /api/v1/skillsets/{id}/permissions`.
+A typed `grants` entry on a permissions request (#1123) carried a `level` outside the allowed set. The only accepted values are `read` and `write` (see [`docs/CONVENTIONS.md`](CONVENTIONS.md) §5.4). Surfaced from `PUT /api/v1/skills/{id}/permissions` and `PUT /api/v1/skillsets/{id}/permissions`.
 
-**Client action:** set every grant's `level` to `read` or `read_write` and retry.
+**Client action:** set every grant's `level` to `read` or `write` and retry.
 
 ### invalid_transfer_target
 
