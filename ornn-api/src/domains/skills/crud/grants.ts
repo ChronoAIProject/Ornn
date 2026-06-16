@@ -31,7 +31,7 @@ import type {
 export const skillGrantSchema = z.object({
   type: z.enum(["user", "org"]),
   id: z.string().min(1).max(128),
-  level: z.enum(["read", "read_write"]),
+  level: z.enum(["read", "write"]),
 });
 
 /**
@@ -88,7 +88,7 @@ export function effectiveGrants(src: GrantSource): SkillGrant[] {
 /**
  * Map the legacy read-only allow-lists onto READ-level typed grants. Used by
  * the boot migration and by the read-time fallback. Never produces a
- * `read_write` grant — legacy sharing was read-only, so migrating it must
+ * `write` grant — legacy sharing was read-only, so migrating it must
  * not escalate anyone.
  */
 export function deriveGrantsFromLegacy(
@@ -106,7 +106,7 @@ export function deriveGrantsFromLegacy(
  * dual-write (#1123). EVERY grant id — regardless of level — lands in the
  * matching legacy list so code that only understands the read lists (an
  * older pod mid-rolling-deploy) still resolves correct READ visibility for
- * read_write grantees, and never escalates anyone to write (old code has no
+ * write grantees, and never escalates anyone to write (old code has no
  * write concept). Dropped by the post-rollout cleanup once all pods read
  * `grants`.
  */
@@ -122,7 +122,7 @@ export function legacyListsFromGrants(grants: readonly SkillGrant[]): LegacyShar
 
 /**
  * Normalize an incoming grants list: trim ids, drop empties, and collapse
- * duplicate `(type, id)` pairs keeping the HIGHEST level (`read_write` wins
+ * duplicate `(type, id)` pairs keeping the HIGHEST level (`write` wins
  * over `read`) so a principal can never hold two conflicting grants on the
  * same skill. Order is preserved by first appearance.
  */
@@ -136,7 +136,7 @@ export function normalizeGrants(grants: readonly SkillGrant[]): SkillGrant[] {
     const prev = byKey.get(key);
     if (!prev) order.push(key);
     const level: SkillPermissionLevel =
-      prev?.level === "read_write" || g.level === "read_write" ? "read_write" : "read";
+      prev?.level === "write" || g.level === "write" ? "write" : "read";
     byKey.set(key, { type: g.type, id, level });
   }
   return order.map((k) => byKey.get(k)!);
@@ -144,7 +144,7 @@ export function normalizeGrants(grants: readonly SkillGrant[]): SkillGrant[] {
 
 /** True when `level` permits writing (updating content / metadata). */
 export function levelAllowsWrite(level: SkillPermissionLevel): boolean {
-  return level === "read_write";
+  return level === "write";
 }
 
 /**
@@ -162,9 +162,13 @@ export function coerceStoredGrants(raw: unknown): SkillGrant[] | undefined {
     const e = entry as Record<string, unknown>;
     const type = e.type;
     const id = typeof e.id === "string" ? e.id.trim() : "";
-    const level = e.level;
+    // #1127 renamed the level `read_write` → `write`. Defensively coerce a
+    // stored legacy `read_write` here so a doc the boot migration hasn't
+    // rewritten yet (or one written by an older pod mid-rolling-deploy) still
+    // resolves to write — never dropped, never silently downgraded.
+    const level = e.level === "read_write" ? "write" : e.level;
     if ((type !== "user" && type !== "org") || !id) continue;
-    if (level !== "read" && level !== "read_write") continue;
+    if (level !== "read" && level !== "write") continue;
     out.push({ type, id, level });
   }
   return out;
