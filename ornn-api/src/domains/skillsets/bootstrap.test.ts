@@ -62,13 +62,26 @@ function buildApp() {
       { "Content-Type": "application/problem+json" },
     );
   });
-  return { app, ensureIndexes: skillsets.ensureIndexes };
+  return {
+    app,
+    ensureIndexes: skillsets.ensureIndexes,
+    backfillDerivedVisibility: skillsets.backfillDerivedVisibility,
+  };
 }
 
 describe("wireSkillsets — smoke mount", () => {
   test("ensureIndexes resolves against a real Mongo", async () => {
     const { ensureIndexes } = buildApp();
     await ensureIndexes();
+    expect(true).toBe(true);
+  });
+
+  test("backfillDerivedVisibility resolves against a real Mongo (#1136)", async () => {
+    // Smoke: the one-shot backfill is wired and queries Mongo without error
+    // on an empty registry (deeper recompute correctness is unit-tested).
+    const { ensureIndexes, backfillDerivedVisibility } = buildApp();
+    await ensureIndexes();
+    await backfillDerivedVisibility();
     expect(true).toBe(true);
   });
 

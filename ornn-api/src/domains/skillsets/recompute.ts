@@ -107,6 +107,30 @@ export async function recomputeSkillsetVisibility(
 }
 
 /**
+ * One-shot boot backfill (#1136): recompute the derived-visibility cache
+ * for every existing skillset. Idempotent (recompute is a pure function of
+ * the current member set), so it is safe to run on every startup. A single
+ * skillset's failure is logged and skipped — one bad/unresolvable member
+ * set must not abort the whole backfill or block boot.
+ */
+export async function backfillDerivedVisibility(deps: SkillsetRecomputeDeps): Promise<void> {
+  const guids = await deps.skillsetRepo.listAllGuids();
+  let recomputed = 0;
+  for (const guid of guids) {
+    try {
+      const result = await recomputeSkillsetVisibility(guid, deps);
+      if (result) recomputed += 1;
+    } catch (err) {
+      logger.error({ guid, err }, "Skillset derived-visibility backfill failed; skipping");
+    }
+  }
+  logger.info(
+    { total: guids.length, recomputed },
+    "Skillset derived-visibility backfill complete",
+  );
+}
+
+/**
  * Recompute every skillset that references the given skill as a member.
  * Driven reactively by a skill visibility change (privacy flip, permission
  * change, ownership transfer, nyxid-service change, delete). Returns the

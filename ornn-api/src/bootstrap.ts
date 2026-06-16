@@ -782,6 +782,10 @@ export async function bootstrap(
       (await userDirectoryRepo.findByUserIds([userId]))[0] ?? null,
   });
   await skillsets.ensureIndexes();
+  // #1136 — one-shot, idempotent backfill of the derived-visibility cache so
+  // skillsets created before the feature get correct `membersAllPublic` /
+  // `memberVisibilityState` without a manual migration.
+  await skillsets.backfillDerivedVisibility();
 
   // ---- Domain: Skill Generation ----
   const { service: generationService, routes: generationRoutes } =

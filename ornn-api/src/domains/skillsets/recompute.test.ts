@@ -14,6 +14,7 @@ import type { ActorContext } from "../skills/crud/authorize";
 import type { LoadVersion, ResolvedVersion } from "../skills/closure/resolver";
 import type { SkillsetMemberVisibilityState } from "./types";
 import {
+  backfillDerivedVisibility,
   computeDerivedVisibility,
   recomputeForSkill,
   recomputeSkillsetVisibility,
@@ -93,6 +94,7 @@ function makeDeps(opts: {
       ): Promise<void> => {
         writes[guid] = derived;
       },
+      listAllGuids: async (): Promise<string[]> => Object.keys(opts.latestMembers),
     },
     skillsetVersionRepo: {
       findLatestBySkillset: async (guid: string) => {
@@ -153,5 +155,42 @@ describe("recomputeForSkill", () => {
     const affected = await recomputeForSkill("orphan", "skl-orphan", deps);
     expect(affected).toEqual([]);
     expect(Object.keys(writes)).toEqual([]);
+  });
+});
+
+describe("backfillDerivedVisibility", () => {
+  test("recomputes the cache for every existing skillset", async () => {
+    const { deps, writes } = makeDeps({
+      refs: { "pub@1.0": "public", "priv@1.0": "private" },
+      latestMembers: {
+        all_public: ["pub@1.0"],
+        mixed: ["pub@1.0", "priv@1.0"],
+        broken: ["pub@1.0", "gone@1.0"],
+      },
+    });
+    await backfillDerivedVisibility(deps);
+    expect(writes["all_public"]).toEqual({ membersAllPublic: true, memberVisibilityState: "all-public" });
+    expect(writes["mixed"]).toEqual({ membersAllPublic: false, memberVisibilityState: "restricted" });
+    expect(writes["broken"]).toEqual({ membersAllPublic: false, memberVisibilityState: "unresolvable" });
+  });
+
+  test("a single skillset failure is skipped, not fatal", async () => {
+    const { deps, writes } = makeDeps({
+      refs: { "pub@1.0": "public" },
+      latestMembers: { ok: ["pub@1.0"], boom: ["pub@1.0"] },
+    });
+    // Force `boom`'s recompute to throw by making its version lookup reject.
+    const versionRepo = deps.skillsetVersionRepo as unknown as {
+      findLatestBySkillset: (g: string) => Promise<unknown>;
+    };
+    const original = versionRepo.findLatestBySkillset.bind(versionRepo);
+    versionRepo.findLatestBySkillset = async (g: string) => {
+      if (g === "boom") throw new Error("simulated repo failure");
+      return original(g);
+    };
+    await backfillDerivedVisibility(deps);
+    // `ok` still got recomputed despite `boom` blowing up.
+    expect(writes["ok"]).toEqual({ membersAllPublic: true, memberVisibilityState: "all-public" });
+    expect(writes["boom"]).toBeUndefined();
   });
 });

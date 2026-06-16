@@ -16,6 +16,7 @@ import type { SkillService } from "../skills/crud/service";
 import { SkillsetRepository } from "./repository";
 import { SkillsetVersionRepository } from "./skillsetVersionRepository";
 import { SkillsetService } from "./service";
+import { backfillDerivedVisibility } from "./recompute";
 import { createSkillsetRoutes } from "./routes";
 import { SkillsetSearchService } from "./search/service";
 import { createSkillsetSearchRoutes } from "./search/routes";
@@ -26,6 +27,12 @@ export interface SkillsetWiring {
   readonly searchRoutes: Hono<{ Variables: AuthVariables }>;
   /** Ensure the two collections' indexes. Awaited by bootstrap on startup. */
   ensureIndexes(): Promise<void>;
+  /**
+   * One-shot derived-visibility backfill (#1136). Idempotent — recomputes
+   * the `membersAllPublic` / `memberVisibilityState` cache for every
+   * existing skillset. Awaited by bootstrap after `ensureIndexes`.
+   */
+  backfillDerivedVisibility(): Promise<void>;
 }
 
 export function wireSkillsets(deps: {
@@ -57,6 +64,13 @@ export function wireSkillsets(deps: {
     ensureIndexes: async () => {
       await skillsetRepo.ensureIndexes();
       await skillsetVersionRepo.ensureIndexes();
+    },
+    backfillDerivedVisibility: async () => {
+      await backfillDerivedVisibility({
+        skillsetRepo,
+        skillsetVersionRepo,
+        skillService: deps.skillService,
+      });
     },
   };
 }

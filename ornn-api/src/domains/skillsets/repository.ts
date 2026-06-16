@@ -113,6 +113,16 @@ export class SkillsetRepository {
     return mapDoc(doc);
   }
 
+  /**
+   * Every skillset guid (the `_id`). Used by the one-shot derived-visibility
+   * backfill (#1136) to recompute the cache for pre-existing skillsets.
+   * Projection-only, so it stays cheap even at scale.
+   */
+  async listAllGuids(): Promise<string[]> {
+    const rows = await this.collection.find({}).project({ _id: 1 }).toArray();
+    return rows.map((r) => r._id as string);
+  }
+
   async create(data: CreateSkillsetData): Promise<SkillsetDocument> {
     const now = new Date();
     const initialGrants = data.grants ?? [];

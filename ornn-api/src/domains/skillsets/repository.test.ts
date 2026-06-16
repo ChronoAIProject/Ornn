@@ -86,6 +86,16 @@ describe("SkillsetRepository — CRUD", () => {
     expect(byName?.guid).toBe("ss-x");
   });
 
+  test("listAllGuids returns every skillset's guid (#1136 backfill)", async () => {
+    await seed(
+      { _id: "ss-a", name: "a-set" },
+      { _id: "ss-b", name: "b-set" },
+      { _id: "ss-c", name: "c-set" },
+    );
+    const guids = await repo.listAllGuids();
+    expect(guids.sort()).toEqual(["ss-a", "ss-b", "ss-c"]);
+  });
+
   test("create rejects a duplicate name with skillset_name_exists", async () => {
     await repo.create({
       guid: "ss-1",
