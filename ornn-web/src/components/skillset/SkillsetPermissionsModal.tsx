@@ -4,7 +4,7 @@
  * Thin wrapper: the Modal shell + the skillset permissions mutation, around
  * the shared two-tab `PermissionsEditor`. Kept in lock-step with the skill
  * `PermissionsModal` (they now share the editor + selector). This also brings
- * skillsets the read/read-write level support they never had under the old
+ * skillsets the read/write level support they never had under the old
  * single-ladder UI.
  *
  * @module components/skillset/SkillsetPermissionsModal

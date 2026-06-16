@@ -38,7 +38,7 @@ export function canReadSkillset(
 
 /**
  * True when `actor` may UPDATE the skillset's content/metadata (publish a new
- * version) — the READ_WRITE tier (#1123). Delegates to the skill gate.
+ * version) — the WRITE tier (#1123). Delegates to the skill gate.
  */
 export function canWriteSkillset(
   skillset: SkillsetOwnership,

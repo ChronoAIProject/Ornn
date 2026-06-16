@@ -999,8 +999,8 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
         throw AppError.notFound("skill_not_found", `Skill '${guid}' not found`);
       }
       const actor = await buildActorContext(c);
-      // Updating content + metadata is the READ_WRITE tier (#1123): author,
-      // platform admin, or a read_write grantee. Changing `isPrivate` is a
+      // Updating content + metadata is the WRITE tier (#1123): author,
+      // platform admin, or a write grantee. Changing `isPrivate` is a
       // permission change (ADMIN tier) — gated separately below once parsed.
       if (!canWriteSkill(existing, actor)) {
         throw AppError.forbidden(
@@ -1065,7 +1065,7 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
         throw AppError.badRequest("no_update", "No update data provided. Send a ZIP file and/or isPrivate field.");
       }
 
-      // Visibility is an ADMIN-tier change (#1123): a read_write grantee may
+      // Visibility is an ADMIN-tier change (#1123): a write grantee may
       // replace content but must not flip public/private. Enforce only when
       // `isPrivate` is actually being changed so a no-op resend by an editor
       // doesn't 403.
@@ -1160,7 +1160,7 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
 
       const updated = await skillService.getSkill(guid);
 
-      const readWriteGrants = (updated.grants ?? []).filter((g) => g.level === "read_write").length;
+      const writeGrants = (updated.grants ?? []).filter((g) => g.level === "write").length;
       trackActivity(authCtx.userId, authCtx.email, authCtx.displayName, "skill.permissions_changed", {
         skillId: guid,
         skillName: updated.name,
@@ -1168,7 +1168,7 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
         sharedWithUsers: updated.sharedWithUsers.length,
         sharedWithOrgs: updated.sharedWithOrgs.length,
         // #1123 — richer payload: how many grants confer write.
-        readWriteGrants,
+        writeGrants,
       });
 
       // Permissions change can flip eligibility — sync handles both
@@ -1204,7 +1204,7 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
         throw AppError.notFound("skill_not_found", `Skill '${guid}' not found`);
       }
       const actor = await buildActorContext(c);
-      // ADMIN tier — transfer is a danger-zone op, never a read_write grant.
+      // ADMIN tier — transfer is a danger-zone op, never a write grant.
       if (!canManageSkill(existing, actor)) {
         throw AppError.forbidden(
           "forbidden",

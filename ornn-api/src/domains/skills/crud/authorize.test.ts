@@ -161,10 +161,10 @@ describe("canReadSkill (#1123 tiers)", () => {
     expect(canReadSkill(s, actor("stranger"))).toBe(false);
   });
 
-  it("any grant level confers read — read AND read_write grantees can read", () => {
+  it("any grant level confers read — read AND write grantees can read", () => {
     const s = skill("owner", [
       { type: "user", id: "reader", level: "read" },
-      { type: "user", id: "editor", level: "read_write" },
+      { type: "user", id: "editor", level: "write" },
     ]);
     expect(canReadSkill(s, actor("reader"))).toBe(true);
     expect(canReadSkill(s, actor("editor"))).toBe(true);
@@ -189,24 +189,24 @@ describe("canReadSkill (#1123 tiers)", () => {
   });
 });
 
-describe("canWriteSkill (#1123 READ_WRITE tier)", () => {
+describe("canWriteSkill (#1123 WRITE tier)", () => {
   it("author + platform admin may write", () => {
     const s = skill("owner", []);
     expect(canWriteSkill(s, actor("owner"))).toBe(true);
     expect(canWriteSkill(s, actor("x", { admin: true }))).toBe(true);
   });
 
-  it("a read grantee may NOT write; a read_write grantee may", () => {
+  it("a read grantee may NOT write; a write grantee may", () => {
     const s = skill("owner", [
       { type: "user", id: "reader", level: "read" },
-      { type: "user", id: "editor", level: "read_write" },
+      { type: "user", id: "editor", level: "write" },
     ]);
     expect(canWriteSkill(s, actor("reader"))).toBe(false);
     expect(canWriteSkill(s, actor("editor"))).toBe(true);
   });
 
-  it("a read_write org grant lets every member write", () => {
-    const s = skill("owner", [{ type: "org", id: "org-a", level: "read_write" }]);
+  it("a write org grant lets every member write", () => {
+    const s = skill("owner", [{ type: "org", id: "org-a", level: "write" }]);
     expect(canWriteSkill(s, actor("u", { orgs: ["org-a"] }))).toBe(true);
     expect(canWriteSkill(s, actor("u", { orgs: ["org-b"] }))).toBe(false);
   });
@@ -225,8 +225,8 @@ describe("canWriteSkill (#1123 READ_WRITE tier)", () => {
 });
 
 describe("canManageSkill (#1123 ADMIN tier)", () => {
-  it("only author + platform admin administer — a read_write grantee never does", () => {
-    const s = skill("owner", [{ type: "user", id: "editor", level: "read_write" }]);
+  it("only author + platform admin administer — a write grantee never does", () => {
+    const s = skill("owner", [{ type: "user", id: "editor", level: "write" }]);
     expect(canManageSkill(s, actor("owner"))).toBe(true);
     expect(canManageSkill(s, actor("x", { admin: true }))).toBe(true);
     expect(canManageSkill(s, actor("editor"))).toBe(false);

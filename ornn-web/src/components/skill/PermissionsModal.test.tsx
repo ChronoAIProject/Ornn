@@ -107,17 +107,17 @@ describe("PermissionsModal — two-tab Read/Write editor (#1125)", () => {
     fireEvent.click(screen.getByRole("button", { name: /write access/i }));
     fireEvent.click(screen.getByRole("checkbox", { name: "Org One" }));
 
-    // Save → public (isPrivate:false) + a read_write org grant; no read grant
+    // Save → public (isPrivate:false) + a write org grant; no read grant
     // (public makes read grants redundant, so they're dropped).
     fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
     expect(mutateAsync).toHaveBeenCalledWith({
       isPrivate: false,
-      grants: [{ type: "org", id: "org-1", level: "read_write" }],
+      grants: [{ type: "org", id: "org-1", level: "write" }],
     });
   });
 
-  it("seeds the Write tab from an existing read_write grant", () => {
-    renderModal(skill({ grants: [{ type: "org", id: "org-1", level: "read_write" }] }));
+  it("seeds the Write tab from an existing write grant", () => {
+    renderModal(skill({ grants: [{ type: "org", id: "org-1", level: "write" }] }));
     // The Write tab shows a count badge of 1.
     const writeTab = screen.getByRole("button", { name: /write access/i });
     expect(writeTab.textContent).toContain("1");

@@ -211,7 +211,7 @@ export interface SkillsetDocument {
   /** Explicit per-org grants (NyxID org user_ids). */
   sharedWithOrgs: string[];
   /**
-   * Typed access grants (#1123) — canonical read/read-write ACL, mirroring
+   * Typed access grants (#1123) — canonical read/write ACL, mirroring
    * `SkillDocument.grants`. Optional for back-compat; readers fall back to
    * deriving read grants from the legacy lists via `effectiveGrants`.
    */

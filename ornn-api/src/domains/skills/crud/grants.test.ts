@@ -22,7 +22,7 @@ import {
 
 describe("effectiveGrants", () => {
   it("returns the explicit grants array when present", () => {
-    const grants: SkillGrant[] = [{ type: "user", id: "u1", level: "read_write" }];
+    const grants: SkillGrant[] = [{ type: "user", id: "u1", level: "write" }];
     expect(effectiveGrants({ grants })).toBe(grants);
   });
 
@@ -45,7 +45,7 @@ describe("effectiveGrants", () => {
 });
 
 describe("deriveGrantsFromLegacy", () => {
-  it("maps users + orgs to READ grants, never read_write", () => {
+  it("maps users + orgs to READ grants, never write", () => {
     const out = deriveGrantsFromLegacy(["u1", "u2"], ["o1"]);
     expect(out).toEqual([
       { type: "user", id: "u1", level: "read" },
@@ -66,8 +66,8 @@ describe("legacyListsFromGrants (dual-write projection)", () => {
   it("places every grant id in its legacy list regardless of level (read visibility, no escalation)", () => {
     const grants: SkillGrant[] = [
       { type: "user", id: "u1", level: "read" },
-      { type: "user", id: "u2", level: "read_write" },
-      { type: "org", id: "o1", level: "read_write" },
+      { type: "user", id: "u2", level: "write" },
+      { type: "org", id: "o1", level: "write" },
     ];
     expect(legacyListsFromGrants(grants)).toEqual({
       sharedWithUsers: ["u1", "u2"],
@@ -83,29 +83,29 @@ describe("legacyListsFromGrants (dual-write projection)", () => {
 });
 
 describe("normalizeGrants", () => {
-  it("collapses duplicate (type,id) keeping the highest level (read_write wins)", () => {
+  it("collapses duplicate (type,id) keeping the highest level (write wins)", () => {
     expect(
       normalizeGrants([
         { type: "user", id: "u1", level: "read" },
-        { type: "user", id: "u1", level: "read_write" },
+        { type: "user", id: "u1", level: "write" },
       ]),
-    ).toEqual([{ type: "user", id: "u1", level: "read_write" }]);
+    ).toEqual([{ type: "user", id: "u1", level: "write" }]);
   });
 
-  it("does not let a later read downgrade an earlier read_write", () => {
+  it("does not let a later read downgrade an earlier write", () => {
     expect(
       normalizeGrants([
-        { type: "org", id: "o1", level: "read_write" },
+        { type: "org", id: "o1", level: "write" },
         { type: "org", id: "o1", level: "read" },
       ]),
-    ).toEqual([{ type: "org", id: "o1", level: "read_write" }]);
+    ).toEqual([{ type: "org", id: "o1", level: "write" }]);
   });
 
   it("trims ids and drops empties, preserving first-appearance order", () => {
     expect(
       normalizeGrants([
         { type: "user", id: " u2 ", level: "read" },
-        { type: "user", id: "", level: "read_write" },
+        { type: "user", id: "", level: "write" },
         { type: "user", id: "u1", level: "read" },
       ]),
     ).toEqual([
@@ -118,18 +118,18 @@ describe("normalizeGrants", () => {
     expect(
       normalizeGrants([
         { type: "user", id: "x", level: "read" },
-        { type: "org", id: "x", level: "read_write" },
+        { type: "org", id: "x", level: "write" },
       ]),
     ).toEqual([
       { type: "user", id: "x", level: "read" },
-      { type: "org", id: "x", level: "read_write" },
+      { type: "org", id: "x", level: "write" },
     ]);
   });
 });
 
 describe("levelAllowsWrite", () => {
-  it("only read_write permits writing", () => {
-    expect(levelAllowsWrite("read_write")).toBe(true);
+  it("only write permits writing", () => {
+    expect(levelAllowsWrite("write")).toBe(true);
     expect(levelAllowsWrite("read")).toBe(false);
   });
 });
@@ -145,11 +145,11 @@ describe("coerceStoredGrants", () => {
     expect(
       coerceStoredGrants([
         { type: "user", id: " u1 ", level: "read" },
-        { type: "org", id: "o1", level: "read_write" },
+        { type: "org", id: "o1", level: "write" },
       ]),
     ).toEqual([
       { type: "user", id: "u1", level: "read" },
-      { type: "org", id: "o1", level: "read_write" },
+      { type: "org", id: "o1", level: "write" },
     ]);
   });
 
@@ -161,12 +161,24 @@ describe("coerceStoredGrants", () => {
         { type: "user", id: "u1", level: "admin" },
         42,
         null,
-        { type: "user", id: "u2", level: "read_write" },
+        { type: "user", id: "u2", level: "write" },
       ]),
-    ).toEqual([{ type: "user", id: "u2", level: "read_write" }]);
+    ).toEqual([{ type: "user", id: "u2", level: "write" }]);
   });
 
   it("returns an empty array for an empty stored array (explicit no-grants)", () => {
     expect(coerceStoredGrants([])).toEqual([]);
+  });
+
+  it("coerces a stored legacy read_write level → write (#1127, no drop)", () => {
+    expect(
+      coerceStoredGrants([
+        { type: "user", id: "u1", level: "read_write" },
+        { type: "org", id: "o1", level: "read" },
+      ]),
+    ).toEqual([
+      { type: "user", id: "u1", level: "write" },
+      { type: "org", id: "o1", level: "read" },
+    ]);
   });
 });

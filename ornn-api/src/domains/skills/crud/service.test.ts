@@ -478,7 +478,7 @@ describe("SkillService.setSkillPermissions — org-membership gate (#815)", () =
     expect(state.updateCalled).toBe(false);
   });
 
-  it("(e) accepts typed grants directly, including read_write (#1123)", async () => {
+  it("(e) accepts typed grants directly, including write (#1123)", async () => {
     const { service, state } = makePermissionsService(
       makeSkillDoc({ guid: "guid-1", createdBy: "owner-1", isPrivate: true }),
     );
@@ -494,18 +494,18 @@ describe("SkillService.setSkillPermissions — org-membership gate (#815)", () =
       {
         isPrivate: true,
         grants: [
-          { type: "user", id: "editor", level: "read_write" },
-          { type: "org", id: "org-A", level: "read_write" },
+          { type: "user", id: "editor", level: "write" },
+          { type: "org", id: "org-A", level: "write" },
         ],
       },
       actor,
     );
     expect(state.updateCalled).toBe(true);
-    expect(result.grants).toContainEqual({ type: "user", id: "editor", level: "read_write" });
-    expect(result.grants).toContainEqual({ type: "org", id: "org-A", level: "read_write" });
+    expect(result.grants).toContainEqual({ type: "user", id: "editor", level: "write" });
+    expect(result.grants).toContainEqual({ type: "org", id: "org-A", level: "write" });
   });
 
-  it("(f) a read_write org grant still honours the #815 non-member gate (#1123)", async () => {
+  it("(f) a write org grant still honours the #815 non-member gate (#1123)", async () => {
     const { service, state } = makePermissionsService(
       makeSkillDoc({ guid: "guid-1", createdBy: "owner-1", isPrivate: true }),
     );
@@ -520,7 +520,7 @@ describe("SkillService.setSkillPermissions — org-membership gate (#815)", () =
       await service.setSkillPermissions(
         "guid-1",
         "owner-1",
-        { isPrivate: true, grants: [{ type: "org", id: "org-Z", level: "read_write" }] },
+        { isPrivate: true, grants: [{ type: "org", id: "org-Z", level: "write" }] },
         actor,
       );
     } catch (err) {
@@ -543,7 +543,7 @@ describe("SkillService.setSkillPermissions — org-membership gate (#815)", () =
     const result = await service.setSkillPermissions(
       "guid-1",
       "owner-1",
-      { isPrivate: true, grants: [{ type: "user", id: "owner-1", level: "read_write" }] },
+      { isPrivate: true, grants: [{ type: "user", id: "owner-1", level: "write" }] },
       actor,
     );
     // The author holds implicit ADMIN — a self-grant is redundant and dropped.
@@ -604,7 +604,7 @@ describe("SkillService.transferSkillOwnership (#1123)", () => {
         guid: "guid-1",
         createdBy: "owner-1",
         isPrivate: true,
-        grants: [{ type: "org", id: "org-A", level: "read_write" }],
+        grants: [{ type: "org", id: "org-A", level: "write" }],
       }),
     );
     const result = await service.transferSkillOwnership(
@@ -616,7 +616,7 @@ describe("SkillService.transferSkillOwnership (#1123)", () => {
     expect(result.createdBy).toBe("newbie");
     expect(result.createdByEmail).toBe("new@x.io");
     // Existing org grant preserved; prior owner added as read.
-    expect(result.grants).toContainEqual({ type: "org", id: "org-A", level: "read_write" });
+    expect(result.grants).toContainEqual({ type: "org", id: "org-A", level: "write" });
     expect(result.grants).toContainEqual({ type: "user", id: "owner-1", level: "read" });
   });
 
@@ -626,7 +626,7 @@ describe("SkillService.transferSkillOwnership (#1123)", () => {
         guid: "guid-1",
         createdBy: "owner-1",
         isPrivate: true,
-        grants: [{ type: "user", id: "newbie", level: "read_write" }],
+        grants: [{ type: "user", id: "newbie", level: "write" }],
       }),
     );
     const result = await service.transferSkillOwnership(

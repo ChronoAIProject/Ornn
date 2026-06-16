@@ -733,7 +733,7 @@ class TestPermissionGrants:
                 "data": {
                     "skill": _skill_data(
                         isPrivate=True,
-                        grants=[{"type": "user", "id": "bob", "level": "read_write"}],
+                        grants=[{"type": "user", "id": "bob", "level": "write"}],
                     )
                 },
                 "error": None,
@@ -743,15 +743,15 @@ class TestPermissionGrants:
             result = ornn.set_skill_permissions(
                 "sk-1",
                 is_private=True,
-                grants=[SkillGrant(type="user", id="bob", level="read_write")],
+                grants=[SkillGrant(type="user", id="bob", level="write")],
             )
         # The typed grant rides on the wire in canonical shape.
         sent = _json.loads(route.calls.last.request.content)
         assert sent["isPrivate"] is True
-        assert sent["grants"] == [{"type": "user", "id": "bob", "level": "read_write"}]
+        assert sent["grants"] == [{"type": "user", "id": "bob", "level": "write"}]
         # Response `{ skill }` envelope is unwrapped + grants parse back.
         assert isinstance(result, SkillDetail)
-        assert result.grants == [SkillGrant(type="user", id="bob", level="read_write")]
+        assert result.grants == [SkillGrant(type="user", id="bob", level="write")]
         assert route.called
 
     @respx.mock
@@ -800,7 +800,7 @@ class TestPermissionGrants:
                 "data": _skill_data(
                     grants=[
                         {"type": "user", "id": "u1", "level": "read"},
-                        {"type": "org", "id": "o1", "level": "read_write"},
+                        {"type": "org", "id": "o1", "level": "write"},
                     ]
                 ),
                 "error": None,
@@ -810,7 +810,7 @@ class TestPermissionGrants:
             detail = ornn.get("sk-1")
         assert detail.grants == [
             SkillGrant(type="user", id="u1", level="read"),
-            SkillGrant(type="org", id="o1", level="read_write"),
+            SkillGrant(type="org", id="o1", level="write"),
         ]
 
     @respx.mock

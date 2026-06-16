@@ -381,7 +381,7 @@ describe("OrnnClient", () => {
           skill: {
             id: "sk-1",
             isPrivate: false,
-            grants: [{ type: "user", id: "u-2", level: "read_write" }],
+            grants: [{ type: "user", id: "u-2", level: "write" }],
           },
         },
         error: null,
@@ -390,7 +390,7 @@ describe("OrnnClient", () => {
     const client = new OrnnClient({ baseUrl: "https://x", fetch: fetchMock });
     const res = await client.setSkillPermissions("sk-1", {
       isPrivate: false,
-      grants: [{ type: "user", id: "u-2", level: "read_write" }],
+      grants: [{ type: "user", id: "u-2", level: "write" }],
     });
     expect(captured.method).toBe("PUT");
     expect(captured.url).toBe("https://x/api/v1/skills/sk-1/permissions");
@@ -398,10 +398,10 @@ describe("OrnnClient", () => {
     // The typed grant shape (#1123) is sent verbatim on the wire.
     expect(JSON.parse(captured.body)).toEqual({
       isPrivate: false,
-      grants: [{ type: "user", id: "u-2", level: "read_write" }],
+      grants: [{ type: "user", id: "u-2", level: "write" }],
     });
     expect(res.id).toBe("sk-1");
-    expect(res.grants).toEqual([{ type: "user", id: "u-2", level: "read_write" }]);
+    expect(res.grants).toEqual([{ type: "user", id: "u-2", level: "write" }]);
   });
 
   test("setSkillPermissions(): throws OrnnError on validation failure (400)", async () => {
@@ -409,7 +409,7 @@ describe("OrnnClient", () => {
       jsonResponse(400, {
         status: 400,
         code: "validation_error",
-        detail: "grants[0].level must be read|read_write",
+        detail: "grants[0].level must be read|write",
       }),
     );
     const client = new OrnnClient({ baseUrl: "https://x", fetch: fetchMock });

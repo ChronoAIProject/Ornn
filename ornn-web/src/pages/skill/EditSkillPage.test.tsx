@@ -74,6 +74,14 @@ vi.mock("@/hooks/useSkills", () => ({
   },
 }));
 
+// Access tier (#1127). Mutable so tests exercise owner / write-grantee /
+// reader. Mocked here so the page doesn't pull in the real authStore (whose
+// persist middleware needs a storage shim this focused test doesn't set up).
+let accessState = { isOwner: true, isAdmin: false, canWrite: true, canManage: true };
+vi.mock("@/hooks/useSkillAccess", () => ({
+  useSkillAccess: () => accessState,
+}));
+
 const addToast = vi.fn();
 vi.mock("@/stores/toastStore", () => ({
   useToastStore: <T,>(selector: (s: { addToast: typeof addToast }) => T) =>
@@ -117,6 +125,7 @@ function resetState() {
   updateMutateAsync.mockResolvedValue(undefined);
   updatePkgMutateAsync.mockResolvedValue(undefined);
   skillState = { data: { ...PUBLIC_SKILL }, isLoading: false };
+  accessState = { isOwner: true, isAdmin: false, canWrite: true, canManage: true };
 }
 
 /** Build a fake .zip File for the upload-flow tests. */
@@ -299,6 +308,31 @@ describe("EditSkillPage — package upload", () => {
     expect(screen.queryByText("skill.zip")).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: /Upload Package/i }),
+    ).not.toBeInTheDocument();
+  });
+});
+
+describe("EditSkillPage — access tiers (#1127)", () => {
+  beforeEach(resetState);
+  afterEach(() => cleanup());
+
+  it("a write-grantee sees Update Package but NOT the Visibility (admin) toggle", () => {
+    accessState = { isOwner: false, isAdmin: false, canWrite: true, canManage: false };
+    render(<EditSkillPage />);
+    expect(screen.getByText(/Update Package/i)).toBeInTheDocument();
+    expect(screen.queryByText(/^Visibility$/i)).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Make (Public|Private)/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("a read-only viewer sees a read-only notice and no edit controls", () => {
+    accessState = { isOwner: false, isAdmin: false, canWrite: false, canManage: false };
+    render(<EditSkillPage />);
+    expect(screen.getByText(/read-only access/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Update Package/i)).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Make (Public|Private)/i }),
     ).not.toBeInTheDocument();
   });
 });

@@ -177,7 +177,7 @@ export class SkillsetService {
     if (!existing) {
       throw AppError.notFound("skillset_not_found", `Skillset '${guid}' not found`);
     }
-    // Publishing a new version is a content/metadata edit — the READ_WRITE
+    // Publishing a new version is a content/metadata edit — the WRITE
     // tier (#1123). Permissions/transfer/delete remain ADMIN-only below.
     if (!canWriteSkill(existing, actor)) {
       throw AppError.forbidden("forbidden", "You do not have permission to update this skillset");

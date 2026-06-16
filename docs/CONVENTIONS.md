@@ -346,7 +346,7 @@ Endpoint-specific. Rules:
 Format: `ornn:<resource>:<action>`. These are the **request scopes** NyxID
 mints onto an access token — `requirePermission(...)` middleware checks them
 per route. They gate *who may call an endpoint at all*; they are **distinct
-from** the per-object READ / READ_WRITE / ADMIN tier (§5.4), which decides
+from** the per-object READ / WRITE / ADMIN tier (§5.4), which decides
 *what the caller may do to a specific skill/skillset*. A caller needs both:
 the route scope to reach the handler, and the object tier to act on the
 target.
@@ -355,7 +355,7 @@ target.
 |---|---|
 | `ornn:skill:read` | Read skills (respects visibility) |
 | `ornn:skill:create` | Create skills (upload, pull from GitHub) |
-| `ornn:skill:update` | Update / publish / refresh / change permissions / transfer ownership / toggle deprecation / bind NyxID service (+ object ADMIN/READ_WRITE per §5.4) |
+| `ornn:skill:update` | Update / publish / refresh / change permissions / transfer ownership / toggle deprecation / bind NyxID service (+ object ADMIN/WRITE per §5.4) |
 | `ornn:skill:delete` | Delete a skill or a single version (+ object ADMIN per §5.4) |
 | `ornn:skill:build` | Invoke skill generation endpoints (high LLM cost) |
 | `ornn:playground:use` | Invoke playground chat (runs user code) |
@@ -396,11 +396,11 @@ tier decides whether they may act on *this specific* skill/skillset.
 
 | Tier | Gate | Who qualifies | What it grants |
 |---|---|---|---|
-| **READ** | `canReadSkill` | Public skill → anyone. Private → author, platform admin, or any grantee (`read` **or** `read_write`), directly or via a granted org. | View / pull / execute / list versions. |
-| **READ_WRITE** | `canWriteSkill` | Author **OR** platform admin **OR** a `read_write` grantee (direct or via a granted org). | READ, plus update the skill's **content + metadata only** (publish a new version). |
+| **READ** | `canReadSkill` | Public skill → anyone. Private → author, platform admin, or any grantee (`read` **or** `write`), directly or via a granted org. | View / pull / execute / list versions. |
+| **WRITE** | `canWriteSkill` | Author **OR** platform admin **OR** a `write` grantee (direct or via a granted org). | READ, plus update the skill's **content + metadata only** (publish a new version). |
 | **ADMIN** | `canManageSkill` | Author **OR** platform admin **only**. | Change permissions, transfer ownership, delete skill/version, toggle deprecation, manage dist-tags, bind a NyxID service. |
 
-A `read_write` grantee is **never** an admin — the danger-zone operations stay
+A `write` grantee is **never** an admin — the danger-zone operations stay
 with the author (`createdBy`) and platform admins (`ornn:admin:skill`). Org
 grants resolve uniformly: every admin/member of a granted org inherits the
 grant's level. The org-membership gates fail soft on an unresolved NyxID
@@ -416,15 +416,16 @@ skill/skillset detail responses and accepted by the permissions endpoints
 {
   "grants": [
     { "type": "user", "id": "<nyxid-person-user-id>", "level": "read" },
-    { "type": "org",  "id": "<nyxid-org-user-id>",    "level": "read_write" }
+    { "type": "org",  "id": "<nyxid-org-user-id>",    "level": "write" }
   ]
 }
 ```
 
 - `type` — `"user"` (a NyxID person user_id) or `"org"` (a NyxID org user_id).
 - `id` — the principal's NyxID id (1..128 chars).
-- `level` — `"read"` or `"read_write"`. An invalid value is rejected with
-  `invalid_permission_level` (a `validation_error` subcode — see `docs/ERRORS.md`).
+- `level` — `"read"` or `"write"` (a `write` grant implies read). An invalid
+  value is rejected with `invalid_permission_level` (a `validation_error`
+  subcode — see `docs/ERRORS.md`).
 
 The author (`createdBy`) is never represented in `grants` — they hold implicit
 ADMIN. The legacy read-only `sharedWithUsers` / `sharedWithOrgs` arrays are
@@ -440,7 +441,7 @@ POST /v1/skillsets/:id/transfer-ownership    { "newOwnerUserId": "<id>" }
 ```
 
 - **Auth:** ADMIN tier (`canManageSkill`) — author or platform admin only. A
-  `read_write` grantee can never transfer. Rides on the existing
+  `write` grantee can never transfer. Rides on the existing
   `ornn:skill:update` request scope; **no new scope** was added.
 - **Behavior:** immediate, synchronous transfer. The target becomes the new
   owner (`createdBy`); the prior owner is kept as a **READ** grantee (retains
@@ -627,7 +628,7 @@ Per-test teardown is the test's responsibility; shared fixtures live in `tests/f
 - [ ] `X-Request-ID` on every response; `requestId` in every error body
 - [ ] Query params camelCase; arrays as repeated keys; `q` for search
 - [ ] Required request scopes from the catalog declared in OpenAPI `security` (§5.2)
-- [ ] Object-level authz, where the target is an owned resource, gates on the READ / READ_WRITE / ADMIN tier (§5.4) — distinct from the route scope
+- [ ] Object-level authz, where the target is an owned resource, gates on the READ / WRITE / ADMIN tier (§5.4) — distinct from the route scope
 - [ ] Content negotiation for multi-representation resources
 - [ ] SSE events named `<resource>_<event>` snake_case
 - [ ] Deprecation uses RFC 8594 headers

@@ -14,21 +14,21 @@
  *   - PRIVATE skill:
  *     - author (`createdBy === actor.userId`) → yes
  *     - platform admin (`ornn:admin:skill`) → yes
- *     - actor holds ANY grant (read or read_write), directly or via
+ *     - actor holds ANY grant (read or write), directly or via
  *       membership of a granted org → yes
  *     - else → no
  *
- * READ_WRITE — `canWriteSkill` (update content + metadata only):
+ * WRITE — `canWriteSkill` (update content + metadata only):
  *   - author → yes
  *   - platform admin → yes
- *   - actor holds a `read_write` grant, directly or via a granted org → yes
+ *   - actor holds a `write` grant, directly or via a granted org → yes
  *   - else → no
  *
  * ADMIN — `canManageSkill` (change permissions, transfer ownership, delete
  * skill/version, toggle deprecation, manage dist-tags, bind NyxID service):
  *   - author → yes
  *   - platform admin → yes
- *   - else → 403. A `read_write` grantee is deliberately NOT an admin.
+ *   - else → 403. A `write` grantee is deliberately NOT an admin.
  *
  * Org grants resolve uniformly: every admin/member of a granted org inherits
  * the grant's level. The org-membership-based gates fail soft on an
@@ -117,7 +117,7 @@ export async function buildActorContext(
 
 /**
  * Returns true when `actor` is allowed to READ the skill. Any grant level
- * (read or read_write) confers read — a read_write grantee is always also a
+ * (read or write) confers read — a write grantee is always also a
  * reader. Public skills are readable by everyone.
  */
 export function canReadSkill(skill: SkillOwnership, actor: ActorContext): boolean {
@@ -129,22 +129,22 @@ export function canReadSkill(skill: SkillOwnership, actor: ActorContext): boolea
 
 /**
  * Returns true when `actor` may UPDATE the skill's content + metadata — the
- * READ_WRITE tier (#1123). Author + platform admin always qualify; otherwise
- * a `read_write` grant (direct, or via membership of a granted org) is
+ * WRITE tier (#1123). Author + platform admin always qualify; otherwise
+ * a `write` grant (direct, or via membership of a granted org) is
  * required. Deliberately NOT sufficient for admin/danger-zone ops — those
  * gate on `canManageSkill`.
  */
 export function canWriteSkill(skill: SkillOwnership, actor: ActorContext): boolean {
   if (actor.isPlatformAdmin) return true;
   if (skill.createdBy === actor.userId) return true;
-  return actorMatchesGrant(skill, actor, (g) => g.level === "read_write");
+  return actorMatchesGrant(skill, actor, (g) => g.level === "write");
 }
 
 /**
  * Returns true when `actor` may ADMINISTER the skill — change permissions,
  * transfer ownership, delete skill/version, toggle deprecation, manage
  * dist-tags, bind a NyxID service. Author + platform admin only; a
- * read_write grantee can never administer.
+ * write grantee can never administer.
  */
 export function canManageSkill(skill: SkillOwnership, actor: ActorContext): boolean {
   if (actor.isPlatformAdmin) return true;

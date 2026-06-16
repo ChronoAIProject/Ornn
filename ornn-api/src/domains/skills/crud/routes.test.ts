@@ -916,7 +916,7 @@ describe("PUT /skills/:id", () => {
     expect(calls).toEqual(["updateSkill"]);
   });
 
-  test("200 ZIP republish for a read_write grantee — content edit is the write tier (#1123)", async () => {
+  test("200 ZIP republish for a write grantee — content edit is the write tier (#1123)", async () => {
     const calls: string[] = [];
     const app = buildApp({
       userId: "editor",
@@ -926,7 +926,7 @@ describe("PUT /skills/:id", () => {
           skillDoc({
             createdBy: OWNER,
             isPrivate: true,
-            grants: [{ type: "user", id: "editor", level: "read_write" }],
+            grants: [{ type: "user", id: "editor", level: "write" }],
           }),
       },
       service: {
@@ -945,7 +945,7 @@ describe("PUT /skills/:id", () => {
     expect(calls).toEqual(["updateSkill"]);
   });
 
-  test("403 when a read_write grantee tries to flip visibility — that is admin-only (#1123)", async () => {
+  test("403 when a write grantee tries to flip visibility — that is admin-only (#1123)", async () => {
     const app = buildApp({
       userId: "editor",
       permissions: [UPDATE],
@@ -954,7 +954,7 @@ describe("PUT /skills/:id", () => {
           skillDoc({
             createdBy: OWNER,
             isPrivate: true,
-            grants: [{ type: "user", id: "editor", level: "read_write" }],
+            grants: [{ type: "user", id: "editor", level: "write" }],
           }),
       },
     });
