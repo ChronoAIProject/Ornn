@@ -81,3 +81,57 @@ export async function backfillTypedGrants(db: Db): Promise<GrantsMigrationResult
   }
   return result;
 }
+
+/**
+ * Aggregation `$set` stage that renames any grant with the legacy
+ * `read_write` level to `write` (#1127), leaving `read` grants untouched.
+ */
+const RENAME_LEVEL_STAGE = {
+  $set: {
+    grants: {
+      $map: {
+        input: { $ifNull: ["$grants", []] },
+        as: "g",
+        in: {
+          $cond: [
+            { $eq: ["$$g.level", "read_write"] },
+            { $mergeObjects: ["$$g", { level: "write" }] },
+            "$$g",
+          ],
+        },
+      },
+    },
+  },
+} as const;
+
+export interface LevelRenameResult {
+  skillsRenamed: number;
+  skillsetsRenamed: number;
+}
+
+/**
+ * Rename the legacy `read_write` grant level to `write` (#1127) on every
+ * skill / skillset that still carries one. Idempotent — only docs with a
+ * `read_write` grant are matched, so reruns are no-ops. Non-destructive:
+ * `read` grants and all other fields are untouched, and a `write` grant
+ * confers exactly what `read_write` did (write implies read). Runs at boot
+ * after the typed-grants backfill; `coerceStoredGrants` covers any doc not
+ * yet rewritten.
+ */
+export async function renameReadWriteGrantsToWrite(db: Db): Promise<LevelRenameResult> {
+  const counts: Record<string, number> = {};
+  for (const coll of GRANTED_COLLECTIONS) {
+    const res = await db
+      .collection(coll)
+      .updateMany({ "grants.level": "read_write" }, [RENAME_LEVEL_STAGE]);
+    counts[coll] = res.modifiedCount;
+  }
+  const result: LevelRenameResult = {
+    skillsRenamed: counts.skills ?? 0,
+    skillsetsRenamed: counts.skillsets ?? 0,
+  };
+  if (result.skillsRenamed > 0 || result.skillsetsRenamed > 0) {
+    logger.info({ ...result }, "read_write → write grant-level rename complete (#1127)");
+  }
+  return result;
+}
