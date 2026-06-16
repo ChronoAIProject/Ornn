@@ -294,6 +294,20 @@ export interface SkillsetDetailResponse {
   sharedWithOrgs: string[];
   /** Typed access grants (#1123). Always present in responses via `effectiveGrants`. */
   grants?: SkillGrant[] | undefined;
+  /**
+   * Derived (#1136) member-visibility state of THIS version's members.
+   * Drives the read-only visibility badge. The authoritative skillset
+   * visibility — `isPrivate`/`grants` above are inert.
+   */
+  memberVisibilityState: SkillsetMemberVisibilityState;
+  /**
+   * Member refs the CALLER cannot read at THIS version (#1136). Always
+   * empty for a non-owner (they 404 instead of seeing a partial set);
+   * surfaced to the owner/admin so they can repair access (re-grant the
+   * member skill, or publish a version without it). Request-scoped, not
+   * stored.
+   */
+  unreadableMembers: string[];
   createdOn: string;
   updatedOn: string;
 }
@@ -308,6 +322,8 @@ export interface SkillsetSearchItem {
   memberCount: number;
   latestVersion: string;
   isPrivate: boolean;
+  /** Derived (#1136) member-visibility state — drives the badge in lists. */
+  memberVisibilityState: SkillsetMemberVisibilityState;
   createdBy: string;
   createdByEmail?: string | undefined;
   createdByDisplayName?: string | undefined;

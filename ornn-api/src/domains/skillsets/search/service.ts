@@ -86,6 +86,8 @@ function toItem(s: SkillsetDocument): SkillsetSearchItem {
     memberCount: 0,
     latestVersion: s.latestVersion,
     isPrivate: s.isPrivate,
+    // Derived visibility (#1136) — drives the badge in browse/search lists.
+    memberVisibilityState: s.memberVisibilityState ?? "all-public",
     createdBy: s.createdBy,
     createdByEmail: s.createdByEmail,
     createdByDisplayName: s.createdByDisplayName,

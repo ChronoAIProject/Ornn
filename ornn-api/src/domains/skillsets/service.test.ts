@@ -280,6 +280,98 @@ function twoMemberSkills(): { skills: SkillDocument[]; versions: SkillVersionDoc
   };
 }
 
+describe("SkillsetService — getSkillsetForRead (member-derived read gate, #1136)", () => {
+  const STRANGER: ActorContext = {
+    userId: "stranger",
+    memberships: [],
+    isPlatformAdmin: false,
+    membershipsResolved: true,
+  };
+
+  /** pdf-tools (public) + secret-tools (private, owned by other-user). */
+  function mixedMembers(): { skills: SkillDocument[]; versions: SkillVersionDocument[] } {
+    const a = skillDoc({ guid: "g-a", name: "pdf-tools", latestVersion: "1.0", isPrivate: false });
+    const b = skillDoc({
+      guid: "g-b",
+      name: "secret-tools",
+      latestVersion: "1.0",
+      isPrivate: true,
+      createdBy: "other-user",
+    });
+    return {
+      skills: [a, b],
+      versions: [
+        skillVersion({ _id: "g-a@1.0", skillGuid: "g-a", version: "1.0" }),
+        skillVersion({ _id: "g-b@1.0", skillGuid: "g-b", version: "1.0" }),
+      ],
+    };
+  }
+
+  async function seedMixedSkillset() {
+    const { skills, versions } = mixedMembers();
+    const skillService = makeSkillService(skills, versions);
+    const { deps } = makeSkillsetDeps(skillService);
+    const service = new SkillsetService(deps);
+    const created = await service.createSkillset(
+      {
+        name: "mixed-set",
+        description: "d",
+        instructions: "p",
+        kind: "generic",
+        tags: [],
+        members: ["pdf-tools@1.0", "secret-tools@1.0"],
+        version: "1.0",
+      },
+      { userId: "owner-1" },
+    );
+    return { service, guid: created.guid };
+  }
+
+  it("owner sees the detail WITH unreadableMembers listed (for repair)", async () => {
+    // owner-1 owns the skillset but NOT the private member secret-tools, so
+    // the owner can no longer read it — surfaced so they can repair access.
+    const { service } = await seedMixedSkillset();
+    const detail = await service.getSkillsetForRead("mixed-set", OWNER);
+    expect(detail.unreadableMembers).toEqual(["secret-tools@1.0"]);
+    expect(detail.members).toEqual(["pdf-tools@1.0", "secret-tools@1.0"]);
+  });
+
+  it("non-owner who can't read every member gets a flat 404 (no leak)", async () => {
+    const { service } = await seedMixedSkillset();
+    let code = "";
+    try {
+      await service.getSkillsetForRead("mixed-set", STRANGER);
+    } catch (err) {
+      code = (err as AppError).code;
+    }
+    // skillset_not_found — identical to a missing skillset; never reveals
+    // which member is private or that it even exists.
+    expect(code).toBe("skillset_not_found");
+  });
+
+  it("anon caller reading an all-public skillset succeeds with empty unreadableMembers", async () => {
+    const { skills, versions } = twoMemberSkills();
+    const skillService = makeSkillService(skills, versions);
+    const { deps } = makeSkillsetDeps(skillService);
+    const service = new SkillsetService(deps);
+    await service.createSkillset(
+      {
+        name: "open-set",
+        description: "d",
+        instructions: "p",
+        kind: "generic",
+        tags: [],
+        members: ["pdf-tools@1.0", "csv-tools@1.0"],
+        version: "1.0",
+      },
+      { userId: "owner-1" },
+    );
+    const detail = await service.getSkillsetForRead("open-set", ANON);
+    expect(detail.unreadableMembers).toEqual([]);
+    expect(detail.memberVisibilityState).toBe("all-public");
+  });
+});
+
 describe("SkillsetService — derived visibility on create/publish (#1136)", () => {
   it("create with all-public members → all-public", async () => {
     const { skills, versions } = twoMemberSkills();
@@ -846,14 +938,18 @@ describe("SkillsetService — resolveClosure (roots = members)", () => {
     expect(sys.items.map((n) => n.name)).toContain("secret-lib");
   });
 
-  it("404s an anonymous caller on a PRIVATE skillset (entry gate)", async () => {
+  it("anon CAN resolve a skillset whose members are all public (#1136 — no entry gate)", async () => {
+    // Pre-#1136 a skillset carried its own `isPrivate`, and an anon caller
+    // was blocked by a standalone entry gate. That gate is gone: a skillset
+    // is bounded only by its members, so an anon caller resolves it whenever
+    // every member is public — the inert legacy `isPrivate` no longer blocks.
     const { skills, versions } = twoMemberSkills();
     const skillService = makeSkillService(skills, versions);
     const { deps } = makeSkillsetDeps(skillService);
     const service = new SkillsetService(deps);
     await service.createSkillset(
       {
-        name: "secret-set",
+        name: "open-set",
         description: "d",
         instructions: "p",
         kind: "generic",
@@ -862,13 +958,9 @@ describe("SkillsetService — resolveClosure (roots = members)", () => {
         version: "1.0",
       },
       { userId: "owner-1" },
-    ); // private by default
-    let code = "";
-    try {
-      await service.resolveClosure("secret-set", ANON);
-    } catch (err) {
-      code = (err as AppError).code;
-    }
-    expect(code).toBe("skillset_not_found");
+    ); // legacy isPrivate defaults true — but it is inert now
+
+    const closure = await service.resolveClosure("open-set", ANON);
+    expect(closure.items.map((n) => n.name).sort()).toEqual(["csv-tools", "pdf-tools"]);
   });
 });

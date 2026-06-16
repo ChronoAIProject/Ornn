@@ -26,7 +26,6 @@ import { createLogger } from "../../shared/logger";
 import { isReservedVerb } from "../../shared/reservedVerbs";
 import { resolveClosure, type ClosureNode } from "../skills/closure/resolver";
 import {
-  canReadSkill,
   canWriteSkill,
   canManageSkill,
   isMemberOfOrg,
@@ -254,22 +253,46 @@ export class SkillsetService {
   // Read / delete / permissions
   // ==========================================================================
 
-  /** Read a skillset detail by GUID or name (optionally a specific version). */
+  /**
+   * Read a skillset detail by GUID or name (optionally a specific version).
+   * Performs NO read-gating — used by the write paths (create/publish/
+   * transfer) that already authorized the caller, and internally. The
+   * member-derived read gate for public reads is {@link getSkillsetForRead}.
+   */
   async getSkillset(idOrName: string, version?: string): Promise<SkillsetDetailResponse> {
     const skillset = await this.findByIdOrName(idOrName);
-    const resolvedVersion =
-      version === undefined || version.length === 0 ? skillset.latestVersion : version;
-    const versionDoc = await this.skillsetVersionRepo.findBySkillsetAndVersion(
-      skillset.guid,
-      resolvedVersion,
-    );
-    if (!versionDoc) {
-      throw AppError.notFound(
-        "skillset_version_not_found",
-        `Version '${resolvedVersion}' not found for skillset '${skillset.name}'`,
-      );
+    const versionDoc = await this.loadVersionOrThrow(skillset, version);
+    return toDetail(skillset, versionDoc, []);
+  }
+
+  /**
+   * Read a skillset detail with the member-derived read gate (#1136). A
+   * skillset has no owner-set visibility: a caller may read it iff they can
+   * read every member skill at the requested version.
+   *
+   *   - owner / platform admin: ALWAYS see the metadata + members +
+   *     `unreadableMembers` (the members THEY can't read), so they can
+   *     repair access.
+   *   - everyone else: 404 (identical to a missing skillset) the moment any
+   *     member is unreadable — never revealing WHICH member is private.
+   */
+  async getSkillsetForRead(
+    idOrName: string,
+    actor: ActorContext,
+    version?: string,
+  ): Promise<SkillsetDetailResponse> {
+    const skillset = await this.findByIdOrName(idOrName);
+    const versionDoc = await this.loadVersionOrThrow(skillset, version);
+
+    const isOwnerOrAdmin = canManageSkill(skillset, actor);
+    const unreadableMembers = await this.resolveUnreadableMembers(versionDoc.members, actor);
+
+    if (!isOwnerOrAdmin && unreadableMembers.length > 0) {
+      // No leak: a non-owner who can't read every member sees a flat 404,
+      // never which member (or that one even exists).
+      throw AppError.notFound("skillset_not_found", `Skillset '${idOrName}' not found`);
     }
-    return toDetail(skillset, versionDoc);
+    return toDetail(skillset, versionDoc, unreadableMembers);
   }
 
   /** List all published versions, newest first. */
@@ -451,9 +474,10 @@ export class SkillsetService {
     version?: string,
   ): Promise<SkillsetClosureResult> {
     const skillset = await this.findByIdOrName(idOrName);
-    if (!canReadSkill(skillset, actor)) {
-      throw AppError.notFound("skillset_not_found", `Skillset '${idOrName}' not found`);
-    }
+    // No standalone skillset read gate (#1136): the per-member loader below
+    // enforces visibility node-by-node. A member the actor can't read makes
+    // the resolver throw `skill_dependency_not_found` (404, no leak) — the
+    // skillset is bounded by its least-privileged member.
 
     const resolvedVersion =
       version === undefined || version.length === 0 ? skillset.latestVersion : version;
@@ -499,6 +523,47 @@ export class SkillsetService {
     });
   }
 
+  /** Load a skillset's requested (or latest) version doc, or 404. */
+  private async loadVersionOrThrow(
+    skillset: SkillsetDocument,
+    version?: string,
+  ): Promise<SkillsetVersionDocument> {
+    const resolvedVersion =
+      version === undefined || version.length === 0 ? skillset.latestVersion : version;
+    const versionDoc = await this.skillsetVersionRepo.findBySkillsetAndVersion(
+      skillset.guid,
+      resolvedVersion,
+    );
+    if (!versionDoc) {
+      throw AppError.notFound(
+        "skillset_version_not_found",
+        `Version '${resolvedVersion}' not found for skillset '${skillset.name}'`,
+      );
+    }
+    return versionDoc;
+  }
+
+  /**
+   * The direct member refs `actor` cannot read (#1136). Each ref is resolved
+   * under the actor via the shared loader — `null` means unreadable (the
+   * `canReadSkill` gate) OR no longer resolvable (deleted skill/version),
+   * both of which the owner needs surfaced to repair. Single-sourced with
+   * the closure walk's per-node gate, so the read gate can never drift from
+   * actual usability.
+   */
+  private async resolveUnreadableMembers(
+    members: string[],
+    actor: ActorContext,
+  ): Promise<string[]> {
+    const load = this.skillService.createVersionLoader(actor);
+    const unreadable: string[] = [];
+    for (const ref of members) {
+      const node = await load(ref);
+      if (!node) unreadable.push(ref);
+    }
+    return unreadable;
+  }
+
   private async findByIdOrName(idOrName: string): Promise<SkillsetDocument> {
     let skillset = await this.skillsetRepo.findByGuid(idOrName);
     if (!skillset) {
@@ -540,6 +605,7 @@ export class SkillsetService {
 function toDetail(
   skillset: SkillsetDocument,
   versionDoc: SkillsetVersionDocument,
+  unreadableMembers: string[],
 ): SkillsetDetailResponse {
   return {
     guid: skillset.guid,
@@ -558,8 +624,12 @@ function toDetail(
     createdByDisplayName: skillset.createdByDisplayName,
     sharedWithUsers: skillset.sharedWithUsers,
     sharedWithOrgs: skillset.sharedWithOrgs,
-    // Canonical typed ACL (#1123) — identical shape regardless of migration.
+    // Inert legacy ACL (#1123/#1136) — kept for back-compat; visibility is
+    // now derived from members, surfaced via `memberVisibilityState`.
     grants: effectiveGrants(skillset),
+    // Derived visibility (#1136) — the authoritative signal for the badge.
+    memberVisibilityState: skillset.memberVisibilityState ?? "all-public",
+    unreadableMembers,
     createdOn:
       skillset.createdOn instanceof Date ? skillset.createdOn.toISOString() : String(skillset.createdOn),
     updatedOn:
