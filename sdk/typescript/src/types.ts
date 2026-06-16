@@ -11,6 +11,27 @@
 export type Visibility = "public" | "private";
 export type SearchScope = "public" | "private" | "mine" | "mixed" | "shared-with-me";
 
+/**
+ * Access level a grant confers (#1123). `read` allows pull/execute;
+ * `write` additionally allows publishing new versions / editing.
+ */
+export type SkillPermissionLevel = "read" | "write";
+
+/**
+ * One typed ACL entry (#1123) — the canonical sharing primitive for
+ * skills and skillsets. Grants a single user or org a specific access
+ * level. Supersedes the legacy `sharedWith*` arrays (which the server
+ * still accepts, mapping each entry to a `read`-level grant).
+ */
+export interface SkillGrant {
+  /** Whether the grant targets an individual user or a whole org. */
+  readonly type: "user" | "org";
+  /** The user or org id the grant applies to. */
+  readonly id: string;
+  /** The access level conferred. */
+  readonly level: SkillPermissionLevel;
+}
+
 /** Minimal skill summary as returned by search results. */
 export interface SkillSummary {
   readonly id: string;
@@ -30,6 +51,8 @@ export interface SkillDetail extends SkillSummary {
   readonly storageKey?: string;
   readonly sharedWithUsers?: readonly string[];
   readonly sharedWithOrgs?: readonly string[];
+  /** Canonical typed ACL (#1123). Present on detail reads post-#1123. */
+  readonly grants?: readonly SkillGrant[];
 }
 
 export interface SkillVersionEntry {
@@ -147,6 +170,8 @@ export interface SkillsetDetail {
   readonly createdBy: string;
   readonly sharedWithUsers?: readonly string[];
   readonly sharedWithOrgs?: readonly string[];
+  /** Canonical typed ACL (#1123). Present on detail reads post-#1123. */
+  readonly grants?: readonly SkillGrant[];
   readonly createdOn: string;
   readonly updatedOn: string;
 }
@@ -214,12 +239,28 @@ export interface SkillsetClosureResult {
   readonly items: readonly ClosureNode[];
 }
 
-/** Payload for `client.setSkillsetPermissions(id, ...)`. */
-export interface SkillsetPermissionsInput {
+/**
+ * Payload for the permissions setters (#1123). Shared by skills and
+ * skillsets — `PUT /skills/:id/permissions` and
+ * `PUT /skillsets/:id/permissions` take the identical body.
+ *
+ * `grants` is the canonical ACL. The legacy `sharedWith*` arrays are
+ * still accepted by the server and map to `read`-level grants; prefer
+ * `grants` for new code.
+ */
+export interface PermissionsInput {
   readonly isPrivate: boolean;
+  /** Canonical typed ACL (#1123) — preferred over the `sharedWith*` arrays. */
+  readonly grants?: readonly SkillGrant[];
   readonly sharedWithUsers?: readonly string[];
   readonly sharedWithOrgs?: readonly string[];
 }
+
+/** Payload for `client.setSkillPermissions(id, ...)` (#1123). */
+export type SkillPermissionsInput = PermissionsInput;
+
+/** Payload for `client.setSkillsetPermissions(id, ...)`. */
+export type SkillsetPermissionsInput = PermissionsInput;
 
 export interface SkillsetSearchParams {
   /** Filter by kind (e.g. `consensus-supported`). */

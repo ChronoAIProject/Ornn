@@ -27,6 +27,7 @@ import { isReservedVerb } from "../../shared/reservedVerbs";
 import { resolveClosure, type ClosureNode } from "../skills/closure/resolver";
 import {
   canReadSkill,
+  canWriteSkill,
   canManageSkill,
   isMemberOfOrg,
   SYSTEM_ACTOR,
@@ -34,6 +35,12 @@ import {
 } from "../skills/crud/authorize";
 import type { SkillService } from "../skills/crud/service";
 import { isGreater, parseVersion } from "../skills/crud/version";
+import {
+  effectiveGrants,
+  normalizeGrants,
+  resolvePermissionGrants,
+  type PermissionsPayload,
+} from "../skills/crud/grants";
 import type { SkillsetRepository } from "./repository";
 import type { SkillsetVersionRepository } from "./skillsetVersionRepository";
 import type {
@@ -66,17 +73,29 @@ export interface SkillsetServiceDeps {
   skillsetVersionRepo: SkillsetVersionRepository;
   /** Injected to reuse the member-ref loader + closure resolution (#968). */
   skillService: SkillService;
+  /**
+   * Resolve a userId to its directory identity (#1123). Used by ownership
+   * transfer to validate the target is a known Ornn user. When unset,
+   * transfer rejects every target as `invalid_transfer_target`.
+   */
+  resolveUser?: (
+    userId: string,
+  ) => Promise<{ userId: string; email: string; displayName: string } | null>;
 }
 
 export class SkillsetService {
   private readonly skillsetRepo: SkillsetRepository;
   private readonly skillsetVersionRepo: SkillsetVersionRepository;
   private readonly skillService: SkillService;
+  private readonly resolveUser?:
+    | ((userId: string) => Promise<{ userId: string; email: string; displayName: string } | null>)
+    | undefined;
 
   constructor(deps: SkillsetServiceDeps) {
     this.skillsetRepo = deps.skillsetRepo;
     this.skillsetVersionRepo = deps.skillsetVersionRepo;
     this.skillService = deps.skillService;
+    this.resolveUser = deps.resolveUser;
   }
 
   // ==========================================================================
@@ -158,8 +177,10 @@ export class SkillsetService {
     if (!existing) {
       throw AppError.notFound("skillset_not_found", `Skillset '${guid}' not found`);
     }
-    if (!canManageSkill(existing, actor)) {
-      throw AppError.forbidden("forbidden", "You do not have permission to manage this skillset");
+    // Publishing a new version is a content/metadata edit — the WRITE
+    // tier (#1123). Permissions/transfer/delete remain ADMIN-only below.
+    if (!canWriteSkill(existing, actor)) {
+      throw AppError.forbidden("forbidden", "You do not have permission to update this skillset");
     }
 
     const parsed = parseVersion(input.version);
@@ -287,7 +308,9 @@ export class SkillsetService {
    */
   async setPermissions(
     guid: string,
-    permissions: { isPrivate: boolean; sharedWithUsers: string[]; sharedWithOrgs: string[] },
+    // Accept typed `grants` or the legacy lists (back-compat); both resolve
+    // to the same normalized grants (#1123). Mirrors the skills service.
+    permissions: { isPrivate: boolean } & PermissionsPayload,
     actor: ActorContext,
   ): Promise<SkillsetDetailResponse> {
     const existing = await this.skillsetRepo.findByGuid(guid);
@@ -298,20 +321,20 @@ export class SkillsetService {
       throw AppError.forbidden("forbidden", "You do not have permission to manage this skillset");
     }
 
-    const sharedWithUsers = Array.from(
-      new Set(permissions.sharedWithUsers.filter((id) => id && id !== existing.createdBy)),
+    const grants = resolvePermissionGrants(permissions).filter(
+      (g) => !(g.type === "user" && g.id === existing.createdBy),
     );
-    const sharedWithOrgs = Array.from(new Set(permissions.sharedWithOrgs.filter((id) => !!id)));
+    const orgGrantIds = grants.filter((g) => g.type === "org").map((g) => g.id);
 
     if (!actor.isPlatformAdmin) {
-      if (sharedWithOrgs.length > 0 && !actor.membershipsResolved) {
+      if (orgGrantIds.length > 0 && !actor.membershipsResolved) {
         logger.warn({ guid }, "Org membership unresolved; cannot validate share into orgs");
         throw AppError.serviceUnavailable(
           "org_membership_unavailable",
           "Could not verify your organization memberships right now. Retry shortly.",
         );
       }
-      const nonMember = sharedWithOrgs.filter((orgId) => !isMemberOfOrg(actor, orgId));
+      const nonMember = orgGrantIds.filter((orgId) => !isMemberOfOrg(actor, orgId));
       if (nonMember.length > 0) {
         logger.warn({ guid, nonMember }, "Rejected skillset share into non-member org(s)");
         throw AppError.forbidden(
@@ -323,11 +346,69 @@ export class SkillsetService {
 
     await this.skillsetRepo.update(guid, {
       isPrivate: permissions.isPrivate,
-      sharedWithUsers,
-      sharedWithOrgs,
+      grants,
       updatedBy: actor.userId,
     });
     logger.info({ guid, isPrivate: permissions.isPrivate }, "Skillset permissions changed");
+    return this.getSkillset(guid);
+  }
+
+  /**
+   * Transfer skillset ownership to another user (#1123). Mirrors
+   * `SkillService.transferSkillOwnership`, but — because the skillset routes
+   * delegate authorization to the service — this method owns the full flow:
+   * ADMIN gate (`canManageSkill`), no-op rejection (`ownership_conflict`),
+   * target validation against the directory (`invalid_transfer_target`,
+   * resolved internally so a non-owner can't enumerate users), then the
+   * mutation (reassign `createdBy`, refresh labels, keep the prior owner as
+   * a READ grantee, drop the new owner from any prior grant).
+   */
+  async transferOwnership(
+    guid: string,
+    newOwnerUserId: string,
+    actor: ActorContext,
+  ): Promise<SkillsetDetailResponse> {
+    const existing = await this.skillsetRepo.findByGuid(guid);
+    if (!existing) {
+      throw AppError.notFound("skillset_not_found", `Skillset '${guid}' not found`);
+    }
+    if (!canManageSkill(existing, actor)) {
+      throw AppError.forbidden(
+        "forbidden",
+        "Only the skillset owner or a platform admin can transfer ownership",
+      );
+    }
+    if (newOwnerUserId === existing.createdBy) {
+      throw AppError.conflict("ownership_conflict", "This user already owns the skillset");
+    }
+
+    const target = this.resolveUser ? await this.resolveUser(newOwnerUserId) : null;
+    if (!target) {
+      throw AppError.badRequest(
+        "invalid_transfer_target",
+        "Transfer target is not a known Ornn user. They must have signed in to Ornn at least once.",
+      );
+    }
+
+    const priorOwner = existing.createdBy;
+    const grants = normalizeGrants([
+      ...effectiveGrants(existing).filter(
+        (g) => !(g.type === "user" && g.id === target.userId),
+      ),
+      { type: "user", id: priorOwner, level: "read" },
+    ]);
+
+    await this.skillsetRepo.transferOwnership(guid, {
+      newOwnerId: target.userId,
+      newOwnerEmail: target.email,
+      newOwnerDisplayName: target.displayName,
+      grants,
+      updatedBy: actor.userId,
+    });
+    logger.info(
+      { guid, priorOwner, newOwnerId: target.userId, by: actor.userId },
+      "Skillset ownership transferred",
+    );
     return this.getSkillset(guid);
   }
 
@@ -453,6 +534,8 @@ function toDetail(
     createdByDisplayName: skillset.createdByDisplayName,
     sharedWithUsers: skillset.sharedWithUsers,
     sharedWithOrgs: skillset.sharedWithOrgs,
+    // Canonical typed ACL (#1123) — identical shape regardless of migration.
+    grants: effectiveGrants(skillset),
     createdOn:
       skillset.createdOn instanceof Date ? skillset.createdOn.toISOString() : String(skillset.createdOn),
     updatedOn:

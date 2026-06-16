@@ -364,6 +364,99 @@ describe("OrnnClient", () => {
     expect(capturedMethod).toBe("DELETE");
     expect(capturedUrl).toBe("https://x/api/v1/skills/abc");
   });
+
+  // -- Permissions + ownership (#1123) --
+
+  test("setSkillPermissions(): PUTs grants ACL and unwraps the { skill } envelope", async () => {
+    let captured = { method: "", url: "", body: "", ct: "" };
+    const fetchMock = mockFetch((url, init) => {
+      captured = {
+        method: init.method ?? "",
+        url,
+        body: init.body as string,
+        ct: (init.headers as Record<string, string>)["Content-Type"] ?? "",
+      };
+      return jsonResponse(200, {
+        data: {
+          skill: {
+            id: "sk-1",
+            isPrivate: false,
+            grants: [{ type: "user", id: "u-2", level: "write" }],
+          },
+        },
+        error: null,
+      });
+    });
+    const client = new OrnnClient({ baseUrl: "https://x", fetch: fetchMock });
+    const res = await client.setSkillPermissions("sk-1", {
+      isPrivate: false,
+      grants: [{ type: "user", id: "u-2", level: "write" }],
+    });
+    expect(captured.method).toBe("PUT");
+    expect(captured.url).toBe("https://x/api/v1/skills/sk-1/permissions");
+    expect(captured.ct).toBe("application/json");
+    // The typed grant shape (#1123) is sent verbatim on the wire.
+    expect(JSON.parse(captured.body)).toEqual({
+      isPrivate: false,
+      grants: [{ type: "user", id: "u-2", level: "write" }],
+    });
+    expect(res.id).toBe("sk-1");
+    expect(res.grants).toEqual([{ type: "user", id: "u-2", level: "write" }]);
+  });
+
+  test("setSkillPermissions(): throws OrnnError on validation failure (400)", async () => {
+    const fetchMock = mockFetch(() =>
+      jsonResponse(400, {
+        status: 400,
+        code: "validation_error",
+        detail: "grants[0].level must be read|write",
+      }),
+    );
+    const client = new OrnnClient({ baseUrl: "https://x", fetch: fetchMock });
+    const err = (await client
+      .setSkillPermissions("sk-1", {
+        isPrivate: true,
+        grants: [{ type: "user", id: "u-2", level: "read" }],
+      })
+      .catch((e) => e)) as OrnnError;
+    expect(err).toBeInstanceOf(OrnnError);
+    expect(err.status).toBe(400);
+    expect(err.code).toBe("validation_error");
+  });
+
+  test("transferSkillOwnership(): POSTs newOwnerUserId and unwraps { skill }", async () => {
+    let captured = { method: "", url: "", body: "" };
+    const fetchMock = mockFetch((url, init) => {
+      captured = { method: init.method ?? "", url, body: init.body as string };
+      return jsonResponse(200, {
+        data: { skill: { id: "sk-1", createdBy: "u-2" } },
+        error: null,
+      });
+    });
+    const client = new OrnnClient({ baseUrl: "https://x", fetch: fetchMock });
+    const res = await client.transferSkillOwnership("sk-1", "u-2");
+    expect(captured.method).toBe("POST");
+    expect(captured.url).toBe("https://x/api/v1/skills/sk-1/transfer-ownership");
+    expect(JSON.parse(captured.body)).toEqual({ newOwnerUserId: "u-2" });
+    expect(res.createdBy).toBe("u-2");
+  });
+
+  test("transferSkillOwnership(): throws OrnnError on 403", async () => {
+    const fetchMock = mockFetch(() =>
+      jsonResponse(403, {
+        status: 403,
+        code: "permission_denied",
+        detail: "only the owner can transfer",
+      }),
+    );
+    const client = new OrnnClient({ baseUrl: "https://x", fetch: fetchMock });
+    const err = (await client
+      .transferSkillOwnership("sk-1", "u-2")
+      .catch((e) => e)) as OrnnError;
+    expect(err).toBeInstanceOf(OrnnError);
+    expect(err.status).toBe(403);
+    expect(err.code).toBe("permission_denied");
+  });
 });
 
 // ======================================================================
@@ -451,6 +544,67 @@ describe("OrnnClient — skillsets", () => {
     const res = await client.setSkillsetPermissions("ss-1", { isPrivate: false });
     expect(res.guid).toBe("ss-1");
     expect(res.isPrivate).toBe(false);
+  });
+
+  test("setSkillsetPermissions(): sends the typed grants ACL on the wire (#1123)", async () => {
+    let captured = { url: "", body: "" };
+    const fetchMock = mockFetch((url, init) => {
+      captured = { url, body: init.body as string };
+      return jsonResponse(200, {
+        data: {
+          skillset: {
+            guid: "ss-1",
+            isPrivate: false,
+            grants: [{ type: "org", id: "o-9", level: "read" }],
+          },
+        },
+        error: null,
+      });
+    });
+    const client = new OrnnClient({ baseUrl: "https://x", fetch: fetchMock });
+    const res = await client.setSkillsetPermissions("ss-1", {
+      isPrivate: false,
+      grants: [{ type: "org", id: "o-9", level: "read" }],
+    });
+    expect(captured.url).toBe("https://x/api/v1/skillsets/ss-1/permissions");
+    expect(JSON.parse(captured.body).grants).toEqual([
+      { type: "org", id: "o-9", level: "read" },
+    ]);
+    expect(res.grants).toEqual([{ type: "org", id: "o-9", level: "read" }]);
+  });
+
+  test("transferSkillsetOwnership(): POSTs newOwnerUserId and unwraps { skillset }", async () => {
+    let captured = { method: "", url: "", body: "" };
+    const fetchMock = mockFetch((url, init) => {
+      captured = { method: init.method ?? "", url, body: init.body as string };
+      return jsonResponse(200, {
+        data: { skillset: { guid: "ss-1", createdBy: "u-2" } },
+        error: null,
+      });
+    });
+    const client = new OrnnClient({ baseUrl: "https://x", fetch: fetchMock });
+    const res = await client.transferSkillsetOwnership("ss-1", "u-2");
+    expect(captured.method).toBe("POST");
+    expect(captured.url).toBe("https://x/api/v1/skillsets/ss-1/transfer-ownership");
+    expect(JSON.parse(captured.body)).toEqual({ newOwnerUserId: "u-2" });
+    expect(res.createdBy).toBe("u-2");
+  });
+
+  test("transferSkillsetOwnership(): throws OrnnError on 403", async () => {
+    const fetchMock = mockFetch(() =>
+      jsonResponse(403, {
+        status: 403,
+        code: "permission_denied",
+        detail: "only the owner can transfer",
+      }),
+    );
+    const client = new OrnnClient({ baseUrl: "https://x", fetch: fetchMock });
+    const err = (await client
+      .transferSkillsetOwnership("ss-1", "u-2")
+      .catch((e) => e)) as OrnnError;
+    expect(err).toBeInstanceOf(OrnnError);
+    expect(err.status).toBe(403);
+    expect(err.code).toBe("permission_denied");
   });
 
   test("deleteSkillset(): fires DELETE to /skillsets/:id", async () => {

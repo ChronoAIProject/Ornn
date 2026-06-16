@@ -20,6 +20,40 @@ SearchMode = Literal["keyword", "semantic", "hybrid"]
 SystemFilter = Literal["any", "only", "exclude"]
 SkillsetKind = Literal["generic", "consensus-supported"]
 
+# Access level a grant confers (#1123). `read` allows pull/execute;
+# `write` additionally allows publishing new versions / editing (and implies read).
+SkillPermissionLevel = Literal["read", "write"]
+GrantTarget = Literal["user", "org"]
+
+
+@dataclass
+class SkillGrant:
+    """One typed ACL entry (#1123) — the canonical sharing primitive for
+    skills and skillsets.
+
+    Grants a single user or org a specific access level. Supersedes the
+    legacy ``sharedWith*`` arrays (which the server still accepts, mapping
+    each entry to a ``read``-level grant).
+    """
+
+    # Whether the grant targets an individual user or a whole org.
+    type: GrantTarget
+    # The user or org id the grant applies to.
+    id: str
+    # The access level conferred.
+    level: SkillPermissionLevel
+
+    @classmethod
+    def from_dict(cls, raw: dict[str, Any]) -> SkillGrant:
+        return cls(
+            type=raw["type"],
+            id=raw["id"],
+            level=raw.get("level", "read"),
+        )
+
+    def to_json(self) -> dict[str, Any]:
+        return {"type": self.type, "id": self.id, "level": self.level}
+
 
 @dataclass
 class SkillSummary:
@@ -70,6 +104,9 @@ class SkillDetail(SkillSummary):
     storage_key: str | None = None
     shared_with_users: list[str] = field(default_factory=list)
     shared_with_orgs: list[str] = field(default_factory=list)
+    # Canonical typed ACL (#1123). Present on detail reads post-#1123;
+    # absent on pre-#1123 API responses (left as an empty list).
+    grants: list[SkillGrant] = field(default_factory=list)
 
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> SkillDetail:
@@ -77,7 +114,7 @@ class SkillDetail(SkillSummary):
         base.pop("_extra")
         # `ownerId` was removed from the wire in #581 — tolerate it
         # showing up on old API responses (treat as unknown extra).
-        known_extra = {"storageKey", "sharedWithUsers", "sharedWithOrgs"}
+        known_extra = {"storageKey", "sharedWithUsers", "sharedWithOrgs", "grants"}
         summary_known = {
             "id",
             "name",
@@ -100,6 +137,7 @@ class SkillDetail(SkillSummary):
             storage_key=raw.get("storageKey"),
             shared_with_users=list(raw.get("sharedWithUsers") or []),
             shared_with_orgs=list(raw.get("sharedWithOrgs") or []),
+            grants=[SkillGrant.from_dict(g) for g in raw.get("grants") or []],
             _extra=extra,
         )
 
@@ -234,6 +272,9 @@ class SkillsetDetail:
     members: list[str] = field(default_factory=list)
     shared_with_users: list[str] = field(default_factory=list)
     shared_with_orgs: list[str] = field(default_factory=list)
+    # Canonical typed ACL (#1123). Present on detail reads post-#1123;
+    # absent on pre-#1123 API responses (left as an empty list).
+    grants: list[SkillGrant] = field(default_factory=list)
     created_on: str = ""
     updated_on: str = ""
 
@@ -253,6 +294,7 @@ class SkillsetDetail:
             members=list(raw.get("members") or []),
             shared_with_users=list(raw.get("sharedWithUsers") or []),
             shared_with_orgs=list(raw.get("sharedWithOrgs") or []),
+            grants=[SkillGrant.from_dict(g) for g in raw.get("grants") or []],
             created_on=raw.get("createdOn", ""),
             updated_on=raw.get("updatedOn", ""),
         )

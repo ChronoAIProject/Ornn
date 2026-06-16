@@ -9,6 +9,7 @@ from ornn_sdk import (
     OrnnClient,
     OrnnError,
     SkillDetail,
+    SkillGrant,
     SkillSearchResult,
     UpdateSkillMetadata,
 )
@@ -607,6 +608,22 @@ class TestSkillsets:
         assert result.is_private is False
 
     @respx.mock
+    def test_set_skillset_permissions_omits_grants_when_not_passed(self) -> None:
+        # Pre-#1123 behaviour: no `grants` key on the wire so the server
+        # falls back to the legacy lists.
+        import json as _json
+
+        route = respx.put(f"{BASE}/api/v1/skillsets/ss-1/permissions").respond(
+            200,
+            json={"data": {"skillset": _skillset_data(isPrivate=True)}, "error": None},
+        )
+        with make_client() as ornn:
+            ornn.set_skillset_permissions("ss-1", is_private=True, shared_with_users=["alice"])
+        sent = _json.loads(route.calls.last.request.content)
+        assert "grants" not in sent
+        assert sent["sharedWithUsers"] == ["alice"]
+
+    @respx.mock
     def test_delete_skillset_fires_delete(self) -> None:
         route = respx.delete(f"{BASE}/api/v1/skillsets/ss-1").respond(
             200, json={"data": {"success": True}, "error": None}
@@ -687,3 +704,176 @@ class TestSkillsets:
         assert params["scope"] == "public"
         assert result.items[0].kind == "consensus-supported"
         assert result.items[0].member_count == 2
+
+
+def _skill_data(**overrides: object) -> dict[str, object]:
+    base: dict[str, object] = {
+        "id": "sk-1",
+        "name": "pdf-extract",
+        "description": "Extract pdf text",
+        "isPrivate": True,
+        "createdBy": "owner-1",
+        "createdOn": "2026-01-01T00:00:00Z",
+        "latestVersion": "1.0",
+    }
+    base.update(overrides)
+    return base
+
+
+class TestPermissionGrants:
+    """Typed ACL grants on skills + skillsets (#1123)."""
+
+    @respx.mock
+    def test_set_skill_permissions_sends_grants_and_unwraps_skill(self) -> None:
+        import json as _json
+
+        route = respx.put(f"{BASE}/api/v1/skills/sk-1/permissions").respond(
+            200,
+            json={
+                "data": {
+                    "skill": _skill_data(
+                        isPrivate=True,
+                        grants=[{"type": "user", "id": "bob", "level": "write"}],
+                    )
+                },
+                "error": None,
+            },
+        )
+        with make_client() as ornn:
+            result = ornn.set_skill_permissions(
+                "sk-1",
+                is_private=True,
+                grants=[SkillGrant(type="user", id="bob", level="write")],
+            )
+        # The typed grant rides on the wire in canonical shape.
+        sent = _json.loads(route.calls.last.request.content)
+        assert sent["isPrivate"] is True
+        assert sent["grants"] == [{"type": "user", "id": "bob", "level": "write"}]
+        # Response `{ skill }` envelope is unwrapped + grants parse back.
+        assert isinstance(result, SkillDetail)
+        assert result.grants == [SkillGrant(type="user", id="bob", level="write")]
+        assert route.called
+
+    @respx.mock
+    def test_set_skill_permissions_omits_grants_when_not_passed(self) -> None:
+        import json as _json
+
+        route = respx.put(f"{BASE}/api/v1/skills/sk-1/permissions").respond(
+            200, json={"data": {"skill": _skill_data()}, "error": None}
+        )
+        with make_client() as ornn:
+            ornn.set_skill_permissions("sk-1", is_private=False, shared_with_orgs=["acme"])
+        sent = _json.loads(route.calls.last.request.content)
+        assert "grants" not in sent
+        assert sent["sharedWithOrgs"] == ["acme"]
+
+    @respx.mock
+    def test_set_skillset_permissions_sends_grants(self) -> None:
+        import json as _json
+
+        route = respx.put(f"{BASE}/api/v1/skillsets/ss-1/permissions").respond(
+            200,
+            json={
+                "data": {
+                    "skillset": _skillset_data(
+                        grants=[{"type": "org", "id": "acme", "level": "read"}]
+                    )
+                },
+                "error": None,
+            },
+        )
+        with make_client() as ornn:
+            result = ornn.set_skillset_permissions(
+                "ss-1",
+                is_private=True,
+                grants=[SkillGrant(type="org", id="acme", level="read")],
+            )
+        sent = _json.loads(route.calls.last.request.content)
+        assert sent["grants"] == [{"type": "org", "id": "acme", "level": "read"}]
+        assert result.grants == [SkillGrant(type="org", id="acme", level="read")]
+
+    @respx.mock
+    def test_skill_detail_parses_grants(self) -> None:
+        respx.get(f"{BASE}/api/v1/skills/sk-1").respond(
+            200,
+            json={
+                "data": _skill_data(
+                    grants=[
+                        {"type": "user", "id": "u1", "level": "read"},
+                        {"type": "org", "id": "o1", "level": "write"},
+                    ]
+                ),
+                "error": None,
+            },
+        )
+        with make_client() as ornn:
+            detail = ornn.get("sk-1")
+        assert detail.grants == [
+            SkillGrant(type="user", id="u1", level="read"),
+            SkillGrant(type="org", id="o1", level="write"),
+        ]
+
+    @respx.mock
+    def test_skill_detail_defaults_grants_empty_when_absent(self) -> None:
+        # Pre-#1123 API response carries no `grants` key.
+        respx.get(f"{BASE}/api/v1/skills/sk-1").respond(
+            200, json={"data": _skill_data(), "error": None}
+        )
+        with make_client() as ornn:
+            detail = ornn.get("sk-1")
+        assert detail.grants == []
+
+
+class TestTransferOwnership:
+    """Ownership transfer for skills + skillsets (#1123)."""
+
+    @respx.mock
+    def test_transfer_skill_ownership_posts_new_owner_and_unwraps(self) -> None:
+        import json as _json
+
+        route = respx.post(f"{BASE}/api/v1/skills/sk-1/transfer-ownership").respond(
+            200,
+            json={"data": {"skill": _skill_data(createdBy="alice")}, "error": None},
+        )
+        with make_client() as ornn:
+            result = ornn.transfer_skill_ownership("sk-1", "alice")
+        assert route.calls.last.request.method == "POST"
+        sent = _json.loads(route.calls.last.request.content)
+        assert sent == {"newOwnerUserId": "alice"}
+        assert isinstance(result, SkillDetail)
+        assert result.created_by == "alice"
+
+    @respx.mock
+    def test_transfer_skillset_ownership_posts_new_owner_and_unwraps(self) -> None:
+        import json as _json
+
+        route = respx.post(f"{BASE}/api/v1/skillsets/ss-1/transfer-ownership").respond(
+            200,
+            json={"data": {"skillset": _skillset_data(createdBy="alice")}, "error": None},
+        )
+        with make_client() as ornn:
+            result = ornn.transfer_skillset_ownership("ss-1", "alice")
+        assert route.calls.last.request.method == "POST"
+        sent = _json.loads(route.calls.last.request.content)
+        assert sent == {"newOwnerUserId": "alice"}
+        assert result.created_by == "alice"
+
+    @respx.mock
+    def test_transfer_skill_ownership_raises_on_invalid_target(self) -> None:
+        # Target who never signed in to Ornn → 400 invalid_transfer_target.
+        respx.post(f"{BASE}/api/v1/skills/sk-1/transfer-ownership").respond(
+            400,
+            json={
+                "type": "https://github.com/.../ERRORS.md#invalid_transfer_target",
+                "title": "Invalid transfer target",
+                "status": 400,
+                "code": "invalid_transfer_target",
+                "detail": "unknown Ornn user",
+                "instance": "/v1/skills/sk-1/transfer-ownership",
+            },
+        )
+        with make_client() as ornn:
+            with pytest.raises(OrnnError) as excinfo:
+                ornn.transfer_skill_ownership("sk-1", "ghost")
+        assert excinfo.value.status == 400
+        assert excinfo.value.code == "invalid_transfer_target"

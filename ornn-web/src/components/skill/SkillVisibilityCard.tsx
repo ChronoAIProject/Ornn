@@ -24,6 +24,8 @@ export interface SkillVisibilityCardProps {
   isPrivate: boolean;
   sharedWithUsersCount: number;
   sharedWithOrgsCount: number;
+  /** How many grants confer write (#1123). Shown as a "can edit" line. */
+  writeCount?: number;
   isOwner: boolean;
   onManagePermissions: () => void;
 }
@@ -32,6 +34,7 @@ export function SkillVisibilityCard({
   isPrivate,
   sharedWithUsersCount,
   sharedWithOrgsCount,
+  writeCount = 0,
   isOwner,
   onManagePermissions,
 }: SkillVisibilityCardProps) {
@@ -97,6 +100,14 @@ export function SkillVisibilityCard({
             {t("skillDetail.shareOrgs", "organizations")}
           </span>
         </li>
+        {writeCount > 0 && (
+          <li className="flex items-baseline gap-2.5">
+            <span className="min-w-[18px] text-right font-mono text-sm font-semibold text-accent">
+              {writeCount}
+            </span>
+            <span className="text-xs text-meta">{t("skillDetail.shareCanEdit", "can edit")}</span>
+          </li>
+        )}
       </ul>
       {isOwner && (
         <div className="mt-3.5">

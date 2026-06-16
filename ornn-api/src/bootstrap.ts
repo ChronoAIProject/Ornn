@@ -146,6 +146,7 @@ import { wireAdmin } from "./domains/admin/bootstrap";
 // per-provider arrays). One-time, idempotent, runs before any
 // LlmProvidersService consumer reads from disk.
 import { migrateModelCatalogIntoProviders } from "./domains/settings/llmProviders/migration";
+import { backfillTypedGrants, renameReadWriteGrantsToWrite } from "./domains/skills/crud/grants.migration";
 import { createLlmPickerRoutes } from "./domains/settings/llmProviders/routes";
 
 // OpenAPI spec
@@ -674,6 +675,33 @@ export async function bootstrap(
     ),
   );
 
+  // ---- Typed-grants backfill (#1123) ----
+  // Fold the legacy read-only `sharedWithUsers` / `sharedWithOrgs` lists into
+  // the typed `grants` array (every legacy grant → `read` level). One-time,
+  // idempotent, non-disruptive (legacy lists preserved, nobody escalated to
+  // write). Runs before any skill/skillset read so the authz gates + scope
+  // filters can rely on `grants`. Failure is non-fatal: the read-time
+  // fallback in `effectiveGrants` keeps un-migrated docs authorizing
+  // correctly off the legacy lists.
+  await backfillTypedGrants(db).catch((err) =>
+    logger.error(
+      { err: err instanceof Error ? err.message : String(err) },
+      "typed-grants backfill failed — gates fall back to legacy read lists via effectiveGrants, no data loss",
+    ),
+  );
+
+  // ---- read_write → write grant-level rename (#1127) ----
+  // The combined `read_write` level was renamed to `write`. Rewrite any
+  // existing grant carrying the legacy value. Idempotent + non-disruptive
+  // (write confers what read_write did); `coerceStoredGrants` covers any doc
+  // not yet rewritten, so failure is non-fatal.
+  await renameReadWriteGrantsToWrite(db).catch((err) =>
+    logger.error(
+      { err: err instanceof Error ? err.message : String(err) },
+      "read_write→write rename failed — coerceStoredGrants maps legacy values at read time, no data loss",
+    ),
+  );
+
   // The picker route — `GET /me/models?surface=...` — reads from the
   // per-provider arrays via `LlmProvidersService` (already constructed
   // upstream as part of `domains/settings/...`). The section-default
@@ -751,6 +779,10 @@ export async function bootstrap(
     // wrapper here.
     extraNyxidServicesResolver: () => resolveExtraNyxidServiceNames(),
     mirrorService,
+    // #1123 — transfer-ownership target validation + owner-label refresh,
+    // backed by the lazily-populated user directory.
+    resolveUser: async (userId) =>
+      (await userDirectoryRepo.findByUserIds([userId]))[0] ?? null,
   });
 
   // ---- Domain: Skill Search ----
@@ -770,7 +802,13 @@ export async function bootstrap(
   // A skillset is a curated, versioned meta-package over N member skills.
   // The service injects `skillService` so member resolution + the #968
   // closure walk stay single-sourced.
-  const skillsets = wireSkillsets({ db, skillService });
+  const skillsets = wireSkillsets({
+    db,
+    skillService,
+    // #1123 — transfer-ownership target validation, shared resolver.
+    resolveUser: async (userId) =>
+      (await userDirectoryRepo.findByUserIds([userId]))[0] ?? null,
+  });
   await skillsets.ensureIndexes();
 
   // ---- Domain: Skill Generation ----

@@ -36,7 +36,7 @@ The pre-#585 `SCREAMING_SNAKE_CASE` shape (`SKILL_NOT_FOUND`, `INVALID_BODY`, �
 ## validation_error
 
 **HTTP:** `400 Bad Request`
-**Common subcodes (lowercase post-#585):** `invalid_body`, `invalid_query`, `invalid_params`, `invalid_*` (per-field), `empty_body`, `missing_*`, `frontmatter_validation_failed`, `invalid_permissions`, `invalid_zip`, …
+**Common subcodes (lowercase post-#585):** `invalid_body`, `invalid_query`, `invalid_params`, `invalid_*` (per-field), `empty_body`, `missing_*`, `frontmatter_validation_failed`, `invalid_permissions`, `invalid_permission_level`, `invalid_transfer_target`, `invalid_zip`, …
 
 Request body, query string, or path parameter failed validation. Per-field details are in `errors[]`.
 
@@ -64,6 +64,18 @@ Content-Type: application/problem+json
 The uploaded payload is not a parseable ZIP — a malformed or unreadable archive.
 
 **Client action:** re-create the ZIP and re-upload; do not retry the same bytes.
+
+### invalid_permission_level
+
+A typed `grants` entry on a permissions request (#1123) carried a `level` outside the allowed set. The only accepted values are `read` and `write` (see [`docs/CONVENTIONS.md`](CONVENTIONS.md) §5.4). Surfaced from `PUT /api/v1/skills/{id}/permissions` and `PUT /api/v1/skillsets/{id}/permissions`.
+
+**Client action:** set every grant's `level` to `read` or `write` and retry.
+
+### invalid_transfer_target
+
+The `newOwnerUserId` supplied to `POST /api/v1/skills/{id}/transfer-ownership` or `POST /api/v1/skillsets/{id}/transfer-ownership` (#1123) does not resolve to a known Ornn user — the target has never signed in to Ornn, so the directory cannot resolve them. The transfer is rejected before any mutation.
+
+**Client action:** confirm the target user has signed in to Ornn at least once, then retry with their resolved user id. Do not retry the same id without that change.
 
 ---
 
@@ -109,7 +121,7 @@ A skill in a dependency closure (#968) could not be resolved — either the refe
 ## resource_conflict
 
 **HTTP:** `409 Conflict`
-**Common subcodes (lowercase post-#585):** `skill_name_exists`, `skillset_name_exists`, `skillset_version_exists`, `dependency_cycle`, `dependency_conflict`, `reconcile_already_running`, `redemption_code_expired`, `redemption_code_already_redeemed`, `redemption_code_already_invalidated`, `old_repo_not_confirmed`, …
+**Common subcodes (lowercase post-#585):** `skill_name_exists`, `skillset_name_exists`, `skillset_version_exists`, `dependency_cycle`, `dependency_conflict`, `ownership_conflict`, `reconcile_already_running`, `redemption_code_expired`, `redemption_code_already_redeemed`, `redemption_code_already_invalidated`, `old_repo_not_confirmed`, …
 
 The request collides with current state — a duplicate skill name on create, a concurrent modification, a job that's already running, etc.
 
@@ -126,6 +138,12 @@ The skill dependency graph (#968) contains a cycle — following `depends-on` re
 Two different versions of the **same** skill appear in one dependency closure (#968) — e.g. `a` depends on `b@1.0` while `a`'s other dependency `c` depends on `b@2.0`. Only one version of a given skill can be installed in a closure. The skillset closure (#969) reuses this verbatim: two members (or their transitive deps) that pin the same skill to different versions collide here.
 
 **Client action:** align the conflicting pins so every path resolves the skill to the same `<major.minor>` version, then retry.
+
+### ownership_conflict
+
+A `POST /api/v1/skills/{id}/transfer-ownership` or `POST /api/v1/skillsets/{id}/transfer-ownership` (#1123) named the **current** owner as `newOwnerUserId` — a no-op transfer. The target already owns the resource, so the request is rejected rather than silently succeeding.
+
+**Client action:** if a transfer is actually intended, supply a different `newOwnerUserId`. If the resource is already owned by the intended user, no action is needed.
 
 ---
 
@@ -241,6 +259,9 @@ Clients pinned to the old `SCREAMING_SNAKE_CASE` codes need to switch to the low
 | _(new in #968)_ | 404 | `skill_dependency_not_found` | `resource_not_found` |
 | _(new in #968)_ | 409 | `dependency_cycle` | `resource_conflict` |
 | _(new in #968)_ | 409 | `dependency_conflict` | `resource_conflict` |
+| _(new in #1123)_ | 400 | `invalid_permission_level` | `validation_error` |
+| _(new in #1123)_ | 400 | `invalid_transfer_target` | `validation_error` |
+| _(new in #1123)_ | 409 | `ownership_conflict` | `resource_conflict` |
 | `UPSTREAM_DOWN` | 502 | `upstream_down` | `upstream_unavailable` |
 
 Format rule for future codes: lowercase ASCII, words joined by `_`, no leading/trailing `_`. Pick from the parent §1.4 vocabulary when generic; add a specific subcode only when the caller needs to branch on it.

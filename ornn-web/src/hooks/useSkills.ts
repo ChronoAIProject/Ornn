@@ -17,7 +17,11 @@ import {
   tieSkillToNyxidService,
   type PullFromGitHubInput,
 } from "@/services/skillApi";
-import { updateSkillPermissions, type SkillPermissionsInput } from "@/services/permissionsApi";
+import {
+  updateSkillPermissions,
+  transferSkillOwnership,
+  type SkillPermissionsInput,
+} from "@/services/permissionsApi";
 import type { SkillSearchParams, SystemFilter } from "@/types/search";
 import type { UpdateSkillMetadata } from "@/types/api";
 
@@ -344,6 +348,26 @@ export function useUpdateSkillPermissions(idOrName: string) {
       queryClient.invalidateQueries({ queryKey: [SKILLS_KEY] });
       queryClient.invalidateQueries({ queryKey: [MY_SKILLS_KEY] });
       queryClient.invalidateQueries({ queryKey: [SKILLS_KEY, idOrName] });
+    },
+  });
+}
+
+/**
+ * Transfer skill ownership to another Ornn user (#1123). Wired with the
+ * two-id split (#750): `skillGuid` for the write, `idOrName` for cache keys.
+ * On success the caller is no longer the owner, so the detail + list caches
+ * are invalidated to redraw the new owner and drop the owner-only UI; the
+ * Shared-with-me tab is invalidated too since the caller becomes a grantee.
+ */
+export function useTransferSkillOwnership(skillGuid: string, idOrName: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (newOwnerUserId: string) => transferSkillOwnership(skillGuid, newOwnerUserId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [SKILLS_KEY, idOrName] });
+      queryClient.invalidateQueries({ queryKey: [SKILLS_KEY] });
+      queryClient.invalidateQueries({ queryKey: [MY_SKILLS_KEY] });
+      queryClient.invalidateQueries({ queryKey: [SHARED_WITH_ME_KEY] });
     },
   });
 }

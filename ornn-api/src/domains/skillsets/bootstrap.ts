@@ -31,6 +31,10 @@ export interface SkillsetWiring {
 export function wireSkillsets(deps: {
   db: Db;
   skillService: SkillService;
+  /** #1123 — directory resolver for ownership-transfer target validation. */
+  resolveUser?: (
+    userId: string,
+  ) => Promise<{ userId: string; email: string; displayName: string } | null>;
 }): SkillsetWiring {
   const skillsetRepo = new SkillsetRepository(deps.db);
   const skillsetVersionRepo = new SkillsetVersionRepository(deps.db);
@@ -39,6 +43,7 @@ export function wireSkillsets(deps: {
     skillsetRepo,
     skillsetVersionRepo,
     skillService: deps.skillService,
+    ...(deps.resolveUser ? { resolveUser: deps.resolveUser } : {}),
   });
   const routes = createSkillsetRoutes({ skillsetService: service });
 

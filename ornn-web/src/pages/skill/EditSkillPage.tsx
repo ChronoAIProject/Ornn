@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Badge } from "@/components/ui/Badge";
 import { useSkill, useUpdateSkill, useUpdateSkillPackage } from "@/hooks/useSkills";
+import { useSkillAccess } from "@/hooks/useSkillAccess";
 import { useToastStore } from "@/stores/toastStore";
 import { formatFileSize } from "@/utils/formatters";
 import { translateError } from "@/utils/translateError";
@@ -32,6 +33,9 @@ export function EditSkillPage() {
   const updatePackageMutation = useUpdateSkillPackage(writeId);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [zipFile, setZipFile] = useState<File | null>(null);
+  // Access tiers (#1127): content/package edits need `canWrite` (owner /
+  // admin / write-grantee); visibility is an ADMIN action (`canManage`).
+  const { canWrite, canManage } = useSkillAccess(skill);
 
   const handleToggleVisibility = async () => {
     if (!skill) return;
@@ -113,7 +117,20 @@ export function EditSkillPage() {
         </h1>
 
         <div className="mx-auto max-w-2xl space-y-6">
-          {/* Visibility toggle */}
+          {/* Read-only notice when the caller can't edit at all (#1127). */}
+          {!canWrite && (
+            <Card>
+              <p className="font-text text-sm text-meta">
+                {t(
+                  "editSkill.readOnly",
+                  "You have read-only access to this skill, so there's nothing to edit here.",
+                )}
+              </p>
+            </Card>
+          )}
+
+          {/* Visibility toggle — ADMIN tier (owner / platform admin). */}
+          {canManage && (
           <Card>
             <h3 className="mb-4 font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-meta border-b border-dashed border-subtle pb-3">
               {t("editSkill.visibilityHeading", "Visibility")}
@@ -152,8 +169,10 @@ export function EditSkillPage() {
               </Button>
             </div>
           </Card>
+          )}
 
-          {/* Upload new package */}
+          {/* Update Package — WRITE tier (owner / admin / write-grantee). */}
+          {canWrite && (
           <Card>
             <h3 className="mb-4 font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-meta border-b border-dashed border-subtle pb-3">
               {t("editSkill.updatePackageHeading", "Update Package")}
@@ -220,6 +239,7 @@ export function EditSkillPage() {
               )}
             </div>
           </Card>
+          )}
         </div>
       </div>
     </PageTransition>

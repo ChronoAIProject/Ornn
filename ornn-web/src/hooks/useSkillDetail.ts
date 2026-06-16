@@ -48,7 +48,8 @@ import {
   useSkillAuditHistory,
 } from "@/hooks/useAudit";
 import { useSkillPulls } from "@/hooks/useAnalytics";
-import { useCurrentUser, useIsAuthenticated, isAdmin } from "@/stores/authStore";
+import { useCurrentUser, useIsAuthenticated } from "@/stores/authStore";
+import { useSkillAccess } from "@/hooks/useSkillAccess";
 import { useToastStore } from "@/stores/toastStore";
 import { buildFileTreeFromEntries, type FileTreeEntry } from "@/utils/fileTreeBuilder";
 import { translateError } from "@/utils/translateError";
@@ -114,9 +115,10 @@ export function useSkillDetail(idOrName: string | undefined) {
     error: packageError,
   } = useSkillPackage(skill?.presignedPackageUrl);
 
-  const isOwner = !!(isAuthenticated && user?.id && skill?.createdBy === user.id);
-  const isAdminUser = isAdmin(user);
-  const canManageVersions = isOwner || isAdminUser;
+  // Three access tiers (#1127) from the shared hook — `canWrite` is what
+  // lets a write-grantee (not just the owner) see the content-edit UI.
+  const { isOwner, isAdmin: isAdminUser, canWrite, canManage } = useSkillAccess(skill);
+  const canManageVersions = canManage;
 
   const latestVersion = versionList[0]?.version;
   const viewingLatest = !versionParam || (latestVersion && versionParam === latestVersion);
@@ -158,6 +160,7 @@ export function useSkillDetail(idOrName: string | undefined) {
   // ── Modal + file-edit state ─────────────────────────────────
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showPermissionsModal, setShowPermissionsModal] = useState(false);
+  const [showTransferModal, setShowTransferModal] = useState(false);
   const [showAdvancedModal, setShowAdvancedModal] = useState(false);
   const [showSaveConfirm, setShowSaveConfirm] = useState(false);
   const [showAuditStartedModal, setShowAuditStartedModal] = useState(false);
@@ -404,6 +407,7 @@ export function useSkillDetail(idOrName: string | undefined) {
     isAuthenticated,
     isOwner,
     isAdminUser,
+    canWrite,
     canManageVersions,
     auditSummaryByVersion,
     versionAudit,
@@ -423,6 +427,8 @@ export function useSkillDetail(idOrName: string | undefined) {
     setShowDeleteConfirm,
     showPermissionsModal,
     setShowPermissionsModal,
+    showTransferModal,
+    setShowTransferModal,
     showAdvancedModal,
     setShowAdvancedModal,
     showSaveConfirm,

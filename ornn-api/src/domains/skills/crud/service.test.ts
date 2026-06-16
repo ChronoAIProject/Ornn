@@ -227,6 +227,24 @@ describe("SkillService.setSkillPermissions — org-membership gate (#815)", () =
         state.updateCalled = true;
         return { ...skill, ...patch } as SkillDocument;
       },
+      transferOwnership: async (
+        _guid: string,
+        data: {
+          newOwnerId: string;
+          newOwnerEmail: string | null;
+          newOwnerDisplayName: string | null;
+          grants: SkillDocument["grants"];
+        },
+      ) => {
+        state.updateCalled = true;
+        return {
+          ...skill,
+          createdBy: data.newOwnerId,
+          createdByEmail: data.newOwnerEmail ?? undefined,
+          createdByDisplayName: data.newOwnerDisplayName ?? undefined,
+          grants: data.grants,
+        } as SkillDocument;
+      },
     } as unknown as SkillRepository;
     const skillVersionRepo = {
       findLatestBySkill: async () => null,
@@ -286,7 +304,8 @@ describe("SkillService.setSkillPermissions — org-membership gate (#815)", () =
       actor,
     );
     expect(state.updateCalled).toBe(true);
-    expect(result.sharedWithOrgs).toContain("org-A");
+    // The canonical ACL now carries the org as a read grant (#1123).
+    expect(result.grants).toContainEqual({ type: "org", id: "org-A", level: "read" });
   });
 
   it("platform admin may share into any org", async () => {
@@ -303,7 +322,7 @@ describe("SkillService.setSkillPermissions — org-membership gate (#815)", () =
       actor,
     );
     expect(state.updateCalled).toBe(true);
-    expect(result.sharedWithOrgs).toContain("org-A");
+    expect(result.grants).toContainEqual({ type: "org", id: "org-A", level: "read" });
   });
 
   it("a rejected share does not leak read access (AC#2)", () => {
@@ -456,6 +475,182 @@ describe("SkillService.setSkillPermissions — org-membership gate (#815)", () =
     expect(msg).toContain("org-B");
     expect(msg).not.toContain("org-A");
     // Atomic — no partial persistence of the member org.
+    expect(state.updateCalled).toBe(false);
+  });
+
+  it("(e) accepts typed grants directly, including write (#1123)", async () => {
+    const { service, state } = makePermissionsService(
+      makeSkillDoc({ guid: "guid-1", createdBy: "owner-1", isPrivate: true }),
+    );
+    const actor: ActorContext = {
+      userId: "owner-1",
+      memberships: [{ userId: "org-A", role: "member", displayName: "" }],
+      isPlatformAdmin: false,
+      membershipsResolved: true,
+    };
+    const result = await service.setSkillPermissions(
+      "guid-1",
+      "owner-1",
+      {
+        isPrivate: true,
+        grants: [
+          { type: "user", id: "editor", level: "write" },
+          { type: "org", id: "org-A", level: "write" },
+        ],
+      },
+      actor,
+    );
+    expect(state.updateCalled).toBe(true);
+    expect(result.grants).toContainEqual({ type: "user", id: "editor", level: "write" });
+    expect(result.grants).toContainEqual({ type: "org", id: "org-A", level: "write" });
+  });
+
+  it("(f) a write org grant still honours the #815 non-member gate (#1123)", async () => {
+    const { service, state } = makePermissionsService(
+      makeSkillDoc({ guid: "guid-1", createdBy: "owner-1", isPrivate: true }),
+    );
+    const actor: ActorContext = {
+      userId: "owner-1",
+      memberships: [],
+      isPlatformAdmin: false,
+      membershipsResolved: true,
+    };
+    let thrown: unknown;
+    try {
+      await service.setSkillPermissions(
+        "guid-1",
+        "owner-1",
+        { isPrivate: true, grants: [{ type: "org", id: "org-Z", level: "write" }] },
+        actor,
+      );
+    } catch (err) {
+      thrown = err;
+    }
+    expect((thrown as AppError).code).toBe("not_org_member");
+    expect(state.updateCalled).toBe(false);
+  });
+
+  it("(g) drops a grant that names the author themselves (#1123)", async () => {
+    const { service } = makePermissionsService(
+      makeSkillDoc({ guid: "guid-1", createdBy: "owner-1", isPrivate: true }),
+    );
+    const actor: ActorContext = {
+      userId: "owner-1",
+      memberships: [],
+      isPlatformAdmin: false,
+      membershipsResolved: true,
+    };
+    const result = await service.setSkillPermissions(
+      "guid-1",
+      "owner-1",
+      { isPrivate: true, grants: [{ type: "user", id: "owner-1", level: "write" }] },
+      actor,
+    );
+    // The author holds implicit ADMIN — a self-grant is redundant and dropped.
+    expect(result.grants).toEqual([]);
+  });
+});
+
+describe("SkillService.transferSkillOwnership (#1123)", () => {
+  function makeTransferService(skill: SkillDocument): {
+    service: SkillService;
+    state: { updateCalled: boolean };
+  } {
+    const state = { updateCalled: false };
+    const skillRepo = {
+      findByGuid: async (guid: string) => (guid === skill.guid ? skill : null),
+      transferOwnership: async (
+        _guid: string,
+        data: {
+          newOwnerId: string;
+          newOwnerEmail: string | null;
+          newOwnerDisplayName: string | null;
+          grants: SkillDocument["grants"];
+        },
+      ) => {
+        state.updateCalled = true;
+        return {
+          ...skill,
+          createdBy: data.newOwnerId,
+          createdByEmail: data.newOwnerEmail ?? undefined,
+          createdByDisplayName: data.newOwnerDisplayName ?? undefined,
+          grants: data.grants,
+        } as SkillDocument;
+      },
+    } as unknown as SkillRepository;
+    const skillVersionRepo = { findLatestBySkill: async () => null } as unknown as SkillVersionRepository;
+    const storageClient = {
+      getPresignedUrl: async () => ({ presignedUrl: "http://unused", expiresAt: "" }),
+    } as unknown as IStorageClient;
+    const service = new SkillService({
+      skillRepo,
+      skillVersionRepo,
+      storageClient,
+      storageBucketResolver: async () => "test-bucket",
+    });
+    return { service, state };
+  }
+
+  const actor: ActorContext = {
+    userId: "owner-1",
+    memberships: [],
+    isPlatformAdmin: false,
+    membershipsResolved: true,
+  };
+
+  it("reassigns the owner, refreshes labels, and keeps the prior owner as a read grantee", async () => {
+    const { service, state } = makeTransferService(
+      makeSkillDoc({
+        guid: "guid-1",
+        createdBy: "owner-1",
+        isPrivate: true,
+        grants: [{ type: "org", id: "org-A", level: "write" }],
+      }),
+    );
+    const result = await service.transferSkillOwnership(
+      "guid-1",
+      { userId: "newbie", email: "new@x.io", displayName: "New Owner" },
+      actor,
+    );
+    expect(state.updateCalled).toBe(true);
+    expect(result.createdBy).toBe("newbie");
+    expect(result.createdByEmail).toBe("new@x.io");
+    // Existing org grant preserved; prior owner added as read.
+    expect(result.grants).toContainEqual({ type: "org", id: "org-A", level: "write" });
+    expect(result.grants).toContainEqual({ type: "user", id: "owner-1", level: "read" });
+  });
+
+  it("drops the new owner from any pre-existing grant (they hold implicit admin now)", async () => {
+    const { service } = makeTransferService(
+      makeSkillDoc({
+        guid: "guid-1",
+        createdBy: "owner-1",
+        isPrivate: true,
+        grants: [{ type: "user", id: "newbie", level: "write" }],
+      }),
+    );
+    const result = await service.transferSkillOwnership(
+      "guid-1",
+      { userId: "newbie" },
+      actor,
+    );
+    expect(result.createdBy).toBe("newbie");
+    // The new owner's old grant is gone; only the prior owner's read grant remains.
+    expect(result.grants).toEqual([{ type: "user", id: "owner-1", level: "read" }]);
+  });
+
+  it("rejects a no-op transfer to the current owner with ownership_conflict", async () => {
+    const { service, state } = makeTransferService(
+      makeSkillDoc({ guid: "guid-1", createdBy: "owner-1", isPrivate: true }),
+    );
+    let thrown: unknown;
+    try {
+      await service.transferSkillOwnership("guid-1", { userId: "owner-1" }, actor);
+    } catch (err) {
+      thrown = err;
+    }
+    expect((thrown as AppError).code).toBe("ownership_conflict");
+    expect((thrown as AppError).statusCode).toBe(409);
     expect(state.updateCalled).toBe(false);
   });
 });

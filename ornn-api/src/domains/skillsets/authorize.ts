@@ -12,14 +12,18 @@
 
 import {
   canReadSkill,
+  canWriteSkill,
   canManageSkill,
   type ActorContext,
 } from "../skills/crud/authorize";
+import type { SkillGrant } from "../../shared/types/index";
 
 /** Minimal ownership shape (subset of SkillsetDocument / detail). */
 export interface SkillsetOwnership {
   createdBy: string;
   isPrivate: boolean;
+  /** Typed grants (#1123); optional — gates fall back to the legacy lists. */
+  grants?: SkillGrant[] | undefined;
   sharedWithUsers: string[];
   sharedWithOrgs: string[];
 }
@@ -32,7 +36,22 @@ export function canReadSkillset(
   return canReadSkill(skillset, actor);
 }
 
-/** True when `actor` may mutate the skillset. Delegates to the skill gate. */
+/**
+ * True when `actor` may UPDATE the skillset's content/metadata (publish a new
+ * version) — the WRITE tier (#1123). Delegates to the skill gate.
+ */
+export function canWriteSkillset(
+  skillset: SkillsetOwnership,
+  actor: ActorContext,
+): boolean {
+  return canWriteSkill(skillset, actor);
+}
+
+/**
+ * True when `actor` may ADMINISTER the skillset (permissions, transfer,
+ * delete) — the ADMIN tier. Author + platform admin only. Delegates to the
+ * skill gate.
+ */
 export function canManageSkillset(
   skillset: SkillsetOwnership,
   actor: ActorContext,
