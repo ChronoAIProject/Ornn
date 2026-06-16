@@ -66,10 +66,13 @@ describe("dropLegacyNotificationCategories", () => {
       makeRow("legacy-1", "share.needs_justification"),
       makeRow("legacy-2", "share.needs_justification"),
       makeRow("legacy-3", "share.granted"),
-      // Current vocabulary — must survive.
+      // Current vocabulary — must survive (incl. the categories that the
+      // hand-maintained allow-list used to drop on reboot, #1136).
       makeRow("keep-1", "audit.completed"),
       makeRow("keep-2", "audit.risky_for_consumer"),
       makeRow("keep-3", "quota.credits_granted"),
+      makeRow("keep-4", "launchPromo.codeDelivered"),
+      makeRow("keep-5", "skillset.member_unreadable"),
     ]);
 
     await dropLegacyNotificationCategories(db);
@@ -83,13 +86,17 @@ describe("dropLegacyNotificationCategories", () => {
       "keep-1",
       "keep-2",
       "keep-3",
+      "keep-4",
+      "keep-5",
     ]);
-    // Every survivor is in the allowed vocabulary.
+    // Every survivor is in the canonical allowed vocabulary.
     for (const doc of remaining) {
       expect([
         "audit.completed",
         "audit.risky_for_consumer",
         "quota.credits_granted",
+        "launchPromo.codeDelivered",
+        "skillset.member_unreadable",
       ]).toContain(doc.category);
     }
   });

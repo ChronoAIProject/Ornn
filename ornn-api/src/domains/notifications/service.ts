@@ -409,6 +409,39 @@ export class NotificationService {
     });
   }
 
+  /**
+   * Owner-side notification (#1136) fired when a member skill's visibility
+   * change costs the skillset OWNER read access — so the owner knows their
+   * skillset's reach shrank and can repair it (re-grant the skill, or
+   * publish a version without it). Coalesced to ONE notification per
+   * skillset per recompute (the caller passes the full unreadable set).
+   */
+  async notifySkillsetMemberUnreadable(params: {
+    ownerUserId: string;
+    skillsetGuid: string;
+    skillsetName: string;
+    unreadableMembers: string[];
+  }): Promise<void> {
+    const count = params.unreadableMembers.length;
+    const title = `A skill in your skillset "${params.skillsetName}" is no longer accessible to you`;
+    const body =
+      `${count === 1 ? "1 member skill is" : `${count} member skills are`} no longer readable by you, ` +
+      `so this skillset can no longer be used or discovered by the people who could before. ` +
+      `Re-gain access to the skill(s), or publish a new version of the skillset without them. ` +
+      `Affected: ${params.unreadableMembers.join(", ")}.`;
+    await this.emit(params.ownerUserId, {
+      category: "skillset.member_unreadable",
+      title,
+      body,
+      link: `/skillsets/${encodeURIComponent(params.skillsetGuid)}`,
+      data: {
+        skillsetGuid: params.skillsetGuid,
+        skillsetName: params.skillsetName,
+        unreadableMembers: params.unreadableMembers,
+      },
+    });
+  }
+
   private async emit(
     userId: string,
     payload: {

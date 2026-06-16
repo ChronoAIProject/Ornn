@@ -3,11 +3,11 @@
  * out-of-vocabulary notifications.
  *
  * PR #198 removed the share/audit-gate workflow. The `NotificationCategory`
- * type was tightened at the same time:
+ * type was tightened at the same time. The current allowed vocabulary is
+ * the canonical `NOTIFICATION_CATEGORIES` list (imported below), so this
+ * migration and the type can never drift apart.
  *
- *   audit.completed | audit.risky_for_consumer | quota.credits_granted
- *
- * but pre-#198 rows in the `notifications` collection still carry dead
+ * Pre-#198 rows in the `notifications` collection still carry dead
  * categories like `share.needs_justification` and dead deep-links into
  * the removed `/shares/*` route tree (which now 404). They surface from
  * `GET /api/v1/notifications` and look broken to the user.
@@ -21,14 +21,15 @@
 
 import type { Db } from "mongodb";
 import { createLogger } from "../../shared/logger";
+import { NOTIFICATION_CATEGORIES } from "./types";
 
 const logger = createLogger("notificationsMigration");
 
-const ALLOWED_CATEGORIES = [
-  "audit.completed",
-  "audit.risky_for_consumer",
-  "quota.credits_granted",
-] as const;
+// Derive the allow-list from the canonical vocabulary (#1136) so a newly
+// added category is never deleted on the next boot. Previously this was a
+// hand-maintained copy that had already drifted (missing
+// `launchPromo.codeDelivered`).
+const ALLOWED_CATEGORIES = NOTIFICATION_CATEGORIES;
 
 export async function dropLegacyNotificationCategories(db: Db): Promise<void> {
   const collection = db.collection("notifications");
