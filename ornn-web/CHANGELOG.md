@@ -1,5 +1,25 @@
 # ornn-web
 
+## 0.13.0
+
+### Minor Changes
+
+- [#1126](https://github.com/ChronoAIProject/Ornn/pull/1126) [`858dc22`](https://github.com/ChronoAIProject/Ornn/commit/858dc2229c3d6837a2b16fb4bf8eadb92ebc88da) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Manage Permissions: separate Read and Write access into two tabs.
+
+  The skill and skillset permissions editor is now a two-tab editor — a **Read** tab (Public toggle, or a restricted set of orgs/users who can read) and a **Write** tab (orgs/users who can edit). This makes every combination the backend already supports expressible, including **public read + organization/user write**, which the previous single-visibility-ladder couldn't reach. Skillsets also gain the read / read-write level support they previously lacked. No API changes — purely a UI redesign over the existing typed `grants` model.
+
+- [#1128](https://github.com/ChronoAIProject/Ornn/pull/1128) [`1b8e529`](https://github.com/ChronoAIProject/Ornn/commit/1b8e52973edc2860d79e712d83e7ab55eb072f19) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Separate read and write access (drop the `read_write` level) and show edit UI to write-grantees.
+
+  The combined `read_write` grant level is renamed to `write`: each grant is now `read` or `write` (a `write` grant implies read), with no combined label. Existing `read_write` grants migrate to `write` automatically at boot — non-disruptive and rollback-safe.
+
+  This also fixes a bug where a user with **write** access saw no edit controls: the skill detail page (Edit button, inline file editor, Save) and the edit page now reveal content-editing to write-grantees, not just the owner, while admin actions (permissions, transfer, delete, visibility) remain owner/admin-only.
+
+- [#1124](https://github.com/ChronoAIProject/Ornn/pull/1124) [`477c007`](https://github.com/ChronoAIProject/Ornn/commit/477c0078df5af063f7f986c142f339ef93400195) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Skill & skillset permission levels (read / read-write) and ownership transfer.
+
+  Skills and skillsets now carry a typed `grants` ACL where each user/org grant has a level: **read** (view / pull / execute) or **read-write** (also update the skill's content & metadata). Read-write grantees cannot manage permissions, transfer ownership, or delete — those admin/danger-zone actions stay with the owner and platform admins only.
+
+  Owners (and platform admins) can **transfer a skill or skillset to another Ornn user** from the Danger Zone; the transfer is immediate and the prior owner keeps read access. All existing shares (public, org, and per-user) migrate to read-only with no disruption to current access.
+
 ## 0.12.0
 
 ### Minor Changes
