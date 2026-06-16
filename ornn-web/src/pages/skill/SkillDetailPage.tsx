@@ -75,6 +75,7 @@ export function SkillDetailPage() {
     isAuthenticated,
     isOwner,
     isAdminUser,
+    canWrite,
     canManageVersions,
     auditSummaryByVersion,
     versionAudit,
@@ -167,12 +168,12 @@ export function SkillDetailPage() {
           pullCount7d={pullCount7d}
           versionAudit={versionAudit}
           isAuthenticated={isAuthenticated}
-          isOwner={isOwner}
           ownerDisplayName={ownerDisplayName}
           ownerAvatarUrl={ownerAvatarUrl}
           onTryPlayground={() => navigate(`/playground?skill=${encodeURIComponent(skill.name)}`)}
           onDownloadPackage={rawZip ? handleDownloadPackage : undefined}
-          onEditSkill={isOwner ? () => navigate(`/skills/${skill.guid}/edit`) : undefined}
+          // Content edit is the write tier (#1127): owner, admin, or write-grantee.
+          onEditSkill={canWrite ? () => navigate(`/skills/${skill.guid}/edit`) : undefined}
         />
 
         {/* ── Audit-version banner (yellow/red/missing only; green is silent) ── */}
@@ -249,7 +250,7 @@ export function SkillDetailPage() {
                   />
                 )}
               </div>
-              {isOwner && (
+              {canWrite && (
                 <Button
                   size="sm"
                   onClick={() => setShowSaveConfirm(true)}
@@ -273,11 +274,11 @@ export function SkillDetailPage() {
                   files={mergedFiles}
                   fileContents={mergedContents}
                   metadata={null}
-                  editable={isOwner}
+                  editable={canWrite}
                   onContentChange={handleContentChange}
-                  onCreateFile={isOwner ? handleCreateFile : undefined}
-                  onCreateFolder={isOwner ? handleCreateFolder : undefined}
-                  onFileDelete={isOwner ? handleDeleteFile : undefined}
+                  onCreateFile={canWrite ? handleCreateFile : undefined}
+                  onCreateFolder={canWrite ? handleCreateFolder : undefined}
+                  onFileDelete={canWrite ? handleDeleteFile : undefined}
                   className="h-full"
                 />
               ) : (
@@ -367,7 +368,7 @@ export function SkillDetailPage() {
               isPrivate={skill.isPrivate}
               sharedWithUsersCount={skill.sharedWithUsers.length}
               sharedWithOrgsCount={skill.sharedWithOrgs.length}
-              readWriteCount={(skill.grants ?? []).filter((g) => g.level === "read_write").length}
+              writeCount={(skill.grants ?? []).filter((g) => g.level === "write").length}
               isOwner={isOwner}
               onManagePermissions={() => setShowPermissionsModal(true)}
             />

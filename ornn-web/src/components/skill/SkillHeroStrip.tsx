@@ -25,7 +25,6 @@ interface SkillHeroStripProps {
   pullCount7d?: number | undefined;
   versionAudit?: AuditRecord | undefined;
   isAuthenticated: boolean;
-  isOwner: boolean;
   ownerDisplayName: string;
   ownerAvatarUrl?: string | null | undefined;
   onTryPlayground: () => void;
@@ -87,7 +86,6 @@ export function SkillHeroStrip({
   pullCount7d,
   versionAudit,
   isAuthenticated,
-  isOwner,
   ownerDisplayName,
   ownerAvatarUrl,
   onTryPlayground,
@@ -203,7 +201,7 @@ export function SkillHeroStrip({
                 replaced the older three-dots menu (#411). Each renders
                 independently when its handler is provided, so the row
                 degrades gracefully (e.g. no edit icon for non-owners). */}
-            {isOwner && onEditSkill && (
+            {onEditSkill && (
               <button
                 type="button"
                 onClick={onEditSkill}
