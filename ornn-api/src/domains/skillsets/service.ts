@@ -40,7 +40,7 @@ import {
   resolvePermissionGrants,
   type PermissionsPayload,
 } from "../skills/crud/grants";
-import { recomputeSkillsetVisibility } from "./recompute";
+import { recomputeForSkill, recomputeSkillsetVisibility } from "./recompute";
 import type { SkillsetRepository } from "./repository";
 import type { SkillsetVersionRepository } from "./skillsetVersionRepository";
 import type {
@@ -68,6 +68,21 @@ export interface SkillsetClosureResult {
   items: ClosureNode[];
 }
 
+/**
+ * Minimal notification surface the skillset service needs (#1136) — just
+ * the owner-side member-unreadable emitter. Narrowed to an interface so the
+ * service doesn't depend on the whole NotificationService (and tests can
+ * inject a spy).
+ */
+export interface SkillsetNotificationEmitter {
+  notifySkillsetMemberUnreadable(params: {
+    ownerUserId: string;
+    skillsetGuid: string;
+    skillsetName: string;
+    unreadableMembers: string[];
+  }): Promise<void>;
+}
+
 export interface SkillsetServiceDeps {
   skillsetRepo: SkillsetRepository;
   skillsetVersionRepo: SkillsetVersionRepository;
@@ -81,6 +96,12 @@ export interface SkillsetServiceDeps {
   resolveUser?: (
     userId: string,
   ) => Promise<{ userId: string; email: string; displayName: string } | null>;
+  /**
+   * Owner-notification emitter (#1136). Optional — when unset, the reactive
+   * recompute still runs (derived flags update) but no member-unreadable
+   * notifications fire. Production bootstrap always wires it.
+   */
+  notificationService?: SkillsetNotificationEmitter;
 }
 
 export class SkillsetService {
@@ -90,12 +111,14 @@ export class SkillsetService {
   private readonly resolveUser?:
     | ((userId: string) => Promise<{ userId: string; email: string; displayName: string } | null>)
     | undefined;
+  private readonly notificationService?: SkillsetNotificationEmitter | undefined;
 
   constructor(deps: SkillsetServiceDeps) {
     this.skillsetRepo = deps.skillsetRepo;
     this.skillsetVersionRepo = deps.skillsetVersionRepo;
     this.skillService = deps.skillService;
     this.resolveUser = deps.resolveUser;
+    this.notificationService = deps.notificationService;
   }
 
   // ==========================================================================
@@ -537,6 +560,64 @@ export class SkillsetService {
     });
   }
 
+  /**
+   * Reactive entry point (#1136) for a skill visibility change (privacy
+   * flip, permission change, ownership transfer, nyxid-service bind,
+   * delete). Recomputes the derived-visibility cache for every skillset
+   * referencing the skill, then — for each affected skillset whose OWNER the
+   * change cost member-read access — fires a one-per-skillset owner
+   * notification.
+   *
+   * Owner-readability is computed best-effort: a background task triggered
+   * by another user's request has no way to resolve the skillset owner's
+   * org memberships, so the owner actor carries none (`membershipsResolved:
+   * false`, read fails soft). Org-granted access therefore can't be
+   * confirmed here — the skillset page recomputes the authoritative set
+   * under the owner's own token. To avoid re-notifying on unrelated member
+   * changes, a notification fires only when the JUST-CHANGED skill is among
+   * the owner's now-unreadable members.
+   */
+  async recomputeForChangedSkill(changedSkill: { guid: string; name: string }): Promise<void> {
+    const affected = await recomputeForSkill(changedSkill.name, changedSkill.guid, {
+      skillsetRepo: this.skillsetRepo,
+      skillsetVersionRepo: this.skillsetVersionRepo,
+      skillService: this.skillService,
+    });
+    if (!this.notificationService || affected.length === 0) return;
+
+    for (const guid of affected) {
+      const skillset = await this.skillsetRepo.findByGuid(guid);
+      if (!skillset) continue;
+      const latest = await this.skillsetVersionRepo.findLatestBySkillset(guid);
+      if (!latest) continue;
+
+      const ownerActor: ActorContext = {
+        userId: skillset.createdBy,
+        memberships: [],
+        isPlatformAdmin: false,
+        membershipsResolved: false,
+      };
+      const unreadable = await this.resolveUnreadableMembers(latest.members, ownerActor);
+      if (unreadable.length === 0) continue;
+      // Notify only when THIS change is what cost the owner access.
+      const changedNowUnreadable = unreadable.some((ref) =>
+        refTargetsSkill(ref, changedSkill.name, changedSkill.guid),
+      );
+      if (!changedNowUnreadable) continue;
+
+      await this.notificationService.notifySkillsetMemberUnreadable({
+        ownerUserId: skillset.createdBy,
+        skillsetGuid: guid,
+        skillsetName: skillset.name,
+        unreadableMembers: unreadable,
+      });
+      logger.info(
+        { skillsetGuid: guid, ownerUserId: skillset.createdBy, unreadableCount: unreadable.length },
+        "Notified skillset owner of member-access loss",
+      );
+    }
+  }
+
   /** Load a skillset's requested (or latest) version doc, or 404. */
   private async loadVersionOrThrow(
     skillset: SkillsetDocument,
@@ -614,6 +695,16 @@ export class SkillsetService {
       "Publish-time skillset members validated",
     );
   }
+}
+
+/**
+ * Whether a member ref points at the given skill (#1136). Member refs are
+ * `<name-or-guid>@<version|dist-tag>`, so the ref targets the skill iff it
+ * begins with `<name>@` or `<guid>@` — the `@` boundary prevents a prefix
+ * name (`rev`) from matching a longer one (`review@1.0`).
+ */
+function refTargetsSkill(ref: string, skillName: string, skillGuid: string): boolean {
+  return ref.startsWith(`${skillName}@`) || ref.startsWith(`${skillGuid}@`);
 }
 
 function toDetail(

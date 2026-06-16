@@ -245,6 +245,15 @@ function makeSkillsetDeps(
     },
     findBySkillsetAndVersion: async (g: string, v: string) =>
       state.versions.find((x) => x.skillsetGuid === g && x.version === v) ?? null,
+    findSkillsetGuidsByMember: async (skillName: string, skillGuid: string) => {
+      const guids = new Set<string>();
+      for (const v of state.versions) {
+        if (v.members.some((m) => m.startsWith(`${skillName}@`) || m.startsWith(`${skillGuid}@`))) {
+          guids.add(v.skillsetGuid);
+        }
+      }
+      return [...guids];
+    },
     findLatestBySkillset: async (g: string) =>
       state.versions
         .filter((x) => x.skillsetGuid === g)
@@ -369,6 +378,141 @@ describe("SkillsetService — getSkillsetForRead (member-derived read gate, #113
     const detail = await service.getSkillsetForRead("open-set", ANON);
     expect(detail.unreadableMembers).toEqual([]);
     expect(detail.memberVisibilityState).toBe("all-public");
+  });
+});
+
+describe("SkillsetService — recomputeForChangedSkill cascade (#1136)", () => {
+  interface NotifyCall {
+    ownerUserId: string;
+    skillsetGuid: string;
+    skillsetName: string;
+    unreadableMembers: string[];
+  }
+
+  function spyNotifier() {
+    const calls: NotifyCall[] = [];
+    return {
+      calls,
+      notifySkillsetMemberUnreadable: async (params: NotifyCall) => {
+        calls.push(params);
+      },
+    };
+  }
+
+  it("recomputes dependent skillsets + notifies the owner when a member goes private", async () => {
+    // secret-tools starts PUBLIC and is owned by other-user; owner-1 bundles it.
+    const a = skillDoc({ guid: "g-a", name: "pdf-tools", latestVersion: "1.0", isPrivate: false });
+    const secret = skillDoc({
+      guid: "g-b",
+      name: "secret-tools",
+      latestVersion: "1.0",
+      isPrivate: false,
+      createdBy: "other-user",
+    });
+    const skillService = makeSkillService(
+      [a, secret],
+      [
+        skillVersion({ _id: "g-a@1.0", skillGuid: "g-a", version: "1.0" }),
+        skillVersion({ _id: "g-b@1.0", skillGuid: "g-b", version: "1.0" }),
+      ],
+    );
+    const { deps, state } = makeSkillsetDeps(skillService);
+    const notifier = spyNotifier();
+    const service = new SkillsetService({ ...deps, notificationService: notifier });
+
+    const created = await service.createSkillset(
+      {
+        name: "bundle",
+        description: "d",
+        instructions: "p",
+        kind: "generic",
+        tags: [],
+        members: ["pdf-tools@1.0", "secret-tools@1.0"],
+        version: "1.0",
+      },
+      { userId: "owner-1" },
+    );
+    // Initially all-public, no notification.
+    expect(state.skillsets.get(created.guid)!.memberVisibilityState).toBe("all-public");
+
+    // The skill's owner flips it private — owner-1 (skillset owner) loses access.
+    secret.isPrivate = true;
+    await service.recomputeForChangedSkill({ guid: "g-b", name: "secret-tools" });
+
+    // Derived cache recomputed to restricted...
+    expect(state.skillsets.get(created.guid)!.memberVisibilityState).toBe("restricted");
+    // ...and the skillset owner was notified about the now-unreadable member.
+    expect(notifier.calls).toHaveLength(1);
+    expect(notifier.calls[0]!.ownerUserId).toBe("owner-1");
+    expect(notifier.calls[0]!.skillsetGuid).toBe(created.guid);
+    expect(notifier.calls[0]!.unreadableMembers).toEqual(["secret-tools@1.0"]);
+  });
+
+  it("does NOT notify when the skillset owner authors the skill (still readable)", async () => {
+    // owner-1 owns BOTH the skillset and the member skill — flipping it
+    // private never costs the owner access (author always reads own skill).
+    const a = skillDoc({ guid: "g-a", name: "pdf-tools", latestVersion: "1.0", isPrivate: false });
+    const own = skillDoc({ guid: "g-b", name: "my-tools", latestVersion: "1.0", isPrivate: false, createdBy: "owner-1" });
+    const skillService = makeSkillService(
+      [a, own],
+      [
+        skillVersion({ _id: "g-a@1.0", skillGuid: "g-a", version: "1.0" }),
+        skillVersion({ _id: "g-b@1.0", skillGuid: "g-b", version: "1.0" }),
+      ],
+    );
+    const { deps, state } = makeSkillsetDeps(skillService);
+    const notifier = spyNotifier();
+    const service = new SkillsetService({ ...deps, notificationService: notifier });
+
+    const created = await service.createSkillset(
+      {
+        name: "bundle",
+        description: "d",
+        instructions: "p",
+        kind: "generic",
+        tags: [],
+        members: ["pdf-tools@1.0", "my-tools@1.0"],
+        version: "1.0",
+      },
+      { userId: "owner-1" },
+    );
+    own.isPrivate = true;
+    await service.recomputeForChangedSkill({ guid: "g-b", name: "my-tools" });
+
+    // Derived state still reflects a private member (restricted)...
+    expect(state.skillsets.get(created.guid)!.memberVisibilityState).toBe("restricted");
+    // ...but no notification — the owner still reads their own skill.
+    expect(notifier.calls).toHaveLength(0);
+  });
+
+  it("does not notify on an unrelated skill that no skillset references", async () => {
+    const a = skillDoc({ guid: "g-a", name: "pdf-tools", latestVersion: "1.0", isPrivate: false });
+    const b = skillDoc({ guid: "g-b", name: "csv-tools", latestVersion: "1.0", isPrivate: false });
+    const skillService = makeSkillService(
+      [a, b],
+      [
+        skillVersion({ _id: "g-a@1.0", skillGuid: "g-a", version: "1.0" }),
+        skillVersion({ _id: "g-b@1.0", skillGuid: "g-b", version: "1.0" }),
+      ],
+    );
+    const { deps } = makeSkillsetDeps(skillService);
+    const notifier = spyNotifier();
+    const service = new SkillsetService({ ...deps, notificationService: notifier });
+    await service.createSkillset(
+      {
+        name: "bundle",
+        description: "d",
+        instructions: "p",
+        kind: "generic",
+        tags: [],
+        members: ["pdf-tools@1.0", "csv-tools@1.0"],
+        version: "1.0",
+      },
+      { userId: "owner-1" },
+    );
+    // A skill that no skillset references — no recompute, no notification.
+    await service.recomputeForChangedSkill({ guid: "g-z", name: "orphan-tools" });
+    expect(notifier.calls).toHaveLength(0);
   });
 });
 
