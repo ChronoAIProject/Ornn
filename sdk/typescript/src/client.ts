@@ -274,7 +274,7 @@ export class OrnnClient {
   /**
    * Update a skill's visibility / sharing ACL (#1123). `grants` is the
    * canonical typed ACL — each entry grants a user or org a `read` or
-   * `read_write` level. The legacy `sharedWith*` arrays are still accepted
+   * `write` level. The legacy `sharedWith*` arrays are still accepted
    * (mapped to `read`-level grants) for backward compat. Returns the
    * refreshed skill detail.
    */
@@ -345,7 +345,7 @@ export class OrnnClient {
   /**
    * Update a skillset's visibility / sharing ACL (#1123). `grants` is the
    * canonical typed ACL — each entry grants a user or org a `read` or
-   * `read_write` level. The legacy `sharedWith*` arrays are still accepted
+   * `write` level. The legacy `sharedWith*` arrays are still accepted
    * (mapped to `read`-level grants) for backward compat.
    */
   async setSkillsetPermissions(

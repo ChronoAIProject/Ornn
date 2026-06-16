@@ -21,8 +21,8 @@ SystemFilter = Literal["any", "only", "exclude"]
 SkillsetKind = Literal["generic", "consensus-supported"]
 
 # Access level a grant confers (#1123). `read` allows pull/execute;
-# `read_write` additionally allows publishing new versions / editing.
-SkillPermissionLevel = Literal["read", "read_write"]
+# `write` additionally allows publishing new versions / editing (and implies read).
+SkillPermissionLevel = Literal["read", "write"]
 GrantTarget = Literal["user", "org"]
 
 

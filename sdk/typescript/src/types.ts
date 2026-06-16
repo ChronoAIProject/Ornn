@@ -13,9 +13,9 @@ export type SearchScope = "public" | "private" | "mine" | "mixed" | "shared-with
 
 /**
  * Access level a grant confers (#1123). `read` allows pull/execute;
- * `read_write` additionally allows publishing new versions / editing.
+ * `write` additionally allows publishing new versions / editing.
  */
-export type SkillPermissionLevel = "read" | "read_write";
+export type SkillPermissionLevel = "read" | "write";
 
 /**
  * One typed ACL entry (#1123) — the canonical sharing primitive for

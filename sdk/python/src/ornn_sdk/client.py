@@ -252,7 +252,7 @@ class OrnnClient:
         """Apply a new ACL state to a skill (#1123).
 
         ``grants`` is the canonical typed ACL — each entry confers ``read``
-        or ``read_write`` to one user or org. The legacy ``shared_with_*``
+        or ``write`` to one user or org. The legacy ``shared_with_*``
         lists are still accepted (the server maps each entry to a
         ``read``-level grant) but are superseded by ``grants``; pass one or
         the other, not both. ``is_private=False`` makes the skill fully
@@ -372,7 +372,7 @@ class OrnnClient:
         """Update a skillset's visibility / ACL (#1123).
 
         ``grants`` is the canonical typed ACL — each entry confers ``read``
-        or ``read_write`` to one user or org. The legacy ``shared_with_*``
+        or ``write`` to one user or org. The legacy ``shared_with_*``
         lists are still accepted (the server maps each entry to a
         ``read``-level grant) but are superseded by ``grants``; pass one or
         the other, not both.
