@@ -166,6 +166,20 @@ function makeSkillsetDeps(
       state.byName.set(next.name, next);
       return next;
     },
+    setDerivedVisibility: async (
+      g: string,
+      derived: {
+        membersAllPublic: boolean;
+        memberVisibilityState: SkillsetDocument["memberVisibilityState"];
+      },
+    ) => {
+      const cur = state.skillsets.get(g);
+      if (!cur) return;
+      // Mirror the real method: only the derived fields, no audit bump.
+      const next = { ...cur, ...derived } as SkillsetDocument;
+      state.skillsets.set(g, next);
+      state.byName.set(next.name, next);
+    },
     transferOwnership: async (
       g: string,
       data: {
@@ -265,6 +279,105 @@ function twoMemberSkills(): { skills: SkillDocument[]; versions: SkillVersionDoc
     ],
   };
 }
+
+describe("SkillsetService — derived visibility on create/publish (#1136)", () => {
+  it("create with all-public members → all-public", async () => {
+    const { skills, versions } = twoMemberSkills();
+    const skillService = makeSkillService(skills, versions);
+    const { deps, state } = makeSkillsetDeps(skillService);
+    const service = new SkillsetService(deps);
+
+    const created = await service.createSkillset(
+      {
+        name: "open-set",
+        description: "d",
+        instructions: "p",
+        kind: "generic",
+        tags: [],
+        members: ["pdf-tools@1.0", "csv-tools@1.0"],
+        version: "1.0",
+      },
+      { userId: "owner-1" },
+    );
+    const doc = state.skillsets.get(created.guid)!;
+    expect(doc.memberVisibilityState).toBe("all-public");
+    expect(doc.membersAllPublic).toBe(true);
+  });
+
+  it("create with a private member → restricted (overrides the seeded all-public)", async () => {
+    // One member skill is private — the skillset cannot advertise public reach.
+    const a = skillDoc({ guid: "g-a", name: "pdf-tools", latestVersion: "1.0", isPrivate: false });
+    const b = skillDoc({ guid: "g-b", name: "secret-tools", latestVersion: "1.0", isPrivate: true });
+    const skillService = makeSkillService(
+      [a, b],
+      [
+        skillVersion({ _id: "g-a@1.0", skillGuid: "g-a", version: "1.0" }),
+        skillVersion({ _id: "g-b@1.0", skillGuid: "g-b", version: "1.0" }),
+      ],
+    );
+    const { deps, state } = makeSkillsetDeps(skillService);
+    const service = new SkillsetService(deps);
+
+    const created = await service.createSkillset(
+      {
+        name: "mixed-set",
+        description: "d",
+        instructions: "p",
+        kind: "generic",
+        tags: [],
+        members: ["pdf-tools@1.0", "secret-tools@1.0"],
+        version: "1.0",
+      },
+      { userId: "owner-1" },
+    );
+    const doc = state.skillsets.get(created.guid)!;
+    expect(doc.memberVisibilityState).toBe("restricted");
+    expect(doc.membersAllPublic).toBe(false);
+  });
+
+  it("publish rederives against the new version's members", async () => {
+    // v1.0 is all-public; v1.1 swaps in a private member → restricted.
+    const a = skillDoc({ guid: "g-a", name: "pdf-tools", latestVersion: "1.0", isPrivate: false });
+    const b = skillDoc({ guid: "g-b", name: "csv-tools", latestVersion: "1.0", isPrivate: false });
+    const c = skillDoc({ guid: "g-c", name: "secret-tools", latestVersion: "1.0", isPrivate: true });
+    const skillService = makeSkillService(
+      [a, b, c],
+      [
+        skillVersion({ _id: "g-a@1.0", skillGuid: "g-a", version: "1.0" }),
+        skillVersion({ _id: "g-b@1.0", skillGuid: "g-b", version: "1.0" }),
+        skillVersion({ _id: "g-c@1.0", skillGuid: "g-c", version: "1.0" }),
+      ],
+    );
+    const { deps, state } = makeSkillsetDeps(skillService);
+    const service = new SkillsetService(deps);
+
+    const created = await service.createSkillset(
+      {
+        name: "evolving-set",
+        description: "d",
+        instructions: "p",
+        kind: "generic",
+        tags: [],
+        members: ["pdf-tools@1.0", "csv-tools@1.0"],
+        version: "1.0",
+      },
+      { userId: "owner-1" },
+    );
+    expect(state.skillsets.get(created.guid)!.memberVisibilityState).toBe("all-public");
+
+    await service.publishVersion(
+      created.guid,
+      {
+        instructions: "p",
+        members: ["pdf-tools@1.0", "secret-tools@1.0"],
+        version: "1.1",
+      },
+      OWNER,
+    );
+    expect(state.skillsets.get(created.guid)!.memberVisibilityState).toBe("restricted");
+    expect(state.skillsets.get(created.guid)!.membersAllPublic).toBe(false);
+  });
+});
 
 describe("SkillsetService — create / publish (immutable versioning)", () => {
   it("create → publish bumps version; prior version stays immutable", async () => {

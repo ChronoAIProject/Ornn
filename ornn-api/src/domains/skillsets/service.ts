@@ -41,6 +41,7 @@ import {
   resolvePermissionGrants,
   type PermissionsPayload,
 } from "../skills/crud/grants";
+import { recomputeSkillsetVisibility } from "./recompute";
 import type { SkillsetRepository } from "./repository";
 import type { SkillsetVersionRepository } from "./skillsetVersionRepository";
 import type {
@@ -156,6 +157,11 @@ export class SkillsetService {
       createdByDisplayName: actor.displayName,
     });
 
+    // Derive the visibility cache from the (just-written) members so a
+    // skillset created with a private member is immediately "restricted",
+    // not the provisional "all-public" the repo seeds (#1136).
+    await this.recomputeVisibility(guid);
+
     logger.info({ guid, name: input.name, version: input.version, kind: input.kind }, "Skillset created");
     return this.getSkillset(guid);
   }
@@ -235,6 +241,10 @@ export class SkillsetService {
       latestVersion: input.version,
       updatedBy: actor.userId,
     });
+
+    // The new version's member set may differ from the prior one — rederive
+    // the visibility cache against the now-latest version (#1136).
+    await this.recomputeVisibility(guid);
 
     logger.info({ guid, version: input.version }, "Skillset version published");
     return this.getSkillset(guid);
@@ -474,6 +484,20 @@ export class SkillsetService {
   // ==========================================================================
   // Private helpers
   // ==========================================================================
+
+  /**
+   * Rederive the denormalized visibility cache for a skillset's latest
+   * version (#1136). Called on the skillset write path (create/publish);
+   * the skill write path drives the same recompute reactively via
+   * `recomputeForSkill`.
+   */
+  private async recomputeVisibility(guid: string): Promise<void> {
+    await recomputeSkillsetVisibility(guid, {
+      skillsetRepo: this.skillsetRepo,
+      skillsetVersionRepo: this.skillsetVersionRepo,
+      skillService: this.skillService,
+    });
+  }
 
   private async findByIdOrName(idOrName: string): Promise<SkillsetDocument> {
     let skillset = await this.skillsetRepo.findByGuid(idOrName);
