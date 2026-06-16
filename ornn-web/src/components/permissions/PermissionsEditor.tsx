@@ -44,14 +44,14 @@ const key = (p: { type: string; id: string }) => `${p.type}:${p.id}`;
 /**
  * Compose the canonical grants from the two audiences. When public, read
  * grants are redundant (everyone reads) so only write grants are emitted.
- * A principal in both audiences resolves to read_write (write wins).
+ * A principal in both audiences resolves to write (write wins).
  */
 function buildGrants(read: Principal[], write: Principal[], isPublic: boolean): SkillGrant[] {
   const map = new Map<string, SkillGrant>();
   if (!isPublic) {
     for (const p of read) map.set(key(p), { type: p.type, id: p.id, level: "read" });
   }
-  for (const p of write) map.set(key(p), { type: p.type, id: p.id, level: "read_write" });
+  for (const p of write) map.set(key(p), { type: p.type, id: p.id, level: "write" });
   return [...map.values()];
 }
 
@@ -78,7 +78,7 @@ export function PermissionsEditor({
   const [isPublic, setIsPublic] = useState<boolean>(!initialIsPrivate);
   const [readGrantees, setReadGrantees] = useState<Principal[]>(() => toPrincipals(initialGrants, "read"));
   const [writeGrantees, setWriteGrantees] = useState<Principal[]>(() =>
-    toPrincipals(initialGrants, "read_write"),
+    toPrincipals(initialGrants, "write"),
   );
 
   // Resolve user-grant labels once on mount (the typeahead supplies labels
@@ -150,7 +150,7 @@ export function PermissionsEditor({
     const grants = buildGrants(readGrantees, writeGrantees, isPublic);
     const initialBuilt = buildGrants(
       toPrincipals(initialGrants, "read"),
-      toPrincipals(initialGrants, "read_write"),
+      toPrincipals(initialGrants, "write"),
       !initialIsPrivate,
     );
     if (isPrivate === initialIsPrivate && signature(grants) === signature(initialBuilt)) {

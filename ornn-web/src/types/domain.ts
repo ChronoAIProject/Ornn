@@ -42,10 +42,10 @@ export type SkillSource =
 
 /**
  * Permission level a grant confers (#1123). `read` = view/pull/execute;
- * `read_write` = also update the skill's content & metadata (no admin —
+ * `write` = also update the skill's content & metadata (no admin —
  * permission management, transfer, and delete stay with the owner + admins).
  */
-export type SkillPermissionLevel = "read" | "read_write";
+export type SkillPermissionLevel = "read" | "write";
 
 /** One typed access grant on a skill / skillset (#1123). */
 export interface SkillGrant {
@@ -69,7 +69,7 @@ export interface SkillDetail extends SkillSummary {
   /** Org user_ids this skill has been explicitly shared with. */
   sharedWithOrgs: string[];
   /**
-   * Typed access grants (#1123) — the canonical read/read-write ACL. Always
+   * Typed access grants (#1123) — the canonical read/write ACL. Always
    * present in API responses; the legacy `sharedWith*` arrays above mirror
    * the read-visibility of these for back-compat.
    */
