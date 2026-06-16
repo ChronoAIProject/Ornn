@@ -34,6 +34,18 @@ export const SKILLSET_MAX_MEMBERS = 100;
 /** Upper bound on the master-prompt body (the per-version usage instructions). */
 export const SKILLSET_INSTRUCTIONS_MAX = 8000;
 
+/**
+ * Member-derived visibility state (#1136) — a skillset's visibility is bounded
+ * by its least-privileged member, never owner-set. Mirrors the backend
+ * `SkillsetMemberVisibilityState`:
+ * - `all-public`   — every member is public; anyone can use / discover it.
+ * - `restricted`   — ≥1 member is private/shared; only callers who can read
+ *                    every member may use / discover it.
+ * - `unresolvable` — ≥1 member ref no longer resolves (e.g. deleted); only the
+ *                    owner sees it, with a repair warning.
+ */
+export type SkillsetMemberVisibilityState = "all-public" | "restricted" | "unresolvable";
+
 /** Why a master-prompt body is invalid. `null` = valid. */
 export type MasterPromptRejection = "empty" | "tooLong" | null;
 
@@ -81,8 +93,22 @@ export interface SkillsetDetail {
   createdByDisplayName?: string | undefined;
   sharedWithUsers: string[];
   sharedWithOrgs: string[];
-  /** Canonical typed ACL (#1123). Present in detail responses via effectiveGrants. */
+  /**
+   * Legacy typed ACL (#1123) — INERT since #1136 (visibility is derived from
+   * members). Kept for back-compat; do not gate UI on it.
+   */
   grants?: SkillGrant[];
+  /**
+   * Derived (#1136) member-visibility state of THIS version — the
+   * authoritative signal for the visibility badge.
+   */
+  memberVisibilityState: SkillsetMemberVisibilityState;
+  /**
+   * Member refs the CURRENT caller cannot read at this version (#1136).
+   * Always empty for a non-owner (they 404 instead); surfaced to the
+   * owner/admin so they can repair access. Drives the warning banner.
+   */
+  unreadableMembers: string[];
   createdOn: string;
   updatedOn: string;
 }
@@ -104,6 +130,8 @@ export interface SkillsetSearchItem {
   memberCount: number;
   latestVersion: string;
   isPrivate: boolean;
+  /** Derived (#1136) member-visibility state — drives the badge in lists. */
+  memberVisibilityState: SkillsetMemberVisibilityState;
   createdBy: string;
   createdByEmail?: string | undefined;
   createdByDisplayName?: string | undefined;
@@ -215,14 +243,9 @@ export interface PublishSkillsetInput {
   version: string;
 }
 
-/** Body for PUT /api/v1/skillsets/:id/permissions. Mirrors skills. */
-export interface SkillsetPermissionsInput {
-  isPrivate: boolean;
-  /** Canonical typed ACL (#1123/#1125); legacy lists optional for back-compat. */
-  grants?: SkillGrant[];
-  sharedWithUsers?: string[];
-  sharedWithOrgs?: string[];
-}
+// NOTE (#1136): there is no skillset permissions input — a skillset's
+// visibility is derived from its members, not owner-set. To widen reach,
+// expose the underlying member skills to the intended audience.
 
 /**
  * Parse a member ref into its `name@version` (or `name@tag`) parts for chip

@@ -34,6 +34,7 @@ const ITEM: SkillsetSearchItem = {
   memberCount: 0,
   latestVersion: "1.2",
   isPrivate: false,
+  memberVisibilityState: "all-public",
   createdBy: "user-1",
   createdByDisplayName: "Ada",
   createdOn: "2026-06-01T00:00:00.000Z",

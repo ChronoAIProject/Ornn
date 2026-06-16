@@ -34,7 +34,6 @@ import {
   createSkillset,
   publishSkillset,
   deleteSkillset,
-  updateSkillsetPermissions,
 } from "./skillsetApi";
 import type {
   CreateSkillsetInput,
@@ -198,23 +197,5 @@ describe("deleteSkillset", () => {
   });
 });
 
-describe("updateSkillsetPermissions", () => {
-  it("PUTs /permissions and unwraps the { skillset } envelope", async () => {
-    fetchSpy.mockResolvedValue(
-      jsonResponse({ skillset: { guid: GUID, name: NAME, isPrivate: true } }),
-    );
-    const out = await updateSkillsetPermissions(GUID, {
-      isPrivate: true,
-      sharedWithUsers: ["u1"],
-      sharedWithOrgs: ["o1"],
-    });
-    expect(init(fetchSpy).method).toBe("PUT");
-    expect(url(fetchSpy)).toContain(`/api/v1/skillsets/${GUID}/permissions`);
-    expect(body(fetchSpy)).toMatchObject({
-      isPrivate: true,
-      sharedWithUsers: ["u1"],
-      sharedWithOrgs: ["o1"],
-    });
-    expect(out).toMatchObject({ guid: GUID, name: NAME });
-  });
-});
+// NOTE (#1136): no updateSkillsetPermissions test — the function was removed
+// (skillset visibility is derived from members, not owner-set).

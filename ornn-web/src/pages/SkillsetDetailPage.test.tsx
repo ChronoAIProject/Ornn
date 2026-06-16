@@ -36,10 +36,6 @@ vi.mock("@/stores/toastStore", () => ({
   useToastStore: (sel: (s: { addToast: () => void }) => unknown) => sel({ addToast: vi.fn() }),
 }));
 
-// Keep the permissions modal + markdown viewer light.
-vi.mock("@/components/skillset/SkillsetPermissionsModal", () => ({
-  SkillsetPermissionsModal: () => null,
-}));
 vi.mock("@/components/skill/ReadmeViewer", () => ({
   ReadmeViewer: ({ content }: { content: string }) => <div data-testid="readme">{content}</div>,
 }));
@@ -80,6 +76,9 @@ const DETAIL: SkillsetDetail = {
   createdBy: "user-1",
   sharedWithUsers: ["u1"],
   sharedWithOrgs: [],
+  // Derived visibility (#1136) — the authoritative signal for the badge.
+  memberVisibilityState: "all-public",
+  unreadableMembers: [],
   createdOn: "2026-06-01T00:00:00.000Z",
   updatedOn: "2026-06-02T00:00:00.000Z",
 };
@@ -139,9 +138,28 @@ describe("SkillsetDetailPage", () => {
     expect(screen.getByTestId("readme")).toHaveTextContent("Run A, then B.");
     // Closure (flat list with a depth-1 dependency).
     expect(screen.getByTestId("closure-list")).toHaveTextContent("a-dep");
-    // Visibility card (exact same as skill details) — shows user/org counts.
-    expect(screen.getByText("1")).toBeInTheDocument();
-    expect(screen.getByText(/users/i)).toBeInTheDocument();
+    // Derived visibility badge (#1136) — appears in the hero AND the rail card.
+    expect(screen.getAllByText("Public").length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("shows the member-access warning banner when the owner can't read every member (#1136)", () => {
+    useSkillset.mockReturnValue({
+      data: { ...DETAIL, memberVisibilityState: "restricted", unreadableMembers: ["secret@1.0"] },
+      isLoading: false,
+      error: null,
+    });
+    renderAt("/skillsets/research-bundle");
+    expect(
+      screen.getByText("You no longer have access to some member skills"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("secret@1.0")).toBeInTheDocument();
+  });
+
+  it("shows NO member-access warning when every member is readable", () => {
+    renderAt("/skillsets/research-bundle");
+    expect(
+      screen.queryByText("You no longer have access to some member skills"),
+    ).not.toBeInTheDocument();
   });
 
   it("shows owner actions (Edit + Delete) for the author", () => {

@@ -24,6 +24,8 @@ const DETAIL: SkillsetDetail = {
   createdBy: "user-1",
   sharedWithUsers: ["u1"],
   sharedWithOrgs: [],
+  memberVisibilityState: "restricted",
+  unreadableMembers: [],
   createdOn: "2026-06-01T00:00:00.000Z",
   updatedOn: "2026-06-02T00:00:00.000Z",
 };
@@ -34,22 +36,23 @@ afterEach(() => {
 });
 
 describe("SkillsetHeroStrip", () => {
-  it("renders the name, description, kind/visibility pills, and tags", () => {
+  it("renders the name, description, kind + DERIVED visibility pills, and tags", () => {
     render(<SkillsetHeroStrip skillset={DETAIL} isOwner={false} />);
     expect(screen.getByRole("heading", { name: "research-bundle" })).toBeInTheDocument();
     expect(screen.getByText("A curated comparison set")).toBeInTheDocument();
-    // Pills (version pill moved to right-rail Versions card).
+    // Pills (version pill moved to right-rail Versions card). Visibility is
+    // now DERIVED (#1136) — a restricted member set shows "Restricted".
     expect(screen.getByText("Consensus")).toBeInTheDocument();
-    expect(screen.getByText("Private")).toBeInTheDocument();
+    expect(screen.getByText("Restricted")).toBeInTheDocument();
     // Tags.
     expect(screen.getByText("#research")).toBeInTheDocument();
     expect(screen.getByText("#rag")).toBeInTheDocument();
   });
 
-  it("renders Public visibility + Bundle kind for a public generic skillset", () => {
+  it("renders Public visibility + Bundle kind for an all-public generic skillset", () => {
     render(
       <SkillsetHeroStrip
-        skillset={{ ...DETAIL, kind: "generic", isPrivate: false }}
+        skillset={{ ...DETAIL, kind: "generic", memberVisibilityState: "all-public" }}
         isOwner={false}
       />,
     );
