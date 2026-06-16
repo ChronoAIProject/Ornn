@@ -177,6 +177,14 @@ export interface SkillRoutesConfig {
   resolveUser?: (
     userId: string,
   ) => Promise<{ userId: string; email: string; displayName: string } | null>;
+  /**
+   * #1136 — fire-and-forget skillset derived-visibility recompute. Called
+   * after any skill mutation that changes the skill's readability (privacy
+   * flip, permission change, ownership transfer, nyxid-service bind,
+   * delete), so every skillset referencing the skill updates its derived
+   * visibility and owners are notified on access loss. No-op when unset.
+   */
+  fireSkillsetRecompute?: (changedSkill: { guid: string; name: string }) => void;
 }
 
 /** Marker prefix for synthetic NyxID-service ids. See `extraNyxidServices`. */
@@ -193,6 +201,7 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
     extraNyxidServicesResolver,
     mirrorService,
     resolveUser,
+    fireSkillsetRecompute,
   } = config;
   const app = new Hono<{ Variables: AuthVariables }>();
 
@@ -1108,6 +1117,12 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
       // umbrella decides between publish vs remove based on the new
       // `isPrivate` state.
       fireMirrorSync(guid);
+      // Only a privacy flip changes who can read the skill, so recompute
+      // dependent skillsets only then (#1136) — a content-only update
+      // leaves readability untouched.
+      if (isPrivate !== undefined) {
+        fireSkillsetRecompute?.({ guid, name: result.name });
+      }
 
       return c.json({ data: result, error: null });
     },
@@ -1174,6 +1189,8 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
       // Permissions change can flip eligibility — sync handles both
       // public→private (remove from mirror) and private→public (add).
       fireMirrorSync(guid);
+      // Grants change who can read the skill → recompute dependent skillsets (#1136).
+      fireSkillsetRecompute?.({ guid, name: updated.name });
 
       return c.json({ data: { skill: updated }, error: null });
     },
@@ -1241,6 +1258,9 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
       // Owner change doesn't affect mirror eligibility, but the cached author
       // labels on the mirror copy are now stale — resync to refresh them.
       fireMirrorSync(guid);
+      // Author change shifts read access (the prior owner keeps READ, but a
+      // skillset owner who relied on authoring it may now lose it) — recompute (#1136).
+      fireSkillsetRecompute?.({ guid, name: updated.name });
 
       return c.json({ data: { skill: updated }, error: null });
     },
@@ -1321,6 +1341,8 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
       // skill becomes mirror-eligible. Conversely an untie can leave a
       // system skill back at private. Sync handles both directions.
       fireMirrorSync(guid);
+      // A tie/untie can flip the skill's visibility → recompute skillsets (#1136).
+      fireSkillsetRecompute?.({ guid, name: updated.name });
 
       return c.json({ data: { skill: updated }, error: null });
     },
@@ -1466,6 +1488,10 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
       // Mirror cleanup: directly remove by name (skill doc is gone, so
       // the umbrella `syncSkill` would no-op).
       fireMirrorRemove(skillNameForMirror);
+      // The skill is gone → any skillset referencing it now has an
+      // unresolvable member; recompute + notify owners (#1136). Name+guid
+      // captured before deletion so the reverse index still matches.
+      fireSkillsetRecompute?.({ guid, name: skillNameForMirror });
 
       return c.json({ data: { success: true }, error: null });
     },

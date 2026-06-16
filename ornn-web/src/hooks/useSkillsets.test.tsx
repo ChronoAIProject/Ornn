@@ -33,7 +33,6 @@ vi.mock("@/stores/authStore", () => ({
 import {
   useDeleteSkillset,
   usePublishSkillset,
-  useUpdateSkillsetPermissions,
   useCreateSkillset,
 } from "./useSkillsets";
 
@@ -198,25 +197,8 @@ describe("usePublishSkillset", () => {
   });
 });
 
-describe("useUpdateSkillsetPermissions", () => {
-  it("PUTs /permissions on the GUID and invalidates the name-keyed detail", async () => {
-    const fetchSpy = vi
-      .spyOn(globalThis, "fetch")
-      .mockResolvedValue(jsonResponse({ skillset: { guid: GUID, name: NAME, isPrivate: true } }));
-    const { wrapper, invalidateSpy } = makeWrapper();
-    const { result } = renderHook(() => useUpdateSkillsetPermissions(GUID, NAME), { wrapper });
-
-    await result.current.mutateAsync({
-      isPrivate: true,
-      sharedWithUsers: [],
-      sharedWithOrgs: [],
-    });
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
-
-    expect(url(fetchSpy)).toContain(`/skillsets/${encodeURIComponent(GUID)}/permissions`);
-    expect(invalidatedKey(invalidateSpy, ["skillsets", NAME])).toBe(true);
-  });
-});
+// NOTE (#1136): no useUpdateSkillsetPermissions test — the hook was removed
+// (skillset visibility is derived from members, not owner-set).
 
 describe("useCreateSkillset", () => {
   it("POSTs and invalidates the public + mine list tabs", async () => {

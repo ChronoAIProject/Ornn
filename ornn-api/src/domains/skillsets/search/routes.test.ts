@@ -20,7 +20,7 @@ interface SearchCall {
   q?: string;
   page: number;
   pageSize: number;
-  currentUserId: string;
+  actor: { userId: string };
 }
 
 function buildApp(opts: {
@@ -119,7 +119,7 @@ describe("GET /skillset-search", () => {
     const app = buildApp({ authenticated: true, capture: (c) => (call = c) });
     await app.request("/api/v1/skillset-search?scope=mine");
     expect(call!.scope).toBe("mine");
-    expect(call!.currentUserId).toBe("u1");
+    expect(call!.actor.userId).toBe("u1");
   });
 
   test("rejects an unknown kind with 400", async () => {

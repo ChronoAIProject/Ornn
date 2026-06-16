@@ -11,11 +11,8 @@
 
 import { Hono } from "hono";
 import { z } from "zod";
-import {
-  type AuthVariables,
-  optionalAuthMiddleware,
-  readUserOrgIds,
-} from "../../../middleware/nyxidAuth";
+import { type AuthVariables, optionalAuthMiddleware } from "../../../middleware/nyxidAuth";
+import { buildActorContext, type ActorContext } from "../../skills/crud/authorize";
 import { validateQuery, getValidatedQuery } from "../../../middleware/validate";
 import { AppError } from "../../../shared/types/index";
 import { createLogger } from "../../../shared/logger";
@@ -90,8 +87,12 @@ export function createSkillsetSearchRoutes(
       const isAnonymous = !authCtx;
       // Anonymous callers can only search public scope.
       const scope = isAnonymous ? "public" : parsed.scope;
-      const currentUserId = authCtx?.userId ?? "";
-      const userOrgIds = authCtx ? await readUserOrgIds(c) : [];
+      // Full actor (#1136) — the live discovery gate resolves each member
+      // ref under the caller, so it needs the org memberships, not just the
+      // user id. Anonymous → a fresh empty actor (sees all-public only).
+      const actor: ActorContext = authCtx
+        ? await buildActorContext(c)
+        : { userId: "", memberships: [], isPlatformAdmin: false, membershipsResolved: true };
 
       logger.debug(
         { kind: parsed.kind ?? null, scope, anonymous: isAnonymous },
@@ -100,8 +101,7 @@ export function createSkillsetSearchRoutes(
 
       const response = await skillsetSearchService.search({
         scope,
-        currentUserId,
-        userOrgIds,
+        actor,
         page,
         pageSize,
         kind: parsed.kind,

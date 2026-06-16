@@ -17,6 +17,7 @@
 import { useTranslation } from "react-i18next";
 import { DetailHeroStrip } from "@/components/detail/DetailHeroStrip";
 import { Button } from "@/components/ui/Button";
+import { SkillsetVisibilityBadge } from "@/components/skillset/SkillsetVisibilityBadge";
 import type { SkillsetDetail } from "@/types/skillset";
 
 export interface SkillsetHeroStripProps {
@@ -45,10 +46,6 @@ export function SkillsetHeroStrip({
     skillset.kind === "consensus-supported"
       ? t("skillsetKind.consensusSupported", "Consensus")
       : t("skillsetKind.generic", "Bundle");
-
-  const visibilityLabel = skillset.isPrivate
-    ? t("common.private", "Private")
-    : t("common.public", "Public");
 
   const ownerName =
     skillset.createdByDisplayName || skillset.createdByEmail || skillset.createdBy;
@@ -89,15 +86,8 @@ export function SkillsetHeroStrip({
             </svg>
             {kindLabel}
           </span>
-          {/* Visibility */}
-          <span className="inline-flex items-center gap-1.5 rounded-sm border border-info/40 bg-info-soft px-2.5 py-1 font-mono text-[11px] uppercase tracking-wider text-info">
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
-              {skillset.isPrivate
-                ? <path d="M12 2a5 5 0 0 0-5 5v3H5a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2h-2V7a5 5 0 0 0-5-5z" />
-                : <><circle cx="12" cy="12" r="9" /><path d="M3 12h18" /></>}
-            </svg>
-            {visibilityLabel}
-          </span>
+          {/* Visibility — DERIVED from members (#1136), read-only. */}
+          <SkillsetVisibilityBadge state={skillset.memberVisibilityState} />
         </>
       }
       footer={

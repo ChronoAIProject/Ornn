@@ -13,9 +13,13 @@ import type { Db } from "mongodb";
 import type { Hono } from "hono";
 import type { AuthVariables } from "../../middleware/nyxidAuth";
 import type { SkillService } from "../skills/crud/service";
+import { createLogger } from "../../shared/logger";
 import { SkillsetRepository } from "./repository";
 import { SkillsetVersionRepository } from "./skillsetVersionRepository";
-import { SkillsetService } from "./service";
+import { SkillsetService, type SkillsetNotificationEmitter } from "./service";
+import { backfillDerivedVisibility } from "./recompute";
+
+const logger = createLogger("skillsetsBootstrap");
 import { createSkillsetRoutes } from "./routes";
 import { SkillsetSearchService } from "./search/service";
 import { createSkillsetSearchRoutes } from "./search/routes";
@@ -26,6 +30,19 @@ export interface SkillsetWiring {
   readonly searchRoutes: Hono<{ Variables: AuthVariables }>;
   /** Ensure the two collections' indexes. Awaited by bootstrap on startup. */
   ensureIndexes(): Promise<void>;
+  /**
+   * One-shot derived-visibility backfill (#1136). Idempotent — recomputes
+   * the `membersAllPublic` / `memberVisibilityState` cache for every
+   * existing skillset. Awaited by bootstrap after `ensureIndexes`.
+   */
+  backfillDerivedVisibility(): Promise<void>;
+  /**
+   * Fire-and-forget reactive recompute (#1136). Call from any skill route
+   * that changes a skill's visibility; recomputes every skillset that
+   * references it and notifies owners who lost member-read access. Errors
+   * are swallowed + logged — never blocks the skill mutation response.
+   */
+  fireSkillsetRecompute(changedSkill: { guid: string; name: string }): void;
 }
 
 export function wireSkillsets(deps: {
@@ -35,6 +52,8 @@ export function wireSkillsets(deps: {
   resolveUser?: (
     userId: string,
   ) => Promise<{ userId: string; email: string; displayName: string } | null>;
+  /** #1136 — owner-notification emitter for the reactive recompute path. */
+  notificationService?: SkillsetNotificationEmitter;
 }): SkillsetWiring {
   const skillsetRepo = new SkillsetRepository(deps.db);
   const skillsetVersionRepo = new SkillsetVersionRepository(deps.db);
@@ -44,10 +63,13 @@ export function wireSkillsets(deps: {
     skillsetVersionRepo,
     skillService: deps.skillService,
     ...(deps.resolveUser ? { resolveUser: deps.resolveUser } : {}),
+    ...(deps.notificationService ? { notificationService: deps.notificationService } : {}),
   });
   const routes = createSkillsetRoutes({ skillsetService: service });
 
-  const searchService = new SkillsetSearchService({ skillsetRepo });
+  // #1136 — the search service live-filters restricted candidates via the
+  // skillset service's per-caller member-readability check.
+  const searchService = new SkillsetSearchService({ skillsetRepo, skillsetService: service });
   const searchRoutes = createSkillsetSearchRoutes({ skillsetSearchService: searchService });
 
   return {
@@ -57,6 +79,23 @@ export function wireSkillsets(deps: {
     ensureIndexes: async () => {
       await skillsetRepo.ensureIndexes();
       await skillsetVersionRepo.ensureIndexes();
+    },
+    backfillDerivedVisibility: async () => {
+      await backfillDerivedVisibility({
+        skillsetRepo,
+        skillsetVersionRepo,
+        skillService: deps.skillService,
+      });
+    },
+    fireSkillsetRecompute: (changedSkill) => {
+      service
+        .recomputeForChangedSkill(changedSkill)
+        .catch((err) =>
+          logger.warn(
+            { err, skillGuid: changedSkill.guid },
+            "Reactive skillset recompute failed",
+          ),
+        );
     },
   };
 }

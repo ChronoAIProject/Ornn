@@ -24,6 +24,8 @@ const CATEGORY_LABEL: Record<NotificationCategory, string> = {
   "audit.completed": "Audit",
   "audit.risky_for_consumer": "Audit",
   "quota.credits_granted": "Quota",
+  "launchPromo.codeDelivered": "Promo",
+  "skillset.member_unreadable": "Skillset",
 };
 
 function formatTimestamp(iso: string): string {

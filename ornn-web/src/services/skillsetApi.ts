@@ -1,10 +1,10 @@
 /**
  * Client for the skillsets domain (#1059 web UI for #969 backend).
  *
- * Eight functions over the local `apiClient` (JSON bodies — NO SDK). URL
+ * Seven functions over the local `apiClient` (JSON bodies — NO SDK). URL
  * layout follows CONVENTIONS.md (plural noun). Read endpoints accept GUID or
- * name; write endpoints (publish / permissions / delete) are GUID-only per
- * CONVENTIONS §2.2 — callers must pass the GUID on the wire.
+ * name; write endpoints (publish / delete) are GUID-only per CONVENTIONS §2.2
+ * — callers must pass the GUID on the wire.
  *
  *   searchSkillsets            → GET    /skillset-search
  *   fetchSkillset              → GET    /skillsets/:idOrName[?version]
@@ -13,7 +13,9 @@
  *   createSkillset             → POST   /skillsets
  *   publishSkillset            → PUT    /skillsets/:id
  *   deleteSkillset             → DELETE /skillsets/:id
- *   updateSkillsetPermissions  → PUT    /skillsets/:id/permissions
+ *
+ * NOTE (#1136): no permissions endpoint — a skillset's visibility is derived
+ * from its members, not owner-set.
  *
  * @module services/skillsetApi
  */
@@ -24,7 +26,6 @@ import type {
   PublishSkillsetInput,
   SkillsetClosureResult,
   SkillsetDetail,
-  SkillsetPermissionsInput,
   SkillsetSearchParams,
   SkillsetSearchResponse,
   SkillsetVersionEntry,
@@ -126,20 +127,4 @@ export async function publishSkillset(
  */
 export async function deleteSkillset(guid: string): Promise<void> {
   await apiDelete(`/api/v1/skillsets/${encodeURIComponent(guid)}`);
-}
-
-/**
- * Replace the skillset's visibility config in one atomic call. First arg MUST
- * be the GUID. Returns the refreshed skillset detail (unwrapped from the
- * `{ skillset }` envelope the route emits).
- */
-export async function updateSkillsetPermissions(
-  guid: string,
-  body: SkillsetPermissionsInput,
-): Promise<SkillsetDetail> {
-  const res = await apiPut<{ skillset: SkillsetDetail }>(
-    `/api/v1/skillsets/${encodeURIComponent(guid)}/permissions`,
-    body,
-  );
-  return res.data!.skillset;
 }

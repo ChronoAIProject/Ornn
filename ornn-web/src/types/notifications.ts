@@ -9,7 +9,10 @@
 export type NotificationCategory =
   | "audit.completed"
   | "audit.risky_for_consumer"
-  | "quota.credits_granted";
+  | "quota.credits_granted"
+  | "launchPromo.codeDelivered"
+  /** A member skill became unreadable to the skillset owner (#1136). */
+  | "skillset.member_unreadable";
 
 /**
  * Discriminator marking whether this row was lifted out of the
