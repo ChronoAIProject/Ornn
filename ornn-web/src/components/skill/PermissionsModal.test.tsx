@@ -1,9 +1,9 @@
 /**
- * PermissionsModal level tests (#1123).
+ * PermissionsModal tests (#1125) — the two-tab Read / Write editor.
  *
- * Guards the typed-grant flow: an existing read_write user grant renders the
- * read-write toggle, flipping it to read and saving sends the canonical
- * `grants` payload with the new level.
+ * Headline guard: an owner can set "public read + org write" (the combination
+ * the old single-ladder modal could not express), and Save emits the correct
+ * typed `grants` + `isPrivate`.
  *
  * orgs / directory / mutation / toast are mocked; framer-motion is stubbed;
  * react-i18next is global.
@@ -12,14 +12,13 @@
  */
 
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { SkillDetail } from "@/types/domain";
 
 const mutateAsync = vi.fn();
 const addToast = vi.fn();
 const resolveUsers = vi.fn();
-const searchUsersByEmail = vi.fn();
 
 vi.mock("framer-motion", () => ({
   AnimatePresence: ({ children }: { children: React.ReactNode }) => <>{children}</>,
@@ -45,7 +44,7 @@ vi.mock("framer-motion", () => ({
   ),
 }));
 
-vi.mock("@/hooks/useMe", () => ({ useMyOrgs: () => ({ data: [] }) }));
+vi.mock("@/hooks/useMe", () => ({ useMyOrgs: () => ({ data: [{ userId: "org-1", displayName: "Org One" }] }) }));
 vi.mock("@/hooks/useSkills", () => ({
   useUpdateSkillPermissions: () => ({ mutateAsync, isPending: false }),
 }));
@@ -54,8 +53,8 @@ vi.mock("@/stores/toastStore", () => ({
 }));
 vi.mock("@/services/usersApi", () => ({
   resolveUsers: (...a: unknown[]) => resolveUsers(...a),
-  searchUsersByEmail: (...a: unknown[]) => searchUsersByEmail(...a),
-  fetchOrgSummary: vi.fn(),
+  searchUsersByEmail: vi.fn().mockResolvedValue([]),
+  fetchOrgSummary: vi.fn().mockResolvedValue(null),
 }));
 
 import { PermissionsModal } from "./PermissionsModal";
@@ -73,18 +72,18 @@ function skill(overrides: Partial<SkillDetail> = {}): SkillDetail {
     presignedPackageUrl: "",
     metadata: {},
     version: "1.0",
-    sharedWithUsers: ["u1"],
+    sharedWithUsers: [],
     sharedWithOrgs: [],
-    grants: [{ type: "user", id: "u1", level: "read_write" }],
+    grants: [],
     ...overrides,
   } as SkillDetail;
 }
 
-function renderModal() {
+function renderModal(s: SkillDetail) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
-      <PermissionsModal isOpen onClose={() => {}} skill={skill()} />
+      <PermissionsModal isOpen onClose={() => {}} skill={s} />
     </QueryClientProvider>,
   );
 }
@@ -92,35 +91,42 @@ function renderModal() {
 beforeEach(() => {
   mutateAsync.mockReset().mockResolvedValue({ skill: skill() });
   addToast.mockReset();
-  // Resolve u1 to a real label so the chip is not "unresolved" → the level
-  // toggle renders.
-  resolveUsers.mockReset().mockResolvedValue([
-    { userId: "u1", email: "u1@x.io", displayName: "User One" },
-  ]);
-  searchUsersByEmail.mockReset().mockResolvedValue([]);
+  resolveUsers.mockReset().mockResolvedValue([]);
 });
 
 afterEach(() => cleanup());
 
-describe("PermissionsModal — permission levels (#1123)", () => {
-  it("renders the read-write toggle for an existing read_write grant and saves the flipped level as typed grants", async () => {
-    renderModal();
+describe("PermissionsModal — two-tab Read/Write editor (#1125)", () => {
+  it("lets an owner set public read + org write and saves the right grants", async () => {
+    renderModal(skill());
 
-    // After the directory resolves u1, its chip shows the read-write toggle.
-    const toggle = await screen.findByRole("button", { name: /read-write/i });
-    expect(toggle).toBeTruthy();
+    // Read tab is default → turn on Public.
+    fireEvent.click(screen.getByRole("checkbox", { name: /public/i }));
 
-    // Flip read-write → read.
-    fireEvent.click(toggle);
-    await screen.findByRole("button", { name: /^read$/i });
+    // Switch to the Write tab and grant the org write access.
+    fireEvent.click(screen.getByRole("button", { name: /write access/i }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Org One" }));
 
-    // Save sends the canonical typed grants with the new level.
+    // Save → public (isPrivate:false) + a read_write org grant; no read grant
+    // (public makes read grants redundant, so they're dropped).
     fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
-    await waitFor(() =>
-      expect(mutateAsync).toHaveBeenCalledWith({
-        isPrivate: true,
-        grants: [{ type: "user", id: "u1", level: "read" }],
-      }),
-    );
+    expect(mutateAsync).toHaveBeenCalledWith({
+      isPrivate: false,
+      grants: [{ type: "org", id: "org-1", level: "read_write" }],
+    });
+  });
+
+  it("seeds the Write tab from an existing read_write grant", () => {
+    renderModal(skill({ grants: [{ type: "org", id: "org-1", level: "read_write" }] }));
+    // The Write tab shows a count badge of 1.
+    const writeTab = screen.getByRole("button", { name: /write access/i });
+    expect(writeTab.textContent).toContain("1");
+  });
+
+  it("short-circuits with no changes when nothing is edited", () => {
+    renderModal(skill({ isPrivate: false, grants: [] }));
+    fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
+    expect(mutateAsync).not.toHaveBeenCalled();
+    expect(addToast).toHaveBeenCalledWith(expect.objectContaining({ type: "info" }));
   });
 });
