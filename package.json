@@ -43,6 +43,7 @@
     "dompurify": "^3.3.4",
     "uuid": "^14.0.0",
     "eslint": "10.2.0",
-    "eslint-plugin-react-hooks": "7.0.1"
+    "eslint-plugin-react-hooks": "7.0.1",
+    "undici": "^7.28.0"
   }
 }
