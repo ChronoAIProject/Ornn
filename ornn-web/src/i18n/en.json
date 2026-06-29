@@ -1742,6 +1742,9 @@
     "versionError": "Version must be <major>.<minor> (e.g. 1.0).",
     "versionBumpError": "Publish requires a new, bumped version (e.g. 1.1).",
     "editHint": "Publishing creates a new immutable version. The name cannot change.",
+    "exportLabel": "Export as a Claude Code plugin",
+    "exportHint": "Publish this skillset as one curated multi-skill plugin in the public mirror.",
+    "exportDisabledHint": "Only available once every member skill is public.",
     "createSubmit": "Create skillset",
     "publishSubmit": "Publish version"
   },
