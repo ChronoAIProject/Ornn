@@ -16,8 +16,10 @@
  *   GET    /skillsets/:idOrName/versions    — list   (optional auth)
  *   GET    /skillsets/:idOrName             — read   (optional auth)
  *   PUT    /skillsets/:id                   — publish (ornn:skill:update)
- *   PUT    /skillsets/:id/permissions       — visibility (ornn:skill:update)
  *   DELETE /skillsets/:id                   — delete (ornn:skill:delete)
+ *
+ * There is NO permissions endpoint (#1136): a skillset's visibility is
+ * DERIVED from its members, never owner-set.
  *
  * @module domains/skillsets/routes
  */
@@ -33,15 +35,9 @@ import {
 } from "../../middleware/nyxidAuth";
 import { validateBody, getValidatedBody } from "../../middleware/validate";
 import { buildActorContext, type ActorContext } from "../skills/crud/authorize";
-import { AppError } from "../../shared/types/index";
 import { createLogger } from "../../shared/logger";
-import { canReadSkillset } from "./authorize";
 import type { SkillsetService } from "./service";
-import {
-  createSkillsetSchema,
-  publishSkillsetSchema,
-  skillsetPermissionsSchema,
-} from "./types";
+import { createSkillsetSchema, publishSkillsetSchema } from "./types";
 
 const logger = createLogger("skillsetRoutes");
 
@@ -127,12 +123,10 @@ export function createSkillsetRoutes(
     const idOrName = c.req.param("idOrName");
     const authCtx = c.get("auth");
     const actor = authCtx ? await buildActorContext(c) : anonActor();
-    // Gate read visibility on the identity doc — a private skillset the
-    // actor cannot read 404s identically to a missing one.
-    const detail = await skillsetService.getSkillset(idOrName);
-    if (detail.isPrivate && !canReadSkillset(detail, actor)) {
-      throw AppError.notFound("skillset_not_found", `Skillset '${idOrName}' not found`);
-    }
+    // Member-derived read gate (#1136) on the latest version — throws a flat
+    // 404 if the caller can't read every member (no leak), identical to a
+    // missing skillset. Owner/admin always pass.
+    await skillsetService.getSkillsetForRead(idOrName, actor);
     const items = await skillsetService.listVersions(idOrName);
     return c.json({ data: { items }, error: null });
   });
@@ -145,14 +139,12 @@ export function createSkillsetRoutes(
     const idOrName = c.req.param("idOrName");
     const version = c.req.query("version") || undefined;
     const authCtx = c.get("auth");
-    const detail = await skillsetService.getSkillset(idOrName, version);
-
-    if (detail.isPrivate) {
-      const actor = authCtx ? await buildActorContext(c) : anonActor();
-      if (!canReadSkillset(detail, actor)) {
-        throw AppError.notFound("skillset_not_found", `Skillset '${idOrName}' not found`);
-      }
-    }
+    const actor = authCtx ? await buildActorContext(c) : anonActor();
+    // Member-derived read gate (#1136): readable iff the caller can read
+    // every member. Owner/admin always see it (with `unreadableMembers`
+    // listed for repair); everyone else 404s the moment a member is
+    // unreadable — no leak of which member is private.
+    const detail = await skillsetService.getSkillsetForRead(idOrName, actor, version);
     return c.json({ data: detail, error: null });
   });
 
@@ -175,32 +167,10 @@ export function createSkillsetRoutes(
     },
   );
 
-  /**
-   * PUT /skillsets/:id/permissions — apply a new ACL state.
-   * Requires: ornn:skill:update + author/admin.
-   */
-  app.put(
-    "/skillsets/:id/permissions",
-    auth,
-    requirePermission("ornn:skill:update"),
-    validateBody(skillsetPermissionsSchema, "invalid_permissions"),
-    async (c) => {
-      const id = c.req.param("id");
-      const body = getValidatedBody<z.infer<typeof skillsetPermissionsSchema>>(c);
-      const actor = await buildActorContext(c);
-      const updated = await skillsetService.setPermissions(
-        id,
-        {
-          isPrivate: body.isPrivate,
-          grants: body.grants,
-          sharedWithUsers: body.sharedWithUsers,
-          sharedWithOrgs: body.sharedWithOrgs,
-        },
-        actor,
-      );
-      return c.json({ data: { skillset: updated }, error: null });
-    },
-  );
+  // NOTE (#1136): there is deliberately NO PUT /skillsets/:id/permissions.
+  // A skillset has no owner-set visibility — its reach is derived from its
+  // member skills' visibility. To widen a skillset's reach, expose the
+  // underlying skills to the intended audience.
 
   /**
    * DELETE /skillsets/:id — delete a skillset + all its versions.

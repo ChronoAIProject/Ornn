@@ -93,7 +93,7 @@ function Nav({ to }: { to: string }) {
 }
 
 function mobileToggle(): HTMLButtonElement {
-  // The hamburger toggle is the button carrying aria-expanded (md:hidden).
+  // The hamburger toggle is the button carrying aria-expanded (lg:hidden).
   return screen
     .getAllByRole("button")
     .find((b) => b.hasAttribute("aria-expanded")) as HTMLButtonElement;

@@ -20,11 +20,24 @@
  * @module domains/notifications/types
  */
 
-export type NotificationCategory =
-  | "audit.completed"
-  | "audit.risky_for_consumer"
-  | "quota.credits_granted"
-  | "launchPromo.codeDelivered";
+/**
+ * Canonical notification-category vocabulary — the SINGLE source of truth.
+ * Both the `NotificationCategory` type and the boot migration's allow-list
+ * (`dropLegacyNotificationCategories`) derive from this array, so adding a
+ * category here can never be silently wiped by the out-of-vocabulary
+ * cleanup (the drift that previously left `launchPromo.codeDelivered`
+ * deletable on reboot — #1136).
+ */
+export const NOTIFICATION_CATEGORIES = [
+  "audit.completed",
+  "audit.risky_for_consumer",
+  "quota.credits_granted",
+  "launchPromo.codeDelivered",
+  // A member skill became unreadable to the skillset owner (#1136).
+  "skillset.member_unreadable",
+] as const;
+
+export type NotificationCategory = (typeof NOTIFICATION_CATEGORIES)[number];
 
 export interface NotificationDocument {
   readonly _id: string;

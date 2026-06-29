@@ -260,12 +260,12 @@ export function Navbar({ className = "", showGetStartedCta = false }: NavbarProp
     <nav
       className={`sticky top-0 z-50 shrink-0 border-b border-subtle bg-page/95 backdrop-blur-md ${className}`}
     >
-      <div className="relative mx-auto flex h-[60px] max-w-[1280px] items-center justify-between gap-3 px-6 sm:px-8">
-        <Link to="/" className="flex items-center gap-2 text-strong" aria-label={t("aria.brandHome", { brand: "Ornn" })}>
+      <div className="relative mx-auto flex h-[60px] max-w-[1280px] items-center justify-between gap-3 px-6 sm:px-8 lg:grid lg:grid-cols-[1fr_auto_1fr]">
+        <Link to="/" className="flex items-center gap-2 text-strong lg:justify-self-start" aria-label={t("aria.brandHome", { brand: "Ornn" })}>
           <Logo className="block h-[26px] w-auto" />
         </Link>
 
-        <div className="absolute left-1/2 top-1/2 hidden -translate-x-1/2 -translate-y-1/2 gap-7 md:flex">
+        <div className="hidden items-center justify-center gap-3 lg:flex lg:justify-self-center xl:gap-7">
           {NAV_ITEMS.map((item) => (
             <NavLink
               key={item.i18nKey}
@@ -290,7 +290,7 @@ export function Navbar({ className = "", showGetStartedCta = false }: NavbarProp
           ))}
         </div>
 
-        <div className="hidden items-center gap-3.5 md:flex">
+        <div className="hidden items-center gap-3.5 lg:flex lg:justify-self-end">
           <a
             href="https://github.com/ChronoAIProject/Ornn"
             target="_blank"
@@ -381,14 +381,9 @@ export function Navbar({ className = "", showGetStartedCta = false }: NavbarProp
               </AnimatePresence>
             </div>
           ) : showGetStartedCta ? (
-            <>
-              <EmberLink to="/login" variant="ghost">
-                {t("nav.signIn")}
-              </EmberLink>
-              <EmberLink to="/login" variant="primary">
-                {t("landing.getStarted")}
-              </EmberLink>
-            </>
+            <EmberLink to="/login" variant="primary" className="whitespace-nowrap">
+              {t("landing.getStarted")}
+            </EmberLink>
           ) : (
             <Link
               to="/login"
@@ -406,7 +401,7 @@ export function Navbar({ className = "", showGetStartedCta = false }: NavbarProp
           aria-expanded={menuOpen}
           aria-controls="app-mobile-nav-panel"
           data-open={menuOpen}
-          className="group inline-flex h-9 w-9 items-center justify-center rounded-sm border border-strong-edge bg-transparent text-strong transition-colors duration-200 hover:border-accent hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent md:hidden"
+          className="group inline-flex h-9 w-9 items-center justify-center rounded-sm border border-strong-edge bg-transparent text-strong transition-colors duration-200 hover:border-accent hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent lg:hidden"
         >
           <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
             <line x1="3" y1="6" x2="21" y2="6" className="origin-center [transform-box:fill-box] transition-[translate,rotate] duration-300 ease-out group-data-[open=true]:translate-y-[6px] group-data-[open=true]:rotate-45" />
@@ -420,7 +415,7 @@ export function Navbar({ className = "", showGetStartedCta = false }: NavbarProp
         id="app-mobile-nav-panel"
         data-open={menuOpen}
         aria-hidden={!menuOpen}
-        className="absolute left-0 right-0 top-full grid grid-rows-[0fr] bg-page transition-[grid-template-rows,border-color] duration-300 ease-out border-t border-transparent data-[open=true]:grid-rows-[1fr] data-[open=true]:border-subtle data-[open=true]:card-impression md:hidden"
+        className="absolute left-0 right-0 top-full grid grid-rows-[0fr] bg-page transition-[grid-template-rows,border-color] duration-300 ease-out border-t border-transparent data-[open=true]:grid-rows-[1fr] data-[open=true]:border-subtle data-[open=true]:card-impression lg:hidden"
       >
         <div className="overflow-hidden">
           <div className="mx-auto flex max-w-[1280px] flex-col px-6 py-3 sm:px-8">

@@ -45,6 +45,7 @@ function makeItem(name: string): SkillsetSearchItem {
     memberCount: 0,
     latestVersion: "1.0",
     isPrivate: false,
+    memberVisibilityState: "all-public",
     createdBy: "user-1",
     createdOn: "2026-06-01T00:00:00.000Z",
     updatedOn: "2026-06-01T00:00:00.000Z",

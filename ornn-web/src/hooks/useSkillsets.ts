@@ -3,11 +3,12 @@
  *
  * Mirrors `useSkills.ts`: per-scope list queries, a detail query keyed on
  * `idOrName + version`, a versions query, a closure query, and create /
- * publish / delete / permissions mutations with the same invalidation shape.
+ * publish / delete mutations with the same invalidation shape. There is no
+ * permissions mutation (#1136 — visibility is derived from members).
  *
- * Two-id split (mirrors #750): write routes (publish / delete / permissions)
- * are GUID-only, so a name-opened detail page must send the GUID on the wire
- * while keying cache invalidation on the URL `idOrName`.
+ * Two-id split (mirrors #750): write routes (publish / delete) are GUID-only,
+ * so a name-opened detail page must send the GUID on the wire while keying
+ * cache invalidation on the URL `idOrName`.
  *
  * @module hooks/useSkillsets
  */
@@ -21,13 +22,11 @@ import {
   createSkillset,
   publishSkillset,
   deleteSkillset,
-  updateSkillsetPermissions,
 } from "@/services/skillsetApi";
 import type {
   CreateSkillsetInput,
   PublishSkillsetInput,
   SkillsetKind,
-  SkillsetPermissionsInput,
   SkillsetScope,
   SkillsetSearchParams,
 } from "@/types/skillset";
@@ -166,24 +165,9 @@ export function usePublishSkillset(guid: string, idOrName: string) {
   });
 }
 
-/**
- * Replace the skillset's visibility config. `guid` is the WIRE id;
- * `idOrName` is the CACHE-KEY id. Invalidates the detail + list tabs so the
- * visibility chips + cards redraw.
- */
-export function useUpdateSkillsetPermissions(guid: string, idOrName: string) {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (input: SkillsetPermissionsInput) =>
-      updateSkillsetPermissions(guid, input),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [SKILLSETS_KEY] });
-      queryClient.invalidateQueries({ queryKey: [MY_SKILLSETS_KEY] });
-      queryClient.invalidateQueries({ queryKey: [SHARED_WITH_ME_KEY] });
-      queryClient.invalidateQueries({ queryKey: [SKILLSETS_KEY, idOrName] });
-    },
-  });
-}
+// NOTE (#1136): there is no useUpdateSkillsetPermissions — a skillset's
+// visibility is derived from its members, not owner-set. Member-skill
+// changes recompute it server-side; this client never writes it.
 
 /**
  * Delete an entire skillset (every version).

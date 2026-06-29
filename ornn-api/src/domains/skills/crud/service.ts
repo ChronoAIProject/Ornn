@@ -1612,6 +1612,10 @@ export class SkillService {
         version: versionDoc.version,
         guid: skill.guid,
         skillHash: versionDoc.skillHash,
+        // Surfaced for #1136 skillset visibility derivation. The actor here
+        // already passed `canReadSkill`; under SYSTEM that's everything, so
+        // the flag faithfully reports the skill's own privacy.
+        isPrivate: skill.isPrivate,
         dependsOn: versionDoc.metadata?.dependsOn ?? [],
       };
       return node;

@@ -160,21 +160,32 @@ describe("GET /skillsets/:idOrName/closure", () => {
 });
 
 describe("GET /skillsets/:idOrName", () => {
-  test("200 for a public skillset (anon)", async () => {
+  test("200 when the member-derived gate admits the caller (#1136)", async () => {
+    // The route delegates the whole read decision to getSkillsetForRead;
+    // here the service admits the caller and returns the detail.
     const app = buildApp({
       authenticated: false,
-      service: { getSkillset: async () => detail({ isPrivate: false }) },
+      service: {
+        getSkillsetForRead: async () => detail({ memberVisibilityState: "all-public", unreadableMembers: [] }),
+      },
     });
     const res = await app.request("/api/v1/skillsets/review-set");
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { data: { name: string } };
+    const body = (await res.json()) as { data: { name: string; memberVisibilityState: string } };
     expect(body.data.name).toBe("review-set");
+    expect(body.data.memberVisibilityState).toBe("all-public");
   });
 
-  test("404 for a private skillset to anon (no leak)", async () => {
+  test("404 when the member-derived gate denies the caller (no leak, #1136)", async () => {
+    // A caller who can't read every member gets a flat skillset_not_found
+    // from the service — the route just surfaces it.
     const app = buildApp({
       authenticated: false,
-      service: { getSkillset: async () => detail({ isPrivate: true, createdBy: "someone" }) },
+      service: {
+        getSkillsetForRead: async () => {
+          throw AppError.notFound("skillset_not_found", "Skillset 'secret-set' not found");
+        },
+      },
     });
     const res = await app.request("/api/v1/skillsets/secret-set");
     expect(res.status).toBe(404);

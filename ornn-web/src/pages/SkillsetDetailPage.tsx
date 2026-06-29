@@ -21,13 +21,13 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { RailCard } from "@/components/detail/RailCard";
 import { ReadmeViewer } from "@/components/skill/ReadmeViewer";
-import { SkillVisibilityCard } from "@/components/skill/SkillVisibilityCard";
 import { VersionPicker } from "@/components/skill/VersionPicker";
 import { SkillsetHeroStrip } from "@/components/skillset/SkillsetHeroStrip";
 import { SkillsetClosureViewer } from "@/components/skillset/SkillsetClosureViewer";
 import { SkillsetDependencyGraph } from "@/components/skillset/SkillsetDependencyGraph";
 import { SkillsetMemberViewer } from "@/components/skillset/SkillsetMemberViewer";
-import { SkillsetPermissionsModal } from "@/components/skillset/SkillsetPermissionsModal";
+import { SkillsetDerivedVisibilityCard } from "@/components/skillset/SkillsetDerivedVisibilityCard";
+import { SkillsetMemberWarningBanner } from "@/components/skillset/SkillsetMemberWarningBanner";
 import { parseDeps } from "@/lib/skillsetDeps";
 import { useToastStore } from "@/stores/toastStore";
 import { useCurrentUser } from "@/stores/authStore";
@@ -61,7 +61,6 @@ export function SkillsetDetailPage() {
   const depEdges = useMemo(() => (skillset?.instructions ? parseDeps(skillset.instructions).edges : []), [skillset?.instructions]);
   const graphMembers = useMemo(() => skillset?.members ?? [], [skillset?.members]);
 
-  const [showPermissions, setShowPermissions] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
 
   // Click-to-open state for graph node package preview dialog.
@@ -151,6 +150,16 @@ export function SkillsetDetailPage() {
             isOwner={isOwner}
             onEdit={isOwner ? () => navigate(`/skillsets/${skillset.guid}/edit`) : undefined}
           />
+
+          {/* Member-access warning (#1136) — owner/admin only, when this
+              caller can't read every member (the API only ever populates
+              `unreadableMembers` for the owner/admin; non-owners 404). */}
+          {skillset.unreadableMembers.length > 0 && (
+            <SkillsetMemberWarningBanner
+              unreadableMembers={skillset.unreadableMembers}
+              unresolvable={skillset.memberVisibilityState === "unresolvable"}
+            />
+          )}
 
           {/* Consensus claim disclaimer (consensus-supported kind only). */}
           {skillset.kind === "consensus-supported" && (
@@ -382,13 +391,13 @@ export function SkillsetDetailPage() {
                 <SkillsetClosureViewer items={closure?.items ?? []} />
               </RailCard>
 
-              {/* ── Visibility card ── use the exact same component as skill details for visual parity */}
-              <SkillVisibilityCard
-                isPrivate={skillset.isPrivate}
-                sharedWithUsersCount={skillset.sharedWithUsers.length}
-                sharedWithOrgsCount={skillset.sharedWithOrgs.length}
+              {/* ── Visibility card ── derived from members (#1136), read-only:
+                  a skillset has no owner-set visibility, so there is no
+                  "manage permissions" action. */}
+              <SkillsetDerivedVisibilityCard
+                state={skillset.memberVisibilityState}
+                unreadableCount={skillset.unreadableMembers.length}
                 isOwner={isOwner}
-                onManagePermissions={() => setShowPermissions(true)}
               />
 
               {/* ── Danger zone (owner only) ── matches skill details page exactly in structure/styling */}
@@ -423,14 +432,8 @@ export function SkillsetDetailPage() {
         </div>
       </div>
 
-      {/* Permissions editor (owner only). */}
-      {isOwner && (
-        <SkillsetPermissionsModal
-          isOpen={showPermissions}
-          onClose={() => setShowPermissions(false)}
-          skillset={skillset}
-        />
-      )}
+      {/* No permissions editor (#1136): a skillset's visibility is derived
+          from its members, not owner-set. */}
 
       {/* Delete confirmation. */}
       <ConfirmDialog

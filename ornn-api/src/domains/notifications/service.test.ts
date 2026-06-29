@@ -640,6 +640,44 @@ describe("NotificationService — emitters", () => {
     });
   });
 
+  test("notifySkillsetMemberUnreadable pins the owner-side payload (#1136)", async () => {
+    const { svc, notificationRepo } = makeService();
+    await svc.notifySkillsetMemberUnreadable({
+      ownerUserId: "owner-9",
+      skillsetGuid: "ss guid",
+      skillsetName: "My Bundle",
+      unreadableMembers: ["secret-tools@1.0"],
+    });
+    expect(notificationRepo.created).toHaveLength(1);
+    const sent = notificationRepo.created[0]!;
+    expect(sent.userId).toBe("owner-9");
+    expect(sent.category).toBe("skillset.member_unreadable");
+    expect(sent.title).toBe('A skill in your skillset "My Bundle" is no longer accessible to you');
+    // Single member → singular phrasing + the member listed.
+    expect(sent.body).toContain("1 member skill is");
+    expect(sent.body).toContain("secret-tools@1.0");
+    // Guid is URL-encoded into the deep link.
+    expect(sent.link).toBe("/skillsets/ss%20guid");
+    expect(sent.data).toEqual({
+      skillsetGuid: "ss guid",
+      skillsetName: "My Bundle",
+      unreadableMembers: ["secret-tools@1.0"],
+    });
+  });
+
+  test("notifySkillsetMemberUnreadable pluralizes for multiple members (#1136)", async () => {
+    const { svc, notificationRepo } = makeService();
+    await svc.notifySkillsetMemberUnreadable({
+      ownerUserId: "owner-9",
+      skillsetGuid: "g",
+      skillsetName: "Bundle",
+      unreadableMembers: ["a@1.0", "b@2.0"],
+    });
+    const sent = notificationRepo.created[0]!;
+    expect(sent.body).toContain("2 member skills are");
+    expect(sent.body).toContain("a@1.0, b@2.0");
+  });
+
   test("notifyQuotaCreditsGranted — with a note inlines the note in the body", async () => {
     const { svc, notificationRepo } = makeService();
     await svc.notifyQuotaCreditsGranted({

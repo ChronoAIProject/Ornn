@@ -5,7 +5,7 @@
  * wired over in-memory skill fakes so `createVersionLoader` resolves member
  * refs exactly as production does. Pins:
  *   - create → publish → re-publish bumps version; prior version immutable
- *   - visibility transitions mirror skills (setPermissions)
+ *   - visibility is derived from members (#1136) — no owner-set permissions
  *   - publish member validation: missing member → skill_dependency_not_found
  *   - conflicting member dep-closures → dependency_conflict
  *   - resolveClosure: members + their #968 dep closures topo-sorted
@@ -166,6 +166,20 @@ function makeSkillsetDeps(
       state.byName.set(next.name, next);
       return next;
     },
+    setDerivedVisibility: async (
+      g: string,
+      derived: {
+        membersAllPublic: boolean;
+        memberVisibilityState: SkillsetDocument["memberVisibilityState"];
+      },
+    ) => {
+      const cur = state.skillsets.get(g);
+      if (!cur) return;
+      // Mirror the real method: only the derived fields, no audit bump.
+      const next = { ...cur, ...derived } as SkillsetDocument;
+      state.skillsets.set(g, next);
+      state.byName.set(next.name, next);
+    },
     transferOwnership: async (
       g: string,
       data: {
@@ -231,6 +245,15 @@ function makeSkillsetDeps(
     },
     findBySkillsetAndVersion: async (g: string, v: string) =>
       state.versions.find((x) => x.skillsetGuid === g && x.version === v) ?? null,
+    findSkillsetGuidsByMember: async (skillName: string, skillGuid: string) => {
+      const guids = new Set<string>();
+      for (const v of state.versions) {
+        if (v.members.some((m) => m.startsWith(`${skillName}@`) || m.startsWith(`${skillGuid}@`))) {
+          guids.add(v.skillsetGuid);
+        }
+      }
+      return [...guids];
+    },
     findLatestBySkillset: async (g: string) =>
       state.versions
         .filter((x) => x.skillsetGuid === g)
@@ -265,6 +288,332 @@ function twoMemberSkills(): { skills: SkillDocument[]; versions: SkillVersionDoc
     ],
   };
 }
+
+describe("SkillsetService — getSkillsetForRead (member-derived read gate, #1136)", () => {
+  const STRANGER: ActorContext = {
+    userId: "stranger",
+    memberships: [],
+    isPlatformAdmin: false,
+    membershipsResolved: true,
+  };
+
+  /** pdf-tools (public) + secret-tools (private, owned by other-user). */
+  function mixedMembers(): { skills: SkillDocument[]; versions: SkillVersionDocument[] } {
+    const a = skillDoc({ guid: "g-a", name: "pdf-tools", latestVersion: "1.0", isPrivate: false });
+    const b = skillDoc({
+      guid: "g-b",
+      name: "secret-tools",
+      latestVersion: "1.0",
+      isPrivate: true,
+      createdBy: "other-user",
+    });
+    return {
+      skills: [a, b],
+      versions: [
+        skillVersion({ _id: "g-a@1.0", skillGuid: "g-a", version: "1.0" }),
+        skillVersion({ _id: "g-b@1.0", skillGuid: "g-b", version: "1.0" }),
+      ],
+    };
+  }
+
+  async function seedMixedSkillset() {
+    const { skills, versions } = mixedMembers();
+    const skillService = makeSkillService(skills, versions);
+    const { deps } = makeSkillsetDeps(skillService);
+    const service = new SkillsetService(deps);
+    const created = await service.createSkillset(
+      {
+        name: "mixed-set",
+        description: "d",
+        instructions: "p",
+        kind: "generic",
+        tags: [],
+        members: ["pdf-tools@1.0", "secret-tools@1.0"],
+        version: "1.0",
+      },
+      { userId: "owner-1" },
+    );
+    return { service, guid: created.guid };
+  }
+
+  it("owner sees the detail WITH unreadableMembers listed (for repair)", async () => {
+    // owner-1 owns the skillset but NOT the private member secret-tools, so
+    // the owner can no longer read it — surfaced so they can repair access.
+    const { service } = await seedMixedSkillset();
+    const detail = await service.getSkillsetForRead("mixed-set", OWNER);
+    expect(detail.unreadableMembers).toEqual(["secret-tools@1.0"]);
+    expect(detail.members).toEqual(["pdf-tools@1.0", "secret-tools@1.0"]);
+  });
+
+  it("non-owner who can't read every member gets a flat 404 (no leak)", async () => {
+    const { service } = await seedMixedSkillset();
+    let code = "";
+    try {
+      await service.getSkillsetForRead("mixed-set", STRANGER);
+    } catch (err) {
+      code = (err as AppError).code;
+    }
+    // skillset_not_found — identical to a missing skillset; never reveals
+    // which member is private or that it even exists.
+    expect(code).toBe("skillset_not_found");
+  });
+
+  it("anon caller reading an all-public skillset succeeds with empty unreadableMembers", async () => {
+    const { skills, versions } = twoMemberSkills();
+    const skillService = makeSkillService(skills, versions);
+    const { deps } = makeSkillsetDeps(skillService);
+    const service = new SkillsetService(deps);
+    await service.createSkillset(
+      {
+        name: "open-set",
+        description: "d",
+        instructions: "p",
+        kind: "generic",
+        tags: [],
+        members: ["pdf-tools@1.0", "csv-tools@1.0"],
+        version: "1.0",
+      },
+      { userId: "owner-1" },
+    );
+    const detail = await service.getSkillsetForRead("open-set", ANON);
+    expect(detail.unreadableMembers).toEqual([]);
+    expect(detail.memberVisibilityState).toBe("all-public");
+  });
+});
+
+describe("SkillsetService — recomputeForChangedSkill cascade (#1136)", () => {
+  interface NotifyCall {
+    ownerUserId: string;
+    skillsetGuid: string;
+    skillsetName: string;
+    unreadableMembers: string[];
+  }
+
+  function spyNotifier() {
+    const calls: NotifyCall[] = [];
+    return {
+      calls,
+      notifySkillsetMemberUnreadable: async (params: NotifyCall) => {
+        calls.push(params);
+      },
+    };
+  }
+
+  it("recomputes dependent skillsets + notifies the owner when a member goes private", async () => {
+    // secret-tools starts PUBLIC and is owned by other-user; owner-1 bundles it.
+    const a = skillDoc({ guid: "g-a", name: "pdf-tools", latestVersion: "1.0", isPrivate: false });
+    const secret = skillDoc({
+      guid: "g-b",
+      name: "secret-tools",
+      latestVersion: "1.0",
+      isPrivate: false,
+      createdBy: "other-user",
+    });
+    const skillService = makeSkillService(
+      [a, secret],
+      [
+        skillVersion({ _id: "g-a@1.0", skillGuid: "g-a", version: "1.0" }),
+        skillVersion({ _id: "g-b@1.0", skillGuid: "g-b", version: "1.0" }),
+      ],
+    );
+    const { deps, state } = makeSkillsetDeps(skillService);
+    const notifier = spyNotifier();
+    const service = new SkillsetService({ ...deps, notificationService: notifier });
+
+    const created = await service.createSkillset(
+      {
+        name: "bundle",
+        description: "d",
+        instructions: "p",
+        kind: "generic",
+        tags: [],
+        members: ["pdf-tools@1.0", "secret-tools@1.0"],
+        version: "1.0",
+      },
+      { userId: "owner-1" },
+    );
+    // Initially all-public, no notification.
+    expect(state.skillsets.get(created.guid)!.memberVisibilityState).toBe("all-public");
+
+    // The skill's owner flips it private — owner-1 (skillset owner) loses access.
+    secret.isPrivate = true;
+    await service.recomputeForChangedSkill({ guid: "g-b", name: "secret-tools" });
+
+    // Derived cache recomputed to restricted...
+    expect(state.skillsets.get(created.guid)!.memberVisibilityState).toBe("restricted");
+    // ...and the skillset owner was notified about the now-unreadable member.
+    expect(notifier.calls).toHaveLength(1);
+    expect(notifier.calls[0]!.ownerUserId).toBe("owner-1");
+    expect(notifier.calls[0]!.skillsetGuid).toBe(created.guid);
+    expect(notifier.calls[0]!.unreadableMembers).toEqual(["secret-tools@1.0"]);
+  });
+
+  it("does NOT notify when the skillset owner authors the skill (still readable)", async () => {
+    // owner-1 owns BOTH the skillset and the member skill — flipping it
+    // private never costs the owner access (author always reads own skill).
+    const a = skillDoc({ guid: "g-a", name: "pdf-tools", latestVersion: "1.0", isPrivate: false });
+    const own = skillDoc({ guid: "g-b", name: "my-tools", latestVersion: "1.0", isPrivate: false, createdBy: "owner-1" });
+    const skillService = makeSkillService(
+      [a, own],
+      [
+        skillVersion({ _id: "g-a@1.0", skillGuid: "g-a", version: "1.0" }),
+        skillVersion({ _id: "g-b@1.0", skillGuid: "g-b", version: "1.0" }),
+      ],
+    );
+    const { deps, state } = makeSkillsetDeps(skillService);
+    const notifier = spyNotifier();
+    const service = new SkillsetService({ ...deps, notificationService: notifier });
+
+    const created = await service.createSkillset(
+      {
+        name: "bundle",
+        description: "d",
+        instructions: "p",
+        kind: "generic",
+        tags: [],
+        members: ["pdf-tools@1.0", "my-tools@1.0"],
+        version: "1.0",
+      },
+      { userId: "owner-1" },
+    );
+    own.isPrivate = true;
+    await service.recomputeForChangedSkill({ guid: "g-b", name: "my-tools" });
+
+    // Derived state still reflects a private member (restricted)...
+    expect(state.skillsets.get(created.guid)!.memberVisibilityState).toBe("restricted");
+    // ...but no notification — the owner still reads their own skill.
+    expect(notifier.calls).toHaveLength(0);
+  });
+
+  it("does not notify on an unrelated skill that no skillset references", async () => {
+    const a = skillDoc({ guid: "g-a", name: "pdf-tools", latestVersion: "1.0", isPrivate: false });
+    const b = skillDoc({ guid: "g-b", name: "csv-tools", latestVersion: "1.0", isPrivate: false });
+    const skillService = makeSkillService(
+      [a, b],
+      [
+        skillVersion({ _id: "g-a@1.0", skillGuid: "g-a", version: "1.0" }),
+        skillVersion({ _id: "g-b@1.0", skillGuid: "g-b", version: "1.0" }),
+      ],
+    );
+    const { deps } = makeSkillsetDeps(skillService);
+    const notifier = spyNotifier();
+    const service = new SkillsetService({ ...deps, notificationService: notifier });
+    await service.createSkillset(
+      {
+        name: "bundle",
+        description: "d",
+        instructions: "p",
+        kind: "generic",
+        tags: [],
+        members: ["pdf-tools@1.0", "csv-tools@1.0"],
+        version: "1.0",
+      },
+      { userId: "owner-1" },
+    );
+    // A skill that no skillset references — no recompute, no notification.
+    await service.recomputeForChangedSkill({ guid: "g-z", name: "orphan-tools" });
+    expect(notifier.calls).toHaveLength(0);
+  });
+});
+
+describe("SkillsetService — derived visibility on create/publish (#1136)", () => {
+  it("create with all-public members → all-public", async () => {
+    const { skills, versions } = twoMemberSkills();
+    const skillService = makeSkillService(skills, versions);
+    const { deps, state } = makeSkillsetDeps(skillService);
+    const service = new SkillsetService(deps);
+
+    const created = await service.createSkillset(
+      {
+        name: "open-set",
+        description: "d",
+        instructions: "p",
+        kind: "generic",
+        tags: [],
+        members: ["pdf-tools@1.0", "csv-tools@1.0"],
+        version: "1.0",
+      },
+      { userId: "owner-1" },
+    );
+    const doc = state.skillsets.get(created.guid)!;
+    expect(doc.memberVisibilityState).toBe("all-public");
+    expect(doc.membersAllPublic).toBe(true);
+  });
+
+  it("create with a private member → restricted (overrides the seeded all-public)", async () => {
+    // One member skill is private — the skillset cannot advertise public reach.
+    const a = skillDoc({ guid: "g-a", name: "pdf-tools", latestVersion: "1.0", isPrivate: false });
+    const b = skillDoc({ guid: "g-b", name: "secret-tools", latestVersion: "1.0", isPrivate: true });
+    const skillService = makeSkillService(
+      [a, b],
+      [
+        skillVersion({ _id: "g-a@1.0", skillGuid: "g-a", version: "1.0" }),
+        skillVersion({ _id: "g-b@1.0", skillGuid: "g-b", version: "1.0" }),
+      ],
+    );
+    const { deps, state } = makeSkillsetDeps(skillService);
+    const service = new SkillsetService(deps);
+
+    const created = await service.createSkillset(
+      {
+        name: "mixed-set",
+        description: "d",
+        instructions: "p",
+        kind: "generic",
+        tags: [],
+        members: ["pdf-tools@1.0", "secret-tools@1.0"],
+        version: "1.0",
+      },
+      { userId: "owner-1" },
+    );
+    const doc = state.skillsets.get(created.guid)!;
+    expect(doc.memberVisibilityState).toBe("restricted");
+    expect(doc.membersAllPublic).toBe(false);
+  });
+
+  it("publish rederives against the new version's members", async () => {
+    // v1.0 is all-public; v1.1 swaps in a private member → restricted.
+    const a = skillDoc({ guid: "g-a", name: "pdf-tools", latestVersion: "1.0", isPrivate: false });
+    const b = skillDoc({ guid: "g-b", name: "csv-tools", latestVersion: "1.0", isPrivate: false });
+    const c = skillDoc({ guid: "g-c", name: "secret-tools", latestVersion: "1.0", isPrivate: true });
+    const skillService = makeSkillService(
+      [a, b, c],
+      [
+        skillVersion({ _id: "g-a@1.0", skillGuid: "g-a", version: "1.0" }),
+        skillVersion({ _id: "g-b@1.0", skillGuid: "g-b", version: "1.0" }),
+        skillVersion({ _id: "g-c@1.0", skillGuid: "g-c", version: "1.0" }),
+      ],
+    );
+    const { deps, state } = makeSkillsetDeps(skillService);
+    const service = new SkillsetService(deps);
+
+    const created = await service.createSkillset(
+      {
+        name: "evolving-set",
+        description: "d",
+        instructions: "p",
+        kind: "generic",
+        tags: [],
+        members: ["pdf-tools@1.0", "csv-tools@1.0"],
+        version: "1.0",
+      },
+      { userId: "owner-1" },
+    );
+    expect(state.skillsets.get(created.guid)!.memberVisibilityState).toBe("all-public");
+
+    await service.publishVersion(
+      created.guid,
+      {
+        instructions: "p",
+        members: ["pdf-tools@1.0", "secret-tools@1.0"],
+        version: "1.1",
+      },
+      OWNER,
+    );
+    expect(state.skillsets.get(created.guid)!.memberVisibilityState).toBe("restricted");
+    expect(state.skillsets.get(created.guid)!.membersAllPublic).toBe(false);
+  });
+});
 
 describe("SkillsetService — create / publish (immutable versioning)", () => {
   it("create → publish bumps version; prior version stays immutable", async () => {
@@ -415,71 +764,6 @@ describe("SkillsetService — create / publish (immutable versioning)", () => {
       code = (err as AppError).code;
     }
     expect(code).toBe("skillset_name_exists");
-  });
-});
-
-describe("SkillsetService — visibility transitions (mirror skills)", () => {
-  it("setPermissions flips public/private + persists shared lists", async () => {
-    const { skills, versions } = twoMemberSkills();
-    const skillService = makeSkillService(skills, versions);
-    const { deps } = makeSkillsetDeps(skillService);
-    const service = new SkillsetService(deps);
-    const created = await service.createSkillset(
-      {
-        name: "review-set",
-        description: "d",
-        instructions: "p",
-        kind: "generic",
-        tags: [],
-        members: ["pdf-tools@1.0", "csv-tools@1.0"],
-        version: "1.0",
-      },
-      { userId: "owner-1" },
-    );
-    const updated = await service.setPermissions(
-      created.guid,
-      { isPrivate: false, sharedWithUsers: ["u2"], sharedWithOrgs: [] },
-      OWNER,
-    );
-    expect(updated.isPrivate).toBe(false);
-    // Canonical ACL now carries the user as a read grant (#1123).
-    expect(updated.grants).toContainEqual({ type: "user", id: "u2", level: "read" });
-  });
-
-  it("setPermissions 403s a non-owner", async () => {
-    const { skills, versions } = twoMemberSkills();
-    const skillService = makeSkillService(skills, versions);
-    const { deps } = makeSkillsetDeps(skillService);
-    const service = new SkillsetService(deps);
-    const created = await service.createSkillset(
-      {
-        name: "review-set",
-        description: "d",
-        instructions: "p",
-        kind: "generic",
-        tags: [],
-        members: ["pdf-tools@1.0", "csv-tools@1.0"],
-        version: "1.0",
-      },
-      { userId: "owner-1" },
-    );
-    const stranger: ActorContext = {
-      userId: "stranger",
-      memberships: [],
-      isPlatformAdmin: false,
-      membershipsResolved: true,
-    };
-    let code = "";
-    try {
-      await service.setPermissions(
-        created.guid,
-        { isPrivate: true, sharedWithUsers: [], sharedWithOrgs: [] },
-        stranger,
-      );
-    } catch (err) {
-      code = (err as AppError).code;
-    }
-    expect(code).toBe("forbidden");
   });
 });
 
@@ -701,7 +985,7 @@ describe("SkillsetService — resolveClosure (roots = members)", () => {
     const { deps } = makeSkillsetDeps(skillService);
     const service = new SkillsetService(deps);
     // Author creates it (publish validates as SYSTEM, so the private dep is fine).
-    const created = await service.createSkillset(
+    await service.createSkillset(
       {
         name: "review-set",
         description: "d",
@@ -713,12 +997,9 @@ describe("SkillsetService — resolveClosure (roots = members)", () => {
       },
       { userId: "owner-1" },
     );
-    // Make the skillset public so the anon caller passes the entry gate.
-    await service.setPermissions(
-      created.guid,
-      { isPrivate: false, sharedWithUsers: [], sharedWithOrgs: [] },
-      OWNER,
-    );
+    // No owner-set visibility (#1136): the skillset has no entry gate. An
+    // anon caller resolving it walks each member under their own actor — the
+    // transitively-private `secret-lib` dep is what blocks them.
 
     let code = "";
     try {
@@ -733,14 +1014,18 @@ describe("SkillsetService — resolveClosure (roots = members)", () => {
     expect(sys.items.map((n) => n.name)).toContain("secret-lib");
   });
 
-  it("404s an anonymous caller on a PRIVATE skillset (entry gate)", async () => {
+  it("anon CAN resolve a skillset whose members are all public (#1136 — no entry gate)", async () => {
+    // Pre-#1136 a skillset carried its own `isPrivate`, and an anon caller
+    // was blocked by a standalone entry gate. That gate is gone: a skillset
+    // is bounded only by its members, so an anon caller resolves it whenever
+    // every member is public — the inert legacy `isPrivate` no longer blocks.
     const { skills, versions } = twoMemberSkills();
     const skillService = makeSkillService(skills, versions);
     const { deps } = makeSkillsetDeps(skillService);
     const service = new SkillsetService(deps);
     await service.createSkillset(
       {
-        name: "secret-set",
+        name: "open-set",
         description: "d",
         instructions: "p",
         kind: "generic",
@@ -749,13 +1034,9 @@ describe("SkillsetService — resolveClosure (roots = members)", () => {
         version: "1.0",
       },
       { userId: "owner-1" },
-    ); // private by default
-    let code = "";
-    try {
-      await service.resolveClosure("secret-set", ANON);
-    } catch (err) {
-      code = (err as AppError).code;
-    }
-    expect(code).toBe("skillset_not_found");
+    ); // legacy isPrivate defaults true — but it is inert now
+
+    const closure = await service.resolveClosure("open-set", ANON);
+    expect(closure.items.map((n) => n.name).sort()).toEqual(["csv-tools", "pdf-tools"]);
   });
 });

@@ -23,7 +23,6 @@
 
 import { z } from "zod";
 import type { SkillGrant } from "../../shared/types/index";
-import { skillGrantSchema } from "../skills/crud/grants";
 import {
   DEPENDS_ON_REF_REGEX,
   SKILL_NAME_REGEX,
@@ -166,22 +165,12 @@ export const publishSkillsetSchema = z.object({
   version: z.string().regex(SKILL_VERSION_REGEX, "version must be `<major>.<minor>`"),
 });
 
-/**
- * Body schema for `PUT /skillsets/:id/permissions` — mirrors skills. `grants`
- * (#1123) is the canonical typed ACL; the legacy `sharedWith*` lists are
- * accepted for back-compat and map to READ-level grants when `grants` is
- * omitted.
- */
-export const skillsetPermissionsSchema = z.object({
-  isPrivate: z.boolean(),
-  grants: z.array(skillGrantSchema).max(600).optional(),
-  sharedWithUsers: z.array(z.string().min(1).max(128)).max(500).default([]),
-  sharedWithOrgs: z.array(z.string().min(1).max(128)).max(100).default([]),
-});
+// NOTE (#1136): no skillset permissions schema — a skillset's visibility is
+// derived from its members, not owner-set, so there is no permissions
+// endpoint to validate a body for.
 
 export type CreateSkillsetInput = z.infer<typeof createSkillsetSchema>;
 export type PublishSkillsetInput = z.infer<typeof publishSkillsetSchema>;
-export type SkillsetPermissionsInput = z.infer<typeof skillsetPermissionsSchema>;
 
 /**
  * Persisted skillset identity document (the `skillsets` collection).
@@ -214,11 +203,34 @@ export interface SkillsetDocument {
    * Typed access grants (#1123) — canonical read/write ACL, mirroring
    * `SkillDocument.grants`. Optional for back-compat; readers fall back to
    * deriving read grants from the legacy lists via `effectiveGrants`.
+   *
+   * @deprecated (#1136) Skillset visibility is now DERIVED from its members
+   * (see `memberVisibilityState`), not owner-set. `isPrivate` / `sharedWith*`
+   * / `grants` on a skillset are inert — kept for rollback; no longer the
+   * authority for who-can-read.
    */
   grants?: SkillGrant[] | undefined;
+  /**
+   * Derived (#1136) — `true` iff EVERY member skill of the latest version is
+   * public. Cheap fast-path for discovery + drives the read-only visibility
+   * badge. Computed under SYSTEM_ACTOR, never owner-set; recomputed when a
+   * member's visibility or the member list changes. Optional for back-compat
+   * (absent ⇒ treated as `true` until the boot backfill runs).
+   */
+  membersAllPublic?: boolean | undefined;
+  /** Derived (#1136) member-visibility state of the latest version. */
+  memberVisibilityState?: SkillsetMemberVisibilityState | undefined;
   /** Cached pointer to the highest published version, e.g. "1.2". */
   latestVersion: string;
 }
+
+/**
+ * Member-derived visibility state of a skillset's latest version (#1136):
+ * - `all-public`   — every member skill is public; discoverable by everyone.
+ * - `restricted`   — ≥1 member is private/shared; discoverable only by callers who can read all members.
+ * - `unresolvable` — ≥1 member ref no longer resolves (e.g. deleted); only the owner sees it, with a warning.
+ */
+export type SkillsetMemberVisibilityState = "all-public" | "restricted" | "unresolvable";
 
 /**
  * Immutable record of one published skillset version (the
@@ -271,6 +283,20 @@ export interface SkillsetDetailResponse {
   sharedWithOrgs: string[];
   /** Typed access grants (#1123). Always present in responses via `effectiveGrants`. */
   grants?: SkillGrant[] | undefined;
+  /**
+   * Derived (#1136) member-visibility state of THIS version's members.
+   * Drives the read-only visibility badge. The authoritative skillset
+   * visibility — `isPrivate`/`grants` above are inert.
+   */
+  memberVisibilityState: SkillsetMemberVisibilityState;
+  /**
+   * Member refs the CALLER cannot read at THIS version (#1136). Always
+   * empty for a non-owner (they 404 instead of seeing a partial set);
+   * surfaced to the owner/admin so they can repair access (re-grant the
+   * member skill, or publish a version without it). Request-scoped, not
+   * stored.
+   */
+  unreadableMembers: string[];
   createdOn: string;
   updatedOn: string;
 }
@@ -285,6 +311,8 @@ export interface SkillsetSearchItem {
   memberCount: number;
   latestVersion: string;
   isPrivate: boolean;
+  /** Derived (#1136) member-visibility state — drives the badge in lists. */
+  memberVisibilityState: SkillsetMemberVisibilityState;
   createdBy: string;
   createdByEmail?: string | undefined;
   createdByDisplayName?: string | undefined;

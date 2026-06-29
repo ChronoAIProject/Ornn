@@ -146,7 +146,6 @@ import { wireAdmin } from "./domains/admin/bootstrap";
 // per-provider arrays). One-time, idempotent, runs before any
 // LlmProvidersService consumer reads from disk.
 import { migrateModelCatalogIntoProviders } from "./domains/settings/llmProviders/migration";
-import { backfillTypedGrants, renameReadWriteGrantsToWrite } from "./domains/skills/crud/grants.migration";
 import { createLlmPickerRoutes } from "./domains/settings/llmProviders/routes";
 
 // OpenAPI spec
@@ -675,33 +674,6 @@ export async function bootstrap(
     ),
   );
 
-  // ---- Typed-grants backfill (#1123) ----
-  // Fold the legacy read-only `sharedWithUsers` / `sharedWithOrgs` lists into
-  // the typed `grants` array (every legacy grant → `read` level). One-time,
-  // idempotent, non-disruptive (legacy lists preserved, nobody escalated to
-  // write). Runs before any skill/skillset read so the authz gates + scope
-  // filters can rely on `grants`. Failure is non-fatal: the read-time
-  // fallback in `effectiveGrants` keeps un-migrated docs authorizing
-  // correctly off the legacy lists.
-  await backfillTypedGrants(db).catch((err) =>
-    logger.error(
-      { err: err instanceof Error ? err.message : String(err) },
-      "typed-grants backfill failed — gates fall back to legacy read lists via effectiveGrants, no data loss",
-    ),
-  );
-
-  // ---- read_write → write grant-level rename (#1127) ----
-  // The combined `read_write` level was renamed to `write`. Rewrite any
-  // existing grant carrying the legacy value. Idempotent + non-disruptive
-  // (write confers what read_write did); `coerceStoredGrants` covers any doc
-  // not yet rewritten, so failure is non-fatal.
-  await renameReadWriteGrantsToWrite(db).catch((err) =>
-    logger.error(
-      { err: err instanceof Error ? err.message : String(err) },
-      "read_write→write rename failed — coerceStoredGrants maps legacy values at read time, no data loss",
-    ),
-  );
-
   // The picker route — `GET /me/models?surface=...` — reads from the
   // per-provider arrays via `LlmProvidersService` (already constructed
   // upstream as part of `domains/settings/...`). The section-default
@@ -766,6 +738,12 @@ export async function bootstrap(
 
   // Skill routes — sharing is now a direct PUT /permissions write; the
   // audit signal is surfaced as a per-version label, not a gate.
+  // #1136 — forward reference: the skill routes fire a reactive skillset
+  // recompute on every visibility-affecting mutation, but `wireSkillsets`
+  // (which owns that recompute) is built below since it injects this skill
+  // service. The holder is filled in once skillsets is wired; the hook is
+  // only ever invoked at request time, long after boot.
+  const skillsetRecomputeHook: { fire?: (s: { guid: string; name: string }) => void } = {};
   const skillRoutes = createSkillRoutes({
     skillService,
     skillRepo,
@@ -783,6 +761,7 @@ export async function bootstrap(
     // backed by the lazily-populated user directory.
     resolveUser: async (userId) =>
       (await userDirectoryRepo.findByUserIds([userId]))[0] ?? null,
+    fireSkillsetRecompute: (changedSkill) => skillsetRecomputeHook.fire?.(changedSkill),
   });
 
   // ---- Domain: Skill Search ----
@@ -808,8 +787,17 @@ export async function bootstrap(
     // #1123 — transfer-ownership target validation, shared resolver.
     resolveUser: async (userId) =>
       (await userDirectoryRepo.findByUserIds([userId]))[0] ?? null,
+    // #1136 — owner notifications on member-access loss during recompute.
+    notificationService,
   });
+  // #1136 — bind the skill routes' reactive-recompute hook now that the
+  // skillset wiring (which owns it) exists.
+  skillsetRecomputeHook.fire = skillsets.fireSkillsetRecompute;
   await skillsets.ensureIndexes();
+  // #1136 — one-shot, idempotent backfill of the derived-visibility cache so
+  // skillsets created before the feature get correct `membersAllPublic` /
+  // `memberVisibilityState` without a manual migration.
+  await skillsets.backfillDerivedVisibility();
 
   // ---- Domain: Skill Generation ----
   const { service: generationService, routes: generationRoutes } =

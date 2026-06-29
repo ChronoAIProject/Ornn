@@ -121,6 +121,8 @@ interface BuildOpts {
   resolveUser?: (
     userId: string,
   ) => Promise<{ userId: string; email: string; displayName: string } | null>;
+  /** #1136 — capture reactive skillset-recompute hook invocations. */
+  onSkillsetRecompute?: (changedSkill: { guid: string; name: string }) => void;
 }
 
 function buildApp(opts: BuildOpts = {}) {
@@ -134,6 +136,7 @@ function buildApp(opts: BuildOpts = {}) {
     nyxidServiceClient,
     extraNyxidServices = [],
     resolveUser,
+    onSkillsetRecompute,
   } = opts;
 
   const skillRepo = {
@@ -150,6 +153,7 @@ function buildApp(opts: BuildOpts = {}) {
       { findVisibleToCaller: async () => null }) as unknown as SkillRoutesConfig["nyxidServiceClient"],
     extraNyxidServicesResolver: async () => extraNyxidServices,
     ...(resolveUser ? { resolveUser } : {}),
+    ...(onSkillsetRecompute ? { fireSkillsetRecompute: onSkillsetRecompute } : {}),
   };
 
   const app = new Hono();
@@ -1029,6 +1033,28 @@ describe("PUT /skills/:id/permissions", () => {
     expect(res.status).toBe(200);
     expect(calls).toContain("setSkillPermissions");
   });
+
+  test("fires the skillset recompute hook after a permissions change (#1136)", async () => {
+    const recomputed: Array<{ guid: string; name: string }> = [];
+    const app = buildApp({
+      userId: OWNER,
+      permissions: [UPDATE],
+      repo: { findByGuid: async () => skillDoc({ createdBy: OWNER }) },
+      service: {
+        setSkillPermissions: async () => detail({ createdBy: OWNER }),
+        getSkill: async () => detail({ createdBy: OWNER }),
+      },
+      onSkillsetRecompute: (s) => recomputed.push(s),
+    });
+    const res = await app.request("/api/v1/skills/guid-1/permissions", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ isPrivate: false, sharedWithUsers: [], sharedWithOrgs: [] }),
+    });
+    expect(res.status).toBe(200);
+    expect(recomputed).toHaveLength(1);
+    expect(recomputed[0]!.guid).toBe("guid-1");
+  });
 });
 
 // ======================================================================
@@ -1322,6 +1348,21 @@ describe("DELETE /skills/:id", () => {
     expect(calls).toEqual(["deleteSkill"]);
     const body = (await res.json()) as { data: { success: boolean } };
     expect(body.data.success).toBe(true);
+  });
+
+  test("fires the skillset recompute hook with the deleted skill's name+guid (#1136)", async () => {
+    const recomputed: Array<{ guid: string; name: string }> = [];
+    const app = buildApp({
+      userId: OWNER,
+      permissions: [DELETE],
+      repo: { findByGuid: async () => skillDoc({ createdBy: OWNER }) },
+      service: { deleteSkill: async () => {} },
+      onSkillsetRecompute: (s) => recomputed.push(s),
+    });
+    const res = await app.request("/api/v1/skills/guid-1", { method: "DELETE" });
+    expect(res.status).toBe(200);
+    // Name captured before deletion so the reverse index still matches.
+    expect(recomputed).toEqual([{ guid: "guid-1", name: "demo-skill" }]);
   });
 });
 
