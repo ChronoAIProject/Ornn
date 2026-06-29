@@ -23,6 +23,7 @@
  * @module domains/skills/mirror/skillsetPlugin
  */
 
+import { createHash } from "node:crypto";
 import { createLogger } from "../../../shared/logger";
 import { SKILL_NAME_REGEX, SKILL_NAME_MAX } from "../../../shared/schemas/skillFrontmatter";
 import {
@@ -104,6 +105,37 @@ function normalizeMembers(members: SkillsetPluginMember[]): SkillsetPluginMember
 }
 
 /**
+ * Plugin version = the owner-published skillset version PLUS a short
+ * fingerprint of the RESOLVED member set (#1155). Claude Code decides an
+ * installed plugin needs updating by a pure string-equality compare on the
+ * version — there is NO content hashing or per-file change detection — so the
+ * version string is the only lever to make a member update reach an installed
+ * plugin. Folding the sorted `name@version` of every member into the string
+ * means:
+ *   - a moving (`@latest`/dist-tag) member that resolves to a NEW version
+ *     changes the fingerprint → CC sees a different version → it updates;
+ *   - a pinned-only set, or a no-op sync, yields a byte-identical string → no
+ *     spurious update and no churn commit (preserves the mirror's no-op skip).
+ *
+ * Build-metadata form `<base>+sk<hash>`. CC compares versions by equality
+ * (the same way it treats a git commit SHA as a version), so the suffix is a
+ * reliable, repo-scoped update signal — unlike omitting the version, which
+ * would fall back to a commit SHA whose subdir-vs-repo-wide scope is
+ * undocumented and could mass-update every plugin on any unrelated sync.
+ *
+ * `members` MUST already be normalized (sorted + de-duped) so the signature
+ * is order-independent and deterministic.
+ */
+export function fingerprintVersion(
+  baseVersion: string,
+  members: SkillsetPluginMember[],
+): string {
+  const signature = members.map((m) => `${m.name}@${m.version}`).join(",");
+  const hash = createHash("sha256").update(signature).digest("hex").slice(0, 8);
+  return `${baseVersion}+sk${hash}`;
+}
+
+/**
  * The marketplace catalogue entry for a skillset plugin — source
  * `./skillsets/<name>`. Lightweight (no member resolution), so the skill
  * incremental publish/remove path can include skillset entries in the shared
@@ -134,12 +166,15 @@ export function buildSkillsetPlugin(
   cfg: SkillsetPluginConfig,
 ): { files: Map<string, string>; marketplace: MarketplacePluginInput } {
   const members = normalizeMembers(input.members);
+  // The update signal CC actually compares: owner version + resolved-member
+  // fingerprint, so a moving member's new version reaches installed plugins.
+  const version = fingerprintVersion(input.version, members);
   const files = new Map<string, string>();
 
   // Per-skillset plugin manifest (multi-skill form — no root SKILL.md).
   files.set(PLUGIN_MANIFEST_RELPATH, buildPluginJson({
     name: input.name,
-    version: input.version,
+    version,
     description: input.description,
   }));
 
@@ -155,6 +190,10 @@ export function buildSkillsetPlugin(
 
   return {
     files,
+    // The catalogue entry carries the PLAIN owner version (human-meaningful +
+    // identical in the full-reconcile and skill-incremental code paths, so the
+    // shared marketplace.json never churns). The fingerprint lives ONLY in
+    // plugin.json, which CC resolves first — so updates still track members.
     marketplace: skillsetMarketplaceInput({
       name: input.name,
       description: input.description,

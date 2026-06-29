@@ -15,6 +15,7 @@
 import { describe, expect, it } from "bun:test";
 import {
   buildSkillsetPlugin,
+  fingerprintVersion,
   isSafeMemberName,
   skillsetMarketplaceInput,
   type SkillsetPluginInput,
@@ -73,14 +74,61 @@ describe("buildSkillsetPlugin — layout", () => {
 });
 
 describe("buildSkillsetPlugin — plugin.json", () => {
-  it("pins name/version/description to the skillset (NOT the members)", () => {
+  it("pins name/description to the skillset (NOT the members)", () => {
     const { files } = buildSkillsetPlugin(input(), CFG);
     const manifest = JSON.parse(files.get(".claude-plugin/plugin.json")!);
-    expect(manifest).toEqual({
-      name: "research-bundle",
-      version: "2.0",
-      description: "A curated research set.",
+    expect(manifest.name).toBe("research-bundle");
+    expect(manifest.description).toBe("A curated research set.");
+  });
+
+  it("version is the owner version + a resolved-member fingerprint", () => {
+    const { files } = buildSkillsetPlugin(input(), CFG);
+    const { version } = JSON.parse(files.get(".claude-plugin/plugin.json")!);
+    expect(version).toMatch(/^2\.0\+sk[0-9a-f]{8}$/);
+  });
+});
+
+describe("buildSkillsetPlugin — version fingerprint (#1155)", () => {
+  it("changes when a member resolves to a new version, so CC sees an update", () => {
+    const before = JSON.parse(
+      buildSkillsetPlugin(input(), CFG).files.get(".claude-plugin/plugin.json")!,
+    ).version;
+    // Same owner version (2.0), but a member moved 1.2 -> 1.3 (e.g. an @latest
+    // member after the underlying skill published a new version).
+    const bumped = input({
+      members: [
+        member({
+          name: "pdf-extract",
+          version: "1.3",
+          files: { "SKILL.md": "# pdf", "references/x.md": "ref" },
+        }),
+        member({ name: "ocr", description: "OCR images.", files: { "SKILL.md": "# ocr" } }),
+      ],
     });
+    const after = JSON.parse(
+      buildSkillsetPlugin(bumped, CFG).files.get(".claude-plugin/plugin.json")!,
+    ).version;
+    expect(after).not.toBe(before);
+    expect(after).toMatch(/^2\.0\+sk[0-9a-f]{8}$/);
+  });
+
+  it("is stable + order-independent for an unchanged member set (no churn)", () => {
+    const a = fingerprintVersion("2.0", [
+      member({ name: "alpha", version: "1.0" }),
+      member({ name: "beta", version: "2.1" }),
+    ]);
+    const b = fingerprintVersion("2.0", [
+      member({ name: "alpha", version: "1.0" }),
+      member({ name: "beta", version: "2.1" }),
+    ]);
+    expect(a).toBe(b);
+  });
+
+  it("keeps the PLAIN owner version on the marketplace catalogue entry", () => {
+    const { marketplace } = buildSkillsetPlugin(input(), CFG);
+    // The fingerprint lives only in plugin.json; the catalogue entry stays
+    // plain so the shared marketplace.json doesn't churn between code paths.
+    expect(marketplace.version).toBe("2.0");
   });
 });
 
