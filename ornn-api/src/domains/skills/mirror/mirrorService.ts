@@ -37,8 +37,15 @@ import {
   buildPluginJson,
   MARKETPLACE_MANIFEST_PATH,
   PLUGIN_MANIFEST_RELPATH,
-  type MarketplaceSkillInput,
+  type MarketplacePluginInput,
 } from "./marketplaceManifest";
+import {
+  buildSkillsetPlugin,
+  skillsetMarketplaceInput,
+  SKILLSET_FOLDER,
+  type SkillsetPluginMember,
+} from "./skillsetPlugin";
+import type { SkillsetDocument } from "../../skillsets/types";
 
 const logger = createLogger("mirrorService");
 
@@ -51,9 +58,35 @@ export interface MirrorSettingsReader {
   getMirror(): Promise<MirrorSection>;
 }
 
+/**
+ * Narrow skillset-repo surface the mirror needs (#1155) — just the
+ * plugin-export-eligible enumeration. Decoupled from `SkillsetRepository` so
+ * tests inject a one-method fake.
+ */
+export interface MirrorSkillsetRepo {
+  findAllEligibleForMirror(): Promise<SkillsetDocument[]>;
+}
+
+/**
+ * Narrow skillset-service surface the mirror needs (#1155) — the latest
+ * version's member refs + master prompt for a skillset being exported.
+ */
+export interface MirrorSkillsetSource {
+  getLatestForMirror(
+    guid: string,
+  ): Promise<{ members: string[]; instructions: string } | null>;
+}
+
 export interface MirrorServiceDeps {
   skillRepo: SkillRepository;
   skillService: SkillService;
+  /**
+   * Skillset plugin-export deps (#1155). OPTIONAL: when either is unset the
+   * mirror simply exports no skillset plugins (graceful for tests / configs
+   * that don't wire skillsets). Production bootstrap always passes both.
+   */
+  skillsetRepo?: MirrorSkillsetRepo;
+  skillsetService?: MirrorSkillsetSource;
   /** `https://ornn.chrono-ai.fun` (no trailing slash). Used in the per-skill README footer. */
   ornnPublicOrigin: string;
   /**
@@ -90,6 +123,16 @@ export interface ReconcileResult {
  */
 export class MirrorService {
   private cachedClient: { fingerprint: string; client: GitHubMirrorClient } | null = null;
+  /**
+   * In-flight `reconcileAll` guard (#1155). Mutation-driven triggers
+   * (skillset create/publish/delete, skill-visibility flips) now fire
+   * reconciles fire-and-forget alongside the cron, so concurrent runs are
+   * possible. Coalescing onto the running promise serializes them — a second
+   * caller rides the in-flight sweep instead of racing a second commit against
+   * the same branch head. The cron is the safety net for anything a coalesced
+   * caller misses.
+   */
+  private reconcileInFlight: Promise<ReconcileResult> | null = null;
 
   constructor(private readonly deps: MirrorServiceDeps) {
     if (deps.githubClientForTest) {
@@ -252,6 +295,18 @@ export class MirrorService {
    * cron is the safety net for incremental-hook failures.
    */
   async reconcileAll(): Promise<ReconcileResult> {
+    // Coalesce concurrent reconciles onto the in-flight run (#1155).
+    if (this.reconcileInFlight) {
+      logger.info("reconcileAll: a sweep is already running — coalescing");
+      return this.reconcileInFlight;
+    }
+    this.reconcileInFlight = this.runReconcile().finally(() => {
+      this.reconcileInFlight = null;
+    });
+    return this.reconcileInFlight;
+  }
+
+  private async runReconcile(): Promise<ReconcileResult> {
     const client = await this.getActiveClient();
     if (!client) {
       return { added: 0, updated: 0, removed: 0, unchanged: 0 };
@@ -269,7 +324,7 @@ export class MirrorService {
     const skillByName = new Map<string, { guid: string; version: string }>();
     // Collected in lockstep with the folders we publish so the root
     // marketplace.json (#1153) lists exactly the skills we mirror.
-    const manifestInputs: MarketplaceSkillInput[] = [];
+    const manifestInputs: MarketplacePluginInput[] = [];
     for (const skill of eligible) {
       // #807 (CWE-22): skip — do NOT abort — a row whose name would
       // escape its `<name>/` subtree. One poisoned row must not stop the
@@ -290,15 +345,21 @@ export class MirrorService {
     }
     desired.set("README.md", await this.repoReadme());
     const mirrorCfg = await this.deps.settingsService.getMirror();
+
+    // #1155 — second export layer: each opted-in, all-public skillset becomes
+    // ONE curated multi-skill plugin under `skillsets/<name>/`, and adds its
+    // own entry to the SAME root marketplace.json alongside the per-skill ones.
+    const skillsetPluginInputs = await this.buildEligibleSkillsetSubtrees(desired);
+
     desired.set(
       MARKETPLACE_MANIFEST_PATH,
-      buildMarketplaceJson(manifestInputs, {
+      buildMarketplaceJson([...manifestInputs, ...skillsetPluginInputs], {
         name: mirrorCfg.repo,
         owner: { name: mirrorCfg.owner },
       }),
     );
     logger.debug(
-      { count: manifestInputs.length },
+      { skills: manifestInputs.length, skillsets: skillsetPluginInputs.length },
       "reconcileAll: regenerated Claude Code marketplace.json",
     );
 
@@ -618,7 +679,11 @@ export class MirrorService {
   ): Promise<void> {
     const eligible = await this.deps.skillRepo.findAllEligibleForMirror();
     const cfg = await this.deps.settingsService.getMirror();
-    const content = buildMarketplaceJson(toManifestInputs(eligible), {
+    // #1155 — the catalogue is the union of per-skill AND skillset plugins.
+    // A skill edit must never drop the skillset entries, so include them here
+    // (lightweight: no member-file resolution, just the catalogue rows).
+    const skillsetInputs = await this.eligibleSkillsetMarketplaceInputs();
+    const content = buildMarketplaceJson([...toManifestInputs(eligible), ...skillsetInputs], {
       name: cfg.repo,
       owner: { name: cfg.owner },
     });
@@ -628,6 +693,116 @@ export class MirrorService {
     if (existing?.sha === computeGitBlobSha(content)) return;
     const sha = await client.createBlob(content);
     changes.push({ path: MARKETPLACE_MANIFEST_PATH, mode: "100644", type: "blob", sha });
+  }
+
+  /**
+   * Lightweight marketplace catalogue rows for every plugin-export-eligible
+   * skillset (#1155) — no member-file resolution. Safe-name filtered so a
+   * poisoned skillset name can never escape its `skillsets/<name>` source path.
+   * Returns `[]` when skillset deps aren't wired.
+   */
+  private async eligibleSkillsetMarketplaceInputs(): Promise<MarketplacePluginInput[]> {
+    if (!this.deps.skillsetRepo) return [];
+    const eligible = await this.deps.skillsetRepo.findAllEligibleForMirror();
+    return eligible
+      .filter((ss) => isSafeSkillFolderName(ss.name))
+      .map((ss) =>
+        skillsetMarketplaceInput({
+          name: ss.name,
+          description: ss.description,
+          version: ss.latestVersion,
+          keywords: ss.tags,
+        }),
+      );
+  }
+
+  /**
+   * For every plugin-export-eligible skillset (#1155): resolve its members to
+   * concrete skill packages, assemble the `skills/<member>/…` + plugin.json +
+   * README subtree via {@link buildSkillsetPlugin}, and stage it into `desired`
+   * under `skillsets/<name>/…`. Returns the marketplace catalogue rows so the
+   * caller can merge them into the shared root marketplace.json.
+   *
+   * A skillset that can't be resolved (no version, or every member dropped) is
+   * skipped — one bad skillset must not abort the whole sweep, mirroring the
+   * per-skill folder guard.
+   */
+  private async buildEligibleSkillsetSubtrees(
+    desired: Map<string, string>,
+  ): Promise<MarketplacePluginInput[]> {
+    if (!this.deps.skillsetRepo || !this.deps.skillsetService) return [];
+    const eligible = await this.deps.skillsetRepo.findAllEligibleForMirror();
+    logger.info({ count: eligible.length }, "reconcileAll: found plugin-export-eligible skillsets");
+
+    const cfg = await this.deps.settingsService.getMirror();
+    const pluginCfg = {
+      ornnPublicOrigin: this.deps.ornnPublicOrigin,
+      repoSlug: `${cfg.owner}/${cfg.repo}`,
+      repoName: cfg.repo,
+    };
+    const loadMember = this.makeMemberLoader();
+
+    const marketplaceInputs: MarketplacePluginInput[] = [];
+    for (const ss of eligible) {
+      // #807 — skip (don't abort) a skillset whose name would escape its subtree.
+      if (!isSafeSkillFolderName(ss.name)) {
+        logger.error({ guid: ss.guid, name: ss.name }, "reconcileAll: skipping unsafe skillset name");
+        continue;
+      }
+      const latest = await this.deps.skillsetService.getLatestForMirror(ss.guid);
+      if (!latest) {
+        logger.warn({ guid: ss.guid, name: ss.name }, "reconcileAll: skillset has no version; skipping");
+        continue;
+      }
+      const members: SkillsetPluginMember[] = [];
+      for (const ref of latest.members) {
+        const m = await loadMember(ref);
+        if (m) members.push(m);
+        else logger.warn({ skillset: ss.name, ref }, "reconcileAll: skillset member unresolvable; skipping");
+      }
+      const { files, marketplace } = buildSkillsetPlugin(
+        {
+          name: ss.name,
+          description: ss.description,
+          version: ss.latestVersion,
+          tags: ss.tags,
+          instructions: latest.instructions,
+          members,
+        },
+        pluginCfg,
+      );
+      for (const [relPath, content] of files) {
+        desired.set(`${SKILLSET_FOLDER}/${ss.name}/${relPath}`, content);
+      }
+      marketplaceInputs.push(marketplace);
+    }
+    return marketplaceInputs;
+  }
+
+  /**
+   * Build a member-ref resolver for the skillset plugin export (#1155).
+   * Resolves each ref under SYSTEM via the shared closure loader (handles
+   * name/guid + version/dist-tag/latest), then fetches the resolved version's
+   * package files. Returns `null` for an unresolvable ref so the caller can
+   * skip it. Eligible skillsets are all-public, so members resolve in practice;
+   * the null path is pure defence.
+   */
+  private makeMemberLoader(): (ref: string) => Promise<SkillsetPluginMember | null> {
+    const load = this.deps.skillService.createVersionLoader(SYSTEM_ACTOR);
+    return async (ref: string): Promise<SkillsetPluginMember | null> => {
+      const node = await load(ref);
+      if (!node) return null;
+      const json = await this.deps.skillService.getSkillJson(
+        node.guid ?? node.name,
+        SYSTEM_ACTOR,
+        node.version,
+      );
+      const files: Record<string, string> = {};
+      for (const [path, content] of Object.entries(json.files)) {
+        files[path] = content;
+      }
+      return { name: node.name, version: node.version, description: json.description, files };
+    };
   }
 
   private async writeCommitAndTag(
@@ -666,11 +841,13 @@ export class MirrorService {
 
 /**
  * Map a skill doc to the minimal shape the marketplace generators need
- * (#1153).
+ * (#1153). Source is the sibling per-skill folder `./<name>` (#1155 made
+ * `source` explicit so skillset plugins can diverge to `./skillsets/<name>`).
  */
-function toMarketplaceInput(skill: SkillDocument): MarketplaceSkillInput {
+function toMarketplaceInput(skill: SkillDocument): MarketplacePluginInput {
   return {
     name: skill.name,
+    source: `./${skill.name}`,
     description: skill.description,
     version: skill.latestVersion,
     keywords: skill.metadata.tags ?? [],
@@ -687,7 +864,7 @@ function isSafeSkillFolderName(name: string): boolean {
  * poisoned `../escape` name out of the public marketplace.json source
  * paths, mirroring the reconcile sweep's per-folder guard.
  */
-function toManifestInputs(skills: SkillDocument[]): MarketplaceSkillInput[] {
+function toManifestInputs(skills: SkillDocument[]): MarketplacePluginInput[] {
   return skills.filter((s) => isSafeSkillFolderName(s.name)).map(toMarketplaceInput);
 }
 

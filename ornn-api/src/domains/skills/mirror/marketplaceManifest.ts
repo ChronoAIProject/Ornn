@@ -30,17 +30,28 @@ export const MARKETPLACE_MANIFEST_PATH = ".claude-plugin/marketplace.json";
 export const PLUGIN_MANIFEST_RELPATH = ".claude-plugin/plugin.json";
 
 /**
- * The slice of a skill the manifests need. Decoupled from
- * `SkillDocument` so this module stays free of DB/runtime types and is
- * trivially unit-testable.
+ * One catalogue entry the marketplace manifest needs. Decoupled from
+ * `SkillDocument` / `SkillsetDocument` so this module stays free of
+ * DB/runtime types and is trivially unit-testable.
+ *
+ * Generalized for #1155: an entry carries its `source` path EXPLICITLY
+ * rather than deriving it from `name`, so a single-skill plugin can pass
+ * `./<name>` while a curated multi-skill skillset plugin passes
+ * `./skillsets/<name>` — both land in the same root marketplace.json.
  */
-export interface MarketplaceSkillInput {
-  /** Canonical skill name — also the folder name and plugin source path. */
+export interface MarketplacePluginInput {
+  /** Plugin name — the marketplace catalogue key + install handle. */
   name: string;
+  /**
+   * Plugin source path relative to the repo root, e.g. `./pdf-extract`
+   * (per-skill) or `./skillsets/research-bundle` (skillset). Carried
+   * explicitly so skill and skillset entries can diverge.
+   */
+  source: string;
   description: string;
   /** Ornn `<major>.<minor>` latest version, used as the plugin version. */
   version: string;
-  /** Skill tags -> Claude Code plugin `keywords`. Empty array => omitted. */
+  /** Tags -> Claude Code plugin `keywords`. Empty array => omitted. */
   keywords: string[];
 }
 
@@ -75,10 +86,15 @@ interface PluginManifest {
   description: string;
 }
 
-/** Stable, locale-independent ascending compare by skill name. */
-function byName(a: MarketplaceSkillInput, b: MarketplaceSkillInput): number {
-  if (a.name < b.name) return -1;
-  if (a.name > b.name) return 1;
+/**
+ * Stable, locale-independent ascending compare — primarily by name, then
+ * by source as a tiebreaker. The source tiebreaker keeps output
+ * byte-stable even if a skill and a skillset ever share a name (distinct
+ * source paths), so the mirror's blob-SHA no-op check never sees churn.
+ */
+function byPlugin(a: MarketplacePluginInput, b: MarketplacePluginInput): number {
+  if (a.name !== b.name) return a.name < b.name ? -1 : 1;
+  if (a.source !== b.source) return a.source < b.source ? -1 : 1;
   return 0;
 }
 
@@ -89,24 +105,26 @@ function serialize(value: unknown): string {
 
 /**
  * Build the root `.claude-plugin/marketplace.json` cataloguing every
- * supplied (already public + safely-named) skill as a single-skill
- * plugin sourced from its sibling folder.
+ * supplied plugin entry (already public + safely-named), each sourced
+ * from its own `source` path. Mixes single-skill plugins (`./<name>`)
+ * and curated multi-skill skillset plugins (`./skillsets/<name>`) in one
+ * catalogue (#1155).
  */
 export function buildMarketplaceJson(
-  skills: MarketplaceSkillInput[],
+  inputs: MarketplacePluginInput[],
   cfg: MarketplaceConfig,
 ): string {
-  const plugins: MarketplacePluginEntry[] = [...skills].sort(byName).map((skill) => {
+  const plugins: MarketplacePluginEntry[] = [...inputs].sort(byPlugin).map((input) => {
     const entry: MarketplacePluginEntry = {
-      name: skill.name,
-      source: `./${skill.name}`,
-      description: skill.description,
-      version: skill.version,
+      name: input.name,
+      source: input.source,
+      description: input.description,
+      version: input.version,
     };
     // Omit `keywords` entirely when empty — keeps the manifest clean and
-    // avoids an unnecessary `[]` diff for tag-less skills.
-    if (skill.keywords.length > 0) {
-      entry.keywords = [...skill.keywords];
+    // avoids an unnecessary `[]` diff for tag-less entries.
+    if (input.keywords.length > 0) {
+      entry.keywords = [...input.keywords];
     }
     return entry;
   });
@@ -120,15 +138,20 @@ export function buildMarketplaceJson(
 }
 
 /**
- * Build a single skill folder's `.claude-plugin/plugin.json`, making
- * that folder a valid one-skill Claude Code plugin and pinning the
- * plugin version to the skill's latest Ornn version.
+ * Build a plugin folder's `.claude-plugin/plugin.json`, making that
+ * folder a valid Claude Code plugin and pinning the plugin version to
+ * the source's latest Ornn version. Used for both a single-skill folder
+ * and a curated skillset folder — only name/version/description matter.
  */
-export function buildPluginJson(skill: MarketplaceSkillInput): string {
+export function buildPluginJson(input: {
+  name: string;
+  version: string;
+  description: string;
+}): string {
   const manifest: PluginManifest = {
-    name: skill.name,
-    version: skill.version,
-    description: skill.description,
+    name: input.name,
+    version: input.version,
+    description: input.description,
   };
   return serialize(manifest);
 }
