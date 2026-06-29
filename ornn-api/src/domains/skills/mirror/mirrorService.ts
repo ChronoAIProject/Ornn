@@ -32,6 +32,13 @@ import { SYSTEM_ACTOR } from "../crud/authorize";
 import type { SkillDocument } from "../../../shared/types/index";
 import type { MirrorSection } from "../../settings/sections/mirror";
 import { SKILL_NAME_REGEX, SKILL_NAME_MAX } from "../../../shared/schemas/skillFrontmatter";
+import {
+  buildMarketplaceJson,
+  buildPluginJson,
+  MARKETPLACE_MANIFEST_PATH,
+  PLUGIN_MANIFEST_RELPATH,
+  type MarketplaceSkillInput,
+} from "./marketplaceManifest";
 
 const logger = createLogger("mirrorService");
 
@@ -260,6 +267,9 @@ export class MirrorService {
     // so we can stamp `mirrorSync` on the skills that get touched.
     const desired = new Map<string, string>(); // path → content
     const skillByName = new Map<string, { guid: string; version: string }>();
+    // Collected in lockstep with the folders we publish so the root
+    // marketplace.json (#1153) lists exactly the skills we mirror.
+    const manifestInputs: MarketplaceSkillInput[] = [];
     for (const skill of eligible) {
       // #807 (CWE-22): skip — do NOT abort — a row whose name would
       // escape its `<name>/` subtree. One poisoned row must not stop the
@@ -272,12 +282,25 @@ export class MirrorService {
         continue;
       }
       skillByName.set(skill.name, { guid: skill.guid, version: skill.latestVersion });
+      manifestInputs.push(toMarketplaceInput(skill));
       const folder = await this.buildSkillFolder(skill);
       for (const [relPath, content] of folder) {
         desired.set(`${skill.name}/${relPath}`, content);
       }
     }
     desired.set("README.md", await this.repoReadme());
+    const mirrorCfg = await this.deps.settingsService.getMirror();
+    desired.set(
+      MARKETPLACE_MANIFEST_PATH,
+      buildMarketplaceJson(manifestInputs, {
+        name: mirrorCfg.repo,
+        owner: { name: mirrorCfg.owner },
+      }),
+    );
+    logger.debug(
+      { count: manifestInputs.length },
+      "reconcileAll: regenerated Claude Code marketplace.json",
+    );
 
     // Read current state of the mirror.
     const headCommit = await client.getDefaultBranchHead();
@@ -378,6 +401,9 @@ export class MirrorService {
       out.set(path, content);
     }
     out.set("README.md", await this.skillReadme(skill));
+    // Per-skill plugin manifest so this folder is a valid one-skill
+    // Claude Code plugin (#1153). Rides every publish + reconcile path.
+    out.set(PLUGIN_MANIFEST_RELPATH, buildPluginJson(toMarketplaceInput(skill)));
     return out;
   }
 
@@ -550,14 +576,18 @@ export class MirrorService {
         }
       }
     } else {
-      if (currentInFolder.length === 0) {
-        logger.info({ skillName }, "removeSkill: folder absent, no-op");
-        return null;
-      }
+      // Remove: drop every blob currently under `<name>/`. An absent
+      // folder leaves `changes` empty here; a stale root manifest entry
+      // is still healed by the manifest refresh below.
       for (const e of currentInFolder) {
         changes.push({ path: e.path, mode: "100644", type: "blob", sha: null as unknown as string });
       }
     }
+
+    // The root marketplace.json (#1153) is a function of the WHOLE public
+    // set, so a single-skill publish/remove must refresh it in the same
+    // commit or the catalogue drifts until the next full reconcile.
+    await this.appendMarketplaceManifestChange(client, currentTree, changes);
 
     if (changes.length === 0) {
       logger.info({ skillName, op }, "commitSkillFolderChange: no diff, skipping commit");
@@ -574,6 +604,30 @@ export class MirrorService {
     });
     logger.info({ skillName, op, changes: changes.length }, "commitSkillFolderChange: committed");
     return commit;
+  }
+
+  /**
+   * Regenerate the root marketplace.json from the current public set
+   * and stage a blob change when it differs from the mirror. Shared by
+   * the incremental publish/remove paths (#1153).
+   */
+  private async appendMarketplaceManifestChange(
+    client: GitHubMirrorClient,
+    currentTree: TreeEntry[],
+    changes: TreeEntry[],
+  ): Promise<void> {
+    const eligible = await this.deps.skillRepo.findAllEligibleForMirror();
+    const cfg = await this.deps.settingsService.getMirror();
+    const content = buildMarketplaceJson(toManifestInputs(eligible), {
+      name: cfg.repo,
+      owner: { name: cfg.owner },
+    });
+    const existing = currentTree.find(
+      (e) => e.type === "blob" && e.path === MARKETPLACE_MANIFEST_PATH,
+    );
+    if (existing?.sha === computeGitBlobSha(content)) return;
+    const sha = await client.createBlob(content);
+    changes.push({ path: MARKETPLACE_MANIFEST_PATH, mode: "100644", type: "blob", sha });
   }
 
   private async writeCommitAndTag(
@@ -608,6 +662,33 @@ export class MirrorService {
     });
     return { sha: commitSha, committedAt };
   }
+}
+
+/**
+ * Map a skill doc to the minimal shape the marketplace generators need
+ * (#1153).
+ */
+function toMarketplaceInput(skill: SkillDocument): MarketplaceSkillInput {
+  return {
+    name: skill.name,
+    description: skill.description,
+    version: skill.latestVersion,
+    keywords: skill.metadata.tags ?? [],
+  };
+}
+
+/** Mirror folder-name safety (#807) — also gates manifest membership. */
+function isSafeSkillFolderName(name: string): boolean {
+  return SKILL_NAME_REGEX.test(name) && name.length <= SKILL_NAME_MAX;
+}
+
+/**
+ * Filter to safely-named skills and map to manifest inputs. Keeps a
+ * poisoned `../escape` name out of the public marketplace.json source
+ * paths, mirroring the reconcile sweep's per-folder guard.
+ */
+function toManifestInputs(skills: SkillDocument[]): MarketplaceSkillInput[] {
+  return skills.filter((s) => isSafeSkillFolderName(s.name)).map(toMarketplaceInput);
 }
 
 /**

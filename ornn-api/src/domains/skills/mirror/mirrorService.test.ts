@@ -400,3 +400,127 @@ describe("MirrorService path-traversal guard (#807, CWE-22)", () => {
     expect(result.added).toBeGreaterThanOrEqual(1);
   });
 });
+
+describe("MirrorService Claude Code marketplace (#1153)", () => {
+  // Parse every blob the service uploaded and return the first one that
+  // is valid JSON exposing a `plugins` array — i.e. the marketplace.json.
+  function findMarketplaceBlob(calls: CallLog): { plugins: Array<{ name: string; source: string }> } | null {
+    for (const b of calls.blobs) {
+      try {
+        const parsed = JSON.parse(b.content);
+        if (parsed && Array.isArray(parsed.plugins)) return parsed;
+      } catch {
+        // not JSON — a SKILL.md / README, skip.
+      }
+    }
+    return null;
+  }
+
+  function allTreePaths(calls: CallLog): string[] {
+    return calls.trees.flatMap((t) => t.entries.map((e) => e.path));
+  }
+
+  it("reconcileAll emits a root marketplace.json + per-skill plugin.json", async () => {
+    const skill = makeSkill({ guid: "g1", name: "demo-skill", isPrivate: false });
+    const { github, calls } = makeFakeGithub();
+    const svc = new MirrorService({
+      githubClientForTest: github,
+      skillRepo: makeFakeRepo([skill]),
+      skillService: makeFakeSkillService({ g1: { "SKILL.md": "# demo" } }),
+      ornnPublicOrigin: "https://example",
+      settingsService: makeFakeSettings(),
+    });
+    await svc.reconcileAll();
+
+    const paths = allTreePaths(calls);
+    expect(paths).toContain(".claude-plugin/marketplace.json");
+    expect(paths).toContain("demo-skill/.claude-plugin/plugin.json");
+
+    const manifest = findMarketplaceBlob(calls);
+    expect(manifest).not.toBeNull();
+    expect(manifest!.plugins).toHaveLength(1);
+    expect(manifest!.plugins[0]).toMatchObject({
+      name: "demo-skill",
+      source: "./demo-skill",
+    });
+  });
+
+  it("reconcileAll keeps private skills out of the marketplace catalogue", async () => {
+    const pub = makeSkill({ guid: "g-pub", name: "pub", isPrivate: false });
+    const priv = makeSkill({ guid: "g-priv", name: "priv", isPrivate: true });
+    const { github, calls } = makeFakeGithub();
+    const svc = new MirrorService({
+      githubClientForTest: github,
+      skillRepo: makeFakeRepo([pub, priv]),
+      skillService: makeFakeSkillService({ "g-pub": { "SKILL.md": "# pub" } }),
+      ornnPublicOrigin: "https://example",
+      settingsService: makeFakeSettings(),
+    });
+    await svc.reconcileAll();
+
+    const manifest = findMarketplaceBlob(calls);
+    expect(manifest).not.toBeNull();
+    const names = manifest!.plugins.map((p) => p.name);
+    expect(names).toContain("pub");
+    expect(names).not.toContain("priv");
+  });
+
+  it("publishSkill refreshes the root marketplace.json in the same commit", async () => {
+    const skill = makeSkill({ guid: "g1", name: "demo-skill", isPrivate: false });
+    // Existing head with the folder present but NO manifest yet.
+    const currentTree: TreeEntry[] = [
+      { path: "demo-skill/SKILL.md", mode: "100644", type: "blob", sha: "old-sha" },
+    ];
+    const { github, calls } = makeFakeGithub({ currentTree });
+    const svc = new MirrorService({
+      githubClientForTest: github,
+      skillRepo: makeFakeRepo([skill]),
+      skillService: makeFakeSkillService({ g1: { "SKILL.md": "# demo" } }),
+      ornnPublicOrigin: "https://example",
+      settingsService: makeFakeSettings(),
+    });
+    await svc.publishSkill("g1");
+
+    expect(allTreePaths(calls)).toContain(".claude-plugin/marketplace.json");
+    const manifest = findMarketplaceBlob(calls);
+    expect(manifest!.plugins.map((p) => p.name)).toContain("demo-skill");
+  });
+
+  it("removeSkill drops the skill from the manifest (regenerated from the public set)", async () => {
+    // Mirror currently lists the skill in both the folder and the manifest;
+    // the skill is now ineligible (findAllEligibleForMirror → []).
+    const staleManifest = JSON.stringify({
+      name: "ornn-skills",
+      owner: { name: "ChronoAIProject" },
+      plugins: [{ name: "gone", source: "./gone", description: "x", version: "1.0" }],
+    });
+    const currentTree: TreeEntry[] = [
+      { path: "gone/SKILL.md", mode: "100644", type: "blob", sha: "old-sha" },
+      {
+        path: ".claude-plugin/marketplace.json",
+        mode: "100644",
+        type: "blob",
+        sha: computeGitBlobSha(staleManifest),
+      },
+    ];
+    const { github, calls } = makeFakeGithub({ currentTree });
+    const svc = new MirrorService({
+      githubClientForTest: github,
+      skillRepo: makeFakeRepo([]), // nothing eligible
+      skillService: makeFakeSkillService({}),
+      ornnPublicOrigin: "https://example",
+      settingsService: makeFakeSettings(),
+    });
+    await svc.removeSkill("gone");
+
+    // Folder blob removed AND the manifest rewritten in the same commit.
+    const entries = calls.trees[0]!.entries;
+    const folderRemoval = entries.find((e) => e.path === "gone/SKILL.md");
+    expect(folderRemoval?.sha).toBeNull();
+    expect(entries.some((e) => e.path === ".claude-plugin/marketplace.json")).toBe(true);
+
+    const manifest = findMarketplaceBlob(calls);
+    expect(manifest).not.toBeNull();
+    expect(manifest!.plugins).toEqual([]); // catalogue now empty
+  });
+});
