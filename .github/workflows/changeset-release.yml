@@ -74,7 +74,7 @@ jobs:
           echo "user-id=${USER_ID}" >> "$GITHUB_OUTPUT"
           echo "Resolved ${SLUG}[bot] → user id ${USER_ID}"
 
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           # Make git push, gh CLI, and downstream `pull_request` event
