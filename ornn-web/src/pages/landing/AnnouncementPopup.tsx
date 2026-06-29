@@ -126,14 +126,11 @@ export function AnnouncementPopup() {
   return createPortal(
     <AnimatePresence>
       {open && (
-        // Anchored to the top-right corner (below the 64px navbar) as a
-        // non-blocking notification card — no page-dimming backdrop, so the
-        // hero + lifecycle ring stay visible and interactive. Dismiss via the
-        // X / Dismiss buttons or Escape.
-        <div
-          className="pointer-events-auto fixed z-50 rounded-[3px] border border-white/15 bg-black/40 backdrop-blur-2xl"
-          style={{ top: '10vh', bottom: '10vh', left: '15vw', right: '15vw' }}
-        >
+        // Full-viewport centering layer — the wrapper itself is
+        // click-through (`pointer-events-none`) so the hero + lifecycle ring
+        // behind it stay interactive (no page-dimming backdrop). The card is
+        // the only interactive surface. Dismiss via X / Dismiss / Escape.
+        <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center">
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -142,7 +139,12 @@ export function AnnouncementPopup() {
             role="dialog"
             aria-labelledby="announcement-title"
             style={GLASS_OVERRIDES as unknown as never}
-            className="relative h-full w-full overflow-y-auto p-8 sm:p-10"
+            // Width is fixed (70vw — matches the prior 15vw side margins);
+            // height hugs the content and is capped at 80vh (matches the
+            // prior 10vh top/bottom margins), scrolling internally only when
+            // the content would exceed that bound. Centered by the flex
+            // wrapper above, so the card stays put as its height changes.
+            className="pointer-events-auto relative w-[70vw] max-h-[80vh] overflow-y-auto rounded-[3px] border border-white/15 bg-black/40 backdrop-blur-2xl p-8 sm:p-10"
           >
 
             {/* Bracketed mono micro-label — Forge Workshop section signature. */}
