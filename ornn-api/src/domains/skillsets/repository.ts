@@ -48,6 +48,8 @@ export interface CreateSkillsetData {
   grants?: SkillGrant[] | undefined;
   /** Initial version, e.g. "1.0". Required. */
   latestVersion: string;
+  /** Owner opt-in (#1155) to export as a multi-skill plugin. Default OFF. */
+  exportAsPlugin?: boolean | undefined;
 }
 
 export interface UpdateSkillsetData {
@@ -66,6 +68,12 @@ export interface UpdateSkillsetData {
   grants?: SkillGrant[];
   latestVersion?: string;
   updatedBy: string;
+  /**
+   * Owner opt-in (#1155). Set ONLY when an explicit boolean is provided —
+   * omitting it preserves the skillset's current setting (a publish that
+   * doesn't mention the flag must not silently reset it).
+   */
+  exportAsPlugin?: boolean;
 }
 
 /** Filters specific to skillset search: `kind` equality + `tags $all` + a `q`
@@ -98,6 +106,8 @@ export class SkillsetRepository {
       this.collection.createIndex({ createdOn: -1 }),
       this.collection.createIndex({ isPrivate: 1, createdOn: -1 }),
       this.collection.createIndex({ kind: 1, createdOn: -1 }),
+      // #1155 — fast lookup of plugin-export-eligible skillsets for the mirror.
+      this.collection.createIndex({ exportAsPlugin: 1, memberVisibilityState: 1 }),
     ]);
   }
 
@@ -109,6 +119,21 @@ export class SkillsetRepository {
   async findByName(name: string): Promise<SkillsetDocument | null> {
     const doc = await this.collection.findOne({ name });
     return mapDoc(doc);
+  }
+
+  /**
+   * Skillsets eligible to export as a curated multi-skill plugin (#1155):
+   * every member public (`memberVisibilityState: "all-public"`) AND the owner
+   * opted in (`exportAsPlugin: true`). The all-public guarantee is what makes
+   * publishing the member content to the public mirror safe. Used by the
+   * mirror sweep + the shared marketplace.json refresh.
+   */
+  async findAllEligibleForMirror(): Promise<SkillsetDocument[]> {
+    const docs = await this.collection
+      .find({ memberVisibilityState: "all-public", exportAsPlugin: true })
+      .maxTimeMS(SkillsetRepository.MAX_QUERY_MS)
+      .toArray();
+    return docs.map((d) => mapDoc(d)!);
   }
 
   /**
@@ -146,6 +171,8 @@ export class SkillsetRepository {
       // from the actual members right after create/publish.
       membersAllPublic: true,
       memberVisibilityState: "all-public",
+      // Plugin-export opt-in (#1155) — default OFF.
+      exportAsPlugin: data.exportAsPlugin ?? false,
       latestVersion: data.latestVersion,
     };
 
@@ -182,6 +209,8 @@ export class SkillsetRepository {
       if (data.sharedWithOrgs !== undefined) setFields.sharedWithOrgs = data.sharedWithOrgs;
     }
     if (data.latestVersion !== undefined) setFields.latestVersion = data.latestVersion;
+    // #1155 — only an explicit boolean flips the opt-in; omission preserves it.
+    if (data.exportAsPlugin !== undefined) setFields.exportAsPlugin = data.exportAsPlugin;
 
     await this.collection.updateOne({ _id: skillsetId(guid) }, { $set: setFields });
     logger.info({ guid }, "Skillset updated");
@@ -398,6 +427,8 @@ function mapDoc(doc: Document | null): SkillsetDocument | null {
     membersAllPublic: doc.membersAllPublic === undefined ? true : doc.membersAllPublic === true,
     memberVisibilityState:
       (doc.memberVisibilityState as SkillsetMemberVisibilityState | undefined) ?? "all-public",
+    // Plugin-export opt-in (#1155) — absent on pre-feature docs ⇒ false.
+    exportAsPlugin: doc.exportAsPlugin === true,
     latestVersion: doc.latestVersion ?? "1.0",
   };
 }
