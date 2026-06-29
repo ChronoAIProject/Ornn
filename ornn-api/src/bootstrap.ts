@@ -693,6 +693,35 @@ export async function bootstrap(
     },
   });
 
+  // ---- Domain: Skillsets (#969) ----
+  // Wired BEFORE the mirror so the mirror can take the skillset repo +
+  // service as deps for the plugin-export sweep (#1155). A skillset is a
+  // curated, versioned meta-package over N member skills; the service injects
+  // `skillService` so member resolution + the #968 closure walk stay
+  // single-sourced.
+  //
+  // The mirror reconcile is fire-and-forget on skillset mutations, but the
+  // MirrorService is built just below — so the routes take a holder hook that
+  // is filled in once the mirror exists (only ever invoked at request time).
+  const mirrorReconcileHook: { fire?: () => void } = {};
+  const skillsets = wireSkillsets({
+    db,
+    skillService,
+    // #1123 — transfer-ownership target validation, shared resolver.
+    resolveUser: async (userId) =>
+      (await userDirectoryRepo.findByUserIds([userId]))[0] ?? null,
+    // #1136 — owner notifications on member-access loss during recompute.
+    notificationService,
+    // #1155 — refresh the plugin-export mirror after a skillset mutation.
+    fireMirrorReconcile: () => mirrorReconcileHook.fire?.(),
+  });
+  await skillsets.ensureIndexes();
+  // #1136 — one-shot, idempotent backfill of the derived-visibility cache so
+  // skillsets created before the feature get correct `membersAllPublic` /
+  // `memberVisibilityState`. Runs before any mirror reconcile so plugin-export
+  // eligibility (#1155) is evaluated against fresh visibility state.
+  await skillsets.backfillDerivedVisibility();
+
   // ---- Domain: GitHub Mirror ----
   // Single MirrorService instance — runtime-aware. Reads enabled +
   // App credentials + repo coords from `platformSettingsService` on
@@ -704,9 +733,19 @@ export async function bootstrap(
   const mirrorService = new MirrorService({
     skillRepo,
     skillService,
+    // #1155 — skillset plugin export (opt-in, all-public skillsets only).
+    skillsetRepo: skillsets.skillsetRepo,
+    skillsetService: skillsets.service,
     ornnPublicOrigin: config.ornnPublicOrigin,
     settingsService,
   });
+  // #1155 — fill the mirror reconcile hook now that the service exists.
+  // Fire-and-forget; failures are logged and never block a mutation response.
+  mirrorReconcileHook.fire = () => {
+    mirrorService
+      .reconcileAll()
+      .catch((err) => logger.warn({ err }, "mirror reconcileAll (mutation-triggered) failed"));
+  };
   // In-process mirror reconcile scheduler. Multi-pod-safe (Agenda's
   // per-fire row lock on `agendaJobs`); schedule is driven by
   // `settings.mirror.reconcileSchedule` and updated dynamically by the
@@ -777,27 +816,15 @@ export async function bootstrap(
     getSaAccessToken,
   });
 
-  // ---- Domain: Skillsets (#969) ----
-  // A skillset is a curated, versioned meta-package over N member skills.
-  // The service injects `skillService` so member resolution + the #968
-  // closure walk stay single-sourced.
-  const skillsets = wireSkillsets({
-    db,
-    skillService,
-    // #1123 — transfer-ownership target validation, shared resolver.
-    resolveUser: async (userId) =>
-      (await userDirectoryRepo.findByUserIds([userId]))[0] ?? null,
-    // #1136 — owner notifications on member-access loss during recompute.
-    notificationService,
-  });
-  // #1136 — bind the skill routes' reactive-recompute hook now that the
-  // skillset wiring (which owns it) exists.
-  skillsetRecomputeHook.fire = skillsets.fireSkillsetRecompute;
-  await skillsets.ensureIndexes();
-  // #1136 — one-shot, idempotent backfill of the derived-visibility cache so
-  // skillsets created before the feature get correct `membersAllPublic` /
-  // `memberVisibilityState` without a manual migration.
-  await skillsets.backfillDerivedVisibility();
+  // #1136 — bind the skill routes' reactive-recompute hook now that both the
+  // skillset wiring and the mirror exist. A skill visibility flip both (a)
+  // recomputes every referencing skillset's derived visibility and (b) can
+  // change which skillsets are plugin-export-eligible (#1155), so the hook
+  // fires the mirror reconcile too. Both are fire-and-forget.
+  skillsetRecomputeHook.fire = (changedSkill) => {
+    skillsets.fireSkillsetRecompute(changedSkill);
+    mirrorReconcileHook.fire?.();
+  };
 
   // ---- Domain: Skill Generation ----
   const { service: generationService, routes: generationRoutes } =

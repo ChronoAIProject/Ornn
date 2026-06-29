@@ -26,6 +26,11 @@ import { createSkillsetSearchRoutes } from "./search/routes";
 
 export interface SkillsetWiring {
   readonly service: SkillsetService;
+  /**
+   * The identity repository (#1155). Exposed so the GitHub mirror can
+   * enumerate plugin-export-eligible skillsets (`findAllEligibleForMirror`).
+   */
+  readonly skillsetRepo: SkillsetRepository;
   readonly routes: Hono<{ Variables: AuthVariables }>;
   readonly searchRoutes: Hono<{ Variables: AuthVariables }>;
   /** Ensure the two collections' indexes. Awaited by bootstrap on startup. */
@@ -54,6 +59,12 @@ export function wireSkillsets(deps: {
   ) => Promise<{ userId: string; email: string; displayName: string } | null>;
   /** #1136 — owner-notification emitter for the reactive recompute path. */
   notificationService?: SkillsetNotificationEmitter;
+  /**
+   * #1155 — fire-and-forget mirror reconcile, called after a skillset
+   * create / publish / delete (any of which can change plugin-export
+   * eligibility). No-op when unset.
+   */
+  fireMirrorReconcile?: () => void;
 }): SkillsetWiring {
   const skillsetRepo = new SkillsetRepository(deps.db);
   const skillsetVersionRepo = new SkillsetVersionRepository(deps.db);
@@ -65,7 +76,10 @@ export function wireSkillsets(deps: {
     ...(deps.resolveUser ? { resolveUser: deps.resolveUser } : {}),
     ...(deps.notificationService ? { notificationService: deps.notificationService } : {}),
   });
-  const routes = createSkillsetRoutes({ skillsetService: service });
+  const routes = createSkillsetRoutes({
+    skillsetService: service,
+    ...(deps.fireMirrorReconcile ? { fireMirrorReconcile: deps.fireMirrorReconcile } : {}),
+  });
 
   // #1136 — the search service live-filters restricted candidates via the
   // skillset service's per-caller member-readability check.
@@ -74,6 +88,7 @@ export function wireSkillsets(deps: {
 
   return {
     service,
+    skillsetRepo,
     routes,
     searchRoutes,
     ensureIndexes: async () => {
