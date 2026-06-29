@@ -1,5 +1,11 @@
 # ornn-api
 
+## 0.14.0
+
+### Minor Changes
+
+- [#1137](https://github.com/ChronoAIProject/Ornn/pull/1137) [`0173360`](https://github.com/ChronoAIProject/Ornn/commit/0173360fd6dc37fad015e4f972668db7a55a6987) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Skillset visibility is now derived from its member skills, never owner-set: a skillset is readable, usable, and discoverable only by callers who can read every member. Owners can no longer set a skillset's visibility — to widen reach, expose the underlying skills. The detail page shows a read-only Public/Restricted/Broken badge and warns the owner (with an in-product notification) when a member skill becomes unreadable and shrinks the skillset's reach.
+
 ## 0.13.0
 
 ### Minor Changes

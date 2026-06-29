@@ -1,5 +1,19 @@
 # ornn-web
 
+## 0.14.0
+
+### Minor Changes
+
+- [#1137](https://github.com/ChronoAIProject/Ornn/pull/1137) [`0173360`](https://github.com/ChronoAIProject/Ornn/commit/0173360fd6dc37fad015e4f972668db7a55a6987) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Skillset visibility is now derived from its member skills, never owner-set: a skillset is readable, usable, and discoverable only by callers who can read every member. Owners can no longer set a skillset's visibility — to widen reach, expose the underlying skills. The detail page shows a read-only Public/Restricted/Broken badge and warns the owner (with an in-product notification) when a member skill becomes unreadable and shrinks the skillset's reach.
+
+### Patch Changes
+
+- [#1144](https://github.com/ChronoAIProject/Ornn/pull/1144) [`73d7d88`](https://github.com/ChronoAIProject/Ornn/commit/73d7d884be86e0ceb8479481c9854b0cda3f9fc1) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Landing-page announcement / launch-celebration popups now size to their content: fixed width, height that hugs the inner content and is capped (with internal scroll) at the prior viewport bound, kept centered on screen. Previously the dialog was pinned to all four edges, so it always filled the bounded area regardless of how little content it held.
+
+- [#1146](https://github.com/ChronoAIProject/Ornn/pull/1146) [`73d0537`](https://github.com/ChronoAIProject/Ornn/commit/73d05377b033ef84f1bbeb4ded7df9175f832c8c) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Fix the signed-out landing top nav overlapping its right-hand actions: the centered links no longer collide with the GitHub / language / theme buttons or the "Sign in" / "Get started" CTAs. The centered nav is now laid out in flow instead of absolutely positioned, and the desktop bar activates at the `lg` (1024px) breakpoint — below that it collapses to the hamburger menu, matching the design system.
+
+- [#1148](https://github.com/ChronoAIProject/Ornn/pull/1148) [`f57b8a2`](https://github.com/ChronoAIProject/Ornn/commit/f57b8a2c62732b60e7ebafef9a18b4038654e842) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Center the landing top nav links dead-center on the bar (3-column grid) instead of between the logo and the actions, and drop the redundant standalone "Sign in" link from the desktop bar — it and "Get started" both open /login, so nothing is lost (the mobile menu keeps both). The nav no longer sits left-of-center or crowds the actions, and "Get started" never wraps.
+
 ## 0.13.0
 
 ### Minor Changes
