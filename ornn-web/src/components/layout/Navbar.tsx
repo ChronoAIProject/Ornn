@@ -260,12 +260,12 @@ export function Navbar({ className = "", showGetStartedCta = false }: NavbarProp
     <nav
       className={`sticky top-0 z-50 shrink-0 border-b border-subtle bg-page/95 backdrop-blur-md ${className}`}
     >
-      <div className="relative mx-auto flex h-[60px] max-w-[1280px] items-center justify-between gap-3 px-6 sm:px-8">
-        <Link to="/" className="flex items-center gap-2 text-strong" aria-label={t("aria.brandHome", { brand: "Ornn" })}>
+      <div className="relative mx-auto flex h-[60px] max-w-[1280px] items-center justify-between gap-3 px-6 sm:px-8 lg:grid lg:grid-cols-[1fr_auto_1fr]">
+        <Link to="/" className="flex items-center gap-2 text-strong lg:justify-self-start" aria-label={t("aria.brandHome", { brand: "Ornn" })}>
           <Logo className="block h-[26px] w-auto" />
         </Link>
 
-        <div className="hidden flex-1 items-center justify-center gap-6 lg:flex xl:gap-7">
+        <div className="hidden items-center justify-center gap-3 lg:flex lg:justify-self-center xl:gap-7">
           {NAV_ITEMS.map((item) => (
             <NavLink
               key={item.i18nKey}
@@ -290,7 +290,7 @@ export function Navbar({ className = "", showGetStartedCta = false }: NavbarProp
           ))}
         </div>
 
-        <div className="hidden items-center gap-3.5 lg:flex">
+        <div className="hidden items-center gap-3.5 lg:flex lg:justify-self-end">
           <a
             href="https://github.com/ChronoAIProject/Ornn"
             target="_blank"
@@ -381,14 +381,9 @@ export function Navbar({ className = "", showGetStartedCta = false }: NavbarProp
               </AnimatePresence>
             </div>
           ) : showGetStartedCta ? (
-            <>
-              <EmberLink to="/login" variant="ghost">
-                {t("nav.signIn")}
-              </EmberLink>
-              <EmberLink to="/login" variant="primary">
-                {t("landing.getStarted")}
-              </EmberLink>
-            </>
+            <EmberLink to="/login" variant="primary" className="whitespace-nowrap">
+              {t("landing.getStarted")}
+            </EmberLink>
           ) : (
             <Link
               to="/login"
