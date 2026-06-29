@@ -310,6 +310,12 @@ export interface SkillsetDetailResponse {
    */
   memberVisibilityState: SkillsetMemberVisibilityState;
   /**
+   * Owner opt-in (#1155) to export the skillset as a curated multi-skill
+   * Claude Code plugin in the public mirror. Surfaced so the web UI can show
+   * the toggle state + the install snippet. Always present (defaults `false`).
+   */
+  exportAsPlugin: boolean;
+  /**
    * Member refs the CALLER cannot read at THIS version (#1136). Always
    * empty for a non-owner (they 404 instead of seeing a partial set);
    * surfaced to the owner/admin so they can repair access (re-grant the
