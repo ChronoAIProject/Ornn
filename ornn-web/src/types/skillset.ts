@@ -104,6 +104,12 @@ export interface SkillsetDetail {
    */
   memberVisibilityState: SkillsetMemberVisibilityState;
   /**
+   * Owner opt-in (#1155) to export the skillset as a curated multi-skill
+   * Claude Code plugin in the public mirror. Drives the form toggle state and
+   * the read-only install snippet on the detail page.
+   */
+  exportAsPlugin: boolean;
+  /**
    * Member refs the CURRENT caller cannot read at this version (#1136).
    * Always empty for a non-owner (they 404 instead); surfaced to the
    * owner/admin so they can repair access. Drives the warning banner.
@@ -231,6 +237,8 @@ export interface CreateSkillsetInput {
   tags: string[];
   members: string[];
   version?: string | undefined;
+  /** Opt-in (#1155) to export the skillset as a multi-skill plugin. */
+  exportAsPlugin?: boolean | undefined;
 }
 
 /** Body for PUT /api/v1/skillsets/:id (publish a new immutable version). */
@@ -241,6 +249,8 @@ export interface PublishSkillsetInput {
   tags?: string[] | undefined;
   members: string[];
   version: string;
+  /** Opt-in (#1155) — omitting it preserves the current setting. */
+  exportAsPlugin?: boolean | undefined;
 }
 
 // NOTE (#1136): there is no skillset permissions input — a skillset's
