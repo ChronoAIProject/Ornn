@@ -28,8 +28,8 @@ beforeAll(async () => {
   client = new MongoClient(mongo.getUri());
   await client.connect();
   db = client.db("skillsets_test");
-  repo = new SkillsetRepository(db);
   versionRepo = new SkillsetVersionRepository(db);
+  repo = new SkillsetRepository(db, versionRepo);
   await repo.ensureIndexes();
   await versionRepo.ensureIndexes();
 });
@@ -243,6 +243,56 @@ describe("SkillsetRepository — findAllEligibleForMirror (#1155)", () => {
   test("returns an empty list when nothing is eligible", async () => {
     await seed({ _id: "x", name: "x-set", memberVisibilityState: "all-public", exportAsPlugin: false });
     expect(await repo.findAllEligibleForMirror()).toEqual([]);
+  });
+});
+
+describe("SkillsetRepository — findEligibleSkillsetsByMember (#1159)", () => {
+  async function seedVersion(skillsetGuid: string, members: string[]): Promise<void> {
+    await versionRepo.create({
+      skillsetGuid,
+      version: "1.0",
+      majorVersion: 1,
+      minorVersion: 0,
+      kind: "generic",
+      description: "d",
+      instructions: "p",
+      tags: [],
+      members,
+      createdBy: "owner-1",
+    });
+  }
+
+  test("returns only opted-in + all-public skillsets that reference the skill", async () => {
+    await seed(
+      // eligible: opted in, all-public, references `review` by name.
+      { _id: "ss-ok", name: "ok-set", memberVisibilityState: "all-public", exportAsPlugin: true },
+      // references the skill but NOT opted in → excluded.
+      { _id: "ss-noopt", name: "noopt-set", memberVisibilityState: "all-public", exportAsPlugin: false },
+      // references the skill, opted in, but NOT all-public → excluded (unsafe to publish).
+      { _id: "ss-restr", name: "restr-set", memberVisibilityState: "restricted", exportAsPlugin: true },
+      // eligible but does NOT reference the skill → excluded.
+      { _id: "ss-unrel", name: "unrel-set", memberVisibilityState: "all-public", exportAsPlugin: true },
+    );
+    await seedVersion("ss-ok", ["review@1.0", "other@1.0"]);
+    await seedVersion("ss-noopt", ["review@latest"]);
+    await seedVersion("ss-restr", ["review@1.0"]);
+    await seedVersion("ss-unrel", ["unrelated@1.0"]);
+
+    const eligible = await repo.findEligibleSkillsetsByMember("review", "skl-review-guid");
+    expect(eligible.map((s) => s.guid)).toEqual(["ss-ok"]);
+  });
+
+  test("matches a skillset that references the skill by guid (#1159)", async () => {
+    await seed({ _id: "ss-g", name: "g-set", memberVisibilityState: "all-public", exportAsPlugin: true });
+    await seedVersion("ss-g", ["skl-review-guid@2.1"]);
+    const eligible = await repo.findEligibleSkillsetsByMember("review", "skl-review-guid");
+    expect(eligible.map((s) => s.guid)).toEqual(["ss-g"]);
+  });
+
+  test("returns an empty list when no skillset references the skill", async () => {
+    await seed({ _id: "ss-z", name: "z-set", memberVisibilityState: "all-public", exportAsPlugin: true });
+    await seedVersion("ss-z", ["other@1.0"]);
+    expect(await repo.findEligibleSkillsetsByMember("review", "skl-review-guid")).toEqual([]);
   });
 });
 

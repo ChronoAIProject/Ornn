@@ -24,6 +24,7 @@ import {
   type MirrorSkillsetRepo,
   type MirrorSkillsetSource,
 } from "./mirrorService";
+import { fingerprintVersion } from "./skillsetPlugin";
 import type { GitHubMirrorClient, TreeEntry } from "./githubMirrorClient";
 import type { SkillRepository } from "../crud/repository";
 import type { SkillService } from "../crud/service";
@@ -146,6 +147,58 @@ function makeFakeGithub(opts: {
   return { github: github as GitHubMirrorClient, calls };
 }
 
+/**
+ * Stateful github stub (#1159): an in-memory tree with DETERMINISTIC blob SHAs
+ * (`computeGitBlobSha`), so committed writes are visible to a subsequent read.
+ * Lets a test commit once and prove a second identical sync produces NO commit
+ * (the no-churn guarantee). Seeded paths give the branch an initial head.
+ */
+function makeStatefulGithub(seed: Record<string, string> = {}): { github: GitHubMirrorClient; calls: CallLog } {
+  const calls: CallLog = { blobs: [], trees: [], commits: [], branchUpdates: [], branchCreates: [], tags: [] };
+  const tree = new Map<string, string>(); // path -> sha
+  for (const [path, content] of Object.entries(seed)) tree.set(path, computeGitBlobSha(content));
+  let head: string | null = Object.keys(seed).length > 0 ? "commit-0" : null;
+  let commitN = 0;
+  let treeN = 0;
+  const github: Partial<GitHubMirrorClient> = {
+    getDefaultBranchHead: mock(async () => head),
+    getCommitTreeSha: mock(async () => `tree-for-${head}`),
+    getRecursiveTree: mock(async () =>
+      [...tree.entries()].map(
+        ([path, sha]) => ({ path, mode: "100644", type: "blob", sha }) as TreeEntry,
+      ),
+    ),
+    createBlob: mock(async (content: string) => {
+      calls.blobs.push({ content });
+      return computeGitBlobSha(content);
+    }),
+    createTree: mock(async (entries: TreeEntry[], baseTree: string | null = null) => {
+      calls.trees.push({ entries, baseTree });
+      // Apply the deltas so a later getRecursiveTree reflects the new state.
+      for (const e of entries) {
+        if (e.sha == null) tree.delete(e.path);
+        else tree.set(e.path, e.sha);
+      }
+      return `new-tree-${++treeN}`;
+    }),
+    createCommit: mock(async (o) => {
+      calls.commits.push(o);
+      head = `commit-${++commitN}`;
+      return head;
+    }),
+    updateDefaultBranch: mock(async (sha: string) => {
+      calls.branchUpdates.push(sha);
+    }),
+    createBranchRef: mock(async (sha: string) => {
+      calls.branchCreates.push(sha);
+    }),
+    createAnnotatedTag: mock(async (o) => {
+      calls.tags.push({ tagName: o.tagName, objectSha: o.objectSha });
+    }),
+  };
+  return { github: github as GitHubMirrorClient, calls };
+}
+
 function makeFakeRepo(skills: SkillDocument[] = []): SkillRepository {
   const byGuid = new Map(skills.map((s) => [s.guid, s]));
   return {
@@ -205,32 +258,42 @@ interface FakeSkillset {
  * (`memberVisibilityState === "all-public"` AND `exportAsPlugin`) so the
  * exclusion tests exercise the contract the mirror depends on.
  */
-function makeFakeSkillsetRepo(skillsets: FakeSkillset[]): MirrorSkillsetRepo {
+function toSkillsetDoc(s: FakeSkillset): SkillsetDocument {
   return {
-    findAllEligibleForMirror: mock(async () =>
-      skillsets
-        .filter((s) => s.memberVisibilityState === "all-public" && s.exportAsPlugin)
-        .map(
-          (s) =>
-            ({
-              guid: s.guid,
-              name: s.name,
-              description: s.description,
-              kind: "generic",
-              tags: s.tags,
-              createdBy: "u1",
-              createdOn: new Date(),
-              updatedBy: "u1",
-              updatedOn: new Date(),
-              isPrivate: false,
-              sharedWithUsers: [],
-              sharedWithOrgs: [],
-              memberVisibilityState: s.memberVisibilityState,
-              exportAsPlugin: s.exportAsPlugin,
-              ...(s.pluginConfig ? { pluginConfig: s.pluginConfig } : {}),
-              latestVersion: s.latestVersion,
-            }) as unknown as SkillsetDocument,
-        ),
+    guid: s.guid,
+    name: s.name,
+    description: s.description,
+    kind: "generic",
+    tags: s.tags,
+    createdBy: "u1",
+    createdOn: new Date(),
+    updatedBy: "u1",
+    updatedOn: new Date(),
+    isPrivate: false,
+    sharedWithUsers: [],
+    sharedWithOrgs: [],
+    memberVisibilityState: s.memberVisibilityState,
+    exportAsPlugin: s.exportAsPlugin,
+    ...(s.pluginConfig ? { pluginConfig: s.pluginConfig } : {}),
+    latestVersion: s.latestVersion,
+  } as unknown as SkillsetDocument;
+}
+
+function makeFakeSkillsetRepo(skillsets: FakeSkillset[]): MirrorSkillsetRepo {
+  const eligible = (): FakeSkillset[] =>
+    skillsets.filter((s) => s.memberVisibilityState === "all-public" && s.exportAsPlugin);
+  return {
+    findAllEligibleForMirror: mock(async () => eligible().map(toSkillsetDoc)),
+    // Replicates the real repo (#1159): only opted-in, all-public skillsets
+    // whose members reference the skill (by name OR guid) come back.
+    findEligibleSkillsetsByMember: mock(async (skillName: string, skillGuid: string) =>
+      eligible()
+        .filter((s) =>
+          s.members.some(
+            (ref) => ref.startsWith(`${skillName}@`) || ref.startsWith(`${skillGuid}@`),
+          ),
+        )
+        .map(toSkillsetDoc),
     ),
   };
 }
@@ -790,5 +853,210 @@ describe("MirrorService skillset plugin export (#1155)", () => {
     });
     await svc.reconcileAll();
     expect(allTreePaths(calls).some((p) => p.startsWith("skillsets/"))).toBe(false);
+  });
+});
+
+describe("MirrorService.syncSkillsetsForMember (#1159)", () => {
+  function allTreePaths(calls: CallLog): string[] {
+    return calls.trees.flatMap((t) => t.entries.map((e) => e.path));
+  }
+  function parsedBlobs(calls: CallLog): Array<Record<string, unknown>> {
+    return calls.blobs
+      .map((b) => {
+        try {
+          return JSON.parse(b.content) as Record<string, unknown>;
+        } catch {
+          return null;
+        }
+      })
+      .filter((p): p is Record<string, unknown> => p !== null);
+  }
+
+  const researchBundle: FakeSkillset = {
+    guid: "ss-research",
+    name: "research-bundle",
+    description: "A curated research set.",
+    latestVersion: "2.0",
+    tags: ["research"],
+    memberVisibilityState: "all-public",
+    exportAsPlugin: true,
+    members: ["pdf@1.1", "ocr@1.0"],
+    instructions: "Run pdf, then ocr.",
+  };
+
+  it("rebuilds the affected subtree + bumps the plugin.json fingerprint on a member change", async () => {
+    // The mirror already holds an OLD subtree; the member set now resolves
+    // pdf to 1.1, so the rebuilt plugin.json must carry a NEW fingerprint and
+    // the member SKILL.md must be re-uploaded.
+    const currentTree: TreeEntry[] = [
+      { path: "skillsets/research-bundle/.claude-plugin/plugin.json", mode: "100644", type: "blob", sha: "old-plugin-sha" },
+      { path: "skillsets/research-bundle/skills/pdf/SKILL.md", mode: "100644", type: "blob", sha: "old-pdf-sha" },
+      { path: "skillsets/research-bundle/skills/ocr/SKILL.md", mode: "100644", type: "blob", sha: "old-ocr-sha" },
+      { path: "skillsets/research-bundle/README.md", mode: "100644", type: "blob", sha: "old-readme-sha" },
+    ];
+    const { github, calls } = makeFakeGithub({ currentTree });
+    const svc = new MirrorService({
+      githubClientForTest: github,
+      skillRepo: makeFakeRepo([makeSkill({ guid: "pdf-guid", name: "pdf", isPrivate: false })]),
+      skillService: makeFakeSkillService({
+        pdf: { "SKILL.md": "# pdf member v2" },
+        ocr: { "SKILL.md": "# ocr member" },
+      }),
+      skillsetRepo: makeFakeSkillsetRepo([researchBundle]),
+      skillsetService: makeFakeSkillsetService([researchBundle]),
+      ornnPublicOrigin: "https://example",
+      settingsService: makeFakeSettings(),
+    });
+
+    await svc.syncSkillsetsForMember("pdf-guid", "pdf");
+
+    // The member file got rebuilt under the skillset subtree.
+    expect(allTreePaths(calls)).toContain("skillsets/research-bundle/skills/pdf/SKILL.md");
+    expect(calls.blobs.some((b) => b.content === "# pdf member v2")).toBe(true);
+
+    // plugin.json carries the fingerprint of the NEW resolved member set,
+    // which differs from the old one (pdf 1.0 → 1.1).
+    const pluginJson = parsedBlobs(calls).find((p) => p.name === "research-bundle");
+    expect(pluginJson).toBeTruthy();
+    const newFp = fingerprintVersion("2.0", [
+      { name: "ocr", version: "1.0", description: "", files: {} },
+      { name: "pdf", version: "1.1", description: "", files: {} },
+    ]);
+    const oldFp = fingerprintVersion("2.0", [
+      { name: "ocr", version: "1.0", description: "", files: {} },
+      { name: "pdf", version: "1.0", description: "", files: {} },
+    ]);
+    expect(newFp).not.toBe(oldFp);
+    expect(pluginJson!.version).toBe(newFp);
+    expect(calls.commits.length).toBe(1);
+  });
+
+  it("no-ops when no eligible skillset references the changed skill", async () => {
+    const { github, calls } = makeFakeGithub({
+      currentTree: [
+        { path: "skillsets/research-bundle/README.md", mode: "100644", type: "blob", sha: "x" },
+      ],
+    });
+    const svc = new MirrorService({
+      githubClientForTest: github,
+      skillRepo: makeFakeRepo([]),
+      skillService: makeFakeSkillService({ pdf: { "SKILL.md": "# pdf" }, ocr: { "SKILL.md": "# ocr" } }),
+      skillsetRepo: makeFakeSkillsetRepo([researchBundle]),
+      skillsetService: makeFakeSkillsetService([researchBundle]),
+      ornnPublicOrigin: "https://example",
+      settingsService: makeFakeSettings(),
+    });
+    // `unrelated` is not a member of any eligible skillset.
+    await svc.syncSkillsetsForMember("unrelated-guid", "unrelated");
+    expect(calls.blobs.length).toBe(0);
+    expect(calls.trees.length).toBe(0);
+    expect(calls.commits.length).toBe(0);
+  });
+
+  it("skips ineligible skillsets (opted-out / not all-public) that reference the skill", async () => {
+    const optedOut: FakeSkillset = { ...researchBundle, guid: "ss-out", name: "out-set", exportAsPlugin: false };
+    const restricted: FakeSkillset = {
+      ...researchBundle,
+      guid: "ss-restr",
+      name: "restr-set",
+      memberVisibilityState: "restricted",
+    };
+    const { github, calls } = makeFakeGithub({
+      currentTree: [{ path: "skillsets/out-set/README.md", mode: "100644", type: "blob", sha: "x" }],
+    });
+    const svc = new MirrorService({
+      githubClientForTest: github,
+      skillRepo: makeFakeRepo([]),
+      skillService: makeFakeSkillService({ pdf: { "SKILL.md": "# pdf" }, ocr: { "SKILL.md": "# ocr" } }),
+      skillsetRepo: makeFakeSkillsetRepo([optedOut, restricted]),
+      skillsetService: makeFakeSkillsetService([optedOut, restricted]),
+      ornnPublicOrigin: "https://example",
+      settingsService: makeFakeSettings(),
+    });
+    await svc.syncSkillsetsForMember("pdf-guid", "pdf");
+    // Neither skillset is export-eligible, so nothing is rebuilt/committed.
+    expect(calls.commits.length).toBe(0);
+    expect(calls.blobs.length).toBe(0);
+  });
+
+  it("rebuilds multiple affected skillsets in a SINGLE commit", async () => {
+    const dataBundle: FakeSkillset = {
+      guid: "ss-data",
+      name: "data-bundle",
+      description: "A data set.",
+      latestVersion: "1.0",
+      tags: ["data"],
+      memberVisibilityState: "all-public",
+      exportAsPlugin: true,
+      members: ["pdf@1.1", "csv@1.0"],
+      instructions: "Run pdf, then csv.",
+    };
+    const currentTree: TreeEntry[] = [
+      { path: "skillsets/research-bundle/README.md", mode: "100644", type: "blob", sha: "r-old" },
+      { path: "skillsets/data-bundle/README.md", mode: "100644", type: "blob", sha: "d-old" },
+    ];
+    const { github, calls } = makeFakeGithub({ currentTree });
+    const svc = new MirrorService({
+      githubClientForTest: github,
+      skillRepo: makeFakeRepo([]),
+      skillService: makeFakeSkillService({
+        pdf: { "SKILL.md": "# pdf" },
+        ocr: { "SKILL.md": "# ocr" },
+        csv: { "SKILL.md": "# csv" },
+      }),
+      skillsetRepo: makeFakeSkillsetRepo([researchBundle, dataBundle]),
+      skillsetService: makeFakeSkillsetService([researchBundle, dataBundle]),
+      ornnPublicOrigin: "https://example",
+      settingsService: makeFakeSettings(),
+    });
+
+    await svc.syncSkillsetsForMember("pdf-guid", "pdf");
+
+    // One commit; both subtrees rebuilt.
+    expect(calls.commits.length).toBe(1);
+    const paths = allTreePaths(calls);
+    expect(paths).toContain("skillsets/research-bundle/.claude-plugin/plugin.json");
+    expect(paths).toContain("skillsets/data-bundle/.claude-plugin/plugin.json");
+    expect(paths).toContain("skillsets/data-bundle/skills/csv/SKILL.md");
+  });
+
+  it("produces NO commit when the subtree already matches (no churn)", async () => {
+    // A stateful github with a pre-existing head: first sync writes the
+    // subtree, the second identical sync must be a clean no-op.
+    const { github, calls } = makeStatefulGithub({ "README.md": "root" });
+    const svc = new MirrorService({
+      githubClientForTest: github,
+      skillRepo: makeFakeRepo([]),
+      skillService: makeFakeSkillService({
+        pdf: { "SKILL.md": "# pdf" },
+        ocr: { "SKILL.md": "# ocr" },
+      }),
+      skillsetRepo: makeFakeSkillsetRepo([researchBundle]),
+      skillsetService: makeFakeSkillsetService([researchBundle]),
+      ornnPublicOrigin: "https://example",
+      settingsService: makeFakeSettings(),
+    });
+
+    await svc.syncSkillsetsForMember("pdf-guid", "pdf");
+    expect(calls.commits.length).toBe(1);
+    // Second run sees a byte-identical desired tree → zero new commits.
+    await svc.syncSkillsetsForMember("pdf-guid", "pdf");
+    expect(calls.commits.length).toBe(1);
+  });
+
+  it("is a no-op when the mirror is disabled", async () => {
+    const { github, calls } = makeFakeGithub();
+    const svc = new MirrorService({
+      githubClientForTest: github,
+      skillRepo: makeFakeRepo([]),
+      skillService: makeFakeSkillService({ pdf: { "SKILL.md": "# pdf" }, ocr: { "SKILL.md": "# ocr" } }),
+      skillsetRepo: makeFakeSkillsetRepo([researchBundle]),
+      skillsetService: makeFakeSkillsetService([researchBundle]),
+      ornnPublicOrigin: "https://example",
+      settingsService: makeFakeSettings({ enabled: false }),
+    });
+    await svc.syncSkillsetsForMember("pdf-guid", "pdf");
+    expect(calls.blobs.length).toBe(0);
+    expect(calls.commits.length).toBe(0);
   });
 });
