@@ -326,13 +326,17 @@ export interface SkillsetVersionDocument {
   /** Member skill refs (`<name-or-guid>@<major.minor>` or `<name>@<dist-tag>`). */
   members: string[];
   /**
-   * Lockfile-like snapshot of the members RESOLVED to concrete versions at the
-   * time this revision was cut (#1162) — sorted, de-duped `name@<major.minor>`
-   * strings. Makes a revision reproducible even when its authored `members`
-   * pin `@latest`/dist-tags, and is the baseline the reactive bump compares
-   * against to decide whether a member-version change warrants a new revision.
-   * Optional for back-compat: pre-#1162 version docs lack it until the boot
-   * backfill populates the latest one.
+   * Lockfile-like snapshot of the PUBLIC-resolvable members RESOLVED to concrete
+   * versions at the time this revision was cut (#1162/#1165) — sorted, de-duped
+   * `name@<major.minor>` strings, private/unresolvable members excluded. This is
+   * exactly the EXPORTED member subset (#1161), so it captures the revision's
+   * delivered content reproducibly even when authored `members` pin
+   * `@latest`/dist-tags, and is the baseline the reactive bump compares against:
+   * a member-version move OR a member visibility flip (private⇄public, #1165)
+   * both shift this set → warranting a new revision so Claude Code picks up the
+   * change. Optional for back-compat: pre-#1162 version docs lack it until the
+   * boot backfill populates the latest one; a pre-#1165 doc may still carry an
+   * all-members snapshot until its first reactive bump self-corrects it.
    */
   resolvedMembers?: string[] | undefined;
   createdBy: string;
