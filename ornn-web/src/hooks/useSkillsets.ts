@@ -21,10 +21,12 @@ import {
   fetchSkillsetClosure,
   createSkillset,
   publishSkillset,
+  updatePluginExport,
   deleteSkillset,
 } from "@/services/skillsetApi";
 import type {
   CreateSkillsetInput,
+  PluginExportInput,
   PublishSkillsetInput,
   SkillsetKind,
   SkillsetScope,
@@ -159,6 +161,26 @@ export function usePublishSkillset(guid: string, idOrName: string) {
           q.queryKey[0] === SKILLSET_CLOSURE_KEY &&
           q.queryKey[1] === idOrName,
       });
+      queryClient.invalidateQueries({ queryKey: [SKILLSETS_KEY] });
+      queryClient.invalidateQueries({ queryKey: [MY_SKILLSETS_KEY] });
+    },
+  });
+}
+
+/**
+ * Toggle Claude Code plugin export + persist the listing overrides (#1157).
+ * `guid` is the WIRE id (the route is GUID-only); `idOrName` is the CACHE-KEY
+ * id so the detail page refreshes whether it was opened by name or guid. Primes
+ * the detail (latest) cache with the returned payload and invalidates the list
+ * tabs (the export badge can surface in lists later).
+ */
+export function useUpdatePluginExport(guid: string, idOrName: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: PluginExportInput) => updatePluginExport(guid, input),
+    onSuccess: (updated) => {
+      queryClient.setQueryData([SKILLSETS_KEY, idOrName, "latest"], updated);
+      queryClient.invalidateQueries({ queryKey: [SKILLSETS_KEY, idOrName] });
       queryClient.invalidateQueries({ queryKey: [SKILLSETS_KEY] });
       queryClient.invalidateQueries({ queryKey: [MY_SKILLSETS_KEY] });
     },

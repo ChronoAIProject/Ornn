@@ -171,4 +171,27 @@ describe("buildPluginJson", () => {
     );
     expect(parsed.description).toBe('has "quotes" and \\ slashes');
   });
+
+  it("omits displayName entirely when not supplied (#1157)", () => {
+    const json = buildPluginJson({ name: "pdf", version: "1.0", description: "d" });
+    expect(json).not.toContain("displayName");
+    expect(JSON.parse(json)).toEqual({ name: "pdf", version: "1.0", description: "d" });
+  });
+
+  it("emits displayName right after name when supplied (#1157)", () => {
+    const json = buildPluginJson({
+      name: "pdf",
+      version: "1.0",
+      description: "d",
+      displayName: "PDF Tools",
+    });
+    expect(JSON.parse(json)).toEqual({
+      name: "pdf",
+      displayName: "PDF Tools",
+      version: "1.0",
+      description: "d",
+    });
+    // Stable key order: displayName sits immediately after name.
+    expect(json.indexOf("displayName")).toBeLessThan(json.indexOf("version"));
+  });
 });

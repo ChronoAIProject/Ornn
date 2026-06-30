@@ -139,6 +139,7 @@ function makeSkillsetDeps(
       isPrivate?: boolean;
       latestVersion: string;
       exportAsPlugin?: boolean;
+      pluginConfig?: SkillsetDocument["pluginConfig"];
     }) => {
       const now = new Date();
       const doc: SkillsetDocument = {
@@ -156,6 +157,8 @@ function makeSkillsetDeps(
         sharedWithOrgs: [],
         // #1155 — persist the plugin-export opt-in (default OFF).
         exportAsPlugin: data.exportAsPlugin ?? false,
+        // #1157 — optional listing overrides.
+        ...(data.pluginConfig ? { pluginConfig: data.pluginConfig } : {}),
         latestVersion: data.latestVersion,
       };
       state.skillsets.set(data.guid, doc);
@@ -165,6 +168,8 @@ function makeSkillsetDeps(
     update: async (g: string, patch: Record<string, unknown>) => {
       const cur = state.skillsets.get(g)!;
       const next = { ...cur, ...patch, updatedOn: new Date() } as SkillsetDocument;
+      // #1157 — mirror the repo's three-state `pluginConfig`: `null` clears.
+      if (patch.pluginConfig === null) delete next.pluginConfig;
       state.skillsets.set(g, next);
       state.byName.set(next.name, next);
       return next;
@@ -786,52 +791,20 @@ describe("SkillsetService — plugin-export opt-in (#1155)", () => {
     members: ["pdf-tools@1.0", "csv-tools@1.0"],
   };
 
-  it("create surfaces exportAsPlugin=true in the detail", async () => {
-    const { svc } = service();
-    const created = await svc.createSkillset(
-      { ...base, name: "exp-set", version: "1.0", exportAsPlugin: true },
-      { userId: "owner-1" },
-    );
-    expect(created.exportAsPlugin).toBe(true);
-  });
-
-  it("create defaults exportAsPlugin to false when omitted", async () => {
+  it("create always defaults exportAsPlugin to false (no create-time opt-in, #1157)", async () => {
     const { svc } = service();
     const created = await svc.createSkillset(
       { ...base, name: "noexp-set", version: "1.0" },
       { userId: "owner-1" },
     );
     expect(created.exportAsPlugin).toBe(false);
-  });
-
-  it("publish flips the opt-in, and omitting it on a later publish preserves it", async () => {
-    const { svc } = service();
-    const created = await svc.createSkillset(
-      { ...base, name: "flip-set", version: "1.0" },
-      { userId: "owner-1" },
-    );
-    expect(created.exportAsPlugin).toBe(false);
-
-    const opted = await svc.publishVersion(
-      created.guid,
-      { ...base, version: "1.1", exportAsPlugin: true },
-      OWNER,
-    );
-    expect(opted.exportAsPlugin).toBe(true);
-
-    // A publish that omits the flag preserves the current setting.
-    const kept = await svc.publishVersion(
-      created.guid,
-      { ...base, version: "1.2" },
-      OWNER,
-    );
-    expect(kept.exportAsPlugin).toBe(true);
+    expect(created.pluginConfig).toBeUndefined();
   });
 
   it("getLatestForMirror returns the latest version's members + master prompt", async () => {
     const { svc } = service();
     const created = await svc.createSkillset(
-      { ...base, instructions: "Run pdf then csv.", name: "mir-set", version: "1.0", exportAsPlugin: true },
+      { ...base, instructions: "Run pdf then csv.", name: "mir-set", version: "1.0" },
       { userId: "owner-1" },
     );
     const latest = await svc.getLatestForMirror(created.guid);
@@ -844,6 +817,134 @@ describe("SkillsetService — plugin-export opt-in (#1155)", () => {
   it("getLatestForMirror returns null for an unknown skillset", async () => {
     const { svc } = service();
     expect(await svc.getLatestForMirror("nope")).toBeNull();
+  });
+});
+
+describe("SkillsetService.setPluginExport (#1157)", () => {
+  const STRANGER: ActorContext = {
+    userId: "stranger",
+    memberships: [],
+    isPlatformAdmin: false,
+    membershipsResolved: true,
+  };
+
+  const base = {
+    description: "A research bundle",
+    instructions: "p",
+    kind: "generic" as const,
+    tags: ["research"],
+    members: ["pdf-tools@1.0", "csv-tools@1.0"],
+  };
+
+  /** All-public skillset (two public members), owned by owner-1. */
+  async function seedPublic() {
+    const { skills, versions } = twoMemberSkills();
+    const skillService = makeSkillService(skills, versions);
+    const { deps, state } = makeSkillsetDeps(skillService);
+    const svc = new SkillsetService(deps);
+    const created = await svc.createSkillset(
+      { ...base, name: "pub-set", version: "1.0" },
+      { userId: "owner-1" },
+    );
+    return { svc, state, guid: created.guid };
+  }
+
+  /** Restricted skillset (one private member owned by another user). */
+  async function seedRestricted() {
+    const a = skillDoc({ guid: "g-a", name: "pdf-tools", latestVersion: "1.0", isPrivate: false });
+    const b = skillDoc({
+      guid: "g-b",
+      name: "secret-tools",
+      latestVersion: "1.0",
+      isPrivate: true,
+      createdBy: "other-user",
+    });
+    const skillService = makeSkillService(
+      [a, b],
+      [
+        skillVersion({ _id: "g-a@1.0", skillGuid: "g-a", version: "1.0" }),
+        skillVersion({ _id: "g-b@1.0", skillGuid: "g-b", version: "1.0" }),
+      ],
+    );
+    const { deps } = makeSkillsetDeps(skillService);
+    const svc = new SkillsetService(deps);
+    const created = await svc.createSkillset(
+      { ...base, name: "restr-set", version: "1.0", members: ["pdf-tools@1.0", "secret-tools@1.0"] },
+      { userId: "owner-1" },
+    );
+    return { svc, guid: created.guid };
+  }
+
+  it("enabling persists exportAsPlugin + the listing overrides", async () => {
+    const { svc, guid } = await seedPublic();
+    const updated = await svc.setPluginExport(
+      guid,
+      {
+        enabled: true,
+        displayName: "Research Bundle",
+        description: "A curated set",
+        keywords: ["rag", "search"],
+      },
+      OWNER,
+    );
+    expect(updated.exportAsPlugin).toBe(true);
+    expect(updated.pluginConfig).toEqual({
+      displayName: "Research Bundle",
+      description: "A curated set",
+      keywords: ["rag", "search"],
+    });
+  });
+
+  it("enabling with no overrides stores none (mirror falls back to skillset fields)", async () => {
+    const { svc, guid } = await seedPublic();
+    const updated = await svc.setPluginExport(guid, { enabled: true }, OWNER);
+    expect(updated.exportAsPlugin).toBe(true);
+    expect(updated.pluginConfig).toBeUndefined();
+  });
+
+  it("rejects a non-owner with forbidden", async () => {
+    const { svc, guid } = await seedPublic();
+    let code = "";
+    try {
+      await svc.setPluginExport(guid, { enabled: true }, STRANGER);
+    } catch (err) {
+      code = (err as AppError).code;
+    }
+    expect(code).toBe("forbidden");
+  });
+
+  it("rejects enabling when the skillset is not all-public", async () => {
+    const { svc, guid } = await seedRestricted();
+    let code = "";
+    try {
+      await svc.setPluginExport(guid, { enabled: true }, OWNER);
+    } catch (err) {
+      code = (err as AppError).code;
+    }
+    expect(code).toBe("skillset_not_all_public");
+  });
+
+  it("disabling clears the opt-in + any stored overrides", async () => {
+    const { svc, guid } = await seedPublic();
+    await svc.setPluginExport(
+      guid,
+      { enabled: true, displayName: "Research Bundle" },
+      OWNER,
+    );
+    const off = await svc.setPluginExport(guid, { enabled: false }, OWNER);
+    expect(off.exportAsPlugin).toBe(false);
+    expect(off.pluginConfig).toBeUndefined();
+  });
+
+  it("404s for an unknown skillset", async () => {
+    const { svc } = await seedPublic();
+    let code = "";
+    try {
+      await svc.setPluginExport("nope", { enabled: true }, OWNER);
+    } catch (err) {
+      code = (err as AppError).code;
+    }
+    expect(code).toBe("skillset_not_found");
   });
 });
 

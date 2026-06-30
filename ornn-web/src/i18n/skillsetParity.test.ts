@@ -23,6 +23,7 @@ const SKILLSET_NAMESPACES = [
   "skillsetExplore",
   "skillsetDetail",
   "skillsetForm",
+  "skillsetPluginExport",
   "skillsetNew",
   "skillsetEdit",
   "skillsetMembers",

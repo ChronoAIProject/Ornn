@@ -102,8 +102,6 @@ export function SkillsetEditPage() {
               tags: skillset.tags,
               members: skillset.members,
               version: skillset.version,
-              exportAsPlugin: skillset.exportAsPlugin,
-              memberVisibilityState: skillset.memberVisibilityState,
             }}
             onPublish={handlePublish}
             submitting={publishMutation.isPending}

@@ -141,13 +141,6 @@ export const createSkillsetSchema = z.object({
     .string()
     .regex(SKILL_VERSION_REGEX, "version must be `<major>.<minor>`")
     .default("1.0"),
-  /**
-   * Opt-in (#1155) to export this skillset as ONE curated multi-skill Claude
-   * Code plugin in the public mirror repo. Only takes effect once the skillset
-   * is also `all-public` (every member public). Optional on the wire; the
-   * service defaults a missing value to OFF.
-   */
-  exportAsPlugin: z.boolean().optional(),
 });
 
 /**
@@ -170,20 +163,51 @@ export const publishSkillsetSchema = z.object({
     .min(SKILLSET_MIN_MEMBERS, `a skillset must have at least ${SKILLSET_MIN_MEMBERS} members`)
     .max(SKILLSET_MAX_MEMBERS, `a skillset may have at most ${SKILLSET_MAX_MEMBERS} members`),
   version: z.string().regex(SKILL_VERSION_REGEX, "version must be `<major>.<minor>`"),
-  /**
-   * Opt-in (#1155) — same flag as create. Optional on publish with NO reset:
-   * omitting it preserves the skillset's current setting (only an explicit
-   * boolean flips it). The web form always sends it explicitly.
-   */
-  exportAsPlugin: z.boolean().optional(),
 });
 
 // NOTE (#1136): no skillset permissions schema — a skillset's visibility is
 // derived from its members, not owner-set, so there is no permissions
 // endpoint to validate a body for.
 
+/**
+ * Kebab-case keyword/tag, matching the skillset `tags` grammar — reused for the
+ * plugin-export `keywords` override (#1157).
+ */
+const pluginKeywordSchema = z.string().min(1).max(30).regex(/^[a-z0-9-]+$/);
+
+/**
+ * Body for `PUT /skillsets/:id/plugin-export` (#1157). The owner toggles plugin
+ * export ON/OFF and may supply optional listing overrides. Each override
+ * defaults from the skillset (displayName←name, description, keywords←tags) when
+ * omitted — surfaced verbatim in the generated plugin.json + marketplace entry.
+ *
+ * Deliberately NOT overridable: the install NAME (= skillset name, the
+ * collision-free `/plugin install <name>@<repo>` handle) and the plugin VERSION
+ * (the auto member fingerprint that drives Claude Code's update signal).
+ */
+export const pluginExportSchema = z.object({
+  enabled: z.boolean(),
+  displayName: z.string().min(1).max(64).optional(),
+  description: z.string().min(1).max(1024).optional(),
+  keywords: z.array(pluginKeywordSchema).max(20).optional(),
+});
+
 export type CreateSkillsetInput = z.infer<typeof createSkillsetSchema>;
 export type PublishSkillsetInput = z.infer<typeof publishSkillsetSchema>;
+export type PluginExportInput = z.infer<typeof pluginExportSchema>;
+
+/**
+ * Owner-customizable plugin listing fields (#1157). Each is OPTIONAL and, when
+ * set, overrides the corresponding skillset-derived default in the exported
+ * Claude Code plugin's `plugin.json` + marketplace entry. An absent field falls
+ * back to the skillset (displayName←name, description, keywords←tags). Persisted
+ * on the identity doc only when the owner exports with overrides.
+ */
+export interface SkillsetPluginOverrides {
+  displayName?: string | undefined;
+  description?: string | undefined;
+  keywords?: string[] | undefined;
+}
 
 /**
  * Persisted skillset identity document (the `skillsets` collection).
@@ -240,6 +264,12 @@ export interface SkillsetDocument {
    * back-compat (absent ⇒ treated as `false`). Default OFF.
    */
   exportAsPlugin?: boolean | undefined;
+  /**
+   * Owner-customizable plugin listing overrides (#1157). Set ONLY when the
+   * owner exported with explicit overrides; absent ⇒ the mirror falls back to
+   * the skillset's own name/description/tags. Inert unless `exportAsPlugin`.
+   */
+  pluginConfig?: SkillsetPluginOverrides | undefined;
   /** Cached pointer to the highest published version, e.g. "1.2". */
   latestVersion: string;
 }
@@ -315,6 +345,12 @@ export interface SkillsetDetailResponse {
    * the toggle state + the install snippet. Always present (defaults `false`).
    */
   exportAsPlugin: boolean;
+  /**
+   * Owner-customizable plugin listing overrides (#1157). Surfaced so the web
+   * export card can prefill the confirm modal with the current overrides (or
+   * fall back to the skillset's own fields when absent).
+   */
+  pluginConfig?: SkillsetPluginOverrides | undefined;
   /**
    * Member refs the CALLER cannot read at THIS version (#1136). Always
    * empty for a non-owner (they 404 instead of seeing a partial set);

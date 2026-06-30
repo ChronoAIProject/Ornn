@@ -144,6 +144,59 @@ describe("SkillsetRepository — CRUD", () => {
     expect((await repo.findByGuid("ss-u"))?.exportAsPlugin).toBe(false);
   });
 
+  test("pluginConfig persists on create and round-trips (#1157)", async () => {
+    await repo.create({
+      guid: "ss-pc",
+      name: "pc-set",
+      description: "d",
+      kind: "generic",
+      tags: [],
+      createdBy: "o",
+      latestVersion: "1.0",
+      pluginConfig: { displayName: "Nice Name", description: "Override", keywords: ["rag"] },
+    });
+    expect((await repo.findByGuid("ss-pc"))?.pluginConfig).toEqual({
+      displayName: "Nice Name",
+      description: "Override",
+      keywords: ["rag"],
+    });
+  });
+
+  test("update with pluginConfig=null clears the stored overrides (#1157)", async () => {
+    await repo.create({
+      guid: "ss-pcc",
+      name: "pcc-set",
+      description: "d",
+      kind: "generic",
+      tags: [],
+      createdBy: "o",
+      latestVersion: "1.0",
+      pluginConfig: { displayName: "Nice Name" },
+    });
+    // Setting overrides via update replaces them.
+    await repo.update("ss-pcc", { pluginConfig: { keywords: ["a", "b"] }, updatedBy: "o" });
+    expect((await repo.findByGuid("ss-pcc"))?.pluginConfig).toEqual({ keywords: ["a", "b"] });
+    // null clears (mirror then falls back to skillset fields).
+    await repo.update("ss-pcc", { pluginConfig: null, updatedBy: "o" });
+    expect((await repo.findByGuid("ss-pcc"))?.pluginConfig).toBeUndefined();
+  });
+
+  test("update without pluginConfig leaves the stored overrides untouched (#1157)", async () => {
+    await repo.create({
+      guid: "ss-pck",
+      name: "pck-set",
+      description: "d",
+      kind: "generic",
+      tags: [],
+      createdBy: "o",
+      latestVersion: "1.0",
+      pluginConfig: { displayName: "Keep Me" },
+    });
+    // A publish-style update (no pluginConfig) must not reset it.
+    await repo.update("ss-pck", { latestVersion: "1.1", updatedBy: "o" });
+    expect((await repo.findByGuid("ss-pck"))?.pluginConfig).toEqual({ displayName: "Keep Me" });
+  });
+
   test("create rejects a duplicate name with skillset_name_exists", async () => {
     await repo.create({
       guid: "ss-1",

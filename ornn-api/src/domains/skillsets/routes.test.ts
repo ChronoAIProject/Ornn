@@ -263,7 +263,6 @@ describe("POST /skillsets — scope reuse + gating", () => {
         description: "d",
         instructions: "Use a, then b.",
         members: ["a@1.0", "b@1.0"],
-        exportAsPlugin: true,
       }),
     });
     expect(res.status).toBe(201);
@@ -331,6 +330,74 @@ describe("PUT/DELETE /skillsets/:id — scope gating", () => {
     });
     const res = await app.request("/api/v1/skillsets/ss-1", { method: "DELETE" });
     expect(res.status).toBe(200);
+  });
+
+  test("PUT /plugin-export 403 without ornn:skill:update (#1157)", async () => {
+    const app = buildApp({ permissions: [CREATE] });
+    const res = await app.request("/api/v1/skillsets/ss-1/plugin-export", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ enabled: true }),
+    });
+    expect(res.status).toBe(403);
+  });
+
+  test("PUT /plugin-export 400 on an invalid body (missing enabled) (#1157)", async () => {
+    const app = buildApp({ permissions: [UPDATE] });
+    const res = await app.request("/api/v1/skillsets/ss-1/plugin-export", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ displayName: "x" }),
+    });
+    expect(res.status).toBe(400);
+  });
+
+  test("PUT /plugin-export 200 updates + fires the mirror reconcile (#1157)", async () => {
+    let fired = 0;
+    const captured: unknown[] = [];
+    const app = buildApp({
+      permissions: [UPDATE],
+      service: {
+        setPluginExport: async (...args: unknown[]) => {
+          captured.push(args[1]);
+          return detail({ exportAsPlugin: true });
+        },
+      },
+      fireMirrorReconcile: () => {
+        fired += 1;
+      },
+    });
+    const res = await app.request("/api/v1/skillsets/ss-1/plugin-export", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        enabled: true,
+        displayName: "Research Bundle",
+        keywords: ["rag"],
+      }),
+    });
+    expect(res.status).toBe(200);
+    expect(fired).toBe(1);
+    expect(((await res.json()) as { data: { exportAsPlugin: boolean } }).data.exportAsPlugin).toBe(true);
+    expect(captured[0]).toEqual({ enabled: true, displayName: "Research Bundle", keywords: ["rag"] });
+  });
+
+  test("PUT /plugin-export surfaces a 409 when not all-public (#1157)", async () => {
+    const app = buildApp({
+      permissions: [UPDATE],
+      service: {
+        setPluginExport: async () => {
+          throw AppError.conflict("skillset_not_all_public", "members not all public");
+        },
+      },
+    });
+    const res = await app.request("/api/v1/skillsets/ss-1/plugin-export", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ enabled: true }),
+    });
+    expect(res.status).toBe(409);
+    expect(((await res.json()) as { code: string }).code).toBe("skillset_not_all_public");
   });
 
   test("PUT + DELETE fire the mirror reconcile on success (#1155)", async () => {

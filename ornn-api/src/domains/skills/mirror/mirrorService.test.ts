@@ -196,6 +196,8 @@ interface FakeSkillset {
   exportAsPlugin: boolean;
   members: string[];
   instructions: string;
+  /** Owner listing overrides (#1157). */
+  pluginConfig?: { displayName?: string; description?: string; keywords?: string[] };
 }
 
 /**
@@ -225,6 +227,7 @@ function makeFakeSkillsetRepo(skillsets: FakeSkillset[]): MirrorSkillsetRepo {
               sharedWithOrgs: [],
               memberVisibilityState: s.memberVisibilityState,
               exportAsPlugin: s.exportAsPlugin,
+              ...(s.pluginConfig ? { pluginConfig: s.pluginConfig } : {}),
               latestVersion: s.latestVersion,
             }) as unknown as SkillsetDocument,
         ),
@@ -661,6 +664,55 @@ describe("MirrorService skillset plugin export (#1155)", () => {
     expect(entry!.source).toBe("./skillsets/research-bundle");
     // The per-skill plugin (pdf) is still catalogued alongside it.
     expect(manifest!.plugins.some((p) => p.name === "pdf" && p.source === "./pdf")).toBe(true);
+  });
+
+  it("applies owner listing overrides to plugin.json + the marketplace entry (#1157)", async () => {
+    const overridden: FakeSkillset = {
+      ...eligibleSkillset,
+      pluginConfig: {
+        displayName: "Research Bundle",
+        description: "Custom blurb",
+        keywords: ["rag", "search"],
+      },
+    };
+    const skill = makeSkill({ guid: "g1", name: "pdf", isPrivate: false });
+    const { github, calls } = makeFakeGithub();
+    const svc = new MirrorService({
+      githubClientForTest: github,
+      skillRepo: makeFakeRepo([skill]),
+      skillService: makeFakeSkillService({
+        g1: { "SKILL.md": "# pdf" },
+        pdf: { "SKILL.md": "# pdf member" },
+        ocr: { "SKILL.md": "# ocr member" },
+      }),
+      skillsetRepo: makeFakeSkillsetRepo([overridden]),
+      skillsetService: makeFakeSkillsetService([overridden]),
+      ornnPublicOrigin: "https://example",
+      settingsService: makeFakeSettings(),
+    });
+    await svc.reconcileAll();
+
+    // plugin.json carries the displayName + overridden description.
+    const pluginJson = calls.blobs
+      .map((b) => {
+        try {
+          return JSON.parse(b.content);
+        } catch {
+          return null;
+        }
+      })
+      .find((p) => p && p.name === "research-bundle" && "displayName" in p);
+    expect(pluginJson).toBeTruthy();
+    expect(pluginJson.displayName).toBe("Research Bundle");
+    expect(pluginJson.description).toBe("Custom blurb");
+
+    // Marketplace catalogue entry reflects the overridden description + keywords.
+    const manifest = findMarketplaceBlob(calls) as {
+      plugins: Array<{ name: string; description: string; keywords?: string[] }>;
+    } | null;
+    const entry = manifest!.plugins.find((p) => p.name === "research-bundle")!;
+    expect(entry.description).toBe("Custom blurb");
+    expect(entry.keywords).toEqual(["rag", "search"]);
   });
 
   it("excludes a skillset that is not opted in (exportAsPlugin=false)", async () => {
