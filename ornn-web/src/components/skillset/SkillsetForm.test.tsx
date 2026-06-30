@@ -153,32 +153,12 @@ describe("SkillsetForm — create", () => {
     expect(screen.getByRole("button", { name: "Create skillset" })).toBeDisabled();
   });
 
-  it("renders the plugin-export toggle (enabled on create) and submits it (#1155)", async () => {
-    const onCreate = vi.fn().mockResolvedValue(undefined);
-    wrap(<SkillsetForm mode="create" onCreate={onCreate} />);
-
-    fireEvent.change(screen.getByPlaceholderText("research-bundle"), {
-      target: { value: "research-bundle" },
-    });
-    fireEvent.change(screen.getByPlaceholderText(/human-readable summary/), {
-      target: { value: "A bundle" },
-    });
-    addMember("a@1.0");
-    addMember("b@1.0");
-    const promptBox = screen.getAllByRole("textbox").find((el) => el.tagName === "TEXTAREA")!;
-    fireEvent.change(promptBox, { target: { value: "Run A, then B." } });
-
-    const toggle = screen.getByRole("checkbox");
-    expect(toggle).not.toBeDisabled();
-    expect(toggle).not.toBeChecked();
-    fireEvent.click(toggle);
-
-    fireEvent.click(screen.getByRole("button", { name: "Create skillset" }));
-    await waitFor(() => expect(onCreate).toHaveBeenCalledTimes(1));
-    expect(onCreate.mock.calls[0]?.[0]).toMatchObject({ exportAsPlugin: true });
+  it("no longer renders the plugin-export checkbox (#1157 moved it to the detail card)", () => {
+    wrap(<SkillsetForm mode="create" onCreate={vi.fn()} />);
+    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
   });
 
-  it("defaults the plugin-export toggle to false in the create payload (#1155)", async () => {
+  it("does not carry exportAsPlugin in the create payload (#1157)", async () => {
     const onCreate = vi.fn().mockResolvedValue(undefined);
     wrap(<SkillsetForm mode="create" onCreate={onCreate} />);
     fireEvent.change(screen.getByPlaceholderText("research-bundle"), {
@@ -194,59 +174,7 @@ describe("SkillsetForm — create", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Create skillset" }));
     await waitFor(() => expect(onCreate).toHaveBeenCalledTimes(1));
-    expect(onCreate.mock.calls[0]?.[0]).toMatchObject({ exportAsPlugin: false });
-  });
-});
-
-describe("SkillsetForm — plugin-export toggle gating (#1155)", () => {
-  const base = {
-    name: "research-bundle",
-    description: "A bundle",
-    instructions: "Run A, then B.",
-    kind: "generic" as const,
-    tags: ["research"],
-    members: ["a@1.0", "b@1.0"],
-    version: "1.0",
-  };
-
-  it("seeds the toggle from initial.exportAsPlugin and stays enabled when all-public", () => {
-    wrap(
-      <SkillsetForm
-        mode="edit"
-        initial={{ ...base, exportAsPlugin: true, memberVisibilityState: "all-public" }}
-        onPublish={vi.fn()}
-      />,
-    );
-    const toggle = screen.getByRole("checkbox");
-    expect(toggle).toBeChecked();
-    expect(toggle).not.toBeDisabled();
-  });
-
-  it("disables the toggle when the skillset is not all-public", () => {
-    wrap(
-      <SkillsetForm
-        mode="edit"
-        initial={{ ...base, exportAsPlugin: false, memberVisibilityState: "restricted" }}
-        onPublish={vi.fn()}
-      />,
-    );
-    expect(screen.getByRole("checkbox")).toBeDisabled();
-  });
-
-  it("carries the toggle through the publish payload", async () => {
-    const onPublish = vi.fn().mockResolvedValue(undefined);
-    wrap(
-      <SkillsetForm
-        mode="edit"
-        initial={{ ...base, exportAsPlugin: false, memberVisibilityState: "all-public" }}
-        onPublish={onPublish}
-      />,
-    );
-    fireEvent.click(screen.getByRole("checkbox")); // opt in
-    // Auto-bumped to 1.1 on mount — submit as-is.
-    fireEvent.click(screen.getByRole("button", { name: "Publish version" }));
-    await waitFor(() => expect(onPublish).toHaveBeenCalledTimes(1));
-    expect(onPublish.mock.calls[0]?.[0]).toMatchObject({ exportAsPlugin: true });
+    expect(onCreate.mock.calls[0]?.[0]).not.toHaveProperty("exportAsPlugin");
   });
 });
 
