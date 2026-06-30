@@ -178,13 +178,14 @@ describe("publishSkillset", () => {
       kind: "consensus-supported",
       tags: ["research"],
       members: ["a@1.0", "b@1.0", "c@1.0"],
-      version: "1.1",
     };
     await publishSkillset(GUID, input);
     expect(init(fetchSpy).method).toBe("PUT");
     expect(url(fetchSpy)).toContain(`/api/v1/skillsets/${GUID}`);
     expect(url(fetchSpy)).not.toContain("/permissions");
-    expect(body(fetchSpy)).toMatchObject({ version: "1.1", members: ["a@1.0", "b@1.0", "c@1.0"] });
+    // The publish body carries no version — the revision is system-assigned (#1162).
+    expect(body(fetchSpy)).toMatchObject({ members: ["a@1.0", "b@1.0", "c@1.0"] });
+    expect(body(fetchSpy)).not.toHaveProperty("version");
   });
 });
 

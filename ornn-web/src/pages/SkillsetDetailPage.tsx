@@ -283,9 +283,17 @@ export function SkillsetDetailPage() {
                   </div>
                   <div className="flex items-baseline justify-between gap-2">
                     <dt className="font-mono text-[10px] uppercase tracking-widest text-meta">
-                      {t("skillsetDetail.version", "Version")}
+                      {t("skillsetDetail.revision", "Revision")}
                     </dt>
-                    <dd className="font-mono text-xs text-strong">
+                    <dd
+                      className="font-mono text-xs text-strong"
+                      title={
+                        t(
+                          "skillsetDetail.revisionAutoManaged",
+                          "Auto-managed — the revision bumps on every edit or member-version change.",
+                        ) as string
+                      }
+                    >
                       {skillset.version}
                       {skillset.version === latestVersion && (
                         <span className="ml-1 text-meta">({t("skillsetDetail.latest", "latest")})</span>
