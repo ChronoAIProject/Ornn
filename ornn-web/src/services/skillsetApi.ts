@@ -23,6 +23,7 @@
 import { apiGet, apiPost, apiPut, apiDelete } from "./apiClient";
 import type {
   CreateSkillsetInput,
+  PluginExportInput,
   PublishSkillsetInput,
   SkillsetClosureResult,
   SkillsetDetail,
@@ -116,6 +117,22 @@ export async function publishSkillset(
 ): Promise<SkillsetDetail> {
   const res = await apiPut<SkillsetDetail>(
     `/api/v1/skillsets/${encodeURIComponent(guid)}`,
+    input,
+  );
+  return res.data!;
+}
+
+/**
+ * Toggle Claude Code plugin export for a skillset and persist the owner's
+ * listing overrides (#1157). GUID-only (a write route). Returns the updated
+ * detail so the caller can prime the cache.
+ */
+export async function updatePluginExport(
+  guid: string,
+  input: PluginExportInput,
+): Promise<SkillsetDetail> {
+  const res = await apiPut<SkillsetDetail>(
+    `/api/v1/skillsets/${encodeURIComponent(guid)}/plugin-export`,
     input,
   );
   return res.data!;

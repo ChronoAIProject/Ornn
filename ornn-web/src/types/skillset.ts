@@ -46,6 +46,30 @@ export const SKILLSET_INSTRUCTIONS_MAX = 8000;
  */
 export type SkillsetMemberVisibilityState = "all-public" | "restricted" | "unresolvable";
 
+/**
+ * Owner-customizable plugin listing fields (#1157). Each defaults from the
+ * skillset (displayName←name, description, keywords←tags) and is overridable
+ * when the owner exports. The install NAME (= skillset name) and the plugin
+ * VERSION (auto fingerprint) are deliberately NOT here — not user-editable.
+ */
+export interface SkillsetPluginConfig {
+  displayName?: string | undefined;
+  description?: string | undefined;
+  keywords?: string[] | undefined;
+}
+
+/**
+ * Body for `PUT /api/v1/skillsets/:id/plugin-export` (#1157). `enabled` toggles
+ * export ON/OFF; the optional fields override the skillset-derived plugin
+ * listing. Omitted overrides fall back to the skillset's own fields.
+ */
+export interface PluginExportInput {
+  enabled: boolean;
+  displayName?: string | undefined;
+  description?: string | undefined;
+  keywords?: string[] | undefined;
+}
+
 /** Why a master-prompt body is invalid. `null` = valid. */
 export type MasterPromptRejection = "empty" | "tooLong" | null;
 
@@ -105,10 +129,17 @@ export interface SkillsetDetail {
   memberVisibilityState: SkillsetMemberVisibilityState;
   /**
    * Owner opt-in (#1155) to export the skillset as a curated multi-skill
-   * Claude Code plugin in the public mirror. Drives the form toggle state and
+   * Claude Code plugin in the public mirror. Drives the export card's state and
    * the read-only install snippet on the detail page.
    */
   exportAsPlugin: boolean;
+  /**
+   * Owner-customizable plugin listing overrides (#1157). Each field, when set,
+   * overrides the corresponding skillset default in the exported plugin; absent
+   * fields fall back to the skillset (displayName←name, description, keywords←
+   * tags). Drives the confirm modal's prefilled values.
+   */
+  pluginConfig?: SkillsetPluginConfig | undefined;
   /**
    * Member refs the CURRENT caller cannot read at this version (#1136).
    * Always empty for a non-owner (they 404 instead); surfaced to the
@@ -237,8 +268,6 @@ export interface CreateSkillsetInput {
   tags: string[];
   members: string[];
   version?: string | undefined;
-  /** Opt-in (#1155) to export the skillset as a multi-skill plugin. */
-  exportAsPlugin?: boolean | undefined;
 }
 
 /** Body for PUT /api/v1/skillsets/:id (publish a new immutable version). */
@@ -249,8 +278,6 @@ export interface PublishSkillsetInput {
   tags?: string[] | undefined;
   members: string[];
   version: string;
-  /** Opt-in (#1155) — omitting it preserves the current setting. */
-  exportAsPlugin?: boolean | undefined;
 }
 
 // NOTE (#1136): there is no skillset permissions input — a skillset's
