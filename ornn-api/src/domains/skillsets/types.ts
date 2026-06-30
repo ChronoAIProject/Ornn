@@ -27,8 +27,16 @@ import {
   DEPENDS_ON_REF_REGEX,
   SKILL_NAME_REGEX,
   SKILL_NAME_MAX,
-  SKILL_VERSION_REGEX,
 } from "../../shared/schemas/skillFrontmatter";
+
+/**
+ * The revision a freshly created skillset starts at (#1162). A skillset's
+ * version is no longer owner-typed — it is a single system-managed revision in
+ * `<major>.<minor>` shape, auto-bumped on the minor on every qualifying change
+ * (owner edit OR a member skill's resolved version moving). Major never
+ * auto-bumps.
+ */
+export const SKILLSET_INITIAL_REVISION = "1.0";
 
 /**
  * Skillset kind (#969). v1 enumerates `generic` (a plain curated bundle)
@@ -128,9 +136,9 @@ export const instructionsSchema = z
   );
 
 /**
- * Body schema for `POST /skillsets` (create) — the initial, version 1.0
- * payload. `version` is validated on publish; create seeds the first
- * version from the request.
+ * Body schema for `POST /skillsets` (create). The system assigns the first
+ * revision ({@link SKILLSET_INITIAL_REVISION}) — there is NO owner-typed
+ * `version` (#1162); the revision auto-advances thereafter.
  */
 export const createSkillsetSchema = z.object({
   name: z
@@ -147,16 +155,13 @@ export const createSkillsetSchema = z.object({
     .array(memberRefSchema)
     .min(SKILLSET_MIN_MEMBERS, `a skillset must have at least ${SKILLSET_MIN_MEMBERS} members`)
     .max(SKILLSET_MAX_MEMBERS, `a skillset may have at most ${SKILLSET_MAX_MEMBERS} members`),
-  version: z
-    .string()
-    .regex(SKILL_VERSION_REGEX, "version must be `<major>.<minor>`")
-    .default("1.0"),
 });
 
 /**
  * Body schema for `PUT /skillsets/:id` (publish a new immutable version).
- * `name` is fixed after create — a publish only revises the curated set,
- * its description, kind, tags, and bumps the version.
+ * `name` is fixed after create — a publish only revises the curated set, its
+ * description, kind, and tags. The new revision is system-assigned (the minor
+ * auto-bumps, #1162); the owner never types a `version`.
  */
 export const publishSkillsetSchema = z.object({
   description: z.string().min(1).max(1024).optional(),
@@ -172,7 +177,6 @@ export const publishSkillsetSchema = z.object({
     .array(memberRefSchema)
     .min(SKILLSET_MIN_MEMBERS, `a skillset must have at least ${SKILLSET_MIN_MEMBERS} members`)
     .max(SKILLSET_MAX_MEMBERS, `a skillset may have at most ${SKILLSET_MAX_MEMBERS} members`),
-  version: z.string().regex(SKILL_VERSION_REGEX, "version must be `<major>.<minor>`"),
 });
 
 // NOTE (#1136): no skillset permissions schema — a skillset's visibility is
@@ -193,7 +197,8 @@ const pluginKeywordSchema = z.string().min(1).max(30).regex(/^[a-z0-9-]+$/);
  *
  * Deliberately NOT overridable: the install NAME (= skillset name, the
  * collision-free `/plugin install <name>@<repo>` handle) and the plugin VERSION
- * (the auto member fingerprint that drives Claude Code's update signal).
+ * (the auto-managed skillset revision that drives Claude Code's update signal,
+ * #1162).
  */
 export const pluginExportSchema = z.object({
   enabled: z.boolean(),
@@ -320,6 +325,16 @@ export interface SkillsetVersionDocument {
   tags: string[];
   /** Member skill refs (`<name-or-guid>@<major.minor>` or `<name>@<dist-tag>`). */
   members: string[];
+  /**
+   * Lockfile-like snapshot of the members RESOLVED to concrete versions at the
+   * time this revision was cut (#1162) — sorted, de-duped `name@<major.minor>`
+   * strings. Makes a revision reproducible even when its authored `members`
+   * pin `@latest`/dist-tags, and is the baseline the reactive bump compares
+   * against to decide whether a member-version change warrants a new revision.
+   * Optional for back-compat: pre-#1162 version docs lack it until the boot
+   * backfill populates the latest one.
+   */
+  resolvedMembers?: string[] | undefined;
   createdBy: string;
   createdByEmail?: string | undefined;
   createdByDisplayName?: string | undefined;

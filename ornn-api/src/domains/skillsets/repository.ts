@@ -322,6 +322,23 @@ export class SkillsetRepository {
   }
 
   /**
+   * Advance ONLY the cached `latestVersion` pointer (#1162). Used by the
+   * reactive, system-driven revision bump (a member skill's resolved version
+   * moved) — deliberately does NOT touch `updatedBy` / `updatedOn`, mirroring
+   * {@link setDerivedVisibility}: the bump reflects a member's change, not an
+   * owner edit, so it must not move the skillset's audit timestamps. An owner
+   * publish, by contrast, advances the pointer through `update` (which DOES
+   * stamp the audit fields, correctly).
+   */
+  async advanceLatestVersion(guid: string, version: string): Promise<void> {
+    await this.collection.updateOne(
+      { _id: skillsetId(guid) },
+      { $set: { latestVersion: version } },
+    );
+    logger.debug({ guid, version }, "Skillset latestVersion advanced (reactive bump)");
+  }
+
+  /**
    * Reassign a skillset's owner (#1123). Mirrors `SkillRepository`: the
    * single explicit `createdBy` write, refreshing cached owner labels and
    * replacing the ACL with the caller-computed grants (dual-writing legacy).

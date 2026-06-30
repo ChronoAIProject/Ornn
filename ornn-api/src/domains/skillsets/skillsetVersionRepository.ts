@@ -31,6 +31,12 @@ export interface CreateSkillsetVersionData {
   instructions: string;
   tags: string[];
   members: string[];
+  /**
+   * Resolved-member snapshot (#1162) — concrete `name@<major.minor>` strings
+   * (sorted, de-duped). Optional only so legacy callers compile; every
+   * create/publish/auto-bump path now passes it.
+   */
+  resolvedMembers?: string[] | undefined;
   createdBy: string;
   // Optionals widen to `T | undefined` for exactOptionalPropertyTypes (#657).
   createdByEmail?: string | undefined;
@@ -89,6 +95,9 @@ export class SkillsetVersionRepository {
       instructions: data.instructions,
       tags: data.tags,
       members: data.members,
+      // #1162 — written only when supplied so a pre-feature doc stays without
+      // the field (the boot backfill populates the latest one in place).
+      ...(data.resolvedMembers !== undefined ? { resolvedMembers: data.resolvedMembers } : {}),
       createdBy: data.createdBy,
       createdByEmail: data.createdByEmail ?? null,
       createdByDisplayName: data.createdByDisplayName ?? null,
@@ -138,6 +147,28 @@ export class SkillsetVersionRepository {
     return docs.map((d) => mapDoc(d)!);
   }
 
+  /**
+   * Backfill the resolved-member snapshot (#1162) onto an existing version doc.
+   * Used by the one-shot boot backfill for pre-feature docs that predate the
+   * snapshot — and as a defensive in-place populate when the reactive bump
+   * encounters a latest version still missing it. Idempotent: writes only the
+   * `resolvedMembers` field, never the immutable content.
+   */
+  async setResolvedMembers(
+    skillsetGuid: string,
+    version: string,
+    resolvedMembers: string[],
+  ): Promise<void> {
+    await this.collection.updateOne(
+      { _id: `${skillsetGuid}@${version}` as never },
+      { $set: { resolvedMembers } },
+    );
+    logger.debug(
+      { skillsetGuid, version, count: resolvedMembers.length },
+      "Skillset version resolved-member snapshot set",
+    );
+  }
+
   async deleteAllBySkillset(skillsetGuid: string): Promise<number> {
     const result = await this.collection.deleteMany({ skillsetGuid });
     logger.info(
@@ -163,6 +194,11 @@ function mapDoc(doc: Document | null): SkillsetVersionDocument | null {
     instructions: doc.instructions ?? "",
     tags: Array.isArray(doc.tags) ? (doc.tags as string[]) : [],
     members: Array.isArray(doc.members) ? (doc.members as string[]) : [],
+    // #1162 — absent on pre-feature docs (left undefined so the bump path can
+    // distinguish "never snapshotted" from "snapshotted as empty").
+    resolvedMembers: Array.isArray(doc.resolvedMembers)
+      ? (doc.resolvedMembers as string[])
+      : undefined,
     createdBy: doc.createdBy,
     createdByEmail: doc.createdByEmail ?? undefined,
     createdByDisplayName: doc.createdByDisplayName ?? undefined,

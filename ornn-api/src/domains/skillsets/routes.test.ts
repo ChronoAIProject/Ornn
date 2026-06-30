@@ -294,7 +294,7 @@ describe("PUT/DELETE /skillsets/:id — scope gating", () => {
     const res = await app.request("/api/v1/skillsets/ss-1", {
       method: "PUT",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ version: "1.1", members: ["a@1.0", "b@1.0"] }),
+      body: JSON.stringify({ members: ["a@1.0", "b@1.0"] }),
     });
     expect(res.status).toBe(403);
   });
@@ -308,7 +308,6 @@ describe("PUT/DELETE /skillsets/:id — scope gating", () => {
       method: "PUT",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        version: "1.1",
         instructions: "Use a, then b.",
         members: ["a@1.0", "b@1.0"],
       }),
@@ -413,7 +412,7 @@ describe("PUT/DELETE /skillsets/:id — scope gating", () => {
     await putApp.request("/api/v1/skillsets/ss-1", {
       method: "PUT",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ version: "1.1", instructions: "Use a, then b.", members: ["a@1.0", "b@1.0"] }),
+      body: JSON.stringify({ instructions: "Use a, then b.", members: ["a@1.0", "b@1.0"] }),
     });
     const delApp = buildApp({
       permissions: [DELETE],
