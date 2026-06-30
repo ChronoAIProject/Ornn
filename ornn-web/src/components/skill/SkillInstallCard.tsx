@@ -1,6 +1,6 @@
 /**
  * Card shown on `SkillDetailPage` for any skill the caller can try.
- * Two tabs:
+ * Three tabs:
  *
  *   - Via prompt  — copies the LLM-ready install prompt (`buildTrySkillPrompt`)
  *                   that a user pastes into their own agent. Works for any
@@ -9,6 +9,11 @@
  *                   the GitHub mirror. Gated by mirror-enabled + public skill;
  *                   renders an "unavailable" placeholder when those conditions
  *                   don't hold instead of hiding the whole tab.
+ *   - Via plugin  — copies the Claude Code marketplace `/plugin …` commands
+ *                   (#1167). Every public skill is mirrored as a single-skill
+ *                   plugin (#1153/#1154), so this shares the npx tab's gating:
+ *                   public skill + mirror enabled. Falls back to a private /
+ *                   mirror-off hint otherwise.
  *
  * Visibility follows the skill itself (#413). The component renders
  * whenever the skill detail page does — the page-level auth + ACL
@@ -34,7 +39,7 @@ interface SkillInstallCardProps {
   className?: string;
 }
 
-type Tab = "prompt" | "npx";
+type Tab = "prompt" | "npx" | "plugin";
 
 /** Format an ISO timestamp as a relative phrase ("3 hours ago", "just now"). */
 function relativeTime(iso: string): string {
@@ -226,6 +231,15 @@ export function SkillInstallCard({ skill, className }: SkillInstallCardProps) {
       ? `https://github.com/${slug}/tree/${repoCfg.branch}/${encodeURIComponent(skill.name)}`
       : null;
 
+  // The Claude Code plugin path shares the npx gating: a public skill is
+  // mirrored as a single-skill plugin (#1153/#1154), so the marketplace
+  // entry only exists when the skill is public AND the mirror is on. Two
+  // commands — add the marketplace, then install the skill by `<name>@<repo>`.
+  const pluginCommands =
+    npxAvailable && slug && repoCfg
+      ? `/plugin marketplace add ${slug}\n/plugin install ${skill.name}@${repoCfg.repo}`
+      : "";
+
   return (
     <Card className={`p-4 ${className ?? ""}`.trim()}>
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -268,6 +282,9 @@ export function SkillInstallCard({ skill, className }: SkillInstallCardProps) {
         </TabButton>
         <TabButton active={tab === "npx"} onClick={() => setTab("npx")}>
           {t("skillInstallCard.tabNpx", "Via npx")}
+        </TabButton>
+        <TabButton active={tab === "plugin"} onClick={() => setTab("plugin")}>
+          {t("skillInstallCard.tabPlugin", "via plugin (Claude Code Marketplace)")}
         </TabButton>
       </div>
 
@@ -314,6 +331,46 @@ export function SkillInstallCard({ skill, className }: SkillInstallCardProps) {
                 ? t(
                     "skillInstallCard.npxNotAvailablePrivate",
                     "Not available — private skills are never mirrored to GitHub. Use the prompt flow instead.",
+                  )
+                : t(
+                    "skillInstallCard.npxNotAvailableMirrorOff",
+                    "Not available — this deployment doesn't have the GitHub mirror configured. Use the prompt flow instead.",
+                  )}
+            </p>
+          )}
+        </div>
+      )}
+
+      {tab === "plugin" && (
+        <div role="tabpanel" className="mt-3 space-y-3">
+          {npxAvailable ? (
+            <>
+              <p className="font-text text-xs text-meta">
+                {t(
+                  "skillInstallCard.pluginHelper",
+                  "Published to the Claude Code marketplace as a single-skill plugin. Install it in Claude Code:",
+                )}
+              </p>
+              <CopyBlock
+                content={pluginCommands}
+                copyAriaLabel={t("skillInstallCard.copyPluginAria", "Copy plugin install commands")}
+                multiline
+              />
+              {/* Shared wording with the skillset export card — third-party
+                  marketplaces ship auto-update OFF (#1167). */}
+              <p className="font-text text-xs text-meta">
+                {t(
+                  "skillsetPluginExport.installAutoUpdate",
+                  "Third-party marketplaces default to auto-update OFF — enable it in /plugin → Marketplaces to receive updates.",
+                )}
+              </p>
+            </>
+          ) : (
+            <p className="font-text text-xs text-meta">
+              {skill.isPrivate
+                ? t(
+                    "skillInstallCard.pluginNotAvailablePrivate",
+                    "Available once this skill is public — public skills are published to the Claude Code marketplace as a plugin.",
                   )
                 : t(
                     "skillInstallCard.npxNotAvailableMirrorOff",
