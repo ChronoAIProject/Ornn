@@ -28,7 +28,7 @@ import { SkillsetDependencyGraph } from "@/components/skillset/SkillsetDependenc
 import { SkillsetMemberViewer } from "@/components/skillset/SkillsetMemberViewer";
 import { SkillsetDerivedVisibilityCard } from "@/components/skillset/SkillsetDerivedVisibilityCard";
 import { SkillsetMemberWarningBanner } from "@/components/skillset/SkillsetMemberWarningBanner";
-import { SkillsetPluginInstallCard } from "@/components/skillset/SkillsetPluginInstallCard";
+import { SkillsetPluginExportCard } from "@/components/skillset/SkillsetPluginExportCard";
 import { parseDeps } from "@/lib/skillsetDeps";
 import { useToastStore } from "@/stores/toastStore";
 import { useCurrentUser } from "@/stores/authStore";
@@ -392,6 +392,15 @@ export function SkillsetDetailPage() {
                 <SkillsetClosureViewer items={closure?.items ?? []} />
               </RailCard>
 
+              {/* ── Claude Code plugin export (#1157) ── owner action (export +
+                  configure + stop) directly ABOVE the visibility card; any viewer
+                  sees the install snippet once the skillset is exported. */}
+              <SkillsetPluginExportCard
+                skillset={skillset}
+                isOwner={isOwner}
+                idOrName={id}
+              />
+
               {/* ── Visibility card ── derived from members (#1136), read-only:
                   a skillset has no owner-set visibility, so there is no
                   "manage permissions" action. */}
@@ -399,15 +408,6 @@ export function SkillsetDetailPage() {
                 state={skillset.memberVisibilityState}
                 unreadableCount={skillset.unreadableMembers.length}
                 isOwner={isOwner}
-              />
-
-              {/* ── Claude Code plugin install (#1155) ── self-gates: renders only
-                  for an exported (opt-in + all-public) skillset with the mirror on.
-                  Visible to any viewer, since an exported skillset is public. */}
-              <SkillsetPluginInstallCard
-                skillsetName={skillset.name}
-                exportAsPlugin={skillset.exportAsPlugin}
-                memberVisibilityState={skillset.memberVisibilityState}
               />
 
               {/* ── Danger zone (owner only) ── matches skill details page exactly in structure/styling */}
