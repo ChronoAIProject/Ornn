@@ -1115,6 +1115,78 @@ describe("MirrorService.syncSkillsetsForMember (#1159)", () => {
     expect(calls.commits.length).toBe(1);
   });
 
+  it("member private on a 3-member set: re-export drops its files + carries the bumped revision (#1165)", async () => {
+    // The live bug: a member of an EXPORTED skillset goes private. The service
+    // bumps the revision (proven in skillsets/service.test.ts) BEFORE this
+    // export runs (bootstrap sequencing), so the doc here already carries the
+    // bumped `latestVersion`. The re-export must (a) carry that new version in
+    // plugin.json — the ONLY signal Claude Code uses to detect an update — and
+    // (b) drop the now-private member's files while keeping the 2 public ones.
+    const tripleBundle: FakeSkillset = {
+      guid: "ss-triple",
+      name: "triple-bundle",
+      description: "A three-member set.",
+      // Post-bump latestVersion (was 1.0 at create; the member-private bump
+      // advanced it to 1.1 before this export reads it).
+      latestVersion: "1.1",
+      tags: ["triple"],
+      memberVisibilityState: "restricted",
+      exportAsPlugin: true,
+      members: ["pdf@1.0", "ocr@1.0", "img@1.0"],
+      instructions: "Run pdf, then ocr.",
+    };
+    const currentTree: TreeEntry[] = [
+      { path: "skillsets/triple-bundle/.claude-plugin/plugin.json", mode: "100644", type: "blob", sha: "old-plugin" },
+      { path: "skillsets/triple-bundle/skills/pdf/SKILL.md", mode: "100644", type: "blob", sha: "old-pdf" },
+      { path: "skillsets/triple-bundle/skills/ocr/SKILL.md", mode: "100644", type: "blob", sha: "old-ocr" },
+      { path: "skillsets/triple-bundle/skills/img/SKILL.md", mode: "100644", type: "blob", sha: "old-img" },
+      { path: "skillsets/triple-bundle/README.md", mode: "100644", type: "blob", sha: "old-readme" },
+    ];
+    const { github, calls } = makeFakeGithub({ currentTree });
+    const svc = new MirrorService({
+      githubClientForTest: github,
+      skillRepo: makeFakeRepo([]),
+      // `img` is now private → the public-subset filter drops it; pdf + ocr stay.
+      skillService: makeFakeSkillService(
+        {
+          pdf: { "SKILL.md": "# pdf member" },
+          ocr: { "SKILL.md": "# ocr member" },
+          img: { "SKILL.md": "# secret img member" },
+        },
+        ["img"],
+      ),
+      skillsetRepo: makeFakeSkillsetRepo([tripleBundle]),
+      skillsetService: makeFakeSkillsetService([tripleBundle]),
+      ornnPublicOrigin: "https://example",
+      settingsService: makeFakeSettings(),
+    });
+
+    await svc.syncSkillsetsForMember("img-guid", "img");
+
+    // plugin.json carries the bumped revision — the update signal.
+    const pluginJson = parsedBlobs(calls).find((p) => p.name === "triple-bundle");
+    expect(pluginJson).toBeTruthy();
+    expect(pluginJson!.version).toBe("1.1");
+
+    // The two public members are bundled; the private member's blob never is.
+    const blobContents = calls.blobs.map((b) => b.content);
+    expect(blobContents.some((c) => c === "# pdf member")).toBe(true);
+    expect(blobContents.some((c) => c === "# ocr member")).toBe(true);
+    expect(blobContents.some((c) => c.includes("secret img member"))).toBe(false);
+
+    // The private member's stale file in the mirror is deleted; the subtree as a
+    // whole survives (2 public members ≥ the export floor).
+    const entries = calls.trees.flatMap((t) => t.entries);
+    const imgDeletion = entries.find(
+      (e) => e.path === "skillsets/triple-bundle/skills/img/SKILL.md" && e.sha === null,
+    );
+    expect(imgDeletion).toBeDefined();
+    expect(
+      entries.some((e) => e.path === "skillsets/triple-bundle/.claude-plugin/plugin.json" && e.sha !== null),
+    ).toBe(true);
+    expect(calls.commits.length).toBe(1);
+  });
+
   it("rebuilds multiple affected skillsets in a SINGLE commit", async () => {
     const dataBundle: FakeSkillset = {
       guid: "ss-data",
