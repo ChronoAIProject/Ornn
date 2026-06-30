@@ -185,6 +185,17 @@ export interface SkillRoutesConfig {
    * visibility and owners are notified on access loss. No-op when unset.
    */
   fireSkillsetRecompute?: (changedSkill: { guid: string; name: string }) => void;
+  /**
+   * #1159/#1161 — fire-and-forget targeted skillset re-export. Called after a
+   * skill CONTENT change (new-version publish, GitHub refresh, dist-tag move) so
+   * any export-eligible skillset referencing the skill via `@latest`/`@tag` is
+   * rebuilt on the mirror immediately, not on the next cron. ALSO called after a
+   * member's VISIBILITY flips (#1161): going private drops the member from each
+   * exported skillset's public subset (or removes the plugin when <2 public
+   * remain), and going public re-includes it. Pairs with `fireSkillsetRecompute`
+   * (which updates the DB-side derived visibility). No-op when unset.
+   */
+  fireSkillsetMirrorForMember?: (skillGuid: string, skillName: string) => void;
 }
 
 /** Marker prefix for synthetic NyxID-service ids. See `extraNyxidServices`. */
@@ -202,6 +213,7 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
     mirrorService,
     resolveUser,
     fireSkillsetRecompute,
+    fireSkillsetMirrorForMember,
   } = config;
   const app = new Hono<{ Variables: AuthVariables }>();
 
@@ -507,6 +519,8 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
         // Refresh bumps version + replaces files → mirror needs to
         // re-extract.
         fireMirrorSync(guid);
+        // New version content → re-export skillsets referencing it (#1159).
+        fireSkillsetMirrorForMember?.(guid, refreshed.name);
 
         return c.json({ data: refreshed, error: null });
       } catch (err) {
@@ -952,6 +966,9 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
 
       const body = getValidatedBody<z.infer<typeof distTagSetSchema>>(c);
       const tags = await skillService.setDistTag(id, tag, body.version);
+      // A dist-tag move can re-resolve a `@tag`-pinned skillset member →
+      // targeted re-export of the skillsets referencing this skill (#1159).
+      fireSkillsetMirrorForMember?.(id, existing.name);
       return c.json({ data: { tags }, error: null });
     },
   );
@@ -984,6 +1001,9 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
       }
 
       const tags = await skillService.deleteDistTag(id, tag);
+      // Removing a dist-tag can re-resolve a `@tag`-pinned skillset member →
+      // targeted re-export of the skillsets referencing this skill (#1159).
+      fireSkillsetMirrorForMember?.(id, existing.name);
       return c.json({ data: { tags }, error: null });
     },
   );
@@ -1117,6 +1137,13 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
       // umbrella decides between publish vs remove based on the new
       // `isPrivate` state.
       fireMirrorSync(guid);
+      // A new-version publish (ZIP) changes the skill's content but not its
+      // readability → targeted re-export of skillsets referencing it (#1159),
+      // NOT a visibility recompute. A pure privacy flip (no ZIP) does the
+      // reverse below.
+      if (zipBuffer !== undefined) {
+        fireSkillsetMirrorForMember?.(guid, result.name);
+      }
       // Only a privacy flip changes who can read the skill, so recompute
       // dependent skillsets only then (#1136) — a content-only update
       // leaves readability untouched.
@@ -1191,6 +1218,10 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
       fireMirrorSync(guid);
       // Grants change who can read the skill → recompute dependent skillsets (#1136).
       fireSkillsetRecompute?.({ guid, name: updated.name });
+      // #1161 — a privacy flip also changes each exported skillset's public
+      // subset: re-export now so the member is dropped (or re-included) and the
+      // plugin removed when <2 public remain, instead of waiting for the cron.
+      fireSkillsetMirrorForMember?.(guid, updated.name);
 
       return c.json({ data: { skill: updated }, error: null });
     },

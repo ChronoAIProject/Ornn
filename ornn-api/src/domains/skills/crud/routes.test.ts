@@ -123,6 +123,8 @@ interface BuildOpts {
   ) => Promise<{ userId: string; email: string; displayName: string } | null>;
   /** #1136 — capture reactive skillset-recompute hook invocations. */
   onSkillsetRecompute?: (changedSkill: { guid: string; name: string }) => void;
+  /** #1159 — capture targeted skillset mirror re-export hook invocations. */
+  onSkillsetMirrorForMember?: (skillGuid: string, skillName: string) => void;
 }
 
 function buildApp(opts: BuildOpts = {}) {
@@ -137,6 +139,7 @@ function buildApp(opts: BuildOpts = {}) {
     extraNyxidServices = [],
     resolveUser,
     onSkillsetRecompute,
+    onSkillsetMirrorForMember,
   } = opts;
 
   const skillRepo = {
@@ -154,6 +157,7 @@ function buildApp(opts: BuildOpts = {}) {
     extraNyxidServicesResolver: async () => extraNyxidServices,
     ...(resolveUser ? { resolveUser } : {}),
     ...(onSkillsetRecompute ? { fireSkillsetRecompute: onSkillsetRecompute } : {}),
+    ...(onSkillsetMirrorForMember ? { fireSkillsetMirrorForMember: onSkillsetMirrorForMember } : {}),
   };
 
   const app = new Hono();
@@ -374,6 +378,46 @@ describe("POST /skills/:id/refresh", () => {
     });
     expect(res.status).toBe(200);
     expect(calls).toContain("refreshSkillFromSource");
+  });
+
+  test("fires the targeted skillset mirror re-export on a real refresh (#1159)", async () => {
+    const fired: Array<[string, string]> = [];
+    const app = buildApp({
+      userId: OWNER,
+      permissions: [UPDATE],
+      service: {
+        getSkill: async () => detail({ createdBy: OWNER }),
+        refreshSkillFromSource: async () => detail({ createdBy: OWNER, name: "demo-skill" }),
+      },
+      onSkillsetMirrorForMember: (guid, name) => fired.push([guid, name]),
+    });
+    const res = await app.request("/api/v1/skills/guid-1/refresh", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    expect(res.status).toBe(200);
+    expect(fired).toEqual([["guid-1", "demo-skill"]]);
+  });
+
+  test("does NOT fire the re-export on a dry-run refresh (#1159)", async () => {
+    const fired: Array<[string, string]> = [];
+    const app = buildApp({
+      userId: OWNER,
+      permissions: [UPDATE],
+      service: {
+        getSkill: async () => detail({ createdBy: OWNER }),
+        previewRefreshFromSource: async () => ({ skill: { guid: "guid-1" }, hasChanges: false }),
+      },
+      onSkillsetMirrorForMember: (guid, name) => fired.push([guid, name]),
+    });
+    const res = await app.request("/api/v1/skills/guid-1/refresh", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ dryRun: true }),
+    });
+    expect(res.status).toBe(200);
+    expect(fired).toEqual([]);
   });
 
   test("dryRun delegates to previewRefreshFromSource", async () => {
@@ -830,6 +874,38 @@ describe("dist-tags routes", () => {
     expect(res.status).toBe(200);
     expect(calls).toEqual(["deleteDistTag"]);
   });
+
+  test("PUT dist-tag fires the targeted skillset mirror re-export (#1159)", async () => {
+    const fired: Array<[string, string]> = [];
+    const app = buildApp({
+      userId: OWNER,
+      permissions: [UPDATE],
+      repo: { findByGuid: async () => skillDoc({ createdBy: OWNER, name: "demo-skill" }) },
+      service: { setDistTag: async () => ({ latest: "1.0", beta: "1.0" }) },
+      onSkillsetMirrorForMember: (guid, name) => fired.push([guid, name]),
+    });
+    const res = await app.request("/api/v1/skills/guid-1/dist-tags/beta", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ version: "1.0" }),
+    });
+    expect(res.status).toBe(200);
+    expect(fired).toEqual([["guid-1", "demo-skill"]]);
+  });
+
+  test("DELETE dist-tag fires the targeted skillset mirror re-export (#1159)", async () => {
+    const fired: Array<[string, string]> = [];
+    const app = buildApp({
+      userId: OWNER,
+      permissions: [UPDATE],
+      repo: { findByGuid: async () => skillDoc({ createdBy: OWNER, name: "demo-skill" }) },
+      service: { deleteDistTag: async () => ({ latest: "1.0" }) },
+      onSkillsetMirrorForMember: (guid, name) => fired.push([guid, name]),
+    });
+    const res = await app.request("/api/v1/skills/guid-1/dist-tags/beta", { method: "DELETE" });
+    expect(res.status).toBe(200);
+    expect(fired).toEqual([["guid-1", "demo-skill"]]);
+  });
 });
 
 // ======================================================================
@@ -918,6 +994,44 @@ describe("PUT /skills/:id", () => {
     });
     expect(res.status).toBe(200);
     expect(calls).toEqual(["updateSkill"]);
+  });
+
+  test("ZIP republish fires the targeted skillset mirror re-export (#1159)", async () => {
+    const fired: Array<[string, string]> = [];
+    const app = buildApp({
+      userId: OWNER,
+      permissions: [UPDATE],
+      repo: { findByGuid: async () => skillDoc({ createdBy: OWNER }) },
+      service: { updateSkill: async () => detail({ createdBy: OWNER, name: "demo-skill" }) },
+      onSkillsetMirrorForMember: (guid, name) => fired.push([guid, name]),
+    });
+    const res = await app.request("/api/v1/skills/guid-1", {
+      method: "PUT",
+      headers: { "content-type": "application/zip" },
+      body: await skillZipBytes(),
+    });
+    expect(res.status).toBe(200);
+    expect(fired).toEqual([["guid-1", "demo-skill"]]);
+  });
+
+  test("JSON-only visibility update does NOT fire the targeted re-export (#1159)", async () => {
+    // A privacy flip changes readability, not content — it must NOT trigger
+    // the content-path re-export (the visibility-recompute hook handles it).
+    const fired: Array<[string, string]> = [];
+    const app = buildApp({
+      userId: OWNER,
+      permissions: [UPDATE],
+      repo: { findByGuid: async () => skillDoc({ createdBy: OWNER }) },
+      service: { updateSkill: async () => detail({ createdBy: OWNER, name: "demo-skill" }) },
+      onSkillsetMirrorForMember: (guid, name) => fired.push([guid, name]),
+    });
+    const res = await app.request("/api/v1/skills/guid-1", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ isPrivate: true }),
+    });
+    expect(res.status).toBe(200);
+    expect(fired).toEqual([]);
   });
 
   test("200 ZIP republish for a write grantee — content edit is the write tier (#1123)", async () => {
@@ -1054,6 +1168,29 @@ describe("PUT /skills/:id/permissions", () => {
     expect(res.status).toBe(200);
     expect(recomputed).toHaveLength(1);
     expect(recomputed[0]!.guid).toBe("guid-1");
+  });
+
+  test("fires the targeted skillset re-export after a permissions change (#1161)", async () => {
+    // A privacy flip changes each exported skillset's public subset, so the
+    // permissions path must re-export the affected skillsets immediately.
+    const fired: Array<[string, string]> = [];
+    const app = buildApp({
+      userId: OWNER,
+      permissions: [UPDATE],
+      repo: { findByGuid: async () => skillDoc({ createdBy: OWNER, name: "pdf-tools" }) },
+      service: {
+        setSkillPermissions: async () => detail({ createdBy: OWNER, name: "pdf-tools" }),
+        getSkill: async () => detail({ createdBy: OWNER, name: "pdf-tools" }),
+      },
+      onSkillsetMirrorForMember: (guid, name) => fired.push([guid, name]),
+    });
+    const res = await app.request("/api/v1/skills/guid-1/permissions", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ isPrivate: true, sharedWithUsers: [], sharedWithOrgs: [] }),
+    });
+    expect(res.status).toBe(200);
+    expect(fired).toEqual([["guid-1", "pdf-tools"]]);
   });
 });
 

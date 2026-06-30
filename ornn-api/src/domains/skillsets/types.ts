@@ -27,8 +27,16 @@ import {
   DEPENDS_ON_REF_REGEX,
   SKILL_NAME_REGEX,
   SKILL_NAME_MAX,
-  SKILL_VERSION_REGEX,
 } from "../../shared/schemas/skillFrontmatter";
+
+/**
+ * The revision a freshly created skillset starts at (#1162). A skillset's
+ * version is no longer owner-typed — it is a single system-managed revision in
+ * `<major>.<minor>` shape, auto-bumped on the minor on every qualifying change
+ * (owner edit OR a member skill's resolved version moving). Major never
+ * auto-bumps.
+ */
+export const SKILLSET_INITIAL_REVISION = "1.0";
 
 /**
  * Skillset kind (#969). v1 enumerates `generic` (a plain curated bundle)
@@ -44,6 +52,16 @@ export type SkillsetKind = (typeof SKILLSET_KINDS)[number];
 
 /** Lower bound on members — a one-member "set" is just a skill. */
 export const SKILLSET_MIN_MEMBERS = 2;
+
+/**
+ * Minimum number of PUBLIC, resolvable members a skillset must have to export
+ * (or keep exporting) as a public Claude Code plugin (#1161). The plugin bundles
+ * only the public-member subset; below this floor the bundle is too thin to be a
+ * meaningful "set", so export is refused / the plugin is removed. Distinct from
+ * {@link SKILLSET_MIN_MEMBERS} (which bounds the curated set itself, public or
+ * not) even though both currently equal 2.
+ */
+export const SKILLSET_MIN_PUBLIC_EXPORT_MEMBERS = 2;
 /**
  * Upper bound on members. Generous: a curated comparison set is rarely
  * more than a handful, but a large fleet bundle is legitimate. Guards
@@ -118,9 +136,9 @@ export const instructionsSchema = z
   );
 
 /**
- * Body schema for `POST /skillsets` (create) — the initial, version 1.0
- * payload. `version` is validated on publish; create seeds the first
- * version from the request.
+ * Body schema for `POST /skillsets` (create). The system assigns the first
+ * revision ({@link SKILLSET_INITIAL_REVISION}) — there is NO owner-typed
+ * `version` (#1162); the revision auto-advances thereafter.
  */
 export const createSkillsetSchema = z.object({
   name: z
@@ -137,16 +155,13 @@ export const createSkillsetSchema = z.object({
     .array(memberRefSchema)
     .min(SKILLSET_MIN_MEMBERS, `a skillset must have at least ${SKILLSET_MIN_MEMBERS} members`)
     .max(SKILLSET_MAX_MEMBERS, `a skillset may have at most ${SKILLSET_MAX_MEMBERS} members`),
-  version: z
-    .string()
-    .regex(SKILL_VERSION_REGEX, "version must be `<major>.<minor>`")
-    .default("1.0"),
 });
 
 /**
  * Body schema for `PUT /skillsets/:id` (publish a new immutable version).
- * `name` is fixed after create — a publish only revises the curated set,
- * its description, kind, tags, and bumps the version.
+ * `name` is fixed after create — a publish only revises the curated set, its
+ * description, kind, and tags. The new revision is system-assigned (the minor
+ * auto-bumps, #1162); the owner never types a `version`.
  */
 export const publishSkillsetSchema = z.object({
   description: z.string().min(1).max(1024).optional(),
@@ -162,15 +177,52 @@ export const publishSkillsetSchema = z.object({
     .array(memberRefSchema)
     .min(SKILLSET_MIN_MEMBERS, `a skillset must have at least ${SKILLSET_MIN_MEMBERS} members`)
     .max(SKILLSET_MAX_MEMBERS, `a skillset may have at most ${SKILLSET_MAX_MEMBERS} members`),
-  version: z.string().regex(SKILL_VERSION_REGEX, "version must be `<major>.<minor>`"),
 });
 
 // NOTE (#1136): no skillset permissions schema — a skillset's visibility is
 // derived from its members, not owner-set, so there is no permissions
 // endpoint to validate a body for.
 
+/**
+ * Kebab-case keyword/tag, matching the skillset `tags` grammar — reused for the
+ * plugin-export `keywords` override (#1157).
+ */
+const pluginKeywordSchema = z.string().min(1).max(30).regex(/^[a-z0-9-]+$/);
+
+/**
+ * Body for `PUT /skillsets/:id/plugin-export` (#1157). The owner toggles plugin
+ * export ON/OFF and may supply optional listing overrides. Each override
+ * defaults from the skillset (displayName←name, description, keywords←tags) when
+ * omitted — surfaced verbatim in the generated plugin.json + marketplace entry.
+ *
+ * Deliberately NOT overridable: the install NAME (= skillset name, the
+ * collision-free `/plugin install <name>@<repo>` handle) and the plugin VERSION
+ * (the auto-managed skillset revision that drives Claude Code's update signal,
+ * #1162).
+ */
+export const pluginExportSchema = z.object({
+  enabled: z.boolean(),
+  displayName: z.string().min(1).max(64).optional(),
+  description: z.string().min(1).max(1024).optional(),
+  keywords: z.array(pluginKeywordSchema).max(20).optional(),
+});
+
 export type CreateSkillsetInput = z.infer<typeof createSkillsetSchema>;
 export type PublishSkillsetInput = z.infer<typeof publishSkillsetSchema>;
+export type PluginExportInput = z.infer<typeof pluginExportSchema>;
+
+/**
+ * Owner-customizable plugin listing fields (#1157). Each is OPTIONAL and, when
+ * set, overrides the corresponding skillset-derived default in the exported
+ * Claude Code plugin's `plugin.json` + marketplace entry. An absent field falls
+ * back to the skillset (displayName←name, description, keywords←tags). Persisted
+ * on the identity doc only when the owner exports with overrides.
+ */
+export interface SkillsetPluginOverrides {
+  displayName?: string | undefined;
+  description?: string | undefined;
+  keywords?: string[] | undefined;
+}
 
 /**
  * Persisted skillset identity document (the `skillsets` collection).
@@ -220,6 +272,22 @@ export interface SkillsetDocument {
   membersAllPublic?: boolean | undefined;
   /** Derived (#1136) member-visibility state of the latest version. */
   memberVisibilityState?: SkillsetMemberVisibilityState | undefined;
+  /**
+   * Owner opt-in (#1155) to export this skillset as ONE curated multi-skill
+   * Claude Code plugin in the public mirror. Eligibility to actually export =
+   * this flag AND the skillset having ≥ {@link SKILLSET_MIN_PUBLIC_EXPORT_MEMBERS}
+   * public, resolvable members (#1161) — the export bundles only that public
+   * subset, dropping private/unresolvable members, so a "restricted" skillset
+   * still exports its public part. Optional for back-compat (absent ⇒ `false`).
+   * Default OFF.
+   */
+  exportAsPlugin?: boolean | undefined;
+  /**
+   * Owner-customizable plugin listing overrides (#1157). Set ONLY when the
+   * owner exported with explicit overrides; absent ⇒ the mirror falls back to
+   * the skillset's own name/description/tags. Inert unless `exportAsPlugin`.
+   */
+  pluginConfig?: SkillsetPluginOverrides | undefined;
   /** Cached pointer to the highest published version, e.g. "1.2". */
   latestVersion: string;
 }
@@ -257,6 +325,20 @@ export interface SkillsetVersionDocument {
   tags: string[];
   /** Member skill refs (`<name-or-guid>@<major.minor>` or `<name>@<dist-tag>`). */
   members: string[];
+  /**
+   * Lockfile-like snapshot of the PUBLIC-resolvable members RESOLVED to concrete
+   * versions at the time this revision was cut (#1162/#1165) — sorted, de-duped
+   * `name@<major.minor>` strings, private/unresolvable members excluded. This is
+   * exactly the EXPORTED member subset (#1161), so it captures the revision's
+   * delivered content reproducibly even when authored `members` pin
+   * `@latest`/dist-tags, and is the baseline the reactive bump compares against:
+   * a member-version move OR a member visibility flip (private⇄public, #1165)
+   * both shift this set → warranting a new revision so Claude Code picks up the
+   * change. Optional for back-compat: pre-#1162 version docs lack it until the
+   * boot backfill populates the latest one; a pre-#1165 doc may still carry an
+   * all-members snapshot until its first reactive bump self-corrects it.
+   */
+  resolvedMembers?: string[] | undefined;
   createdBy: string;
   createdByEmail?: string | undefined;
   createdByDisplayName?: string | undefined;
@@ -289,6 +371,26 @@ export interface SkillsetDetailResponse {
    * visibility — `isPrivate`/`grants` above are inert.
    */
   memberVisibilityState: SkillsetMemberVisibilityState;
+  /**
+   * Owner opt-in (#1155) to export the skillset as a curated multi-skill
+   * Claude Code plugin in the public mirror. Surfaced so the web UI can show
+   * the toggle state + the install snippet. Always present (defaults `false`).
+   */
+  exportAsPlugin: boolean;
+  /**
+   * Number of THIS version's members whose skill is currently public AND
+   * resolvable, counted under SYSTEM (#1161). The export bundles only this
+   * public subset; export is available / sustained only while this is
+   * ≥ {@link SKILLSET_MIN_PUBLIC_EXPORT_MEMBERS}. The web export card gates on
+   * it (and derives the excluded count as `members.length - publicMemberCount`).
+   */
+  publicMemberCount: number;
+  /**
+   * Owner-customizable plugin listing overrides (#1157). Surfaced so the web
+   * export card can prefill the confirm modal with the current overrides (or
+   * fall back to the skillset's own fields when absent).
+   */
+  pluginConfig?: SkillsetPluginOverrides | undefined;
   /**
    * Member refs the CALLER cannot read at THIS version (#1136). Always
    * empty for a non-owner (they 404 instead of seeing a partial set);

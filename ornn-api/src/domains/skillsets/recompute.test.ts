@@ -16,6 +16,7 @@ import type { SkillsetMemberVisibilityState } from "./types";
 import {
   backfillDerivedVisibility,
   computeDerivedVisibility,
+  computePublicResolvedMembers,
   recomputeForSkill,
   recomputeSkillsetVisibility,
   type MemberVisibilityResolver,
@@ -69,6 +70,36 @@ describe("computeDerivedVisibility", () => {
     const resolver = makeResolver({});
     const result = await computeDerivedVisibility([], resolver);
     expect(result).toEqual({ membersAllPublic: true, memberVisibilityState: "all-public" });
+  });
+});
+
+describe("computePublicResolvedMembers (#1165 — public-only snapshot)", () => {
+  test("includes only public, resolvable members, sorted + de-duped", async () => {
+    const resolver = makeResolver({ "b@1.0": "public", "a@2.1": "public" });
+    const snapshot = await computePublicResolvedMembers(["b@1.0", "a@2.1"], resolver);
+    // Sorted by the canonical `name@version` string, so `a@2.1` precedes `b@1.0`.
+    expect(snapshot).toEqual(["a@2.1", "b@1.0"]);
+  });
+
+  test("excludes a PRIVATE member — the export-subset signal (#1165)", async () => {
+    // m3 is private: it still RESOLVES under SYSTEM but is not in the exported
+    // set, so it must not appear in the snapshot. This is what makes a privacy
+    // flip move the snapshot (and bump the revision) even though no version did.
+    const resolver = makeResolver({ "m1@1.0": "public", "m2@1.0": "public", "m3@1.0": "private" });
+    const snapshot = await computePublicResolvedMembers(["m1@1.0", "m2@1.0", "m3@1.0"], resolver);
+    expect(snapshot).toEqual(["m1@1.0", "m2@1.0"]);
+  });
+
+  test("excludes an unresolvable member ref", async () => {
+    const resolver = makeResolver({ "m1@1.0": "public" });
+    const snapshot = await computePublicResolvedMembers(["m1@1.0", "gone@1.0"], resolver);
+    expect(snapshot).toEqual(["m1@1.0"]);
+  });
+
+  test("empty when no member is public-resolvable", async () => {
+    const resolver = makeResolver({ "m1@1.0": "private" });
+    const snapshot = await computePublicResolvedMembers(["m1@1.0", "gone@1.0"], resolver);
+    expect(snapshot).toEqual([]);
   });
 });
 

@@ -37,12 +37,20 @@ import { validateBody, getValidatedBody } from "../../middleware/validate";
 import { buildActorContext, type ActorContext } from "../skills/crud/authorize";
 import { createLogger } from "../../shared/logger";
 import type { SkillsetService } from "./service";
-import { createSkillsetSchema, publishSkillsetSchema } from "./types";
+import { createSkillsetSchema, publishSkillsetSchema, pluginExportSchema } from "./types";
 
 const logger = createLogger("skillsetRoutes");
 
 export interface SkillsetRoutesConfig {
   skillsetService: SkillsetService;
+  /**
+   * Fire-and-forget mirror reconcile (#1155). Called after a successful
+   * create / publish / delete because any of those can change which skillsets
+   * are plugin-export-eligible (opt-in flip, member set change, or removal).
+   * No-op when unset; errors are swallowed inside the hook — never blocks the
+   * response.
+   */
+  fireMirrorReconcile?: () => void;
 }
 
 /** Body for `POST /skillsets/:id/transfer-ownership` (#1123). */
@@ -64,7 +72,7 @@ function anonActor(): ActorContext {
 export function createSkillsetRoutes(
   config: SkillsetRoutesConfig,
 ): Hono<{ Variables: AuthVariables }> {
-  const { skillsetService } = config;
+  const { skillsetService, fireMirrorReconcile } = config;
   const app = new Hono<{ Variables: AuthVariables }>();
   const auth = nyxidAuthMiddleware();
   const optionalAuth = optionalAuthMiddleware();
@@ -87,6 +95,8 @@ export function createSkillsetRoutes(
         displayName: authCtx.displayName,
       });
       logger.info({ guid: created.guid, name: created.name }, "Skillset created via API");
+      // #1155 — opt-in may already be set at create; refresh the mirror.
+      fireMirrorReconcile?.();
       c.header("Location", `/api/v1/skillsets/${created.guid}`);
       return c.json({ data: created, error: null }, 201);
     },
@@ -163,6 +173,32 @@ export function createSkillsetRoutes(
       const actor = await buildActorContext(c);
       const updated = await skillsetService.publishVersion(id, body, actor);
       logger.info({ guid: id, version: updated.version }, "Skillset version published via API");
+      // #1155 — publish can flip the opt-in or change the member set.
+      fireMirrorReconcile?.();
+      return c.json({ data: updated, error: null });
+    },
+  );
+
+  /**
+   * PUT /skillsets/:id/plugin-export — enable/disable Claude Code plugin
+   * export and persist the owner's listing overrides (#1157).
+   * Requires: ornn:skill:update + author/admin. Enabling is rejected unless the
+   * skillset is `all-public` (enforced in the service). Registered as a literal
+   * sub-segment, so it never collides with the `PUT /skillsets/:id` publish.
+   */
+  app.put(
+    "/skillsets/:id/plugin-export",
+    auth,
+    requirePermission("ornn:skill:update"),
+    validateBody(pluginExportSchema, "invalid_plugin_export"),
+    async (c) => {
+      const id = c.req.param("id");
+      const body = getValidatedBody<z.infer<typeof pluginExportSchema>>(c);
+      const actor = await buildActorContext(c);
+      const updated = await skillsetService.setPluginExport(id, body, actor);
+      logger.info({ guid: id, enabled: body.enabled }, "Skillset plugin export updated via API");
+      // #1157 — flipping the opt-in changes mirror eligibility; reconcile.
+      fireMirrorReconcile?.();
       return c.json({ data: updated, error: null });
     },
   );
@@ -184,6 +220,8 @@ export function createSkillsetRoutes(
       const id = c.req.param("id");
       const actor = await buildActorContext(c);
       await skillsetService.deleteSkillset(id, actor);
+      // #1155 — a deleted skillset must drop out of the mirror catalogue.
+      fireMirrorReconcile?.();
       return c.json({ data: { success: true }, error: null });
     },
   );
@@ -206,6 +244,9 @@ export function createSkillsetRoutes(
       // mutation) so a non-owner can't enumerate users via the response.
       const updated = await skillsetService.transferOwnership(id, body.newOwnerUserId, actor);
       logger.info({ guid: id, newOwnerId: body.newOwnerUserId }, "Skillset ownership transferred via API");
+      // #1159 — symmetry with the skill transfer path: a re-owned skillset must
+      // refresh the mirror (its plugin README provenance/links can change).
+      fireMirrorReconcile?.();
       return c.json({ data: { skillset: updated }, error: null });
     },
   );

@@ -3,18 +3,16 @@
  * `/skillsets/new` (create → POST) and `/skillsets/:id/edit` (publish → PUT).
  *
  * Composes the kind selector, tag editor, `SkillsetMemberPicker`, and
- * `MasterPromptEditor`. The two modes differ in three ways:
+ * `MasterPromptEditor`. The two modes differ in two ways:
  *
- *   create  → name is editable + required (kebab-case); version defaults 1.0;
- *             submits via `onSubmit` with the create payload.
- *   edit    → name is LOCKED (display-only); version is auto-bumped on mount
- *             (next minor) with quick +minor / +major buttons so you rarely
- *             have to type the tag by hand. Still validated to be different from
- *             the loaded version (server also enforces proper bump).
+ *   create  → name is editable + required (kebab-case); submits the create
+ *             payload. The system assigns the first revision (1.0, #1162).
+ *   edit    → name is LOCKED (display-only); publishing creates a new revision
+ *             whose number the system auto-bumps. The owner never types a
+ *             version — there is no version field in either mode.
  *
  * Validation is surfaced inline; the submit button is disabled until the form
- * is structurally valid (name present in create, ≥2 members, required prompt,
- * version present in edit).
+ * is structurally valid (name present in create, ≥2 members, required prompt).
  *
  * @module components/skillset/SkillsetForm
  */
@@ -38,8 +36,6 @@ import {
 
 /** Kebab-case skill/skillset name. Mirrors the backend `SKILL_NAME_REGEX`. */
 const NAME_REGEX = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-/** `<major>.<minor>` version. */
-const VERSION_REGEX = /^\d+\.\d+$/;
 
 export interface SkillsetFormInitial {
   name?: string | undefined;
@@ -48,7 +44,6 @@ export interface SkillsetFormInitial {
   kind?: SkillsetKind | undefined;
   tags?: string[] | undefined;
   members?: string[] | undefined;
-  version?: string | undefined;
 }
 
 export interface SkillsetFormProps {
@@ -78,23 +73,10 @@ export function SkillsetForm({
   const [kind, setKind] = useState<SkillsetKind>(initial?.kind ?? "generic");
   const [tags, setTags] = useState<string[]>(initial?.tags ?? []);
   const [members, setMembersRaw] = useState<string[]>(initial?.members ?? []);
-  /** Compute an auto-bumped version for edit mode so user doesn't have to manually type the next tag. */
-  function bumpVersion(current: string, level: "minor" | "major" = "minor"): string {
-    const [majStr = "", minStr = ""] = current.trim().split(".");
-    const major = parseInt(majStr, 10);
-    const minor = parseInt(minStr, 10);
-    if (isNaN(major) || isNaN(minor)) return "1.0";
-    if (level === "major") {
-      return `${major + 1}.0`;
-    }
-    return `${major}.${minor + 1}`;
-  }
-
-  const [version, setVersion] = useState(() => {
-    if (mode === "create") return "1.0";
-    const cur = initial?.version?.trim() ?? "";
-    return cur ? bumpVersion(cur, "minor") : "1.0";
-  });
+  // Plugin export (#1157) is no longer set here — it's a deliberate, configurable
+  // action on the skillset detail page (SkillsetPluginExportCard + confirm modal).
+  // Version (#1162) is no longer set here either — the revision is system-managed
+  // (auto-bumped on create/publish), so there is no version input in either mode.
   const [submitted, setSubmitted] = useState(false);
 
   // Dependency edges are a PROJECTION of the single `instructions` state — the
@@ -128,13 +110,8 @@ export function SkillsetForm({
   const descriptionValid = description.trim().length > 0 && description.trim().length <= 1024;
   const membersValid = members.length >= SKILLSET_MIN_MEMBERS;
   const promptValid = promptError === null;
-  const versionValid =
-    mode === "create"
-      ? VERSION_REGEX.test(version.trim())
-      : VERSION_REGEX.test(version.trim()) && version.trim() !== lockedVersion(initial);
 
-  const canSubmit =
-    nameValid && descriptionValid && membersValid && promptValid && versionValid && !submitting;
+  const canSubmit = nameValid && descriptionValid && membersValid && promptValid && !submitting;
 
   const tagInputId = useId();
 
@@ -160,7 +137,6 @@ export function SkillsetForm({
         kind,
         tags,
         members,
-        version: version.trim(),
       });
     } else {
       await onPublish?.({
@@ -169,7 +145,6 @@ export function SkillsetForm({
         kind,
         tags,
         members,
-        version: version.trim(),
       });
     }
   }
@@ -178,81 +153,38 @@ export function SkillsetForm({
     <form onSubmit={handleSubmit} className="flex flex-col gap-6">
       {/* Identity + metadata — a compact 2-col grid so the editor surfaces below
           (members, dependency graph, master prompt) get the vertical room.
-          Name + version share the top row; description spans full width; kind +
-          tags share the bottom row. */}
+          Name spans the top row (the revision is system-managed, #1162, so
+          there's no version field); description spans full width; kind + tags
+          share the bottom row. */}
       <div className="grid grid-cols-1 items-start gap-x-4 gap-y-4 sm:grid-cols-2">
-        {/* Name — editable on create, locked on edit. */}
-        {mode === "create" ? (
-          <Input
-            label={t("skillsetForm.name", "Name") as string}
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="research-bundle"
-            error={
-              submitted && !nameValid
-                ? (t("skillsetForm.nameError", "Name must be kebab-case (a-z, 0-9, hyphens).") as string)
-                : undefined
-            }
-          />
-        ) : (
-          <div className="flex flex-col gap-1.5">
-            <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-meta">
-              {t("skillsetForm.name", "Name")}
-            </span>
-            <div className="rounded-sm border border-subtle bg-elevated/40 px-3 py-2 font-mono text-sm text-meta">
-              {lockedName}
-              <span className="ml-2 font-mono text-[10px] uppercase tracking-wider text-meta">
-                ({t("skillsetForm.nameLocked", "locked")})
-              </span>
-            </div>
-          </div>
-        )}
-
-        {/* Version — defaulted 1.0 on create; in edit we auto-bump to the next minor on mount
-            and provide quick +minor / +major buttons so you don't have to type tags manually. */}
-        {mode === "edit" ? (
-          <div className="flex flex-col gap-1.5">
+        {/* Name — editable on create, locked on edit. Spans the full row. */}
+        <div className="sm:col-span-2">
+          {mode === "create" ? (
             <Input
-              label={t("skillsetForm.version", "Version") as string}
-              value={version}
-              onChange={(e) => setVersion(e.target.value)}
-              placeholder="1.1"
+              label={t("skillsetForm.name", "Name") as string}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="research-bundle"
               error={
-                submitted && !versionValid
-                  ? (t("skillsetForm.versionBumpError", "Publish requires a new, bumped version (e.g. 1.1).") as string)
+                submitted && !nameValid
+                  ? (t("skillsetForm.nameError", "Name must be kebab-case (a-z, 0-9, hyphens).") as string)
                   : undefined
               }
             />
-            <div className="flex items-center gap-1.5">
-              <span className="font-mono text-[9px] uppercase tracking-[0.16em] text-meta">
-                from {initial?.version ?? "?"}
+          ) : (
+            <div className="flex flex-col gap-1.5">
+              <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-meta">
+                {t("skillsetForm.name", "Name")}
               </span>
-              {(["minor", "major"] as const).map((level) => (
-                <button
-                  key={level}
-                  type="button"
-                  onClick={() => setVersion(bumpVersion(version, level))}
-                  className="rounded-sm border border-subtle px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-widest text-meta hover:border-accent hover:text-strong focus:outline-none"
-                  title={`Bump ${level} from current field value`}
-                >
-                  +{level}
-                </button>
-              ))}
+              <div className="rounded-sm border border-subtle bg-elevated/40 px-3 py-2 font-mono text-sm text-meta">
+                {lockedName}
+                <span className="ml-2 font-mono text-[10px] uppercase tracking-wider text-meta">
+                  ({t("skillsetForm.nameLocked", "locked")})
+                </span>
+              </div>
             </div>
-          </div>
-        ) : (
-          <Input
-            label={t("skillsetForm.version", "Version") as string}
-            value={version}
-            onChange={(e) => setVersion(e.target.value)}
-            placeholder="1.0"
-            error={
-              submitted && !versionValid
-                ? (t("skillsetForm.versionError", "Version must be <major>.<minor> (e.g. 1.0).") as string)
-                : undefined
-            }
-          />
-        )}
+          )}
+        </div>
 
         {/* Description — full width. */}
         <div className="sm:col-span-2">
@@ -362,7 +294,10 @@ export function SkillsetForm({
 
       {mode === "edit" && (
         <p className="font-text text-xs text-meta">
-          {t("skillsetForm.editHint", "Publishing creates a new immutable version. The name cannot change.")}
+          {t(
+            "skillsetForm.editHint",
+            "Publishing creates a new immutable revision (the number is auto-managed). The name cannot change.",
+          )}
         </p>
       )}
 
@@ -380,9 +315,4 @@ export function SkillsetForm({
       </div>
     </form>
   );
-}
-
-/** The version the form loaded with — edit must publish a DIFFERENT one. */
-function lockedVersion(initial: SkillsetFormInitial | undefined): string {
-  return initial?.version ?? "";
 }

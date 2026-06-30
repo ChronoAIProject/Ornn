@@ -28,8 +28,8 @@ beforeAll(async () => {
   client = new MongoClient(mongo.getUri());
   await client.connect();
   db = client.db("skillsets_test");
-  repo = new SkillsetRepository(db);
   versionRepo = new SkillsetVersionRepository(db);
+  repo = new SkillsetRepository(db, versionRepo);
   await repo.ensureIndexes();
   await versionRepo.ensureIndexes();
 });
@@ -98,6 +98,105 @@ describe("SkillsetRepository — CRUD", () => {
     expect(guids.sort()).toEqual(["ss-a", "ss-b", "ss-c"]);
   });
 
+  test("exportAsPlugin persists on create and round-trips (#1155)", async () => {
+    await repo.create({
+      guid: "ss-opt",
+      name: "opt-set",
+      description: "d",
+      kind: "generic",
+      tags: [],
+      createdBy: "o",
+      latestVersion: "1.0",
+      exportAsPlugin: true,
+    });
+    expect((await repo.findByGuid("ss-opt"))?.exportAsPlugin).toBe(true);
+  });
+
+  test("exportAsPlugin defaults to false when omitted on create (#1155)", async () => {
+    await repo.create({
+      guid: "ss-def",
+      name: "def-set",
+      description: "d",
+      kind: "generic",
+      tags: [],
+      createdBy: "o",
+      latestVersion: "1.0",
+    });
+    expect((await repo.findByGuid("ss-def"))?.exportAsPlugin).toBe(false);
+  });
+
+  test("update flips exportAsPlugin only when an explicit value is given (#1155)", async () => {
+    await repo.create({
+      guid: "ss-u",
+      name: "u-set",
+      description: "d",
+      kind: "generic",
+      tags: [],
+      createdBy: "o",
+      latestVersion: "1.0",
+      exportAsPlugin: true,
+    });
+    // A publish that omits the flag must preserve it.
+    await repo.update("ss-u", { latestVersion: "1.1", updatedBy: "o" });
+    expect((await repo.findByGuid("ss-u"))?.exportAsPlugin).toBe(true);
+    // An explicit false turns it off.
+    await repo.update("ss-u", { exportAsPlugin: false, updatedBy: "o" });
+    expect((await repo.findByGuid("ss-u"))?.exportAsPlugin).toBe(false);
+  });
+
+  test("pluginConfig persists on create and round-trips (#1157)", async () => {
+    await repo.create({
+      guid: "ss-pc",
+      name: "pc-set",
+      description: "d",
+      kind: "generic",
+      tags: [],
+      createdBy: "o",
+      latestVersion: "1.0",
+      pluginConfig: { displayName: "Nice Name", description: "Override", keywords: ["rag"] },
+    });
+    expect((await repo.findByGuid("ss-pc"))?.pluginConfig).toEqual({
+      displayName: "Nice Name",
+      description: "Override",
+      keywords: ["rag"],
+    });
+  });
+
+  test("update with pluginConfig=null clears the stored overrides (#1157)", async () => {
+    await repo.create({
+      guid: "ss-pcc",
+      name: "pcc-set",
+      description: "d",
+      kind: "generic",
+      tags: [],
+      createdBy: "o",
+      latestVersion: "1.0",
+      pluginConfig: { displayName: "Nice Name" },
+    });
+    // Setting overrides via update replaces them.
+    await repo.update("ss-pcc", { pluginConfig: { keywords: ["a", "b"] }, updatedBy: "o" });
+    expect((await repo.findByGuid("ss-pcc"))?.pluginConfig).toEqual({ keywords: ["a", "b"] });
+    // null clears (mirror then falls back to skillset fields).
+    await repo.update("ss-pcc", { pluginConfig: null, updatedBy: "o" });
+    expect((await repo.findByGuid("ss-pcc"))?.pluginConfig).toBeUndefined();
+  });
+
+  test("update without pluginConfig leaves the stored overrides untouched (#1157)", async () => {
+    await repo.create({
+      guid: "ss-pck",
+      name: "pck-set",
+      description: "d",
+      kind: "generic",
+      tags: [],
+      createdBy: "o",
+      latestVersion: "1.0",
+      pluginConfig: { displayName: "Keep Me" },
+    });
+    // A publish-style update (no pluginConfig) must not reset it.
+    await repo.update("ss-pck", { latestVersion: "1.1", updatedBy: "o" });
+    expect((await repo.findByGuid("ss-pck"))?.pluginConfig).toEqual({ displayName: "Keep Me" });
+  });
+
   test("create rejects a duplicate name with skillset_name_exists", async () => {
     await repo.create({
       guid: "ss-1",
@@ -123,6 +222,79 @@ describe("SkillsetRepository — CRUD", () => {
       code = (err as { code: string }).code;
     }
     expect(code).toBe("skillset_name_exists");
+  });
+});
+
+describe("SkillsetRepository — findAllEligibleForMirror (#1155/#1161)", () => {
+  test("returns every opted-in skillset regardless of member visibility", async () => {
+    await seed(
+      { _id: "ok", name: "ok-set", memberVisibilityState: "all-public", exportAsPlugin: true },
+      // #1161 — opted in but restricted still qualifies: the mirror exports its
+      // PUBLIC subset (dropping the private member), so it must be returned.
+      { _id: "restr", name: "restr-set", memberVisibilityState: "restricted", exportAsPlugin: true },
+      // not opted in → excluded (no consent), whatever the visibility.
+      { _id: "noopt", name: "noopt-set", memberVisibilityState: "all-public", exportAsPlugin: false },
+      // opt-in field absent (pre-feature doc) → excluded.
+      { _id: "legacy", name: "legacy-set", memberVisibilityState: "all-public" },
+    );
+    const eligible = await repo.findAllEligibleForMirror();
+    expect(eligible.map((s) => s.guid).sort()).toEqual(["ok", "restr"]);
+  });
+
+  test("returns an empty list when nothing is eligible", async () => {
+    await seed({ _id: "x", name: "x-set", memberVisibilityState: "all-public", exportAsPlugin: false });
+    expect(await repo.findAllEligibleForMirror()).toEqual([]);
+  });
+});
+
+describe("SkillsetRepository — findEligibleSkillsetsByMember (#1159/#1161)", () => {
+  async function seedVersion(skillsetGuid: string, members: string[]): Promise<void> {
+    await versionRepo.create({
+      skillsetGuid,
+      version: "1.0",
+      majorVersion: 1,
+      minorVersion: 0,
+      kind: "generic",
+      description: "d",
+      instructions: "p",
+      tags: [],
+      members,
+      createdBy: "owner-1",
+    });
+  }
+
+  test("returns opted-in skillsets referencing the skill, any visibility (#1161)", async () => {
+    await seed(
+      // eligible: opted in, all-public, references `review` by name.
+      { _id: "ss-ok", name: "ok-set", memberVisibilityState: "all-public", exportAsPlugin: true },
+      // references the skill but NOT opted in → excluded.
+      { _id: "ss-noopt", name: "noopt-set", memberVisibilityState: "all-public", exportAsPlugin: false },
+      // #1161 — references the skill, opted in, restricted: STILL returned so the
+      // targeted re-export can rebuild the public subset / remove if too thin.
+      { _id: "ss-restr", name: "restr-set", memberVisibilityState: "restricted", exportAsPlugin: true },
+      // eligible but does NOT reference the skill → excluded.
+      { _id: "ss-unrel", name: "unrel-set", memberVisibilityState: "all-public", exportAsPlugin: true },
+    );
+    await seedVersion("ss-ok", ["review@1.0", "other@1.0"]);
+    await seedVersion("ss-noopt", ["review@latest"]);
+    await seedVersion("ss-restr", ["review@1.0"]);
+    await seedVersion("ss-unrel", ["unrelated@1.0"]);
+
+    const eligible = await repo.findEligibleSkillsetsByMember("review", "skl-review-guid");
+    expect(eligible.map((s) => s.guid).sort()).toEqual(["ss-ok", "ss-restr"]);
+  });
+
+  test("matches a skillset that references the skill by guid (#1159)", async () => {
+    await seed({ _id: "ss-g", name: "g-set", memberVisibilityState: "all-public", exportAsPlugin: true });
+    await seedVersion("ss-g", ["skl-review-guid@2.1"]);
+    const eligible = await repo.findEligibleSkillsetsByMember("review", "skl-review-guid");
+    expect(eligible.map((s) => s.guid)).toEqual(["ss-g"]);
+  });
+
+  test("returns an empty list when no skillset references the skill", async () => {
+    await seed({ _id: "ss-z", name: "z-set", memberVisibilityState: "all-public", exportAsPlugin: true });
+    await seedVersion("ss-z", ["other@1.0"]);
+    expect(await repo.findEligibleSkillsetsByMember("review", "skl-review-guid")).toEqual([]);
   });
 });
 

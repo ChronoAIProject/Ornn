@@ -28,6 +28,14 @@ export type SkillsetKind = (typeof SKILLSET_KINDS)[number];
 
 /** Lower bound on members — a one-member "set" is just a skill. */
 export const SKILLSET_MIN_MEMBERS = 2;
+
+/**
+ * Minimum number of PUBLIC, resolvable members a skillset must have to export
+ * (or keep exporting) as a public Claude Code plugin (#1161). Mirrors the
+ * backend `SKILLSET_MIN_PUBLIC_EXPORT_MEMBERS`. The export card gates the
+ * opt-in button on `publicMemberCount >= SKILLSET_MIN_PUBLIC_EXPORT_MEMBERS`.
+ */
+export const SKILLSET_MIN_PUBLIC_EXPORT_MEMBERS = 2;
 /** Upper bound on members — guards against a pathological publish. */
 export const SKILLSET_MAX_MEMBERS = 100;
 
@@ -45,6 +53,31 @@ export const SKILLSET_INSTRUCTIONS_MAX = 8000;
  *                    owner sees it, with a repair warning.
  */
 export type SkillsetMemberVisibilityState = "all-public" | "restricted" | "unresolvable";
+
+/**
+ * Owner-customizable plugin listing fields (#1157). Each defaults from the
+ * skillset (displayName←name, description, keywords←tags) and is overridable
+ * when the owner exports. The install NAME (= skillset name) and the plugin
+ * VERSION (the auto-managed skillset revision, #1162) are deliberately NOT here
+ * — not user-editable.
+ */
+export interface SkillsetPluginConfig {
+  displayName?: string | undefined;
+  description?: string | undefined;
+  keywords?: string[] | undefined;
+}
+
+/**
+ * Body for `PUT /api/v1/skillsets/:id/plugin-export` (#1157). `enabled` toggles
+ * export ON/OFF; the optional fields override the skillset-derived plugin
+ * listing. Omitted overrides fall back to the skillset's own fields.
+ */
+export interface PluginExportInput {
+  enabled: boolean;
+  displayName?: string | undefined;
+  description?: string | undefined;
+  keywords?: string[] | undefined;
+}
 
 /** Why a master-prompt body is invalid. `null` = valid. */
 export type MasterPromptRejection = "empty" | "tooLong" | null;
@@ -103,6 +136,27 @@ export interface SkillsetDetail {
    * authoritative signal for the visibility badge.
    */
   memberVisibilityState: SkillsetMemberVisibilityState;
+  /**
+   * Owner opt-in (#1155) to export the skillset as a curated multi-skill
+   * Claude Code plugin in the public mirror. Drives the export card's state and
+   * the read-only install snippet on the detail page.
+   */
+  exportAsPlugin: boolean;
+  /**
+   * Number of THIS version's members whose skill is currently public AND
+   * resolvable (#1161). The export bundles only this public subset; the export
+   * card gates the opt-in on `publicMemberCount >= 2` and derives the excluded
+   * count as `members.length - publicMemberCount`. Always present from the API;
+   * optional only for back-compat with older fixtures (treated as 0 when absent).
+   */
+  publicMemberCount?: number | undefined;
+  /**
+   * Owner-customizable plugin listing overrides (#1157). Each field, when set,
+   * overrides the corresponding skillset default in the exported plugin; absent
+   * fields fall back to the skillset (displayName←name, description, keywords←
+   * tags). Drives the confirm modal's prefilled values.
+   */
+  pluginConfig?: SkillsetPluginConfig | undefined;
   /**
    * Member refs the CURRENT caller cannot read at this version (#1136).
    * Always empty for a non-owner (they 404 instead); surfaced to the
@@ -222,7 +276,10 @@ export interface SkillsetVersionEntry {
   createdOn: string;
 }
 
-/** Body for POST /api/v1/skillsets (create — seeds version 1.0). */
+/**
+ * Body for POST /api/v1/skillsets (create). The system assigns the first
+ * revision (1.0, #1162) — there is NO owner-typed `version`.
+ */
 export interface CreateSkillsetInput {
   name: string;
   description: string;
@@ -230,17 +287,18 @@ export interface CreateSkillsetInput {
   kind: SkillsetKind;
   tags: string[];
   members: string[];
-  version?: string | undefined;
 }
 
-/** Body for PUT /api/v1/skillsets/:id (publish a new immutable version). */
+/**
+ * Body for PUT /api/v1/skillsets/:id (publish a new immutable revision). The
+ * revision number is system-assigned (auto-bumped, #1162) — no `version`.
+ */
 export interface PublishSkillsetInput {
   description?: string | undefined;
   instructions: string;
   kind?: SkillsetKind | undefined;
   tags?: string[] | undefined;
   members: string[];
-  version: string;
 }
 
 // NOTE (#1136): there is no skillset permissions input — a skillset's

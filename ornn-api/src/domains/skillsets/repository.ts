@@ -18,7 +18,13 @@ import { AppError } from "../../shared/types/index";
 import { createLogger } from "../../shared/logger";
 import { coerceStoredGrants, legacyListsFromGrants } from "../skills/crud/grants";
 import type { SkillGrant } from "../../shared/types/index";
-import type { SkillsetDocument, SkillsetKind, SkillsetMemberVisibilityState } from "./types";
+import { SkillsetVersionRepository } from "./skillsetVersionRepository";
+import type {
+  SkillsetDocument,
+  SkillsetKind,
+  SkillsetMemberVisibilityState,
+  SkillsetPluginOverrides,
+} from "./types";
 
 const logger = createLogger("skillsetRepository");
 
@@ -48,6 +54,10 @@ export interface CreateSkillsetData {
   grants?: SkillGrant[] | undefined;
   /** Initial version, e.g. "1.0". Required. */
   latestVersion: string;
+  /** Owner opt-in (#1155) to export as a multi-skill plugin. Default OFF. */
+  exportAsPlugin?: boolean | undefined;
+  /** Owner plugin listing overrides (#1157). Omitted ⇒ no overrides stored. */
+  pluginConfig?: SkillsetPluginOverrides | undefined;
 }
 
 export interface UpdateSkillsetData {
@@ -66,6 +76,19 @@ export interface UpdateSkillsetData {
   grants?: SkillGrant[];
   latestVersion?: string;
   updatedBy: string;
+  /**
+   * Owner opt-in (#1155). Set ONLY when an explicit boolean is provided —
+   * omitting it preserves the skillset's current setting (a publish that
+   * doesn't mention the flag must not silently reset it).
+   */
+  exportAsPlugin?: boolean;
+  /**
+   * Owner plugin listing overrides (#1157). Three-state:
+   *   - `undefined` — leave the stored overrides untouched (publish path).
+   *   - object      — replace the stored overrides with these fields.
+   *   - `null`      — `$unset` the overrides (fall back to skillset fields).
+   */
+  pluginConfig?: SkillsetPluginOverrides | null;
 }
 
 /** Filters specific to skillset search: `kind` equality + `tags $all` + a `q`
@@ -81,9 +104,17 @@ export class SkillsetRepository {
   private readonly collection: Collection;
   /** Server-side cap on paginated reads (mirrors SkillRepository). */
   private static readonly MAX_QUERY_MS = 5_000;
+  /**
+   * Append-only version repo (#1159). Injected so the targeted mirror
+   * re-export can ask "which skillsets reference this member skill?" via the
+   * version collection's multikey `members` index, then narrow to the
+   * export-eligible identity docs here.
+   */
+  private readonly versionRepo: SkillsetVersionRepository;
 
-  constructor(db: Db) {
+  constructor(db: Db, versionRepo: SkillsetVersionRepository) {
     this.collection = db.collection("skillsets");
+    this.versionRepo = versionRepo;
   }
 
   /**
@@ -98,6 +129,10 @@ export class SkillsetRepository {
       this.collection.createIndex({ createdOn: -1 }),
       this.collection.createIndex({ isPrivate: 1, createdOn: -1 }),
       this.collection.createIndex({ kind: 1, createdOn: -1 }),
+      // #1155/#1161 — fast lookup of plugin-export opted-in skillsets for the
+      // mirror. `exportAsPlugin` is the sole eligibility filter now (the public
+      // subset is decided at build time), and is this index's prefix.
+      this.collection.createIndex({ exportAsPlugin: 1, memberVisibilityState: 1 }),
     ]);
   }
 
@@ -109,6 +144,58 @@ export class SkillsetRepository {
   async findByName(name: string): Promise<SkillsetDocument | null> {
     const doc = await this.collection.findOne({ name });
     return mapDoc(doc);
+  }
+
+  /**
+   * Skillsets the owner opted in to export as a curated multi-skill plugin
+   * (`exportAsPlugin: true`, #1155). Deliberately NOT filtered by
+   * `memberVisibilityState` (#1161): a skillset exports its PUBLIC-member
+   * SUBSET, so a "restricted" skillset (one private member) still exports the
+   * rest. The actual public-member count — and the ≥2 floor below which the
+   * plugin is dropped — is decided at build time by the mirror (it needs
+   * per-member resolution). Used by the mirror sweep + the marketplace refresh.
+   */
+  async findAllEligibleForMirror(): Promise<SkillsetDocument[]> {
+    const docs = await this.collection
+      .find({ exportAsPlugin: true })
+      .maxTimeMS(SkillsetRepository.MAX_QUERY_MS)
+      .toArray();
+    return docs.map((d) => mapDoc(d)!);
+  }
+
+  /**
+   * Export-eligible skillsets that reference the given skill as a member of
+   * ANY version (#1159). Powers the targeted mirror re-export: when a member
+   * skill publishes a new version or moves a dist-tag, ONLY the skillsets that
+   * actually reference it are rebuilt — not a full sweep.
+   *
+   * Backed by the version repo's multikey `members` index
+   * (`findSkillsetGuidsByMember`, which matches by name OR guid across every
+   * ref grammar), then narrowed to the SAME eligibility predicate as
+   * {@link findAllEligibleForMirror} (`exportAsPlugin: true` only, #1161). No
+   * `memberVisibilityState` filter: a member going private must STILL surface
+   * its skillset here so the targeted re-export rebuilds the public subset
+   * (dropping that member) — or removes the plugin when <2 public remain. Only
+   * the public members' files are ever bundled, so nothing private leaks.
+   */
+  async findEligibleSkillsetsByMember(
+    skillName: string,
+    skillGuid: string,
+  ): Promise<SkillsetDocument[]> {
+    const guids = await this.versionRepo.findSkillsetGuidsByMember(skillName, skillGuid);
+    if (guids.length === 0) return [];
+    const docs = await this.collection
+      .find({
+        _id: { $in: guids } as never,
+        exportAsPlugin: true,
+      })
+      .maxTimeMS(SkillsetRepository.MAX_QUERY_MS)
+      .toArray();
+    logger.debug(
+      { skillName, candidates: guids.length, eligible: docs.length },
+      "findEligibleSkillsetsByMember resolved",
+    );
+    return docs.map((d) => mapDoc(d)!);
   }
 
   /**
@@ -146,8 +233,13 @@ export class SkillsetRepository {
       // from the actual members right after create/publish.
       membersAllPublic: true,
       memberVisibilityState: "all-public",
+      // Plugin-export opt-in (#1155) — default OFF.
+      exportAsPlugin: data.exportAsPlugin ?? false,
       latestVersion: data.latestVersion,
     };
+    // Plugin listing overrides (#1157) — only written when supplied so a fresh
+    // skillset has no `pluginConfig` field at all (mirror falls back to fields).
+    if (data.pluginConfig) doc.pluginConfig = data.pluginConfig;
 
     try {
       await this.collection.insertOne(doc as never);
@@ -182,8 +274,20 @@ export class SkillsetRepository {
       if (data.sharedWithOrgs !== undefined) setFields.sharedWithOrgs = data.sharedWithOrgs;
     }
     if (data.latestVersion !== undefined) setFields.latestVersion = data.latestVersion;
+    // #1155 — only an explicit boolean flips the opt-in; omission preserves it.
+    if (data.exportAsPlugin !== undefined) setFields.exportAsPlugin = data.exportAsPlugin;
+    // #1157 — three-state plugin overrides: object replaces, null clears
+    // ($unset so the mirror falls back to skillset fields), undefined no-ops.
+    const unsetFields: Record<string, unknown> = {};
+    if (data.pluginConfig === null) {
+      unsetFields.pluginConfig = "";
+    } else if (data.pluginConfig !== undefined) {
+      setFields.pluginConfig = data.pluginConfig;
+    }
 
-    await this.collection.updateOne({ _id: skillsetId(guid) }, { $set: setFields });
+    const updateDoc: Record<string, unknown> = { $set: setFields };
+    if (Object.keys(unsetFields).length > 0) updateDoc.$unset = unsetFields;
+    await this.collection.updateOne({ _id: skillsetId(guid) }, updateDoc);
     logger.info({ guid }, "Skillset updated");
     return (await this.findByGuid(guid))!;
   }
@@ -215,6 +319,23 @@ export class SkillsetRepository {
       { guid, memberVisibilityState: derived.memberVisibilityState },
       "Skillset derived visibility recomputed",
     );
+  }
+
+  /**
+   * Advance ONLY the cached `latestVersion` pointer (#1162). Used by the
+   * reactive, system-driven revision bump (a member skill's resolved version
+   * moved) — deliberately does NOT touch `updatedBy` / `updatedOn`, mirroring
+   * {@link setDerivedVisibility}: the bump reflects a member's change, not an
+   * owner edit, so it must not move the skillset's audit timestamps. An owner
+   * publish, by contrast, advances the pointer through `update` (which DOES
+   * stamp the audit fields, correctly).
+   */
+  async advanceLatestVersion(guid: string, version: string): Promise<void> {
+    await this.collection.updateOne(
+      { _id: skillsetId(guid) },
+      { $set: { latestVersion: version } },
+    );
+    logger.debug({ guid, version }, "Skillset latestVersion advanced (reactive bump)");
   }
 
   /**
@@ -398,6 +519,27 @@ function mapDoc(doc: Document | null): SkillsetDocument | null {
     membersAllPublic: doc.membersAllPublic === undefined ? true : doc.membersAllPublic === true,
     memberVisibilityState:
       (doc.memberVisibilityState as SkillsetMemberVisibilityState | undefined) ?? "all-public",
+    // Plugin-export opt-in (#1155) — absent on pre-feature docs ⇒ false.
+    exportAsPlugin: doc.exportAsPlugin === true,
+    // Plugin listing overrides (#1157) — undefined when unset/legacy.
+    pluginConfig: coercePluginConfig(doc.pluginConfig),
     latestVersion: doc.latestVersion ?? "1.0",
   };
+}
+
+/**
+ * Defensively coerce a stored `pluginConfig` (#1157) into the typed override
+ * shape, dropping any field of the wrong type. Returns `undefined` when nothing
+ * usable is present so callers can cleanly fall back to the skillset fields.
+ */
+function coercePluginConfig(raw: unknown): SkillsetPluginOverrides | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const r = raw as Record<string, unknown>;
+  const out: SkillsetPluginOverrides = {};
+  if (typeof r.displayName === "string") out.displayName = r.displayName;
+  if (typeof r.description === "string") out.description = r.description;
+  if (Array.isArray(r.keywords)) {
+    out.keywords = r.keywords.filter((k): k is string => typeof k === "string");
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
 }

@@ -20,12 +20,14 @@ const useSkillset = vi.fn();
 const useSkillsetVersions = vi.fn();
 const useSkillsetClosure = vi.fn();
 const useDeleteSkillset = vi.fn();
+const useUpdatePluginExport = vi.fn();
 
 vi.mock("@/hooks/useSkillsets", () => ({
   useSkillset: (...a: unknown[]) => useSkillset(...a),
   useSkillsetVersions: (...a: unknown[]) => useSkillsetVersions(...a),
   useSkillsetClosure: (...a: unknown[]) => useSkillsetClosure(...a),
   useDeleteSkillset: (...a: unknown[]) => useDeleteSkillset(...a),
+  useUpdatePluginExport: (...a: unknown[]) => useUpdatePluginExport(...a),
 }));
 
 vi.mock("@/stores/authStore", () => ({
@@ -57,6 +59,14 @@ vi.mock("@/components/skillset/SkillsetMemberViewer", () => ({
   SkillsetMemberViewer: ({ members }: { members: string[] }) => (
     <div data-testid="member-viewer">{members.join(" ")}</div>
   ),
+}));
+
+// The plugin-export card (#1157) calls useGithubRepo (react-query). This page
+// test renders without a QueryClientProvider, so stub the hook; `data:
+// undefined` keeps the install snippet hidden (the card's own gating + modal
+// are covered by SkillsetPluginExportCard.test).
+vi.mock("@/hooks/useGithubMirror", () => ({
+  useGithubRepo: () => ({ data: undefined }),
 }));
 
 import { SkillsetDetailPage } from "./SkillsetDetailPage";
@@ -97,6 +107,7 @@ beforeEach(() => {
     },
   });
   useDeleteSkillset.mockReturnValue({ mutateAsync: vi.fn(), isPending: false });
+  useUpdatePluginExport.mockReturnValue({ mutateAsync: vi.fn(), isPending: false });
 });
 
 afterEach(() => {

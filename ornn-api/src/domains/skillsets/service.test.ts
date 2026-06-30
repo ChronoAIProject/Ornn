@@ -138,6 +138,8 @@ function makeSkillsetDeps(
       createdBy: string;
       isPrivate?: boolean;
       latestVersion: string;
+      exportAsPlugin?: boolean;
+      pluginConfig?: SkillsetDocument["pluginConfig"];
     }) => {
       const now = new Date();
       const doc: SkillsetDocument = {
@@ -153,6 +155,10 @@ function makeSkillsetDeps(
         isPrivate: data.isPrivate ?? true,
         sharedWithUsers: [],
         sharedWithOrgs: [],
+        // #1155 — persist the plugin-export opt-in (default OFF).
+        exportAsPlugin: data.exportAsPlugin ?? false,
+        // #1157 — optional listing overrides.
+        ...(data.pluginConfig ? { pluginConfig: data.pluginConfig } : {}),
         latestVersion: data.latestVersion,
       };
       state.skillsets.set(data.guid, doc);
@@ -162,6 +168,8 @@ function makeSkillsetDeps(
     update: async (g: string, patch: Record<string, unknown>) => {
       const cur = state.skillsets.get(g)!;
       const next = { ...cur, ...patch, updatedOn: new Date() } as SkillsetDocument;
+      // #1157 — mirror the repo's three-state `pluginConfig`: `null` clears.
+      if (patch.pluginConfig === null) delete next.pluginConfig;
       state.skillsets.set(g, next);
       state.byName.set(next.name, next);
       return next;
@@ -202,6 +210,14 @@ function makeSkillsetDeps(
       state.byName.set(next.name, next);
       return next;
     },
+    // #1162 — reactive bump advances only the pointer, no audit-field touch.
+    advanceLatestVersion: async (g: string, version: string) => {
+      const cur = state.skillsets.get(g);
+      if (!cur) return;
+      const next = { ...cur, latestVersion: version } as SkillsetDocument;
+      state.skillsets.set(g, next);
+      state.byName.set(next.name, next);
+    },
     hardDelete: async (g: string) => {
       const doc = state.skillsets.get(g);
       if (doc) state.byName.delete(doc.name);
@@ -220,6 +236,7 @@ function makeSkillsetDeps(
       instructions: string;
       tags: string[];
       members: string[];
+      resolvedMembers?: string[] | undefined;
       createdBy: string;
     }) => {
       const id = `${data.skillsetGuid}@${data.version}`;
@@ -237,6 +254,8 @@ function makeSkillsetDeps(
         instructions: data.instructions,
         tags: data.tags,
         members: data.members,
+        // #1162 — store the snapshot when supplied (create/publish/auto-bump).
+        ...(data.resolvedMembers !== undefined ? { resolvedMembers: data.resolvedMembers } : {}),
         createdBy: data.createdBy,
         createdOn: new Date(),
       };
@@ -245,6 +264,11 @@ function makeSkillsetDeps(
     },
     findBySkillsetAndVersion: async (g: string, v: string) =>
       state.versions.find((x) => x.skillsetGuid === g && x.version === v) ?? null,
+    // #1162 — backfill / in-place set of the resolved-member snapshot.
+    setResolvedMembers: async (g: string, v: string, resolvedMembers: string[]) => {
+      const doc = state.versions.find((x) => x.skillsetGuid === g && x.version === v);
+      if (doc) doc.resolvedMembers = resolvedMembers;
+    },
     findSkillsetGuidsByMember: async (skillName: string, skillGuid: string) => {
       const guids = new Set<string>();
       for (const v of state.versions) {
@@ -329,7 +353,6 @@ describe("SkillsetService — getSkillsetForRead (member-derived read gate, #113
         kind: "generic",
         tags: [],
         members: ["pdf-tools@1.0", "secret-tools@1.0"],
-        version: "1.0",
       },
       { userId: "owner-1" },
     );
@@ -371,7 +394,6 @@ describe("SkillsetService — getSkillsetForRead (member-derived read gate, #113
         kind: "generic",
         tags: [],
         members: ["pdf-tools@1.0", "csv-tools@1.0"],
-        version: "1.0",
       },
       { userId: "owner-1" },
     );
@@ -428,7 +450,6 @@ describe("SkillsetService — recomputeForChangedSkill cascade (#1136)", () => {
         kind: "generic",
         tags: [],
         members: ["pdf-tools@1.0", "secret-tools@1.0"],
-        version: "1.0",
       },
       { userId: "owner-1" },
     );
@@ -472,7 +493,6 @@ describe("SkillsetService — recomputeForChangedSkill cascade (#1136)", () => {
         kind: "generic",
         tags: [],
         members: ["pdf-tools@1.0", "my-tools@1.0"],
-        version: "1.0",
       },
       { userId: "owner-1" },
     );
@@ -506,7 +526,6 @@ describe("SkillsetService — recomputeForChangedSkill cascade (#1136)", () => {
         kind: "generic",
         tags: [],
         members: ["pdf-tools@1.0", "csv-tools@1.0"],
-        version: "1.0",
       },
       { userId: "owner-1" },
     );
@@ -531,7 +550,6 @@ describe("SkillsetService — derived visibility on create/publish (#1136)", () 
         kind: "generic",
         tags: [],
         members: ["pdf-tools@1.0", "csv-tools@1.0"],
-        version: "1.0",
       },
       { userId: "owner-1" },
     );
@@ -562,7 +580,6 @@ describe("SkillsetService — derived visibility on create/publish (#1136)", () 
         kind: "generic",
         tags: [],
         members: ["pdf-tools@1.0", "secret-tools@1.0"],
-        version: "1.0",
       },
       { userId: "owner-1" },
     );
@@ -595,7 +612,6 @@ describe("SkillsetService — derived visibility on create/publish (#1136)", () 
         kind: "generic",
         tags: [],
         members: ["pdf-tools@1.0", "csv-tools@1.0"],
-        version: "1.0",
       },
       { userId: "owner-1" },
     );
@@ -606,7 +622,6 @@ describe("SkillsetService — derived visibility on create/publish (#1136)", () 
       {
         instructions: "p",
         members: ["pdf-tools@1.0", "secret-tools@1.0"],
-        version: "1.1",
       },
       OWNER,
     );
@@ -630,7 +645,6 @@ describe("SkillsetService — create / publish (immutable versioning)", () => {
         kind: "generic",
         tags: ["t"],
         members: ["pdf-tools@1.0", "csv-tools@1.0"],
-        version: "1.0",
       },
       { userId: "owner-1" },
     );
@@ -645,7 +659,6 @@ describe("SkillsetService — create / publish (immutable versioning)", () => {
         description: "v2",
         instructions: "prompt-v2: csv-tools first this time",
         members: ["pdf-tools@1.0", "csv-tools@1.0"],
-        version: "1.1",
       },
       OWNER,
     );
@@ -667,47 +680,14 @@ describe("SkillsetService — create / publish (immutable versioning)", () => {
     expect(state.versions).toHaveLength(2);
   });
 
-  it("re-publishing the current version is rejected (non-incrementing)", async () => {
-    // Republishing the SAME version is a non-incrementing publish — the
-    // strict-increment guard catches it (mirrors the skill publish path,
-    // where `!isGreater` rejects equal versions before the storage-level
-    // duplicate `_id` check is ever reached).
+  it("every owner publish auto-bumps the minor; the owner never types a version (#1162)", async () => {
+    // The system controls the revision now — there is no owner-typed version and
+    // no strict-increment guard. Each publish is a qualifying owner edit, so the
+    // minor always advances (1.0 → 1.1 → 1.2), even when the members are
+    // unchanged. The major never auto-bumps.
     const { skills, versions } = twoMemberSkills();
     const skillService = makeSkillService(skills, versions);
     const { deps } = makeSkillsetDeps(skillService);
-    const service = new SkillsetService(deps);
-    const created = await service.createSkillset(
-      {
-        name: "review-set",
-        description: "v1",
-        instructions: "p",
-        kind: "generic",
-        tags: [],
-        members: ["pdf-tools@1.0", "csv-tools@1.0"],
-        version: "1.0",
-      },
-      { userId: "owner-1" },
-    );
-    let code = "";
-    try {
-      await service.publishVersion(
-        created.guid,
-        { instructions: "p", members: ["pdf-tools@1.0", "csv-tools@1.0"], version: "1.0" },
-        OWNER,
-      );
-    } catch (err) {
-      code = (err as AppError).code;
-    }
-    expect(code).toBe("VERSION_NOT_INCREMENTED");
-  });
-
-  it("rejects a lower version without regressing latestVersion (#969)", async () => {
-    // latestVersion advanced to 2.0; publishing a never-used LOWER 1.5 must
-    // be rejected (VERSION_NOT_INCREMENTED) AND must not regress the pointer
-    // or leak a stale version row into "latest".
-    const { skills, versions } = twoMemberSkills();
-    const skillService = makeSkillService(skills, versions);
-    const { deps, state } = makeSkillsetDeps(skillService);
     const service = new SkillsetService(deps);
     const members = ["pdf-tools@1.0", "csv-tools@1.0"];
 
@@ -719,27 +699,45 @@ describe("SkillsetService — create / publish (immutable versioning)", () => {
         kind: "generic",
         tags: [],
         members,
-        version: "1.0",
       },
       { userId: "owner-1" },
     );
-    const guid = created.guid;
-    await service.publishVersion(guid, { instructions: "p", members, version: "1.1" }, OWNER);
-    await service.publishVersion(guid, { instructions: "p", members, version: "2.0" }, OWNER);
-    expect((await service.getSkillset(guid)).latestVersion).toBe("2.0");
+    expect(created.version).toBe("1.0");
 
-    // (a) lower version is rejected with the version-not-incremented code.
-    let code = "";
-    try {
-      await service.publishVersion(guid, { instructions: "p", members, version: "1.5" }, OWNER);
-    } catch (err) {
-      code = (err as AppError).code;
-    }
-    expect(code).toBe("VERSION_NOT_INCREMENTED");
+    const after1 = await service.publishVersion(created.guid, { instructions: "p", members }, OWNER);
+    expect(after1.version).toBe("1.1");
+    expect(after1.latestVersion).toBe("1.1");
 
-    // (b) the pointer did NOT regress and no stale 1.5 row leaked into latest.
-    expect((await service.getSkillset(guid)).latestVersion).toBe("2.0");
-    expect(state.versions.some((v) => v.version === "1.5")).toBe(false);
+    const after2 = await service.publishVersion(created.guid, { instructions: "p", members }, OWNER);
+    expect(after2.version).toBe("1.2");
+    expect(after2.latestVersion).toBe("1.2");
+  });
+
+  it("create snapshots resolved members; each publish writes a fresh snapshot (#1162)", async () => {
+    const { skills, versions } = twoMemberSkills();
+    const skillService = makeSkillService(skills, versions);
+    const { deps, state } = makeSkillsetDeps(skillService);
+    const service = new SkillsetService(deps);
+    const members = ["pdf-tools@1.0", "csv-tools@1.0"];
+
+    const created = await service.createSkillset(
+      {
+        name: "snap-set",
+        description: "v1",
+        instructions: "p",
+        kind: "generic",
+        tags: [],
+        members,
+      },
+      { userId: "owner-1" },
+    );
+    // The 1.0 revision records the concrete resolved member versions (sorted).
+    const v10 = state.versions.find((v) => v._id === `${created.guid}@1.0`)!;
+    expect(v10.resolvedMembers).toEqual(["csv-tools@1.0", "pdf-tools@1.0"]);
+
+    await service.publishVersion(created.guid, { instructions: "p", members }, OWNER);
+    const v11 = state.versions.find((v) => v._id === `${created.guid}@1.1`)!;
+    expect(v11.resolvedMembers).toEqual(["csv-tools@1.0", "pdf-tools@1.0"]);
   });
 
   it("create rejects a duplicate skillset name", async () => {
@@ -754,7 +752,6 @@ describe("SkillsetService — create / publish (immutable versioning)", () => {
       kind: "generic" as const,
       tags: [],
       members: ["pdf-tools@1.0", "csv-tools@1.0"],
-      version: "1.0",
     };
     await service.createSkillset(input, { userId: "owner-1" });
     let code = "";
@@ -764,6 +761,412 @@ describe("SkillsetService — create / publish (immutable versioning)", () => {
       code = (err as AppError).code;
     }
     expect(code).toBe("skillset_name_exists");
+  });
+});
+
+describe("SkillsetService — reactive revision bump on member-version change (#1162)", () => {
+  /** Skillset with a moving (`@latest`) pdf member + a pinned csv member. */
+  async function seed() {
+    const { skills, versions } = twoMemberSkills();
+    const skillService = makeSkillService(skills, versions);
+    const { deps, state } = makeSkillsetDeps(skillService);
+    const service = new SkillsetService(deps);
+    const created = await service.createSkillset(
+      {
+        name: "reactive-set",
+        description: "d",
+        instructions: "p",
+        kind: "generic",
+        tags: [],
+        members: ["pdf-tools@latest", "csv-tools@1.0"],
+      },
+      { userId: "owner-1" },
+    );
+    return { service, state, skills, versions, guid: created.guid };
+  }
+
+  /** Mutate the fake so `pdf-tools@latest` now resolves to a higher version. */
+  function publishPdfVersion(skills: SkillDocument[], versions: SkillVersionDocument[], v: string) {
+    const pdf = skills.find((s) => s.name === "pdf-tools")!;
+    pdf.latestVersion = v;
+    const [maj = "1", min = "0"] = v.split(".");
+    versions.push(
+      skillVersion({
+        _id: `g-a@${v}`,
+        skillGuid: "g-a",
+        version: v,
+        majorVersion: Number(maj),
+        minorVersion: Number(min),
+      }),
+    );
+  }
+
+  it("create records the resolved-member snapshot at 1.0", async () => {
+    const { state, guid } = await seed();
+    const v10 = state.versions.find((v) => v._id === `${guid}@1.0`)!;
+    expect(v10.resolvedMembers).toEqual(["csv-tools@1.0", "pdf-tools@1.0"]);
+  });
+
+  it("a no-op member sync creates NO new revision (idempotent, no churn)", async () => {
+    const { service, state, guid } = await seed();
+    await service.bumpRevisionsForChangedMember({ guid: "g-a", name: "pdf-tools" });
+    expect(state.versions.filter((v) => v.skillsetGuid === guid)).toHaveLength(1);
+    expect((await service.getSkillset(guid)).latestVersion).toBe("1.0");
+  });
+
+  it("a member-version increment cuts a new revision with the fresh snapshot", async () => {
+    const { service, state, skills, versions, guid } = await seed();
+    // pdf-tools publishes 1.1 → the @latest member now resolves higher.
+    publishPdfVersion(skills, versions, "1.1");
+
+    await service.bumpRevisionsForChangedMember({ guid: "g-a", name: "pdf-tools" });
+
+    const setVersions = state.versions.filter((v) => v.skillsetGuid === guid);
+    expect(setVersions).toHaveLength(2);
+    const v11 = state.versions.find((v) => v._id === `${guid}@1.1`)!;
+    expect(v11.resolvedMembers).toEqual(["csv-tools@1.0", "pdf-tools@1.1"]);
+    // The authored member refs are carried forward verbatim — only the
+    // resolved versions moved.
+    expect(v11.members).toEqual(["pdf-tools@latest", "csv-tools@1.0"]);
+    expect((await service.getSkillset(guid)).latestVersion).toBe("1.1");
+  });
+
+  it("a second bump with no further change does NOT churn another revision", async () => {
+    const { service, state, skills, versions, guid } = await seed();
+    publishPdfVersion(skills, versions, "1.1");
+    await service.bumpRevisionsForChangedMember({ guid: "g-a", name: "pdf-tools" });
+    // Nothing changed since → the snapshot now matches → no new revision.
+    await service.bumpRevisionsForChangedMember({ guid: "g-a", name: "pdf-tools" });
+    expect(state.versions.filter((v) => v.skillsetGuid === guid)).toHaveLength(2);
+    expect((await service.getSkillset(guid)).latestVersion).toBe("1.1");
+  });
+
+  it("no-ops when no skillset references the changed skill", async () => {
+    const { service, state, guid } = await seed();
+    await service.bumpRevisionsForChangedMember({ guid: "g-zzz", name: "unrelated" });
+    expect(state.versions.filter((v) => v.skillsetGuid === guid)).toHaveLength(1);
+  });
+});
+
+describe("SkillsetService — reactive revision bump on member VISIBILITY change (#1165)", () => {
+  /**
+   * Three public member skills. The exported subset is all three at create, so
+   * dropping one to private still leaves a meaningful set — mirroring the live
+   * 3→2 bug report.
+   */
+  function threeMemberSkills(): { skills: SkillDocument[]; versions: SkillVersionDocument[] } {
+    const a = skillDoc({ guid: "g-a", name: "pdf-tools", latestVersion: "1.0" });
+    const b = skillDoc({ guid: "g-b", name: "csv-tools", latestVersion: "1.0" });
+    const c = skillDoc({ guid: "g-c", name: "img-tools", latestVersion: "1.0" });
+    return {
+      skills: [a, b, c],
+      versions: [
+        skillVersion({ _id: "g-a@1.0", skillGuid: "g-a", version: "1.0" }),
+        skillVersion({ _id: "g-b@1.0", skillGuid: "g-b", version: "1.0" }),
+        skillVersion({ _id: "g-c@1.0", skillGuid: "g-c", version: "1.0" }),
+      ],
+    };
+  }
+
+  async function seed3() {
+    const { skills, versions } = threeMemberSkills();
+    const skillService = makeSkillService(skills, versions);
+    const { deps, state } = makeSkillsetDeps(skillService);
+    const service = new SkillsetService(deps);
+    const created = await service.createSkillset(
+      {
+        name: "vis-set",
+        description: "d",
+        instructions: "p",
+        kind: "generic",
+        tags: [],
+        members: ["pdf-tools@1.0", "csv-tools@1.0", "img-tools@1.0"],
+      },
+      { userId: "owner-1" },
+    );
+    return { service, state, skills, guid: created.guid };
+  }
+
+  it("a member going private bumps the minor; the new snapshot is the public subset", async () => {
+    const { service, state, skills, guid } = await seed3();
+    // 1.0 snapshot is all three (every member public at create).
+    const v10 = state.versions.find((v) => v._id === `${guid}@1.0`)!;
+    expect(v10.resolvedMembers).toEqual(["csv-tools@1.0", "img-tools@1.0", "pdf-tools@1.0"]);
+
+    // img-tools goes private — same resolved VERSION, but it drops from the
+    // exported set, so the public snapshot moves → a revision bump (the #1165 fix:
+    // without it the snapshot was unchanged and Claude Code kept the stale bundle).
+    skills.find((s) => s.name === "img-tools")!.isPrivate = true;
+    await service.bumpRevisionsForChangedMember({ guid: "g-c", name: "img-tools" });
+
+    expect((await service.getSkillset(guid)).latestVersion).toBe("1.1");
+    const v11 = state.versions.find((v) => v._id === `${guid}@1.1`)!;
+    expect(v11.resolvedMembers).toEqual(["csv-tools@1.0", "pdf-tools@1.0"]);
+    // Authored member refs are carried forward verbatim — img-tools stays a
+    // member of the set; only its EXPORTED contribution dropped.
+    expect(v11.members).toEqual(["pdf-tools@1.0", "csv-tools@1.0", "img-tools@1.0"]);
+  });
+
+  it("a member going public again bumps + re-includes it in the snapshot", async () => {
+    const { service, state, skills, guid } = await seed3();
+    const img = skills.find((s) => s.name === "img-tools")!;
+
+    img.isPrivate = true;
+    await service.bumpRevisionsForChangedMember({ guid: "g-c", name: "img-tools" });
+    expect((await service.getSkillset(guid)).latestVersion).toBe("1.1");
+
+    // Back to public → re-enters the exported subset → another bump.
+    img.isPrivate = false;
+    await service.bumpRevisionsForChangedMember({ guid: "g-c", name: "img-tools" });
+    expect((await service.getSkillset(guid)).latestVersion).toBe("1.2");
+    const v12 = state.versions.find((v) => v._id === `${guid}@1.2`)!;
+    expect(v12.resolvedMembers).toEqual(["csv-tools@1.0", "img-tools@1.0", "pdf-tools@1.0"]);
+  });
+
+  it("a no-op visibility event (public subset unchanged) does NOT bump", async () => {
+    const { service, state, guid } = await seed3();
+    // Nothing actually flipped — the public subset is identical → no churn,
+    // preserving the mirror's deterministic no-op-commit skip.
+    await service.bumpRevisionsForChangedMember({ guid: "g-c", name: "img-tools" });
+    expect(state.versions.filter((v) => v.skillsetGuid === guid)).toHaveLength(1);
+    expect((await service.getSkillset(guid)).latestVersion).toBe("1.0");
+  });
+
+  it("a pre-#1165 all-members snapshot self-corrects with ONE bump, then is idempotent", async () => {
+    const { service, state, skills, guid } = await seed3();
+    // Simulate a doc cut before #1165: img-tools is now private, but the stored
+    // snapshot still lists it (the old all-members logic the backfill leaves
+    // untouched). The FIRST reactive event must correct it — exactly once.
+    skills.find((s) => s.name === "img-tools")!.isPrivate = true;
+    const v10 = state.versions.find((v) => v._id === `${guid}@1.0`)!;
+    v10.resolvedMembers = ["csv-tools@1.0", "img-tools@1.0", "pdf-tools@1.0"];
+
+    // First event: public subset (2) differs from the stored 3 → one legit bump.
+    await service.bumpRevisionsForChangedMember({ guid: "g-c", name: "img-tools" });
+    expect((await service.getSkillset(guid)).latestVersion).toBe("1.1");
+    const v11 = state.versions.find((v) => v._id === `${guid}@1.1`)!;
+    expect(v11.resolvedMembers).toEqual(["csv-tools@1.0", "pdf-tools@1.0"]);
+
+    // Second event with nothing further changed → snapshot matches → no churn.
+    await service.bumpRevisionsForChangedMember({ guid: "g-c", name: "img-tools" });
+    expect(state.versions.filter((v) => v.skillsetGuid === guid)).toHaveLength(2);
+    expect((await service.getSkillset(guid)).latestVersion).toBe("1.1");
+  });
+});
+
+describe("SkillsetService — plugin-export opt-in (#1155)", () => {
+  function service() {
+    const { skills, versions } = twoMemberSkills();
+    const skillService = makeSkillService(skills, versions);
+    const { deps, state } = makeSkillsetDeps(skillService);
+    return { svc: new SkillsetService(deps), state };
+  }
+
+  const base = {
+    description: "d",
+    instructions: "p",
+    kind: "generic" as const,
+    tags: [],
+    members: ["pdf-tools@1.0", "csv-tools@1.0"],
+  };
+
+  it("create always defaults exportAsPlugin to false (no create-time opt-in, #1157)", async () => {
+    const { svc } = service();
+    const created = await svc.createSkillset(
+      { ...base, name: "noexp-set" },
+      { userId: "owner-1" },
+    );
+    expect(created.exportAsPlugin).toBe(false);
+    expect(created.pluginConfig).toBeUndefined();
+  });
+
+  it("getLatestForMirror returns the latest version's members + master prompt", async () => {
+    const { svc } = service();
+    const created = await svc.createSkillset(
+      { ...base, instructions: "Run pdf then csv.", name: "mir-set" },
+      { userId: "owner-1" },
+    );
+    const latest = await svc.getLatestForMirror(created.guid);
+    expect(latest).toEqual({
+      members: ["pdf-tools@1.0", "csv-tools@1.0"],
+      instructions: "Run pdf then csv.",
+    });
+  });
+
+  it("getLatestForMirror returns null for an unknown skillset", async () => {
+    const { svc } = service();
+    expect(await svc.getLatestForMirror("nope")).toBeNull();
+  });
+});
+
+describe("SkillsetService.setPluginExport (#1157)", () => {
+  const STRANGER: ActorContext = {
+    userId: "stranger",
+    memberships: [],
+    isPlatformAdmin: false,
+    membershipsResolved: true,
+  };
+
+  const base = {
+    description: "A research bundle",
+    instructions: "p",
+    kind: "generic" as const,
+    tags: ["research"],
+    members: ["pdf-tools@1.0", "csv-tools@1.0"],
+  };
+
+  /** All-public skillset (two public members), owned by owner-1. */
+  async function seedPublic() {
+    const { skills, versions } = twoMemberSkills();
+    const skillService = makeSkillService(skills, versions);
+    const { deps, state } = makeSkillsetDeps(skillService);
+    const svc = new SkillsetService(deps);
+    const created = await svc.createSkillset(
+      { ...base, name: "pub-set" },
+      { userId: "owner-1" },
+    );
+    return { svc, state, guid: created.guid };
+  }
+
+  /** Restricted skillset (one private member owned by another user). */
+  async function seedRestricted() {
+    const a = skillDoc({ guid: "g-a", name: "pdf-tools", latestVersion: "1.0", isPrivate: false });
+    const b = skillDoc({
+      guid: "g-b",
+      name: "secret-tools",
+      latestVersion: "1.0",
+      isPrivate: true,
+      createdBy: "other-user",
+    });
+    const skillService = makeSkillService(
+      [a, b],
+      [
+        skillVersion({ _id: "g-a@1.0", skillGuid: "g-a", version: "1.0" }),
+        skillVersion({ _id: "g-b@1.0", skillGuid: "g-b", version: "1.0" }),
+      ],
+    );
+    const { deps } = makeSkillsetDeps(skillService);
+    const svc = new SkillsetService(deps);
+    const created = await svc.createSkillset(
+      { ...base, name: "restr-set", members: ["pdf-tools@1.0", "secret-tools@1.0"] },
+      { userId: "owner-1" },
+    );
+    return { svc, guid: created.guid };
+  }
+
+  it("enabling persists exportAsPlugin + the listing overrides", async () => {
+    const { svc, guid } = await seedPublic();
+    const updated = await svc.setPluginExport(
+      guid,
+      {
+        enabled: true,
+        displayName: "Research Bundle",
+        description: "A curated set",
+        keywords: ["rag", "search"],
+      },
+      OWNER,
+    );
+    expect(updated.exportAsPlugin).toBe(true);
+    expect(updated.pluginConfig).toEqual({
+      displayName: "Research Bundle",
+      description: "A curated set",
+      keywords: ["rag", "search"],
+    });
+  });
+
+  it("enabling with no overrides stores none (mirror falls back to skillset fields)", async () => {
+    const { svc, guid } = await seedPublic();
+    const updated = await svc.setPluginExport(guid, { enabled: true }, OWNER);
+    expect(updated.exportAsPlugin).toBe(true);
+    expect(updated.pluginConfig).toBeUndefined();
+  });
+
+  it("rejects a non-owner with forbidden", async () => {
+    const { svc, guid } = await seedPublic();
+    let code = "";
+    try {
+      await svc.setPluginExport(guid, { enabled: true }, STRANGER);
+    } catch (err) {
+      code = (err as AppError).code;
+    }
+    expect(code).toBe("forbidden");
+  });
+
+  it("rejects enabling when fewer than 2 public members remain (#1161)", async () => {
+    // restr-set has one public (pdf-tools) + one private (secret-tools) member,
+    // so only one public member remains — below the export floor.
+    const { svc, guid } = await seedRestricted();
+    let code = "";
+    try {
+      await svc.setPluginExport(guid, { enabled: true }, OWNER);
+    } catch (err) {
+      code = (err as AppError).code;
+    }
+    expect(code).toBe("skillset_too_few_public_members");
+  });
+
+  it("allows enabling a restricted skillset that still has ≥2 public members (#1161)", async () => {
+    // Two public members + one private: the export bundles the public subset, so
+    // the opt-in is allowed even though the skillset is restricted on Ornn.
+    const a = skillDoc({ guid: "g-a", name: "pdf-tools", latestVersion: "1.0", isPrivate: false });
+    const b = skillDoc({ guid: "g-b", name: "csv-tools", latestVersion: "1.0", isPrivate: false });
+    const c = skillDoc({
+      guid: "g-c",
+      name: "secret-tools",
+      latestVersion: "1.0",
+      isPrivate: true,
+      createdBy: "other-user",
+    });
+    const skillService = makeSkillService(
+      [a, b, c],
+      [
+        skillVersion({ _id: "g-a@1.0", skillGuid: "g-a", version: "1.0" }),
+        skillVersion({ _id: "g-b@1.0", skillGuid: "g-b", version: "1.0" }),
+        skillVersion({ _id: "g-c@1.0", skillGuid: "g-c", version: "1.0" }),
+      ],
+    );
+    const { deps } = makeSkillsetDeps(skillService);
+    const svc = new SkillsetService(deps);
+    const created = await svc.createSkillset(
+      {
+        ...base,
+        name: "two-public-set",
+        members: ["pdf-tools@1.0", "csv-tools@1.0", "secret-tools@1.0"],
+      },
+      { userId: "owner-1" },
+    );
+    const updated = await svc.setPluginExport(created.guid, { enabled: true }, OWNER);
+    expect(updated.exportAsPlugin).toBe(true);
+    expect(updated.publicMemberCount).toBe(2);
+  });
+
+  it("detail surfaces the public-member count (#1161)", async () => {
+    const { svc, guid } = await seedPublic();
+    const detail = await svc.getSkillset(guid);
+    expect(detail.publicMemberCount).toBe(2);
+  });
+
+  it("disabling clears the opt-in + any stored overrides", async () => {
+    const { svc, guid } = await seedPublic();
+    await svc.setPluginExport(
+      guid,
+      { enabled: true, displayName: "Research Bundle" },
+      OWNER,
+    );
+    const off = await svc.setPluginExport(guid, { enabled: false }, OWNER);
+    expect(off.exportAsPlugin).toBe(false);
+    expect(off.pluginConfig).toBeUndefined();
+  });
+
+  it("404s for an unknown skillset", async () => {
+    const { svc } = await seedPublic();
+    let code = "";
+    try {
+      await svc.setPluginExport("nope", { enabled: true }, OWNER);
+    } catch (err) {
+      code = (err as AppError).code;
+    }
+    expect(code).toBe("skillset_not_found");
   });
 });
 
@@ -787,7 +1190,6 @@ describe("SkillsetService.transferOwnership (#1123)", () => {
         kind: "generic",
         tags: [],
         members: ["pdf-tools@1.0", "csv-tools@1.0"],
-        version: "1.0",
       },
       { userId: "owner-1" },
     );
@@ -857,7 +1259,6 @@ describe("SkillsetService — publish member validation (#969)", () => {
           kind: "generic",
           tags: [],
           members: ["pdf-tools@1.0", "ghost-tools@1.0"],
-          version: "1.0",
         },
         { userId: "owner-1" },
       );
@@ -906,7 +1307,6 @@ describe("SkillsetService — publish member validation (#969)", () => {
           kind: "consensus-supported",
           tags: [],
           members: ["member-a@1.0", "member-b@1.0"],
-          version: "1.0",
         },
         { userId: "owner-1" },
       );
@@ -947,7 +1347,6 @@ describe("SkillsetService — resolveClosure (roots = members)", () => {
         kind: "generic",
         tags: [],
         members: ["pdf-tools@1.0", "csv-tools@1.0"],
-        version: "1.0",
       },
       { userId: "owner-1" },
     );
@@ -993,7 +1392,6 @@ describe("SkillsetService — resolveClosure (roots = members)", () => {
         kind: "generic",
         tags: [],
         members: ["pdf-tools@1.0", "csv-tools@1.0"],
-        version: "1.0",
       },
       { userId: "owner-1" },
     );
@@ -1031,7 +1429,6 @@ describe("SkillsetService — resolveClosure (roots = members)", () => {
         kind: "generic",
         tags: [],
         members: ["pdf-tools@1.0", "csv-tools@1.0"],
-        version: "1.0",
       },
       { userId: "owner-1" },
     ); // legacy isPrivate defaults true — but it is inert now

@@ -60,12 +60,15 @@ interface BuildOpts {
   userId?: string;
   permissions?: string[];
   service?: Record<string, (...args: unknown[]) => unknown>;
+  /** #1155 — capture mirror-reconcile triggers fired by mutation routes. */
+  fireMirrorReconcile?: () => void;
 }
 
 function buildApp(opts: BuildOpts = {}) {
   const { authenticated = true, userId = OWNER, permissions = [], service = {} } = opts;
   const config: SkillsetRoutesConfig = {
     skillsetService: fakeService(service),
+    ...(opts.fireMirrorReconcile ? { fireMirrorReconcile: opts.fireMirrorReconcile } : {}),
   };
   const app = new Hono();
   if (authenticated) {
@@ -242,6 +245,47 @@ describe("POST /skillsets — scope reuse + gating", () => {
     });
     expect(res.status).toBe(400);
   });
+
+  test("fires the mirror reconcile after a successful create (#1155)", async () => {
+    let fired = 0;
+    const app = buildApp({
+      permissions: [CREATE],
+      service: { createSkillset: async () => detail({ guid: "ss-new" }) },
+      fireMirrorReconcile: () => {
+        fired += 1;
+      },
+    });
+    const res = await app.request("/api/v1/skillsets", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        name: "review-set",
+        description: "d",
+        instructions: "Use a, then b.",
+        members: ["a@1.0", "b@1.0"],
+      }),
+    });
+    expect(res.status).toBe(201);
+    expect(fired).toBe(1);
+  });
+
+  test("does NOT fire the mirror reconcile when create is rejected (#1155)", async () => {
+    let fired = 0;
+    const app = buildApp({
+      permissions: [CREATE],
+      fireMirrorReconcile: () => {
+        fired += 1;
+      },
+    });
+    // Invalid body (1 member) → 400 before the handler body runs.
+    const res = await app.request("/api/v1/skillsets", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "review-set", description: "d", members: ["a@1.0"] }),
+    });
+    expect(res.status).toBe(400);
+    expect(fired).toBe(0);
+  });
 });
 
 describe("PUT/DELETE /skillsets/:id — scope gating", () => {
@@ -250,7 +294,7 @@ describe("PUT/DELETE /skillsets/:id — scope gating", () => {
     const res = await app.request("/api/v1/skillsets/ss-1", {
       method: "PUT",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ version: "1.1", members: ["a@1.0", "b@1.0"] }),
+      body: JSON.stringify({ members: ["a@1.0", "b@1.0"] }),
     });
     expect(res.status).toBe(403);
   });
@@ -264,7 +308,6 @@ describe("PUT/DELETE /skillsets/:id — scope gating", () => {
       method: "PUT",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        version: "1.1",
         instructions: "Use a, then b.",
         members: ["a@1.0", "b@1.0"],
       }),
@@ -288,6 +331,98 @@ describe("PUT/DELETE /skillsets/:id — scope gating", () => {
     expect(res.status).toBe(200);
   });
 
+  test("PUT /plugin-export 403 without ornn:skill:update (#1157)", async () => {
+    const app = buildApp({ permissions: [CREATE] });
+    const res = await app.request("/api/v1/skillsets/ss-1/plugin-export", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ enabled: true }),
+    });
+    expect(res.status).toBe(403);
+  });
+
+  test("PUT /plugin-export 400 on an invalid body (missing enabled) (#1157)", async () => {
+    const app = buildApp({ permissions: [UPDATE] });
+    const res = await app.request("/api/v1/skillsets/ss-1/plugin-export", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ displayName: "x" }),
+    });
+    expect(res.status).toBe(400);
+  });
+
+  test("PUT /plugin-export 200 updates + fires the mirror reconcile (#1157)", async () => {
+    let fired = 0;
+    const captured: unknown[] = [];
+    const app = buildApp({
+      permissions: [UPDATE],
+      service: {
+        setPluginExport: async (...args: unknown[]) => {
+          captured.push(args[1]);
+          return detail({ exportAsPlugin: true });
+        },
+      },
+      fireMirrorReconcile: () => {
+        fired += 1;
+      },
+    });
+    const res = await app.request("/api/v1/skillsets/ss-1/plugin-export", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        enabled: true,
+        displayName: "Research Bundle",
+        keywords: ["rag"],
+      }),
+    });
+    expect(res.status).toBe(200);
+    expect(fired).toBe(1);
+    expect(((await res.json()) as { data: { exportAsPlugin: boolean } }).data.exportAsPlugin).toBe(true);
+    expect(captured[0]).toEqual({ enabled: true, displayName: "Research Bundle", keywords: ["rag"] });
+  });
+
+  test("PUT /plugin-export surfaces a 409 when too few public members (#1157/#1161)", async () => {
+    const app = buildApp({
+      permissions: [UPDATE],
+      service: {
+        setPluginExport: async () => {
+          throw AppError.conflict("skillset_too_few_public_members", "needs ≥2 public members");
+        },
+      },
+    });
+    const res = await app.request("/api/v1/skillsets/ss-1/plugin-export", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ enabled: true }),
+    });
+    expect(res.status).toBe(409);
+    expect(((await res.json()) as { code: string }).code).toBe("skillset_too_few_public_members");
+  });
+
+  test("PUT + DELETE fire the mirror reconcile on success (#1155)", async () => {
+    let fired = 0;
+    const fireMirrorReconcile = () => {
+      fired += 1;
+    };
+    const putApp = buildApp({
+      permissions: [UPDATE],
+      service: { publishVersion: async () => detail({ version: "1.1" }) },
+      fireMirrorReconcile,
+    });
+    await putApp.request("/api/v1/skillsets/ss-1", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ instructions: "Use a, then b.", members: ["a@1.0", "b@1.0"] }),
+    });
+    const delApp = buildApp({
+      permissions: [DELETE],
+      service: { deleteSkillset: async () => undefined },
+      fireMirrorReconcile,
+    });
+    await delApp.request("/api/v1/skillsets/ss-1", { method: "DELETE" });
+    expect(fired).toBe(2);
+  });
+
   test("transfer-ownership 403 without ornn:skill:update", async () => {
     const app = buildApp({ permissions: [] });
     const res = await app.request("/api/v1/skillsets/ss-1/transfer-ownership", {
@@ -298,8 +433,9 @@ describe("PUT/DELETE /skillsets/:id — scope gating", () => {
     expect(res.status).toBe(403);
   });
 
-  test("transfer-ownership 200 delegating to the service", async () => {
+  test("transfer-ownership 200 delegating to the service + firing the mirror reconcile (#1159)", async () => {
     const calls: string[] = [];
+    let fired = 0;
     const app = buildApp({
       permissions: [UPDATE],
       service: {
@@ -307,6 +443,9 @@ describe("PUT/DELETE /skillsets/:id — scope gating", () => {
           calls.push("transferOwnership");
           return { guid: "ss-1", createdBy: "alice" };
         },
+      },
+      fireMirrorReconcile: () => {
+        fired += 1;
       },
     });
     const res = await app.request("/api/v1/skillsets/ss-1/transfer-ownership", {
@@ -316,6 +455,30 @@ describe("PUT/DELETE /skillsets/:id — scope gating", () => {
     });
     expect(res.status).toBe(200);
     expect(calls).toEqual(["transferOwnership"]);
+    // #1159 — the transfer now reconciles the mirror, matching the skill path.
+    expect(fired).toBe(1);
+  });
+
+  test("transfer-ownership does NOT fire the mirror reconcile when rejected (#1159)", async () => {
+    let fired = 0;
+    const app = buildApp({
+      permissions: [UPDATE],
+      service: {
+        transferOwnership: async () => {
+          throw AppError.forbidden("forbidden", "only the owner may transfer");
+        },
+      },
+      fireMirrorReconcile: () => {
+        fired += 1;
+      },
+    });
+    const res = await app.request("/api/v1/skillsets/ss-1/transfer-ownership", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ newOwnerUserId: "alice" }),
+    });
+    expect(res.status).toBe(403);
+    expect(fired).toBe(0);
   });
 
   test("transfer-ownership 400 on a missing newOwnerUserId", async () => {

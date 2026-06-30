@@ -28,6 +28,7 @@ import { SkillsetDependencyGraph } from "@/components/skillset/SkillsetDependenc
 import { SkillsetMemberViewer } from "@/components/skillset/SkillsetMemberViewer";
 import { SkillsetDerivedVisibilityCard } from "@/components/skillset/SkillsetDerivedVisibilityCard";
 import { SkillsetMemberWarningBanner } from "@/components/skillset/SkillsetMemberWarningBanner";
+import { SkillsetPluginExportCard } from "@/components/skillset/SkillsetPluginExportCard";
 import { parseDeps } from "@/lib/skillsetDeps";
 import { useToastStore } from "@/stores/toastStore";
 import { useCurrentUser } from "@/stores/authStore";
@@ -282,9 +283,17 @@ export function SkillsetDetailPage() {
                   </div>
                   <div className="flex items-baseline justify-between gap-2">
                     <dt className="font-mono text-[10px] uppercase tracking-widest text-meta">
-                      {t("skillsetDetail.version", "Version")}
+                      {t("skillsetDetail.revision", "Revision")}
                     </dt>
-                    <dd className="font-mono text-xs text-strong">
+                    <dd
+                      className="font-mono text-xs text-strong"
+                      title={
+                        t(
+                          "skillsetDetail.revisionAutoManaged",
+                          "Auto-managed — the revision bumps on every edit or member-version change.",
+                        ) as string
+                      }
+                    >
                       {skillset.version}
                       {skillset.version === latestVersion && (
                         <span className="ml-1 text-meta">({t("skillsetDetail.latest", "latest")})</span>
@@ -390,6 +399,15 @@ export function SkillsetDetailPage() {
               >
                 <SkillsetClosureViewer items={closure?.items ?? []} />
               </RailCard>
+
+              {/* ── Claude Code plugin export (#1157) ── owner action (export +
+                  configure + stop) directly ABOVE the visibility card; any viewer
+                  sees the install snippet once the skillset is exported. */}
+              <SkillsetPluginExportCard
+                skillset={skillset}
+                isOwner={isOwner}
+                idOrName={id}
+              />
 
               {/* ── Visibility card ── derived from members (#1136), read-only:
                   a skillset has no owner-set visibility, so there is no
