@@ -65,6 +65,15 @@ export interface MirrorSettingsReader {
  */
 export interface MirrorSkillsetRepo {
   findAllEligibleForMirror(): Promise<SkillsetDocument[]>;
+  /**
+   * Export-eligible skillsets referencing the given member skill (#1159).
+   * Drives the targeted re-export so a member content / dist-tag change
+   * rebuilds only the affected `skillsets/<name>/` subtrees, not a full sweep.
+   */
+  findEligibleSkillsetsByMember(
+    skillName: string,
+    skillGuid: string,
+  ): Promise<SkillsetDocument[]>;
 }
 
 /**
@@ -278,6 +287,81 @@ export class MirrorService {
     const client = await this.getActiveClient();
     if (!client) return;
     await this.commitSkillFolderChange(client, name, null, "remove");
+  }
+
+  /**
+   * Targeted re-export (#1159): rebuild ONLY the `skillsets/<name>/` subtrees
+   * of the export-eligible skillsets that reference the given member skill, in
+   * a SINGLE commit. Fired fire-and-forget from the skill content-change paths
+   * (new-version publish, GitHub refresh, dist-tag move) so an exported
+   * skillset referencing the skill via `@latest`/`@tag` reflects the change
+   * immediately instead of waiting up to 24h for the cron reconcile.
+   *
+   * No-ops cleanly when the mirror is disabled, skillset deps are unwired, no
+   * eligible skillset references the skill, or every affected skillset is
+   * unresolvable. Deterministic: an unchanged subtree (e.g. a member ref pinned
+   * to a fixed version, so the resolved-member fingerprint is unmoved) produces
+   * no diff and therefore no commit.
+   *
+   * reconcileInFlight handling: when a full reconcile is already running it
+   * rebuilds EVERY eligible skillset subtree anyway, so we defer to it rather
+   * than racing a second commit against the same branch head. The cron remains
+   * the backstop if that reconcile somehow misses this skill.
+   */
+  async syncSkillsetsForMember(skillGuid: string, skillName: string): Promise<void> {
+    const client = await this.getActiveClient();
+    if (!client) return;
+    if (!this.deps.skillsetRepo || !this.deps.skillsetService) return;
+
+    if (this.reconcileInFlight) {
+      logger.info(
+        { skillGuid, skillName },
+        "syncSkillsetsForMember: reconcile in flight — deferring the targeted re-export to it",
+      );
+      return;
+    }
+
+    const affected = await this.deps.skillsetRepo.findEligibleSkillsetsByMember(
+      skillName,
+      skillGuid,
+    );
+    if (affected.length === 0) {
+      logger.debug(
+        { skillGuid, skillName },
+        "syncSkillsetsForMember: no eligible skillset references this skill",
+      );
+      return;
+    }
+
+    // Build every affected subtree, then commit them all in one shot.
+    const desired = new Map<string, string>();
+    const folderPrefixes: string[] = [];
+    const rebuilt: string[] = [];
+    for (const ss of affected) {
+      const subtree = await this.buildOneSkillsetSubtree(ss);
+      if (!subtree) continue;
+      for (const [path, content] of subtree.files) desired.set(path, content);
+      folderPrefixes.push(`${SKILLSET_FOLDER}/${ss.name}/`);
+      rebuilt.push(ss.name);
+    }
+    if (folderPrefixes.length === 0) {
+      logger.debug(
+        { skillGuid, skillName, affected: affected.length },
+        "syncSkillsetsForMember: affected skillsets unresolvable — nothing to rebuild",
+      );
+      return;
+    }
+
+    const commit = await this.commitFolderSubtrees(client, {
+      folderPrefixes,
+      desired,
+      op: "skillset-sync",
+      message: `mirror: re-export skillsets for ${skillName}`,
+    });
+    logger.info(
+      { skillGuid, skillName, skillsets: rebuilt, committed: !!commit },
+      "syncSkillsetsForMember: targeted re-export complete",
+    );
   }
 
   /**
@@ -596,74 +680,100 @@ export class MirrorService {
     // call is scoped to a single skill (publishSkill / removeSkill), so a
     // bad name fails just that operation, never a batch.
     this.assertSafeSkillFolder(skillName);
+    const folderPrefix = `${skillName}/`;
+    // Re-key the per-skill RELATIVE paths to full mirror paths so the shared
+    // subtree-commit core can diff them against the current tree.
+    const desiredFull = desired
+      ? new Map<string, string>(
+          [...desired].map(([rel, content]) => [`${folderPrefix}${rel}`, content]),
+        )
+      : null;
+    return this.commitFolderSubtrees(client, {
+      folderPrefixes: [folderPrefix],
+      desired: desiredFull,
+      op,
+      message: op === "publish" ? `mirror: publish ${skillName}` : `mirror: remove ${skillName}`,
+    });
+  }
+
+  /**
+   * Shared incremental-commit core (#1153/#1159). Diffs a combined
+   * `fullPath → content` desired map against the current mirror tree,
+   * RESTRICTED to `folderPrefixes`, and writes ONE commit with the add /
+   * update / delete deltas. Generalizes the original per-skill `<name>/` commit
+   * to an arbitrary set of subtrees, so a single member change can re-export
+   * every affected `skillsets/<name>/` subtree in one commit.
+   *
+   *   - `desired === null` removes every blob under the prefixes (the per-skill
+   *     remove case). Otherwise each prefix is fully reconciled to `desired`: a
+   *     current blob under a prefix that isn't in `desired` is deleted.
+   *   - The root marketplace.json (#1153) is refreshed in the SAME commit, but
+   *     stages a blob ONLY when its content actually changed — a content-only
+   *     member bump leaves the plain catalogue entry unmoved → no manifest
+   *     churn.
+   *   - No diff (and no manifest change) ⇒ no commit (deterministic).
+   *   - First-ever push (no branch head) defers to `reconcileAll` so the
+   *     bootstrap commit reflects the whole catalogue; returns null so the
+   *     caller doesn't double-stamp.
+   */
+  private async commitFolderSubtrees(
+    client: GitHubMirrorClient,
+    opts: {
+      folderPrefixes: string[];
+      desired: Map<string, string> | null;
+      op: string;
+      message: string;
+    },
+  ): Promise<{ sha: string; committedAt: Date } | null> {
+    const { folderPrefixes, desired, op, message } = opts;
     const headCommit = await client.getDefaultBranchHead();
     if (!headCommit) {
-      // First-ever push — bootstrap requires an initial commit. Defer
-      // to reconcile so the bootstrap commit reflects the entire
-      // current Ornn catalogue, not just one skill in isolation.
-      // Reconcile stamps everything itself; we return null here so
-      // the caller doesn't double-stamp.
-      logger.warn(
-        { skillName, op },
-        "commitSkillFolderChange: mirror branch missing — running reconcileAll instead",
-      );
+      logger.warn({ op }, "commitFolderSubtrees: mirror branch missing — running reconcileAll instead");
       await this.reconcileAll();
       return null;
     }
-    const currentTreeSha = await client.getCommitTreeSha(headCommit);
-    const currentTree = await client.getRecursiveTree(currentTreeSha);
-    const folderPrefix = `${skillName}/`;
-    const currentInFolder = currentTree
-      .filter((e) => e.type === "blob" && e.path.startsWith(folderPrefix))
+    const currentTree = await client.getRecursiveTree(await client.getCommitTreeSha(headCommit));
+    const currentInFolders = currentTree
+      .filter((e) => e.type === "blob" && folderPrefixes.some((p) => e.path.startsWith(p)))
       .map((e) => ({ path: e.path, sha: e.sha }));
 
     const changes: TreeEntry[] = [];
     if (desired) {
-      // Build add/update entries for every desired path; mark deletes
-      // for any current path that isn't in the desired set.
       const desiredPaths = new Set<string>();
-      for (const [relPath, content] of desired) {
-        const fullPath = `${folderPrefix}${relPath}`;
+      for (const [fullPath, content] of desired) {
         desiredPaths.add(fullPath);
-        const existing = currentInFolder.find((e) => e.path === fullPath);
+        const existing = currentInFolders.find((e) => e.path === fullPath);
         const desiredSha = computeGitBlobSha(content);
         if (existing?.sha === desiredSha) continue;
         const newSha = await client.createBlob(content);
         changes.push({ path: fullPath, mode: "100644", type: "blob", sha: newSha });
       }
-      for (const e of currentInFolder) {
+      for (const e of currentInFolders) {
         if (!desiredPaths.has(e.path)) {
           changes.push({ path: e.path, mode: "100644", type: "blob", sha: null as unknown as string });
         }
       }
     } else {
-      // Remove: drop every blob currently under `<name>/`. An absent
-      // folder leaves `changes` empty here; a stale root manifest entry
-      // is still healed by the manifest refresh below.
-      for (const e of currentInFolder) {
+      for (const e of currentInFolders) {
         changes.push({ path: e.path, mode: "100644", type: "blob", sha: null as unknown as string });
       }
     }
 
-    // The root marketplace.json (#1153) is a function of the WHOLE public
-    // set, so a single-skill publish/remove must refresh it in the same
-    // commit or the catalogue drifts until the next full reconcile.
+    // The root marketplace.json is a function of the WHOLE public set, so a
+    // targeted commit refreshes it too — but only when its content changed.
     await this.appendMarketplaceManifestChange(client, currentTree, changes);
 
     if (changes.length === 0) {
-      logger.info({ skillName, op }, "commitSkillFolderChange: no diff, skipping commit");
+      logger.info({ op, prefixes: folderPrefixes.length }, "commitFolderSubtrees: no diff, skipping commit");
       return null;
     }
 
     const commit = await this.writeCommitAndTag(client, {
       changes,
       parentCommit: headCommit,
-      message:
-        op === "publish"
-          ? `mirror: publish ${skillName}`
-          : `mirror: remove ${skillName}`,
+      message,
     });
-    logger.info({ skillName, op, changes: changes.length }, "commitSkillFolderChange: committed");
+    logger.info({ op, changes: changes.length }, "commitFolderSubtrees: committed");
     return commit;
   }
 
@@ -736,6 +846,40 @@ export class MirrorService {
     const eligible = await this.deps.skillsetRepo.findAllEligibleForMirror();
     logger.info({ count: eligible.length }, "reconcileAll: found plugin-export-eligible skillsets");
 
+    const marketplaceInputs: MarketplacePluginInput[] = [];
+    for (const ss of eligible) {
+      const subtree = await this.buildOneSkillsetSubtree(ss);
+      if (!subtree) continue;
+      for (const [path, content] of subtree.files) desired.set(path, content);
+      marketplaceInputs.push(subtree.marketplace);
+    }
+    return marketplaceInputs;
+  }
+
+  /**
+   * Assemble ONE skillset's `skillsets/<name>/…` subtree (#1155/#1159):
+   * resolve its latest-version members to concrete packages, build the
+   * multi-skill plugin via {@link buildSkillsetPlugin}, and return the file map
+   * already prefixed under `skillsets/<name>/` plus the marketplace catalogue
+   * row. Returns `null` when the skillset can't be exported (unsafe name, no
+   * published version, or skillset deps unwired) so a caller skips it without
+   * aborting a batch. Shared by the full reconcile sweep and the targeted
+   * per-member re-export.
+   */
+  private async buildOneSkillsetSubtree(
+    ss: SkillsetDocument,
+  ): Promise<{ files: Map<string, string>; marketplace: MarketplacePluginInput } | null> {
+    if (!this.deps.skillsetService) return null;
+    // #807 — skip (don't abort) a skillset whose name would escape its subtree.
+    if (!isSafeSkillFolderName(ss.name)) {
+      logger.error({ guid: ss.guid, name: ss.name }, "mirror: skipping unsafe skillset name");
+      return null;
+    }
+    const latest = await this.deps.skillsetService.getLatestForMirror(ss.guid);
+    if (!latest) {
+      logger.warn({ guid: ss.guid, name: ss.name }, "mirror: skillset has no version; skipping");
+      return null;
+    }
     const cfg = await this.deps.settingsService.getMirror();
     const pluginCfg = {
       ornnPublicOrigin: this.deps.ornnPublicOrigin,
@@ -743,44 +887,30 @@ export class MirrorService {
       repoName: cfg.repo,
     };
     const loadMember = this.makeMemberLoader();
-
-    const marketplaceInputs: MarketplacePluginInput[] = [];
-    for (const ss of eligible) {
-      // #807 — skip (don't abort) a skillset whose name would escape its subtree.
-      if (!isSafeSkillFolderName(ss.name)) {
-        logger.error({ guid: ss.guid, name: ss.name }, "reconcileAll: skipping unsafe skillset name");
-        continue;
-      }
-      const latest = await this.deps.skillsetService.getLatestForMirror(ss.guid);
-      if (!latest) {
-        logger.warn({ guid: ss.guid, name: ss.name }, "reconcileAll: skillset has no version; skipping");
-        continue;
-      }
-      const members: SkillsetPluginMember[] = [];
-      for (const ref of latest.members) {
-        const m = await loadMember(ref);
-        if (m) members.push(m);
-        else logger.warn({ skillset: ss.name, ref }, "reconcileAll: skillset member unresolvable; skipping");
-      }
-      const { files, marketplace } = buildSkillsetPlugin(
-        {
-          name: ss.name,
-          description: ss.description,
-          version: ss.latestVersion,
-          tags: ss.tags,
-          instructions: latest.instructions,
-          members,
-          // #1157 — owner listing overrides; the builder resolves the fallbacks.
-          pluginConfig: ss.pluginConfig,
-        },
-        pluginCfg,
-      );
-      for (const [relPath, content] of files) {
-        desired.set(`${SKILLSET_FOLDER}/${ss.name}/${relPath}`, content);
-      }
-      marketplaceInputs.push(marketplace);
+    const members: SkillsetPluginMember[] = [];
+    for (const ref of latest.members) {
+      const m = await loadMember(ref);
+      if (m) members.push(m);
+      else logger.warn({ skillset: ss.name, ref }, "mirror: skillset member unresolvable; skipping");
     }
-    return marketplaceInputs;
+    const { files, marketplace } = buildSkillsetPlugin(
+      {
+        name: ss.name,
+        description: ss.description,
+        version: ss.latestVersion,
+        tags: ss.tags,
+        instructions: latest.instructions,
+        members,
+        // #1157 — owner listing overrides; the builder resolves the fallbacks.
+        pluginConfig: ss.pluginConfig,
+      },
+      pluginCfg,
+    );
+    const prefixed = new Map<string, string>();
+    for (const [relPath, content] of files) {
+      prefixed.set(`${SKILLSET_FOLDER}/${ss.name}/${relPath}`, content);
+    }
+    return { files: prefixed, marketplace };
   }
 
   /**
