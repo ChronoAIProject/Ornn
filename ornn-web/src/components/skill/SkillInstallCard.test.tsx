@@ -78,8 +78,9 @@ describe("SkillInstallCard — plugin tab", () => {
     expect(code?.textContent).toContain("/plugin marketplace add acme/skills-mirror");
     expect(code?.textContent).toContain("/plugin install pdf-tools@skills-mirror");
 
-    // The shared auto-update note rides below the commands.
-    expect(screen.getByText(/default to auto-update off/i)).toBeInTheDocument();
+    // The auto-update reminder is folded into the helper above the box
+    // (no per-tab footer) so the panel matches the "via npx" layout.
+    expect(screen.getByText(/auto-update off/i)).toBeInTheDocument();
   });
 
   it("shows the 'available once public' hint for a private skill, no command", () => {
