@@ -801,6 +801,17 @@ export async function bootstrap(
     resolveUser: async (userId) =>
       (await userDirectoryRepo.findByUserIds([userId]))[0] ?? null,
     fireSkillsetRecompute: (changedSkill) => skillsetRecomputeHook.fire?.(changedSkill),
+    // #1159 — targeted skillset re-export on a member-skill content/dist-tag
+    // change. Fire-and-forget; the targeted method already no-ops cleanly when
+    // the mirror is disabled or nothing is affected, and the cron is the
+    // backstop for any swallowed failure.
+    fireSkillsetMirrorForMember: (skillGuid, skillName) => {
+      mirrorService
+        .syncSkillsetsForMember(skillGuid, skillName)
+        .catch((err) =>
+          logger.warn({ err, skillGuid, skillName }, "mirror syncSkillsetsForMember failed"),
+        );
+    },
   });
 
   // ---- Domain: Skill Search ----
