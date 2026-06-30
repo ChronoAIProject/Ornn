@@ -721,6 +721,11 @@ export async function bootstrap(
   // `memberVisibilityState`. Runs before any mirror reconcile so plugin-export
   // eligibility (#1155) is evaluated against fresh visibility state.
   await skillsets.backfillDerivedVisibility();
+  // #1162 — one-shot, idempotent backfill of the resolved-member snapshot on
+  // each skillset's latest revision, so the reactive member-version bump has a
+  // baseline to diff against (a pre-feature revision lacks one). Existing
+  // skillsets keep their current `latestVersion` as the starting revision.
+  await skillsets.backfillResolvedMembers();
 
   // ---- Domain: GitHub Mirror ----
   // Single MirrorService instance — runtime-aware. Reads enabled +
@@ -801,16 +806,30 @@ export async function bootstrap(
     resolveUser: async (userId) =>
       (await userDirectoryRepo.findByUserIds([userId]))[0] ?? null,
     fireSkillsetRecompute: (changedSkill) => skillsetRecomputeHook.fire?.(changedSkill),
-    // #1159 — targeted skillset re-export on a member-skill content/dist-tag
-    // change. Fire-and-forget; the targeted method already no-ops cleanly when
-    // the mirror is disabled or nothing is affected, and the cron is the
-    // backstop for any swallowed failure.
+    // #1159/#1162 — targeted skillset re-export on a member-skill content/
+    // dist-tag change. Sequenced in ONE fire-and-forget handler so the reactive
+    // revision bump completes BEFORE the export reads `latestVersion`: (1) bump
+    // every referencing skillset whose resolved-member snapshot moved (#1162),
+    // then (2) re-export the eligible ones (#1159). Not racing two independent
+    // hooks — the export always sees the freshly-bumped revision. Both steps
+    // no-op cleanly (bump is idempotent; export no-ops when the mirror is
+    // disabled/nothing affected); the cron is the backstop for any failure.
     fireSkillsetMirrorForMember: (skillGuid, skillName) => {
-      mirrorService
-        .syncSkillsetsForMember(skillGuid, skillName)
-        .catch((err) =>
-          logger.warn({ err, skillGuid, skillName }, "mirror syncSkillsetsForMember failed"),
-        );
+      void (async () => {
+        try {
+          await skillsets.service.bumpRevisionsForChangedMember({
+            guid: skillGuid,
+            name: skillName,
+          });
+        } catch (err) {
+          logger.warn({ err, skillGuid, skillName }, "skillset revision bump failed");
+        }
+        try {
+          await mirrorService.syncSkillsetsForMember(skillGuid, skillName);
+        } catch (err) {
+          logger.warn({ err, skillGuid, skillName }, "mirror syncSkillsetsForMember failed");
+        }
+      })();
     },
   });
 
