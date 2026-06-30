@@ -36,7 +36,7 @@ import type { SkillService } from "../skills/crud/service";
 import { parseVersion } from "../skills/crud/version";
 import { effectiveGrants, normalizeGrants } from "../skills/crud/grants";
 import {
-  computeResolvedMembers,
+  computePublicResolvedMembers,
   recomputeForSkill,
   recomputeSkillsetVisibility,
 } from "./recompute";
@@ -649,13 +649,14 @@ export class SkillsetService {
   }
 
   /**
-   * Reactive revision bump (#1162) for a member skill whose resolved version
-   * may have moved (new-version publish, GitHub refresh, dist-tag set/delete, a
-   * privacy flip that changes the resolved set). Finds EVERY skillset that
-   * references the changed skill — exported or not, since the revision is the
-   * skillset's OWN version — and, for each, re-cuts a new revision ONLY when the
-   * resolved-member snapshot actually changed from the latest revision's
-   * baseline.
+   * Reactive revision bump (#1162/#1165) for a member skill whose EXPORTED
+   * contribution may have moved — either its resolved version (new-version
+   * publish, GitHub refresh, dist-tag set/delete) OR its visibility (a privacy
+   * flip that adds/removes it from the public-resolvable set, #1165). Finds
+   * EVERY skillset that references the changed skill — exported or not, since the
+   * revision is the skillset's OWN version — and, for each, re-cuts a new
+   * revision ONLY when the public-resolved-member snapshot actually changed from
+   * the latest revision's baseline.
    *
    * Ordering (#1162): bootstrap invokes this BEFORE the mirror's targeted
    * re-export (`syncSkillsetsForMember`) inside one fire-and-forget handler, so
@@ -691,10 +692,10 @@ export class SkillsetService {
   }
 
   /**
-   * Re-cut a skillset's revision iff its resolved-member snapshot changed
-   * (#1162). Returns `true` when a new revision was written. Compares the
-   * current resolved members (under SYSTEM) against the latest revision's
-   * stored snapshot:
+   * Re-cut a skillset's revision iff its public-resolved-member snapshot changed
+   * (#1162/#1165). Returns `true` when a new revision was written. Compares the
+   * current public-resolvable members (under SYSTEM) against the latest
+   * revision's stored snapshot:
    *   - snapshot identical → no-op (idempotency guard, no churn).
    *   - snapshot missing (pre-feature doc the backfill hasn't reached) →
    *     populate it in place, no bump (no baseline to diff against).
@@ -702,6 +703,13 @@ export class SkillsetService {
    *     same authored members/metadata + the new snapshot, then advance the
    *     pointer WITHOUT touching the audit timestamps (a member-driven change,
    *     not an owner edit).
+   *
+   * A member going private/public is a snapshot move (#1165), so this is what
+   * makes an exported plugin's version bump when its public member subset
+   * changes — the bootstrap sequences this BEFORE the targeted re-export, so the
+   * re-exported plugin.json carries the freshly-bumped revision. A doc still
+   * carrying a pre-#1165 all-members snapshot self-corrects with one legitimate
+   * bump on its first reactive event, then is idempotent.
    */
   private async maybeBumpRevisionForMemberChange(guid: string): Promise<boolean> {
     const latest = await this.skillsetVersionRepo.findLatestBySkillset(guid);
@@ -741,13 +749,15 @@ export class SkillsetService {
   }
 
   /**
-   * Resolve member refs to the lockfile-like snapshot (#1162). Thin instance
-   * wrapper over the shared {@link computeResolvedMembers} so create / publish /
-   * reactive-bump all snapshot members the same way (SYSTEM loader, sorted,
-   * de-duped concrete `name@<major.minor>`).
+   * Resolve member refs to the EXPORTED snapshot (#1162/#1165). Thin instance
+   * wrapper over the shared {@link computePublicResolvedMembers} so create /
+   * publish / reactive-bump all snapshot members the same way: the SYSTEM loader,
+   * sorted + de-duped concrete `name@<major.minor>` of the PUBLIC-resolvable
+   * subset only. Public-only means a member's visibility flip (private⇄public)
+   * moves the snapshot and bumps the revision, in addition to a version move.
    */
   private async resolveMemberSnapshot(members: string[]): Promise<string[]> {
-    return computeResolvedMembers(members, this.skillService);
+    return computePublicResolvedMembers(members, this.skillService);
   }
 
   /** Load a skillset's requested (or latest) version doc, or 404. */
@@ -886,9 +896,9 @@ function nextRevision(current: string): { version: string; major: number; minor:
 
 /**
  * Order-independent equality of two resolved-member snapshots (#1162). Both are
- * produced sorted by {@link computeResolvedMembers}, so a positional compare is
- * sufficient and cheap — this is the idempotency guard that stops a no-op member
- * sync from churning a new revision.
+ * produced sorted by {@link computePublicResolvedMembers}, so a positional
+ * compare is sufficient and cheap — this is the idempotency guard that stops a
+ * no-op member sync from churning a new revision.
  */
 function snapshotsEqual(a: string[], b: string[]): boolean {
   if (a.length !== b.length) return false;
