@@ -66,8 +66,10 @@ export function wireSkillsets(deps: {
    */
   fireMirrorReconcile?: () => void;
 }): SkillsetWiring {
-  const skillsetRepo = new SkillsetRepository(deps.db);
+  // Version repo first: the identity repo takes it so the targeted mirror
+  // re-export (#1159) can resolve "which skillsets reference this member?".
   const skillsetVersionRepo = new SkillsetVersionRepository(deps.db);
+  const skillsetRepo = new SkillsetRepository(deps.db, skillsetVersionRepo);
 
   const service = new SkillsetService({
     skillsetRepo,

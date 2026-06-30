@@ -18,6 +18,7 @@ import { AppError } from "../../shared/types/index";
 import { createLogger } from "../../shared/logger";
 import { coerceStoredGrants, legacyListsFromGrants } from "../skills/crud/grants";
 import type { SkillGrant } from "../../shared/types/index";
+import { SkillsetVersionRepository } from "./skillsetVersionRepository";
 import type {
   SkillsetDocument,
   SkillsetKind,
@@ -103,9 +104,17 @@ export class SkillsetRepository {
   private readonly collection: Collection;
   /** Server-side cap on paginated reads (mirrors SkillRepository). */
   private static readonly MAX_QUERY_MS = 5_000;
+  /**
+   * Append-only version repo (#1159). Injected so the targeted mirror
+   * re-export can ask "which skillsets reference this member skill?" via the
+   * version collection's multikey `members` index, then narrow to the
+   * export-eligible identity docs here.
+   */
+  private readonly versionRepo: SkillsetVersionRepository;
 
-  constructor(db: Db) {
+  constructor(db: Db, versionRepo: SkillsetVersionRepository) {
     this.collection = db.collection("skillsets");
+    this.versionRepo = versionRepo;
   }
 
   /**
@@ -147,6 +156,41 @@ export class SkillsetRepository {
       .find({ memberVisibilityState: "all-public", exportAsPlugin: true })
       .maxTimeMS(SkillsetRepository.MAX_QUERY_MS)
       .toArray();
+    return docs.map((d) => mapDoc(d)!);
+  }
+
+  /**
+   * Export-eligible skillsets that reference the given skill as a member of
+   * ANY version (#1159). Powers the targeted mirror re-export: when a member
+   * skill publishes a new version or moves a dist-tag, ONLY the skillsets that
+   * actually reference it are rebuilt — not a full sweep.
+   *
+   * Backed by the version repo's multikey `members` index
+   * (`findSkillsetGuidsByMember`, which matches by name OR guid across every
+   * ref grammar), then narrowed to the SAME eligibility predicate as
+   * {@link findAllEligibleForMirror} (`memberVisibilityState: "all-public"`
+   * AND `exportAsPlugin: true`). The all-public narrowing is load-bearing: a
+   * content change must never leak a non-public skillset's member subtree into
+   * the public mirror.
+   */
+  async findEligibleSkillsetsByMember(
+    skillName: string,
+    skillGuid: string,
+  ): Promise<SkillsetDocument[]> {
+    const guids = await this.versionRepo.findSkillsetGuidsByMember(skillName, skillGuid);
+    if (guids.length === 0) return [];
+    const docs = await this.collection
+      .find({
+        _id: { $in: guids } as never,
+        memberVisibilityState: "all-public",
+        exportAsPlugin: true,
+      })
+      .maxTimeMS(SkillsetRepository.MAX_QUERY_MS)
+      .toArray();
+    logger.debug(
+      { skillName, candidates: guids.length, eligible: docs.length },
+      "findEligibleSkillsetsByMember resolved",
+    );
     return docs.map((d) => mapDoc(d)!);
   }
 
