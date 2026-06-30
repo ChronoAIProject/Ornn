@@ -707,11 +707,13 @@ export class MirrorService {
     return eligible
       .filter((ss) => isSafeSkillFolderName(ss.name))
       .map((ss) =>
+        // #1157 — owner overrides win over the skillset defaults, matching the
+        // full-reconcile subtree path so the shared marketplace.json never drifts.
         skillsetMarketplaceInput({
           name: ss.name,
-          description: ss.description,
+          description: ss.pluginConfig?.description ?? ss.description,
           version: ss.latestVersion,
-          keywords: ss.tags,
+          keywords: ss.pluginConfig?.keywords ?? ss.tags,
         }),
       );
   }
@@ -768,6 +770,8 @@ export class MirrorService {
           tags: ss.tags,
           instructions: latest.instructions,
           members,
+          // #1157 — owner listing overrides; the builder resolves the fallbacks.
+          pluginConfig: ss.pluginConfig,
         },
         pluginCfg,
       );

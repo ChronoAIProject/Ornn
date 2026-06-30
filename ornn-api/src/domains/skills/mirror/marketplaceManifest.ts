@@ -82,6 +82,8 @@ interface MarketplaceManifest {
 
 interface PluginManifest {
   name: string;
+  /** Optional human label (#1157) — present only for an owner-overridden skillset plugin. */
+  displayName?: string;
   version: string;
   description: string;
 }
@@ -141,17 +143,31 @@ export function buildMarketplaceJson(
  * Build a plugin folder's `.claude-plugin/plugin.json`, making that
  * folder a valid Claude Code plugin and pinning the plugin version to
  * the source's latest Ornn version. Used for both a single-skill folder
- * and a curated skillset folder — only name/version/description matter.
+ * and a curated skillset folder.
+ *
+ * `displayName` (#1157) is OPTIONAL — emitted only when supplied, with a stable
+ * key position right after `name`. When absent the manifest is byte-identical
+ * to the pre-#1157 `{ name, version, description }` form, so the per-skill
+ * plugins (which never set it) never churn a no-op commit.
  */
 export function buildPluginJson(input: {
   name: string;
   version: string;
   description: string;
+  displayName?: string;
 }): string {
-  const manifest: PluginManifest = {
-    name: input.name,
-    version: input.version,
-    description: input.description,
-  };
+  const manifest: PluginManifest =
+    input.displayName !== undefined
+      ? {
+          name: input.name,
+          displayName: input.displayName,
+          version: input.version,
+          description: input.description,
+        }
+      : {
+          name: input.name,
+          version: input.version,
+          description: input.description,
+        };
   return serialize(manifest);
 }

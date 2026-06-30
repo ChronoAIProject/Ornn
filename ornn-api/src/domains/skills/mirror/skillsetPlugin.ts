@@ -41,6 +41,19 @@ const SKILLSET_README_RELPATH = "README.md";
 /** Sub-folder holding the member skills inside a multi-skill plugin. */
 const SKILLS_SUBFOLDER = "skills";
 
+/**
+ * Owner listing overrides for an exported skillset plugin (#1157). Each field,
+ * when set, overrides the corresponding skillset-derived default in the
+ * generated `plugin.json` + marketplace entry; an absent field falls back to
+ * the skillset's own name/description/tags. Decoupled from the DB type so this
+ * pure builder stays free of runtime/DB imports.
+ */
+export interface PluginListingOverrides {
+  displayName?: string | undefined;
+  description?: string | undefined;
+  keywords?: string[] | undefined;
+}
+
 /** A resolved member skill, ready to embed under `skills/<name>/`. */
 export interface SkillsetPluginMember {
   /** Canonical member skill name — the folder name under `skills/`. */
@@ -67,6 +80,12 @@ export interface SkillsetPluginInput {
   instructions: string;
   /** Resolved member skills (already visibility-checked + safe-named upstream). */
   members: SkillsetPluginMember[];
+  /**
+   * Owner listing overrides (#1157). `displayName` → plugin.json; `description`
+   * / `keywords` override the skillset defaults in plugin.json + marketplace.
+   * Absent ⇒ every field falls back to the skillset's own values.
+   */
+  pluginConfig?: PluginListingOverrides | undefined;
 }
 
 /** Install-snippet + provenance context for the README. */
@@ -171,11 +190,20 @@ export function buildSkillsetPlugin(
   const version = fingerprintVersion(input.version, members);
   const files = new Map<string, string>();
 
+  // Resolve the owner overrides (#1157) against the skillset defaults — these
+  // drive plugin.json + the README blurb + the marketplace catalogue entry.
+  const overrides = input.pluginConfig;
+  const effectiveDescription = overrides?.description ?? input.description;
+  const effectiveKeywords = overrides?.keywords ?? input.tags;
+  const displayName = overrides?.displayName;
+
   // Per-skillset plugin manifest (multi-skill form — no root SKILL.md).
+  // `displayName` is emitted only when overridden (deterministic key order).
   files.set(PLUGIN_MANIFEST_RELPATH, buildPluginJson({
     name: input.name,
     version,
-    description: input.description,
+    description: effectiveDescription,
+    ...(displayName !== undefined ? { displayName } : {}),
   }));
 
   // Each member's package files land under skills/<member>/… so Claude Code's
@@ -186,7 +214,7 @@ export function buildSkillsetPlugin(
     }
   }
 
-  files.set(SKILLSET_README_RELPATH, buildSkillsetReadme(input, members, cfg));
+  files.set(SKILLSET_README_RELPATH, buildSkillsetReadme(input, members, cfg, effectiveDescription));
 
   return {
     files,
@@ -196,9 +224,9 @@ export function buildSkillsetPlugin(
     // plugin.json, which CC resolves first — so updates still track members.
     marketplace: skillsetMarketplaceInput({
       name: input.name,
-      description: input.description,
+      description: effectiveDescription,
       version: input.version,
-      keywords: input.tags,
+      keywords: effectiveKeywords,
     }),
   };
 }
@@ -213,6 +241,7 @@ function buildSkillsetReadme(
   input: SkillsetPluginInput,
   members: SkillsetPluginMember[],
   cfg: SkillsetPluginConfig,
+  description: string,
 ): string {
   const url = `${cfg.ornnPublicOrigin}/skillsets/${encodeURIComponent(input.name)}`;
   const memberLines =
@@ -222,7 +251,7 @@ function buildSkillsetReadme(
   return [
     `# ${input.name}`,
     "",
-    `> ${input.description}`,
+    `> ${description}`,
     "",
     "---",
     "",

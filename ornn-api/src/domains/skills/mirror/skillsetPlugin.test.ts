@@ -204,6 +204,60 @@ describe("buildSkillsetPlugin — member-name safety", () => {
   });
 });
 
+describe("buildSkillsetPlugin — owner listing overrides (#1157)", () => {
+  it("emits displayName in plugin.json only when overridden", () => {
+    const without = JSON.parse(
+      buildSkillsetPlugin(input(), CFG).files.get(".claude-plugin/plugin.json")!,
+    );
+    expect(without.displayName).toBeUndefined();
+
+    const withOverride = JSON.parse(
+      buildSkillsetPlugin(
+        input({ pluginConfig: { displayName: "Research Bundle" } }),
+        CFG,
+      ).files.get(".claude-plugin/plugin.json")!,
+    );
+    expect(withOverride.displayName).toBe("Research Bundle");
+  });
+
+  it("overrides plugin.json + marketplace description, falling back when absent", () => {
+    const overridden = buildSkillsetPlugin(
+      input({ pluginConfig: { description: "Custom blurb" } }),
+      CFG,
+    );
+    expect(JSON.parse(overridden.files.get(".claude-plugin/plugin.json")!).description).toBe(
+      "Custom blurb",
+    );
+    expect(overridden.marketplace.description).toBe("Custom blurb");
+    // README blurb reflects the override too.
+    expect(overridden.files.get("README.md")!).toContain("> Custom blurb");
+
+    // No override → skillset description is used.
+    const fallback = buildSkillsetPlugin(input(), CFG);
+    expect(fallback.marketplace.description).toBe("A curated research set.");
+  });
+
+  it("overrides marketplace keywords, falling back to skillset tags when absent", () => {
+    const overridden = buildSkillsetPlugin(
+      input({ pluginConfig: { keywords: ["rag", "search"] } }),
+      CFG,
+    );
+    expect(overridden.marketplace.keywords).toEqual(["rag", "search"]);
+
+    const fallback = buildSkillsetPlugin(input(), CFG);
+    expect(fallback.marketplace.keywords).toEqual(["research"]);
+  });
+
+  it("stays deterministic with overrides applied (no churn)", () => {
+    const cfg = { pluginConfig: { displayName: "X", description: "Y", keywords: ["z"] } };
+    const a = buildSkillsetPlugin(input(cfg), CFG);
+    const b = buildSkillsetPlugin(input(cfg), CFG);
+    for (const [path, content] of a.files) {
+      expect(b.files.get(path)).toBe(content);
+    }
+  });
+});
+
 describe("skillsetMarketplaceInput", () => {
   it("sources from ./skillsets/<name> and maps tags to keywords", () => {
     const entry = skillsetMarketplaceInput({
