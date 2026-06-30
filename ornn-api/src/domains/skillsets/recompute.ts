@@ -87,14 +87,25 @@ export async function computeDerivedVisibility(
 }
 
 /**
- * Resolve a member-ref list to its lockfile-like snapshot (#1162): the
- * concrete `name@<major.minor>` of every member that resolves under SYSTEM,
- * sorted + de-duped so the snapshot is order-independent and stable. An
- * unresolvable member contributes nothing (its disappearance shows up as a
- * snapshot change → a bump). Single-sourced with the visibility classifier so
- * both walk member refs through the exact same loader grammar.
+ * Resolve a member-ref list to its EXPORTED snapshot (#1162/#1165): the concrete
+ * `name@<major.minor>` of every member that resolves under SYSTEM AND is public
+ * (`isPrivate === false`), sorted + de-duped so the snapshot is order-independent
+ * and stable.
+ *
+ * Public-only by design (#1165): the snapshot is the baseline the reactive
+ * revision bump diffs against, and a skillset's EXPORTED content is exactly its
+ * public-resolvable member subset (#1161). A member going PRIVATE is a
+ * visibility change — its resolved VERSION is unchanged, so an all-members
+ * snapshot wouldn't move and the revision would never bump — but it DROPS from
+ * the exported set, so Claude Code (which detects plugin updates only by the
+ * version string) would keep serving the stale bundle. Counting only public
+ * members makes a visibility flip move the snapshot → bump the revision →
+ * re-export carries the new version. A private or unresolvable member therefore
+ * contributes nothing; its appearance / disappearance shows up as a snapshot
+ * change → a bump. Single-sourced with the visibility classifier + the mirror's
+ * export filter so all three agree on what "in the exported set" means.
  */
-export async function computeResolvedMembers(
+export async function computePublicResolvedMembers(
   members: string[],
   skillService: MemberVisibilityResolver,
 ): Promise<string[]> {
@@ -102,7 +113,9 @@ export async function computeResolvedMembers(
   const snapshot = new Set<string>();
   for (const ref of members) {
     const node = await load(ref);
-    if (node) snapshot.add(`${node.name}@${node.version}`);
+    // SYSTEM resolves everything, so `node.isPrivate` faithfully reports the
+    // member skill's OWN privacy — the public-export gate, not a read denial.
+    if (node && node.isPrivate === false) snapshot.add(`${node.name}@${node.version}`);
   }
   return [...snapshot].sort();
 }
@@ -110,11 +123,19 @@ export async function computeResolvedMembers(
 /**
  * One-shot boot backfill (#1162): for every existing skillset, populate the
  * resolved-member snapshot on its LATEST version doc when it lacks one (a
- * pre-feature doc). Existing skillsets keep their current `latestVersion` as
- * the starting revision — only the snapshot is added, so a later member-version
- * change has a baseline to compare against. Idempotent (skips docs that already
- * carry a snapshot) and failure-isolated per skillset, so one bad member set
- * never aborts boot.
+ * pre-feature doc). The snapshot is the PUBLIC-resolvable member set (#1165),
+ * single-sourced with the reactive bump so create / publish / backfill / bump
+ * all compare apples to apples. Existing skillsets keep their current
+ * `latestVersion` as the starting revision — only the snapshot is added, so a
+ * later member change has a baseline to compare against. Idempotent (skips docs
+ * that already carry a snapshot) and failure-isolated per skillset, so one bad
+ * member set never aborts boot.
+ *
+ * Docs that already carry a (pre-#1165, all-members) snapshot are intentionally
+ * NOT rewritten here: silently swapping the baseline to the public set would
+ * desync the stored revision from the export content with no version bump — the
+ * exact bug #1165 fixes. The first reactive event corrects such a doc with a
+ * legitimate one-time bump (and is idempotent thereafter).
  */
 export async function backfillResolvedMembers(deps: SkillsetRecomputeDeps): Promise<void> {
   const guids = await deps.skillsetRepo.listAllGuids();
@@ -123,7 +144,7 @@ export async function backfillResolvedMembers(deps: SkillsetRecomputeDeps): Prom
     try {
       const latest = await deps.skillsetVersionRepo.findLatestBySkillset(guid);
       if (!latest || latest.resolvedMembers !== undefined) continue;
-      const snapshot = await computeResolvedMembers(latest.members, deps.skillService);
+      const snapshot = await computePublicResolvedMembers(latest.members, deps.skillService);
       await deps.skillsetVersionRepo.setResolvedMembers(guid, latest.version, snapshot);
       backfilled += 1;
     } catch (err) {

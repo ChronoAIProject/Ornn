@@ -848,6 +848,112 @@ describe("SkillsetService — reactive revision bump on member-version change (#
   });
 });
 
+describe("SkillsetService — reactive revision bump on member VISIBILITY change (#1165)", () => {
+  /**
+   * Three public member skills. The exported subset is all three at create, so
+   * dropping one to private still leaves a meaningful set — mirroring the live
+   * 3→2 bug report.
+   */
+  function threeMemberSkills(): { skills: SkillDocument[]; versions: SkillVersionDocument[] } {
+    const a = skillDoc({ guid: "g-a", name: "pdf-tools", latestVersion: "1.0" });
+    const b = skillDoc({ guid: "g-b", name: "csv-tools", latestVersion: "1.0" });
+    const c = skillDoc({ guid: "g-c", name: "img-tools", latestVersion: "1.0" });
+    return {
+      skills: [a, b, c],
+      versions: [
+        skillVersion({ _id: "g-a@1.0", skillGuid: "g-a", version: "1.0" }),
+        skillVersion({ _id: "g-b@1.0", skillGuid: "g-b", version: "1.0" }),
+        skillVersion({ _id: "g-c@1.0", skillGuid: "g-c", version: "1.0" }),
+      ],
+    };
+  }
+
+  async function seed3() {
+    const { skills, versions } = threeMemberSkills();
+    const skillService = makeSkillService(skills, versions);
+    const { deps, state } = makeSkillsetDeps(skillService);
+    const service = new SkillsetService(deps);
+    const created = await service.createSkillset(
+      {
+        name: "vis-set",
+        description: "d",
+        instructions: "p",
+        kind: "generic",
+        tags: [],
+        members: ["pdf-tools@1.0", "csv-tools@1.0", "img-tools@1.0"],
+      },
+      { userId: "owner-1" },
+    );
+    return { service, state, skills, guid: created.guid };
+  }
+
+  it("a member going private bumps the minor; the new snapshot is the public subset", async () => {
+    const { service, state, skills, guid } = await seed3();
+    // 1.0 snapshot is all three (every member public at create).
+    const v10 = state.versions.find((v) => v._id === `${guid}@1.0`)!;
+    expect(v10.resolvedMembers).toEqual(["csv-tools@1.0", "img-tools@1.0", "pdf-tools@1.0"]);
+
+    // img-tools goes private — same resolved VERSION, but it drops from the
+    // exported set, so the public snapshot moves → a revision bump (the #1165 fix:
+    // without it the snapshot was unchanged and Claude Code kept the stale bundle).
+    skills.find((s) => s.name === "img-tools")!.isPrivate = true;
+    await service.bumpRevisionsForChangedMember({ guid: "g-c", name: "img-tools" });
+
+    expect((await service.getSkillset(guid)).latestVersion).toBe("1.1");
+    const v11 = state.versions.find((v) => v._id === `${guid}@1.1`)!;
+    expect(v11.resolvedMembers).toEqual(["csv-tools@1.0", "pdf-tools@1.0"]);
+    // Authored member refs are carried forward verbatim — img-tools stays a
+    // member of the set; only its EXPORTED contribution dropped.
+    expect(v11.members).toEqual(["pdf-tools@1.0", "csv-tools@1.0", "img-tools@1.0"]);
+  });
+
+  it("a member going public again bumps + re-includes it in the snapshot", async () => {
+    const { service, state, skills, guid } = await seed3();
+    const img = skills.find((s) => s.name === "img-tools")!;
+
+    img.isPrivate = true;
+    await service.bumpRevisionsForChangedMember({ guid: "g-c", name: "img-tools" });
+    expect((await service.getSkillset(guid)).latestVersion).toBe("1.1");
+
+    // Back to public → re-enters the exported subset → another bump.
+    img.isPrivate = false;
+    await service.bumpRevisionsForChangedMember({ guid: "g-c", name: "img-tools" });
+    expect((await service.getSkillset(guid)).latestVersion).toBe("1.2");
+    const v12 = state.versions.find((v) => v._id === `${guid}@1.2`)!;
+    expect(v12.resolvedMembers).toEqual(["csv-tools@1.0", "img-tools@1.0", "pdf-tools@1.0"]);
+  });
+
+  it("a no-op visibility event (public subset unchanged) does NOT bump", async () => {
+    const { service, state, guid } = await seed3();
+    // Nothing actually flipped — the public subset is identical → no churn,
+    // preserving the mirror's deterministic no-op-commit skip.
+    await service.bumpRevisionsForChangedMember({ guid: "g-c", name: "img-tools" });
+    expect(state.versions.filter((v) => v.skillsetGuid === guid)).toHaveLength(1);
+    expect((await service.getSkillset(guid)).latestVersion).toBe("1.0");
+  });
+
+  it("a pre-#1165 all-members snapshot self-corrects with ONE bump, then is idempotent", async () => {
+    const { service, state, skills, guid } = await seed3();
+    // Simulate a doc cut before #1165: img-tools is now private, but the stored
+    // snapshot still lists it (the old all-members logic the backfill leaves
+    // untouched). The FIRST reactive event must correct it — exactly once.
+    skills.find((s) => s.name === "img-tools")!.isPrivate = true;
+    const v10 = state.versions.find((v) => v._id === `${guid}@1.0`)!;
+    v10.resolvedMembers = ["csv-tools@1.0", "img-tools@1.0", "pdf-tools@1.0"];
+
+    // First event: public subset (2) differs from the stored 3 → one legit bump.
+    await service.bumpRevisionsForChangedMember({ guid: "g-c", name: "img-tools" });
+    expect((await service.getSkillset(guid)).latestVersion).toBe("1.1");
+    const v11 = state.versions.find((v) => v._id === `${guid}@1.1`)!;
+    expect(v11.resolvedMembers).toEqual(["csv-tools@1.0", "pdf-tools@1.0"]);
+
+    // Second event with nothing further changed → snapshot matches → no churn.
+    await service.bumpRevisionsForChangedMember({ guid: "g-c", name: "img-tools" });
+    expect(state.versions.filter((v) => v.skillsetGuid === guid)).toHaveLength(2);
+    expect((await service.getSkillset(guid)).latestVersion).toBe("1.1");
+  });
+});
+
 describe("SkillsetService — plugin-export opt-in (#1155)", () => {
   function service() {
     const { skills, versions } = twoMemberSkills();
