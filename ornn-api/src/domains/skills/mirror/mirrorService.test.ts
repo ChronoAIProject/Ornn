@@ -214,7 +214,15 @@ function makeFakeRepo(skills: SkillDocument[] = []): SkillRepository {
 
 function makeFakeSkillService(
   filesByGuid: Record<string, Record<string, string>>,
+  /**
+   * Member NAMES whose resolved skill is private (#1161). The loader reports
+   * `isPrivate: true` for these so the mirror's public-subset filter drops them;
+   * everything else defaults to public. Their files stay in `filesByGuid` so a
+   * test can assert the private content never lands in the public mirror.
+   */
+  privateMembers: string[] = [],
 ): SkillService {
+  const priv = new Set(privateMembers);
   return {
     // Signature mirrors the #806 service change: (idOrName, actor, version?).
     getSkillJson: mock(async (idOrName: string, _actor: ActorContext, version?: string) => ({
@@ -233,7 +241,7 @@ function makeFakeSkillService(
       const name = ref.slice(0, at);
       const version = ref.slice(at + 1);
       if (!(name in filesByGuid)) return null;
-      return { ref: `${name}@${version}`, name, version, guid: name, isPrivate: false, dependsOn: [] };
+      return { ref: `${name}@${version}`, name, version, guid: name, isPrivate: priv.has(name), dependsOn: [] };
     }),
   } as unknown as SkillService;
 }
@@ -254,9 +262,9 @@ interface FakeSkillset {
 }
 
 /**
- * Fake skillset repo — replicates the REAL eligibility filter
- * (`memberVisibilityState === "all-public"` AND `exportAsPlugin`) so the
- * exclusion tests exercise the contract the mirror depends on.
+ * Fake skillset repo — replicates the REAL eligibility filter (#1161:
+ * `exportAsPlugin` only; the public-member subset is decided at build time) so
+ * the exclusion / subset tests exercise the contract the mirror depends on.
  */
 function toSkillsetDoc(s: FakeSkillset): SkillsetDocument {
   return {
@@ -280,12 +288,12 @@ function toSkillsetDoc(s: FakeSkillset): SkillsetDocument {
 }
 
 function makeFakeSkillsetRepo(skillsets: FakeSkillset[]): MirrorSkillsetRepo {
-  const eligible = (): FakeSkillset[] =>
-    skillsets.filter((s) => s.memberVisibilityState === "all-public" && s.exportAsPlugin);
+  const eligible = (): FakeSkillset[] => skillsets.filter((s) => s.exportAsPlugin);
   return {
     findAllEligibleForMirror: mock(async () => eligible().map(toSkillsetDoc)),
-    // Replicates the real repo (#1159): only opted-in, all-public skillsets
-    // whose members reference the skill (by name OR guid) come back.
+    // Replicates the real repo (#1161): every opted-in skillset whose members
+    // reference the skill (by name OR guid) comes back, regardless of member
+    // visibility — the public subset is decided at build time.
     findEligibleSkillsetsByMember: mock(async (skillName: string, skillGuid: string) =>
       eligible()
         .filter((s) =>
@@ -797,13 +805,26 @@ describe("MirrorService skillset plugin export (#1155)", () => {
     expect((manifest?.plugins ?? []).some((p) => p.name === "research-bundle")).toBe(false);
   });
 
-  it("excludes a skillset that is not all-public (restricted members)", async () => {
-    const restricted: FakeSkillset = { ...eligibleSkillset, memberVisibilityState: "restricted" };
+  it("exports the PUBLIC subset of a restricted skillset — no private leak (#1161)", async () => {
+    // research-bundle has 3 members; `secret` is private. The plugin must bundle
+    // only the two public members and never the private member's content.
+    const restricted: FakeSkillset = {
+      ...eligibleSkillset,
+      memberVisibilityState: "restricted",
+      members: ["pdf@1.0", "ocr@1.0", "secret@1.0"],
+    };
     const { github, calls } = makeFakeGithub();
     const svc = new MirrorService({
       githubClientForTest: github,
       skillRepo: makeFakeRepo([]),
-      skillService: makeFakeSkillService({ pdf: { "SKILL.md": "# pdf" }, ocr: { "SKILL.md": "# ocr" } }),
+      skillService: makeFakeSkillService(
+        {
+          pdf: { "SKILL.md": "# pdf" },
+          ocr: { "SKILL.md": "# ocr" },
+          secret: { "SKILL.md": "# SECRET DO NOT LEAK" },
+        },
+        ["secret"], // `secret` resolves as private → dropped from the public subset
+      ),
       skillsetRepo: makeFakeSkillsetRepo([restricted]),
       skillsetService: makeFakeSkillsetService([restricted]),
       ornnPublicOrigin: "https://example",
@@ -811,7 +832,86 @@ describe("MirrorService skillset plugin export (#1155)", () => {
     });
     await svc.reconcileAll();
 
-    expect(allTreePaths(calls).some((p) => p.startsWith("skillsets/"))).toBe(false);
+    const paths = allTreePaths(calls);
+    // Public members bundled; the private one is NOT.
+    expect(paths).toContain("skillsets/research-bundle/skills/pdf/SKILL.md");
+    expect(paths).toContain("skillsets/research-bundle/skills/ocr/SKILL.md");
+    expect(paths.some((p) => p.includes("skills/secret/"))).toBe(false);
+    // The private content never reaches a blob.
+    expect(calls.blobs.some((b) => b.content.includes("DO NOT LEAK"))).toBe(false);
+    // The README documents the exclusion.
+    const readme = calls.blobs.find((b) => b.content.includes("## Excluded members"));
+    expect(readme).toBeDefined();
+    expect(readme!.content).toContain("`secret`");
+    // It still appears in the marketplace catalogue (it does export a subset).
+    const manifest = findMarketplaceBlob(calls);
+    expect(manifest!.plugins.some((p) => p.name === "research-bundle")).toBe(true);
+  });
+
+  it("removes a skillset's subtree when fewer than 2 public members remain (#1161)", async () => {
+    // Only `pdf` stays public; `ocr` goes private → 1 public member < 2, so the
+    // skillset's existing subtree is reconciled away (the plugin is un-exported).
+    const currentTree: TreeEntry[] = [
+      { path: "skillsets/research-bundle/.claude-plugin/plugin.json", mode: "100644", type: "blob", sha: "p" },
+      { path: "skillsets/research-bundle/skills/pdf/SKILL.md", mode: "100644", type: "blob", sha: "a" },
+      { path: "skillsets/research-bundle/skills/ocr/SKILL.md", mode: "100644", type: "blob", sha: "b" },
+      { path: "skillsets/research-bundle/README.md", mode: "100644", type: "blob", sha: "r" },
+    ];
+    const { github, calls } = makeFakeGithub({ currentTree });
+    const svc = new MirrorService({
+      githubClientForTest: github,
+      skillRepo: makeFakeRepo([]),
+      skillService: makeFakeSkillService(
+        { pdf: { "SKILL.md": "# pdf" }, ocr: { "SKILL.md": "# ocr" } },
+        ["ocr"],
+      ),
+      skillsetRepo: makeFakeSkillsetRepo([eligibleSkillset]),
+      skillsetService: makeFakeSkillsetService([eligibleSkillset]),
+      ornnPublicOrigin: "https://example",
+      settingsService: makeFakeSettings(),
+    });
+    await svc.reconcileAll();
+
+    // The reconcile-wide diff deletes every blob under the skillset subtree.
+    const deletions = calls.trees
+      .flatMap((t) => t.entries)
+      .filter((e) => e.path.startsWith("skillsets/research-bundle/") && e.sha === null);
+    expect(deletions.length).toBe(currentTree.length);
+    // No fresh skillset blobs were written.
+    expect(allTreePaths(calls).some((p) => p.startsWith("skillsets/research-bundle/") )
+      && calls.trees.flatMap((t) => t.entries).some((e) => e.path.startsWith("skillsets/research-bundle/") && e.sha !== null)).toBe(false);
+    // And it drops out of the marketplace catalogue.
+    const manifest = findMarketplaceBlob(calls);
+    expect((manifest?.plugins ?? []).some((p) => p.name === "research-bundle")).toBe(false);
+  });
+
+  it("re-includes a member once it is public again (#1161)", async () => {
+    // Same set, but now ALL members resolve public → the full subtree is built
+    // with no exclusions noted.
+    const restricted: FakeSkillset = {
+      ...eligibleSkillset,
+      members: ["pdf@1.0", "ocr@1.0", "secret@1.0"],
+    };
+    const { github, calls } = makeFakeGithub();
+    const svc = new MirrorService({
+      githubClientForTest: github,
+      skillRepo: makeFakeRepo([]),
+      skillService: makeFakeSkillService({
+        pdf: { "SKILL.md": "# pdf" },
+        ocr: { "SKILL.md": "# ocr" },
+        secret: { "SKILL.md": "# secret now public" },
+      }),
+      skillsetRepo: makeFakeSkillsetRepo([restricted]),
+      skillsetService: makeFakeSkillsetService([restricted]),
+      ornnPublicOrigin: "https://example",
+      settingsService: makeFakeSettings(),
+    });
+    await svc.reconcileAll();
+
+    const paths = allTreePaths(calls);
+    expect(paths).toContain("skillsets/research-bundle/skills/secret/SKILL.md");
+    // No exclusions, so no Excluded-members section in the README.
+    expect(calls.blobs.some((b) => b.content.includes("## Excluded members"))).toBe(false);
   });
 
   it("a skill incremental publish keeps skillset entries in the marketplace.json", async () => {
@@ -824,7 +924,13 @@ describe("MirrorService skillset plugin export (#1155)", () => {
     const svc = new MirrorService({
       githubClientForTest: github,
       skillRepo: makeFakeRepo([skill]),
-      skillService: makeFakeSkillService({ g1: { "SKILL.md": "# pdf" } }),
+      // The marketplace refresh now resolves the skillset's members to confirm
+      // it has ≥2 public members (#1161), so the member files must resolve.
+      skillService: makeFakeSkillService({
+        g1: { "SKILL.md": "# pdf" },
+        pdf: { "SKILL.md": "# pdf member" },
+        ocr: { "SKILL.md": "# ocr member" },
+      }),
       skillsetRepo: makeFakeSkillsetRepo([eligibleSkillset]),
       skillsetService: makeFakeSkillsetService([eligibleSkillset]),
       ornnPublicOrigin: "https://example",
@@ -953,8 +1059,9 @@ describe("MirrorService.syncSkillsetsForMember (#1159)", () => {
     expect(calls.commits.length).toBe(0);
   });
 
-  it("skips ineligible skillsets (opted-out / not all-public) that reference the skill", async () => {
+  it("skips an opted-out skillset but re-exports an opted-in restricted one (#1161)", async () => {
     const optedOut: FakeSkillset = { ...researchBundle, guid: "ss-out", name: "out-set", exportAsPlugin: false };
+    // Opted-in but restricted: now eligible — exports its public subset.
     const restricted: FakeSkillset = {
       ...researchBundle,
       guid: "ss-restr",
@@ -974,9 +1081,47 @@ describe("MirrorService.syncSkillsetsForMember (#1159)", () => {
       settingsService: makeFakeSettings(),
     });
     await svc.syncSkillsetsForMember("pdf-guid", "pdf");
-    // Neither skillset is export-eligible, so nothing is rebuilt/committed.
-    expect(calls.commits.length).toBe(0);
-    expect(calls.blobs.length).toBe(0);
+    const paths = allTreePaths(calls);
+    // The opted-in restricted skillset IS rebuilt (its public members resolve).
+    expect(paths).toContain("skillsets/restr-set/.claude-plugin/plugin.json");
+    // The opted-out skillset's folder is never touched.
+    expect(paths.some((p) => p.startsWith("skillsets/out-set/"))).toBe(false);
+    expect(calls.commits.length).toBe(1);
+  });
+
+  it("removes an exported skillset's subtree once it drops below 2 public members (#1161)", async () => {
+    // `ocr` goes private → research-bundle is left with 1 public member, so its
+    // existing subtree must be reconciled away in the targeted commit.
+    const currentTree: TreeEntry[] = [
+      { path: "skillsets/research-bundle/.claude-plugin/plugin.json", mode: "100644", type: "blob", sha: "p" },
+      { path: "skillsets/research-bundle/skills/pdf/SKILL.md", mode: "100644", type: "blob", sha: "a" },
+      { path: "skillsets/research-bundle/skills/ocr/SKILL.md", mode: "100644", type: "blob", sha: "b" },
+      { path: "skillsets/research-bundle/README.md", mode: "100644", type: "blob", sha: "r" },
+    ];
+    const { github, calls } = makeFakeGithub({ currentTree });
+    const svc = new MirrorService({
+      githubClientForTest: github,
+      skillRepo: makeFakeRepo([]),
+      skillService: makeFakeSkillService(
+        { pdf: { "SKILL.md": "# pdf" }, ocr: { "SKILL.md": "# ocr" } },
+        ["ocr"],
+      ),
+      skillsetRepo: makeFakeSkillsetRepo([researchBundle]),
+      skillsetService: makeFakeSkillsetService([researchBundle]),
+      ornnPublicOrigin: "https://example",
+      settingsService: makeFakeSettings(),
+    });
+    await svc.syncSkillsetsForMember("pdf-guid", "pdf");
+    const entries = calls.trees.flatMap((t) => t.entries);
+    const subtreeDeletions = entries.filter(
+      (e) => e.path.startsWith("skillsets/research-bundle/") && e.sha === null,
+    );
+    expect(subtreeDeletions.length).toBe(currentTree.length);
+    // No new subtree blob was staged for it.
+    expect(
+      entries.some((e) => e.path.startsWith("skillsets/research-bundle/") && e.sha !== null),
+    ).toBe(false);
+    expect(calls.commits.length).toBe(1);
   });
 
   it("rebuilds multiple affected skillsets in a SINGLE commit", async () => {
