@@ -41,10 +41,12 @@ import {
 } from "./marketplaceManifest";
 import {
   buildSkillsetPlugin,
+  isSafeMemberName,
   skillsetMarketplaceInput,
   SKILLSET_FOLDER,
   type SkillsetPluginMember,
 } from "./skillsetPlugin";
+import { SKILLSET_MIN_PUBLIC_EXPORT_MEMBERS } from "../../skillsets/types";
 import type { SkillsetDocument } from "../../skillsets/types";
 
 const logger = createLogger("mirrorService");
@@ -333,21 +335,31 @@ export class MirrorService {
       return;
     }
 
-    // Build every affected subtree, then commit them all in one shot.
+    // Build every affected subtree, then commit them all in one shot. A subtree
+    // that no longer exports (now <2 public members, #1161) still gets its
+    // folder prefix added — with NO desired paths — so the shared commit core
+    // deletes its stale `skillsets/<name>/` blobs (the plugin is un-exported).
     const desired = new Map<string, string>();
     const folderPrefixes: string[] = [];
     const rebuilt: string[] = [];
+    const removed: string[] = [];
     for (const ss of affected) {
-      const subtree = await this.buildOneSkillsetSubtree(ss);
-      if (!subtree) continue;
-      for (const [path, content] of subtree.files) desired.set(path, content);
+      // An unsafe name can't form a prefix safely and should never have been
+      // published — skip it entirely (neither rebuild nor remove).
+      if (!isSafeSkillFolderName(ss.name)) continue;
       folderPrefixes.push(`${SKILLSET_FOLDER}/${ss.name}/`);
-      rebuilt.push(ss.name);
+      const subtree = await this.buildOneSkillsetSubtree(ss);
+      if (subtree) {
+        for (const [path, content] of subtree.files) desired.set(path, content);
+        rebuilt.push(ss.name);
+      } else {
+        removed.push(ss.name);
+      }
     }
     if (folderPrefixes.length === 0) {
       logger.debug(
         { skillGuid, skillName, affected: affected.length },
-        "syncSkillsetsForMember: affected skillsets unresolvable — nothing to rebuild",
+        "syncSkillsetsForMember: affected skillsets have unsafe names — nothing to do",
       );
       return;
     }
@@ -359,7 +371,7 @@ export class MirrorService {
       message: `mirror: re-export skillsets for ${skillName}`,
     });
     logger.info(
-      { skillGuid, skillName, skillsets: rebuilt, committed: !!commit },
+      { skillGuid, skillName, rebuilt, removed, committed: !!commit },
       "syncSkillsetsForMember: targeted re-export complete",
     );
   }
@@ -430,9 +442,10 @@ export class MirrorService {
     desired.set("README.md", await this.repoReadme());
     const mirrorCfg = await this.deps.settingsService.getMirror();
 
-    // #1155 — second export layer: each opted-in, all-public skillset becomes
-    // ONE curated multi-skill plugin under `skillsets/<name>/`, and adds its
-    // own entry to the SAME root marketplace.json alongside the per-skill ones.
+    // #1155/#1161 — second export layer: each opted-in skillset with ≥2 public
+    // members becomes ONE curated multi-skill plugin (of its public subset)
+    // under `skillsets/<name>/`, and adds its own entry to the SAME root
+    // marketplace.json alongside the per-skill ones.
     const skillsetPluginInputs = await this.buildEligibleSkillsetSubtrees(desired);
 
     desired.set(
@@ -806,19 +819,24 @@ export class MirrorService {
   }
 
   /**
-   * Lightweight marketplace catalogue rows for every plugin-export-eligible
-   * skillset (#1155) — no member-file resolution. Safe-name filtered so a
-   * poisoned skillset name can never escape its `skillsets/<name>` source path.
+   * Marketplace catalogue rows for every skillset that ACTUALLY exports (#1155,
+   * #1161) — opted-in, safe-named, AND carrying ≥2 public members (so a subtree
+   * is built). The public-member check resolves members under SYSTEM (no file
+   * fetch), which keeps the shared marketplace.json in lockstep with the
+   * subtrees the reconcile path writes: a skillset dropped for too few public
+   * members must not linger as a dangling `./skillsets/<name>` catalogue row.
    * Returns `[]` when skillset deps aren't wired.
    */
   private async eligibleSkillsetMarketplaceInputs(): Promise<MarketplacePluginInput[]> {
     if (!this.deps.skillsetRepo) return [];
     const eligible = await this.deps.skillsetRepo.findAllEligibleForMirror();
-    return eligible
-      .filter((ss) => isSafeSkillFolderName(ss.name))
-      .map((ss) =>
-        // #1157 — owner overrides win over the skillset defaults, matching the
-        // full-reconcile subtree path so the shared marketplace.json never drifts.
+    const inputs: MarketplacePluginInput[] = [];
+    for (const ss of eligible) {
+      if (!isSafeSkillFolderName(ss.name)) continue;
+      if ((await this.countSkillsetPublicMembers(ss)) < SKILLSET_MIN_PUBLIC_EXPORT_MEMBERS) continue;
+      // #1157 — owner overrides win over the skillset defaults, matching the
+      // full-reconcile subtree path so the shared marketplace.json never drifts.
+      inputs.push(
         skillsetMarketplaceInput({
           name: ss.name,
           description: ss.pluginConfig?.description ?? ss.description,
@@ -826,18 +844,21 @@ export class MirrorService {
           keywords: ss.pluginConfig?.keywords ?? ss.tags,
         }),
       );
+    }
+    return inputs;
   }
 
   /**
-   * For every plugin-export-eligible skillset (#1155): resolve its members to
-   * concrete skill packages, assemble the `skills/<member>/…` + plugin.json +
-   * README subtree via {@link buildSkillsetPlugin}, and stage it into `desired`
-   * under `skillsets/<name>/…`. Returns the marketplace catalogue rows so the
-   * caller can merge them into the shared root marketplace.json.
+   * For every plugin-export-eligible skillset (#1155/#1161): resolve its
+   * members to concrete skill packages, assemble the public-subset
+   * `skills/<member>/…` + plugin.json + README subtree via
+   * {@link buildSkillsetPlugin}, and stage it into `desired` under
+   * `skillsets/<name>/…`. Returns the marketplace catalogue rows so the caller
+   * can merge them into the shared root marketplace.json.
    *
-   * A skillset that can't be resolved (no version, or every member dropped) is
-   * skipped — one bad skillset must not abort the whole sweep, mirroring the
-   * per-skill folder guard.
+   * A skillset that can't be exported (no version, or fewer than 2 public
+   * members remaining) is skipped — its stale subtree, if any, is removed by the
+   * reconcile-wide diff. One bad skillset never aborts the sweep.
    */
   private async buildEligibleSkillsetSubtrees(
     desired: Map<string, string>,
@@ -857,13 +878,18 @@ export class MirrorService {
   }
 
   /**
-   * Assemble ONE skillset's `skillsets/<name>/…` subtree (#1155/#1159):
-   * resolve its latest-version members to concrete packages, build the
+   * Assemble ONE skillset's `skillsets/<name>/…` subtree (#1155/#1159/#1161):
+   * resolve its latest-version members under SYSTEM, bundle ONLY the public,
+   * resolvable members (dropping private / unresolvable ones), build the
    * multi-skill plugin via {@link buildSkillsetPlugin}, and return the file map
    * already prefixed under `skillsets/<name>/` plus the marketplace catalogue
-   * row. Returns `null` when the skillset can't be exported (unsafe name, no
-   * published version, or skillset deps unwired) so a caller skips it without
-   * aborting a batch. Shared by the full reconcile sweep and the targeted
+   * row. The dropped members are listed in the README; nothing private is ever
+   * bundled.
+   *
+   * Returns `null` — so the caller removes / skips the subtree — when the
+   * skillset can't be exported: unsafe name, no published version, skillset deps
+   * unwired, or FEWER THAN {@link SKILLSET_MIN_PUBLIC_EXPORT_MEMBERS} public
+   * members remain (#1161). Shared by the full reconcile sweep and the targeted
    * per-member re-export.
    */
   private async buildOneSkillsetSubtree(
@@ -886,13 +912,53 @@ export class MirrorService {
       repoSlug: `${cfg.owner}/${cfg.repo}`,
       repoName: cfg.repo,
     };
-    const loadMember = this.makeMemberLoader();
+
+    // Resolve each member under SYSTEM and partition into public-resolvable
+    // (bundled) vs private/unresolvable (excluded → README note only). Only the
+    // public subset's files are ever fetched, so a private member's content can
+    // never leak into the public mirror (#1161).
+    const load = this.deps.skillService.createVersionLoader(SYSTEM_ACTOR);
     const members: SkillsetPluginMember[] = [];
+    const includedNames = new Set<string>();
+    const excludedMembers: string[] = [];
     for (const ref of latest.members) {
-      const m = await loadMember(ref);
-      if (m) members.push(m);
-      else logger.warn({ skillset: ss.name, ref }, "mirror: skillset member unresolvable; skipping");
+      const node = await load(ref);
+      if (!node) {
+        excludedMembers.push(memberRefName(ref));
+        logger.warn({ skillset: ss.name, ref }, "mirror: skillset member unresolvable; excluding");
+        continue;
+      }
+      if (node.isPrivate !== false || !isSafeMemberName(node.name)) {
+        excludedMembers.push(node.name);
+        logger.info(
+          { skillset: ss.name, member: node.name },
+          "mirror: skillset member private/unsafe; excluding from public plugin",
+        );
+        continue;
+      }
+      if (includedNames.has(node.name)) continue; // de-dupe (mirrors normalizeMembers)
+      includedNames.add(node.name);
+      const json = await this.deps.skillService.getSkillJson(
+        node.guid ?? node.name,
+        SYSTEM_ACTOR,
+        node.version,
+      );
+      const files: Record<string, string> = {};
+      for (const [path, content] of Object.entries(json.files)) files[path] = content;
+      members.push({ name: node.name, version: node.version, description: json.description, files });
     }
+
+    // Guard: keep exporting only while ≥2 public members remain. Below the
+    // floor the subtree is null → the reconcile / targeted path removes any
+    // existing `skillsets/<name>/` (the plugin is un-exported).
+    if (includedNames.size < SKILLSET_MIN_PUBLIC_EXPORT_MEMBERS) {
+      logger.info(
+        { guid: ss.guid, name: ss.name, publicMembers: includedNames.size, excluded: excludedMembers.length },
+        "mirror: skillset has too few public members; not exporting",
+      );
+      return null;
+    }
+
     const { files, marketplace } = buildSkillsetPlugin(
       {
         name: ss.name,
@@ -901,6 +967,8 @@ export class MirrorService {
         tags: ss.tags,
         instructions: latest.instructions,
         members,
+        // #1161 — dropped members surfaced in the README (public-subset note).
+        excludedMembers,
         // #1157 — owner listing overrides; the builder resolves the fallbacks.
         pluginConfig: ss.pluginConfig,
       },
@@ -914,29 +982,26 @@ export class MirrorService {
   }
 
   /**
-   * Build a member-ref resolver for the skillset plugin export (#1155).
-   * Resolves each ref under SYSTEM via the shared closure loader (handles
-   * name/guid + version/dist-tag/latest), then fetches the resolved version's
-   * package files. Returns `null` for an unresolvable ref so the caller can
-   * skip it. Eligible skillsets are all-public, so members resolve in practice;
-   * the null path is pure defence.
+   * Count a skillset's PUBLIC, resolvable members of its latest version (#1161)
+   * — resolved under SYSTEM, de-duped by skill name. Cheap relative to
+   * {@link buildOneSkillsetSubtree}: it loads each member's version node (for
+   * the `isPrivate` flag) WITHOUT fetching package files. Drives the
+   * marketplace-catalogue eligibility so the shared marketplace.json never lists
+   * a skillset whose subtree was dropped for having too few public members.
    */
-  private makeMemberLoader(): (ref: string) => Promise<SkillsetPluginMember | null> {
+  private async countSkillsetPublicMembers(ss: SkillsetDocument): Promise<number> {
+    if (!this.deps.skillsetService) return 0;
+    const latest = await this.deps.skillsetService.getLatestForMirror(ss.guid);
+    if (!latest) return 0;
     const load = this.deps.skillService.createVersionLoader(SYSTEM_ACTOR);
-    return async (ref: string): Promise<SkillsetPluginMember | null> => {
+    const publicNames = new Set<string>();
+    for (const ref of latest.members) {
       const node = await load(ref);
-      if (!node) return null;
-      const json = await this.deps.skillService.getSkillJson(
-        node.guid ?? node.name,
-        SYSTEM_ACTOR,
-        node.version,
-      );
-      const files: Record<string, string> = {};
-      for (const [path, content] of Object.entries(json.files)) {
-        files[path] = content;
+      if (node && node.isPrivate === false && isSafeMemberName(node.name)) {
+        publicNames.add(node.name);
       }
-      return { name: node.name, version: node.version, description: json.description, files };
-    };
+    }
+    return publicNames.size;
   }
 
   private async writeCommitAndTag(
@@ -991,6 +1056,16 @@ function toMarketplaceInput(skill: SkillDocument): MarketplacePluginInput {
 /** Mirror folder-name safety (#807) — also gates manifest membership. */
 function isSafeSkillFolderName(name: string): boolean {
   return SKILL_NAME_REGEX.test(name) && name.length <= SKILL_NAME_MAX;
+}
+
+/**
+ * The skill-name part of a member ref (`<name-or-guid>@<version>`), for the
+ * README excluded-members note when the ref is otherwise unresolvable (#1161).
+ * Falls back to the raw ref when it carries no `@`.
+ */
+function memberRefName(ref: string): string {
+  const at = ref.lastIndexOf("@");
+  return at > 0 ? ref.slice(0, at) : ref;
 }
 
 /**

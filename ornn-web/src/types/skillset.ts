@@ -28,6 +28,14 @@ export type SkillsetKind = (typeof SKILLSET_KINDS)[number];
 
 /** Lower bound on members — a one-member "set" is just a skill. */
 export const SKILLSET_MIN_MEMBERS = 2;
+
+/**
+ * Minimum number of PUBLIC, resolvable members a skillset must have to export
+ * (or keep exporting) as a public Claude Code plugin (#1161). Mirrors the
+ * backend `SKILLSET_MIN_PUBLIC_EXPORT_MEMBERS`. The export card gates the
+ * opt-in button on `publicMemberCount >= SKILLSET_MIN_PUBLIC_EXPORT_MEMBERS`.
+ */
+export const SKILLSET_MIN_PUBLIC_EXPORT_MEMBERS = 2;
 /** Upper bound on members — guards against a pathological publish. */
 export const SKILLSET_MAX_MEMBERS = 100;
 
@@ -133,6 +141,14 @@ export interface SkillsetDetail {
    * the read-only install snippet on the detail page.
    */
   exportAsPlugin: boolean;
+  /**
+   * Number of THIS version's members whose skill is currently public AND
+   * resolvable (#1161). The export bundles only this public subset; the export
+   * card gates the opt-in on `publicMemberCount >= 2` and derives the excluded
+   * count as `members.length - publicMemberCount`. Always present from the API;
+   * optional only for back-compat with older fixtures (treated as 0 when absent).
+   */
+  publicMemberCount?: number | undefined;
   /**
    * Owner-customizable plugin listing overrides (#1157). Each field, when set,
    * overrides the corresponding skillset default in the exported plugin; absent

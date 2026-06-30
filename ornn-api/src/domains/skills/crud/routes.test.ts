@@ -1169,6 +1169,29 @@ describe("PUT /skills/:id/permissions", () => {
     expect(recomputed).toHaveLength(1);
     expect(recomputed[0]!.guid).toBe("guid-1");
   });
+
+  test("fires the targeted skillset re-export after a permissions change (#1161)", async () => {
+    // A privacy flip changes each exported skillset's public subset, so the
+    // permissions path must re-export the affected skillsets immediately.
+    const fired: Array<[string, string]> = [];
+    const app = buildApp({
+      userId: OWNER,
+      permissions: [UPDATE],
+      repo: { findByGuid: async () => skillDoc({ createdBy: OWNER, name: "pdf-tools" }) },
+      service: {
+        setSkillPermissions: async () => detail({ createdBy: OWNER, name: "pdf-tools" }),
+        getSkill: async () => detail({ createdBy: OWNER, name: "pdf-tools" }),
+      },
+      onSkillsetMirrorForMember: (guid, name) => fired.push([guid, name]),
+    });
+    const res = await app.request("/api/v1/skills/guid-1/permissions", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ isPrivate: true, sharedWithUsers: [], sharedWithOrgs: [] }),
+    });
+    expect(res.status).toBe(200);
+    expect(fired).toEqual([["guid-1", "pdf-tools"]]);
+  });
 });
 
 // ======================================================================
