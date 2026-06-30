@@ -434,8 +434,9 @@ describe("PUT/DELETE /skillsets/:id — scope gating", () => {
     expect(res.status).toBe(403);
   });
 
-  test("transfer-ownership 200 delegating to the service", async () => {
+  test("transfer-ownership 200 delegating to the service + firing the mirror reconcile (#1159)", async () => {
     const calls: string[] = [];
+    let fired = 0;
     const app = buildApp({
       permissions: [UPDATE],
       service: {
@@ -443,6 +444,9 @@ describe("PUT/DELETE /skillsets/:id — scope gating", () => {
           calls.push("transferOwnership");
           return { guid: "ss-1", createdBy: "alice" };
         },
+      },
+      fireMirrorReconcile: () => {
+        fired += 1;
       },
     });
     const res = await app.request("/api/v1/skillsets/ss-1/transfer-ownership", {
@@ -452,6 +456,30 @@ describe("PUT/DELETE /skillsets/:id — scope gating", () => {
     });
     expect(res.status).toBe(200);
     expect(calls).toEqual(["transferOwnership"]);
+    // #1159 — the transfer now reconciles the mirror, matching the skill path.
+    expect(fired).toBe(1);
+  });
+
+  test("transfer-ownership does NOT fire the mirror reconcile when rejected (#1159)", async () => {
+    let fired = 0;
+    const app = buildApp({
+      permissions: [UPDATE],
+      service: {
+        transferOwnership: async () => {
+          throw AppError.forbidden("forbidden", "only the owner may transfer");
+        },
+      },
+      fireMirrorReconcile: () => {
+        fired += 1;
+      },
+    });
+    const res = await app.request("/api/v1/skillsets/ss-1/transfer-ownership", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ newOwnerUserId: "alice" }),
+    });
+    expect(res.status).toBe(403);
+    expect(fired).toBe(0);
   });
 
   test("transfer-ownership 400 on a missing newOwnerUserId", async () => {

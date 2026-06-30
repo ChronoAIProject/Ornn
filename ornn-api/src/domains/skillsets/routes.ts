@@ -244,6 +244,9 @@ export function createSkillsetRoutes(
       // mutation) so a non-owner can't enumerate users via the response.
       const updated = await skillsetService.transferOwnership(id, body.newOwnerUserId, actor);
       logger.info({ guid: id, newOwnerId: body.newOwnerUserId }, "Skillset ownership transferred via API");
+      // #1159 — symmetry with the skill transfer path: a re-owned skillset must
+      // refresh the mirror (its plugin README provenance/links can change).
+      fireMirrorReconcile?.();
       return c.json({ data: { skillset: updated }, error: null });
     },
   );
