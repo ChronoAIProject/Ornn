@@ -5,16 +5,18 @@
  * action on the skillset detail page, sitting directly above the visibility card.
  *
  *   - Owner, not exported: an "Export as a Claude Code plugin" button (disabled
- *     with a hint when the skillset isn't all-public) opens a confirm modal that
- *     lets the owner customise the plugin's display name / description / keywords.
+ *     with a hint when fewer than two members are public) opens a confirm modal
+ *     that lets the owner customise the plugin's display name / description /
+ *     keywords.
  *   - Owner, exported: the install snippet + "Edit fields" (reopens the modal,
  *     prefilled) + "Stop exporting" (behind a small confirm).
  *   - Any viewer, exported: the install snippet only — an exported skillset is
  *     public, so the snippet is safe to surface to everyone.
  *
  * The install NAME stays the skillset name and the VERSION stays the auto
- * fingerprint — neither is user-editable. Export still requires every member be
- * public; the API enforces the same gate server-side.
+ * fingerprint — neither is user-editable. Export bundles only the PUBLIC-member
+ * subset (#1161): private / unresolvable members are dropped, and export needs
+ * ≥2 public members to stay live; the API enforces the same gate server-side.
  *
  * @module components/skillset/SkillsetPluginExportCard
  */
@@ -30,7 +32,11 @@ import { useGithubRepo } from "@/hooks/useGithubMirror";
 import { useUpdatePluginExport } from "@/hooks/useSkillsets";
 import { useToastStore } from "@/stores/toastStore";
 import { translateError } from "@/utils/translateError";
-import type { PluginExportInput, SkillsetDetail } from "@/types/skillset";
+import {
+  SKILLSET_MIN_PUBLIC_EXPORT_MEMBERS,
+  type PluginExportInput,
+  type SkillsetDetail,
+} from "@/types/skillset";
 
 /** Kebab-case keyword — mirrors the backend `keywords` grammar. */
 const KEYWORD_REGEX = /^[a-z0-9-]+$/;
@@ -62,11 +68,17 @@ export function SkillsetPluginExportCard({
   const [keywords, setKeywords] = useState<string[]>([]);
   const keywordInputId = useId();
 
-  const allPublic = skillset.memberVisibilityState === "all-public";
-  // The skillset is actually exporting only when opted in AND every member is
-  // public (the only state the mirror publishes). A later member-privacy flip
+  // Export bundles the PUBLIC-member subset (#1161): the gate is ≥2 public,
+  // resolvable members — not "all-public". A restricted skillset can still
+  // export as long as enough members stay public.
+  const publicMemberCount = skillset.publicMemberCount ?? 0;
+  const enoughPublic = publicMemberCount >= SKILLSET_MIN_PUBLIC_EXPORT_MEMBERS;
+  // Number of members dropped from the bundle (private / unresolvable).
+  const excludedCount = Math.max(skillset.members.length - publicMemberCount, 0);
+  // The skillset is actually exporting only when opted in AND ≥2 public members
+  // remain (the only state the mirror publishes). A later member-privacy flip
   // can leave the opt-in set while export is effectively paused.
-  const exported = skillset.exportAsPlugin && allPublic;
+  const exported = skillset.exportAsPlugin && enoughPublic;
 
   const repoReady = !!repoCfg?.enabled && !!repoCfg.owner && !!repoCfg.repo;
   const commands = repoReady
@@ -149,12 +161,22 @@ export function SkillsetPluginExportCard({
             {t("skillsetPluginExport.exportedStatus", "Exported as a Claude Code plugin")}
           </p>
           {exported && repoReady ? (
-            <InstallSnippet commands={commands} />
+            <>
+              <InstallSnippet commands={commands} />
+              {excludedCount > 0 && (
+                <p className="font-text text-xs text-meta">
+                  {t("skillsetPluginExport.excludedNote", {
+                    excluded: excludedCount,
+                    defaultValue: "{{excluded}} member(s) excluded (private or unresolvable).",
+                  })}
+                </p>
+              )}
+            </>
           ) : (
             <p className="font-text text-xs text-meta">
               {t(
                 "skillsetPluginExport.pausedNote",
-                "Export is paused until every member skill is public again.",
+                "Export is paused until at least 2 member skills are public again.",
               )}
             </p>
           )}
@@ -179,16 +201,16 @@ export function SkillsetPluginExportCard({
             variant="primary"
             size="sm"
             className="w-full"
-            disabled={!allPublic}
+            disabled={!enoughPublic}
             onClick={openModal}
           >
             {t("skillsetPluginExport.exportButton", "Export as a Claude Code plugin")}
           </Button>
-          {!allPublic && (
+          {!enoughPublic && (
             <p className="font-text text-xs text-meta">
               {t(
                 "skillsetPluginExport.disabledHint",
-                "Only available once every member skill is public.",
+                "Requires at least 2 public member skills.",
               )}
             </p>
           )}

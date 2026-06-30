@@ -53,6 +53,7 @@ const BASE: SkillsetDetail = {
   sharedWithOrgs: [],
   memberVisibilityState: "all-public",
   exportAsPlugin: false,
+  publicMemberCount: 2,
   unreadableMembers: [],
   createdOn: "2026-06-01T00:00:00.000Z",
   updatedOn: "2026-06-02T00:00:00.000Z",
@@ -65,18 +66,18 @@ afterEach(() => {
 });
 
 describe("SkillsetPluginExportCard", () => {
-  it("owner + not exported + all-public: shows an enabled export button", () => {
+  it("owner + not exported + ≥2 public members: shows an enabled export button", () => {
     repoState.data = ENABLED;
     render(<SkillsetPluginExportCard skillset={BASE} isOwner idOrName="research-bundle" />);
     const btn = screen.getByRole("button", { name: "Export as a Claude Code plugin" });
     expect(btn).not.toBeDisabled();
   });
 
-  it("owner + not exported + restricted: disables the button with a hint", () => {
+  it("owner + not exported + <2 public members: disables the button with a hint", () => {
     repoState.data = ENABLED;
     render(
       <SkillsetPluginExportCard
-        skillset={{ ...BASE, memberVisibilityState: "restricted" }}
+        skillset={{ ...BASE, publicMemberCount: 1 }}
         isOwner
         idOrName="research-bundle"
       />,
@@ -85,7 +86,47 @@ describe("SkillsetPluginExportCard", () => {
       screen.getByRole("button", { name: "Export as a Claude Code plugin" }),
     ).toBeDisabled();
     expect(
-      screen.getByText("Only available once every member skill is public."),
+      screen.getByText("Requires at least 2 public member skills."),
+    ).toBeInTheDocument();
+  });
+
+  it("owner + not exported + restricted but ≥2 public: enables the button (#1161)", () => {
+    // Gating is on the public-member count, NOT memberVisibilityState — a
+    // restricted skillset that still has 2 public members can export its subset.
+    repoState.data = ENABLED;
+    render(
+      <SkillsetPluginExportCard
+        skillset={{
+          ...BASE,
+          memberVisibilityState: "restricted",
+          members: ["a@1.0", "b@1.0", "secret@1.0"],
+          publicMemberCount: 2,
+        }}
+        isOwner
+        idOrName="research-bundle"
+      />,
+    );
+    expect(
+      screen.getByRole("button", { name: "Export as a Claude Code plugin" }),
+    ).not.toBeDisabled();
+  });
+
+  it("owner + exported with exclusions: surfaces the excluded-members note (#1161)", () => {
+    repoState.data = ENABLED;
+    render(
+      <SkillsetPluginExportCard
+        skillset={{
+          ...BASE,
+          exportAsPlugin: true,
+          members: ["a@1.0", "b@1.0", "secret@1.0"],
+          publicMemberCount: 2,
+        }}
+        isOwner
+        idOrName="research-bundle"
+      />,
+    );
+    expect(
+      screen.getByText("1 member(s) excluded (private or unresolvable)."),
     ).toBeInTheDocument();
   });
 
