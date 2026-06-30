@@ -119,10 +119,12 @@ function CopyBlock({
   content,
   copyAriaLabel,
   multiline,
+  centered = false,
 }: {
   content: string;
   copyAriaLabel: string;
   multiline: boolean;
+  centered?: boolean;
 }) {
   const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
@@ -154,15 +156,21 @@ function CopyBlock({
     <div className="relative h-32 overflow-hidden rounded border border-strong-edge bg-elevated/40">
       <code
         className={
-          multiline
-            // pr-20 reserves a clear gutter so prompt text never slides
-            // under the floating COPY button.
-            ? "block h-full overflow-y-auto whitespace-pre-wrap break-words px-3 py-2 pr-20 font-mono text-xs leading-relaxed text-strong"
-            // Single-line command centred both axes inside the h-32
-            // box. Symmetric `px-20` mirrors the COPY-button gutter on
-            // the left so the centred text is visually centred, not
-            // offset by the right-only padding.
-            : "h-full flex items-center justify-center overflow-x-auto px-20 font-mono text-sm text-strong"
+          centered
+            // Multi-line command(s) centred both axes inside the box —
+            // the same centred treatment as the single-line npx variant,
+            // but `whitespace-pre` keeps the line breaks. Used by the
+            // plugin tab so its layout matches "via npx".
+            ? "h-full flex items-center justify-center overflow-auto px-12 text-center font-mono text-sm leading-relaxed text-strong whitespace-pre"
+            : multiline
+              // pr-20 reserves a clear gutter so prompt text never slides
+              // under the floating COPY button.
+              ? "block h-full overflow-y-auto whitespace-pre-wrap break-words px-3 py-2 pr-20 font-mono text-xs leading-relaxed text-strong"
+              // Single-line command centred both axes inside the h-32
+              // box. Symmetric `px-20` mirrors the COPY-button gutter on
+              // the left so the centred text is visually centred, not
+              // offset by the right-only padding.
+              : "h-full flex items-center justify-center overflow-x-auto px-20 font-mono text-sm text-strong"
         }
       >
         {content}
@@ -345,25 +353,21 @@ export function SkillInstallCard({ skill, className }: SkillInstallCardProps) {
         <div role="tabpanel" className="mt-3 space-y-3">
           {npxAvailable ? (
             <>
+              {/* Auto-update reminder folded into the helper (above the box)
+                  so the panel matches the "via npx" layout — helper + a
+                  centred CopyBlock, no per-tab footer (#418 symmetry). */}
               <p className="font-text text-xs text-meta">
                 {t(
                   "skillInstallCard.pluginHelper",
-                  "Published to the Claude Code marketplace as a single-skill plugin. Install it in Claude Code:",
+                  "Published to the Claude Code marketplace as a single-skill plugin. Third-party marketplaces ship auto-update OFF — enable it in /plugin → Marketplaces.",
                 )}
               </p>
               <CopyBlock
                 content={pluginCommands}
                 copyAriaLabel={t("skillInstallCard.copyPluginAria", "Copy plugin install commands")}
-                multiline
+                multiline={false}
+                centered
               />
-              {/* Shared wording with the skillset export card — third-party
-                  marketplaces ship auto-update OFF (#1167). */}
-              <p className="font-text text-xs text-meta">
-                {t(
-                  "skillsetPluginExport.installAutoUpdate",
-                  "Third-party marketplaces default to auto-update OFF — enable it in /plugin → Marketplaces to receive updates.",
-                )}
-              </p>
             </>
           ) : (
             <p className="font-text text-xs text-meta">

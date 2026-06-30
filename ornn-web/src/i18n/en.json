@@ -175,7 +175,7 @@
     "npxHelper": "Mirrored to GitHub for one-line installation in any agent harness.",
     "npxNotAvailablePrivate": "Not available — private skills are never mirrored to GitHub. Use the prompt flow instead.",
     "npxNotAvailableMirrorOff": "Not available — this deployment doesn't have the GitHub mirror configured. Use the prompt flow instead.",
-    "pluginHelper": "Published to the Claude Code marketplace as a single-skill plugin. Install it in Claude Code:",
+    "pluginHelper": "Published to the Claude Code marketplace as a single-skill plugin. Third-party marketplaces ship auto-update OFF — enable it in /plugin → Marketplaces.",
     "pluginNotAvailablePrivate": "Available once this skill is public — public skills are published to the Claude Code marketplace as a plugin.",
     "copy": "Copy",
     "copied": "Copied",
