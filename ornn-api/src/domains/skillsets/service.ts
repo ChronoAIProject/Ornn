@@ -38,14 +38,15 @@ import { effectiveGrants, normalizeGrants } from "../skills/crud/grants";
 import { recomputeForSkill, recomputeSkillsetVisibility } from "./recompute";
 import type { SkillsetRepository } from "./repository";
 import type { SkillsetVersionRepository } from "./skillsetVersionRepository";
-import type {
-  CreateSkillsetInput,
-  PluginExportInput,
-  PublishSkillsetInput,
-  SkillsetDetailResponse,
-  SkillsetDocument,
-  SkillsetPluginOverrides,
-  SkillsetVersionDocument,
+import {
+  SKILLSET_MIN_PUBLIC_EXPORT_MEMBERS,
+  type CreateSkillsetInput,
+  type PluginExportInput,
+  type PublishSkillsetInput,
+  type SkillsetDetailResponse,
+  type SkillsetDocument,
+  type SkillsetPluginOverrides,
+  type SkillsetVersionDocument,
 } from "./types";
 
 const logger = createLogger("skillsetService");
@@ -279,12 +280,14 @@ export class SkillsetService {
    * (#1157). The opt-in is a deliberate, configurable action — NOT a create /
    * publish side effect. Owner/admin only (WRITE tier, mirroring publish).
    *
-   * Enabling requires the skillset be `all-public` (every member public) — the
-   * only state where publishing member content to the public mirror is safe;
-   * a request to enable a restricted/unresolvable skillset is rejected. The
-   * overrides (`displayName` / `description` / `keywords`) are stored only when
-   * provided; an empty set clears them so the mirror falls back to the
-   * skillset's own name / description / tags. Disabling clears the overrides.
+   * Enabling requires the skillset have at least
+   * {@link SKILLSET_MIN_PUBLIC_EXPORT_MEMBERS} public, resolvable members (#1161)
+   * — the export bundles only that public subset, so a restricted skillset (one
+   * private member) may still export as long as enough public members remain; a
+   * request to enable a skillset below the floor is rejected. The overrides
+   * (`displayName` / `description` / `keywords`) are stored only when provided;
+   * an empty set clears them so the mirror falls back to the skillset's own name
+   * / description / tags. Disabling is always allowed and clears the overrides.
    */
   async setPluginExport(
     guid: string,
@@ -302,14 +305,18 @@ export class SkillsetService {
       );
     }
 
-    const visibility = existing.memberVisibilityState ?? "all-public";
-    if (input.enabled && visibility !== "all-public") {
-      // Member content is only safe to publish to the public mirror when every
-      // member is public — refuse to enable otherwise (the UI also gates this).
-      throw AppError.conflict(
-        "skillset_not_all_public",
-        "A skillset can only be exported as a plugin when every member skill is public.",
-      );
+    if (input.enabled) {
+      // Only the public-member subset is ever bundled, so a private member never
+      // leaks — but a plugin under the floor is too thin to be a meaningful set.
+      // Count the latest version's public members under SYSTEM and gate on it.
+      const latest = await this.skillsetVersionRepo.findLatestBySkillset(guid);
+      const publicCount = latest ? await this.countPublicMembers(latest.members) : 0;
+      if (publicCount < SKILLSET_MIN_PUBLIC_EXPORT_MEMBERS) {
+        throw AppError.conflict(
+          "skillset_too_few_public_members",
+          `A skillset needs at least ${SKILLSET_MIN_PUBLIC_EXPORT_MEMBERS} public member skills to export as a plugin.`,
+        );
+      }
     }
 
     const overrides = input.enabled ? buildPluginOverrides(input) : null;
@@ -340,7 +347,7 @@ export class SkillsetService {
   async getSkillset(idOrName: string, version?: string): Promise<SkillsetDetailResponse> {
     const skillset = await this.findByIdOrName(idOrName);
     const versionDoc = await this.loadVersionOrThrow(skillset, version);
-    return toDetail(skillset, versionDoc, []);
+    return this.buildDetail(skillset, versionDoc, []);
   }
 
   /**
@@ -370,7 +377,7 @@ export class SkillsetService {
       // never which member (or that one even exists).
       throw AppError.notFound("skillset_not_found", `Skillset '${idOrName}' not found`);
     }
-    return toDetail(skillset, versionDoc, unreadableMembers);
+    return this.buildDetail(skillset, versionDoc, unreadableMembers);
   }
 
   /**
@@ -681,6 +688,39 @@ export class SkillsetService {
     return unreadable;
   }
 
+  /**
+   * Count the PUBLIC, resolvable members of a version under SYSTEM (#1161),
+   * de-duped by skill name. A member is public iff it resolves AND its skill's
+   * `isPrivate === false`. Single-sourced with the mirror's export filter so the
+   * detail-surfaced count + the opt-in gate agree with what actually gets
+   * bundled. Resolved as SYSTEM so a member's own privacy — not the caller's
+   * read access — decides public-ness.
+   */
+  private async countPublicMembers(members: string[]): Promise<number> {
+    const load = this.skillService.createVersionLoader(SYSTEM_ACTOR);
+    const publicNames = new Set<string>();
+    for (const ref of members) {
+      const node = await load(ref);
+      if (node && node.isPrivate === false) publicNames.add(node.name);
+    }
+    return publicNames.size;
+  }
+
+  /**
+   * Serialize a skillset detail, computing the public-member count (#1161) so
+   * the response carries it for the web export-card gate. The count is over the
+   * RETURNED version's members (latest by default), matching the `members` array
+   * in the same response.
+   */
+  private async buildDetail(
+    skillset: SkillsetDocument,
+    versionDoc: SkillsetVersionDocument,
+    unreadableMembers: string[],
+  ): Promise<SkillsetDetailResponse> {
+    const publicMemberCount = await this.countPublicMembers(versionDoc.members);
+    return toDetail(skillset, versionDoc, unreadableMembers, publicMemberCount);
+  }
+
   private async findByIdOrName(idOrName: string): Promise<SkillsetDocument> {
     let skillset = await this.skillsetRepo.findByGuid(idOrName);
     if (!skillset) {
@@ -749,6 +789,7 @@ function toDetail(
   skillset: SkillsetDocument,
   versionDoc: SkillsetVersionDocument,
   unreadableMembers: string[],
+  publicMemberCount: number,
 ): SkillsetDetailResponse {
   return {
     guid: skillset.guid,
@@ -775,6 +816,8 @@ function toDetail(
     // Plugin-export opt-in (#1155) + owner listing overrides (#1157).
     exportAsPlugin: skillset.exportAsPlugin ?? false,
     pluginConfig: skillset.pluginConfig,
+    // Public-member subset size (#1161) — drives the export-card gate.
+    publicMemberCount,
     unreadableMembers,
     createdOn:
       skillset.createdOn instanceof Date ? skillset.createdOn.toISOString() : String(skillset.createdOn),

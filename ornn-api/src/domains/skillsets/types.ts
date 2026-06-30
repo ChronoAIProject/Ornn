@@ -44,6 +44,16 @@ export type SkillsetKind = (typeof SKILLSET_KINDS)[number];
 
 /** Lower bound on members — a one-member "set" is just a skill. */
 export const SKILLSET_MIN_MEMBERS = 2;
+
+/**
+ * Minimum number of PUBLIC, resolvable members a skillset must have to export
+ * (or keep exporting) as a public Claude Code plugin (#1161). The plugin bundles
+ * only the public-member subset; below this floor the bundle is too thin to be a
+ * meaningful "set", so export is refused / the plugin is removed. Distinct from
+ * {@link SKILLSET_MIN_MEMBERS} (which bounds the curated set itself, public or
+ * not) even though both currently equal 2.
+ */
+export const SKILLSET_MIN_PUBLIC_EXPORT_MEMBERS = 2;
 /**
  * Upper bound on members. Generous: a curated comparison set is rarely
  * more than a handful, but a large fleet bundle is legitimate. Guards
@@ -260,8 +270,11 @@ export interface SkillsetDocument {
   /**
    * Owner opt-in (#1155) to export this skillset as ONE curated multi-skill
    * Claude Code plugin in the public mirror. Eligibility to actually export =
-   * `memberVisibilityState === "all-public"` AND this flag. Optional for
-   * back-compat (absent ⇒ treated as `false`). Default OFF.
+   * this flag AND the skillset having ≥ {@link SKILLSET_MIN_PUBLIC_EXPORT_MEMBERS}
+   * public, resolvable members (#1161) — the export bundles only that public
+   * subset, dropping private/unresolvable members, so a "restricted" skillset
+   * still exports its public part. Optional for back-compat (absent ⇒ `false`).
+   * Default OFF.
    */
   exportAsPlugin?: boolean | undefined;
   /**
@@ -345,6 +358,14 @@ export interface SkillsetDetailResponse {
    * the toggle state + the install snippet. Always present (defaults `false`).
    */
   exportAsPlugin: boolean;
+  /**
+   * Number of THIS version's members whose skill is currently public AND
+   * resolvable, counted under SYSTEM (#1161). The export bundles only this
+   * public subset; export is available / sustained only while this is
+   * ≥ {@link SKILLSET_MIN_PUBLIC_EXPORT_MEMBERS}. The web export card gates on
+   * it (and derives the excluded count as `members.length - publicMemberCount`).
+   */
+  publicMemberCount: number;
   /**
    * Owner-customizable plugin listing overrides (#1157). Surfaced so the web
    * export card can prefill the confirm modal with the current overrides (or

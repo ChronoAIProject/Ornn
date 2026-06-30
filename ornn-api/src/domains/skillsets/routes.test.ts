@@ -382,12 +382,12 @@ describe("PUT/DELETE /skillsets/:id — scope gating", () => {
     expect(captured[0]).toEqual({ enabled: true, displayName: "Research Bundle", keywords: ["rag"] });
   });
 
-  test("PUT /plugin-export surfaces a 409 when not all-public (#1157)", async () => {
+  test("PUT /plugin-export surfaces a 409 when too few public members (#1157/#1161)", async () => {
     const app = buildApp({
       permissions: [UPDATE],
       service: {
         setPluginExport: async () => {
-          throw AppError.conflict("skillset_not_all_public", "members not all public");
+          throw AppError.conflict("skillset_too_few_public_members", "needs ≥2 public members");
         },
       },
     });
@@ -397,7 +397,7 @@ describe("PUT/DELETE /skillsets/:id — scope gating", () => {
       body: JSON.stringify({ enabled: true }),
     });
     expect(res.status).toBe(409);
-    expect(((await res.json()) as { code: string }).code).toBe("skillset_not_all_public");
+    expect(((await res.json()) as { code: string }).code).toBe("skillset_too_few_public_members");
   });
 
   test("PUT + DELETE fire the mirror reconcile on success (#1155)", async () => {

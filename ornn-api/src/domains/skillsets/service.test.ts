@@ -913,7 +913,9 @@ describe("SkillsetService.setPluginExport (#1157)", () => {
     expect(code).toBe("forbidden");
   });
 
-  it("rejects enabling when the skillset is not all-public", async () => {
+  it("rejects enabling when fewer than 2 public members remain (#1161)", async () => {
+    // restr-set has one public (pdf-tools) + one private (secret-tools) member,
+    // so only one public member remains — below the export floor.
     const { svc, guid } = await seedRestricted();
     let code = "";
     try {
@@ -921,7 +923,49 @@ describe("SkillsetService.setPluginExport (#1157)", () => {
     } catch (err) {
       code = (err as AppError).code;
     }
-    expect(code).toBe("skillset_not_all_public");
+    expect(code).toBe("skillset_too_few_public_members");
+  });
+
+  it("allows enabling a restricted skillset that still has ≥2 public members (#1161)", async () => {
+    // Two public members + one private: the export bundles the public subset, so
+    // the opt-in is allowed even though the skillset is restricted on Ornn.
+    const a = skillDoc({ guid: "g-a", name: "pdf-tools", latestVersion: "1.0", isPrivate: false });
+    const b = skillDoc({ guid: "g-b", name: "csv-tools", latestVersion: "1.0", isPrivate: false });
+    const c = skillDoc({
+      guid: "g-c",
+      name: "secret-tools",
+      latestVersion: "1.0",
+      isPrivate: true,
+      createdBy: "other-user",
+    });
+    const skillService = makeSkillService(
+      [a, b, c],
+      [
+        skillVersion({ _id: "g-a@1.0", skillGuid: "g-a", version: "1.0" }),
+        skillVersion({ _id: "g-b@1.0", skillGuid: "g-b", version: "1.0" }),
+        skillVersion({ _id: "g-c@1.0", skillGuid: "g-c", version: "1.0" }),
+      ],
+    );
+    const { deps } = makeSkillsetDeps(skillService);
+    const svc = new SkillsetService(deps);
+    const created = await svc.createSkillset(
+      {
+        ...base,
+        name: "two-public-set",
+        version: "1.0",
+        members: ["pdf-tools@1.0", "csv-tools@1.0", "secret-tools@1.0"],
+      },
+      { userId: "owner-1" },
+    );
+    const updated = await svc.setPluginExport(created.guid, { enabled: true }, OWNER);
+    expect(updated.exportAsPlugin).toBe(true);
+    expect(updated.publicMemberCount).toBe(2);
+  });
+
+  it("detail surfaces the public-member count (#1161)", async () => {
+    const { svc, guid } = await seedPublic();
+    const detail = await svc.getSkillset(guid);
+    expect(detail.publicMemberCount).toBe(2);
   });
 
   it("disabling clears the opt-in + any stored overrides", async () => {
