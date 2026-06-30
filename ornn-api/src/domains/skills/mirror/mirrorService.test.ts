@@ -24,7 +24,6 @@ import {
   type MirrorSkillsetRepo,
   type MirrorSkillsetSource,
 } from "./mirrorService";
-import { fingerprintVersion } from "./skillsetPlugin";
 import type { GitHubMirrorClient, TreeEntry } from "./githubMirrorClient";
 import type { SkillRepository } from "../crud/repository";
 import type { SkillService } from "../crud/service";
@@ -990,10 +989,11 @@ describe("MirrorService.syncSkillsetsForMember (#1159)", () => {
     instructions: "Run pdf, then ocr.",
   };
 
-  it("rebuilds the affected subtree + bumps the plugin.json fingerprint on a member change", async () => {
-    // The mirror already holds an OLD subtree; the member set now resolves
-    // pdf to 1.1, so the rebuilt plugin.json must carry a NEW fingerprint and
-    // the member SKILL.md must be re-uploaded.
+  it("rebuilds the affected subtree + writes plugin.json at the plain revision (#1162)", async () => {
+    // The mirror already holds an OLD subtree; the member content changed, so
+    // the member SKILL.md must be re-uploaded. plugin.json carries the plain
+    // skillset revision (the service bumps it BEFORE the export, sequenced in
+    // bootstrap) — no `+sk` fingerprint, so plugin.json + marketplace agree.
     const currentTree: TreeEntry[] = [
       { path: "skillsets/research-bundle/.claude-plugin/plugin.json", mode: "100644", type: "blob", sha: "old-plugin-sha" },
       { path: "skillsets/research-bundle/skills/pdf/SKILL.md", mode: "100644", type: "blob", sha: "old-pdf-sha" },
@@ -1020,20 +1020,11 @@ describe("MirrorService.syncSkillsetsForMember (#1159)", () => {
     expect(allTreePaths(calls)).toContain("skillsets/research-bundle/skills/pdf/SKILL.md");
     expect(calls.blobs.some((b) => b.content === "# pdf member v2")).toBe(true);
 
-    // plugin.json carries the fingerprint of the NEW resolved member set,
-    // which differs from the old one (pdf 1.0 → 1.1).
+    // plugin.json carries the plain revision (no fingerprint) — matching the
+    // skillset's latestVersion.
     const pluginJson = parsedBlobs(calls).find((p) => p.name === "research-bundle");
     expect(pluginJson).toBeTruthy();
-    const newFp = fingerprintVersion("2.0", [
-      { name: "ocr", version: "1.0", description: "", files: {} },
-      { name: "pdf", version: "1.1", description: "", files: {} },
-    ]);
-    const oldFp = fingerprintVersion("2.0", [
-      { name: "ocr", version: "1.0", description: "", files: {} },
-      { name: "pdf", version: "1.0", description: "", files: {} },
-    ]);
-    expect(newFp).not.toBe(oldFp);
-    expect(pluginJson!.version).toBe(newFp);
+    expect(pluginJson!.version).toBe("2.0");
     expect(calls.commits.length).toBe(1);
   });
 
