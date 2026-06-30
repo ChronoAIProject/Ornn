@@ -141,6 +141,13 @@ export const createSkillsetSchema = z.object({
     .string()
     .regex(SKILL_VERSION_REGEX, "version must be `<major>.<minor>`")
     .default("1.0"),
+  /**
+   * Opt-in (#1155) to export this skillset as ONE curated multi-skill Claude
+   * Code plugin in the public mirror repo. Only takes effect once the skillset
+   * is also `all-public` (every member public). Optional on the wire; the
+   * service defaults a missing value to OFF.
+   */
+  exportAsPlugin: z.boolean().optional(),
 });
 
 /**
@@ -163,6 +170,12 @@ export const publishSkillsetSchema = z.object({
     .min(SKILLSET_MIN_MEMBERS, `a skillset must have at least ${SKILLSET_MIN_MEMBERS} members`)
     .max(SKILLSET_MAX_MEMBERS, `a skillset may have at most ${SKILLSET_MAX_MEMBERS} members`),
   version: z.string().regex(SKILL_VERSION_REGEX, "version must be `<major>.<minor>`"),
+  /**
+   * Opt-in (#1155) — same flag as create. Optional on publish with NO reset:
+   * omitting it preserves the skillset's current setting (only an explicit
+   * boolean flips it). The web form always sends it explicitly.
+   */
+  exportAsPlugin: z.boolean().optional(),
 });
 
 // NOTE (#1136): no skillset permissions schema — a skillset's visibility is
@@ -220,6 +233,13 @@ export interface SkillsetDocument {
   membersAllPublic?: boolean | undefined;
   /** Derived (#1136) member-visibility state of the latest version. */
   memberVisibilityState?: SkillsetMemberVisibilityState | undefined;
+  /**
+   * Owner opt-in (#1155) to export this skillset as ONE curated multi-skill
+   * Claude Code plugin in the public mirror. Eligibility to actually export =
+   * `memberVisibilityState === "all-public"` AND this flag. Optional for
+   * back-compat (absent ⇒ treated as `false`). Default OFF.
+   */
+  exportAsPlugin?: boolean | undefined;
   /** Cached pointer to the highest published version, e.g. "1.2". */
   latestVersion: string;
 }
@@ -289,6 +309,12 @@ export interface SkillsetDetailResponse {
    * visibility — `isPrivate`/`grants` above are inert.
    */
   memberVisibilityState: SkillsetMemberVisibilityState;
+  /**
+   * Owner opt-in (#1155) to export the skillset as a curated multi-skill
+   * Claude Code plugin in the public mirror. Surfaced so the web UI can show
+   * the toggle state + the install snippet. Always present (defaults `false`).
+   */
+  exportAsPlugin: boolean;
   /**
    * Member refs the CALLER cannot read at THIS version (#1136). Always
    * empty for a non-owner (they 404 instead of seeing a partial set);

@@ -18,12 +18,18 @@
 
 import { describe, expect, it, mock } from "bun:test";
 import { createHash } from "node:crypto";
-import { MirrorService, type MirrorSettingsReader } from "./mirrorService";
+import {
+  MirrorService,
+  type MirrorSettingsReader,
+  type MirrorSkillsetRepo,
+  type MirrorSkillsetSource,
+} from "./mirrorService";
 import type { GitHubMirrorClient, TreeEntry } from "./githubMirrorClient";
 import type { SkillRepository } from "../crud/repository";
 import type { SkillService } from "../crud/service";
 import type { ActorContext } from "../crud/authorize";
 import type { SkillDocument } from "../../../shared/types/index";
+import type { SkillsetDocument } from "../../skillsets/types";
 import type { MirrorSection } from "../../settings/sections/mirror";
 
 /** Stub SettingsService surface used by MirrorService — fixed mirror config. */
@@ -158,14 +164,83 @@ function makeFakeSkillService(
 ): SkillService {
   return {
     // Signature mirrors the #806 service change: (idOrName, actor, version?).
-    getSkillJson: mock(async (idOrName: string, _actor: ActorContext, _version?: string) => ({
-      name: "demo-skill",
-      description: "A test skill.",
-      version: "1.0",
+    getSkillJson: mock(async (idOrName: string, _actor: ActorContext, version?: string) => ({
+      name: idOrName,
+      description: `Desc for ${idOrName}`,
+      version: version ?? "1.0",
       metadata: { category: "plain" },
       files: filesByGuid[idOrName] ?? {},
     })),
+    // #1155 — the skillset member loader resolves each ref to a concrete
+    // version, then fetches its files. The fake resolves `<name>@<version>`
+    // against `filesByGuid` keyed by member name (guid == name here).
+    createVersionLoader: mock((_actor: ActorContext) => async (ref: string) => {
+      const at = ref.lastIndexOf("@");
+      if (at <= 0) return null;
+      const name = ref.slice(0, at);
+      const version = ref.slice(at + 1);
+      if (!(name in filesByGuid)) return null;
+      return { ref: `${name}@${version}`, name, version, guid: name, isPrivate: false, dependsOn: [] };
+    }),
   } as unknown as SkillService;
+}
+
+/** One fake skillset row carrying everything the mirror reads (#1155). */
+interface FakeSkillset {
+  guid: string;
+  name: string;
+  description: string;
+  latestVersion: string;
+  tags: string[];
+  memberVisibilityState: "all-public" | "restricted" | "unresolvable";
+  exportAsPlugin: boolean;
+  members: string[];
+  instructions: string;
+}
+
+/**
+ * Fake skillset repo — replicates the REAL eligibility filter
+ * (`memberVisibilityState === "all-public"` AND `exportAsPlugin`) so the
+ * exclusion tests exercise the contract the mirror depends on.
+ */
+function makeFakeSkillsetRepo(skillsets: FakeSkillset[]): MirrorSkillsetRepo {
+  return {
+    findAllEligibleForMirror: mock(async () =>
+      skillsets
+        .filter((s) => s.memberVisibilityState === "all-public" && s.exportAsPlugin)
+        .map(
+          (s) =>
+            ({
+              guid: s.guid,
+              name: s.name,
+              description: s.description,
+              kind: "generic",
+              tags: s.tags,
+              createdBy: "u1",
+              createdOn: new Date(),
+              updatedBy: "u1",
+              updatedOn: new Date(),
+              isPrivate: false,
+              sharedWithUsers: [],
+              sharedWithOrgs: [],
+              memberVisibilityState: s.memberVisibilityState,
+              exportAsPlugin: s.exportAsPlugin,
+              latestVersion: s.latestVersion,
+            }) as unknown as SkillsetDocument,
+        ),
+    ),
+  };
+}
+
+/** Fake skillset service — latest version member refs + master prompt. */
+function makeFakeSkillsetService(skillsets: FakeSkillset[]): MirrorSkillsetSource {
+  const byGuid = new Map(skillsets.map((s) => [s.guid, s]));
+  return {
+    getLatestForMirror: mock(async (guid: string) => {
+      const s = byGuid.get(guid);
+      return s ? { members: s.members, instructions: s.instructions } : null;
+    }),
+  };
 }
 
 // ────────────────────────── tests ──────────────────────────
@@ -522,5 +597,146 @@ describe("MirrorService Claude Code marketplace (#1153)", () => {
     const manifest = findMarketplaceBlob(calls);
     expect(manifest).not.toBeNull();
     expect(manifest!.plugins).toEqual([]); // catalogue now empty
+  });
+});
+
+describe("MirrorService skillset plugin export (#1155)", () => {
+  function allTreePaths(calls: CallLog): string[] {
+    return calls.trees.flatMap((t) => t.entries.map((e) => e.path));
+  }
+  function findMarketplaceBlob(
+    calls: CallLog,
+  ): { plugins: Array<{ name: string; source: string }> } | null {
+    for (const b of calls.blobs) {
+      try {
+        const parsed = JSON.parse(b.content);
+        if (parsed && Array.isArray(parsed.plugins)) return parsed;
+      } catch {
+        // not JSON — skip.
+      }
+    }
+    return null;
+  }
+
+  const eligibleSkillset: FakeSkillset = {
+    guid: "ss-1",
+    name: "research-bundle",
+    description: "A curated research set.",
+    latestVersion: "2.0",
+    tags: ["research"],
+    memberVisibilityState: "all-public",
+    exportAsPlugin: true,
+    members: ["pdf@1.0", "ocr@1.0"],
+    instructions: "Run pdf, then ocr.",
+  };
+
+  it("reconcileAll emits the skillset subtree + a marketplace entry", async () => {
+    const skill = makeSkill({ guid: "g1", name: "pdf", isPrivate: false });
+    const { github, calls } = makeFakeGithub();
+    const svc = new MirrorService({
+      githubClientForTest: github,
+      skillRepo: makeFakeRepo([skill]),
+      skillService: makeFakeSkillService({
+        g1: { "SKILL.md": "# pdf" },
+        pdf: { "SKILL.md": "# pdf member" },
+        ocr: { "SKILL.md": "# ocr member" },
+      }),
+      skillsetRepo: makeFakeSkillsetRepo([eligibleSkillset]),
+      skillsetService: makeFakeSkillsetService([eligibleSkillset]),
+      ornnPublicOrigin: "https://example",
+      settingsService: makeFakeSettings(),
+    });
+    await svc.reconcileAll();
+
+    const paths = allTreePaths(calls);
+    expect(paths).toContain("skillsets/research-bundle/.claude-plugin/plugin.json");
+    expect(paths).toContain("skillsets/research-bundle/skills/pdf/SKILL.md");
+    expect(paths).toContain("skillsets/research-bundle/skills/ocr/SKILL.md");
+    expect(paths).toContain("skillsets/research-bundle/README.md");
+
+    const manifest = findMarketplaceBlob(calls);
+    expect(manifest).not.toBeNull();
+    const entry = manifest!.plugins.find((p) => p.name === "research-bundle");
+    expect(entry).toBeDefined();
+    expect(entry!.source).toBe("./skillsets/research-bundle");
+    // The per-skill plugin (pdf) is still catalogued alongside it.
+    expect(manifest!.plugins.some((p) => p.name === "pdf" && p.source === "./pdf")).toBe(true);
+  });
+
+  it("excludes a skillset that is not opted in (exportAsPlugin=false)", async () => {
+    const optedOut: FakeSkillset = { ...eligibleSkillset, exportAsPlugin: false };
+    const { github, calls } = makeFakeGithub();
+    const svc = new MirrorService({
+      githubClientForTest: github,
+      skillRepo: makeFakeRepo([]),
+      skillService: makeFakeSkillService({ pdf: { "SKILL.md": "# pdf" }, ocr: { "SKILL.md": "# ocr" } }),
+      skillsetRepo: makeFakeSkillsetRepo([optedOut]),
+      skillsetService: makeFakeSkillsetService([optedOut]),
+      ornnPublicOrigin: "https://example",
+      settingsService: makeFakeSettings(),
+    });
+    await svc.reconcileAll();
+
+    expect(allTreePaths(calls).some((p) => p.startsWith("skillsets/"))).toBe(false);
+    const manifest = findMarketplaceBlob(calls);
+    expect((manifest?.plugins ?? []).some((p) => p.name === "research-bundle")).toBe(false);
+  });
+
+  it("excludes a skillset that is not all-public (restricted members)", async () => {
+    const restricted: FakeSkillset = { ...eligibleSkillset, memberVisibilityState: "restricted" };
+    const { github, calls } = makeFakeGithub();
+    const svc = new MirrorService({
+      githubClientForTest: github,
+      skillRepo: makeFakeRepo([]),
+      skillService: makeFakeSkillService({ pdf: { "SKILL.md": "# pdf" }, ocr: { "SKILL.md": "# ocr" } }),
+      skillsetRepo: makeFakeSkillsetRepo([restricted]),
+      skillsetService: makeFakeSkillsetService([restricted]),
+      ornnPublicOrigin: "https://example",
+      settingsService: makeFakeSettings(),
+    });
+    await svc.reconcileAll();
+
+    expect(allTreePaths(calls).some((p) => p.startsWith("skillsets/"))).toBe(false);
+  });
+
+  it("a skill incremental publish keeps skillset entries in the marketplace.json", async () => {
+    const skill = makeSkill({ guid: "g1", name: "pdf", isPrivate: false });
+    // Existing head with the skill folder but no manifest yet.
+    const currentTree: TreeEntry[] = [
+      { path: "pdf/SKILL.md", mode: "100644", type: "blob", sha: "old-sha" },
+    ];
+    const { github, calls } = makeFakeGithub({ currentTree });
+    const svc = new MirrorService({
+      githubClientForTest: github,
+      skillRepo: makeFakeRepo([skill]),
+      skillService: makeFakeSkillService({ g1: { "SKILL.md": "# pdf" } }),
+      skillsetRepo: makeFakeSkillsetRepo([eligibleSkillset]),
+      skillsetService: makeFakeSkillsetService([eligibleSkillset]),
+      ornnPublicOrigin: "https://example",
+      settingsService: makeFakeSettings(),
+    });
+    await svc.publishSkill("g1");
+
+    const manifest = findMarketplaceBlob(calls);
+    expect(manifest).not.toBeNull();
+    // The skillset entry survives a skill-only publish (#1155).
+    const entry = manifest!.plugins.find((p) => p.name === "research-bundle");
+    expect(entry).toBeDefined();
+    expect(entry!.source).toBe("./skillsets/research-bundle");
+  });
+
+  it("no-ops the skillset subtree when skillset deps are unwired (back-compat)", async () => {
+    const skill = makeSkill({ guid: "g1", name: "pdf", isPrivate: false });
+    const { github, calls } = makeFakeGithub();
+    const svc = new MirrorService({
+      githubClientForTest: github,
+      skillRepo: makeFakeRepo([skill]),
+      skillService: makeFakeSkillService({ g1: { "SKILL.md": "# pdf" } }),
+      // No skillsetRepo / skillsetService.
+      ornnPublicOrigin: "https://example",
+      settingsService: makeFakeSettings(),
+    });
+    await svc.reconcileAll();
+    expect(allTreePaths(calls).some((p) => p.startsWith("skillsets/"))).toBe(false);
   });
 });

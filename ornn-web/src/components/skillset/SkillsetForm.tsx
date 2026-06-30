@@ -34,6 +34,7 @@ import {
   type CreateSkillsetInput,
   type PublishSkillsetInput,
   type SkillsetKind,
+  type SkillsetMemberVisibilityState,
 } from "@/types/skillset";
 
 /** Kebab-case skill/skillset name. Mirrors the backend `SKILL_NAME_REGEX`. */
@@ -49,6 +50,14 @@ export interface SkillsetFormInitial {
   tags?: string[] | undefined;
   members?: string[] | undefined;
   version?: string | undefined;
+  /** Plugin-export opt-in (#1155) — seeds the toggle in edit mode. */
+  exportAsPlugin?: boolean | undefined;
+  /**
+   * Derived member-visibility state (#1155). The plugin-export toggle is only
+   * actionable when this is `all-public` (member content is safe to publish);
+   * otherwise it's disabled with a hint. Absent in create mode.
+   */
+  memberVisibilityState?: SkillsetMemberVisibilityState | undefined;
 }
 
 export interface SkillsetFormProps {
@@ -78,6 +87,14 @@ export function SkillsetForm({
   const [kind, setKind] = useState<SkillsetKind>(initial?.kind ?? "generic");
   const [tags, setTags] = useState<string[]>(initial?.tags ?? []);
   const [members, setMembersRaw] = useState<string[]>(initial?.members ?? []);
+  // Plugin-export opt-in (#1155). Disabled unless the loaded skillset is
+  // all-public — exporting member content is only safe then. On create there
+  // is no derived state yet, so the toggle is enabled (the backend still gates
+  // the actual export on all-public).
+  const [exportAsPlugin, setExportAsPlugin] = useState(initial?.exportAsPlugin ?? false);
+  const exportDisabled =
+    initial?.memberVisibilityState !== undefined &&
+    initial.memberVisibilityState !== "all-public";
   /** Compute an auto-bumped version for edit mode so user doesn't have to manually type the next tag. */
   function bumpVersion(current: string, level: "minor" | "major" = "minor"): string {
     const [majStr = "", minStr = ""] = current.trim().split(".");
@@ -161,6 +178,7 @@ export function SkillsetForm({
         tags,
         members,
         version: version.trim(),
+        exportAsPlugin,
       });
     } else {
       await onPublish?.({
@@ -170,6 +188,7 @@ export function SkillsetForm({
         tags,
         members,
         version: version.trim(),
+        exportAsPlugin,
       });
     }
   }
@@ -325,6 +344,34 @@ export function SkillsetForm({
           </div>
         </div>
       </div>
+
+      {/* Plugin export opt-in (#1155). Disabled (with a hint) until the
+          skillset is all-public — exporting member content is only safe then. */}
+      <label className="flex cursor-pointer items-start gap-3 rounded border border-subtle bg-elevated/40 p-4">
+        <input
+          type="checkbox"
+          checked={exportAsPlugin}
+          disabled={exportDisabled}
+          onChange={(e) => setExportAsPlugin(e.target.checked)}
+          className="mt-1 h-4 w-4 shrink-0 rounded border-accent/40 accent-accent disabled:opacity-50"
+        />
+        <div className="flex-1">
+          <p className="font-display text-base text-strong">
+            {t("skillsetForm.exportLabel", "Export as a Claude Code plugin")}
+          </p>
+          <p className="mt-0.5 font-text text-sm text-meta">
+            {exportDisabled
+              ? t(
+                  "skillsetForm.exportDisabledHint",
+                  "Only available once every member skill is public.",
+                )
+              : t(
+                  "skillsetForm.exportHint",
+                  "Publish this skillset as one curated multi-skill plugin in the public mirror.",
+                )}
+          </p>
+        </div>
+      </label>
 
       {/* Members. */}
       <SkillsetMemberPicker

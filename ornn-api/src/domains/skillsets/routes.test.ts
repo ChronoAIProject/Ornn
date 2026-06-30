@@ -60,12 +60,15 @@ interface BuildOpts {
   userId?: string;
   permissions?: string[];
   service?: Record<string, (...args: unknown[]) => unknown>;
+  /** #1155 — capture mirror-reconcile triggers fired by mutation routes. */
+  fireMirrorReconcile?: () => void;
 }
 
 function buildApp(opts: BuildOpts = {}) {
   const { authenticated = true, userId = OWNER, permissions = [], service = {} } = opts;
   const config: SkillsetRoutesConfig = {
     skillsetService: fakeService(service),
+    ...(opts.fireMirrorReconcile ? { fireMirrorReconcile: opts.fireMirrorReconcile } : {}),
   };
   const app = new Hono();
   if (authenticated) {
@@ -242,6 +245,48 @@ describe("POST /skillsets — scope reuse + gating", () => {
     });
     expect(res.status).toBe(400);
   });
+
+  test("fires the mirror reconcile after a successful create (#1155)", async () => {
+    let fired = 0;
+    const app = buildApp({
+      permissions: [CREATE],
+      service: { createSkillset: async () => detail({ guid: "ss-new" }) },
+      fireMirrorReconcile: () => {
+        fired += 1;
+      },
+    });
+    const res = await app.request("/api/v1/skillsets", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        name: "review-set",
+        description: "d",
+        instructions: "Use a, then b.",
+        members: ["a@1.0", "b@1.0"],
+        exportAsPlugin: true,
+      }),
+    });
+    expect(res.status).toBe(201);
+    expect(fired).toBe(1);
+  });
+
+  test("does NOT fire the mirror reconcile when create is rejected (#1155)", async () => {
+    let fired = 0;
+    const app = buildApp({
+      permissions: [CREATE],
+      fireMirrorReconcile: () => {
+        fired += 1;
+      },
+    });
+    // Invalid body (1 member) → 400 before the handler body runs.
+    const res = await app.request("/api/v1/skillsets", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "review-set", description: "d", members: ["a@1.0"] }),
+    });
+    expect(res.status).toBe(400);
+    expect(fired).toBe(0);
+  });
 });
 
 describe("PUT/DELETE /skillsets/:id — scope gating", () => {
@@ -286,6 +331,30 @@ describe("PUT/DELETE /skillsets/:id — scope gating", () => {
     });
     const res = await app.request("/api/v1/skillsets/ss-1", { method: "DELETE" });
     expect(res.status).toBe(200);
+  });
+
+  test("PUT + DELETE fire the mirror reconcile on success (#1155)", async () => {
+    let fired = 0;
+    const fireMirrorReconcile = () => {
+      fired += 1;
+    };
+    const putApp = buildApp({
+      permissions: [UPDATE],
+      service: { publishVersion: async () => detail({ version: "1.1" }) },
+      fireMirrorReconcile,
+    });
+    await putApp.request("/api/v1/skillsets/ss-1", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ version: "1.1", instructions: "Use a, then b.", members: ["a@1.0", "b@1.0"] }),
+    });
+    const delApp = buildApp({
+      permissions: [DELETE],
+      service: { deleteSkillset: async () => undefined },
+      fireMirrorReconcile,
+    });
+    await delApp.request("/api/v1/skillsets/ss-1", { method: "DELETE" });
+    expect(fired).toBe(2);
   });
 
   test("transfer-ownership 403 without ornn:skill:update", async () => {

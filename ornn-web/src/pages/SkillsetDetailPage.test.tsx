@@ -59,6 +59,14 @@ vi.mock("@/components/skillset/SkillsetMemberViewer", () => ({
   ),
 }));
 
+// The plugin-install card (#1155) calls useGithubRepo (react-query). This page
+// test renders without a QueryClientProvider, so stub the hook; `data:
+// undefined` keeps the card hidden (the card's own gating is covered by
+// SkillsetPluginInstallCard.test).
+vi.mock("@/hooks/useGithubMirror", () => ({
+  useGithubRepo: () => ({ data: undefined }),
+}));
+
 import { SkillsetDetailPage } from "./SkillsetDetailPage";
 import type { SkillsetDetail } from "@/types/skillset";
 

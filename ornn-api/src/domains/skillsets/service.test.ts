@@ -138,6 +138,7 @@ function makeSkillsetDeps(
       createdBy: string;
       isPrivate?: boolean;
       latestVersion: string;
+      exportAsPlugin?: boolean;
     }) => {
       const now = new Date();
       const doc: SkillsetDocument = {
@@ -153,6 +154,8 @@ function makeSkillsetDeps(
         isPrivate: data.isPrivate ?? true,
         sharedWithUsers: [],
         sharedWithOrgs: [],
+        // #1155 — persist the plugin-export opt-in (default OFF).
+        exportAsPlugin: data.exportAsPlugin ?? false,
         latestVersion: data.latestVersion,
       };
       state.skillsets.set(data.guid, doc);
@@ -764,6 +767,83 @@ describe("SkillsetService — create / publish (immutable versioning)", () => {
       code = (err as AppError).code;
     }
     expect(code).toBe("skillset_name_exists");
+  });
+});
+
+describe("SkillsetService — plugin-export opt-in (#1155)", () => {
+  function service() {
+    const { skills, versions } = twoMemberSkills();
+    const skillService = makeSkillService(skills, versions);
+    const { deps, state } = makeSkillsetDeps(skillService);
+    return { svc: new SkillsetService(deps), state };
+  }
+
+  const base = {
+    description: "d",
+    instructions: "p",
+    kind: "generic" as const,
+    tags: [],
+    members: ["pdf-tools@1.0", "csv-tools@1.0"],
+  };
+
+  it("create surfaces exportAsPlugin=true in the detail", async () => {
+    const { svc } = service();
+    const created = await svc.createSkillset(
+      { ...base, name: "exp-set", version: "1.0", exportAsPlugin: true },
+      { userId: "owner-1" },
+    );
+    expect(created.exportAsPlugin).toBe(true);
+  });
+
+  it("create defaults exportAsPlugin to false when omitted", async () => {
+    const { svc } = service();
+    const created = await svc.createSkillset(
+      { ...base, name: "noexp-set", version: "1.0" },
+      { userId: "owner-1" },
+    );
+    expect(created.exportAsPlugin).toBe(false);
+  });
+
+  it("publish flips the opt-in, and omitting it on a later publish preserves it", async () => {
+    const { svc } = service();
+    const created = await svc.createSkillset(
+      { ...base, name: "flip-set", version: "1.0" },
+      { userId: "owner-1" },
+    );
+    expect(created.exportAsPlugin).toBe(false);
+
+    const opted = await svc.publishVersion(
+      created.guid,
+      { ...base, version: "1.1", exportAsPlugin: true },
+      OWNER,
+    );
+    expect(opted.exportAsPlugin).toBe(true);
+
+    // A publish that omits the flag preserves the current setting.
+    const kept = await svc.publishVersion(
+      created.guid,
+      { ...base, version: "1.2" },
+      OWNER,
+    );
+    expect(kept.exportAsPlugin).toBe(true);
+  });
+
+  it("getLatestForMirror returns the latest version's members + master prompt", async () => {
+    const { svc } = service();
+    const created = await svc.createSkillset(
+      { ...base, instructions: "Run pdf then csv.", name: "mir-set", version: "1.0", exportAsPlugin: true },
+      { userId: "owner-1" },
+    );
+    const latest = await svc.getLatestForMirror(created.guid);
+    expect(latest).toEqual({
+      members: ["pdf-tools@1.0", "csv-tools@1.0"],
+      instructions: "Run pdf then csv.",
+    });
+  });
+
+  it("getLatestForMirror returns null for an unknown skillset", async () => {
+    const { svc } = service();
+    expect(await svc.getLatestForMirror("nope")).toBeNull();
   });
 });
 

@@ -98,6 +98,52 @@ describe("SkillsetRepository — CRUD", () => {
     expect(guids.sort()).toEqual(["ss-a", "ss-b", "ss-c"]);
   });
 
+  test("exportAsPlugin persists on create and round-trips (#1155)", async () => {
+    await repo.create({
+      guid: "ss-opt",
+      name: "opt-set",
+      description: "d",
+      kind: "generic",
+      tags: [],
+      createdBy: "o",
+      latestVersion: "1.0",
+      exportAsPlugin: true,
+    });
+    expect((await repo.findByGuid("ss-opt"))?.exportAsPlugin).toBe(true);
+  });
+
+  test("exportAsPlugin defaults to false when omitted on create (#1155)", async () => {
+    await repo.create({
+      guid: "ss-def",
+      name: "def-set",
+      description: "d",
+      kind: "generic",
+      tags: [],
+      createdBy: "o",
+      latestVersion: "1.0",
+    });
+    expect((await repo.findByGuid("ss-def"))?.exportAsPlugin).toBe(false);
+  });
+
+  test("update flips exportAsPlugin only when an explicit value is given (#1155)", async () => {
+    await repo.create({
+      guid: "ss-u",
+      name: "u-set",
+      description: "d",
+      kind: "generic",
+      tags: [],
+      createdBy: "o",
+      latestVersion: "1.0",
+      exportAsPlugin: true,
+    });
+    // A publish that omits the flag must preserve it.
+    await repo.update("ss-u", { latestVersion: "1.1", updatedBy: "o" });
+    expect((await repo.findByGuid("ss-u"))?.exportAsPlugin).toBe(true);
+    // An explicit false turns it off.
+    await repo.update("ss-u", { exportAsPlugin: false, updatedBy: "o" });
+    expect((await repo.findByGuid("ss-u"))?.exportAsPlugin).toBe(false);
+  });
+
   test("create rejects a duplicate name with skillset_name_exists", async () => {
     await repo.create({
       guid: "ss-1",
@@ -123,6 +169,27 @@ describe("SkillsetRepository — CRUD", () => {
       code = (err as { code: string }).code;
     }
     expect(code).toBe("skillset_name_exists");
+  });
+});
+
+describe("SkillsetRepository — findAllEligibleForMirror (#1155)", () => {
+  test("returns only all-public AND opted-in skillsets", async () => {
+    await seed(
+      { _id: "ok", name: "ok-set", memberVisibilityState: "all-public", exportAsPlugin: true },
+      // opted in but not all-public → excluded (member content not safe to publish).
+      { _id: "restr", name: "restr-set", memberVisibilityState: "restricted", exportAsPlugin: true },
+      // all-public but not opted in → excluded (no consent).
+      { _id: "noopt", name: "noopt-set", memberVisibilityState: "all-public", exportAsPlugin: false },
+      // all-public, opt-in field absent (pre-feature doc) → excluded.
+      { _id: "legacy", name: "legacy-set", memberVisibilityState: "all-public" },
+    );
+    const eligible = await repo.findAllEligibleForMirror();
+    expect(eligible.map((s) => s.guid)).toEqual(["ok"]);
+  });
+
+  test("returns an empty list when nothing is eligible", async () => {
+    await seed({ _id: "x", name: "x-set", memberVisibilityState: "all-public", exportAsPlugin: false });
+    expect(await repo.findAllEligibleForMirror()).toEqual([]);
   });
 });
 

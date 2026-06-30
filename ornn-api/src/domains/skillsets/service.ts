@@ -156,6 +156,8 @@ export class SkillsetService {
       createdByEmail: actor.email,
       createdByDisplayName: actor.displayName,
       isPrivate: true,
+      // Plugin-export opt-in (#1155) — default OFF at create time.
+      exportAsPlugin: input.exportAsPlugin ?? false,
       latestVersion: input.version,
     });
     await this.skillsetVersionRepo.create({
@@ -251,12 +253,15 @@ export class SkillsetService {
     });
 
     // Advance the identity doc's cached pointers to the new version.
+    // #1155 — `exportAsPlugin` is optional on publish: omitting it preserves
+    // the current setting (the repo only writes the field when defined).
     await this.skillsetRepo.update(guid, {
       description,
       kind,
       tags,
       latestVersion: input.version,
       updatedBy: actor.userId,
+      ...(input.exportAsPlugin !== undefined ? { exportAsPlugin: input.exportAsPlugin } : {}),
     });
 
     // The new version's member set may differ from the prior one — rederive
@@ -325,6 +330,21 @@ export class SkillsetService {
     if (!latest) return false;
     const unreadable = await this.resolveUnreadableMembers(latest.members, actor);
     return unreadable.length === 0;
+  }
+
+  /**
+   * Latest-version member refs + master prompt for the plugin-export mirror
+   * (#1155). Returns `null` when the skillset has no published version. The
+   * mirror resolves the member refs to concrete skill packages itself (under
+   * SYSTEM via the shared loader), so this only surfaces the raw refs + the
+   * README-bound master prompt — no closure walk here.
+   */
+  async getLatestForMirror(
+    guid: string,
+  ): Promise<{ members: string[]; instructions: string } | null> {
+    const latest = await this.skillsetVersionRepo.findLatestBySkillset(guid);
+    if (!latest) return null;
+    return { members: latest.members, instructions: latest.instructions };
   }
 
   /** List all published versions, newest first. */
@@ -681,6 +701,8 @@ function toDetail(
     grants: effectiveGrants(skillset),
     // Derived visibility (#1136) — the authoritative signal for the badge.
     memberVisibilityState: skillset.memberVisibilityState ?? "all-public",
+    // Plugin-export opt-in (#1155).
+    exportAsPlugin: skillset.exportAsPlugin ?? false,
     unreadableMembers,
     createdOn:
       skillset.createdOn instanceof Date ? skillset.createdOn.toISOString() : String(skillset.createdOn),

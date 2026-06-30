@@ -43,6 +43,14 @@ const logger = createLogger("skillsetRoutes");
 
 export interface SkillsetRoutesConfig {
   skillsetService: SkillsetService;
+  /**
+   * Fire-and-forget mirror reconcile (#1155). Called after a successful
+   * create / publish / delete because any of those can change which skillsets
+   * are plugin-export-eligible (opt-in flip, member set change, or removal).
+   * No-op when unset; errors are swallowed inside the hook — never blocks the
+   * response.
+   */
+  fireMirrorReconcile?: () => void;
 }
 
 /** Body for `POST /skillsets/:id/transfer-ownership` (#1123). */
@@ -64,7 +72,7 @@ function anonActor(): ActorContext {
 export function createSkillsetRoutes(
   config: SkillsetRoutesConfig,
 ): Hono<{ Variables: AuthVariables }> {
-  const { skillsetService } = config;
+  const { skillsetService, fireMirrorReconcile } = config;
   const app = new Hono<{ Variables: AuthVariables }>();
   const auth = nyxidAuthMiddleware();
   const optionalAuth = optionalAuthMiddleware();
@@ -87,6 +95,8 @@ export function createSkillsetRoutes(
         displayName: authCtx.displayName,
       });
       logger.info({ guid: created.guid, name: created.name }, "Skillset created via API");
+      // #1155 — opt-in may already be set at create; refresh the mirror.
+      fireMirrorReconcile?.();
       c.header("Location", `/api/v1/skillsets/${created.guid}`);
       return c.json({ data: created, error: null }, 201);
     },
@@ -163,6 +173,8 @@ export function createSkillsetRoutes(
       const actor = await buildActorContext(c);
       const updated = await skillsetService.publishVersion(id, body, actor);
       logger.info({ guid: id, version: updated.version }, "Skillset version published via API");
+      // #1155 — publish can flip the opt-in or change the member set.
+      fireMirrorReconcile?.();
       return c.json({ data: updated, error: null });
     },
   );
@@ -184,6 +196,8 @@ export function createSkillsetRoutes(
       const id = c.req.param("id");
       const actor = await buildActorContext(c);
       await skillsetService.deleteSkillset(id, actor);
+      // #1155 — a deleted skillset must drop out of the mirror catalogue.
+      fireMirrorReconcile?.();
       return c.json({ data: { success: true }, error: null });
     },
   );

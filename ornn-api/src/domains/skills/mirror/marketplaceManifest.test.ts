@@ -16,7 +16,7 @@ import {
   MARKETPLACE_MANIFEST_PATH,
   PLUGIN_MANIFEST_RELPATH,
   type MarketplaceConfig,
-  type MarketplaceSkillInput,
+  type MarketplacePluginInput,
 } from "./marketplaceManifest";
 
 const CFG: MarketplaceConfig = {
@@ -24,9 +24,16 @@ const CFG: MarketplaceConfig = {
   owner: { name: "ChronoAIProject" },
 };
 
-function skill(overrides: Partial<MarketplaceSkillInput> = {}): MarketplaceSkillInput {
+/**
+ * A single-skill plugin entry — source defaults to `./<name>` so the
+ * existing per-skill assertions stay valid. Callers override `source`
+ * (e.g. `./skillsets/<name>`) to exercise the #1155 generalization.
+ */
+function skill(overrides: Partial<MarketplacePluginInput> = {}): MarketplacePluginInput {
+  const name = overrides.name ?? "demo-skill";
   return {
-    name: "demo-skill",
+    name,
+    source: `./${name}`,
     description: "A test skill.",
     version: "1.0",
     keywords: [],
@@ -55,6 +62,38 @@ describe("buildMarketplaceJson", () => {
       version: "1.0",
       keywords: ["pdf"],
     });
+  });
+
+  it("carries an explicit skillset source path verbatim (#1155)", () => {
+    const out = buildMarketplaceJson(
+      [skill({ name: "research-bundle", source: "./skillsets/research-bundle", keywords: ["research"] })],
+      CFG,
+    );
+    const parsed = JSON.parse(out);
+    expect(parsed.plugins[0]).toEqual({
+      name: "research-bundle",
+      source: "./skillsets/research-bundle",
+      description: "A test skill.",
+      version: "1.0",
+      keywords: ["research"],
+    });
+  });
+
+  it("mixes per-skill and skillset entries, sorted by name (#1155)", () => {
+    const out = buildMarketplaceJson(
+      [
+        skill({ name: "pdf-extract", source: "./pdf-extract" }),
+        skill({ name: "research-bundle", source: "./skillsets/research-bundle" }),
+        skill({ name: "alpha", source: "./alpha" }),
+      ],
+      CFG,
+    );
+    const parsed = JSON.parse(out);
+    expect(parsed.plugins.map((p: { name: string; source: string }) => [p.name, p.source])).toEqual([
+      ["alpha", "./alpha"],
+      ["pdf-extract", "./pdf-extract"],
+      ["research-bundle", "./skillsets/research-bundle"],
+    ]);
   });
 
   it("sorts plugins by name regardless of input order (determinism)", () => {
