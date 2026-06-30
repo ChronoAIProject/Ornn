@@ -129,7 +129,9 @@ export class SkillsetRepository {
       this.collection.createIndex({ createdOn: -1 }),
       this.collection.createIndex({ isPrivate: 1, createdOn: -1 }),
       this.collection.createIndex({ kind: 1, createdOn: -1 }),
-      // #1155 — fast lookup of plugin-export-eligible skillsets for the mirror.
+      // #1155/#1161 — fast lookup of plugin-export opted-in skillsets for the
+      // mirror. `exportAsPlugin` is the sole eligibility filter now (the public
+      // subset is decided at build time), and is this index's prefix.
       this.collection.createIndex({ exportAsPlugin: 1, memberVisibilityState: 1 }),
     ]);
   }
@@ -145,15 +147,17 @@ export class SkillsetRepository {
   }
 
   /**
-   * Skillsets eligible to export as a curated multi-skill plugin (#1155):
-   * every member public (`memberVisibilityState: "all-public"`) AND the owner
-   * opted in (`exportAsPlugin: true`). The all-public guarantee is what makes
-   * publishing the member content to the public mirror safe. Used by the
-   * mirror sweep + the shared marketplace.json refresh.
+   * Skillsets the owner opted in to export as a curated multi-skill plugin
+   * (`exportAsPlugin: true`, #1155). Deliberately NOT filtered by
+   * `memberVisibilityState` (#1161): a skillset exports its PUBLIC-member
+   * SUBSET, so a "restricted" skillset (one private member) still exports the
+   * rest. The actual public-member count — and the ≥2 floor below which the
+   * plugin is dropped — is decided at build time by the mirror (it needs
+   * per-member resolution). Used by the mirror sweep + the marketplace refresh.
    */
   async findAllEligibleForMirror(): Promise<SkillsetDocument[]> {
     const docs = await this.collection
-      .find({ memberVisibilityState: "all-public", exportAsPlugin: true })
+      .find({ exportAsPlugin: true })
       .maxTimeMS(SkillsetRepository.MAX_QUERY_MS)
       .toArray();
     return docs.map((d) => mapDoc(d)!);
@@ -168,10 +172,11 @@ export class SkillsetRepository {
    * Backed by the version repo's multikey `members` index
    * (`findSkillsetGuidsByMember`, which matches by name OR guid across every
    * ref grammar), then narrowed to the SAME eligibility predicate as
-   * {@link findAllEligibleForMirror} (`memberVisibilityState: "all-public"`
-   * AND `exportAsPlugin: true`). The all-public narrowing is load-bearing: a
-   * content change must never leak a non-public skillset's member subtree into
-   * the public mirror.
+   * {@link findAllEligibleForMirror} (`exportAsPlugin: true` only, #1161). No
+   * `memberVisibilityState` filter: a member going private must STILL surface
+   * its skillset here so the targeted re-export rebuilds the public subset
+   * (dropping that member) — or removes the plugin when <2 public remain. Only
+   * the public members' files are ever bundled, so nothing private leaks.
    */
   async findEligibleSkillsetsByMember(
     skillName: string,
@@ -182,7 +187,6 @@ export class SkillsetRepository {
     const docs = await this.collection
       .find({
         _id: { $in: guids } as never,
-        memberVisibilityState: "all-public",
         exportAsPlugin: true,
       })
       .maxTimeMS(SkillsetRepository.MAX_QUERY_MS)

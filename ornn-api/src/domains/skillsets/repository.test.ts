@@ -225,19 +225,20 @@ describe("SkillsetRepository — CRUD", () => {
   });
 });
 
-describe("SkillsetRepository — findAllEligibleForMirror (#1155)", () => {
-  test("returns only all-public AND opted-in skillsets", async () => {
+describe("SkillsetRepository — findAllEligibleForMirror (#1155/#1161)", () => {
+  test("returns every opted-in skillset regardless of member visibility", async () => {
     await seed(
       { _id: "ok", name: "ok-set", memberVisibilityState: "all-public", exportAsPlugin: true },
-      // opted in but not all-public → excluded (member content not safe to publish).
+      // #1161 — opted in but restricted still qualifies: the mirror exports its
+      // PUBLIC subset (dropping the private member), so it must be returned.
       { _id: "restr", name: "restr-set", memberVisibilityState: "restricted", exportAsPlugin: true },
-      // all-public but not opted in → excluded (no consent).
+      // not opted in → excluded (no consent), whatever the visibility.
       { _id: "noopt", name: "noopt-set", memberVisibilityState: "all-public", exportAsPlugin: false },
-      // all-public, opt-in field absent (pre-feature doc) → excluded.
+      // opt-in field absent (pre-feature doc) → excluded.
       { _id: "legacy", name: "legacy-set", memberVisibilityState: "all-public" },
     );
     const eligible = await repo.findAllEligibleForMirror();
-    expect(eligible.map((s) => s.guid)).toEqual(["ok"]);
+    expect(eligible.map((s) => s.guid).sort()).toEqual(["ok", "restr"]);
   });
 
   test("returns an empty list when nothing is eligible", async () => {
@@ -246,7 +247,7 @@ describe("SkillsetRepository — findAllEligibleForMirror (#1155)", () => {
   });
 });
 
-describe("SkillsetRepository — findEligibleSkillsetsByMember (#1159)", () => {
+describe("SkillsetRepository — findEligibleSkillsetsByMember (#1159/#1161)", () => {
   async function seedVersion(skillsetGuid: string, members: string[]): Promise<void> {
     await versionRepo.create({
       skillsetGuid,
@@ -262,13 +263,14 @@ describe("SkillsetRepository — findEligibleSkillsetsByMember (#1159)", () => {
     });
   }
 
-  test("returns only opted-in + all-public skillsets that reference the skill", async () => {
+  test("returns opted-in skillsets referencing the skill, any visibility (#1161)", async () => {
     await seed(
       // eligible: opted in, all-public, references `review` by name.
       { _id: "ss-ok", name: "ok-set", memberVisibilityState: "all-public", exportAsPlugin: true },
       // references the skill but NOT opted in → excluded.
       { _id: "ss-noopt", name: "noopt-set", memberVisibilityState: "all-public", exportAsPlugin: false },
-      // references the skill, opted in, but NOT all-public → excluded (unsafe to publish).
+      // #1161 — references the skill, opted in, restricted: STILL returned so the
+      // targeted re-export can rebuild the public subset / remove if too thin.
       { _id: "ss-restr", name: "restr-set", memberVisibilityState: "restricted", exportAsPlugin: true },
       // eligible but does NOT reference the skill → excluded.
       { _id: "ss-unrel", name: "unrel-set", memberVisibilityState: "all-public", exportAsPlugin: true },
@@ -279,7 +281,7 @@ describe("SkillsetRepository — findEligibleSkillsetsByMember (#1159)", () => {
     await seedVersion("ss-unrel", ["unrelated@1.0"]);
 
     const eligible = await repo.findEligibleSkillsetsByMember("review", "skl-review-guid");
-    expect(eligible.map((s) => s.guid)).toEqual(["ss-ok"]);
+    expect(eligible.map((s) => s.guid).sort()).toEqual(["ss-ok", "ss-restr"]);
   });
 
   test("matches a skillset that references the skill by guid (#1159)", async () => {
