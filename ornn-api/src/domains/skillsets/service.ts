@@ -40,9 +40,11 @@ import type { SkillsetRepository } from "./repository";
 import type { SkillsetVersionRepository } from "./skillsetVersionRepository";
 import type {
   CreateSkillsetInput,
+  PluginExportInput,
   PublishSkillsetInput,
   SkillsetDetailResponse,
   SkillsetDocument,
+  SkillsetPluginOverrides,
   SkillsetVersionDocument,
 } from "./types";
 
@@ -156,8 +158,9 @@ export class SkillsetService {
       createdByEmail: actor.email,
       createdByDisplayName: actor.displayName,
       isPrivate: true,
-      // Plugin-export opt-in (#1155) — default OFF at create time.
-      exportAsPlugin: input.exportAsPlugin ?? false,
+      // Plugin-export opt-in (#1155/#1157) — always OFF at create; enabling it
+      // is a deliberate post-create action via PUT /skillsets/:id/plugin-export.
+      exportAsPlugin: false,
       latestVersion: input.version,
     });
     await this.skillsetVersionRepo.create({
@@ -252,16 +255,15 @@ export class SkillsetService {
       createdBy: actor.userId,
     });
 
-    // Advance the identity doc's cached pointers to the new version.
-    // #1155 — `exportAsPlugin` is optional on publish: omitting it preserves
-    // the current setting (the repo only writes the field when defined).
+    // Advance the identity doc's cached pointers to the new version. Plugin
+    // export (#1157) is a separate concern, mutated only by the dedicated
+    // endpoint — a publish never touches `exportAsPlugin` / `pluginConfig`.
     await this.skillsetRepo.update(guid, {
       description,
       kind,
       tags,
       latestVersion: input.version,
       updatedBy: actor.userId,
-      ...(input.exportAsPlugin !== undefined ? { exportAsPlugin: input.exportAsPlugin } : {}),
     });
 
     // The new version's member set may differ from the prior one — rederive
@@ -269,6 +271,59 @@ export class SkillsetService {
     await this.recomputeVisibility(guid);
 
     logger.info({ guid, version: input.version }, "Skillset version published");
+    return this.getSkillset(guid);
+  }
+
+  /**
+   * Enable / disable plugin export and persist the owner's listing overrides
+   * (#1157). The opt-in is a deliberate, configurable action — NOT a create /
+   * publish side effect. Owner/admin only (WRITE tier, mirroring publish).
+   *
+   * Enabling requires the skillset be `all-public` (every member public) — the
+   * only state where publishing member content to the public mirror is safe;
+   * a request to enable a restricted/unresolvable skillset is rejected. The
+   * overrides (`displayName` / `description` / `keywords`) are stored only when
+   * provided; an empty set clears them so the mirror falls back to the
+   * skillset's own name / description / tags. Disabling clears the overrides.
+   */
+  async setPluginExport(
+    guid: string,
+    input: PluginExportInput,
+    actor: ActorContext,
+  ): Promise<SkillsetDetailResponse> {
+    const existing = await this.skillsetRepo.findByGuid(guid);
+    if (!existing) {
+      throw AppError.notFound("skillset_not_found", `Skillset '${guid}' not found`);
+    }
+    if (!canWriteSkill(existing, actor)) {
+      throw AppError.forbidden(
+        "forbidden",
+        "You do not have permission to manage plugin export for this skillset",
+      );
+    }
+
+    const visibility = existing.memberVisibilityState ?? "all-public";
+    if (input.enabled && visibility !== "all-public") {
+      // Member content is only safe to publish to the public mirror when every
+      // member is public — refuse to enable otherwise (the UI also gates this).
+      throw AppError.conflict(
+        "skillset_not_all_public",
+        "A skillset can only be exported as a plugin when every member skill is public.",
+      );
+    }
+
+    const overrides = input.enabled ? buildPluginOverrides(input) : null;
+    await this.skillsetRepo.update(guid, {
+      exportAsPlugin: input.enabled,
+      // `null` clears the stored overrides; an object replaces them.
+      pluginConfig: overrides,
+      updatedBy: actor.userId,
+    });
+
+    logger.info(
+      { guid, enabled: input.enabled, hasOverrides: overrides !== null },
+      "Skillset plugin export updated",
+    );
     return this.getSkillset(guid);
   }
 
@@ -674,6 +729,22 @@ function refTargetsSkill(ref: string, skillName: string, skillGuid: string): boo
   return ref.startsWith(`${skillName}@`) || ref.startsWith(`${skillGuid}@`);
 }
 
+/**
+ * Collapse the plugin-export request's optional override fields (#1157) into a
+ * compact overrides object, dropping empty/whitespace values so the mirror
+ * cleanly falls back to the skillset's own fields. Returns `null` when nothing
+ * meaningful was supplied (so the repo `$unset`s any prior overrides).
+ */
+function buildPluginOverrides(input: PluginExportInput): SkillsetPluginOverrides | null {
+  const out: SkillsetPluginOverrides = {};
+  const displayName = input.displayName?.trim();
+  const description = input.description?.trim();
+  if (displayName) out.displayName = displayName;
+  if (description) out.description = description;
+  if (input.keywords && input.keywords.length > 0) out.keywords = input.keywords;
+  return Object.keys(out).length > 0 ? out : null;
+}
+
 function toDetail(
   skillset: SkillsetDocument,
   versionDoc: SkillsetVersionDocument,
@@ -701,8 +772,9 @@ function toDetail(
     grants: effectiveGrants(skillset),
     // Derived visibility (#1136) — the authoritative signal for the badge.
     memberVisibilityState: skillset.memberVisibilityState ?? "all-public",
-    // Plugin-export opt-in (#1155).
+    // Plugin-export opt-in (#1155) + owner listing overrides (#1157).
     exportAsPlugin: skillset.exportAsPlugin ?? false,
+    pluginConfig: skillset.pluginConfig,
     unreadableMembers,
     createdOn:
       skillset.createdOn instanceof Date ? skillset.createdOn.toISOString() : String(skillset.createdOn),

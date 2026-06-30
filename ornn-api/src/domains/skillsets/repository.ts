@@ -18,7 +18,12 @@ import { AppError } from "../../shared/types/index";
 import { createLogger } from "../../shared/logger";
 import { coerceStoredGrants, legacyListsFromGrants } from "../skills/crud/grants";
 import type { SkillGrant } from "../../shared/types/index";
-import type { SkillsetDocument, SkillsetKind, SkillsetMemberVisibilityState } from "./types";
+import type {
+  SkillsetDocument,
+  SkillsetKind,
+  SkillsetMemberVisibilityState,
+  SkillsetPluginOverrides,
+} from "./types";
 
 const logger = createLogger("skillsetRepository");
 
@@ -50,6 +55,8 @@ export interface CreateSkillsetData {
   latestVersion: string;
   /** Owner opt-in (#1155) to export as a multi-skill plugin. Default OFF. */
   exportAsPlugin?: boolean | undefined;
+  /** Owner plugin listing overrides (#1157). Omitted ⇒ no overrides stored. */
+  pluginConfig?: SkillsetPluginOverrides | undefined;
 }
 
 export interface UpdateSkillsetData {
@@ -74,6 +81,13 @@ export interface UpdateSkillsetData {
    * doesn't mention the flag must not silently reset it).
    */
   exportAsPlugin?: boolean;
+  /**
+   * Owner plugin listing overrides (#1157). Three-state:
+   *   - `undefined` — leave the stored overrides untouched (publish path).
+   *   - object      — replace the stored overrides with these fields.
+   *   - `null`      — `$unset` the overrides (fall back to skillset fields).
+   */
+  pluginConfig?: SkillsetPluginOverrides | null;
 }
 
 /** Filters specific to skillset search: `kind` equality + `tags $all` + a `q`
@@ -175,6 +189,9 @@ export class SkillsetRepository {
       exportAsPlugin: data.exportAsPlugin ?? false,
       latestVersion: data.latestVersion,
     };
+    // Plugin listing overrides (#1157) — only written when supplied so a fresh
+    // skillset has no `pluginConfig` field at all (mirror falls back to fields).
+    if (data.pluginConfig) doc.pluginConfig = data.pluginConfig;
 
     try {
       await this.collection.insertOne(doc as never);
@@ -211,8 +228,18 @@ export class SkillsetRepository {
     if (data.latestVersion !== undefined) setFields.latestVersion = data.latestVersion;
     // #1155 — only an explicit boolean flips the opt-in; omission preserves it.
     if (data.exportAsPlugin !== undefined) setFields.exportAsPlugin = data.exportAsPlugin;
+    // #1157 — three-state plugin overrides: object replaces, null clears
+    // ($unset so the mirror falls back to skillset fields), undefined no-ops.
+    const unsetFields: Record<string, unknown> = {};
+    if (data.pluginConfig === null) {
+      unsetFields.pluginConfig = "";
+    } else if (data.pluginConfig !== undefined) {
+      setFields.pluginConfig = data.pluginConfig;
+    }
 
-    await this.collection.updateOne({ _id: skillsetId(guid) }, { $set: setFields });
+    const updateDoc: Record<string, unknown> = { $set: setFields };
+    if (Object.keys(unsetFields).length > 0) updateDoc.$unset = unsetFields;
+    await this.collection.updateOne({ _id: skillsetId(guid) }, updateDoc);
     logger.info({ guid }, "Skillset updated");
     return (await this.findByGuid(guid))!;
   }
@@ -429,6 +456,25 @@ function mapDoc(doc: Document | null): SkillsetDocument | null {
       (doc.memberVisibilityState as SkillsetMemberVisibilityState | undefined) ?? "all-public",
     // Plugin-export opt-in (#1155) — absent on pre-feature docs ⇒ false.
     exportAsPlugin: doc.exportAsPlugin === true,
+    // Plugin listing overrides (#1157) — undefined when unset/legacy.
+    pluginConfig: coercePluginConfig(doc.pluginConfig),
     latestVersion: doc.latestVersion ?? "1.0",
   };
+}
+
+/**
+ * Defensively coerce a stored `pluginConfig` (#1157) into the typed override
+ * shape, dropping any field of the wrong type. Returns `undefined` when nothing
+ * usable is present so callers can cleanly fall back to the skillset fields.
+ */
+function coercePluginConfig(raw: unknown): SkillsetPluginOverrides | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const r = raw as Record<string, unknown>;
+  const out: SkillsetPluginOverrides = {};
+  if (typeof r.displayName === "string") out.displayName = r.displayName;
+  if (typeof r.description === "string") out.description = r.description;
+  if (Array.isArray(r.keywords)) {
+    out.keywords = r.keywords.filter((k): k is string => typeof k === "string");
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
 }

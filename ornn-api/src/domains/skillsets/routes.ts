@@ -37,7 +37,7 @@ import { validateBody, getValidatedBody } from "../../middleware/validate";
 import { buildActorContext, type ActorContext } from "../skills/crud/authorize";
 import { createLogger } from "../../shared/logger";
 import type { SkillsetService } from "./service";
-import { createSkillsetSchema, publishSkillsetSchema } from "./types";
+import { createSkillsetSchema, publishSkillsetSchema, pluginExportSchema } from "./types";
 
 const logger = createLogger("skillsetRoutes");
 
@@ -174,6 +174,30 @@ export function createSkillsetRoutes(
       const updated = await skillsetService.publishVersion(id, body, actor);
       logger.info({ guid: id, version: updated.version }, "Skillset version published via API");
       // #1155 — publish can flip the opt-in or change the member set.
+      fireMirrorReconcile?.();
+      return c.json({ data: updated, error: null });
+    },
+  );
+
+  /**
+   * PUT /skillsets/:id/plugin-export — enable/disable Claude Code plugin
+   * export and persist the owner's listing overrides (#1157).
+   * Requires: ornn:skill:update + author/admin. Enabling is rejected unless the
+   * skillset is `all-public` (enforced in the service). Registered as a literal
+   * sub-segment, so it never collides with the `PUT /skillsets/:id` publish.
+   */
+  app.put(
+    "/skillsets/:id/plugin-export",
+    auth,
+    requirePermission("ornn:skill:update"),
+    validateBody(pluginExportSchema, "invalid_plugin_export"),
+    async (c) => {
+      const id = c.req.param("id");
+      const body = getValidatedBody<z.infer<typeof pluginExportSchema>>(c);
+      const actor = await buildActorContext(c);
+      const updated = await skillsetService.setPluginExport(id, body, actor);
+      logger.info({ guid: id, enabled: body.enabled }, "Skillset plugin export updated via API");
+      // #1157 — flipping the opt-in changes mirror eligibility; reconcile.
       fireMirrorReconcile?.();
       return c.json({ data: updated, error: null });
     },
