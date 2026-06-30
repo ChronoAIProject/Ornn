@@ -15,7 +15,6 @@
 import { describe, expect, it } from "bun:test";
 import {
   buildSkillsetPlugin,
-  fingerprintVersion,
   isSafeMemberName,
   skillsetMarketplaceInput,
   type SkillsetPluginInput,
@@ -81,54 +80,41 @@ describe("buildSkillsetPlugin — plugin.json", () => {
     expect(manifest.description).toBe("A curated research set.");
   });
 
-  it("version is the owner version + a resolved-member fingerprint", () => {
+  it("version is the plain skillset revision — no +sk fingerprint (#1162)", () => {
     const { files } = buildSkillsetPlugin(input(), CFG);
     const { version } = JSON.parse(files.get(".claude-plugin/plugin.json")!);
-    expect(version).toMatch(/^2\.0\+sk[0-9a-f]{8}$/);
+    expect(version).toBe("2.0");
   });
 });
 
-describe("buildSkillsetPlugin — version fingerprint (#1155)", () => {
-  it("changes when a member resolves to a new version, so CC sees an update", () => {
-    const before = JSON.parse(
-      buildSkillsetPlugin(input(), CFG).files.get(".claude-plugin/plugin.json")!,
+describe("buildSkillsetPlugin — version = skillset revision (#1162)", () => {
+  it("plugin.json + marketplace carry the SAME revision (they agree, no +sk)", () => {
+    const { files, marketplace } = buildSkillsetPlugin(input(), CFG);
+    const { version } = JSON.parse(files.get(".claude-plugin/plugin.json")!);
+    expect(version).toBe("2.0");
+    expect(marketplace.version).toBe("2.0");
+  });
+
+  it("tracks the revision passed in — a member's resolved version no longer alters it", () => {
+    // The revision is now bumped by the service before this builder runs, so a
+    // moving member changes the plugin version ONLY via a higher `input.version`,
+    // never a fingerprint over the member set.
+    const at10 = JSON.parse(
+      buildSkillsetPlugin(input({ version: "2.1" }), CFG).files.get(".claude-plugin/plugin.json")!,
     ).version;
-    // Same owner version (2.0), but a member moved 1.2 -> 1.3 (e.g. an @latest
-    // member after the underlying skill published a new version).
-    const bumped = input({
+    expect(at10).toBe("2.1");
+    // Same revision but a member moved 1.2 -> 1.3 → identical plugin version.
+    const movedMember = input({
+      version: "2.0",
       members: [
-        member({
-          name: "pdf-extract",
-          version: "1.3",
-          files: { "SKILL.md": "# pdf", "references/x.md": "ref" },
-        }),
+        member({ name: "pdf-extract", version: "1.3", files: { "SKILL.md": "# pdf" } }),
         member({ name: "ocr", description: "OCR images.", files: { "SKILL.md": "# ocr" } }),
       ],
     });
-    const after = JSON.parse(
-      buildSkillsetPlugin(bumped, CFG).files.get(".claude-plugin/plugin.json")!,
-    ).version;
-    expect(after).not.toBe(before);
-    expect(after).toMatch(/^2\.0\+sk[0-9a-f]{8}$/);
-  });
-
-  it("is stable + order-independent for an unchanged member set (no churn)", () => {
-    const a = fingerprintVersion("2.0", [
-      member({ name: "alpha", version: "1.0" }),
-      member({ name: "beta", version: "2.1" }),
-    ]);
-    const b = fingerprintVersion("2.0", [
-      member({ name: "alpha", version: "1.0" }),
-      member({ name: "beta", version: "2.1" }),
-    ]);
-    expect(a).toBe(b);
-  });
-
-  it("keeps the PLAIN owner version on the marketplace catalogue entry", () => {
-    const { marketplace } = buildSkillsetPlugin(input(), CFG);
-    // The fingerprint lives only in plugin.json; the catalogue entry stays
-    // plain so the shared marketplace.json doesn't churn between code paths.
-    expect(marketplace.version).toBe("2.0");
+    expect(
+      JSON.parse(buildSkillsetPlugin(movedMember, CFG).files.get(".claude-plugin/plugin.json")!)
+        .version,
+    ).toBe("2.0");
   });
 });
 
@@ -185,15 +171,16 @@ describe("buildSkillsetPlugin — excluded members (#1161)", () => {
     expect(empty).not.toContain("## Excluded members");
   });
 
-  it("the excluded list NEVER changes the version fingerprint (it's over the public subset)", () => {
-    // Same bundled members; different exclusion lists ⇒ identical plugin.json
-    // version (the fingerprint folds only the INCLUDED members), but a README
-    // that differs by the note.
+  it("the excluded list NEVER changes the plugin version (#1162)", () => {
+    // The version is the skillset revision (`input.version`), independent of
+    // the members or the exclusion list — so different exclusion lists yield an
+    // identical plugin.json version but a README that differs by the note.
     const withExcl = buildSkillsetPlugin(input({ excludedMembers: ["dropped"] }), CFG);
     const withoutExcl = buildSkillsetPlugin(input(), CFG);
     const vA = JSON.parse(withExcl.files.get(".claude-plugin/plugin.json")!).version;
     const vB = JSON.parse(withoutExcl.files.get(".claude-plugin/plugin.json")!).version;
     expect(vA).toBe(vB);
+    expect(vA).toBe("2.0");
     expect(withExcl.files.get("README.md")).not.toBe(withoutExcl.files.get("README.md"));
   });
 });

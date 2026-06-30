@@ -33,12 +33,17 @@ import {
   type ActorContext,
 } from "../skills/crud/authorize";
 import type { SkillService } from "../skills/crud/service";
-import { isGreater, parseVersion } from "../skills/crud/version";
+import { parseVersion } from "../skills/crud/version";
 import { effectiveGrants, normalizeGrants } from "../skills/crud/grants";
-import { recomputeForSkill, recomputeSkillsetVisibility } from "./recompute";
+import {
+  computeResolvedMembers,
+  recomputeForSkill,
+  recomputeSkillsetVisibility,
+} from "./recompute";
 import type { SkillsetRepository } from "./repository";
 import type { SkillsetVersionRepository } from "./skillsetVersionRepository";
 import {
+  SKILLSET_INITIAL_REVISION,
   SKILLSET_MIN_PUBLIC_EXPORT_MEMBERS,
   type CreateSkillsetInput,
   type PluginExportInput,
@@ -125,8 +130,10 @@ export class SkillsetService {
 
   /**
    * Create a new skillset (private by default, like skills). Validates the
-   * member closure BEFORE any write, seeds the first immutable version,
-   * and points `latestVersion` at it.
+   * member closure BEFORE any write, seeds the first immutable revision
+   * ({@link SKILLSET_INITIAL_REVISION}) with its resolved-member snapshot, and
+   * points `latestVersion` at it. The revision is system-assigned (#1162) — the
+   * owner never types a version.
    */
   async createSkillset(
     input: CreateSkillsetInput,
@@ -143,10 +150,14 @@ export class SkillsetService {
       throw AppError.conflict("skillset_name_exists", `Skillset '${input.name}' already exists`);
     }
 
-    const parsed = parseVersion(input.version);
+    const version = SKILLSET_INITIAL_REVISION;
+    const parsed = parseVersion(version);
     // Member validation BEFORE any write — every member must resolve to a
     // readable skill version and be closure-conflict-free.
-    await this.validateMembers(input.members, { name: input.name, version: input.version });
+    await this.validateMembers(input.members, { name: input.name, version });
+    // Snapshot the members resolved to concrete versions so this revision is
+    // reproducible even when its authored refs pin `@latest`/dist-tags (#1162).
+    const resolvedMembers = await this.resolveMemberSnapshot(input.members);
 
     const guid = randomUUID();
     await this.skillsetRepo.create({
@@ -162,11 +173,11 @@ export class SkillsetService {
       // Plugin-export opt-in (#1155/#1157) — always OFF at create; enabling it
       // is a deliberate post-create action via PUT /skillsets/:id/plugin-export.
       exportAsPlugin: false,
-      latestVersion: input.version,
+      latestVersion: version,
     });
     await this.skillsetVersionRepo.create({
       skillsetGuid: guid,
-      version: input.version,
+      version,
       majorVersion: parsed.major,
       minorVersion: parsed.minor,
       kind: input.kind,
@@ -175,6 +186,7 @@ export class SkillsetService {
       instructions: input.instructions,
       tags: input.tags,
       members: input.members,
+      resolvedMembers,
       createdBy: actor.userId,
       createdByEmail: actor.email,
       createdByDisplayName: actor.displayName,
@@ -185,17 +197,17 @@ export class SkillsetService {
     // not the provisional "all-public" the repo seeds (#1136).
     await this.recomputeVisibility(guid);
 
-    logger.info({ guid, name: input.name, version: input.version, kind: input.kind }, "Skillset created");
+    logger.info({ guid, name: input.name, version, kind: input.kind }, "Skillset created");
     return this.getSkillset(guid);
   }
 
   /**
-   * Publish a new immutable version of an existing skillset. The new
-   * version must be strictly greater than the current `latestVersion`
-   * — enforced by an explicit strict-increment guard (VERSION_NOT_INCREMENTED)
-   * that rejects both equal and lower versions, mirroring the skill publish
-   * path. The append-only `guid@version` `_id` is a defence-in-depth backstop
-   * for an exact duplicate. Prior versions remain immutable.
+   * Publish a new immutable revision of an existing skillset. The owner no
+   * longer types a version (#1162) — the system auto-bumps the MINOR off the
+   * current latest (`1.0 → 1.1 → 1.2 …`; major never auto-bumps), writing a new
+   * immutable version doc with a fresh resolved-member snapshot. Prior versions
+   * remain immutable. The append-only `guid@version` `_id` is a defence-in-depth
+   * backstop against a concurrent double-publish landing the same minor.
    */
   async publishVersion(
     guid: string,
@@ -212,39 +224,27 @@ export class SkillsetService {
       throw AppError.forbidden("forbidden", "You do not have permission to update this skillset");
     }
 
-    const parsed = parseVersion(input.version);
     const members = input.members;
     const kind = input.kind ?? existing.kind;
     const description = input.description ?? existing.description;
     const tags = input.tags ?? existing.tags;
 
-    await this.validateMembers(members, { name: existing.name, version: input.version });
-
-    // Enforce strictly-incrementing version BEFORE any write — mirrors the
-    // skill publish guard (#969). The append-only `guid@version` `_id` only
-    // rejects an EXACT re-publish; without this check a never-used LOWER
-    // version (e.g. 1.5 over latest 2.0) would insert a stale version row
-    // AND regress `latestVersion` backward, so "latest" consumers silently
-    // resolve the downgraded member set. Same VERSION_NOT_INCREMENTED code
-    // the skill path emits, covering both lower and equal versions.
+    // System-assigned revision: bump the minor off the current latest. Every
+    // owner publish is a qualifying change, so it always advances (no
+    // idempotency guard here — that guards only the reactive member-driven bump).
     const currentLatest = await this.skillsetVersionRepo.findLatestBySkillset(guid);
-    if (currentLatest) {
-      const parsedCurrent = parseVersion(currentLatest.version);
-      if (!isGreater(parsed, parsedCurrent)) {
-        throw AppError.conflict(
-          "VERSION_NOT_INCREMENTED",
-          `New version '${input.version}' must be strictly greater than the current latest '${currentLatest.version}'.`,
-        );
-      }
-    }
+    const next = nextRevision(currentLatest?.version ?? existing.latestVersion);
+
+    await this.validateMembers(members, { name: existing.name, version: next.version });
+    const resolvedMembers = await this.resolveMemberSnapshot(members);
 
     // Append-only — a duplicate `guid@version` is rejected by the version
     // repo (skillset_version_exists). Prior versions are never touched.
     await this.skillsetVersionRepo.create({
       skillsetGuid: guid,
-      version: input.version,
-      majorVersion: parsed.major,
-      minorVersion: parsed.minor,
+      version: next.version,
+      majorVersion: next.major,
+      minorVersion: next.minor,
       kind,
       description,
       // Master prompt (#978) — REQUIRED on publish, NO carry-forward: each
@@ -253,6 +253,7 @@ export class SkillsetService {
       instructions: input.instructions,
       tags,
       members,
+      resolvedMembers,
       createdBy: actor.userId,
     });
 
@@ -263,7 +264,7 @@ export class SkillsetService {
       description,
       kind,
       tags,
-      latestVersion: input.version,
+      latestVersion: next.version,
       updatedBy: actor.userId,
     });
 
@@ -271,7 +272,7 @@ export class SkillsetService {
     // the visibility cache against the now-latest version (#1136).
     await this.recomputeVisibility(guid);
 
-    logger.info({ guid, version: input.version }, "Skillset version published");
+    logger.info({ guid, version: next.version }, "Skillset revision published");
     return this.getSkillset(guid);
   }
 
@@ -647,6 +648,108 @@ export class SkillsetService {
     }
   }
 
+  /**
+   * Reactive revision bump (#1162) for a member skill whose resolved version
+   * may have moved (new-version publish, GitHub refresh, dist-tag set/delete, a
+   * privacy flip that changes the resolved set). Finds EVERY skillset that
+   * references the changed skill — exported or not, since the revision is the
+   * skillset's OWN version — and, for each, re-cuts a new revision ONLY when the
+   * resolved-member snapshot actually changed from the latest revision's
+   * baseline.
+   *
+   * Ordering (#1162): bootstrap invokes this BEFORE the mirror's targeted
+   * re-export (`syncSkillsetsForMember`) inside one fire-and-forget handler, so
+   * an exported plugin always picks up the freshly-bumped revision rather than
+   * racing two independent hooks. Idempotent + failure-isolated per skillset: a
+   * no-op member sync (snapshot unchanged) creates NO revision, so the mirror's
+   * deterministic no-op-commit skip still holds.
+   */
+  async bumpRevisionsForChangedMember(changedSkill: { guid: string; name: string }): Promise<void> {
+    const guids = await this.skillsetVersionRepo.findSkillsetGuidsByMember(
+      changedSkill.name,
+      changedSkill.guid,
+    );
+    if (guids.length === 0) {
+      logger.debug(
+        { skillName: changedSkill.name },
+        "No skillsets reference this skill; nothing to bump",
+      );
+      return;
+    }
+    let bumped = 0;
+    for (const guid of guids) {
+      try {
+        if (await this.maybeBumpRevisionForMemberChange(guid)) bumped += 1;
+      } catch (err) {
+        logger.error({ guid, err }, "Skillset revision bump failed; skipping");
+      }
+    }
+    logger.info(
+      { skillName: changedSkill.name, referencing: guids.length, bumped },
+      "Skillset reactive revision bump complete",
+    );
+  }
+
+  /**
+   * Re-cut a skillset's revision iff its resolved-member snapshot changed
+   * (#1162). Returns `true` when a new revision was written. Compares the
+   * current resolved members (under SYSTEM) against the latest revision's
+   * stored snapshot:
+   *   - snapshot identical → no-op (idempotency guard, no churn).
+   *   - snapshot missing (pre-feature doc the backfill hasn't reached) →
+   *     populate it in place, no bump (no baseline to diff against).
+   *   - snapshot moved → write a new minor-bumped revision carrying forward the
+   *     same authored members/metadata + the new snapshot, then advance the
+   *     pointer WITHOUT touching the audit timestamps (a member-driven change,
+   *     not an owner edit).
+   */
+  private async maybeBumpRevisionForMemberChange(guid: string): Promise<boolean> {
+    const latest = await this.skillsetVersionRepo.findLatestBySkillset(guid);
+    if (!latest) return false;
+
+    const currentSnapshot = await this.resolveMemberSnapshot(latest.members);
+
+    if (latest.resolvedMembers === undefined) {
+      // Defensive backfill: no baseline yet, so record one rather than bump.
+      await this.skillsetVersionRepo.setResolvedMembers(guid, latest.version, currentSnapshot);
+      return false;
+    }
+    if (snapshotsEqual(latest.resolvedMembers, currentSnapshot)) return false;
+
+    const next = nextRevision(latest.version);
+    await this.skillsetVersionRepo.create({
+      skillsetGuid: guid,
+      version: next.version,
+      majorVersion: next.major,
+      minorVersion: next.minor,
+      kind: latest.kind,
+      description: latest.description,
+      // Carry the prior revision's prompt/metadata forward verbatim — only the
+      // RESOLVED member versions moved; the authored member refs are unchanged.
+      instructions: latest.instructions,
+      tags: latest.tags,
+      members: latest.members,
+      resolvedMembers: currentSnapshot,
+      createdBy: latest.createdBy,
+    });
+    await this.skillsetRepo.advanceLatestVersion(guid, next.version);
+    logger.info(
+      { guid, from: latest.version, to: next.version },
+      "Skillset revision auto-bumped on member-version change",
+    );
+    return true;
+  }
+
+  /**
+   * Resolve member refs to the lockfile-like snapshot (#1162). Thin instance
+   * wrapper over the shared {@link computeResolvedMembers} so create / publish /
+   * reactive-bump all snapshot members the same way (SYSTEM loader, sorted,
+   * de-duped concrete `name@<major.minor>`).
+   */
+  private async resolveMemberSnapshot(members: string[]): Promise<string[]> {
+    return computeResolvedMembers(members, this.skillService);
+  }
+
   /** Load a skillset's requested (or latest) version doc, or 404. */
   private async loadVersionOrThrow(
     skillset: SkillsetDocument,
@@ -767,6 +870,32 @@ export class SkillsetService {
  */
 function refTargetsSkill(ref: string, skillName: string, skillGuid: string): boolean {
   return ref.startsWith(`${skillName}@`) || ref.startsWith(`${skillGuid}@`);
+}
+
+/**
+ * The next auto-bumped skillset revision (#1162): keep the major, increment the
+ * minor (`1.0 → 1.1`, `2.3 → 2.4`). Major never auto-bumps — chosen to keep the
+ * `<major>.<minor>` shape so the `guid@<version>` doc-id / dist-tag /
+ * `SKILL_VERSION_REGEX` grammar is unchanged.
+ */
+function nextRevision(current: string): { version: string; major: number; minor: number } {
+  const parsed = parseVersion(current);
+  const minor = parsed.minor + 1;
+  return { version: `${parsed.major}.${minor}`, major: parsed.major, minor };
+}
+
+/**
+ * Order-independent equality of two resolved-member snapshots (#1162). Both are
+ * produced sorted by {@link computeResolvedMembers}, so a positional compare is
+ * sufficient and cheap — this is the idempotency guard that stops a no-op member
+ * sync from churning a new revision.
+ */
+function snapshotsEqual(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i += 1) {
+    if (a[i] !== b[i]) return false;
+  }
+  return true;
 }
 
 /**

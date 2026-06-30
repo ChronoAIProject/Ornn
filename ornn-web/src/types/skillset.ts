@@ -58,7 +58,8 @@ export type SkillsetMemberVisibilityState = "all-public" | "restricted" | "unres
  * Owner-customizable plugin listing fields (#1157). Each defaults from the
  * skillset (displayName←name, description, keywords←tags) and is overridable
  * when the owner exports. The install NAME (= skillset name) and the plugin
- * VERSION (auto fingerprint) are deliberately NOT here — not user-editable.
+ * VERSION (the auto-managed skillset revision, #1162) are deliberately NOT here
+ * — not user-editable.
  */
 export interface SkillsetPluginConfig {
   displayName?: string | undefined;
@@ -275,7 +276,10 @@ export interface SkillsetVersionEntry {
   createdOn: string;
 }
 
-/** Body for POST /api/v1/skillsets (create — seeds version 1.0). */
+/**
+ * Body for POST /api/v1/skillsets (create). The system assigns the first
+ * revision (1.0, #1162) — there is NO owner-typed `version`.
+ */
 export interface CreateSkillsetInput {
   name: string;
   description: string;
@@ -283,17 +287,18 @@ export interface CreateSkillsetInput {
   kind: SkillsetKind;
   tags: string[];
   members: string[];
-  version?: string | undefined;
 }
 
-/** Body for PUT /api/v1/skillsets/:id (publish a new immutable version). */
+/**
+ * Body for PUT /api/v1/skillsets/:id (publish a new immutable revision). The
+ * revision number is system-assigned (auto-bumped, #1162) — no `version`.
+ */
 export interface PublishSkillsetInput {
   description?: string | undefined;
   instructions: string;
   kind?: SkillsetKind | undefined;
   tags?: string[] | undefined;
   members: string[];
-  version: string;
 }
 
 // NOTE (#1136): there is no skillset permissions input — a skillset's

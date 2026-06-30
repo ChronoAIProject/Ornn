@@ -2,10 +2,10 @@
  * SkillsetForm — create vs. edit contract.
  *
  * create: name is editable; submit requires ≥2 members + a required prompt;
- *         the create payload carries name / members / instructions / version.
- * edit:   name is LOCKED (display-only, no name field); the version must be
- *         BUMPED — submitting with the same loaded version is rejected, a new
- *         version publishes.
+ *         the create payload carries name / members / instructions (no version
+ *         — the revision is system-assigned, #1162).
+ * edit:   name is LOCKED (display-only, no name field); there is no version
+ *         field — publishing auto-bumps the revision server-side.
  *
  * The member picker's skill-search query is gated on focus + non-empty query
  * and never runs (we drive raw refs via Enter), so only a QueryClient is
@@ -98,7 +98,7 @@ afterEach(() => {
 });
 
 describe("SkillsetForm — create", () => {
-  it("submits a create payload with name, ≥2 members, prompt, and version", async () => {
+  it("submits a create payload with name, ≥2 members, and prompt (no version, #1162)", async () => {
     const onCreate = vi.fn().mockResolvedValue(undefined);
     wrap(<SkillsetForm mode="create" onCreate={onCreate} />);
 
@@ -121,8 +121,15 @@ describe("SkillsetForm — create", () => {
       name: "research-bundle",
       members: ["a@1.0", "b@1.0"],
       instructions: "Run A, then B.",
-      version: "1.0",
     });
+    // The revision is system-assigned (#1162) — the form never sends one.
+    expect(onCreate.mock.calls[0]?.[0]).not.toHaveProperty("version");
+  });
+
+  it("renders no version field in create mode (#1162)", () => {
+    wrap(<SkillsetForm mode="create" onCreate={vi.fn()} />);
+    expect(screen.queryByPlaceholderText("1.0")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Version")).not.toBeInTheDocument();
   });
 
   it("blocks submit with fewer than 2 members", async () => {
@@ -270,7 +277,6 @@ describe("SkillsetForm — edit", () => {
     kind: "generic" as const,
     tags: ["research"],
     members: ["a@1.0", "b@1.0"],
-    version: "1.0",
   };
 
   it("locks the name (no editable name field, label shows the locked name)", () => {
@@ -281,30 +287,27 @@ describe("SkillsetForm — edit", () => {
     expect(screen.getByText("(locked)")).toBeInTheDocument();
   });
 
-  it("rejects publishing with the same (un-bumped) version", () => {
+  it("renders no version field in edit mode (#1162 — the revision is auto-managed)", () => {
     wrap(<SkillsetForm mode="edit" initial={initial} onPublish={vi.fn()} />);
-    // We now auto-bump the version field on mount (next patch), so button starts enabled.
-    // Manually set it back to the loaded version to test the "must bump" guard.
-    fireEvent.change(screen.getByDisplayValue("1.1"), { target: { value: "1.0" } });
-    expect(screen.getByRole("button", { name: "Publish version" })).toBeDisabled();
+    expect(screen.queryByLabelText("Version")).not.toBeInTheDocument();
+    expect(screen.queryByText("+minor")).not.toBeInTheDocument();
+    expect(screen.queryByText("+major")).not.toBeInTheDocument();
   });
 
-  it("publishes when the version is bumped (auto-filled on mount)", async () => {
+  it("publishes without a version — the system auto-bumps the revision (#1162)", async () => {
     const onPublish = vi.fn().mockResolvedValue(undefined);
     wrap(<SkillsetForm mode="edit" initial={initial} onPublish={onPublish} />);
 
-    // Auto-bump pre-fills the next patch (1.1). We can submit immediately, or
-    // demonstrate manual edit still works.
-    fireEvent.change(screen.getByDisplayValue("1.1"), { target: { value: "1.2" } });
+    // Nothing to type — the form is structurally valid as loaded; just submit.
     fireEvent.click(screen.getByRole("button", { name: "Publish version" }));
 
     await waitFor(() => expect(onPublish).toHaveBeenCalledTimes(1));
     expect(onPublish.mock.calls[0]?.[0]).toMatchObject({
-      version: "1.2",
       members: ["a@1.0", "b@1.0"],
       instructions: "Run A, then B.",
     });
-    // The create-only `name` field is never part of the publish payload.
+    // The payload carries neither the create-only `name` nor a `version`.
     expect(onPublish.mock.calls[0]?.[0]).not.toHaveProperty("name");
+    expect(onPublish.mock.calls[0]?.[0]).not.toHaveProperty("version");
   });
 });

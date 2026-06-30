@@ -302,8 +302,10 @@ export class MirrorService {
    * No-ops cleanly when the mirror is disabled, skillset deps are unwired, no
    * eligible skillset references the skill, or every affected skillset is
    * unresolvable. Deterministic: an unchanged subtree (e.g. a member ref pinned
-   * to a fixed version, so the resolved-member fingerprint is unmoved) produces
-   * no diff and therefore no commit.
+   * to a fixed version, so the skillset revision is unmoved) produces no diff
+   * and therefore no commit. The reactive revision bump (#1162) runs BEFORE
+   * this method (sequenced in the bootstrap hook), so a moved `@latest` member
+   * arrives here already reflected in the skillset's `latestVersion`.
    *
    * reconcileInFlight handling: when a full reconcile is already running it
    * rebuilds EVERY eligible skillset subtree anyway, so we defer to it rather

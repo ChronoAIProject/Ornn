@@ -17,7 +17,7 @@ import { createLogger } from "../../shared/logger";
 import { SkillsetRepository } from "./repository";
 import { SkillsetVersionRepository } from "./skillsetVersionRepository";
 import { SkillsetService, type SkillsetNotificationEmitter } from "./service";
-import { backfillDerivedVisibility } from "./recompute";
+import { backfillDerivedVisibility, backfillResolvedMembers } from "./recompute";
 
 const logger = createLogger("skillsetsBootstrap");
 import { createSkillsetRoutes } from "./routes";
@@ -41,6 +41,13 @@ export interface SkillsetWiring {
    * existing skillset. Awaited by bootstrap after `ensureIndexes`.
    */
   backfillDerivedVisibility(): Promise<void>;
+  /**
+   * One-shot resolved-member snapshot backfill (#1162). Idempotent — populates
+   * the lockfile-like snapshot on each skillset's LATEST version doc when it
+   * predates the feature, so the reactive member-version bump has a baseline to
+   * compare against. Awaited by bootstrap right after the visibility backfill.
+   */
+  backfillResolvedMembers(): Promise<void>;
   /**
    * Fire-and-forget reactive recompute (#1136). Call from any skill route
    * that changes a skill's visibility; recomputes every skillset that
@@ -99,6 +106,13 @@ export function wireSkillsets(deps: {
     },
     backfillDerivedVisibility: async () => {
       await backfillDerivedVisibility({
+        skillsetRepo,
+        skillsetVersionRepo,
+        skillService: deps.skillService,
+      });
+    },
+    backfillResolvedMembers: async () => {
+      await backfillResolvedMembers({
         skillsetRepo,
         skillsetVersionRepo,
         skillService: deps.skillService,

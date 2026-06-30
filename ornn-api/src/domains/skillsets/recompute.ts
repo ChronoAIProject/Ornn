@@ -87,6 +87,56 @@ export async function computeDerivedVisibility(
 }
 
 /**
+ * Resolve a member-ref list to its lockfile-like snapshot (#1162): the
+ * concrete `name@<major.minor>` of every member that resolves under SYSTEM,
+ * sorted + de-duped so the snapshot is order-independent and stable. An
+ * unresolvable member contributes nothing (its disappearance shows up as a
+ * snapshot change → a bump). Single-sourced with the visibility classifier so
+ * both walk member refs through the exact same loader grammar.
+ */
+export async function computeResolvedMembers(
+  members: string[],
+  skillService: MemberVisibilityResolver,
+): Promise<string[]> {
+  const load = skillService.createVersionLoader(SYSTEM_ACTOR);
+  const snapshot = new Set<string>();
+  for (const ref of members) {
+    const node = await load(ref);
+    if (node) snapshot.add(`${node.name}@${node.version}`);
+  }
+  return [...snapshot].sort();
+}
+
+/**
+ * One-shot boot backfill (#1162): for every existing skillset, populate the
+ * resolved-member snapshot on its LATEST version doc when it lacks one (a
+ * pre-feature doc). Existing skillsets keep their current `latestVersion` as
+ * the starting revision — only the snapshot is added, so a later member-version
+ * change has a baseline to compare against. Idempotent (skips docs that already
+ * carry a snapshot) and failure-isolated per skillset, so one bad member set
+ * never aborts boot.
+ */
+export async function backfillResolvedMembers(deps: SkillsetRecomputeDeps): Promise<void> {
+  const guids = await deps.skillsetRepo.listAllGuids();
+  let backfilled = 0;
+  for (const guid of guids) {
+    try {
+      const latest = await deps.skillsetVersionRepo.findLatestBySkillset(guid);
+      if (!latest || latest.resolvedMembers !== undefined) continue;
+      const snapshot = await computeResolvedMembers(latest.members, deps.skillService);
+      await deps.skillsetVersionRepo.setResolvedMembers(guid, latest.version, snapshot);
+      backfilled += 1;
+    } catch (err) {
+      logger.error({ guid, err }, "Skillset resolved-members backfill failed; skipping");
+    }
+  }
+  logger.info(
+    { total: guids.length, backfilled },
+    "Skillset resolved-members backfill complete",
+  );
+}
+
+/**
  * Recompute + persist the derived-visibility cache for a single skillset's
  * latest version. No-op (returns null) if the skillset has no version yet.
  * Returns the freshly computed state so callers can react (e.g. detect an

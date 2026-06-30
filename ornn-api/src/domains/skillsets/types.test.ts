@@ -124,28 +124,36 @@ describe("createSkillsetSchema — member ref grammar (#969)", () => {
 
 function basePublish(overrides: Record<string, unknown> = {}) {
   return {
-    version: "1.1",
     instructions: "Use member-a, then member-b for the comparison.",
     members: ["a@1.0", "b@1.0"],
     ...overrides,
   };
 }
 
-describe("publishSkillsetSchema (#969)", () => {
-  it("requires version + members", () => {
-    expect(
-      publishSkillsetSchema.safeParse(basePublish({ version: undefined })).success,
-    ).toBe(false); // missing version
+describe("publishSkillsetSchema (#1162)", () => {
+  it("requires members + instructions; the revision is system-assigned (no version field)", () => {
     expect(
       publishSkillsetSchema.safeParse(basePublish({ members: undefined })).success,
     ).toBe(false); // missing members
+    expect(
+      publishSkillsetSchema.safeParse(basePublish({ instructions: undefined })).success,
+    ).toBe(false); // missing master prompt
+    // A valid publish carries NO version — the system bumps the revision.
     expect(publishSkillsetSchema.safeParse(basePublish()).success).toBe(true);
   });
 
-  it("rejects a malformed version", () => {
-    expect(
-      publishSkillsetSchema.safeParse(basePublish({ version: "1.2.3" })).success,
-    ).toBe(false);
+  it("ignores an owner-supplied version (stripped — the system controls it)", () => {
+    const parsed = publishSkillsetSchema.safeParse(basePublish({ version: "9.9" }));
+    expect(parsed.success).toBe(true);
+    if (parsed.success) expect("version" in parsed.data).toBe(false);
+  });
+});
+
+describe("createSkillsetSchema — no owner version (#1162)", () => {
+  it("ignores an owner-supplied version (stripped — create always starts at 1.0)", () => {
+    const parsed = createSkillsetSchema.safeParse(baseCreate({ version: "5.0" }));
+    expect(parsed.success).toBe(true);
+    if (parsed.success) expect("version" in parsed.data).toBe(false);
   });
 });
 

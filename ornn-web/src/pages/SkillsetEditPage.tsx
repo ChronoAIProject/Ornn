@@ -2,8 +2,9 @@
  * SkillsetEditPage — publish a new immutable version (PUT /skillsets/:id).
  *
  * Wraps `SkillsetForm` in edit mode, seeded from the current latest version.
- * The name is locked; the version field is required and must be bumped. On
- * success, navigates back to the detail page.
+ * The name is locked; the revision is system-managed (auto-bumped on publish,
+ * #1162), so the form carries no version field. On success, navigates back to
+ * the detail page.
  *
  * The URL `:id` is human-readable (name OR guid); reads accept either, but the
  * publish route is GUID-only, so the form resolves through the GET first and
@@ -101,7 +102,6 @@ export function SkillsetEditPage() {
               kind: skillset.kind,
               tags: skillset.tags,
               members: skillset.members,
-              version: skillset.version,
             }}
             onPublish={handlePublish}
             submitting={publishMutation.isPending}
