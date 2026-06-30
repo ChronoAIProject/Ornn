@@ -186,12 +186,14 @@ export interface SkillRoutesConfig {
    */
   fireSkillsetRecompute?: (changedSkill: { guid: string; name: string }) => void;
   /**
-   * #1159 — fire-and-forget targeted skillset re-export. Called after a skill
-   * CONTENT change (new-version publish, GitHub refresh, dist-tag move) so any
-   * export-eligible skillset referencing the skill via `@latest`/`@tag` is
-   * rebuilt on the mirror immediately, not on the next cron. Distinct from
-   * `fireSkillsetRecompute` (visibility): a content change can't alter skillset
-   * eligibility, so there is no visibility-recompute race here. No-op when unset.
+   * #1159/#1161 — fire-and-forget targeted skillset re-export. Called after a
+   * skill CONTENT change (new-version publish, GitHub refresh, dist-tag move) so
+   * any export-eligible skillset referencing the skill via `@latest`/`@tag` is
+   * rebuilt on the mirror immediately, not on the next cron. ALSO called after a
+   * member's VISIBILITY flips (#1161): going private drops the member from each
+   * exported skillset's public subset (or removes the plugin when <2 public
+   * remain), and going public re-includes it. Pairs with `fireSkillsetRecompute`
+   * (which updates the DB-side derived visibility). No-op when unset.
    */
   fireSkillsetMirrorForMember?: (skillGuid: string, skillName: string) => void;
 }
@@ -1216,6 +1218,10 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
       fireMirrorSync(guid);
       // Grants change who can read the skill → recompute dependent skillsets (#1136).
       fireSkillsetRecompute?.({ guid, name: updated.name });
+      // #1161 — a privacy flip also changes each exported skillset's public
+      // subset: re-export now so the member is dropped (or re-included) and the
+      // plugin removed when <2 public remain, instead of waiting for the cron.
+      fireSkillsetMirrorForMember?.(guid, updated.name);
 
       return c.json({ data: { skill: updated }, error: null });
     },
