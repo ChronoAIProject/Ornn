@@ -81,6 +81,14 @@ export interface SkillsetPluginInput {
   /** Resolved member skills (already visibility-checked + safe-named upstream). */
   members: SkillsetPluginMember[];
   /**
+   * Member names dropped from this public plugin because their skill is
+   * currently private or no longer resolvable (#1161). Surfaced in the README
+   * so consumers know the bundle is a public-only subset. NEVER affects the
+   * version fingerprint or the bundled files — only the README note — since the
+   * excluded members are not part of {@link members}. Absent / empty ⇒ no note.
+   */
+  excludedMembers?: string[] | undefined;
+  /**
    * Owner listing overrides (#1157). `displayName` → plugin.json; `description`
    * / `keywords` override the skillset defaults in plugin.json + marketplace.
    * Absent ⇒ every field falls back to the skillset's own values.
@@ -275,6 +283,7 @@ function buildSkillsetReadme(
     "",
     "Each member ships its own `SKILL.md` under `skills/<name>/`.",
     "",
+    ...excludedMembersSection(input.excludedMembers),
     "## Install",
     "",
     "```bash",
@@ -286,4 +295,28 @@ function buildSkillsetReadme(
     "> `/plugin` → Marketplaces if you want this skillset to update automatically.",
     "",
   ].join("\n");
+}
+
+/**
+ * Deterministic "Excluded members" README block (#1161). A skillset exports its
+ * PUBLIC-member subset: any member whose skill is currently private or no longer
+ * resolvable is dropped from the bundle and listed here instead, so a consumer
+ * understands the plugin is intentionally partial. De-duped + sorted so the same
+ * exclusion set always renders byte-identically (no churn). Returns `[]` (no
+ * heading at all) when nothing was excluded.
+ */
+function excludedMembersSection(excludedMembers?: string[]): string[] {
+  if (!excludedMembers || excludedMembers.length === 0) return [];
+  const names = [...new Set(excludedMembers)].sort((a, b) =>
+    a < b ? -1 : a > b ? 1 : 0,
+  );
+  return [
+    "## Excluded members",
+    "",
+    "These members are currently private or unresolvable on Ornn, so they are",
+    "NOT bundled in this public plugin:",
+    "",
+    ...names.map((n) => `- \`${n}\``),
+    "",
+  ];
 }

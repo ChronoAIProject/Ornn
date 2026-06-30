@@ -155,6 +155,49 @@ describe("buildSkillsetPlugin — README", () => {
   });
 });
 
+describe("buildSkillsetPlugin — excluded members (#1161)", () => {
+  it("adds a deterministic Excluded-members note when members were dropped", () => {
+    const { files } = buildSkillsetPlugin(
+      input({ excludedMembers: ["secret-tools", "legacy-thing"] }),
+      CFG,
+    );
+    const readme = files.get("README.md")!;
+    expect(readme).toContain("## Excluded members");
+    expect(readme).toContain("currently private or unresolvable");
+    expect(readme).toContain("`secret-tools`");
+    expect(readme).toContain("`legacy-thing`");
+    // Sorted + de-duped so the same exclusion set never churns.
+    const a = buildSkillsetPlugin(
+      input({ excludedMembers: ["legacy-thing", "secret-tools", "secret-tools"] }),
+      CFG,
+    ).files.get("README.md")!;
+    const b = buildSkillsetPlugin(
+      input({ excludedMembers: ["secret-tools", "legacy-thing"] }),
+      CFG,
+    ).files.get("README.md")!;
+    expect(a).toBe(b);
+  });
+
+  it("omits the Excluded-members heading entirely when nothing was dropped", () => {
+    const none = buildSkillsetPlugin(input(), CFG).files.get("README.md")!;
+    expect(none).not.toContain("## Excluded members");
+    const empty = buildSkillsetPlugin(input({ excludedMembers: [] }), CFG).files.get("README.md")!;
+    expect(empty).not.toContain("## Excluded members");
+  });
+
+  it("the excluded list NEVER changes the version fingerprint (it's over the public subset)", () => {
+    // Same bundled members; different exclusion lists ⇒ identical plugin.json
+    // version (the fingerprint folds only the INCLUDED members), but a README
+    // that differs by the note.
+    const withExcl = buildSkillsetPlugin(input({ excludedMembers: ["dropped"] }), CFG);
+    const withoutExcl = buildSkillsetPlugin(input(), CFG);
+    const vA = JSON.parse(withExcl.files.get(".claude-plugin/plugin.json")!).version;
+    const vB = JSON.parse(withoutExcl.files.get(".claude-plugin/plugin.json")!).version;
+    expect(vA).toBe(vB);
+    expect(withExcl.files.get("README.md")).not.toBe(withoutExcl.files.get("README.md"));
+  });
+});
+
 describe("buildSkillsetPlugin — determinism", () => {
   it("produces byte-identical output regardless of member input order", () => {
     const ordered = input();
