@@ -1,6 +1,6 @@
 ---
 name: ornn-agent-manual-cli
-description: Operational manual for AI agents using the Ornn skill-lifecycle API via the NyxID CLI (`nyxid proxy request ornn-api …`). Once loaded, the host agent can search / pull / execute / build / upload / share skills end-to-end without further setup. Authoritative contract between Ornn and the agent. Pair this file with references/api-reference.md (the full per-endpoint catalogue + error legend) — both ship together as one Ornn skill.
+description: The manual an AI agent loads to operate Ornn, the model-agnostic skill-lifecycle API (an npm-style registry + CLI for agent skills), through the NyxID CLI (`nyxid proxy request ornn-api …`). Load and follow this skill WHENEVER the user asks to work with Ornn skills or skillsets, e.g. search Ornn / find a skill, pull or install a skill or a specific version, run or execute a skill, build and upload a new skill, publish a new version, make a skill public / private / shared, run a security audit or read audit history, deprecate or delete a skill or version, diff two versions, check usage analytics, bind a skill to a NyxID service, link a skill to GitHub or sync from source, or check your quota / pick an LLM model before an SSE call — and for every SKILLSET request: bundle skills into a set, create or publish a skillset (a curated multi-skill package with a required master prompt), resolve a skillset closure in one call, export a skillset as a Claude Code marketplace plugin, transfer skill or skillset ownership, or work out why others can't see a skillset you shared (visibility is derived from member skills). Once loaded the agent runs the whole search → pull → execute → build → upload → share lifecycle with no further setup. Authoritative Ornn↔agent contract; pair with references/api-reference.md (the full per-endpoint catalogue + error legend), shipped together as one Ornn skill.
 metadata:
   category: plain
   tag:
@@ -48,7 +48,7 @@ lastUpdated: 2026-06-11
 > - **Pull your Ornn notifications** (audit fan-out, broadcasts, etc.) — §2.13.
 > - **Link a skill to GitHub** or **trigger a sync** from the linked source — §2.14.
 > - **Check your monthly quota** or **pick a valid LLM model** before calling an SSE endpoint — §2.15.
-> - **Work with skillsets** (curated bundles + required master prompt / instructions, one-call closure) — §2.16.
+> - **Work with skillsets** — create / publish a curated multi-skill bundle with its required master prompt, resolve the one-call closure, **export a skillset as a Claude Code plugin**, or transfer skillset ownership — §2.16.
 >
 > Without this manual loaded, you do not know which endpoint to call, how to authenticate, or how to read the response shapes.
 >
