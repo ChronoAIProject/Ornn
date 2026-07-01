@@ -25,6 +25,7 @@ Companion to `SKILL.md`. This file enumerates every endpoint in the Ornn HTTP su
 6. [Skill format](#6-skill-format)
 7. [Skill generation (SSE)](#7-skill-generation-sse)
 8. [Playground (SSE)](#8-playground-sse)
+   - 8a. Assistant (SSE)
 9. [Notifications](#9-notifications)
 10. [Analytics](#10-analytics)
 11. [Me — caller scope](#11-me--caller-scope)
@@ -1387,7 +1388,7 @@ SDK: `client.createSkillset` / `getSkillset` / `publishSkillset` / `transferSkil
 
 ## 6. Skill format
 
-Two endpoints — the canonical format spec, and a pre-flight validator.
+Three endpoints — the canonical format spec, a pre-flight validator, and a public JSON Schema for editors.
 
 ### 6.1 Format rules — `GET /api/v1/skill-format/rules`
 
@@ -1440,6 +1441,10 @@ Validation is idempotent and side-effect-free; safe to call repeatedly in CI.
 | `INVALID_CONTENT_TYPE` | 400 | Wrong Content-Type. |
 | `EMPTY_BODY` | 400 | Zero-byte body. |
 | `AUTH_MISSING` | 401 / `FORBIDDEN` 403 | Standard. |
+
+### 6.3 Manifest JSON Schema — `GET /api/v1/skill-manifest-schema.json`
+
+Public JSON Schema (draft 2020-12) for the `SKILL.md` frontmatter, derived from the canonical Zod schema (#464). **Auth: none.** Unlike every other JSON endpoint it returns the **raw schema object, NOT the `{ data, error }` envelope** — editors / IDEs consume it directly as a `$schema` target. No error path (static, computed once at module load).
 
 ---
 
@@ -1641,6 +1646,27 @@ The backend runs up to 5 rounds of tool-use; when the LLM emits a `function_call
 | `VALIDATION_ERROR` | 400 (pre-stream) | Body failed Zod validation. |
 | `AUTH_MISSING` / `FORBIDDEN` | 401 / 403 (pre-stream) | Standard. |
 | `error` | terminal stream event | Chat error during the LLM / sandbox loop. |
+
+---
+
+## 8a. Assistant (SSE, #970)
+
+A repo-aware Q&A assistant — a **single non-agentic completion** (no tools, no sandbox loop) grounded server-side on the Ornn docs KB. Distinct from the Playground (§8): it never executes anything.
+
+### 8a.1 Chat — `POST /api/v1/assistant/chat`
+
+**Auth: required** (any authenticated NyxID user; **no scalar scope**). Rate-limited **30/min per user**; **charges the `assistant` monthly quota** (reserved before the LLM call — see §11 `/me/quota`). Request body:
+
+```jsonc
+{
+  "messages": [                                   // REQUIRED, 1..100 items
+    { "role": "user", "content": "How do dist-tags work?" }  // role: user|assistant; content ≤32000 chars
+  ],
+  "modelId": "…"                                  // optional; defaults to the assistant-surface default
+}
+```
+
+Response: SSE stream (§1.9). Four event types: `chat_start` `{ model }`, `chat_text_delta` `{ delta }` (incremental answer text), `chat_finish` `{ usage? }`, and `chat_error` `{ code, message }` (terminal). Retrieval grounding is applied server-side and is **not** surfaced as a separate event. Pre-stream failures are clean RFC 7807 JSON, never a broken stream: `429 rate_limited` (Retry-After), `400 VALIDATION_ERROR`, `429 quota_exceeded`, `400 MODEL_NOT_ENABLED` / `MODEL_UNAVAILABLE`. Quota is charged on completion. Pick a model with `GET /api/v1/me/models?surface=assistant` (§11).
 
 ---
 
