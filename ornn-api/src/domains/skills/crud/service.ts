@@ -2204,6 +2204,19 @@ export class SkillService {
             ...(typeof skill.source.lastSyncedCommit === "string" && skill.source.lastSyncedCommit
               ? { lastSyncedCommit: skill.source.lastSyncedCommit }
               : {}),
+            // Drift-detection state (#1176/#1177) — surfaced on GET so the
+            // frontend renders the auto-sync badge (#1178) from the last
+            // scheduled check without a bespoke endpoint. `etag` stays
+            // internal (a conditional-request cache detail, not client-facing).
+            ...(typeof skill.source.upstreamHeadSha === "string" && skill.source.upstreamHeadSha
+              ? { upstreamHeadSha: skill.source.upstreamHeadSha }
+              : {}),
+            ...(skill.source.lastCheckedAt instanceof Date
+              ? { lastCheckedAt: skill.source.lastCheckedAt.toISOString() }
+              : {}),
+            ...(typeof skill.source.driftState === "string"
+              ? { driftState: skill.source.driftState }
+              : {}),
           }
         : undefined,
       agentsealScan: effectiveOverlay?.agentsealScan ?? null,
