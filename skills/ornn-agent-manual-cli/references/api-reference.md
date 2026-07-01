@@ -107,8 +107,7 @@ Permissions are issued by NyxID as part of the proxy-forwarded identity. Roles m
 | `ornn:skill:delete` | `ornn-user` | `DELETE /skills/:id`, `DELETE /skills/:idOrName/versions/:version`, `DELETE /skillsets/:id` |
 | `ornn:skill:build` | `ornn-user` | `POST /skills/generate`, `POST /skills/generate/from-source`, `POST /skills/generate/from-openapi` |
 | `ornn:playground:use` | `ornn-user` | `POST /playground/chat` |
-| `ornn:admin:skill` | `ornn-admin` | All `/admin/*` skill-scoped routes; admin force-audit; sectioned platform settings; mirror config; announcements / broadcasts |
-| `ornn:quota:admin` | `ornn-admin` | `GET /admin/dashboard/stats`; all `/admin/quota/*`; all `/admin/redemption-codes/*` |
+| `ornn:admin:skill` | `ornn-admin` | All `/admin/*` skill-scoped routes; admin force-audit; sectioned platform settings; mirror config; announcements / broadcasts; `GET /admin/dashboard/stats`; all `/admin/quota/*`; all `/admin/redemption-codes/*`; `/admin/launch-promo/*`. The quota / redemption / dashboard routes are gated by the code constant `QUOTA_ADMIN_PERMISSION`, which is an **alias whose value is `ornn:admin:skill`** — there is no separate `ornn:quota:admin` scope. |
 
 A few endpoints (`POST /skills/:idOrName/audit`, the various caller-scoped reads) gate on **ownership** instead of (or in addition to) a permission — those are documented per-endpoint.
 
@@ -2211,7 +2210,7 @@ The legacy `GET /admin/stats` and `GET /admin/activities` endpoints were removed
 
 ### 13.1 Dashboard tiles — `GET /api/v1/admin/dashboard/stats`
 
-**Auth: required. Permission: `ornn:quota:admin`.**
+**Auth: required. Permission: `ornn:admin:skill`.**
 
 User + skill totals for the admin dashboard.
 
@@ -2259,7 +2258,7 @@ Re-runs the AgentSeal scanner against a specific version's package and refreshes
 
 ### 13.6 Quota administration
 
-All under `/admin/quota/*`. **Auth: required. Permission: `ornn:quota:admin`.**
+All under `/admin/quota/*`. **Auth: required. Permission: `ornn:admin:skill`.**
 
 | Method | Path | Body | Notes |
 |---|---|---|---|
@@ -2271,7 +2270,7 @@ All under `/admin/quota/*`. **Auth: required. Permission: `ornn:quota:admin`.**
 
 ### 13.7 Redemption codes
 
-All under `/admin/redemption-codes/*`. **Auth: required. Permission: `ornn:quota:admin`.** Caller-side `redeem` and `history` live at `/me/redemption-codes/*` (§11.11, §11.12).
+All under `/admin/redemption-codes/*`. **Auth: required. Permission: `ornn:admin:skill`.** Caller-side `redeem` and `history` live at `/me/redemption-codes/*` (§11.11, §11.12).
 
 | Method | Path | Body | Notes |
 |---|---|---|---|
@@ -2362,7 +2361,7 @@ Response shape on read: `{ data: <sectionPayload>, error: null }`. On write: `{ 
 
 ### 14.3 LLM providers — `/admin/settings/llm-providers[/:id]`
 
-Multi-provider model catalog. Each provider row carries credentials + per-model toggles for the two SSE surfaces.
+Multi-provider model catalog. Each provider row carries credentials + per-model toggles for the three SSE surfaces (`playground`, `skillGen`, `assistant`).
 
 | Method | Path | Body | Notes |
 |---|---|---|---|
@@ -2372,7 +2371,7 @@ Multi-provider model catalog. Each provider row carries credentials + per-model 
 | `PUT` | `/admin/settings/llm-providers/:id` | partial | Update. Accepts plaintext or mid-mask sentinel for secret fields. |
 | `DELETE` | `/admin/settings/llm-providers/:id` | — | Hard delete + cascade through model catalog. |
 | `POST` | `/admin/settings/llm-providers/:id/sync` | — | Re-pull model list from the provider gateway. Response `{ data: { synced: int }, error: null }`. |
-| `PATCH` | `/admin/settings/llm-providers/:id/models/:modelId` | `{ enabledForPlayground?, enabledForSkillGen?, defaultForPlayground?, defaultForSkillGen? }` | Per-row surface flags. Setting `defaultFor*: true` unsets the previous default atomically. |
+| `PATCH` | `/admin/settings/llm-providers/:id/models/:modelId` | `{ enabledForPlayground?, enabledForSkillGen?, enabledForAssistant?, defaultForPlayground?, defaultForSkillGen?, defaultForAssistant? }` | Per-model surface flags (#270; assistant surface #970). ≥1 flag required. `defaultForX: true` forces `enabledForX: true` and clears that default on every other model atomically. Errors: `MODEL_NOT_FOUND` (404), `MODEL_REMOVED` (400 — re-sync first). |
 
 The picker `GET /me/models` (§11.10) reads through this catalog.
 

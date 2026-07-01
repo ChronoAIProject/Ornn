@@ -182,7 +182,7 @@ Expected output includes `user_id`, `email`, `roles`, and `permissions`. Confirm
 | Use the Playground (`POST /playground/chat`) | `ornn:playground:use` |
 | Trigger an audit (`POST /skills/:idOrName/audit`) | none (owner or `ornn:admin:skill`) |
 | Admin operations (`/admin/*`, force-audit, sectioned platform settings) | `ornn:admin:skill` |
-| Admin quota / redemption-codes operations (`/admin/quota/*`, `/admin/redemption-codes/*`, `/admin/dashboard/stats`) | `ornn:quota:admin` |
+| Admin quota / redemption-codes operations (`/admin/quota/*`, `/admin/redemption-codes/*`, `/admin/dashboard/stats`) | `ornn:admin:skill` |
 
 Most read operations — browsing public skills, version listings, skill format rules, audit verdicts on visible skills, notifications, your own quota — **need no scalar permission**; they're open to any authenticated caller (and some are anonymous). The exact gates for every endpoint live in `references/api-reference.md`.
 
