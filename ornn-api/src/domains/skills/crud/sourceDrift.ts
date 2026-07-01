@@ -32,6 +32,56 @@ export interface SourceDriftResult {
   readonly upstreamHeadSha?: string;
 }
 
+/** Persist patch (sans `lastCheckedAt`, which the caller stamps). */
+export interface DriftPatch {
+  readonly driftState: SkillSourceDriftState;
+  readonly upstreamHeadSha?: string;
+  readonly etag?: string;
+}
+
+/**
+ * Turn a probe result + a skill's last-synced commit into a drift verdict
+ * and the fields to persist. Pure — shared by the single-skill check and the
+ * batch scheduler (#1176), which probes once per `(repo, ref)` group and
+ * classifies each member against its own `lastSyncedCommit`.
+ *
+ * A `304` (nothing changed since the stored ETag) is `in_sync`; a live HEAD
+ * equal to `lastSyncedCommit` is `in_sync`; anything else is `drifted`.
+ */
+export function classifyProbeResult(
+  source: { lastSyncedCommit?: string | undefined },
+  result: RefHeadProbeResult,
+): { driftState: SkillSourceDriftState; patch: DriftPatch } {
+  if (result.notModified) {
+    return { driftState: "in_sync", patch: { driftState: "in_sync" } };
+  }
+  const sha = result.sha!;
+  const driftState: SkillSourceDriftState =
+    sha === source.lastSyncedCommit ? "in_sync" : "drifted";
+  return {
+    driftState,
+    patch: {
+      driftState,
+      upstreamHeadSha: sha,
+      ...(result.etag ? { etag: result.etag } : {}),
+    },
+  };
+}
+
+/**
+ * Resolve the effective GitHub token: an admin-set settings value wins, then
+ * the env fallback, else `""` (anonymous). Trimmed so stray whitespace never
+ * becomes a bogus bearer. Pure — shared by SkillService and the scheduler.
+ */
+export function pickSourceSyncToken(
+  settingsToken: string | undefined,
+  envFallback: string | undefined,
+): string {
+  const configured = settingsToken?.trim();
+  if (configured) return configured;
+  return envFallback?.trim() ?? "";
+}
+
 export interface SourceDriftDeps {
   readonly skillRepo: Pick<
     SkillRepository,
@@ -80,31 +130,17 @@ export async function runSourceDriftCheck(
       etag: source.etag,
     });
 
-    // 304 — nothing changed since the stored ETag. Free on authenticated
-    // requests; just record that we looked.
-    if (result.notModified) {
-      await deps.skillRepo.updateSourceDriftState(guid, {
-        driftState: "in_sync",
-        lastCheckedAt: now,
-      });
-      logger.debug({ guid, repo: source.repo }, "source drift check: 304 not modified");
-      return { applicable: true, driftState: "in_sync" };
-    }
-
-    const sha = result.sha!;
-    const drifted = sha !== source.lastSyncedCommit;
-    const driftState: SkillSourceDriftState = drifted ? "drifted" : "in_sync";
-    await deps.skillRepo.updateSourceDriftState(guid, {
-      driftState,
-      upstreamHeadSha: sha,
-      ...(result.etag ? { etag: result.etag } : {}),
-      lastCheckedAt: now,
-    });
+    const { driftState, patch } = classifyProbeResult(source, result);
+    await deps.skillRepo.updateSourceDriftState(guid, { ...patch, lastCheckedAt: now });
     logger.info(
-      { guid, repo: source.repo, ref: source.ref, driftState, upstreamHeadSha: sha },
+      { guid, repo: source.repo, ref: source.ref, driftState, upstreamHeadSha: patch.upstreamHeadSha },
       "source drift check complete",
     );
-    return { applicable: true, driftState, upstreamHeadSha: sha };
+    return {
+      applicable: true,
+      driftState,
+      ...(patch.upstreamHeadSha ? { upstreamHeadSha: patch.upstreamHeadSha } : {}),
+    };
   } catch (err) {
     // A genuinely missing repo/ref is a terminal, per-skill state — record
     // it and return. Transient failures (network, 5xx) are re-thrown so the

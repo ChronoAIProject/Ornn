@@ -35,6 +35,9 @@ export const NOTIFICATION_CATEGORIES = [
   "launchPromo.codeDelivered",
   // A member skill became unreadable to the skillset owner (#1136).
   "skillset.member_unreadable",
+  // A GitHub-sourced skill's upstream repo/ref could not be resolved during
+  // an automatic drift check — the source is broken (404/private/deleted) (#1176).
+  "skill.source_broken",
 ] as const;
 
 export type NotificationCategory = (typeof NOTIFICATION_CATEGORIES)[number];

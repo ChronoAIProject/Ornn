@@ -109,6 +109,11 @@ import {
   createMirrorScheduler,
   type MirrorScheduler,
 } from "./domains/skills/mirror/scheduler";
+import {
+  createSourceSyncScheduler,
+  type SourceSyncScheduler,
+} from "./domains/skills/crud/sourceSyncScheduler";
+import { runSourceDriftJob } from "./domains/skills/crud/sourceDriftJob";
 
 // Domain: Me (caller-scoped endpoints)
 import { createMeRoutes } from "./domains/me/routes";
@@ -784,6 +789,39 @@ export async function bootstrap(
     mirrorScheduler,
   });
 
+  // In-process source-drift scheduler (#1176). Same multi-pod-safe Agenda
+  // pattern as the mirror scheduler; cadence driven by
+  // `settings.sourceSync.pollSchedule`. Detects when a GitHub-sourced skill's
+  // upstream moved and records drift state (no publish — that is #1177). A
+  // start failure logs and leaves this pod without the scheduled scan rather
+  // than crashing boot.
+  let sourceSyncScheduler: SourceSyncScheduler | null = null;
+  try {
+    sourceSyncScheduler = createSourceSyncScheduler({
+      db,
+      logger,
+      settingsService,
+      runDriftJob: () =>
+        runSourceDriftJob({
+          skillRepo,
+          settingsService,
+          envTokenFallback: config.sourceSyncGithubToken,
+          notifier: notificationService,
+          logger,
+          // Small per-group jitter so a large catalogue spreads its probes
+          // across the tick instead of bursting one egress IP.
+          jitterMs: 250,
+        }),
+    });
+    await sourceSyncScheduler.start();
+  } catch (err) {
+    logger.error(
+      { err: err instanceof Error ? err.message : String(err) },
+      "source-sync scheduler failed to start — scheduled drift checks will not run on this pod",
+    );
+    sourceSyncScheduler = null;
+  }
+
   // Skill routes — sharing is now a direct PUT /permissions write; the
   // audit signal is surfaced as a per-version label, not a gate.
   // #1136 — forward reference: the skill routes fire a reactive skillset
@@ -1134,9 +1172,16 @@ export async function bootstrap(
   // ---- Shutdown ----
   async function shutdown(): Promise<void> {
     logger.info("Shutting down ornn-api...");
-    // Stop the scheduler first so no new mirror reconciles start while
-    // we're tearing the Mongo connection down. `stop()` is idempotent +
-    // already swallows its own errors.
+    // Stop the schedulers first so no new reconciles / drift checks start
+    // while we're tearing the Mongo connection down. `stop()` is idempotent +
+    // already swallows its own errors. Source-sync first, then mirror.
+    if (sourceSyncScheduler) {
+      try {
+        await sourceSyncScheduler.stop();
+      } catch (err) {
+        logger.warn({ err }, "Source-sync scheduler stop failed — continuing");
+      }
+    }
     if (mirrorScheduler) {
       try {
         await mirrorScheduler.stop();

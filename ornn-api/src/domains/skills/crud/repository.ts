@@ -8,6 +8,7 @@ import type {
   SkillDocument,
   SkillGrant,
   SkillMetadata,
+  SkillSource,
   SkillSourceDriftState,
 } from "../../../shared/types/index";
 import { AppError } from "../../../shared/types/index";
@@ -170,6 +171,13 @@ export class SkillRepository {
       this.collection.createIndex({ createdBy: 1, createdOn: -1 }),
       this.collection.createIndex({ createdOn: -1 }),
       this.collection.createIndex({ isPrivate: 1, createdOn: -1 }),
+      // Source-drift scan (#1176): partial index over github-sourced skills
+      // only, ordered by last-checked so the scheduler's "due for a check"
+      // query stays cheap as the catalogue grows.
+      this.collection.createIndex(
+        { "source.lastCheckedAt": 1 },
+        { partialFilterExpression: { "source.type": "github" } },
+      ),
     ]);
   }
 
@@ -387,6 +395,44 @@ export class SkillRepository {
       { _id: skillId(guid), source: { $exists: true } },
       { $set: setFields },
     );
+  }
+
+  /**
+   * Enumerate GitHub-sourced skills due for a drift check (#1176). Selects
+   * skills whose source is github, whose `ref` is NOT a pinned 40-hex SHA
+   * (those can never drift), and which were either never checked or last
+   * checked before `notCheckedSince`. Returns light `{ guid, source }`
+   * projections — the scheduler coalesces them by `(repo, ref)`.
+   */
+  async findGithubSourcedSkills(opts: {
+    notCheckedSince: Date;
+  }): Promise<Array<{ guid: string; source: SkillSource; ownerId: string }>> {
+    const docs = await this.collection
+      .find(
+        {
+          "source.type": "github",
+          // Exclude pinned commit SHAs — a 40-hex ref never moves.
+          "source.ref": { $not: /^[0-9a-f]{40}$/i },
+          $or: [
+            { "source.lastCheckedAt": { $exists: false } },
+            { "source.lastCheckedAt": { $lt: opts.notCheckedSince } },
+          ],
+        },
+        { projection: { source: 1, createdBy: 1 } },
+      )
+      .toArray();
+    const out: Array<{ guid: string; source: SkillSource; ownerId: string }> = [];
+    for (const doc of docs) {
+      const source = coerceSkillSource(doc.source);
+      if (source) {
+        out.push({
+          guid: String(doc._id),
+          source,
+          ownerId: typeof doc.createdBy === "string" ? doc.createdBy : "",
+        });
+      }
+    }
+    return out;
   }
 
   /**
@@ -930,6 +976,44 @@ export class SkillRepository {
   }
 }
 
+/**
+ * Coerce a stored `source` sub-document into the typed `SkillSource`,
+ * omitting absent optional fields so we never fabricate an Invalid Date.
+ * Shared by `mapDoc` and `findGithubSourcedSkills` (#1176). Returns
+ * `undefined` for hand-uploaded skills (no `source`).
+ */
+function coerceSkillSource(raw: unknown): SkillSource | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const s = raw as Record<string, unknown>;
+  return {
+    type: "github",
+    repo: String(s.repo ?? ""),
+    ref: String(s.ref ?? ""),
+    path: String(s.path ?? ""),
+    ...(s.lastSyncedAt instanceof Date
+      ? { lastSyncedAt: s.lastSyncedAt }
+      : s.lastSyncedAt != null
+        ? { lastSyncedAt: new Date(s.lastSyncedAt as string | number) }
+        : {}),
+    ...(typeof s.lastSyncedCommit === "string" && s.lastSyncedCommit
+      ? { lastSyncedCommit: s.lastSyncedCommit }
+      : {}),
+    // Drift-detection fields (#1175). Absent until the first drift check.
+    ...(typeof s.upstreamHeadSha === "string" && s.upstreamHeadSha
+      ? { upstreamHeadSha: s.upstreamHeadSha }
+      : {}),
+    ...(typeof s.etag === "string" && s.etag ? { etag: s.etag } : {}),
+    ...(s.lastCheckedAt instanceof Date
+      ? { lastCheckedAt: s.lastCheckedAt }
+      : s.lastCheckedAt != null
+        ? { lastCheckedAt: new Date(s.lastCheckedAt as string | number) }
+        : {}),
+    ...(typeof s.driftState === "string"
+      ? { driftState: s.driftState as SkillSourceDriftState }
+      : {}),
+  };
+}
+
 function mapDoc(doc: Document | null): SkillDocument | null {
   if (!doc) return null;
   return {
@@ -959,43 +1043,7 @@ function mapDoc(doc: Document | null): SkillDocument | null {
     // to fall back to read-grants derived from the legacy lists.
     grants: coerceStoredGrants(doc.grants),
     latestVersion: doc.latestVersion ?? "0.1",
-    source: doc.source
-      ? {
-          type: "github",
-          repo: String(doc.source.repo ?? ""),
-          ref: String(doc.source.ref ?? ""),
-          path: String(doc.source.path ?? ""),
-          // Both fields are optional — when the user attached a GitHub
-          // link via PUT /skills/:id/source without an immediate sync,
-          // they're absent from the doc. Don't fabricate an Invalid
-          // Date by feeding `undefined` to the Date constructor.
-          ...(doc.source.lastSyncedAt instanceof Date
-            ? { lastSyncedAt: doc.source.lastSyncedAt }
-            : doc.source.lastSyncedAt != null
-              ? { lastSyncedAt: new Date(doc.source.lastSyncedAt) }
-              : {}),
-          ...(typeof doc.source.lastSyncedCommit === "string" && doc.source.lastSyncedCommit
-            ? { lastSyncedCommit: doc.source.lastSyncedCommit }
-            : {}),
-          // Drift-detection fields (#1175). All optional — absent until the
-          // first drift check runs. Same absent-field care as above so we
-          // never fabricate an Invalid Date.
-          ...(typeof doc.source.upstreamHeadSha === "string" && doc.source.upstreamHeadSha
-            ? { upstreamHeadSha: doc.source.upstreamHeadSha }
-            : {}),
-          ...(typeof doc.source.etag === "string" && doc.source.etag
-            ? { etag: doc.source.etag }
-            : {}),
-          ...(doc.source.lastCheckedAt instanceof Date
-            ? { lastCheckedAt: doc.source.lastCheckedAt }
-            : doc.source.lastCheckedAt != null
-              ? { lastCheckedAt: new Date(doc.source.lastCheckedAt) }
-              : {}),
-          ...(typeof doc.source.driftState === "string"
-            ? { driftState: doc.source.driftState as SkillSourceDriftState }
-            : {}),
-        }
-      : undefined,
+    source: coerceSkillSource(doc.source),
     nyxidServiceId: typeof doc.nyxidServiceId === "string" ? doc.nyxidServiceId : null,
     nyxidServiceSlug: typeof doc.nyxidServiceSlug === "string" ? doc.nyxidServiceSlug : null,
     nyxidServiceLabel: typeof doc.nyxidServiceLabel === "string" ? doc.nyxidServiceLabel : null,

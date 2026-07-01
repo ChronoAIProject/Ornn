@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { runSourceDriftCheck, type SourceDriftDeps } from "./sourceDrift";
+import {
+  runSourceDriftCheck,
+  classifyProbeResult,
+  pickSourceSyncToken,
+  type SourceDriftDeps,
+} from "./sourceDrift";
 import {
   GitHubSourceNotFoundError,
   type RefHeadProbeResult,
@@ -133,5 +138,54 @@ describe("runSourceDriftCheck", () => {
     const { deps } = fakeDeps({ skill: null });
     const res = await runSourceDriftCheck(deps, "g1", "tok");
     expect(res.applicable).toBe(false);
+  });
+});
+
+describe("classifyProbeResult", () => {
+  test("304 notModified → in_sync, no upstreamHeadSha", () => {
+    const { driftState, patch } = classifyProbeResult(
+      { lastSyncedCommit: "x" },
+      { notModified: true },
+    );
+    expect(driftState).toBe("in_sync");
+    expect(patch).toEqual({ driftState: "in_sync" });
+  });
+
+  test("HEAD == lastSyncedCommit → in_sync with sha + etag", () => {
+    const { driftState, patch } = classifyProbeResult(
+      { lastSyncedCommit: "same" },
+      { sha: "same", etag: 'W/"e"', notModified: false },
+    );
+    expect(driftState).toBe("in_sync");
+    expect(patch).toEqual({ driftState: "in_sync", upstreamHeadSha: "same", etag: 'W/"e"' });
+  });
+
+  test("HEAD != lastSyncedCommit → drifted", () => {
+    const { driftState, patch } = classifyProbeResult(
+      { lastSyncedCommit: "old" },
+      { sha: "new", notModified: false },
+    );
+    expect(driftState).toBe("drifted");
+    expect(patch.upstreamHeadSha).toBe("new");
+    expect(patch.etag).toBeUndefined();
+  });
+});
+
+describe("pickSourceSyncToken", () => {
+  test("settings token wins", () => {
+    expect(pickSourceSyncToken("settings", "env")).toBe("settings");
+  });
+  test("empty/whitespace settings → env fallback", () => {
+    expect(pickSourceSyncToken("", "env")).toBe("env");
+    expect(pickSourceSyncToken("   ", "env")).toBe("env");
+    expect(pickSourceSyncToken(undefined, "env")).toBe("env");
+  });
+  test("neither → empty string (anonymous)", () => {
+    expect(pickSourceSyncToken(undefined, undefined)).toBe("");
+    expect(pickSourceSyncToken("", "")).toBe("");
+  });
+  test("trims the chosen token", () => {
+    expect(pickSourceSyncToken("  tok  ", undefined)).toBe("tok");
+    expect(pickSourceSyncToken("", "  env  ")).toBe("env");
   });
 });
