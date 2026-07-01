@@ -913,6 +913,43 @@ Response 200: the updated `SkillDetail`. The stored `source` block omits `lastSy
 | `INVALID_GITHUB_URL` | 400 | URL couldn't be parsed (blob URL, non-github host, missing repo, etc.). |
 | `AUTH_MISSING` / `FORBIDDEN` | 401 / 403 | Standard. |
 
+### 3.16 Transfer ownership — `POST /api/v1/skills/:id/transfer-ownership`
+
+Hand a skill to another Ornn user (#1123). **ADMIN-tier**: the caller must be the skill **author or a platform admin** — a write grantee is not enough. Immediate + synchronous; the prior owner is retained as a **READ** grant (keeps visibility, loses edit/admin).
+
+**Auth: required.** **Permission: `ornn:skill:update`** (+ author/admin). Path param `:id` — skill GUID.
+
+```jsonc
+{ "newOwnerUserId": "user_…" }   // REQUIRED, 1..128 chars
+```
+
+The target must be a known Ornn user (signed in to Ornn at least once) — resolved before any mutation. Response 200: `{ data: { skill: SkillDetail }, error: null }` with `createdBy` now the new owner. Side effects: the mirror refreshes cached author labels and referencing skillsets recompute their derived visibility (#1136).
+
+| Code | Status | Cause |
+|---|---|---|
+| `invalid_transfer` | 400 | Body fails validation (missing `newOwnerUserId`). |
+| `invalid_transfer_target` | 400 | Target isn't a known Ornn user (never signed in). |
+| `skill_not_found` | 404 | No skill with that GUID. |
+| `forbidden` | 403 | Caller is not the author and lacks `ornn:admin:skill`. |
+| `ownership_conflict` | 409 | Target already owns the skill. |
+
+### 3.17 Dist-tags — `GET | PUT | DELETE /api/v1/skills/:id/dist-tags[/:tag]`
+
+npm-style named pointers to versions (#463). `latest` is auto-managed by the publish path and always present (synthesized from `latestVersion` for pre-#463 skills). Tag grammar: `/^[a-z][a-z0-9-]{0,49}$/` (lowercase, must start with a letter — so a tag can't look like a version). A `@<tag>` ref resolves anywhere the ref grammar is accepted (skill deps, skillset members).
+
+- **Read — `GET /api/v1/skills/:idOrName/dist-tags`.** Auth: optional (name **or** GUID; private skills 404-masked for non-readers). No scope. Returns `{ data: { tags: { "<tag>": "<version>", … } }, error: null }` — always includes `latest`.
+- **Set — `PUT /api/v1/skills/:id/dist-tags/:tag`.** Auth: required, **`ornn:skill:update`** + author/admin. GUID only. Body `{ "version": "1.3" }` (`<major>.<minor>`). The target version must already exist. Returns the full refreshed tags map.
+- **Delete — `DELETE /api/v1/skills/:id/dist-tags/:tag`.** Auth: required, **`ornn:skill:update`** + author/admin. GUID only. Returns the refreshed tags map.
+
+| Code | Status | Cause |
+|---|---|---|
+| `invalid_dist_tag_body` | 400 | PUT body missing/malformed `version`. |
+| `invalid_dist_tag` | 400 | `:tag` fails the grammar. |
+| `dist_tag_immutable` | 400 | Tried to set/delete `latest` (auto-managed). |
+| `skill_version_not_found` | 404 | PUT target version doesn't exist. |
+| `skill_not_found` | 404 | No such skill. |
+| `forbidden` | 403 | Not author/admin (write paths). |
+
 ---
 
 ## 4. Skill audit
