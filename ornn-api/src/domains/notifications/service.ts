@@ -442,6 +442,32 @@ export class NotificationService {
     });
   }
 
+  /**
+   * Owner-side notification (#1176) fired when an automatic drift check finds
+   * a GitHub-sourced skill's upstream repo/ref can no longer be resolved
+   * (deleted, made private, or the branch/tag was removed). Lets the owner
+   * re-link or fix the source. Deep-links to the skill detail page.
+   */
+  async notifySourceBroken(params: {
+    ownerId: string;
+    skillGuid: string;
+    repo: string;
+    ref: string;
+  }): Promise<void> {
+    const title = `The GitHub source for one of your skills is unavailable`;
+    const body =
+      `Ornn could not reach the upstream source (${params.repo}@${params.ref}) during an ` +
+      `automatic sync check — it may have been deleted, made private, or the branch/tag ` +
+      `was removed. Re-link the skill to a valid GitHub folder to resume automatic syncing.`;
+    await this.emit(params.ownerId, {
+      category: "skill.source_broken",
+      title,
+      body,
+      link: `/skills/${encodeURIComponent(params.skillGuid)}`,
+      data: { skillGuid: params.skillGuid, repo: params.repo, ref: params.ref },
+    });
+  }
+
   private async emit(
     userId: string,
     payload: {
