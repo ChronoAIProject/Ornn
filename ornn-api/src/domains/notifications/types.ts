@@ -38,6 +38,10 @@ export const NOTIFICATION_CATEGORIES = [
   // A GitHub-sourced skill's upstream repo/ref could not be resolved during
   // an automatic drift check — the source is broken (404/private/deleted) (#1176).
   "skill.source_broken",
+  // A GitHub-sourced skill was automatically re-published from upstream (#1177).
+  "skill.auto_synced",
+  // An automatic re-publish was refused (version not bumped / validation failed) (#1177).
+  "skill.auto_sync_failed",
 ] as const;
 
 export type NotificationCategory = (typeof NOTIFICATION_CATEGORIES)[number];

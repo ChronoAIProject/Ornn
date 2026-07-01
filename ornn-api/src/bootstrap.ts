@@ -789,12 +789,12 @@ export async function bootstrap(
     mirrorScheduler,
   });
 
-  // In-process source-drift scheduler (#1176). Same multi-pod-safe Agenda
-  // pattern as the mirror scheduler; cadence driven by
+  // In-process source-drift scheduler (#1176/#1177). Same multi-pod-safe
+  // Agenda pattern as the mirror scheduler; cadence driven by
   // `settings.sourceSync.pollSchedule`. Detects when a GitHub-sourced skill's
-  // upstream moved and records drift state (no publish — that is #1177). A
-  // start failure logs and leaves this pod without the scheduled scan rather
-  // than crashing boot.
+  // upstream moved, records drift state, and — when `sourceSync.autoPublish`
+  // is on — auto-publishes the new version. A start failure logs and leaves
+  // this pod without the scheduled scan rather than crashing boot.
   let sourceSyncScheduler: SourceSyncScheduler | null = null;
   try {
     sourceSyncScheduler = createSourceSyncScheduler({
@@ -807,6 +807,10 @@ export async function bootstrap(
           settingsService,
           envTokenFallback: config.sourceSyncGithubToken,
           notifier: notificationService,
+          analyticsEmitter,
+          // #1177 — unattended auto-publish of drifted skills when the
+          // sourceSync.autoPublish switch is on.
+          autoPublish: (guid) => skillService.autoPublishFromSource(guid),
           logger,
           // Small per-group jitter so a large catalogue spreads its probes
           // across the tick instead of bursting one egress IP.

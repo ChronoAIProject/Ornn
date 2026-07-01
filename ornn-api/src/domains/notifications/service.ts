@@ -468,6 +468,53 @@ export class NotificationService {
     });
   }
 
+  /**
+   * Owner notification (#1177) fired when a GitHub-sourced skill was
+   * automatically re-published from upstream — so the owner knows a new
+   * version shipped without their action, and to what.
+   */
+  async notifyAutoSynced(params: {
+    ownerId: string;
+    skillGuid: string;
+    fromVersion: string;
+    toVersion: string;
+  }): Promise<void> {
+    await this.emit(params.ownerId, {
+      category: "skill.auto_synced",
+      title: `A skill of yours auto-synced from GitHub to v${params.toVersion}`,
+      body:
+        `Ornn detected an upstream change and automatically published a new version ` +
+        `(v${params.fromVersion} → v${params.toVersion}) from the linked GitHub source.`,
+      link: `/skills/${encodeURIComponent(params.skillGuid)}`,
+      data: {
+        skillGuid: params.skillGuid,
+        fromVersion: params.fromVersion,
+        toVersion: params.toVersion,
+      },
+    });
+  }
+
+  /**
+   * Owner notification (#1177) fired when an automatic re-publish was
+   * refused — the upstream changed but the SKILL.md version wasn't bumped,
+   * or the pulled package failed validation. The owner must fix upstream.
+   */
+  async notifyAutoSyncFailed(params: {
+    ownerId: string;
+    skillGuid: string;
+    reason: string;
+  }): Promise<void> {
+    await this.emit(params.ownerId, {
+      category: "skill.auto_sync_failed",
+      title: `Auto-sync could not publish a new version of one of your skills`,
+      body:
+        `Ornn detected an upstream change but did not publish it: ${params.reason}. ` +
+        `Your current published version is unchanged — fix the issue upstream to resume auto-syncing.`,
+      link: `/skills/${encodeURIComponent(params.skillGuid)}`,
+      data: { skillGuid: params.skillGuid, reason: params.reason },
+    });
+  }
+
   private async emit(
     userId: string,
     payload: {

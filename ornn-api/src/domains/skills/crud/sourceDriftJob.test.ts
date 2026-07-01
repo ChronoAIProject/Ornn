@@ -7,6 +7,7 @@ import {
   type RefHeadProbeInput,
   type RefHeadProbeResult,
 } from "./utils/githubPull";
+import type { AutoPublishOutcome } from "./sourceDrift";
 import type { SkillSource } from "../../../shared/types/index";
 
 const logger = pino({ level: "silent" });
@@ -36,13 +37,21 @@ function makeDeps(opts: {
   candidates: Candidate[];
   probe: Probe;
   concurrency?: number;
+  autoPublishSetting?: boolean;
+  autoPublish?: (guid: string) => Promise<AutoPublishOutcome>;
 }): {
   deps: SourceDriftJobDeps;
   persisted: Array<{ guid: string; patch: Record<string, unknown> }>;
   notified: Array<{ ownerId: string; skillGuid: string; repo: string; ref: string }>;
+  autoSynced: Array<{ skillGuid: string; fromVersion: string; toVersion: string }>;
+  autoFailed: Array<{ skillGuid: string; reason: string }>;
+  activity: Array<{ action: string; properties: Record<string, unknown> }>;
 } {
   const persisted: Array<{ guid: string; patch: Record<string, unknown> }> = [];
   const notified: Array<{ ownerId: string; skillGuid: string; repo: string; ref: string }> = [];
+  const autoSynced: Array<{ skillGuid: string; fromVersion: string; toVersion: string }> = [];
+  const autoFailed: Array<{ skillGuid: string; reason: string }> = [];
+  const activity: Array<{ action: string; properties: Record<string, unknown> }> = [];
   const deps: SourceDriftJobDeps = {
     skillRepo: {
       findGithubSourcedSkills: async () => opts.candidates,
@@ -56,20 +65,32 @@ function makeDeps(opts: {
         githubToken: "tok",
         pollSchedule: "*/15 * * * *",
         minCheckIntervalMinutes: 60,
-        autoPublish: false,
+        autoPublish: opts.autoPublishSetting ?? false,
       }),
     },
     notifier: {
       notifySourceBroken: async (p) => {
         notified.push(p);
       },
+      notifyAutoSynced: async (p) => {
+        autoSynced.push({ skillGuid: p.skillGuid, fromVersion: p.fromVersion, toVersion: p.toVersion });
+      },
+      notifyAutoSyncFailed: async (p) => {
+        autoFailed.push({ skillGuid: p.skillGuid, reason: p.reason });
+      },
+    },
+    analyticsEmitter: {
+      trackPlatformActivity: (input) => {
+        activity.push({ action: input.action, properties: input.properties ?? {} });
+      },
     },
     logger,
     probeRefHead: opts.probe,
+    ...(opts.autoPublish ? { autoPublish: opts.autoPublish } : {}),
     concurrency: opts.concurrency ?? 5,
     jitterMs: 0,
   };
-  return { deps, persisted, notified };
+  return { deps, persisted, notified, autoSynced, autoFailed, activity };
 }
 
 describe("runSourceDriftJob", () => {
@@ -240,7 +261,11 @@ describe("runSourceDriftJob", () => {
           autoPublish: false,
         }),
       },
-      notifier: { notifySourceBroken: async () => {} },
+      notifier: {
+        notifySourceBroken: async () => {},
+        notifyAutoSynced: async () => {},
+        notifyAutoSyncFailed: async () => {},
+      },
       logger,
       probeRefHead: async () => ({ sha: "c1", notModified: false }),
       concurrency: 1,
@@ -250,5 +275,103 @@ describe("runSourceDriftJob", () => {
     // Both counted as checked; g2 still persisted despite g1's write throwing.
     expect(res.checked).toBe(2);
     expect(persisted).toContain("g2");
+  });
+
+  test("emits skill.source_drift_detected for every drift, regardless of autoPublish", async () => {
+    const { deps, activity } = makeDeps({
+      autoPublishSetting: false, // OFF
+      candidates: [cand("g1", "a/x", "main", { lastSyncedCommit: "old" })],
+      probe: async () => ({ sha: "new", notModified: false }),
+    });
+    await runSourceDriftJob(deps);
+    const drift = activity.filter((a) => a.action === "skill.source_drift_detected");
+    expect(drift.length).toBe(1);
+    expect(drift[0]!.properties.skillId).toBe("g1");
+  });
+
+  test("autoPublish OFF → autoPublish callback is never invoked", async () => {
+    let called = 0;
+    const { deps } = makeDeps({
+      autoPublishSetting: false,
+      autoPublish: async () => {
+        called++;
+        return { status: "published", fromVersion: "1.0", toVersion: "1.1" };
+      },
+      candidates: [cand("g1", "a/x", "main", { lastSyncedCommit: "old" })],
+      probe: async () => ({ sha: "new", notModified: false }),
+    });
+    await runSourceDriftJob(deps);
+    expect(called).toBe(0);
+  });
+
+  test("autoPublish ON + published → notifyAutoSynced + skill.auto_synced event", async () => {
+    const { deps, autoSynced, activity } = makeDeps({
+      autoPublishSetting: true,
+      autoPublish: async () => ({ status: "published", fromVersion: "1.0", toVersion: "1.1" }),
+      candidates: [cand("g1", "a/x", "main", { lastSyncedCommit: "old" })],
+      probe: async () => ({ sha: "new", notModified: false }),
+    });
+    const res = await runSourceDriftJob(deps);
+    expect(res.autoPublished).toBe(1);
+    expect(autoSynced).toEqual([{ skillGuid: "g1", fromVersion: "1.0", toVersion: "1.1" }]);
+    expect(activity.some((a) => a.action === "skill.auto_synced")).toBe(true);
+  });
+
+  test("autoPublish ON + changed_unversioned → notifyAutoSyncFailed, counted", async () => {
+    const { deps, autoFailed } = makeDeps({
+      autoPublishSetting: true,
+      autoPublish: async () => ({ status: "changed_unversioned" }),
+      candidates: [cand("g1", "a/x", "main", { lastSyncedCommit: "old" })],
+      probe: async () => ({ sha: "new", notModified: false }),
+    });
+    const res = await runSourceDriftJob(deps);
+    expect(res.autoSyncFailed).toBe(1);
+    expect(autoFailed).toEqual([
+      { skillGuid: "g1", reason: "upstream changed but SKILL.md version not bumped" },
+    ]);
+  });
+
+  test("autoPublish ON + validation_failed → notifyAutoSyncFailed with reason", async () => {
+    const { deps, autoFailed } = makeDeps({
+      autoPublishSetting: true,
+      autoPublish: async () => ({ status: "validation_failed", reason: "validation_failed: bad zip" }),
+      candidates: [cand("g1", "a/x", "main", { lastSyncedCommit: "old" })],
+      probe: async () => ({ sha: "new", notModified: false }),
+    });
+    const res = await runSourceDriftJob(deps);
+    expect(res.autoSyncFailed).toBe(1);
+    expect(autoFailed[0]!.reason).toContain("bad zip");
+  });
+
+  test("autoPublish ON + error → no notification, tick continues", async () => {
+    const { deps, autoFailed, autoSynced } = makeDeps({
+      autoPublishSetting: true,
+      autoPublish: async () => ({ status: "error", reason: "network blip" }),
+      candidates: [cand("g1", "a/x", "main", { lastSyncedCommit: "old" })],
+      probe: async () => ({ sha: "new", notModified: false }),
+    });
+    const res = await runSourceDriftJob(deps);
+    expect(res.autoPublished).toBe(0);
+    expect(res.autoSyncFailed).toBe(0);
+    expect(autoFailed.length).toBe(0);
+    expect(autoSynced.length).toBe(0);
+    expect(res.drifted).toBe(1);
+  });
+
+  test("autoPublish callback throwing does not abort the tick", async () => {
+    const { deps } = makeDeps({
+      autoPublishSetting: true,
+      autoPublish: async () => {
+        throw new Error("unexpected");
+      },
+      candidates: [
+        cand("g1", "a/x", "main", { lastSyncedCommit: "old" }),
+        cand("g2", "b/y", "main", { lastSyncedCommit: "old" }),
+      ],
+      concurrency: 1,
+      probe: async () => ({ sha: "new", notModified: false }),
+    });
+    const res = await runSourceDriftJob(deps);
+    expect(res.drifted).toBe(2); // both still processed despite the throw
   });
 });

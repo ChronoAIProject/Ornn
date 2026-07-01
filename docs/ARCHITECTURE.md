@@ -46,6 +46,8 @@ so dashboards can disambiguate from frontend events of the same name):
 | `skill.visibility_changed` / `.permissions_changed` | visibility + sharing flips | `skillId`, `isPrivate`, `sharedWithUsers`, `sharedWithOrgs`, `writeGrants` (count of `write` grants, #1123) |
 | `skill.ownership_transferred` | ownership handed to another user (#1123) | `skillId`, `skillName`, `priorOwnerId`, `newOwnerId` |
 | `skill.refresh` / `.source_linked` / `.source_unlinked` | source-pointer ops | `skillId`, `repo`, `ref`, `commit` |
+| `skill.source_drift_detected` | scheduled drift check found upstream moved (#1176/#1177) | `skillId`, `repo`, `ref`, `upstreamHeadSha` |
+| `skill.auto_synced` / `.auto_sync_failed` | unattended auto-publish outcome (#1177) | `skillId`, `fromVersion`, `toVersion` / `reason` |
 | `skill.nyxid_service_tied` / `.agentseal_rescanned` | tie + admin-rescan | `skillId`, `isSystemSkill`, `score` |
 | `settings.exported` / `.imported` | settings IO | `schemaVersion`, `aggregateStatus`, `dryRun`, `sections` |
 

@@ -65,6 +65,10 @@ export type PlatformActivityAction =
   | "skill.source_linked"
   | "skill.source_unlinked"
   | "skill.agentseal_rescanned"
+  // Automatic source-sync events (#1177).
+  | "skill.source_drift_detected"
+  | "skill.auto_synced"
+  | "skill.auto_sync_failed"
   | "settings.exported"
   | "settings.imported";
 
