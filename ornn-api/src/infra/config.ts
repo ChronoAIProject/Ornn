@@ -87,6 +87,15 @@ export interface SkillConfig {
    */
   readonly ornnPublicOrigin: string;
 
+  /**
+   * Service-account GitHub token for authenticated source-repo reads
+   * (#1175). Env fallback used when the `sourceSync` settings section has no
+   * token. Public-read only — it lifts the 60/hr anonymous rate ceiling, it
+   * grants no access beyond public content. Empty ⇒ reads run anonymously
+   * (rate-limited). Never logged.
+   */
+  readonly sourceSyncGithubToken: string;
+
   /** Master passphrase for AES-256-GCM at-rest secret encryption. Required, ≥32 chars; boot fails with ConfigError if missing/short. See ENCRYPTION_KEY in envSchema for full rationale. */
   readonly encryptionKey: string;
 }
@@ -165,6 +174,11 @@ const envSchema = z.object({
     (v) => (v === "" ? undefined : v),
     z.string().url().default("https://ornn.chrono-ai.fun"),
   ),
+
+  // Source-sync GitHub token (#1175). Optional — empty means anonymous,
+  // rate-limited source reads. The `sourceSync` settings section overrides
+  // this at runtime when an admin sets a value there.
+  ORNN_SOURCE_SYNC_GITHUB_TOKEN: z.string().default(""),
 });
 
 /**
@@ -228,5 +242,7 @@ export function loadConfig(): SkillConfig {
     agentsealEnabled: env.AGENTSEAL_ENABLED !== "false",
 
     ornnPublicOrigin: env.ORNN_PUBLIC_ORIGIN.replace(/\/+$/, ""),
+
+    sourceSyncGithubToken: env.ORNN_SOURCE_SYNC_GITHUB_TOKEN.trim(),
   };
 }

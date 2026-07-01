@@ -487,6 +487,10 @@ export async function bootstrap(
     maxEntryUncompressedBytes: config.maxEntryUncompressedBytes,
     maxPackageFileCount: config.maxPackageFileCount,
     maxCompressionRatio: config.maxCompressionRatio,
+    // Source-sync (#1175): authenticate GitHub source reads. The settings
+    // token wins; the env token is the fallback.
+    sourceSyncSettings: settingsService,
+    sourceSyncGithubTokenFallback: config.sourceSyncGithubToken,
   });
 
   // ---- Domain: Notifications + Broadcasts ----
