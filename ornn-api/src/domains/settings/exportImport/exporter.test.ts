@@ -92,6 +92,7 @@ function fakeSettingsService(): SettingsService {
     listLlmProviders: async () => providers,
     getLlmProvider: async (id: string) => providers.find((p) => p._id === id) ?? null,
     getLaunchPromo: () => make("launchPromo"),
+    getSourceSync: () => make("sourceSync"),
     invalidateCache: () => {},
   };
 }

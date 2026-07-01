@@ -4,7 +4,8 @@
  *
  * Responsibilities:
  *   • Decrypt secret fields on read (apiKey / clientSecret / password /
- *     appPrivateKey / postHogApiKey) so internal callers see plaintext.
+ *     appPrivateKey / postHogApiKey / githubToken) so internal callers see
+ *     plaintext.
  *   • Encrypt secret fields on write before they hit Mongo.
  *   • Run the section's Zod schema before persisting (caller may also
  *     validate, but the service is the last line of defence).
@@ -40,6 +41,7 @@ import {
   type SectionId,
   type SkillAuditSection,
   type SkillGenSection,
+  type SourceSyncSection,
   type TelemetrySection,
 } from "./sections";
 import type {
@@ -120,6 +122,10 @@ export class SettingsServiceImpl implements SettingsService {
   }
   async getLaunchPromo(): Promise<LaunchPromoSection> {
     return this.getSection<LaunchPromoSection>("launchPromo");
+  }
+
+  async getSourceSync(): Promise<SourceSyncSection> {
+    return this.getSection<SourceSyncSection>("sourceSync");
   }
 
   async getSection<T>(id: SectionId): Promise<T> {
