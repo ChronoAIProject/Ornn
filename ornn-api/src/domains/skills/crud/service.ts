@@ -15,7 +15,9 @@ import { fetchSkillFromGitHub, parseGithubUrl, type GitHubPullInput } from "./ut
 import {
   runSourceDriftCheck,
   pickSourceSyncToken,
+  SYSTEM_SYNC_ACTOR,
   type SourceDriftResult,
+  type AutoPublishOutcome,
 } from "./sourceDrift";
 import type { SourceSyncSection } from "../../settings/sections/sourceSync";
 import { computeVersionDiff, type VersionDiffResult } from "./utils/versionDiff";
@@ -230,6 +232,88 @@ export class SkillService {
   async checkSourceDrift(guid: string): Promise<SourceDriftResult> {
     const token = await this.resolveSourceSyncToken();
     return runSourceDriftCheck({ skillRepo: this.skillRepo }, guid, token);
+  }
+
+  /**
+   * Unattended auto-publish of a drifted GitHub-sourced skill (#1177). Called
+   * by the drift scheduler when `sourceSync.autoPublish` is on. Re-pulls the
+   * upstream and publishes a new version under the system source-sync actor,
+   * running the SAME validation the manual refresh runs.
+   *
+   * Never throws for known outcomes — returns a typed {@link AutoPublishOutcome}
+   * the caller maps to a notification + telemetry:
+   *  - `published`           — a new version shipped (from → to).
+   *  - `changed_unversioned` — upstream changed but SKILL.md version not bumped;
+   *    the immutable current version is left untouched (updateSkill's
+   *    VERSION_NOT_INCREMENTED guard fires BEFORE any storage write).
+   *  - `validation_failed`   — the pulled package was rejected by the publish
+   *    rules (validation / breaking-change / deps); nothing was written.
+   *  - `skipped`             — no github source, not drifted, or already synced
+   *    (idempotency guard against a concurrent pod).
+   *  - `error`               — a mechanical/transient failure; drift state is
+   *    left `drifted` so the next tick retries. Never publishes bad content.
+   */
+  async autoPublishFromSource(guid: string): Promise<AutoPublishOutcome> {
+    const existing = await this.skillRepo.findByGuid(guid);
+    if (!existing || existing.source?.type !== "github") {
+      return { status: "skipped", reason: "no_github_source" };
+    }
+    const source = existing.source;
+    if (source.driftState !== "drifted") {
+      return { status: "skipped", reason: `not_drifted:${source.driftState ?? "unknown"}` };
+    }
+    // Idempotency: a concurrent pod may have already published this HEAD.
+    if (source.upstreamHeadSha && source.upstreamHeadSha === source.lastSyncedCommit) {
+      return { status: "skipped", reason: "already_synced" };
+    }
+
+    const fromVersion = existing.latestVersion;
+    const now = new Date();
+    try {
+      // skipValidation deliberately unset — the auto path MUST validate.
+      const detail = await this.refreshSkillFromSource(guid, SYSTEM_SYNC_ACTOR.userId, {
+        userEmail: SYSTEM_SYNC_ACTOR.userEmail,
+        userDisplayName: SYSTEM_SYNC_ACTOR.userDisplayName,
+      });
+      // refreshSkillFromSource rewrites `source` without the drift fields, so
+      // stamp the resolved verdict back on.
+      await this.skillRepo.updateSourceDriftState(guid, {
+        driftState: "in_sync",
+        lastCheckedAt: now,
+      });
+      logger.info(
+        { guid, fromVersion, toVersion: detail.version, actor: SYSTEM_SYNC_ACTOR.userId },
+        "auto-sync published new version",
+      );
+      return { status: "published", fromVersion, toVersion: detail.version };
+    } catch (err) {
+      if (err instanceof AppError && err.code === "VERSION_NOT_INCREMENTED") {
+        await this.skillRepo.updateSourceDriftState(guid, {
+          driftState: "changed_unversioned",
+          lastCheckedAt: now,
+        });
+        logger.warn({ guid }, "auto-sync skipped: upstream changed but SKILL.md version not bumped");
+        return { status: "changed_unversioned" };
+      }
+      if (err instanceof AppError) {
+        // A deliberate publish-rule rejection (validation / breaking change /
+        // deps). The upstream content is unacceptable — never publish it. The
+        // guard fired before any storage write, so nothing partial landed.
+        await this.skillRepo.updateSourceDriftState(guid, {
+          driftState: "broken",
+          lastCheckedAt: now,
+        });
+        logger.warn({ guid, code: err.code }, "auto-sync refused: pulled package failed publish rules");
+        return { status: "validation_failed", reason: `${err.code}: ${err.message}` };
+      }
+      // Mechanical/transient (network, rate limit, malformed fetch) — leave
+      // driftState `drifted` so the next tick retries. Never mislabel or publish.
+      logger.error(
+        { guid, err: err instanceof Error ? err.message : String(err) },
+        "auto-sync errored unexpectedly — leaving drifted for retry",
+      );
+      return { status: "error", reason: err instanceof Error ? err.message : String(err) };
+    }
   }
 
   /**

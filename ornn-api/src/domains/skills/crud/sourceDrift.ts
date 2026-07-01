@@ -23,6 +23,30 @@ import {
 
 const logger = createLogger("sourceDrift");
 
+/**
+ * Identity recorded as `createdBy` on an auto-published version (#1177).
+ * Distinct from the authz `SYSTEM_ACTOR` (`__system__`) so the audit trail
+ * plainly shows automatic source-sync — not the original linking user, who
+ * may have lost repo access or left — authored the version.
+ */
+export const SYSTEM_SYNC_ACTOR = {
+  userId: "system:source-sync",
+  userEmail: "source-sync@ornn.internal",
+  userDisplayName: "Ornn Auto-Sync",
+} as const;
+
+/**
+ * Result of an auto-publish attempt (#1177). `autoPublishFromSource` never
+ * throws for these known outcomes — the batch job maps the status to a
+ * notification + telemetry event and keeps going.
+ */
+export type AutoPublishOutcome =
+  | { status: "published"; fromVersion: string; toVersion: string }
+  | { status: "changed_unversioned" }
+  | { status: "validation_failed"; reason: string }
+  | { status: "skipped"; reason: string }
+  | { status: "error"; reason: string };
+
 export interface SourceDriftResult {
   /** False when the skill has no GitHub source — nothing to check. */
   readonly applicable: boolean;
