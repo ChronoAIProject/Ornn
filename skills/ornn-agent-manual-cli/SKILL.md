@@ -1,6 +1,6 @@
 ---
 name: ornn-agent-manual-cli
-description: The manual an AI agent loads to operate Ornn — the model-agnostic skill-lifecycle API (an npm-style registry + CLI for agent skills) — via the NyxID CLI (`nyxid proxy request ornn-api …`). Load and follow it WHENEVER the user asks to work with Ornn skills or skillsets, e.g. search Ornn or find a skill, pull or install a skill or a specific version, run a skill, build and upload one, publish a new version, make a skill public/private/shared, run or read a security audit, deprecate or delete, bind a skill to a NyxID service, link to GitHub or sync from source, check quota or pick an LLM model; and for skillsets, bundle skills into a set, create or publish a skillset (a curated multi-skill package with a master prompt), resolve its closure in one call, export it as a Claude Code marketplace plugin, transfer ownership, or work out why others can't see a skillset you shared (visibility is derived from members). Authoritative Ornn↔agent contract; pair with references/api-reference.md.
+description: "The manual an AI agent loads to operate Ornn — the model-agnostic skill-lifecycle API (an npm-style registry + CLI for agent skills) — via the NyxID CLI (`nyxid proxy request ornn-api …`). Load and follow this skill WHENEVER the user asks to do anything with Ornn skills or skillsets. Skills: search Ornn or find a skill, pull or install a skill (or a specific version), run a skill, build and upload a skill, publish a new version, make a skill public / private / shared, run or read a security audit, deprecate or delete a version, diff two versions, check usage analytics, bind a skill to a NyxID service, link a skill to GitHub or sync from source, manage npm-style dist-tags, or transfer skill ownership. Skillsets — curated multi-skill bundles with a required master prompt: bundle skills into a set, create or publish a skillset, resolve its closure in one call, export a skillset as a Claude Code marketplace plugin, transfer skillset ownership, or diagnose why a shared skillset isn't visible (visibility derives from its member skills). Also load it to check your quota or pick an LLM model before an SSE call, and on phrases like 'share my skill', 'bundle these skills', or 'export as a Claude Code plugin'. Once loaded, the agent runs the whole search → pull → execute → build → upload → share lifecycle with no further setup — this is the authoritative Ornn↔agent contract, paired with references/api-reference.md (full per-endpoint catalogue + error legend)."
 metadata:
   category: plain
   tag:
@@ -9,7 +9,7 @@ metadata:
     - manual
     - skill-lifecycle
     - cli
-version: "1.4"
+version: "1.5"
 lastUpdated: 2026-07-01
 ---
 
