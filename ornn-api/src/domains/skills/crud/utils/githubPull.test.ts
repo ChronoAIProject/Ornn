@@ -8,6 +8,7 @@ import {
   authHeaders,
   resolveRefHeadSha,
   GitHubSourceNotFoundError,
+  GitHubRateLimitError,
 } from "./githubPull";
 
 /** Records each request's URL + Authorization header, returns caller-chosen responses. */
@@ -443,5 +444,49 @@ describe("resolveRefHeadSha", () => {
     );
     await resolveRefHeadSha("acme/x", "feature/foo", {}, impl);
     expect(calls[0]!.url).toContain("/git/ref/heads/feature/foo");
+  });
+
+  test("429 → GitHubRateLimitError with Retry-After", async () => {
+    const { impl } = recordingFetch(
+      () => new Response("slow down", { status: 429, headers: { "retry-after": "30" } }),
+    );
+    let err: unknown;
+    try {
+      await resolveRefHeadSha("acme/x", "main", {}, impl);
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toBeInstanceOf(GitHubRateLimitError);
+    expect((err as GitHubRateLimitError).retryAfterMs).toBe(30_000);
+  });
+
+  test("403 with X-RateLimit-Remaining: 0 → GitHubRateLimitError", async () => {
+    const { impl } = recordingFetch(
+      () =>
+        new Response("forbidden", {
+          status: 403,
+          headers: { "x-ratelimit-remaining": "0" },
+        }),
+    );
+    await expect(resolveRefHeadSha("acme/x", "main", {}, impl)).rejects.toBeInstanceOf(
+      GitHubRateLimitError,
+    );
+  });
+
+  test("403 WITHOUT rate-limit signals → generic error (not rate-limit)", async () => {
+    const { impl } = recordingFetch(() => new Response("nope", { status: 403 }));
+    let err: unknown;
+    try {
+      await resolveRefHeadSha("acme/x", "main", {}, impl);
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toBeInstanceOf(Error);
+    expect(err).not.toBeInstanceOf(GitHubRateLimitError);
+  });
+
+  test("500 → generic transient error", async () => {
+    const { impl } = recordingFetch(() => new Response("boom", { status: 500 }));
+    await expect(resolveRefHeadSha("acme/x", "main", {}, impl)).rejects.toThrow(/500/);
   });
 });

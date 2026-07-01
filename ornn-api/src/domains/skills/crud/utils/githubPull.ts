@@ -61,6 +61,53 @@ export class GitHubSourceNotFoundError extends Error {
   }
 }
 
+/**
+ * Thrown when GitHub signals a primary or secondary rate limit (`429`, or
+ * `403` with `X-RateLimit-Remaining: 0` / a `Retry-After` header). Carries
+ * the recommended wait so a batch caller (the drift scheduler, #1176) can
+ * short-circuit the rest of its tick and let the next fire retry.
+ */
+export class GitHubRateLimitError extends Error {
+  constructor(
+    public readonly status: number,
+    public readonly retryAfterMs: number | undefined,
+  ) {
+    super(`GitHub rate limit hit (status ${status})`);
+    this.name = "GitHubRateLimitError";
+  }
+}
+
+/**
+ * Classify a non-OK GitHub response: a rate-limit signal becomes a typed
+ * {@link GitHubRateLimitError} (with the wait derived from `Retry-After` or
+ * `X-RateLimit-Reset`); everything else becomes a generic error the caller
+ * treats as transient. `nowMs` is injected for deterministic tests.
+ */
+function rateLimitOrGeneric(
+  res: Response,
+  context: string,
+  nowMs: number,
+): Error {
+  const retryAfter = res.headers.get("retry-after");
+  const remaining = res.headers.get("x-ratelimit-remaining");
+  const reset = res.headers.get("x-ratelimit-reset");
+  const isRateLimit =
+    res.status === 429 ||
+    (res.status === 403 && (remaining === "0" || retryAfter !== null));
+  if (!isRateLimit) {
+    return new Error(`GitHub API returned ${res.status} for ${context}`);
+  }
+  let retryAfterMs: number | undefined;
+  if (retryAfter !== null) {
+    const secs = Number(retryAfter);
+    if (Number.isFinite(secs)) retryAfterMs = Math.max(0, secs * 1000);
+  } else if (reset !== null) {
+    const resetMs = Number(reset) * 1000;
+    if (Number.isFinite(resetMs)) retryAfterMs = Math.max(0, resetMs - nowMs);
+  }
+  return new GitHubRateLimitError(res.status, retryAfterMs);
+}
+
 export interface GitHubPullInput {
   /** `owner/name`. */
   readonly repo: string;
@@ -359,9 +406,9 @@ export async function resolveRefHeadSha(
     if (res.status === 304) return { notModified: true };
     if (res.status === 404) return "not-found";
     if (!res.ok) {
-      throw new Error(
-        `GitHub git/ref API returned ${res.status} for ${normalizedRepo}@${trimmedRef}`,
-      );
+      // A 403/429 rate-limit signal becomes a typed error so the batch
+      // caller can back off; anything else is treated as transient.
+      throw rateLimitOrGeneric(res, `${normalizedRepo}@${trimmedRef}`, Date.now());
     }
     const body = (await res.json()) as { object?: { sha?: string } };
     const sha = body.object?.sha;
