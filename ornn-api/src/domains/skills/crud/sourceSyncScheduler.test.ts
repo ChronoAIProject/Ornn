@@ -99,6 +99,8 @@ const okResult: SourceDriftJobResult = {
   drifted: 0,
   broken: 0,
   skipped: 0,
+  autoPublished: 0,
+  autoSyncFailed: 0,
 };
 const FAKE_DB = {} as Parameters<typeof createSourceSyncScheduler>[0]["db"];
 
