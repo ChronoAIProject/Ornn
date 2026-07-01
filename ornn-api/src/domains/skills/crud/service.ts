@@ -12,7 +12,11 @@ import type { IStorageClient } from "../../../clients/storageClient";
 import type { SkillDocument, SkillMetadata, SkillDetailResponse, SkillVersionDocument, SkillSource } from "../../../shared/types/index";
 import { AppError } from "../../../shared/types/index";
 import { fetchSkillFromGitHub, parseGithubUrl, type GitHubPullInput } from "./utils/githubPull";
-import { runSourceDriftCheck, type SourceDriftResult } from "./sourceDrift";
+import {
+  runSourceDriftCheck,
+  pickSourceSyncToken,
+  type SourceDriftResult,
+} from "./sourceDrift";
 import type { SourceSyncSection } from "../../settings/sections/sourceSync";
 import { computeVersionDiff, type VersionDiffResult } from "./utils/versionDiff";
 import { isReservedVerb } from "../../../shared/reservedVerbs";
@@ -212,9 +216,8 @@ export class SkillService {
    * bogus `Authorization` header. NEVER logged.
    */
   private async resolveSourceSyncToken(): Promise<string> {
-    const configured = (await this.sourceSyncSettings?.getSourceSync())?.githubToken?.trim();
-    if (configured) return configured;
-    return this.sourceSyncGithubTokenFallback?.trim() ?? "";
+    const settingsToken = (await this.sourceSyncSettings?.getSourceSync())?.githubToken;
+    return pickSourceSyncToken(settingsToken, this.sourceSyncGithubTokenFallback);
   }
 
   /**
