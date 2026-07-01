@@ -1229,55 +1229,122 @@ The path is intentionally outside `/skills/` so it does not collide with `GET /s
 
 ## 5a. Skillsets (#969)
 
-A **skillset** is a named, versioned, owned, visibility-scoped meta-package that references N member skills and carries a `kind`. One call (`/closure`) resolves + delivers the whole set — including each member's dependency closure (§3.6a). Ownership / visibility / immutable-versioning mirror skills; permission scopes **reuse** `ornn:skill:{create,read,update,delete}` (a dedicated `ornn:skillset:*` split is a tracked follow-up).
+A **skillset** is a named, versioned, owned meta-package that references N member skills and carries a `kind`. One call (`/closure`) resolves + delivers the whole set — including each member's dependency closure (§3.6a). Immutable versioning mirrors skills, and permission scopes **reuse** `ornn:skill:{create,read,update,delete}` (a dedicated `ornn:skillset:*` split is a tracked follow-up). Two things do **not** mirror skills and trip up most callers: **visibility is DERIVED from the member skills, never owner-set** (#1136), and **revisions are system-managed, never caller-supplied** (#1162). Read the two model notes below before calling any endpoint.
 
 - `kind` enum: `generic` (default) | `consensus-supported`. The latter is an author **claim** that the members are an independent, comparable set — not a guarantee. Ornn delivers the set; the agent runs any consensus in its own runtime.
-- `members`: 2..N skill refs, each `<name-or-guid>@<major.minor>` or `<name>@<dist-tag>` (same grammar as `depends-on`). No nested skillsets. Validated on publish (each must resolve to a readable skill version; union closure conflict-free).
+- `members`: 2..100 skill refs (min 2 — a bundle of one is just a skill), each ≤115 chars and shaped `<name-or-guid>@<major.minor>` or `<name>@<dist-tag>` (same grammar as `depends-on`; no semver ranges). **No nested skillsets** — a ref may not start with `skillset:`. Validated on publish under SYSTEM (each must resolve to a real skill version; union closure conflict-free) — so a curator may legitimately bundle a private skill they own.
 - `instructions` (master prompt, #978): **REQUIRED**, versioned markdown telling an agent **HOW** to use the set (orchestration, ordering, which member to pick when). 1..8000 chars (trimmed; whitespace-only rejected). Distinct from `description` (short ≤1024 summary). **Required on BOTH create and publish, with NO carry-forward** — unlike `description`/`kind`/`tags` (a publish may omit them to inherit the prior version), every version must restate its own master prompt. Stored opaque (no rendering / sanitization / templating / linting / search-indexing). Surfaced verbatim on the detail read and as a root field on `/closure`.
+
+**Model note — derived visibility (#1136).** A skillset has **no owner-set visibility**. Its `isPrivate` / `sharedWithUsers` / `sharedWithOrgs` / `grants` fields are **inert legacy** (kept for back-compat only — do not rely on them). Reachability is computed live from the members: a caller may read a skillset **iff they can read every member skill** at the requested version. The owner and platform admins always see it, plus an `unreadableMembers` list (the members *they* can no longer read, for repair); every other caller gets a flat `skillset_not_found` (404) the moment any one member is unreadable — the response never reveals *which* member (so non-owners always get `unreadableMembers: []`). The derived state is surfaced as **`memberVisibilityState`**: `all-public` (every member public → discoverable by anyone), `restricted` (≥1 private/shared member → only callers who can read all members), `unresolvable` (≥1 member ref no longer resolves → only the owner sees it, with a warning). **There is no permissions endpoint. To widen a skillset's reach you expose the underlying member skills to the intended audience** — you never set visibility on the skillset itself.
+
+**Model note — auto-revision (#1162/#1165).** Revisions are system-managed `<major>.<minor>` starting at `1.0`; the owner **never sends a `version`** on create or publish. Every owner publish auto-bumps the **minor** (major never auto-bumps). A skillset is also **reactively re-cut** with a minor bump when its *public-resolved-member snapshot* moves — i.e. a member's version pointer changes, or a member flips private⇄public — so a consumer's `/closure` stays coherent and a mirrored plugin re-publishes. Sending a `version` field is silently ignored by the schema; do not build request bodies around one.
 
 ### 5a.1 Create skillset — `POST /api/v1/skillsets`
 
-Requires `ornn:skill:create`. Created **private** by default. JSON body:
+Requires `ornn:skill:create`. **Do not send a `version`** — the system assigns the initial revision `1.0` (auto-revision model note above). Reachability is derived from the members, never set here. JSON body:
 
 ```jsonc
 {
-  "name": "review-set",
-  "description": "A curated comparison set.",
-  "instructions": "Run pdf-tools first, then feed its output to csv-tools…",  // REQUIRED, 1..8000 chars
+  "name": "review-set",            // REQUIRED, kebab-case, unique
+  "description": "A curated comparison set.",   // REQUIRED, 1..1024 chars
+  "instructions": "Run pdf-tools first, then feed its output to csv-tools…",  // REQUIRED master prompt, 1..8000 chars
   "kind": "consensus-supported",   // optional, default "generic"
-  "tags": ["review"],              // optional
-  "members": ["pdf-tools@1.0", "csv-tools@2.1"],   // 2..N
-  "version": "1.0"                 // optional, default "1.0"
+  "tags": ["review"],              // optional, ≤20 kebab-case tags
+  "members": ["pdf-tools@1.0", "csv-tools@2.1"]   // REQUIRED, 2..100 refs (no nested skillsets)
 }
 ```
 
-Response 201 + `Location: /api/v1/skillsets/:guid`. Member validation runs before any write — a missing member → `skill_dependency_not_found` (404), a conflicting union closure → `dependency_conflict` (409). Duplicate name → `skillset_name_exists` (409). A missing/empty/whitespace-only `instructions` → `400` validation error.
+Response 201 + `Location: /api/v1/skillsets/:guid`, body `{ data: <SkillsetDetail — §5a.2>, error: null }`. Member validation runs before any write — a missing/unreadable member → `skill_dependency_not_found` (404), a conflicting union closure → `dependency_conflict` (409). Duplicate name → `skillset_name_exists` (409); a reserved name → `reserved_name` (400); a missing/empty/whitespace-only `instructions`, fewer than 2 members, or a `skillset:`-prefixed ref → `400 invalid_skillset` validation error.
 
 ### 5a.2 Get skillset — `GET /api/v1/skillsets/:idOrName`
 
-**Auth: optional** (anon sees public only; private → `skillset_not_found`). Query `version` (optional). Returns `{ guid, name, description, instructions, kind, tags, members, version, latestVersion, isPrivate, createdBy, sharedWithUsers, sharedWithOrgs, createdOn, updatedOn }` — `instructions` is the version's master prompt.
+**Auth: optional.** Query `version` (optional; defaults to latest). The member-derived read gate applies (derived-visibility model note): unreadable for the caller → flat `skillset_not_found` (404), no leak of which member. Returns `{ data: SkillsetDetail, error: null }` where **SkillsetDetail** is:
+
+```jsonc
+{
+  "guid": "…", "name": "review-set",
+  "description": "…", "instructions": "…",       // master prompt of THIS version, verbatim
+  "kind": "consensus-supported", "tags": ["review"],
+  "members": ["pdf-tools@1.0", "csv-tools@2.1"],  // authored refs of this version
+  "version": "1.3", "latestVersion": "1.3",
+  "createdBy": "user_…", "createdByEmail": "…", "createdByDisplayName": "…",  // email/displayName optional
+
+  // --- DERIVED visibility (#1136) — the authoritative reach signal ---
+  "memberVisibilityState": "all-public",   // all-public | restricted | unresolvable
+  "unreadableMembers": [],                 // populated only for owner/admin; always [] for others
+  "publicMemberCount": 2,                  // SYSTEM count of public+resolvable members of THIS version
+
+  // --- Claude Code plugin export (#1157) ---
+  "exportAsPlugin": false,
+  "pluginConfig": { "displayName": "…", "description": "…", "keywords": ["…"] },  // present only when overrides are set
+
+  // --- INERT legacy ACL fields (#1136) — do NOT use for visibility decisions ---
+  "isPrivate": true, "sharedWithUsers": [], "sharedWithOrgs": [], "grants": [],
+
+  "createdOn": "2026-…", "updatedOn": "2026-…"
+}
+```
+
+Judge reach from **`memberVisibilityState`**, never from `isPrivate`/`sharedWith*` (those are inert). `members.length − publicMemberCount` is how many members are currently excluded from the public / plugin view.
 
 ### 5a.3 List versions — `GET /api/v1/skillsets/:idOrName/versions`
 
-**Auth: optional** (visibility matches the detail read). Returns `{ items: [{ version, kind, memberCount, createdBy, createdOn }] }`, newest first.
+**Auth: optional** (member-derived read gate, same as §5a.2). Returns `{ data: { items: [{ version, kind, memberCount, createdBy, createdByEmail?, createdByDisplayName?, createdOn }] }, error: null }`, newest first. Use it to compare your locally-recorded skillset revision against the latest before re-resolving `/closure`.
 
 ### 5a.4 Resolve closure — `GET /api/v1/skillsets/:idOrName/closure`
 
-**Auth: optional.** One-call resolve: the union of all member skills **plus** each member's transitive dependency closure (§3.6a), deduplicated and topo-sorted (deps-first). Query `version` (optional). The success body carries the version's master prompt as a **root sibling** of `items`: `{ "data": { "instructions": "…", "items": [ … ] }, "error": null }` (the skill `/skills/:id/closure` body stays `{ items }`, unchanged). Same error codes as §3.6a: `dependency_cycle` / `dependency_conflict` (409), `skill_dependency_not_found` (404), plus `skillset_not_found` (404) for an unknown/invisible root. A public skillset whose member transitively pins a private skill surfaces `skill_dependency_not_found` for that node to anonymous callers (no leak).
+**Auth: optional.** One-call resolve: the union of all member skills **plus** each member's transitive dependency closure (§3.6a), deduplicated and topo-sorted (deps-first). Query `version` (optional). The success body carries the version's master prompt as a **root sibling** of `items`: `{ "data": { "instructions": "…", "items": [ … ] }, "error": null }` (the skill `/skills/:id/closure` body stays `{ items }`, unchanged). Each `items[]` entry is a **ClosureNode** `{ ref, name, version, depth, guid?, skillHash? }` — `ref` is the canonical `<name>@<version>`, `depth` is 0 for the set's direct members and grows with dependency distance, and `guid`/`skillHash` appear only when known (`isPrivate` is never emitted here). This is the main agent payload: run `instructions` as the master prompt and install/execute the nodes deps-first. Same error codes as §3.6a: `dependency_cycle` / `dependency_conflict` (409), `skill_dependency_not_found` (404), plus `skillset_not_found` (404) for an unknown/invisible root. A public skillset whose member transitively pins a private skill surfaces `skill_dependency_not_found` for that node to anonymous callers (no leak).
 
 ### 5a.5 Publish new version — `PUT /api/v1/skillsets/:id`
 
-Requires `ornn:skill:update` + author/admin. JSON body `{ members, version, instructions, description?, kind?, tags? }` — `instructions` is **REQUIRED** here too (no carry-forward; each version restates its own master prompt). Appends an immutable `guid@version` and advances `latestVersion`; prior versions never mutate. Re-publishing an existing version → `skillset_version_exists` (409).
+Requires `ornn:skill:update` + author/admin. JSON body `{ members, instructions, description?, kind?, tags? }` — **no `version`** (the minor revision auto-bumps; auto-revision model note). `members` + `instructions` are **REQUIRED** every publish (no carry-forward for the master prompt — each version restates its own); `description`/`kind`/`tags` may be omitted to inherit the prior version. Appends an immutable `guid@<new-minor>` and advances `latestVersion`; prior versions never mutate. The response is the new `SkillsetDetail` (§5a.2). Member/closure validation reuses the §5a.1 errors; an unknown id → `skillset_version_not_found` (404).
 
-### 5a.7 Delete skillset — `DELETE /api/v1/skillsets/:id`
+### 5a.6 Export as a Claude Code plugin — `PUT /api/v1/skillsets/:id/plugin-export`
 
-Requires `ornn:skill:delete` + author/admin. Cascades all versions. Returns `{ data: { success: true } }`.
+Requires `ornn:skill:update` + author/admin. Turns the skillset into (or removes it from) a **Claude Code marketplace plugin** in the public mirror repo (§3.15 / §13.8). JSON body:
 
-### 5a.8 Search skillsets — `GET /api/v1/skillset-search`
+```jsonc
+{
+  "enabled": true,               // REQUIRED
+  "displayName": "Review Set",   // optional listing override, ≤64 chars
+  "description": "…",            // optional listing override, ≤1024 chars
+  "keywords": ["review", "pdf"]  // optional, ≤20 kebab-case keywords
+}
+```
 
-**Auth: optional** (anon → public scope). Query: `kind`, `scope`, `tags` (CSV, AND-match), `page`/`pageSize` or `cursor`/`limit`. Plain keyword/filter discovery — no semantic ranking, no facets, no popularity ranking. Cursor pagination per §1.10.
+Enabling requires `memberVisibilityState: all-public` with **≥2 public, resolvable members** — otherwise `skillset_too_few_public_members` (409). The mirror then publishes a multi-skill plugin under `skillsets/<name>/` (`.claude-plugin/plugin.json` + `skills/<member>/…` + a README carrying the master prompt); private / unresolvable members are excluded and listed in the README. The install **name and version are not overridable** — only the three listing fields above. Response is the updated `SkillsetDetail` (`exportAsPlugin` flips, `pluginConfig` reflects the overrides). Body validation failures → `400 invalid_plugin_export`.
 
-SDK: `client.createSkillset` / `getSkillset` / `publishSkillset` / `deleteSkillset` / `getSkillsetClosure` / `searchSkillsets` (TypeScript); `create_skillset` / `get_skillset` / `publish_skillset` / `delete_skillset` / `resolve_skillset_closure` / `search_skillsets` (Python).
+### 5a.7 Transfer ownership — `POST /api/v1/skillsets/:id/transfer-ownership`
+
+Requires `ornn:skill:update` and is **ADMIN-tier** (caller must own the skillset or hold `ornn:admin:skill`). JSON body `{ "newOwnerUserId": "user_…" }` (1..128 chars). Immediate; the prior owner is retained as a READ grant. Returns `{ data: { skillset: SkillsetDetail }, error: null }`. Invalid / non-existent target → `invalid_transfer_target` (400); caller not owner/admin → `forbidden` (403); transferring to the current owner → `ownership_conflict` (409). Mirrors the skill transfer-ownership flow (#1123).
+
+### 5a.8 Delete skillset — `DELETE /api/v1/skillsets/:id`
+
+Requires `ornn:skill:delete` + author/admin. Cascades all versions. Returns `{ data: { success: true }, error: null }`.
+
+### 5a.9 Search skillsets — `GET /api/v1/skillset-search`
+
+**Auth: optional** (anon forced to `scope=public`). Query: `q` (case-insensitive substring over name + description, ≤200 chars), `kind`, `scope` (`public` | `private` | `mixed` | `shared-with-me` | `mine`, default `public`), `tags` (CSV, AND-match), `page`/`pageSize` or `cursor`/`limit`. Rate-limited 60/min. Plain keyword/filter discovery — no semantic ranking, no facets, no popularity. Discovery live-filters `restricted` skillsets to callers who can read every member. Returns `{ data: { items: [SkillsetSearchItem], total, page, pageSize, totalPages, meta: { limit, hasMore, nextCursor } }, error: null }`; each item is `{ guid, name, description, kind, tags, memberCount, latestVersion, memberVisibilityState, createdBy, createdOn, updatedOn }`. Cursor pagination per §1.10.
+
+SDK: `client.createSkillset` / `getSkillset` / `publishSkillset` / `transferSkillsetOwnership` / `deleteSkillset` / `getSkillsetClosure` / `searchSkillsets` (TypeScript); `create_skillset` / `get_skillset` / `publish_skillset` / `transfer_skillset_ownership` / `delete_skillset` / `resolve_skillset_closure` / `search_skillsets` (Python). No SDK method targets plugin-export yet — call `PUT /skillsets/:id/plugin-export` directly.
+
+### 5a.10 Skillset error codes
+
+| Code | HTTP | When |
+|---|---|---|
+| `invalid_skillset` | 400 | Body fails create/publish validation (missing `instructions`, <2 or >100 members, bad ref grammar, `skillset:`-prefixed ref). |
+| `reserved_name` | 400 | `name` is on the reserved list. |
+| `invalid_plugin_export` | 400 | Plugin-export body fails validation. |
+| `invalid_transfer` / `invalid_transfer_target` | 400 | Missing / unresolvable `newOwnerUserId`. |
+| `forbidden` | 403 | Authenticated caller is not the owner and lacks `ornn:admin:skill`. |
+| `skillset_not_found` | 404 | Unknown skillset, or the member-derived read gate hid it (a member is unreadable). |
+| `skillset_version_not_found` | 404 | Named `version` (or publish target) does not exist. |
+| `skill_dependency_not_found` | 404 | A member (or transitive dep) can't be resolved/read at the requested version. |
+| `skillset_name_exists` | 409 | Another skillset already owns that `name`. |
+| `skillset_version_exists` | 409 | Internal revision collision on publish (auto-revision guard). |
+| `dependency_conflict` / `dependency_cycle` | 409 | The union closure is conflicting or cyclic. |
+| `skillset_too_few_public_members` | 409 | Plugin-export enabled with fewer than 2 public, resolvable members. |
+| `ownership_conflict` | 409 | Transfer target is already the owner. |
 
 ---
 
