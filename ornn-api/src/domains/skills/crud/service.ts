@@ -12,6 +12,8 @@ import type { IStorageClient } from "../../../clients/storageClient";
 import type { SkillDocument, SkillMetadata, SkillDetailResponse, SkillVersionDocument, SkillSource } from "../../../shared/types/index";
 import { AppError } from "../../../shared/types/index";
 import { fetchSkillFromGitHub, parseGithubUrl, type GitHubPullInput } from "./utils/githubPull";
+import { runSourceDriftCheck, type SourceDriftResult } from "./sourceDrift";
+import type { SourceSyncSection } from "../../settings/sections/sourceSync";
 import { computeVersionDiff, type VersionDiffResult } from "./utils/versionDiff";
 import { isReservedVerb } from "../../../shared/reservedVerbs";
 import { canReadSkill, isMemberOfOrg, SYSTEM_ACTOR, type ActorContext } from "./authorize";
@@ -115,6 +117,15 @@ export function resolveDistTag(skill: SkillDocument, version: string): string | 
   );
 }
 
+/**
+ * Narrow settings surface the source-drift path needs (#1175). Decoupled
+ * from the full SettingsService so tests stub just this one method — same
+ * pattern as `MirrorSettingsReader`.
+ */
+export interface SourceSyncSettingsReader {
+  getSourceSync(): Promise<SourceSyncSection>;
+}
+
 export interface SkillServiceDeps {
   skillRepo: SkillRepository;
   skillVersionRepo: SkillVersionRepository;
@@ -148,6 +159,19 @@ export interface SkillServiceDeps {
   maxEntryUncompressedBytes?: number;
   maxPackageFileCount?: number;
   maxCompressionRatio?: number;
+
+  /**
+   * Source-sync settings reader (#1175). Optional — when absent the GitHub
+   * source reads/drift checks fall back to the env token (below) or run
+   * anonymously. Production bootstrap passes the SettingsService.
+   */
+  sourceSyncSettings?: SourceSyncSettingsReader;
+  /**
+   * Env-provided GitHub token fallback (`ORNN_SOURCE_SYNC_GITHUB_TOKEN`),
+   * used only when the settings `githubToken` is empty. Lets ops supply the
+   * credential without the admin UI. Never hardcoded, never logged.
+   */
+  sourceSyncGithubTokenFallback?: string;
 }
 
 export class SkillService {
@@ -163,6 +187,8 @@ export class SkillService {
   private readonly maxEntryUncompressedBytes: number | undefined;
   private readonly maxPackageFileCount: number | undefined;
   private readonly maxCompressionRatio: number | undefined;
+  private readonly sourceSyncSettings: SourceSyncSettingsReader | undefined;
+  private readonly sourceSyncGithubTokenFallback: string | undefined;
 
   constructor(deps: SkillServiceDeps) {
     this.skillRepo = deps.skillRepo;
@@ -175,6 +201,32 @@ export class SkillService {
     this.maxEntryUncompressedBytes = deps.maxEntryUncompressedBytes;
     this.maxPackageFileCount = deps.maxPackageFileCount;
     this.maxCompressionRatio = deps.maxCompressionRatio;
+    this.sourceSyncSettings = deps.sourceSyncSettings;
+    this.sourceSyncGithubTokenFallback = deps.sourceSyncGithubTokenFallback;
+  }
+
+  /**
+   * Resolve the GitHub token for authenticated source reads (#1175): the
+   * admin-set settings value wins; the env fallback is next; empty ⇒ run
+   * anonymous (rate-limited). Trimmed so stray whitespace never becomes a
+   * bogus `Authorization` header. NEVER logged.
+   */
+  private async resolveSourceSyncToken(): Promise<string> {
+    const configured = (await this.sourceSyncSettings?.getSourceSync())?.githubToken?.trim();
+    if (configured) return configured;
+    return this.sourceSyncGithubTokenFallback?.trim() ?? "";
+  }
+
+  /**
+   * Read-only drift check for a GitHub-sourced skill (#1175). Probes the
+   * upstream HEAD via the cheap `git/ref` endpoint, compares it to the
+   * last-synced commit, and persists the verdict on `source`. NEVER
+   * re-pulls or publishes — the scheduler (#1176) and auto-publish (#1177)
+   * consume the state this writes.
+   */
+  async checkSourceDrift(guid: string): Promise<SourceDriftResult> {
+    const token = await this.resolveSourceSyncToken();
+    return runSourceDriftCheck({ skillRepo: this.skillRepo }, guid, token);
   }
 
   /**
@@ -849,7 +901,10 @@ export class SkillService {
       skipValidation?: boolean | undefined;
     },
   ): Promise<{ guid: string; source: SkillSource }> {
-    const pulled = await fetchSkillFromGitHub(input);
+    // Authenticate the pull when a token is configured (#1175) — lifts the
+    // 60/hr anonymous ceiling. An explicit input token (tests) wins.
+    const token = await this.resolveSourceSyncToken();
+    const pulled = await fetchSkillFromGitHub({ ...input, token: input.token ?? token });
     const source: SkillSource = {
       type: "github",
       repo: pulled.source.repo,
@@ -897,6 +952,8 @@ export class SkillService {
       repo: existing.source.repo,
       ref: existing.source.ref,
       path: existing.source.path,
+      // Authenticated re-pull when a token is configured (#1175).
+      token: await this.resolveSourceSyncToken(),
     });
 
     const newSource: SkillSource = {
