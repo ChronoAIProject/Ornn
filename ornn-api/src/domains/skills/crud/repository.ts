@@ -4,7 +4,12 @@
  */
 
 import type { Collection, Db, Document } from "mongodb";
-import type { SkillDocument, SkillGrant, SkillMetadata } from "../../../shared/types/index";
+import type {
+  SkillDocument,
+  SkillGrant,
+  SkillMetadata,
+  SkillSourceDriftState,
+} from "../../../shared/types/index";
 import { AppError } from "../../../shared/types/index";
 import { createLogger } from "../../../shared/logger";
 import { coerceStoredGrants, legacyListsFromGrants } from "./grants";
@@ -347,6 +352,41 @@ export class SkillRepository {
       },
     );
     return this.findByGuid(guid);
+  }
+
+  /**
+   * Persist the drift-detection fields on a skill's `source` (#1175). Only
+   * touches `source.*` drift keys via dot-paths — it never rewrites the
+   * whole `source` object (so it can't race with a concurrent refresh that
+   * updated `lastSyncedCommit`) and never touches the package or version
+   * history. A no-op when the skill has no `source`.
+   *
+   * `updatedOn`/`updatedBy` are deliberately NOT bumped: a drift check is a
+   * background read, not a user edit, and must not disturb sort-by-updated
+   * ordering.
+   */
+  async updateSourceDriftState(
+    guid: string,
+    patch: {
+      driftState?: SkillSourceDriftState;
+      upstreamHeadSha?: string;
+      etag?: string;
+      lastCheckedAt?: Date;
+    },
+  ): Promise<void> {
+    const setFields: Record<string, unknown> = {};
+    if (patch.driftState !== undefined) setFields["source.driftState"] = patch.driftState;
+    if (patch.upstreamHeadSha !== undefined)
+      setFields["source.upstreamHeadSha"] = patch.upstreamHeadSha;
+    if (patch.etag !== undefined) setFields["source.etag"] = patch.etag;
+    if (patch.lastCheckedAt !== undefined)
+      setFields["source.lastCheckedAt"] = patch.lastCheckedAt;
+    if (Object.keys(setFields).length === 0) return;
+
+    await this.collection.updateOne(
+      { _id: skillId(guid), source: { $exists: true } },
+      { $set: setFields },
+    );
   }
 
   /**
@@ -936,6 +976,23 @@ function mapDoc(doc: Document | null): SkillDocument | null {
               : {}),
           ...(typeof doc.source.lastSyncedCommit === "string" && doc.source.lastSyncedCommit
             ? { lastSyncedCommit: doc.source.lastSyncedCommit }
+            : {}),
+          // Drift-detection fields (#1175). All optional — absent until the
+          // first drift check runs. Same absent-field care as above so we
+          // never fabricate an Invalid Date.
+          ...(typeof doc.source.upstreamHeadSha === "string" && doc.source.upstreamHeadSha
+            ? { upstreamHeadSha: doc.source.upstreamHeadSha }
+            : {}),
+          ...(typeof doc.source.etag === "string" && doc.source.etag
+            ? { etag: doc.source.etag }
+            : {}),
+          ...(doc.source.lastCheckedAt instanceof Date
+            ? { lastCheckedAt: doc.source.lastCheckedAt }
+            : doc.source.lastCheckedAt != null
+              ? { lastCheckedAt: new Date(doc.source.lastCheckedAt) }
+              : {}),
+          ...(typeof doc.source.driftState === "string"
+            ? { driftState: doc.source.driftState as SkillSourceDriftState }
             : {}),
         }
       : undefined,
