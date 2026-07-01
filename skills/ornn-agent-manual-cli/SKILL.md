@@ -9,8 +9,8 @@ metadata:
     - manual
     - skill-lifecycle
     - cli
-version: "1.3"
-lastUpdated: 2026-06-11
+version: "1.4"
+lastUpdated: 2026-07-01
 ---
 
 # Agent Manual (NyxID CLI variant)
