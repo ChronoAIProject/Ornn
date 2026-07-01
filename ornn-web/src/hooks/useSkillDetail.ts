@@ -42,6 +42,7 @@ import {
   useRefreshSkillFromSource,
 } from "@/hooks/useSkills";
 import { useSkillPackage } from "@/hooks/useSkillPackage";
+import { useSourceDriftProbe } from "@/hooks/useSourceDriftProbe";
 import {
   useStartAudit,
   useAuditSummaryByVersion,
@@ -93,6 +94,10 @@ export function useSkillDetail(idOrName: string | undefined) {
   });
   const refreshMutation = useRefreshSkillFromSource(idOrName ?? "");
   const startAuditMutation = useStartAudit();
+
+  // Lazy on-view drift freshening (#1178) — re-reads the detail once when the
+  // github source's last drift check is stale. See useSourceDriftProbe.
+  useSourceDriftProbe(skill?.source, refetch);
 
   // 7-day pulls totals — feeds the hero "↓ N pulls · 7d" status pill.
   const last7d = useMemo(rangeLast7d, []);

@@ -38,6 +38,20 @@ export type SkillSource =
        * "linked but never synced" state.
        */
       lastSyncedCommit?: string;
+      /**
+       * Automatic-sync drift state (#1176/#1177), surfaced on GET so the UI
+       * renders a passive status badge:
+       *   - `in_sync`             upstream HEAD == last synced commit
+       *   - `drifted`             upstream moved; auto-publish (if on) is imminent
+       *   - `changed_unversioned` upstream changed but SKILL.md version not bumped
+       *   - `broken`              source repo/ref could not be resolved
+       * Absent until the first scheduled drift check runs.
+       */
+      driftState?: "in_sync" | "drifted" | "changed_unversioned" | "broken";
+      /** Upstream HEAD observed by the last drift check. */
+      upstreamHeadSha?: string;
+      /** ISO timestamp of the last drift check. Drives the lazy on-view probe. */
+      lastCheckedAt?: string;
     };
 
 /**

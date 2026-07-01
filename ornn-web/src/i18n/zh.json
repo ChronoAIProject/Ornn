@@ -1033,6 +1033,17 @@
     "applySync": "应用同步",
     "urlPlaceholder": "https://github.com/owner/repo/tree/main/path/to/skill"
   },
+  "sourceDrift": {
+    "inSync": "已自动同步",
+    "inSyncAt": "已自动同步 · {{when}}",
+    "inSyncTitle": "正在与 GitHub 源自动保持同步。",
+    "drifted": "更新进行中",
+    "driftedTitle": "上游已变更 — 正在自动发布新版本。",
+    "changedUnversioned": "上游已变更 — 版本号未提升",
+    "changedUnversionedTitle": "GitHub 源已变更，但 SKILL.md 的版本号未提升，因此未发布新版本。请在上游提升版本号以恢复自动同步。",
+    "broken": "源不可用",
+    "brokenTitle": "无法访问 GitHub 源（可能已删除、被设为私有，或分支/标签被移除）。请重新关联该技能以恢复自动同步。"
+  },
   "githubImport": {
     "title": "从 GitHub 导入",
     "subtitle": "从公开 GitHub 仓库的某个文件夹发布一个技能。后续更新可通过同一链接一键重新同步。",

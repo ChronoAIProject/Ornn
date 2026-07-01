@@ -26,6 +26,7 @@ import {
 import { useToastStore } from "@/stores/toastStore";
 import type { RefreshPreviewResponse } from "@/services/skillApi";
 import type { SkillDetail } from "@/types/domain";
+import { SourceDriftBadge } from "./SourceDriftBadge";
 import { translateError } from "@/utils/translateError";
 
 type AdvancedSettingId = "nyxid-service-binding" | "github-link";
@@ -571,6 +572,8 @@ function GithubLinkPanel({ skill, onClose }: { skill: SkillDetail; onClose: () =
                   })
                 : t("githubLink.neverSynced", "Linked but never synced.")}
             </p>
+            {/* Auto-sync drift status (#1178) — same passive pill as the chip. */}
+            <SourceDriftBadge source={skill.source} className="mt-2" />
           </div>
         )}
       </div>
