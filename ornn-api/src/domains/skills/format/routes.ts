@@ -45,7 +45,7 @@ export const SKILL_FORMAT_RULES = `# Ornn Skill Package Format Rules
 ### Required Frontmatter Fields
 
 - **name** (string, required): kebab-case only, must match the skill package folder name. No spaces or capitals.
-- **description** (string, required): must be under 1024 characters. Must not contain XML tags (\`<\` or \`>\`).
+- **description** (string, required): must be under 1536 characters. Must not contain XML tags (\`<\` or \`>\`).
 - **metadata** (object, required): a nested object containing:
   - **category** (string, required): one of \`plain\`, \`tool-based\`, \`runtime-based\`, \`mixed\`.
     - \`plain\`: no programmatic dependency (no tools, no scripts).

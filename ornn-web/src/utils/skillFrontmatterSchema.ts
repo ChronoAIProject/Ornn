@@ -240,7 +240,9 @@ export const skillFrontmatterSchema = z.object({
       /^[a-z0-9][a-z0-9-]*$/,
       issueMessage({ key: "errors.frontmatter.nameFormat" }),
     ),
-  description: z.string().min(1).max(1024),
+  // Aligned with Claude Code's 1536-char skill-listing truncation (kept in
+  // sync with SKILL_DESCRIPTION_MAX in ornn-api's skillFrontmatter.ts).
+  description: z.string().min(1).max(1536),
   // #649 — YAML parses `version: 0.1` (unquoted) as a number, not a
   // string. The default Zod message ("Invalid input") doesn't tell
   // the author to quote the value. Surface an actionable message via

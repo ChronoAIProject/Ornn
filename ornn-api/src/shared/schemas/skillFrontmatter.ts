@@ -218,11 +218,17 @@ export const SKILL_VERSION_REGEX = /^(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
  */
 export const SKILL_NAME_REGEX = /^[a-z0-9][a-z0-9-]*$/;
 export const SKILL_NAME_MAX = 64;
+// Aligned with Claude Code's skill-listing budget: it truncates the combined
+// `description` (+ optional `when_to_use`) at 1536 chars when deciding whether
+// to auto-invoke a skill (the `skillListingMaxDescChars` default). Capping here
+// at the same number lets an author write a description as rich as the runtime
+// will actually use for routing, while still rejecting unbounded input.
+export const SKILL_DESCRIPTION_MAX = 1536;
 
 // Full frontmatter schema (base, before the top-level refinement).
 const baseSkillFrontmatterSchema = z.object({
   name: z.string().min(1).max(SKILL_NAME_MAX).regex(SKILL_NAME_REGEX, "Name must be kebab-case"),
-  description: z.string().min(1).max(1024),
+  description: z.string().min(1).max(SKILL_DESCRIPTION_MAX),
   // YAML parses `version: 0.1` (unquoted) as a float and `1.0` as an
   // integer `1`, which both lose the intended two-digit shape. We require
   // the author to quote it (`version: "0.1"`) so the round-trip is
