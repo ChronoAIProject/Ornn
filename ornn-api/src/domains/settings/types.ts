@@ -22,6 +22,7 @@ import type {
   SectionId,
   SkillAuditSection,
   SkillGenSection,
+  SourceSyncSection,
   TelemetrySection,
 } from "./sections";
 import type { LlmProvider } from "./llmProviders/types";
@@ -60,6 +61,7 @@ export interface SettingsService {
   getTelemetry(): Promise<TelemetrySection>;
   getExtras(): Promise<ExtrasSection>;
   getLaunchPromo(): Promise<LaunchPromoSection>;
+  getSourceSync(): Promise<SourceSyncSection>;
 
   /**
    * Read a section by id. Returns the typed payload, applying defaults

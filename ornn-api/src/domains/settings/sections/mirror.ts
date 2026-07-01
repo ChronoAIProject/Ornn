@@ -14,34 +14,9 @@
  * @module domains/settings/sections/mirror
  */
 import { z } from "zod";
-import { CronExpressionParser } from "cron-parser";
 import { OWNER_RE, REPO_RE } from "../../../shared/githubNaming";
+import { cronSchedule } from "./cronSchedule";
 import type { SectionMeta } from "./index";
-
-/**
- * Validates that the input is either an empty string (disabled) or a
- * cron expression accepted by `cron-parser`. We do NOT require a
- * 5-field UNIX cron specifically — `cron-parser` also accepts 6-field
- * forms with seconds; either is fine for our purposes.
- */
-const cronSchedule = z
-  .string()
-  .refine(
-    (s) => {
-      if (s.length === 0) return true;
-      try {
-        CronExpressionParser.parse(s);
-        return true;
-      } catch {
-        // Intentional silent (#579): the false return becomes a Zod
-        // validation error with the message below — that's the
-        // user-facing signal. Logging the cron-parser exception would
-        // be noisy on every form-validation typo.
-        return false;
-      }
-    },
-    { message: "must be a valid cron expression or empty (disabled)" },
-  );
 
 export const mirrorSchema = z.object({
   enabled: z.boolean(),
