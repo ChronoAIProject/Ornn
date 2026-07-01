@@ -102,7 +102,7 @@ Permissions are issued by NyxID as part of the proxy-forwarded identity. Roles m
 |---|---|---|
 | `ornn:skill:read` | `ornn-user` | `GET /skills/:idOrName/json`, `POST /skill-format/validate` |
 | `ornn:skill:create` | `ornn-user` | `POST /skills`, `POST /skills/pull`, `POST /skillsets` |
-| `ornn:skill:update` | `ornn-user` | `PUT /skills/:id`, `PUT /skills/:id/permissions`, `POST /skills/:id/refresh`, `PATCH /skills/:idOrName/versions/:version`, `PUT /skillsets/:id`, `PUT /skillsets/:id/permissions` |
+| `ornn:skill:update` | `ornn-user` | `PUT /skills/:id`, `PUT /skills/:id/permissions`, `POST /skills/:id/refresh`, `PATCH /skills/:idOrName/versions/:version`, `PUT /skillsets/:id`, `PUT /skillsets/:id/plugin-export`, `POST /skillsets/:id/transfer-ownership` |
 | `ornn:skill:delete` | `ornn-user` | `DELETE /skills/:id`, `DELETE /skills/:idOrName/versions/:version`, `DELETE /skillsets/:id` |
 | `ornn:skill:build` | `ornn-user` | `POST /skills/generate`, `POST /skills/generate/from-source`, `POST /skills/generate/from-openapi` |
 | `ornn:playground:use` | `ornn-user` | `POST /playground/chat` |
@@ -1269,10 +1269,6 @@ Response 201 + `Location: /api/v1/skillsets/:guid`. Member validation runs befor
 
 Requires `ornn:skill:update` + author/admin. JSON body `{ members, version, instructions, description?, kind?, tags? }` — `instructions` is **REQUIRED** here too (no carry-forward; each version restates its own master prompt). Appends an immutable `guid@version` and advances `latestVersion`; prior versions never mutate. Re-publishing an existing version → `skillset_version_exists` (409).
 
-### 5a.6 Replace permissions — `PUT /api/v1/skillsets/:id/permissions`
-
-Requires `ornn:skill:update` + author/admin. JSON body `{ isPrivate, sharedWithUsers, sharedWithOrgs }` (same shape as skills). An owner may only share into orgs they belong to.
-
 ### 5a.7 Delete skillset — `DELETE /api/v1/skillsets/:id`
 
 Requires `ornn:skill:delete` + author/admin. Cascades all versions. Returns `{ data: { success: true } }`.
@@ -1281,7 +1277,7 @@ Requires `ornn:skill:delete` + author/admin. Cascades all versions. Returns `{ d
 
 **Auth: optional** (anon → public scope). Query: `kind`, `scope`, `tags` (CSV, AND-match), `page`/`pageSize` or `cursor`/`limit`. Plain keyword/filter discovery — no semantic ranking, no facets, no popularity ranking. Cursor pagination per §1.10.
 
-SDK: `client.createSkillset` / `getSkillset` / `publishSkillset` / `setSkillsetPermissions` / `deleteSkillset` / `getSkillsetClosure` / `searchSkillsets` (TypeScript); `create_skillset` / `get_skillset` / `publish_skillset` / `set_skillset_permissions` / `delete_skillset` / `resolve_skillset_closure` / `search_skillsets` (Python).
+SDK: `client.createSkillset` / `getSkillset` / `publishSkillset` / `deleteSkillset` / `getSkillsetClosure` / `searchSkillsets` (TypeScript); `create_skillset` / `get_skillset` / `publish_skillset` / `delete_skillset` / `resolve_skillset_closure` / `search_skillsets` (Python).
 
 ---
 
