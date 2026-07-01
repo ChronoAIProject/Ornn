@@ -291,6 +291,10 @@ When 503, the pod is drained from the K8s service.
 
 Response 200: a complete OpenAPI 3.0 document. Schemas, parameters, request bodies, and responses are all derived from the same Zod schemas the runtime uses for validation, so it never drifts.
 
+### 2.4 `GET /api/v1/github/repo`
+
+**Public mirror coordinates** for the GitHub skill mirror (§3.15 / §13.8). **Auth: none.** Returns `{ data: { owner, repo, branch, enabled }, error: null }` — coordinates only, never credentials. The `enabled` flag lets a client hide the `npx skills add …` / `/plugin marketplace add …` install snippet when the mirror is off. The admin config write is §13.8.
+
 ---
 
 ## 3. Skills CRUD
@@ -2141,6 +2145,10 @@ Response 200:
 }
 ```
 
+### 11.13 Launch-promo status — `GET /api/v1/me/launch-promo`
+
+Your launch-promo claim status (#724). **Auth: required** (caller-scoped; no scope). Response `{ data: { promoEnabled, claimed, rank, totalSlots, slotsRemaining, awardedAt }, error: null }` — `rank` is your 1-based Ornn registration rank (or `null`), `awardedAt` is set once claimed. Admin award + observability is §13.11.
+
 ---
 
 ## 12. Users directory
@@ -2281,6 +2289,8 @@ All under `/admin/redemption-codes/*`. **Auth: required. Permission: `ornn:quota
 
 The mirror **config** (repo, branch, GitHub App id, encrypted private key, enabled flag, cadence) lives under the sectioned platform settings (§14.2, `mirror`). The two endpoints above only operate the scheduler. Manual `reconcile` runs are tracked in pod-local state and do not update `scheduledRun` in the status response.
 
+There is also a **direct mirror-config pair** outside `/admin/settings`: `GET /api/v1/github/repo` (public coordinates — §2.4) and `POST /api/v1/github/repo` (**`ornn:admin:skill`**), which patches the full mirror config — the `enabled` kill-switch, `owner` / `repo` / `branch`, and the GitHub App `appId` / `installationId` / `appPrivateKey`. Accepts any subset (omitted fields are preserved); the response mid-masks secrets, never plaintext. Changing `owner` / `repo` while skills are still stamped to the old repo is rejected unless `confirmAbandonOldRepo: true` — a guard against orphaning the existing mirror. Errors: `400 invalid_body` / `invalid_setting`.
+
 ### 13.9 Announcements
 
 Public anonymous reads + admin CRUD. Bilingual EN + ZH content; ZH falls back to EN at render time when empty.
@@ -2306,6 +2316,15 @@ Admin-authored notifications that fan out into every user's `/notifications` fee
 | `POST` | `/admin/broadcasts` | `ornn:admin:skill` | Create. Body carries bilingual `titleI18n` / `bodyMarkdownI18n`. Returns 201. |
 | `PATCH` | `/admin/broadcasts/:id` | `ornn:admin:skill` | Partial update. |
 | `DELETE` | `/admin/broadcasts/:id` | `ornn:admin:skill` | Hard delete (read receipts cascade). |
+
+### 13.11 Launch promo (#724)
+
+Admin operation of the launch-promo reward program (the caller-facing status read is §11.13).
+
+| Method | Path | Permission | Notes |
+|---|---|---|---|
+| `POST` | `/admin/launch-promo/award/:userId` | `ornn:admin:skill` | Manually award the promo — mints a redemption code (playground / skillGen grants per config). No body; `awardedBy` = caller. Idempotent per user. Errors: `PROMO_DISABLED` (400, also when zero grants configured), `ALREADY_CLAIMED` (409), `RANK_EXCEEDED` (403), `SLOTS_EXHAUSTED` (409). |
+| `GET` | `/admin/launch-promo/recent` | `ornn:admin:skill` | Recent claims for observability. Query `limit` (default 50, clamped 1..500). Returns `{ items: [{ userId, eligibilityRank, redemptionCodeId, awardedAt, awardedBy, githubLogin }] }`. |
 
 ---
 
