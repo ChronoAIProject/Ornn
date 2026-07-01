@@ -1033,6 +1033,17 @@
     "applySync": "Apply sync",
     "urlPlaceholder": "https://github.com/owner/repo/tree/main/path/to/skill"
   },
+  "sourceDrift": {
+    "inSync": "Auto-synced",
+    "inSyncAt": "Auto-synced {{when}}",
+    "inSyncTitle": "Automatically kept in sync with the GitHub source.",
+    "drifted": "Update in progress",
+    "driftedTitle": "Upstream changed — a new version is being published automatically.",
+    "changedUnversioned": "Upstream changed — version not bumped",
+    "changedUnversionedTitle": "The GitHub source changed but its SKILL.md version was not increased, so no new version was published. Bump the version upstream to resume auto-sync.",
+    "broken": "Source unavailable",
+    "brokenTitle": "The GitHub source could not be reached (deleted, made private, or the branch/tag was removed). Re-link the skill to resume auto-sync."
+  },
   "githubImport": {
     "title": "Import from GitHub",
     "subtitle": "Publish a skill from a folder in a public GitHub repo. Subsequent updates can be re-synced from the same link in one click.",

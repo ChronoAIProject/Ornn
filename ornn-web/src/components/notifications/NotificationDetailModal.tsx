@@ -41,6 +41,9 @@ const CATEGORY_LABEL: Record<NotificationCategory, string> = {
   "quota.credits_granted": "Quota",
   "launchPromo.codeDelivered": "Promo",
   "skillset.member_unreadable": "Skillset",
+  "skill.source_broken": "Source",
+  "skill.auto_synced": "Auto-sync",
+  "skill.auto_sync_failed": "Auto-sync",
 };
 
 export interface NotificationDetailModalProps {

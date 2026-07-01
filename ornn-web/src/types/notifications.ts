@@ -12,7 +12,13 @@ export type NotificationCategory =
   | "quota.credits_granted"
   | "launchPromo.codeDelivered"
   /** A member skill became unreadable to the skillset owner (#1136). */
-  | "skillset.member_unreadable";
+  | "skillset.member_unreadable"
+  /** A github-sourced skill's upstream became unreachable (#1176). */
+  | "skill.source_broken"
+  /** A github-sourced skill auto-published a new version from upstream (#1177). */
+  | "skill.auto_synced"
+  /** An automatic re-publish was refused (unversioned / validation) (#1177). */
+  | "skill.auto_sync_failed";
 
 /**
  * Discriminator marking whether this row was lifted out of the
