@@ -22,9 +22,11 @@ import {
   createSkillset,
   publishSkillset,
   updatePluginExport,
+  updateAutoUpdate,
   deleteSkillset,
 } from "@/services/skillsetApi";
 import type {
+  AutoUpdateInput,
   CreateSkillsetInput,
   PluginExportInput,
   PublishSkillsetInput,
@@ -178,6 +180,25 @@ export function useUpdatePluginExport(guid: string, idOrName: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (input: PluginExportInput) => updatePluginExport(guid, input),
+    onSuccess: (updated) => {
+      queryClient.setQueryData([SKILLSETS_KEY, idOrName, "latest"], updated);
+      queryClient.invalidateQueries({ queryKey: [SKILLSETS_KEY, idOrName] });
+      queryClient.invalidateQueries({ queryKey: [SKILLSETS_KEY] });
+      queryClient.invalidateQueries({ queryKey: [MY_SKILLSETS_KEY] });
+    },
+  });
+}
+
+/**
+ * Toggle "always keep skills in this skillset up to date" (#1191). Same
+ * two-id cache handling as {@link useUpdatePluginExport}: prime the detail
+ * cache with the returned payload (its version/members may have bumped) and
+ * invalidate the list tabs.
+ */
+export function useUpdateAutoUpdate(guid: string, idOrName: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: AutoUpdateInput) => updateAutoUpdate(guid, input),
     onSuccess: (updated) => {
       queryClient.setQueryData([SKILLSETS_KEY, idOrName, "latest"], updated);
       queryClient.invalidateQueries({ queryKey: [SKILLSETS_KEY, idOrName] });
