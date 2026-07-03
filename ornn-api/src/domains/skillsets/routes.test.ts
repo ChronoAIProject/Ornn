@@ -399,6 +399,52 @@ describe("PUT/DELETE /skillsets/:id — scope gating", () => {
     expect(((await res.json()) as { code: string }).code).toBe("skillset_too_few_public_members");
   });
 
+  test("PUT /auto-update 403 without ornn:skill:update (#1191)", async () => {
+    const app = buildApp({ permissions: [CREATE] });
+    const res = await app.request("/api/v1/skillsets/ss-1/auto-update", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ enabled: true }),
+    });
+    expect(res.status).toBe(403);
+  });
+
+  test("PUT /auto-update 400 on an invalid body (missing enabled) (#1191)", async () => {
+    const app = buildApp({ permissions: [UPDATE] });
+    const res = await app.request("/api/v1/skillsets/ss-1/auto-update", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    expect(res.status).toBe(400);
+  });
+
+  test("PUT /auto-update 200 updates + fires the mirror reconcile (#1191)", async () => {
+    let fired = 0;
+    const captured: unknown[] = [];
+    const app = buildApp({
+      permissions: [UPDATE],
+      service: {
+        setAutoUpdateMembers: async (...args: unknown[]) => {
+          captured.push(args[1]);
+          return detail({ autoUpdateMembers: true });
+        },
+      },
+      fireMirrorReconcile: () => {
+        fired += 1;
+      },
+    });
+    const res = await app.request("/api/v1/skillsets/ss-1/auto-update", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ enabled: true }),
+    });
+    expect(res.status).toBe(200);
+    expect(fired).toBe(1);
+    expect(((await res.json()) as { data: { autoUpdateMembers: boolean } }).data.autoUpdateMembers).toBe(true);
+    expect(captured[0]).toEqual({ enabled: true });
+  });
+
   test("PUT + DELETE fire the mirror reconcile on success (#1155)", async () => {
     let fired = 0;
     const fireMirrorReconcile = () => {

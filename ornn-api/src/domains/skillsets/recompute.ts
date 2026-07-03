@@ -37,7 +37,7 @@ const logger = createLogger("skillsetRecompute");
  * resolver without standing up the whole skill service.
  */
 export interface MemberVisibilityResolver {
-  createVersionLoader(actor: ActorContext): LoadVersion;
+  createVersionLoader(actor: ActorContext, forceLatest?: boolean): LoadVersion;
 }
 
 export interface SkillsetRecomputeDeps {
@@ -60,8 +60,9 @@ export interface DerivedVisibility {
 export async function computeDerivedVisibility(
   members: string[],
   skillService: MemberVisibilityResolver,
+  forceLatest = false,
 ): Promise<DerivedVisibility> {
-  const load = skillService.createVersionLoader(SYSTEM_ACTOR);
+  const load = skillService.createVersionLoader(SYSTEM_ACTOR, forceLatest);
   let anyPrivate = false;
   let anyUnresolvable = false;
 
@@ -108,8 +109,9 @@ export async function computeDerivedVisibility(
 export async function computePublicResolvedMembers(
   members: string[],
   skillService: MemberVisibilityResolver,
+  forceLatest = false,
 ): Promise<string[]> {
-  const load = skillService.createVersionLoader(SYSTEM_ACTOR);
+  const load = skillService.createVersionLoader(SYSTEM_ACTOR, forceLatest);
   const snapshot = new Set<string>();
   for (const ref of members) {
     const node = await load(ref);
@@ -172,7 +174,11 @@ export async function recomputeSkillsetVisibility(
     logger.debug({ guid }, "Skillset has no version; skipping visibility recompute");
     return null;
   }
-  const derived = await computeDerivedVisibility(latest.members, deps.skillService);
+  // #1191 — when auto-update is on, classify visibility over the members'
+  // LATEST versions (the delivered set), matching how closure/export resolve.
+  const identity = await deps.skillsetRepo.findByGuid(guid);
+  const forceLatest = identity?.autoUpdateMembers ?? false;
+  const derived = await computeDerivedVisibility(latest.members, deps.skillService, forceLatest);
   await deps.skillsetRepo.setDerivedVisibility(guid, derived);
   return derived;
 }
