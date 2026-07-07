@@ -66,7 +66,6 @@ export const skillDetailResponseSchema = z.object({
   metadata: z.record(z.string(), z.unknown()).describe("Structured skill metadata including category, outputType, runtimes, tools, and tags. See skill format spec for full schema"),
   tags: z.array(z.string()).describe("List of tag names for categorization and search filtering"),
   skillHash: z.string().describe("SHA-256 hash of the skill package contents. Changes when the skill is updated"),
-  presignedPackageUrl: z.string().describe("Temporary pre-signed URL to download the skill package ZIP file. Expires after a short period"),
   isPrivate: z.boolean().describe("If true, only the owner can view and use this skill. If false, the skill is publicly listed in the registry"),
   createdBy: z.string().describe("Email address of the user who created the skill"),
   createdOn: z.string().describe("ISO 8601 timestamp of when the skill was created"),

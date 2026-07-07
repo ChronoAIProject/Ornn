@@ -553,9 +553,6 @@ export async function bootstrap(
   const auditService = new AuditService({
     auditRepo,
     skillService,
-    storageClient,
-    storageBucketResolver: async () =>
-      (await settingsService.getNyxid()).chronoStorageBucket,
     llmClient: nyxLlmClient,
     defaultsResolver: async () => resolveAuditDefaults(),
     // Audits are re-run automatically when the cached record ages past

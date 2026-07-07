@@ -14,7 +14,6 @@ export interface SkillDetailResponse {
   metadata: Record<string, unknown>;
   tags: string[];
   skillHash: string;
-  presignedPackageUrl: string;
   isPrivate: boolean;
   createdBy: string;
   createdOn: string;

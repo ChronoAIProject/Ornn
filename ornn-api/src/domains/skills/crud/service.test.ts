@@ -29,12 +29,12 @@ import { AppError } from "../../../shared/types/index";
 
 const SECRET_BODY = "SECRET_FROM_PACKAGE_b91c";
 
-/** Build a one-file zip and hand it back as a fetchable `data:` URL. */
-async function zipDataUrl(): Promise<string> {
+/** Build a one-file zip and hand it back as raw bytes (what the storage
+ *  client's `downloadObject` returns). */
+async function zipBytes(): Promise<Uint8Array> {
   const zip = new JSZip();
   zip.file("SKILL.md", `# demo\n${SECRET_BODY}`);
-  const buf = await zip.generateAsync({ type: "uint8array" });
-  return `data:application/zip;base64,${Buffer.from(buf).toString("base64")}`;
+  return zip.generateAsync({ type: "uint8array" });
 }
 
 /** Minimal SkillDocument carrying just the fields getSkillJson reads. */
@@ -54,14 +54,14 @@ function makeSkillDoc(overrides: Partial<SkillDocument> = {}): SkillDocument {
   } as SkillDocument;
 }
 
-function makeService(skill: SkillDocument, presignedUrl: string): SkillService {
+function makeService(skill: SkillDocument, packageBytes: Uint8Array): SkillService {
   const skillRepo = {
     findByGuid: async (guid: string) => (guid === skill.guid ? skill : null),
     findByName: async (name: string) => (name === skill.name ? skill : null),
   } as unknown as SkillRepository;
   const skillVersionRepo = {} as unknown as SkillVersionRepository;
   const storageClient = {
-    getPresignedUrl: async () => ({ presignedUrl, expiresAt: new Date().toISOString() }),
+    downloadObject: async () => ({ bytes: packageBytes, contentType: "application/zip" }),
   } as unknown as IStorageClient;
   return new SkillService({
     skillRepo,
@@ -79,9 +79,9 @@ describe("SkillService.getSkillJson — object-level authorization (#806)", () =
   it("private skill + stranger actor throws skill_not_found before any download", async () => {
     let downloaded = false;
     const storageClient = {
-      getPresignedUrl: async () => {
+      downloadObject: async () => {
         downloaded = true;
-        return { presignedUrl: "http://unused", expiresAt: "" };
+        return { bytes: new Uint8Array(), contentType: "application/zip" };
       },
     } as unknown as IStorageClient;
     const skill = makeSkillDoc({ isPrivate: true });
@@ -103,30 +103,30 @@ describe("SkillService.getSkillJson — object-level authorization (#806)", () =
     }
     expect(thrown).toBeInstanceOf(AppError);
     expect((thrown as AppError).code).toBe("skill_not_found");
-    // Gate runs before storage — no presigned URL was ever requested.
+    // Gate runs before storage — no package download was ever requested.
     expect(downloaded).toBe(false);
   });
 
   it("private skill succeeds for SYSTEM_ACTOR and returns package contents", async () => {
-    const service = makeService(makeSkillDoc({ isPrivate: true }), await zipDataUrl());
+    const service = makeService(makeSkillDoc({ isPrivate: true }), await zipBytes());
     const result = await service.getSkillJson("guid-1", SYSTEM_ACTOR);
     expect(result.files["SKILL.md"]).toContain(SECRET_BODY);
   });
 
   it("private skill succeeds for the author", async () => {
-    const service = makeService(makeSkillDoc({ isPrivate: true, createdBy: "owner-1" }), await zipDataUrl());
+    const service = makeService(makeSkillDoc({ isPrivate: true, createdBy: "owner-1" }), await zipBytes());
     const result = await service.getSkillJson("guid-1", OWNER);
     expect(result.files["SKILL.md"]).toContain(SECRET_BODY);
   });
 
   it("private skill succeeds for a platform admin", async () => {
-    const service = makeService(makeSkillDoc({ isPrivate: true }), await zipDataUrl());
+    const service = makeService(makeSkillDoc({ isPrivate: true }), await zipBytes());
     const result = await service.getSkillJson("guid-1", ADMIN);
     expect(result.files["SKILL.md"]).toContain(SECRET_BODY);
   });
 
   it("public skill succeeds for any actor (including a stranger)", async () => {
-    const service = makeService(makeSkillDoc({ isPrivate: false }), await zipDataUrl());
+    const service = makeService(makeSkillDoc({ isPrivate: false }), await zipBytes());
     const result = await service.getSkillJson("guid-1", STRANGER);
     expect(result.files["SKILL.md"]).toContain(SECRET_BODY);
   });
@@ -249,9 +249,9 @@ describe("SkillService.setSkillPermissions — org-membership gate (#815)", () =
     const skillVersionRepo = {
       findLatestBySkill: async () => null,
     } as unknown as SkillVersionRepository;
-    const storageClient = {
-      getPresignedUrl: async () => ({ presignedUrl: "http://unused", expiresAt: "" }),
-    } as unknown as IStorageClient;
+    // buildDetailResponse no longer touches storage (#1196), so these flows
+    // need no storage stub.
+    const storageClient = {} as unknown as IStorageClient;
     const service = new SkillService({
       skillRepo,
       skillVersionRepo,
@@ -579,9 +579,9 @@ describe("SkillService.transferSkillOwnership (#1123)", () => {
       },
     } as unknown as SkillRepository;
     const skillVersionRepo = { findLatestBySkill: async () => null } as unknown as SkillVersionRepository;
-    const storageClient = {
-      getPresignedUrl: async () => ({ presignedUrl: "http://unused", expiresAt: "" }),
-    } as unknown as IStorageClient;
+    // buildDetailResponse no longer touches storage (#1196), so these flows
+    // need no storage stub.
+    const storageClient = {} as unknown as IStorageClient;
     const service = new SkillService({
       skillRepo,
       skillVersionRepo,
@@ -847,7 +847,6 @@ function makeFakeDeps(seed?: Partial<FakeState>): { deps: SkillServiceDeps; stat
     delete: async (_bucket: string, key: string) => {
       state.deletes.push(key);
     },
-    getPresignedUrl: async () => ({ presignedUrl: "http://unused", expiresAt: "" }),
   } as unknown as IStorageClient;
 
   return {

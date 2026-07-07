@@ -126,7 +126,7 @@ function skillReadPath(_prefix: string): PathItem {
   return {
     get: {
       summary: "Get skill by GUID or name",
-      description: "Retrieve full details of a single skill by its UUID or unique name. Returns metadata, tags, package download URL, visibility status, and timestamps. The presignedPackageUrl can be used to download the raw ZIP package. For accessing individual file contents without downloading the ZIP, use the /json endpoint instead.",
+      description: "Retrieve full details of a single skill by its UUID or unique name. Returns metadata, tags, visibility status, and timestamps. To download the raw ZIP package use GET /skills/{idOrName}/versions/{version}/download; for individual file contents without downloading the ZIP, use the /json endpoint instead.",
       operationId: "getSkill",
       tags: ["Skills"],
       security: bearerAuth(),
@@ -146,6 +146,29 @@ function skillJsonPath(_prefix: string): PathItem {
       security: bearerAuth(),
       parameters: [pathParam("idOrName", "Skill UUID (e.g. '550e8400-e29b-41d4-a716-446655440000') or unique skill name (e.g. 'web-summarizer')")],
       responses: { ...jsonResponse(S.skillJsonApiResponse), ...errorResponses(401, 404) },
+    },
+  };
+}
+
+function skillDownloadPath(_prefix: string): PathItem {
+  return {
+    get: {
+      summary: "Download a skill version's package ZIP",
+      description: "Stream the raw ZIP package for a specific skill version. Bytes are proxied from object storage through ornn-api — clients never talk to the storage backend directly. `version` may be a literal (e.g. '1.2') or a dist-tag (e.g. 'latest'). Returns application/zip on success; a private skill the caller cannot read returns 404 (existence is not leaked).",
+      operationId: "downloadSkillPackage",
+      tags: ["Skills"],
+      security: bearerAuth(),
+      parameters: [
+        pathParam("idOrName", "Skill UUID or unique skill name"),
+        pathParam("version", "Version literal (e.g. '1.2') or dist-tag (e.g. 'latest')"),
+      ],
+      responses: {
+        200: {
+          description: "The raw skill package ZIP bytes",
+          content: { "application/zip": { schema: { type: "string", format: "binary" } } },
+        },
+        ...errorResponses(401, 404),
+      },
     },
   };
 }
@@ -453,6 +476,7 @@ export function buildSpec(): OpenApiSpec {
       [`${prefix}/skills`]: skillUploadPath(prefix),
       [`${prefix}/skills/{idOrName}`]: skillReadPath(prefix),
       [`${prefix}/skills/{idOrName}/json`]: skillJsonPath(prefix),
+      [`${prefix}/skills/{idOrName}/versions/{version}/download`]: skillDownloadPath(prefix),
       [`${prefix}/skills/{id}`]: {
         ...skillUpdatePath(prefix),
         ...skillDeletePath(prefix),

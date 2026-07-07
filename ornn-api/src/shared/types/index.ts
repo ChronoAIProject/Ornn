@@ -391,7 +391,8 @@ export interface SkillDetailResponse {
   metadata: Record<string, unknown>;
   tags: string[];
   skillHash: string;
-  presignedPackageUrl: string;
+  // Package bytes are fetched via `GET /skills/:idOrName/versions/:version/
+  // download` (#1196) — the response no longer carries a presigned URL.
   isPrivate: boolean;
   createdBy: string;
   // Optionals widen to `T | undefined` for exactOptionalPropertyTypes (#657).

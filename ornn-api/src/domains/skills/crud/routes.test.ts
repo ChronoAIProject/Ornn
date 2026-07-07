@@ -52,7 +52,6 @@ function detail(overrides: Partial<SkillDetailResponse> = {}): SkillDetailRespon
     metadata: {},
     tags: [],
     skillHash: "hash-1",
-    presignedPackageUrl: "https://storage.test/skill.zip",
     isPrivate: false,
     createdBy: OWNER,
     createdOn: "2026-01-01T00:00:00Z",
@@ -522,6 +521,60 @@ describe("GET /skills/:idOrName/json", () => {
     const res = await app.request("/api/v1/skills/demo-skill/json");
     expect(res.status).toBe(200);
     expect(calls).toContain("getSkillJson");
+  });
+});
+
+// ======================================================================
+// GET /skills/:idOrName/versions/:version/download  (#1196)
+// ======================================================================
+
+describe("GET /skills/:idOrName/versions/:version/download", () => {
+  const PKG = new Uint8Array([80, 75, 3, 4, 9, 8, 7]); // "PK.." + noise
+
+  test("200 streams the ZIP bytes with attachment headers", async () => {
+    const app = buildApp({
+      permissions: [READ],
+      service: {
+        getPackageBytes: async () => ({ bytes: PKG, name: "demo-skill", version: "1.0" }),
+      },
+    });
+    const res = await app.request("/api/v1/skills/demo-skill/versions/1.0/download");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toBe("application/zip");
+    expect(res.headers.get("content-disposition")).toContain('filename="demo-skill-1.0.zip"');
+    expect(new Uint8Array(await res.arrayBuffer())).toEqual(PKG);
+  });
+
+  test("404 (problem+json) when getPackageBytes denies a private/unknown skill", async () => {
+    const app = buildApp({
+      userId: "stranger",
+      permissions: [READ],
+      service: {
+        getPackageBytes: async () => {
+          // The visibility gate lives in getPackageBytes and 404s without
+          // leaking existence — same shape as GET /skills/:idOrName.
+          throw Object.assign(new Error("Skill 'demo-skill' not found"), {
+            code: "skill_not_found",
+            statusCode: 404,
+          });
+        },
+      },
+    });
+    const res = await app.request("/api/v1/skills/demo-skill/versions/1.0/download");
+    expect(res.status).toBe(404);
+    expect(((await res.json()) as { code: string }).code).toBe("skill_not_found");
+  });
+
+  test("downloads a public skill anonymously (optional auth)", async () => {
+    const app = buildApp({
+      authenticated: false,
+      service: {
+        getPackageBytes: async () => ({ bytes: PKG, name: "demo-skill", version: "1.0" }),
+      },
+    });
+    const res = await app.request("/api/v1/skills/demo-skill/versions/1.0/download");
+    expect(res.status).toBe(200);
+    expect(new Uint8Array(await res.arrayBuffer())).toEqual(PKG);
   });
 });
 
