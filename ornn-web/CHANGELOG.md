@@ -1,5 +1,17 @@
 # ornn-web
 
+## 0.16.0
+
+### Minor Changes
+
+- [#1197](https://github.com/ChronoAIProject/Ornn/pull/1197) [`5d30e40`](https://github.com/ChronoAIProject/Ornn/commit/5d30e40e3ea704f0fd2dd806250b4c922fa8828d) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Migrate skill package downloads to chrono-bucket's streaming endpoint ([#1196](https://github.com/ChronoAIProject/Ornn/issues/1196)). chrono-bucket (replacing chrono-storage) removed presigned URLs and the object-copy endpoint and now serves downloads via a streaming `GET /objects/download` behind the NyxID proxy. ornn-api's storage client gains a streaming `downloadObject()` (replacing the removed `getPresignedUrl`/`copy`); package reads for diff/json/audit go through it, and a new `GET /skills/:idOrName/versions/:version/download` route streams the ZIP through ornn-api (the route the TS SDK's `downloadPackage()` already targets). The client-facing `presignedPackageUrl` field is dropped from the skill detail response, and the web viewer now pulls packages through that authenticated ornn-api route instead of fetching chrono-bucket / MinIO directly. Also removes the wasted presigned round-trip and dead code in the audit pipeline ([#995](https://github.com/ChronoAIProject/Ornn/issues/995)).
+
+- [#1188](https://github.com/ChronoAIProject/Ornn/pull/1188) [`3193fca`](https://github.com/ChronoAIProject/Ornn/commit/3193fca336fa01f988c24d80ae59045f0d2234c1) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Surface automatic GitHub source-sync status in the UI ([#1178](https://github.com/ChronoAIProject/Ornn/issues/1178)): the skill detail page now shows a passive badge driven by the source's drift state — "Auto-synced", "Update in progress", "Upstream changed — version not bumped" (warning), or "Source unavailable" (error) — next to the existing "Synced from GitHub" chip and in the advanced GitHub-link panel, so owners see what auto-sync did without polling. The `skill.auto_synced` / `skill.auto_sync_failed` / `skill.source_broken` notifications render with proper labels, and opening a skill opportunistically refreshes a stale drift state once (no polling loop). The GET skill response now includes the drift fields that drive this (ornn-api).
+
+### Patch Changes
+
+- [#1190](https://github.com/ChronoAIProject/Ornn/pull/1190) [`69fc652`](https://github.com/ChronoAIProject/Ornn/commit/69fc6524122ea16eee7104346730c638017e549e) Thanks [@chronoai-shining](https://github.com/chronoai-shining)! - Raise the skill frontmatter `description` cap from 1024 to 1536 characters, aligned with Claude Code's skill-listing truncation limit (`skillListingMaxDescChars`, default 1536) — so an author can write a description as rich as the runtime actually uses for auto-invocation routing, instead of relying on `skip_validation` to smuggle a longer one past the schema. Skillset descriptions are unchanged (still 1024).
+
 ## 0.15.0
 
 ### Minor Changes
