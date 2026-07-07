@@ -132,6 +132,66 @@ describe("SkillService.getSkillJson — object-level authorization (#806)", () =
   });
 });
 
+// The download route (GET /skills/:idOrName/versions/:version/download, #1196)
+// is optionalAuth and anonymous-reachable, so its object-level gate lives
+// entirely in getPackageBytes. This suite exercises the REAL gate (not a route
+// mock) so deleting the canReadSkill check can never ship green.
+describe("SkillService.getPackageBytes — object-level authorization (#806/#1196)", () => {
+  it("private skill + stranger actor throws skill_not_found before any download", async () => {
+    let downloaded = false;
+    const storageClient = {
+      downloadObject: async () => {
+        downloaded = true;
+        return { bytes: new Uint8Array(), contentType: "application/zip" };
+      },
+    } as unknown as IStorageClient;
+    const skill = makeSkillDoc({ isPrivate: true });
+    const service = new SkillService({
+      skillRepo: {
+        findByGuid: async () => skill,
+        findByName: async () => null,
+      } as unknown as SkillRepository,
+      skillVersionRepo: {} as unknown as SkillVersionRepository,
+      storageClient,
+      storageBucketResolver: async () => "test-bucket",
+    });
+
+    let thrown: unknown;
+    try {
+      await service.getPackageBytes("guid-1", STRANGER);
+    } catch (err) {
+      thrown = err;
+    }
+    expect(thrown).toBeInstanceOf(AppError);
+    expect((thrown as AppError).code).toBe("skill_not_found");
+    // Gate runs before storage — no package download was ever requested.
+    expect(downloaded).toBe(false);
+  });
+
+  it("public skill returns package bytes + name/version for a stranger", async () => {
+    const bytes = await zipBytes();
+    const service = makeService(makeSkillDoc({ isPrivate: false }), bytes);
+    const result = await service.getPackageBytes("guid-1", STRANGER);
+    expect(result.name).toBe("demo-skill");
+    expect(result.version).toBe("1.0");
+    expect(Array.from(result.bytes)).toEqual(Array.from(bytes));
+  });
+
+  it("private skill succeeds for the author", async () => {
+    const bytes = await zipBytes();
+    const service = makeService(makeSkillDoc({ isPrivate: true, createdBy: "owner-1" }), bytes);
+    const result = await service.getPackageBytes("guid-1", OWNER);
+    expect(Array.from(result.bytes)).toEqual(Array.from(bytes));
+  });
+
+  it("private skill succeeds for SYSTEM_ACTOR (audit pipeline path)", async () => {
+    const bytes = await zipBytes();
+    const service = makeService(makeSkillDoc({ isPrivate: true }), bytes);
+    const result = await service.getPackageBytes("guid-1", SYSTEM_ACTOR);
+    expect(Array.from(result.bytes)).toEqual(Array.from(bytes));
+  });
+});
+
 /**
  * #807 (CWE-22) — `extractSkillInfoLenient` is the `skip_validation=true`
  * import path. It used to accept ANY non-empty `name`, including
