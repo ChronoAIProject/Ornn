@@ -84,7 +84,7 @@ export function useSkillPackage(
 
       try {
         const buffer = await apiGetBinary(
-          `/skills/${encodeURIComponent(guid!)}/versions/${encodeURIComponent(version!)}/download`,
+          `/api/v1/skills/${encodeURIComponent(guid!)}/versions/${encodeURIComponent(version!)}/download`,
         );
         const zip = await JSZip.loadAsync(buffer);
 
