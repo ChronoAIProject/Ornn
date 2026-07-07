@@ -118,7 +118,7 @@ export function useSkillDetail(idOrName: string | undefined) {
     rawZip,
     isLoading: packageLoading,
     error: packageError,
-  } = useSkillPackage(skill?.presignedPackageUrl);
+  } = useSkillPackage(skill?.guid, skill?.version);
 
   // Three access tiers (#1127) from the shared hook — `canWrite` is what
   // lets a write-grantee (not just the owner) see the content-edit UI.

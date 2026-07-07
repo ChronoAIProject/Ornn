@@ -105,7 +105,6 @@ function skill(overrides: Partial<SkillDetail>): SkillDetail {
     isPrivate: false,
     tags: [],
     updatedOn: "2026-05-01T00:00:00.000Z",
-    presignedPackageUrl: "",
     metadata: {},
     version: "1.0.0",
     sharedWithUsers: [],

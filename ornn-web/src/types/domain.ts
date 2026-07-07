@@ -70,7 +70,6 @@ export interface SkillGrant {
 
 export interface SkillDetail extends SkillSummary {
   updatedOn: string;
-  presignedPackageUrl: string;
   metadata: Record<string, unknown>;
   /** Version of the currently-returned payload (latest by default). */
   version: string;

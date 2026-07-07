@@ -8,8 +8,9 @@
  *
  * Data path (all read-only — NO skill mutation, NO closure write):
  *   member ref `name@version`
- *     → `useSkill(name, version)`        → SkillDetail (carries presigned URL)
- *     → `useSkillPackage(presignedUrl)`  → FileNode tree + text contents map
+ *     → `useSkill(name, version)`         → SkillDetail (guid + version)
+ *     → `useSkillPackage(guid, version)`  → FileNode tree + text contents map
+ *                                           (proxied ornn-api download, #1196)
  *     → `<SkillPackagePreview>`          → file tree + viewer
  *
  * ACL is enforced upstream: a member the caller can't see (private / removed)
@@ -52,7 +53,7 @@ export function SkillsetMemberViewer({ members, previewRef }: SkillsetMemberView
     fileContents,
     isLoading: pkgLoading,
     error: pkgError,
-  } = useSkillPackage(skill?.presignedPackageUrl);
+  } = useSkillPackage(skill?.guid, skill?.version);
 
   const loading = skillLoading || (!!skill && pkgLoading);
 

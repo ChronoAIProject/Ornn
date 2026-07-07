@@ -720,6 +720,61 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
   );
 
   /**
+   * GET /skills/:idOrName/versions/:version/download — Stream the raw ZIP
+   * package for a specific version, proxied from chrono-bucket (#1196).
+   *
+   * Replaces the removed presigned-URL flow: clients no longer receive a
+   * direct storage URL — the bytes are streamed through ornn-api so the
+   * storage backend (chrono-bucket / MinIO) is never exposed. `version` may
+   * be a literal (e.g. `1.2`) or a dist-tag (e.g. `latest`).
+   *
+   * Visibility rules match GET /skills/:idOrName: anonymous callers may
+   * download public skills only; a private skill the caller cannot read 404s
+   * without leaking existence (the gate lives in `getPackageBytes`, #806).
+   *
+   * Auth: Optional. Returns `application/zip` bytes on success; errors use the
+   * RFC 7807 problem+json envelope (the TS SDK `downloadPackage()` contract).
+   * Deliberately does NOT record an analytics pull — this endpoint also backs
+   * the web file-tree viewer, and counting UI views would inflate the pull
+   * metric (programmatic reads are counted on /json).
+   */
+  app.get(
+    "/skills/:idOrName/versions/:version/download",
+    optionalAuth,
+    async (c) => {
+      const idOrName = c.req.param("idOrName");
+      const version = c.req.param("version");
+      const authCtx = c.get("auth");
+
+      // Authenticated callers get their full org/admin context; anonymous
+      // callers get a read-only actor that can see public skills only.
+      const actor = authCtx
+        ? await buildActorContext(c)
+        : {
+            userId: "",
+            memberships: [],
+            isPlatformAdmin: false,
+            membershipsResolved: true,
+          };
+
+      const pkg = await skillService.getPackageBytes(idOrName, actor, version);
+
+      const safeName = pkg.name.replace(/[^A-Za-z0-9._-]/g, "_");
+      // Raw binary body — NOT the JSON envelope. Returned as a Response so the
+      // Uint8Array streams verbatim (Hono's `c.body` types exclude
+      // ArrayBufferView). Errors thrown above still flow through the RFC 7807
+      // error middleware.
+      return new Response(pkg.bytes as unknown as BodyInit, {
+        status: 200,
+        headers: {
+          "Content-Type": "application/zip",
+          "Content-Disposition": `attachment; filename="${safeName}-${pkg.version}.zip"`,
+        },
+      });
+    },
+  );
+
+  /**
    * GET /skills/:idOrName/closure — Resolve the full transitive
    * dependency closure of a skill version (#968).
    *

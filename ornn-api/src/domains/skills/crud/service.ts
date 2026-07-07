@@ -1272,18 +1272,21 @@ export class SkillService {
   }
 
   private async downloadPackage(storageKey: string): Promise<Uint8Array> {
-    const presigned = await this.storageClient.getPresignedUrl(
-      (await this.storageBucketResolver()),
-      storageKey,
-    );
-    const res = await fetch(presigned.presignedUrl);
-    if (!res.ok) {
+    // Proxied through chrono-bucket's streaming download (#1196). The storage
+    // client throws on a non-2xx, which we surface as `package_download_failed`
+    // to keep the existing error contract for internal byte-consumers.
+    try {
+      const { bytes } = await this.storageClient.downloadObject(
+        (await this.storageBucketResolver()),
+        storageKey,
+      );
+      return bytes;
+    } catch (err) {
       throw AppError.internalError(
         "package_download_failed",
-        `Failed to download package for key '${storageKey}' (HTTP ${res.status})`,
+        `Failed to download package for key '${storageKey}': ${err instanceof Error ? err.message : String(err)}`,
       );
     }
-    return new Uint8Array(await res.arrayBuffer());
   }
 
   /**
@@ -1509,44 +1512,16 @@ export class SkillService {
       throw AppError.notFound("skill_not_found", `Skill '${idOrName}' not found`);
     }
 
-    // 1a. Resolve the requested version (literal or dist-tag, #463).
-    //     When unset OR empty-string, fall through to the skill doc's
-    //     latest storage. `resolveDistTag` returns `undefined` for
-    //     empty input, which we treat as "no pin requested".
-    let resolvedVersion = skill.latestVersion;
-    let storageKey = skill.storageKey;
-    let metadata: SkillMetadata = skill.metadata;
-    if (version !== undefined && version.length > 0) {
-      const literal = resolveDistTag(skill, version);
-      if (!literal) {
-        // Defensive — resolveDistTag's contract returns string for any
-        // non-empty input, but the type system widens to `| undefined`.
-        // Treat as malformed rather than crash.
-        throw AppError.badRequest(
-          "invalid_version",
-          `Could not resolve version '${version}'`,
-        );
-      }
-      parseVersion(literal); // 400 if malformed, before Mongo lookup
-      const versionDoc = await this.skillVersionRepo.findBySkillAndVersion(skill.guid, literal);
-      if (!versionDoc) {
-        throw AppError.notFound(
-          "skill_version_not_found",
-          `Version '${literal}' not found for skill '${skill.name}'`,
-        );
-      }
-      resolvedVersion = versionDoc.version;
-      storageKey = versionDoc.storageKey;
-      metadata = versionDoc.metadata;
-    }
+    // 1a. Resolve the requested version (literal or dist-tag, #463) to its
+    //     concrete version + storage key + metadata. Empty/undefined → latest.
+    const { resolvedVersion, storageKey, metadata } = await this.resolveVersionStorage(
+      skill,
+      version,
+    );
 
-    // 2. Download ZIP from storage
-    const presigned = await this.storageClient.getPresignedUrl((await this.storageBucketResolver()), storageKey);
-    const response = await fetch(presigned.presignedUrl);
-    if (!response.ok) {
-      throw AppError.internalError("package_download_failed", "Failed to download skill package from storage");
-    }
-    const zipBuffer = new Uint8Array(await response.arrayBuffer());
+    // 2. Download the ZIP from storage, proxied through chrono-bucket's
+    //    streaming endpoint (#1196) — no presigned URL / direct MinIO fetch.
+    const zipBuffer = await this.downloadPackage(storageKey);
 
     // 3. Extract all files
     const zip = await JSZip.loadAsync(zipBuffer);
@@ -1596,6 +1571,80 @@ export class SkillService {
       metadata: metadata as unknown as Record<string, unknown>,
       files,
     };
+  }
+
+  /**
+   * Resolve a requested version (literal or dist-tag; empty/undefined →
+   * latest) to its concrete version string, storage key, and metadata.
+   * Shared by the package-content read paths (getSkillJson, getPackageBytes)
+   * so version resolution lives in one place (#463, #1196).
+   */
+  private async resolveVersionStorage(
+    skill: SkillDocument,
+    version?: string,
+  ): Promise<{ resolvedVersion: string; storageKey: string; metadata: SkillMetadata }> {
+    if (version === undefined || version.length === 0) {
+      return {
+        resolvedVersion: skill.latestVersion,
+        storageKey: skill.storageKey,
+        metadata: skill.metadata,
+      };
+    }
+    const literal = resolveDistTag(skill, version);
+    if (!literal) {
+      // Defensive — resolveDistTag returns a string for any non-empty input,
+      // but the type system widens to `| undefined`.
+      throw AppError.badRequest("invalid_version", `Could not resolve version '${version}'`);
+    }
+    parseVersion(literal); // 400 if malformed, before the Mongo lookup
+    const versionDoc = await this.skillVersionRepo.findBySkillAndVersion(skill.guid, literal);
+    if (!versionDoc) {
+      throw AppError.notFound(
+        "skill_version_not_found",
+        `Version '${literal}' not found for skill '${skill.name}'`,
+      );
+    }
+    return {
+      resolvedVersion: versionDoc.version,
+      storageKey: versionDoc.storageKey,
+      metadata: versionDoc.metadata,
+    };
+  }
+
+  /**
+   * Resolve a skill version's package ZIP bytes from storage.
+   *
+   * Enforces the same object-level visibility gate as the metadata / json
+   * paths (#806): a private skill the actor cannot read 404s as
+   * `skill_not_found` before any storage read. `version` may be a literal or
+   * dist-tag; empty/undefined → latest. Bytes are streamed from chrono-bucket
+   * via the storage client — no presigned URL ever leaves the server (#1196).
+   * Backs `GET /skills/:idOrName/versions/:version/download` and the audit
+   * pipeline. Trusted server jobs pass `SYSTEM_ACTOR`.
+   */
+  async getPackageBytes(
+    idOrName: string,
+    actor: ActorContext,
+    version?: string,
+  ): Promise<{ bytes: Uint8Array; name: string; version: string }> {
+    let skill = await this.skillRepo.findByGuid(idOrName);
+    if (!skill) skill = await this.skillRepo.findByName(idOrName);
+    if (!skill) {
+      throw AppError.notFound("skill_not_found", `Skill '${idOrName}' not found`);
+    }
+    if (!canReadSkill(skill, actor)) {
+      logger.info({ idOrName, actorUserId: actor.userId }, "getPackageBytes visibility denied");
+      throw AppError.notFound("skill_not_found", `Skill '${idOrName}' not found`);
+    }
+    const { resolvedVersion, storageKey } = await this.resolveVersionStorage(skill, version);
+    if (!storageKey) {
+      throw AppError.notFound(
+        "skill_package_not_found",
+        `No package stored for skill '${skill.name}'`,
+      );
+    }
+    const bytes = await this.downloadPackage(storageKey);
+    return { bytes, name: skill.name, version: resolvedVersion };
   }
 
   /**
@@ -2143,7 +2192,10 @@ export class SkillService {
         (await this.skillVersionRepo.findLatestBySkill(skill.guid)) ?? undefined;
     }
 
-    const storageKey = effectiveOverlay?.storageKey ?? skill.storageKey;
+    // Package downloads are proxied through `GET /skills/:idOrName/versions/
+    // :version/download` (#1196); the detail response no longer carries a
+    // presigned URL, so there is no per-read storage round-trip here and no
+    // direct-to-MinIO URL ever reaches a client.
     const metadata = effectiveOverlay?.metadata ?? skill.metadata;
     const skillHash = effectiveOverlay?.skillHash ?? skill.skillHash;
     const license = effectiveOverlay ? effectiveOverlay.license : skill.license;
@@ -2151,16 +2203,6 @@ export class SkillService {
     const version = effectiveOverlay?.version ?? skill.latestVersion;
     const isDeprecated = effectiveOverlay?.isDeprecated === true;
     const deprecationNote = effectiveOverlay?.deprecationNote ?? null;
-
-    let presignedPackageUrl = "";
-    if (storageKey) {
-      try {
-        const result = await this.storageClient.getPresignedUrl((await this.storageBucketResolver()), storageKey);
-        presignedPackageUrl = result.presignedUrl;
-      } catch (err) {
-        logger.warn({ guid: skill.guid, version, err }, "Presigned URL generation failed");
-      }
-    }
 
     const tags: string[] = metadata?.tags ?? [];
 
@@ -2173,7 +2215,6 @@ export class SkillService {
       metadata: metadata as unknown as Record<string, unknown>,
       tags,
       skillHash,
-      presignedPackageUrl,
       isPrivate: skill.isPrivate,
       createdBy: skill.createdBy,
       createdByEmail: skill.createdByEmail,

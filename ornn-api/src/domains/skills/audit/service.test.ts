@@ -9,8 +9,9 @@
  *   - notification    → LOCAL typed recorder (the shared mock's
  *                       notifyAuditCompleted signature doesn't match the
  *                       real {ownerUserId,...} call site)
- *   - storage/orgs    → minimal fakes
- *   - globalThis.fetch → swapped to a Response wrapping a real JSZip zip
+ *   - orgs            → minimal fake
+ *   - package bytes   → FakeSkillService.getPackageBytes returns a JSZip zip
+ *                       (audit reads bytes through the skill service, #1196)
  *
  * `runAudit` finalizes in a fire-and-forget microtask; tests flush it
  * with `flushFinalize()` before asserting on the recorder.
@@ -19,8 +20,6 @@
  */
 
 import {
-  afterEach,
-  beforeEach,
   describe,
   expect,
   test,
@@ -42,7 +41,6 @@ import type {
 import type { SkillService } from "../crud/service";
 import type { NotificationService } from "../../notifications/service";
 import type { NyxidOrgsClient } from "../../../clients/nyxid/orgs";
-import type { IStorageClient } from "../../../clients/storageClient";
 import type { SkillDetailResponse } from "../../../shared/types/index";
 
 // ---- Local typed notification recorder -------------------------------
@@ -122,7 +120,6 @@ function baseSkill(overrides: Partial<SkillDetailResponse> = {}): SkillDetailRes
     metadata: { category: "devtools", runtimes: [{ runtime: "node" }] },
     tags: ["alpha", "beta"],
     skillHash: "hash-1",
-    presignedPackageUrl: "https://storage.test/skill.zip",
     isPrivate: false,
     createdBy: "owner-1",
     createdOn: "2026-01-01T00:00:00Z",
@@ -136,6 +133,9 @@ function baseSkill(overrides: Partial<SkillDetailResponse> = {}): SkillDetailRes
 
 class FakeSkillService {
   getSkillCalls: Array<{ idOrName: string; version?: string | undefined }> = [];
+  getPackageBytesCalls: Array<{ idOrName: string; version?: string | undefined }> = [];
+  /** When set, getPackageBytes throws this instead of returning bytes. */
+  packageError: Error | null = null;
   constructor(private skill: SkillDetailResponse) {}
   setSkill(s: SkillDetailResponse) {
     this.skill = s;
@@ -143,6 +143,26 @@ class FakeSkillService {
   async getSkill(idOrName: string, version?: string): Promise<SkillDetailResponse> {
     this.getSkillCalls.push({ idOrName, version });
     return this.skill;
+  }
+  // Mirrors SkillService.getPackageBytes (#1196) — audit now reads package
+  // bytes through the skill service. Driven by the module-level `fetchPlan`
+  // (ok/status/bytes/throws) so the existing test bodies still control the
+  // download outcome; `packageError` models a resolve-time failure
+  // (e.g. skill_package_not_found).
+  async getPackageBytes(
+    idOrName: string,
+    _actor: unknown,
+    version?: string,
+  ): Promise<{ bytes: Uint8Array; name: string; version: string }> {
+    this.getPackageBytesCalls.push({ idOrName, version });
+    if (this.packageError) throw this.packageError;
+    if (fetchPlan.throws) throw new Error("network down");
+    if (!fetchPlan.ok) {
+      throw new Error(
+        `Failed to download package for key 'skills/${this.skill.guid}/${this.skill.version}.zip' (HTTP ${fetchPlan.status})`,
+      );
+    }
+    return { bytes: fetchPlan.bytes, name: this.skill.name, version: this.skill.version };
   }
 }
 
@@ -196,13 +216,7 @@ class FakeAuditRepo {
   }
 }
 
-// ---- Fake storage / orgs ---------------------------------------------
-
-class FakeStorageClient {
-  async getPresignedUrl(): Promise<{ presignedUrl: string; expiresAt: string }> {
-    return { presignedUrl: "https://storage.test/skill.zip", expiresAt: "2026-01-01T01:00:00Z" };
-  }
-}
+// ---- Fake orgs -------------------------------------------------------
 
 class FakeOrgsClient {
   membersByOrg = new Map<string, Array<{ userId: string }>>();
@@ -238,8 +252,6 @@ function makeLlmClient(text: string): NyxLlmClient {
 
 // ---- fetch swap ------------------------------------------------------
 
-const originalFetch = globalThis.fetch;
-
 interface FetchPlan {
   ok: boolean;
   status: number;
@@ -247,6 +259,8 @@ interface FetchPlan {
   throws?: boolean;
 }
 
+// Drives FakeSkillService.getPackageBytes — audit reads package bytes through
+// the skill service now (#1196), not a direct global fetch of a presigned URL.
 let fetchPlan: FetchPlan;
 
 async function buildZip(files: Record<string, string>): Promise<Uint8Array> {
@@ -256,21 +270,6 @@ async function buildZip(files: Record<string, string>): Promise<Uint8Array> {
   }
   return zip.generateAsync({ type: "uint8array" });
 }
-
-beforeEach(() => {
-  const fakeFetch = async (): Promise<Response> => {
-    if (fetchPlan.throws) throw new Error("network down");
-    return new Response(fetchPlan.bytes as unknown as BodyInit, {
-      status: fetchPlan.status,
-      statusText: fetchPlan.ok ? "OK" : "Error",
-    });
-  };
-  globalThis.fetch = fakeFetch as unknown as typeof fetch;
-});
-
-afterEach(() => {
-  globalThis.fetch = originalFetch;
-});
 
 // ---- helpers ---------------------------------------------------------
 
@@ -310,8 +309,6 @@ function buildService(
   const deps: AuditServiceDeps = {
     auditRepo: repo as unknown as AuditServiceDeps["auditRepo"],
     skillService: skillService as unknown as SkillService,
-    storageClient: new FakeStorageClient() as unknown as IStorageClient,
-    storageBucketResolver: async () => "skills-bucket",
     llmClient: client,
     defaultsResolver: async () => ({
       model: "gpt-test",
@@ -529,15 +526,15 @@ describe("buildAuditContext", () => {
     expect(repo.markCompletedCalls).toHaveLength(1);
   });
 
-  test("missing presignedPackageUrl marks failed with audit_package_unavailable", async () => {
+  test("missing package (no storage key) marks failed", async () => {
     fetchPlan = { ok: true, status: 200, bytes: await buildZip({ "SKILL.md": "# demo" }) };
-    const { service, repo } = buildService({
-      skill: baseSkill({ presignedPackageUrl: "" }),
-    });
+    const { service, repo, skillService } = buildService();
+    // getPackageBytes 404s when the skill has no stored package (#1196).
+    skillService.packageError = new Error("No package stored for skill 'demo-skill'");
     await service.runAudit("demo-skill", { triggeredBy: "owner-1" });
     await flushFinalize();
     expect(repo.markFailedCalls).toHaveLength(1);
-    expect(repo.markFailedCalls[0]!.errorMessage).toContain("No storage URL");
+    expect(repo.markFailedCalls[0]!.errorMessage).toContain("No package stored");
   });
 
   test("non-ok package fetch marks failed with the download-failed message", async () => {

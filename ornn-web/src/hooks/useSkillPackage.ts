@@ -6,6 +6,7 @@ import {
   type FileTreeEntry,
 } from "@/utils/fileTreeBuilder";
 import { encodeErrorPayload } from "@/utils/translateError";
+import { apiGetBinary, ApiClientError } from "@/services/apiClient";
 
 /** Extensions treated as viewable text files */
 const TEXT_EXTENSIONS = new Set([
@@ -56,11 +57,13 @@ interface UseSkillPackageResult {
 }
 
 /**
- * Fetches a skill ZIP from a presigned URL, extracts it with JSZip,
- * and returns a FileNode tree + text file contents map.
+ * Fetches a skill version's ZIP from the ornn-api proxied download endpoint
+ * (#1196 — no direct chrono-bucket / presigned-URL fetch), extracts it with
+ * JSZip, and returns a FileNode tree + text file contents map.
  */
 export function useSkillPackage(
-  presignedUrl: string | undefined,
+  guid: string | undefined,
+  version: string | undefined,
 ): UseSkillPackageResult {
   const [files, setFiles] = useState<FileNode[]>([]);
   const [fileContents, setFileContents] = useState<Map<string, string>>(
@@ -71,7 +74,7 @@ export function useSkillPackage(
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!presignedUrl) return;
+    if (!guid || !version) return;
 
     let cancelled = false;
 
@@ -80,17 +83,9 @@ export function useSkillPackage(
       setError(null);
 
       try {
-        const response = await fetch(presignedUrl!);
-        if (!response.ok) {
-          throw new Error(
-            encodeErrorPayload({
-              key: "errors.api.skillPackage.downloadFailed",
-              params: { status: response.status },
-            }),
-          );
-        }
-
-        const buffer = await response.arrayBuffer();
+        const buffer = await apiGetBinary(
+          `/api/v1/skills/${encodeURIComponent(guid!)}/versions/${encodeURIComponent(version!)}/download`,
+        );
         const zip = await JSZip.loadAsync(buffer);
 
         const entries: FileTreeEntry[] = [];
@@ -145,10 +140,18 @@ export function useSkillPackage(
         }
       } catch (err) {
         if (!cancelled) {
+          // A non-2xx from the proxied download surfaces as ApiClientError;
+          // map it to the same translated "download failed" payload the old
+          // direct-fetch path used, preserving the status code.
           setError(
-            err instanceof Error
-              ? err.message
-              : "errors.api.skillPackage.loadFailed",
+            err instanceof ApiClientError
+              ? encodeErrorPayload({
+                  key: "errors.api.skillPackage.downloadFailed",
+                  params: { status: err.statusCode },
+                })
+              : err instanceof Error
+                ? err.message
+                : "errors.api.skillPackage.loadFailed",
           );
         }
       } finally {
@@ -163,7 +166,7 @@ export function useSkillPackage(
     return () => {
       cancelled = true;
     };
-  }, [presignedUrl]);
+  }, [guid, version]);
 
   return { files, fileContents, rawZip, isLoading, error };
 }

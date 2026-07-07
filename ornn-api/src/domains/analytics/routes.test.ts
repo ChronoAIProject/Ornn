@@ -57,7 +57,6 @@ function skill(overrides: Partial<SkillDetailResponse> = {}): SkillDetailRespons
     metadata: {},
     tags: [],
     skillHash: "hash-1",
-    presignedPackageUrl: "https://storage.test/skill.zip",
     isPrivate: false,
     createdBy: OWNER_ID,
     createdOn: "2026-01-01T00:00:00Z",
