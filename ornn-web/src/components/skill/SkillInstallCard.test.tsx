@@ -42,7 +42,6 @@ function makeSkill(overrides: Partial<SkillDetail> = {}): SkillDetail {
     isPrivate: false,
     tags: ["pdf"],
     updatedOn: "2026-06-01T00:00:00.000Z",
-    presignedPackageUrl: "https://example.com/pkg.zip",
     metadata: {},
     version: "1.0.0",
     sharedWithUsers: [],

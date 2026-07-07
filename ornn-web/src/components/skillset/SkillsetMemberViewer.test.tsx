@@ -32,7 +32,7 @@ const MEMBERS = ["alpha@1.0", "beta@2.1"];
 
 beforeEach(() => {
   useSkill.mockReturnValue({
-    data: { presignedPackageUrl: "https://signed/pkg.zip" },
+    data: { guid: "alpha-guid", version: "1.0" },
     isLoading: false,
     error: null,
   });
