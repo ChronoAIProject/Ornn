@@ -94,7 +94,7 @@ services:
       # PostHog telemetry off by default in compose.
       POSTHOG_ENABLED: "false"
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:3802/livez || exit 1"]
+      test: ["CMD-SHELL", "bun -e \"fetch('http://localhost:3802/livez').then((res) => process.exit(res.ok ? 0 : 1)).catch(() => process.exit(1))\""]
       interval: 10s
       timeout: 5s
       retries: 6

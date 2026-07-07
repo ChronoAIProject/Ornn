@@ -1,0 +1,12 @@
+kind = "package.composed"
+name = "ornn-native-full"
+persistence_class = "saga"
+
+[code]
+root = "."
+
+[lib_deps]
+libraries = ["workflow", "testkit"]
+
+[event_deps]
+packages = ["browser-readiness", "testing-pipeline", "module-test-loop", "testing-runner", "test-artifacts", "test-publication"]
