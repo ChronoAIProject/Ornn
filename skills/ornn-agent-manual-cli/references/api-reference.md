@@ -25,6 +25,7 @@ Companion to `SKILL.md`. This file enumerates every endpoint in the Ornn HTTP su
 6. [Skill format](#6-skill-format)
 7. [Skill generation (SSE)](#7-skill-generation-sse)
 8. [Playground (SSE)](#8-playground-sse)
+   - 8a. Assistant (SSE)
 9. [Notifications](#9-notifications)
 10. [Analytics](#10-analytics)
 11. [Me — caller scope](#11-me--caller-scope)
@@ -102,12 +103,11 @@ Permissions are issued by NyxID as part of the proxy-forwarded identity. Roles m
 |---|---|---|
 | `ornn:skill:read` | `ornn-user` | `GET /skills/:idOrName/json`, `POST /skill-format/validate` |
 | `ornn:skill:create` | `ornn-user` | `POST /skills`, `POST /skills/pull`, `POST /skillsets` |
-| `ornn:skill:update` | `ornn-user` | `PUT /skills/:id`, `PUT /skills/:id/permissions`, `POST /skills/:id/refresh`, `PATCH /skills/:idOrName/versions/:version`, `PUT /skillsets/:id`, `PUT /skillsets/:id/permissions` |
+| `ornn:skill:update` | `ornn-user` | `PUT /skills/:id`, `PUT /skills/:id/permissions`, `POST /skills/:id/refresh`, `PATCH /skills/:idOrName/versions/:version`, `PUT /skillsets/:id`, `PUT /skillsets/:id/plugin-export`, `POST /skillsets/:id/transfer-ownership` |
 | `ornn:skill:delete` | `ornn-user` | `DELETE /skills/:id`, `DELETE /skills/:idOrName/versions/:version`, `DELETE /skillsets/:id` |
 | `ornn:skill:build` | `ornn-user` | `POST /skills/generate`, `POST /skills/generate/from-source`, `POST /skills/generate/from-openapi` |
 | `ornn:playground:use` | `ornn-user` | `POST /playground/chat` |
-| `ornn:admin:skill` | `ornn-admin` | All `/admin/*` skill-scoped routes; admin force-audit; sectioned platform settings; mirror config; announcements / broadcasts |
-| `ornn:quota:admin` | `ornn-admin` | `GET /admin/dashboard/stats`; all `/admin/quota/*`; all `/admin/redemption-codes/*` |
+| `ornn:admin:skill` | `ornn-admin` | All `/admin/*` skill-scoped routes; admin force-audit; sectioned platform settings; mirror config; announcements / broadcasts; `GET /admin/dashboard/stats`; all `/admin/quota/*`; all `/admin/redemption-codes/*`; `/admin/launch-promo/*`. The quota / redemption / dashboard routes are gated by the code constant `QUOTA_ADMIN_PERMISSION`, which is an **alias whose value is `ornn:admin:skill`** — there is no separate `ornn:quota:admin` scope. |
 
 A few endpoints (`POST /skills/:idOrName/audit`, the various caller-scoped reads) gate on **ownership** instead of (or in addition to) a permission — those are documented per-endpoint.
 
@@ -289,6 +289,10 @@ When 503, the pod is drained from the K8s service.
 **Auth: none.**
 
 Response 200: a complete OpenAPI 3.0 document. Schemas, parameters, request bodies, and responses are all derived from the same Zod schemas the runtime uses for validation, so it never drifts.
+
+### 2.4 `GET /api/v1/github/repo`
+
+**Public mirror coordinates** for the GitHub skill mirror (§3.15 / §13.8). **Auth: none.** Returns `{ data: { owner, repo, branch, enabled }, error: null }` — coordinates only, never credentials. The `enabled` flag lets a client hide the `npx skills add …` / `/plugin marketplace add …` install snippet when the mirror is off. The admin config write is §13.8.
 
 ---
 
@@ -913,6 +917,43 @@ Response 200: the updated `SkillDetail`. The stored `source` block omits `lastSy
 | `INVALID_GITHUB_URL` | 400 | URL couldn't be parsed (blob URL, non-github host, missing repo, etc.). |
 | `AUTH_MISSING` / `FORBIDDEN` | 401 / 403 | Standard. |
 
+### 3.16 Transfer ownership — `POST /api/v1/skills/:id/transfer-ownership`
+
+Hand a skill to another Ornn user (#1123). **ADMIN-tier**: the caller must be the skill **author or a platform admin** — a write grantee is not enough. Immediate + synchronous; the prior owner is retained as a **READ** grant (keeps visibility, loses edit/admin).
+
+**Auth: required.** **Permission: `ornn:skill:update`** (+ author/admin). Path param `:id` — skill GUID.
+
+```jsonc
+{ "newOwnerUserId": "user_…" }   // REQUIRED, 1..128 chars
+```
+
+The target must be a known Ornn user (signed in to Ornn at least once) — resolved before any mutation. Response 200: `{ data: { skill: SkillDetail }, error: null }` with `createdBy` now the new owner. Side effects: the mirror refreshes cached author labels and referencing skillsets recompute their derived visibility (#1136).
+
+| Code | Status | Cause |
+|---|---|---|
+| `invalid_transfer` | 400 | Body fails validation (missing `newOwnerUserId`). |
+| `invalid_transfer_target` | 400 | Target isn't a known Ornn user (never signed in). |
+| `skill_not_found` | 404 | No skill with that GUID. |
+| `forbidden` | 403 | Caller is not the author and lacks `ornn:admin:skill`. |
+| `ownership_conflict` | 409 | Target already owns the skill. |
+
+### 3.17 Dist-tags — `GET | PUT | DELETE /api/v1/skills/:id/dist-tags[/:tag]`
+
+npm-style named pointers to versions (#463). `latest` is auto-managed by the publish path and always present (synthesized from `latestVersion` for pre-#463 skills). Tag grammar: `/^[a-z][a-z0-9-]{0,49}$/` (lowercase, must start with a letter — so a tag can't look like a version). A `@<tag>` ref resolves anywhere the ref grammar is accepted (skill deps, skillset members).
+
+- **Read — `GET /api/v1/skills/:idOrName/dist-tags`.** Auth: optional (name **or** GUID; private skills 404-masked for non-readers). No scope. Returns `{ data: { tags: { "<tag>": "<version>", … } }, error: null }` — always includes `latest`.
+- **Set — `PUT /api/v1/skills/:id/dist-tags/:tag`.** Auth: required, **`ornn:skill:update`** + author/admin. GUID only. Body `{ "version": "1.3" }` (`<major>.<minor>`). The target version must already exist. Returns the full refreshed tags map.
+- **Delete — `DELETE /api/v1/skills/:id/dist-tags/:tag`.** Auth: required, **`ornn:skill:update`** + author/admin. GUID only. Returns the refreshed tags map.
+
+| Code | Status | Cause |
+|---|---|---|
+| `invalid_dist_tag_body` | 400 | PUT body missing/malformed `version`. |
+| `invalid_dist_tag` | 400 | `:tag` fails the grammar. |
+| `dist_tag_immutable` | 400 | Tried to set/delete `latest` (auto-managed). |
+| `skill_version_not_found` | 404 | PUT target version doesn't exist. |
+| `skill_not_found` | 404 | No such skill. |
+| `forbidden` | 403 | Not author/admin (write paths). |
+
 ---
 
 ## 4. Skill audit
@@ -1229,65 +1270,128 @@ The path is intentionally outside `/skills/` so it does not collide with `GET /s
 
 ## 5a. Skillsets (#969)
 
-A **skillset** is a named, versioned, owned, visibility-scoped meta-package that references N member skills and carries a `kind`. One call (`/closure`) resolves + delivers the whole set — including each member's dependency closure (§3.6a). Ownership / visibility / immutable-versioning mirror skills; permission scopes **reuse** `ornn:skill:{create,read,update,delete}` (a dedicated `ornn:skillset:*` split is a tracked follow-up).
+A **skillset** is a named, versioned, owned meta-package that references N member skills and carries a `kind`. One call (`/closure`) resolves + delivers the whole set — including each member's dependency closure (§3.6a). Immutable versioning mirrors skills, and permission scopes **reuse** `ornn:skill:{create,read,update,delete}` (a dedicated `ornn:skillset:*` split is a tracked follow-up). Two things do **not** mirror skills and trip up most callers: **visibility is DERIVED from the member skills, never owner-set** (#1136), and **revisions are system-managed, never caller-supplied** (#1162). Read the two model notes below before calling any endpoint.
 
 - `kind` enum: `generic` (default) | `consensus-supported`. The latter is an author **claim** that the members are an independent, comparable set — not a guarantee. Ornn delivers the set; the agent runs any consensus in its own runtime.
-- `members`: 2..N skill refs, each `<name-or-guid>@<major.minor>` or `<name>@<dist-tag>` (same grammar as `depends-on`). No nested skillsets. Validated on publish (each must resolve to a readable skill version; union closure conflict-free).
+- `members`: 2..100 skill refs (min 2 — a bundle of one is just a skill), each ≤115 chars and shaped `<name-or-guid>@<major.minor>` or `<name>@<dist-tag>` (same grammar as `depends-on`; no semver ranges). **No nested skillsets** — a ref may not start with `skillset:`. Validated on publish under SYSTEM (each must resolve to a real skill version; union closure conflict-free) — so a curator may legitimately bundle a private skill they own.
 - `instructions` (master prompt, #978): **REQUIRED**, versioned markdown telling an agent **HOW** to use the set (orchestration, ordering, which member to pick when). 1..8000 chars (trimmed; whitespace-only rejected). Distinct from `description` (short ≤1024 summary). **Required on BOTH create and publish, with NO carry-forward** — unlike `description`/`kind`/`tags` (a publish may omit them to inherit the prior version), every version must restate its own master prompt. Stored opaque (no rendering / sanitization / templating / linting / search-indexing). Surfaced verbatim on the detail read and as a root field on `/closure`.
+
+**Model note — derived visibility (#1136).** A skillset has **no owner-set visibility**. Its `isPrivate` / `sharedWithUsers` / `sharedWithOrgs` / `grants` fields are **inert legacy** (kept for back-compat only — do not rely on them). Reachability is computed live from the members: a caller may read a skillset **iff they can read every member skill** at the requested version. The owner and platform admins always see it, plus an `unreadableMembers` list (the members *they* can no longer read, for repair); every other caller gets a flat `skillset_not_found` (404) the moment any one member is unreadable — the response never reveals *which* member (so non-owners always get `unreadableMembers: []`). The derived state is surfaced as **`memberVisibilityState`**: `all-public` (every member public → discoverable by anyone), `restricted` (≥1 private/shared member → only callers who can read all members), `unresolvable` (≥1 member ref no longer resolves → only the owner sees it, with a warning). **There is no permissions endpoint. To widen a skillset's reach you expose the underlying member skills to the intended audience** — you never set visibility on the skillset itself.
+
+**Model note — auto-revision (#1162/#1165).** Revisions are system-managed `<major>.<minor>` starting at `1.0`; the owner **never sends a `version`** on create or publish. Every owner publish auto-bumps the **minor** (major never auto-bumps). A skillset is also **reactively re-cut** with a minor bump when its *public-resolved-member snapshot* moves — i.e. a member's version pointer changes, or a member flips private⇄public — so a consumer's `/closure` stays coherent and a mirrored plugin re-publishes. Sending a `version` field is silently ignored by the schema; do not build request bodies around one.
 
 ### 5a.1 Create skillset — `POST /api/v1/skillsets`
 
-Requires `ornn:skill:create`. Created **private** by default. JSON body:
+Requires `ornn:skill:create`. **Do not send a `version`** — the system assigns the initial revision `1.0` (auto-revision model note above). Reachability is derived from the members, never set here. JSON body:
 
 ```jsonc
 {
-  "name": "review-set",
-  "description": "A curated comparison set.",
-  "instructions": "Run pdf-tools first, then feed its output to csv-tools…",  // REQUIRED, 1..8000 chars
+  "name": "review-set",            // REQUIRED, kebab-case, unique
+  "description": "A curated comparison set.",   // REQUIRED, 1..1024 chars
+  "instructions": "Run pdf-tools first, then feed its output to csv-tools…",  // REQUIRED master prompt, 1..8000 chars
   "kind": "consensus-supported",   // optional, default "generic"
-  "tags": ["review"],              // optional
-  "members": ["pdf-tools@1.0", "csv-tools@2.1"],   // 2..N
-  "version": "1.0"                 // optional, default "1.0"
+  "tags": ["review"],              // optional, ≤20 kebab-case tags
+  "members": ["pdf-tools@1.0", "csv-tools@2.1"]   // REQUIRED, 2..100 refs (no nested skillsets)
 }
 ```
 
-Response 201 + `Location: /api/v1/skillsets/:guid`. Member validation runs before any write — a missing member → `skill_dependency_not_found` (404), a conflicting union closure → `dependency_conflict` (409). Duplicate name → `skillset_name_exists` (409). A missing/empty/whitespace-only `instructions` → `400` validation error.
+Response 201 + `Location: /api/v1/skillsets/:guid`, body `{ data: <SkillsetDetail — §5a.2>, error: null }`. Member validation runs before any write — a missing/unreadable member → `skill_dependency_not_found` (404), a conflicting union closure → `dependency_conflict` (409). Duplicate name → `skillset_name_exists` (409); a reserved name → `reserved_name` (400); a missing/empty/whitespace-only `instructions`, fewer than 2 members, or a `skillset:`-prefixed ref → `400 invalid_skillset` validation error.
 
 ### 5a.2 Get skillset — `GET /api/v1/skillsets/:idOrName`
 
-**Auth: optional** (anon sees public only; private → `skillset_not_found`). Query `version` (optional). Returns `{ guid, name, description, instructions, kind, tags, members, version, latestVersion, isPrivate, createdBy, sharedWithUsers, sharedWithOrgs, createdOn, updatedOn }` — `instructions` is the version's master prompt.
+**Auth: optional.** Query `version` (optional; defaults to latest). The member-derived read gate applies (derived-visibility model note): unreadable for the caller → flat `skillset_not_found` (404), no leak of which member. Returns `{ data: SkillsetDetail, error: null }` where **SkillsetDetail** is:
+
+```jsonc
+{
+  "guid": "…", "name": "review-set",
+  "description": "…", "instructions": "…",       // master prompt of THIS version, verbatim
+  "kind": "consensus-supported", "tags": ["review"],
+  "members": ["pdf-tools@1.0", "csv-tools@2.1"],  // authored refs of this version
+  "version": "1.3", "latestVersion": "1.3",
+  "createdBy": "user_…", "createdByEmail": "…", "createdByDisplayName": "…",  // email/displayName optional
+
+  // --- DERIVED visibility (#1136) — the authoritative reach signal ---
+  "memberVisibilityState": "all-public",   // all-public | restricted | unresolvable
+  "unreadableMembers": [],                 // populated only for owner/admin; always [] for others
+  "publicMemberCount": 2,                  // SYSTEM count of public+resolvable members of THIS version
+
+  // --- Claude Code plugin export (#1157) ---
+  "exportAsPlugin": false,
+  "pluginConfig": { "displayName": "…", "description": "…", "keywords": ["…"] },  // present only when overrides are set
+
+  // --- INERT legacy ACL fields (#1136) — do NOT use for visibility decisions ---
+  "isPrivate": true, "sharedWithUsers": [], "sharedWithOrgs": [], "grants": [],
+
+  "createdOn": "2026-…", "updatedOn": "2026-…"
+}
+```
+
+Judge reach from **`memberVisibilityState`**, never from `isPrivate`/`sharedWith*` (those are inert). `members.length − publicMemberCount` is how many members are currently excluded from the public / plugin view.
 
 ### 5a.3 List versions — `GET /api/v1/skillsets/:idOrName/versions`
 
-**Auth: optional** (visibility matches the detail read). Returns `{ items: [{ version, kind, memberCount, createdBy, createdOn }] }`, newest first.
+**Auth: optional** (member-derived read gate, same as §5a.2). Returns `{ data: { items: [{ version, kind, memberCount, createdBy, createdByEmail?, createdByDisplayName?, createdOn }] }, error: null }`, newest first. Use it to compare your locally-recorded skillset revision against the latest before re-resolving `/closure`.
 
 ### 5a.4 Resolve closure — `GET /api/v1/skillsets/:idOrName/closure`
 
-**Auth: optional.** One-call resolve: the union of all member skills **plus** each member's transitive dependency closure (§3.6a), deduplicated and topo-sorted (deps-first). Query `version` (optional). The success body carries the version's master prompt as a **root sibling** of `items`: `{ "data": { "instructions": "…", "items": [ … ] }, "error": null }` (the skill `/skills/:id/closure` body stays `{ items }`, unchanged). Same error codes as §3.6a: `dependency_cycle` / `dependency_conflict` (409), `skill_dependency_not_found` (404), plus `skillset_not_found` (404) for an unknown/invisible root. A public skillset whose member transitively pins a private skill surfaces `skill_dependency_not_found` for that node to anonymous callers (no leak).
+**Auth: optional.** One-call resolve: the union of all member skills **plus** each member's transitive dependency closure (§3.6a), deduplicated and topo-sorted (deps-first). Query `version` (optional). The success body carries the version's master prompt as a **root sibling** of `items`: `{ "data": { "instructions": "…", "items": [ … ] }, "error": null }` (the skill `/skills/:id/closure` body stays `{ items }`, unchanged). Each `items[]` entry is a **ClosureNode** `{ ref, name, version, depth, guid?, skillHash? }` — `ref` is the canonical `<name>@<version>`, `depth` is 0 for the set's direct members and grows with dependency distance, and `guid`/`skillHash` appear only when known (`isPrivate` is never emitted here). This is the main agent payload: run `instructions` as the master prompt and install/execute the nodes deps-first. Same error codes as §3.6a: `dependency_cycle` / `dependency_conflict` (409), `skill_dependency_not_found` (404), plus `skillset_not_found` (404) for an unknown/invisible root. A public skillset whose member transitively pins a private skill surfaces `skill_dependency_not_found` for that node to anonymous callers (no leak).
 
 ### 5a.5 Publish new version — `PUT /api/v1/skillsets/:id`
 
-Requires `ornn:skill:update` + author/admin. JSON body `{ members, version, instructions, description?, kind?, tags? }` — `instructions` is **REQUIRED** here too (no carry-forward; each version restates its own master prompt). Appends an immutable `guid@version` and advances `latestVersion`; prior versions never mutate. Re-publishing an existing version → `skillset_version_exists` (409).
+Requires `ornn:skill:update` + author/admin. JSON body `{ members, instructions, description?, kind?, tags? }` — **no `version`** (the minor revision auto-bumps; auto-revision model note). `members` + `instructions` are **REQUIRED** every publish (no carry-forward for the master prompt — each version restates its own); `description`/`kind`/`tags` may be omitted to inherit the prior version. Appends an immutable `guid@<new-minor>` and advances `latestVersion`; prior versions never mutate. The response is the new `SkillsetDetail` (§5a.2). Member/closure validation reuses the §5a.1 errors; an unknown id → `skillset_version_not_found` (404).
 
-### 5a.6 Replace permissions — `PUT /api/v1/skillsets/:id/permissions`
+### 5a.6 Export as a Claude Code plugin — `PUT /api/v1/skillsets/:id/plugin-export`
 
-Requires `ornn:skill:update` + author/admin. JSON body `{ isPrivate, sharedWithUsers, sharedWithOrgs }` (same shape as skills). An owner may only share into orgs they belong to.
+Requires `ornn:skill:update` + author/admin. Turns the skillset into (or removes it from) a **Claude Code marketplace plugin** in the public mirror repo (§3.15 / §13.8). JSON body:
 
-### 5a.7 Delete skillset — `DELETE /api/v1/skillsets/:id`
+```jsonc
+{
+  "enabled": true,               // REQUIRED
+  "displayName": "Review Set",   // optional listing override, ≤64 chars
+  "description": "…",            // optional listing override, ≤1024 chars
+  "keywords": ["review", "pdf"]  // optional, ≤20 kebab-case keywords
+}
+```
 
-Requires `ornn:skill:delete` + author/admin. Cascades all versions. Returns `{ data: { success: true } }`.
+Enabling requires `memberVisibilityState: all-public` with **≥2 public, resolvable members** — otherwise `skillset_too_few_public_members` (409). The mirror then publishes a multi-skill plugin under `skillsets/<name>/` (`.claude-plugin/plugin.json` + `skills/<member>/…` + a README carrying the master prompt); private / unresolvable members are excluded and listed in the README. The install **name and version are not overridable** — only the three listing fields above. Response is the updated `SkillsetDetail` (`exportAsPlugin` flips, `pluginConfig` reflects the overrides). Body validation failures → `400 invalid_plugin_export`.
 
-### 5a.8 Search skillsets — `GET /api/v1/skillset-search`
+### 5a.7 Transfer ownership — `POST /api/v1/skillsets/:id/transfer-ownership`
 
-**Auth: optional** (anon → public scope). Query: `kind`, `scope`, `tags` (CSV, AND-match), `page`/`pageSize` or `cursor`/`limit`. Plain keyword/filter discovery — no semantic ranking, no facets, no popularity ranking. Cursor pagination per §1.10.
+Requires `ornn:skill:update` and is **ADMIN-tier** (caller must own the skillset or hold `ornn:admin:skill`). JSON body `{ "newOwnerUserId": "user_…" }` (1..128 chars). Immediate; the prior owner is retained as a READ grant. Returns `{ data: { skillset: SkillsetDetail }, error: null }`. Invalid / non-existent target → `invalid_transfer_target` (400); caller not owner/admin → `forbidden` (403); transferring to the current owner → `ownership_conflict` (409). Mirrors the skill transfer-ownership flow (#1123).
 
-SDK: `client.createSkillset` / `getSkillset` / `publishSkillset` / `setSkillsetPermissions` / `deleteSkillset` / `getSkillsetClosure` / `searchSkillsets` (TypeScript); `create_skillset` / `get_skillset` / `publish_skillset` / `set_skillset_permissions` / `delete_skillset` / `resolve_skillset_closure` / `search_skillsets` (Python).
+### 5a.8 Delete skillset — `DELETE /api/v1/skillsets/:id`
+
+Requires `ornn:skill:delete` + author/admin. Cascades all versions. Returns `{ data: { success: true }, error: null }`.
+
+### 5a.9 Search skillsets — `GET /api/v1/skillset-search`
+
+**Auth: optional** (anon forced to `scope=public`). Query: `q` (case-insensitive substring over name + description, ≤200 chars), `kind`, `scope` (`public` | `private` | `mixed` | `shared-with-me` | `mine`, default `public`), `tags` (CSV, AND-match), `page`/`pageSize` or `cursor`/`limit`. Rate-limited 60/min. Plain keyword/filter discovery — no semantic ranking, no facets, no popularity. Discovery live-filters `restricted` skillsets to callers who can read every member. Returns `{ data: { items: [SkillsetSearchItem], total, page, pageSize, totalPages, meta: { limit, hasMore, nextCursor } }, error: null }`; each item is `{ guid, name, description, kind, tags, memberCount, latestVersion, memberVisibilityState, createdBy, createdOn, updatedOn }`. Cursor pagination per §1.10.
+
+SDK: `client.createSkillset` / `getSkillset` / `publishSkillset` / `transferSkillsetOwnership` / `deleteSkillset` / `getSkillsetClosure` / `searchSkillsets` (TypeScript); `create_skillset` / `get_skillset` / `publish_skillset` / `transfer_skillset_ownership` / `delete_skillset` / `resolve_skillset_closure` / `search_skillsets` (Python). No SDK method targets plugin-export yet — call `PUT /skillsets/:id/plugin-export` directly.
+
+### 5a.10 Skillset error codes
+
+| Code | HTTP | When |
+|---|---|---|
+| `invalid_skillset` | 400 | Body fails create/publish validation (missing `instructions`, <2 or >100 members, bad ref grammar, `skillset:`-prefixed ref). |
+| `reserved_name` | 400 | `name` is on the reserved list. |
+| `invalid_plugin_export` | 400 | Plugin-export body fails validation. |
+| `invalid_transfer` / `invalid_transfer_target` | 400 | Missing / unresolvable `newOwnerUserId`. |
+| `forbidden` | 403 | Authenticated caller is not the owner and lacks `ornn:admin:skill`. |
+| `skillset_not_found` | 404 | Unknown skillset, or the member-derived read gate hid it (a member is unreadable). |
+| `skillset_version_not_found` | 404 | Named `version` (or publish target) does not exist. |
+| `skill_dependency_not_found` | 404 | A member (or transitive dep) can't be resolved/read at the requested version. |
+| `skillset_name_exists` | 409 | Another skillset already owns that `name`. |
+| `skillset_version_exists` | 409 | Internal revision collision on publish (auto-revision guard). |
+| `dependency_conflict` / `dependency_cycle` | 409 | The union closure is conflicting or cyclic. |
+| `skillset_too_few_public_members` | 409 | Plugin-export enabled with fewer than 2 public, resolvable members. |
+| `ownership_conflict` | 409 | Transfer target is already the owner. |
 
 ---
 
 ## 6. Skill format
 
-Two endpoints — the canonical format spec, and a pre-flight validator.
+Three endpoints — the canonical format spec, a pre-flight validator, and a public JSON Schema for editors.
 
 ### 6.1 Format rules — `GET /api/v1/skill-format/rules`
 
@@ -1340,6 +1444,10 @@ Validation is idempotent and side-effect-free; safe to call repeatedly in CI.
 | `INVALID_CONTENT_TYPE` | 400 | Wrong Content-Type. |
 | `EMPTY_BODY` | 400 | Zero-byte body. |
 | `AUTH_MISSING` | 401 / `FORBIDDEN` 403 | Standard. |
+
+### 6.3 Manifest JSON Schema — `GET /api/v1/skill-manifest-schema.json`
+
+Public JSON Schema (draft 2020-12) for the `SKILL.md` frontmatter, derived from the canonical Zod schema (#464). **Auth: none.** Unlike every other JSON endpoint it returns the **raw schema object, NOT the `{ data, error }` envelope** — editors / IDEs consume it directly as a `$schema` target. No error path (static, computed once at module load).
 
 ---
 
@@ -1541,6 +1649,27 @@ The backend runs up to 5 rounds of tool-use; when the LLM emits a `function_call
 | `VALIDATION_ERROR` | 400 (pre-stream) | Body failed Zod validation. |
 | `AUTH_MISSING` / `FORBIDDEN` | 401 / 403 (pre-stream) | Standard. |
 | `error` | terminal stream event | Chat error during the LLM / sandbox loop. |
+
+---
+
+## 8a. Assistant (SSE, #970)
+
+A repo-aware Q&A assistant — a **single non-agentic completion** (no tools, no sandbox loop) grounded server-side on the Ornn docs KB. Distinct from the Playground (§8): it never executes anything.
+
+### 8a.1 Chat — `POST /api/v1/assistant/chat`
+
+**Auth: required** (any authenticated NyxID user; **no scalar scope**). Rate-limited **30/min per user**; **charges the `assistant` monthly quota** (reserved before the LLM call — see §11 `/me/quota`). Request body:
+
+```jsonc
+{
+  "messages": [                                   // REQUIRED, 1..100 items
+    { "role": "user", "content": "How do dist-tags work?" }  // role: user|assistant; content ≤32000 chars
+  ],
+  "modelId": "…"                                  // optional; defaults to the assistant-surface default
+}
+```
+
+Response: SSE stream (§1.9). Four event types: `chat_start` `{ model }`, `chat_text_delta` `{ delta }` (incremental answer text), `chat_finish` `{ usage? }`, and `chat_error` `{ code, message }` (terminal). Retrieval grounding is applied server-side and is **not** surfaced as a separate event. Pre-stream failures are clean RFC 7807 JSON, never a broken stream: `429 rate_limited` (Retry-After), `400 VALIDATION_ERROR`, `429 quota_exceeded`, `400 MODEL_NOT_ENABLED` / `MODEL_UNAVAILABLE`. Quota is charged on completion. Pick a model with `GET /api/v1/me/models?surface=assistant` (§11).
 
 ---
 
@@ -2015,6 +2144,10 @@ Response 200:
 }
 ```
 
+### 11.13 Launch-promo status — `GET /api/v1/me/launch-promo`
+
+Your launch-promo claim status (#724). **Auth: required** (caller-scoped; no scope). Response `{ data: { promoEnabled, claimed, rank, totalSlots, slotsRemaining, awardedAt }, error: null }` — `rank` is your 1-based Ornn registration rank (or `null`), `awardedAt` is set once claimed. Admin award + observability is §13.11.
+
 ---
 
 ## 12. Users directory
@@ -2077,7 +2210,7 @@ The legacy `GET /admin/stats` and `GET /admin/activities` endpoints were removed
 
 ### 13.1 Dashboard tiles — `GET /api/v1/admin/dashboard/stats`
 
-**Auth: required. Permission: `ornn:quota:admin`.**
+**Auth: required. Permission: `ornn:admin:skill`.**
 
 User + skill totals for the admin dashboard.
 
@@ -2125,7 +2258,7 @@ Re-runs the AgentSeal scanner against a specific version's package and refreshes
 
 ### 13.6 Quota administration
 
-All under `/admin/quota/*`. **Auth: required. Permission: `ornn:quota:admin`.**
+All under `/admin/quota/*`. **Auth: required. Permission: `ornn:admin:skill`.**
 
 | Method | Path | Body | Notes |
 |---|---|---|---|
@@ -2137,7 +2270,7 @@ All under `/admin/quota/*`. **Auth: required. Permission: `ornn:quota:admin`.**
 
 ### 13.7 Redemption codes
 
-All under `/admin/redemption-codes/*`. **Auth: required. Permission: `ornn:quota:admin`.** Caller-side `redeem` and `history` live at `/me/redemption-codes/*` (§11.11, §11.12).
+All under `/admin/redemption-codes/*`. **Auth: required. Permission: `ornn:admin:skill`.** Caller-side `redeem` and `history` live at `/me/redemption-codes/*` (§11.11, §11.12).
 
 | Method | Path | Body | Notes |
 |---|---|---|---|
@@ -2154,6 +2287,8 @@ All under `/admin/redemption-codes/*`. **Auth: required. Permission: `ornn:quota
 | `GET` | `/admin/mirror/status` | `ornn:admin:skill` | Counts + last-run summary. Response combines DB-side mirror counts, the persisted scheduled-run status (cluster-wide), and the current `mirror` settings section (App private key mid-masked) so the admin UI can render without a second round-trip. |
 
 The mirror **config** (repo, branch, GitHub App id, encrypted private key, enabled flag, cadence) lives under the sectioned platform settings (§14.2, `mirror`). The two endpoints above only operate the scheduler. Manual `reconcile` runs are tracked in pod-local state and do not update `scheduledRun` in the status response.
+
+There is also a **direct mirror-config pair** outside `/admin/settings`: `GET /api/v1/github/repo` (public coordinates — §2.4) and `POST /api/v1/github/repo` (**`ornn:admin:skill`**), which patches the full mirror config — the `enabled` kill-switch, `owner` / `repo` / `branch`, and the GitHub App `appId` / `installationId` / `appPrivateKey`. Accepts any subset (omitted fields are preserved); the response mid-masks secrets, never plaintext. Changing `owner` / `repo` while skills are still stamped to the old repo is rejected unless `confirmAbandonOldRepo: true` — a guard against orphaning the existing mirror. Errors: `400 invalid_body` / `invalid_setting`.
 
 ### 13.9 Announcements
 
@@ -2180,6 +2315,15 @@ Admin-authored notifications that fan out into every user's `/notifications` fee
 | `POST` | `/admin/broadcasts` | `ornn:admin:skill` | Create. Body carries bilingual `titleI18n` / `bodyMarkdownI18n`. Returns 201. |
 | `PATCH` | `/admin/broadcasts/:id` | `ornn:admin:skill` | Partial update. |
 | `DELETE` | `/admin/broadcasts/:id` | `ornn:admin:skill` | Hard delete (read receipts cascade). |
+
+### 13.11 Launch promo (#724)
+
+Admin operation of the launch-promo reward program (the caller-facing status read is §11.13).
+
+| Method | Path | Permission | Notes |
+|---|---|---|---|
+| `POST` | `/admin/launch-promo/award/:userId` | `ornn:admin:skill` | Manually award the promo — mints a redemption code (playground / skillGen grants per config). No body; `awardedBy` = caller. Idempotent per user. Errors: `PROMO_DISABLED` (400, also when zero grants configured), `ALREADY_CLAIMED` (409), `RANK_EXCEEDED` (403), `SLOTS_EXHAUSTED` (409). |
+| `GET` | `/admin/launch-promo/recent` | `ornn:admin:skill` | Recent claims for observability. Query `limit` (default 50, clamped 1..500). Returns `{ items: [{ userId, eligibilityRank, redemptionCodeId, awardedAt, awardedBy, githubLogin }] }`. |
 
 ---
 
@@ -2217,7 +2361,7 @@ Response shape on read: `{ data: <sectionPayload>, error: null }`. On write: `{ 
 
 ### 14.3 LLM providers — `/admin/settings/llm-providers[/:id]`
 
-Multi-provider model catalog. Each provider row carries credentials + per-model toggles for the two SSE surfaces.
+Multi-provider model catalog. Each provider row carries credentials + per-model toggles for the three SSE surfaces (`playground`, `skillGen`, `assistant`).
 
 | Method | Path | Body | Notes |
 |---|---|---|---|
@@ -2227,7 +2371,7 @@ Multi-provider model catalog. Each provider row carries credentials + per-model 
 | `PUT` | `/admin/settings/llm-providers/:id` | partial | Update. Accepts plaintext or mid-mask sentinel for secret fields. |
 | `DELETE` | `/admin/settings/llm-providers/:id` | — | Hard delete + cascade through model catalog. |
 | `POST` | `/admin/settings/llm-providers/:id/sync` | — | Re-pull model list from the provider gateway. Response `{ data: { synced: int }, error: null }`. |
-| `PATCH` | `/admin/settings/llm-providers/:id/models/:modelId` | `{ enabledForPlayground?, enabledForSkillGen?, defaultForPlayground?, defaultForSkillGen? }` | Per-row surface flags. Setting `defaultFor*: true` unsets the previous default atomically. |
+| `PATCH` | `/admin/settings/llm-providers/:id/models/:modelId` | `{ enabledForPlayground?, enabledForSkillGen?, enabledForAssistant?, defaultForPlayground?, defaultForSkillGen?, defaultForAssistant? }` | Per-model surface flags (#270; assistant surface #970). ≥1 flag required. `defaultForX: true` forces `enabledForX: true` and clears that default on every other model atomically. Errors: `MODEL_NOT_FOUND` (404), `MODEL_REMOVED` (400 — re-sync first). |
 
 The picker `GET /me/models` (§11.10) reads through this catalog.
 

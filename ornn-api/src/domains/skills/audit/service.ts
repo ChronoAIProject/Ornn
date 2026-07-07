@@ -13,11 +13,10 @@
 
 import { createLogger } from "../../../shared/logger";
 import type { NyxLlmClient, ResponsesApiInputMessage } from "../../../clients/nyxid/llm";
-import type { IStorageClient } from "../../../clients/storageClient";
 import type { NyxidOrgsClient } from "../../../clients/nyxid/orgs";
 import type { SkillService } from "../crud/service";
+import { SYSTEM_ACTOR } from "../crud/authorize";
 import type { NotificationService } from "../../notifications/service";
-import { AppError } from "../../../shared/types/index";
 import type { AuditRepository } from "./repository";
 import {
   type AuditFinding,
@@ -54,19 +53,9 @@ export interface AuditLlmDefaults {
 
 export type AuditDefaultsResolver = () => Promise<AuditLlmDefaults>;
 
-/**
- * Per-bucket storage resolver — the audit pipeline reads skill packages
- * from the same bucket the upload path used. Sourced from admin
- * settings (services section) so a bucket rename doesn't redeploy.
- */
-export type AuditStorageBucketResolver = () => Promise<string>;
-
 export interface AuditServiceDeps {
   readonly auditRepo: AuditRepository;
   readonly skillService: SkillService;
-  readonly storageClient: IStorageClient;
-  /** Resolves the active storage bucket from settings. */
-  readonly storageBucketResolver: AuditStorageBucketResolver;
   readonly llmClient: NyxLlmClient;
   /** Resolves audit knobs (LLM toggle/model, AgentSeal toggle/timeout, threshold) from settings. */
   readonly defaultsResolver: AuditDefaultsResolver;
@@ -87,8 +76,6 @@ export interface AuditOptions {
 export class AuditService {
   private readonly auditRepo: AuditRepository;
   private readonly skillService: SkillService;
-  private readonly storageClient: IStorageClient;
-  private readonly storageBucketResolver: AuditStorageBucketResolver;
   private readonly llmClient: NyxLlmClient;
   private readonly defaultsResolver: AuditDefaultsResolver;
   private readonly cacheTtlMs: number;
@@ -99,8 +86,6 @@ export class AuditService {
   constructor(deps: AuditServiceDeps) {
     this.auditRepo = deps.auditRepo;
     this.skillService = deps.skillService;
-    this.storageClient = deps.storageClient;
-    this.storageBucketResolver = deps.storageBucketResolver;
     this.llmClient = deps.llmClient;
     this.defaultsResolver = deps.defaultsResolver;
     this.cacheTtlMs = deps.cacheTtlMs;
@@ -344,28 +329,14 @@ export class AuditService {
   private async buildAuditContext(
     guid: string,
   ): Promise<{ filesBundle: string; metadataSummary: string }> {
-    const storageBucket = await this.storageBucketResolver();
-    const presigned = await this.storageClient.getPresignedUrl(storageBucket, `skills/${guid}.zip`).catch(() => null);
-    // The canonical pointer is `skills/{guid}/{version}.zip`; fall back via
-    // the skill doc's stored `storageKey` for migrated/legacy rows.
+    // Fetch the latest version's package bytes through the skill service, which
+    // proxies chrono-bucket's streaming download (#1196). Audit is a trusted
+    // system pipeline, so it passes SYSTEM_ACTOR to bypass the per-skill
+    // visibility gate. This replaces the old dead presigned-URL round-trip and
+    // the cast-riddled `skillDoc.presignedPackageUrl` read (#995).
+    const { bytes } = await this.skillService.getPackageBytes(guid, SYSTEM_ACTOR);
+    // Metadata/tags for the audit summary come from the skill doc (latest).
     const skillDoc = await this.skillService.getSkill(guid);
-    const storageKey = presigned
-      ? `skills/${guid}.zip`
-      : (skillDoc as unknown as { presignedPackageUrl?: string; storageKey?: string });
-
-    // Prefer the skill doc's presigned URL — `getSkill` already minted one.
-    const url = (skillDoc as unknown as { presignedPackageUrl?: string }).presignedPackageUrl;
-    if (!url) {
-      throw AppError.internalError("audit_package_unavailable", "No storage URL for skill package");
-    }
-    const res = await fetch(url);
-    if (!res.ok) {
-      throw AppError.internalError(
-        "AUDIT_PACKAGE_DOWNLOAD_FAILED",
-        `Failed to download package for audit (HTTP ${res.status})`,
-      );
-    }
-    const bytes = new Uint8Array(await res.arrayBuffer());
     const zip = await JSZip.loadAsync(bytes);
     const allPaths = Object.keys(zip.files);
     resolveZipRoot(zip, allPaths);
@@ -412,7 +383,6 @@ export class AuditService {
       `tags=${(skillDoc.tags ?? []).join(",")}`,
     ].join("; ");
 
-    void storageKey; // used only in legacy fallback; keep reference to satisfy lint
     return { filesBundle: chunks.join("\n\n"), metadataSummary };
   }
 }

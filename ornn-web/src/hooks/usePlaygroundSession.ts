@@ -49,7 +49,7 @@ export function usePlaygroundSession(skillName: string | null) {
     files: packageFiles,
     fileContents: packageContents,
     isLoading: packageLoading,
-  } = useSkillPackage(skill?.presignedPackageUrl);
+  } = useSkillPackage(skill?.guid, skill?.version);
 
   // ── Env vars ────────────────────────────────────────────────────────
   const envVarKeys = useMemo(

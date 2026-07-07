@@ -109,6 +109,11 @@ import {
   createMirrorScheduler,
   type MirrorScheduler,
 } from "./domains/skills/mirror/scheduler";
+import {
+  createSourceSyncScheduler,
+  type SourceSyncScheduler,
+} from "./domains/skills/crud/sourceSyncScheduler";
+import { runSourceDriftJob } from "./domains/skills/crud/sourceDriftJob";
 
 // Domain: Me (caller-scoped endpoints)
 import { createMeRoutes } from "./domains/me/routes";
@@ -487,6 +492,10 @@ export async function bootstrap(
     maxEntryUncompressedBytes: config.maxEntryUncompressedBytes,
     maxPackageFileCount: config.maxPackageFileCount,
     maxCompressionRatio: config.maxCompressionRatio,
+    // Source-sync (#1175): authenticate GitHub source reads. The settings
+    // token wins; the env token is the fallback.
+    sourceSyncSettings: settingsService,
+    sourceSyncGithubTokenFallback: config.sourceSyncGithubToken,
   });
 
   // ---- Domain: Notifications + Broadcasts ----
@@ -544,9 +553,6 @@ export async function bootstrap(
   const auditService = new AuditService({
     auditRepo,
     skillService,
-    storageClient,
-    storageBucketResolver: async () =>
-      (await settingsService.getNyxid()).chronoStorageBucket,
     llmClient: nyxLlmClient,
     defaultsResolver: async () => resolveAuditDefaults(),
     // Audits are re-run automatically when the cached record ages past
@@ -779,6 +785,43 @@ export async function bootstrap(
     skillRepo,
     mirrorScheduler,
   });
+
+  // In-process source-drift scheduler (#1176/#1177). Same multi-pod-safe
+  // Agenda pattern as the mirror scheduler; cadence driven by
+  // `settings.sourceSync.pollSchedule`. Detects when a GitHub-sourced skill's
+  // upstream moved, records drift state, and — when `sourceSync.autoPublish`
+  // is on — auto-publishes the new version. A start failure logs and leaves
+  // this pod without the scheduled scan rather than crashing boot.
+  let sourceSyncScheduler: SourceSyncScheduler | null = null;
+  try {
+    sourceSyncScheduler = createSourceSyncScheduler({
+      db,
+      logger,
+      settingsService,
+      runDriftJob: () =>
+        runSourceDriftJob({
+          skillRepo,
+          settingsService,
+          envTokenFallback: config.sourceSyncGithubToken,
+          notifier: notificationService,
+          analyticsEmitter,
+          // #1177 — unattended auto-publish of drifted skills when the
+          // sourceSync.autoPublish switch is on.
+          autoPublish: (guid) => skillService.autoPublishFromSource(guid),
+          logger,
+          // Small per-group jitter so a large catalogue spreads its probes
+          // across the tick instead of bursting one egress IP.
+          jitterMs: 250,
+        }),
+    });
+    await sourceSyncScheduler.start();
+  } catch (err) {
+    logger.error(
+      { err: err instanceof Error ? err.message : String(err) },
+      "source-sync scheduler failed to start — scheduled drift checks will not run on this pod",
+    );
+    sourceSyncScheduler = null;
+  }
 
   // Skill routes — sharing is now a direct PUT /permissions write; the
   // audit signal is surfaced as a per-version label, not a gate.
@@ -1130,9 +1173,16 @@ export async function bootstrap(
   // ---- Shutdown ----
   async function shutdown(): Promise<void> {
     logger.info("Shutting down ornn-api...");
-    // Stop the scheduler first so no new mirror reconciles start while
-    // we're tearing the Mongo connection down. `stop()` is idempotent +
-    // already swallows its own errors.
+    // Stop the schedulers first so no new reconciles / drift checks start
+    // while we're tearing the Mongo connection down. `stop()` is idempotent +
+    // already swallows its own errors. Source-sync first, then mirror.
+    if (sourceSyncScheduler) {
+      try {
+        await sourceSyncScheduler.stop();
+      } catch (err) {
+        logger.warn({ err }, "Source-sync scheduler stop failed — continuing");
+      }
+    }
     if (mirrorScheduler) {
       try {
         await mirrorScheduler.stop();

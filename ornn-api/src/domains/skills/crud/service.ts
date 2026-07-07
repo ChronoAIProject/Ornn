@@ -12,6 +12,14 @@ import type { IStorageClient } from "../../../clients/storageClient";
 import type { SkillDocument, SkillMetadata, SkillDetailResponse, SkillVersionDocument, SkillSource } from "../../../shared/types/index";
 import { AppError } from "../../../shared/types/index";
 import { fetchSkillFromGitHub, parseGithubUrl, type GitHubPullInput } from "./utils/githubPull";
+import {
+  runSourceDriftCheck,
+  pickSourceSyncToken,
+  SYSTEM_SYNC_ACTOR,
+  type SourceDriftResult,
+  type AutoPublishOutcome,
+} from "./sourceDrift";
+import type { SourceSyncSection } from "../../settings/sections/sourceSync";
 import { computeVersionDiff, type VersionDiffResult } from "./utils/versionDiff";
 import { isReservedVerb } from "../../../shared/reservedVerbs";
 import { canReadSkill, isMemberOfOrg, SYSTEM_ACTOR, type ActorContext } from "./authorize";
@@ -115,6 +123,15 @@ export function resolveDistTag(skill: SkillDocument, version: string): string | 
   );
 }
 
+/**
+ * Narrow settings surface the source-drift path needs (#1175). Decoupled
+ * from the full SettingsService so tests stub just this one method — same
+ * pattern as `MirrorSettingsReader`.
+ */
+export interface SourceSyncSettingsReader {
+  getSourceSync(): Promise<SourceSyncSection>;
+}
+
 export interface SkillServiceDeps {
   skillRepo: SkillRepository;
   skillVersionRepo: SkillVersionRepository;
@@ -148,6 +165,19 @@ export interface SkillServiceDeps {
   maxEntryUncompressedBytes?: number;
   maxPackageFileCount?: number;
   maxCompressionRatio?: number;
+
+  /**
+   * Source-sync settings reader (#1175). Optional — when absent the GitHub
+   * source reads/drift checks fall back to the env token (below) or run
+   * anonymously. Production bootstrap passes the SettingsService.
+   */
+  sourceSyncSettings?: SourceSyncSettingsReader;
+  /**
+   * Env-provided GitHub token fallback (`ORNN_SOURCE_SYNC_GITHUB_TOKEN`),
+   * used only when the settings `githubToken` is empty. Lets ops supply the
+   * credential without the admin UI. Never hardcoded, never logged.
+   */
+  sourceSyncGithubTokenFallback?: string;
 }
 
 export class SkillService {
@@ -163,6 +193,8 @@ export class SkillService {
   private readonly maxEntryUncompressedBytes: number | undefined;
   private readonly maxPackageFileCount: number | undefined;
   private readonly maxCompressionRatio: number | undefined;
+  private readonly sourceSyncSettings: SourceSyncSettingsReader | undefined;
+  private readonly sourceSyncGithubTokenFallback: string | undefined;
 
   constructor(deps: SkillServiceDeps) {
     this.skillRepo = deps.skillRepo;
@@ -175,6 +207,113 @@ export class SkillService {
     this.maxEntryUncompressedBytes = deps.maxEntryUncompressedBytes;
     this.maxPackageFileCount = deps.maxPackageFileCount;
     this.maxCompressionRatio = deps.maxCompressionRatio;
+    this.sourceSyncSettings = deps.sourceSyncSettings;
+    this.sourceSyncGithubTokenFallback = deps.sourceSyncGithubTokenFallback;
+  }
+
+  /**
+   * Resolve the GitHub token for authenticated source reads (#1175): the
+   * admin-set settings value wins; the env fallback is next; empty ⇒ run
+   * anonymous (rate-limited). Trimmed so stray whitespace never becomes a
+   * bogus `Authorization` header. NEVER logged.
+   */
+  private async resolveSourceSyncToken(): Promise<string> {
+    const settingsToken = (await this.sourceSyncSettings?.getSourceSync())?.githubToken;
+    return pickSourceSyncToken(settingsToken, this.sourceSyncGithubTokenFallback);
+  }
+
+  /**
+   * Read-only drift check for a GitHub-sourced skill (#1175). Probes the
+   * upstream HEAD via the cheap `git/ref` endpoint, compares it to the
+   * last-synced commit, and persists the verdict on `source`. NEVER
+   * re-pulls or publishes — the scheduler (#1176) and auto-publish (#1177)
+   * consume the state this writes.
+   */
+  async checkSourceDrift(guid: string): Promise<SourceDriftResult> {
+    const token = await this.resolveSourceSyncToken();
+    return runSourceDriftCheck({ skillRepo: this.skillRepo }, guid, token);
+  }
+
+  /**
+   * Unattended auto-publish of a drifted GitHub-sourced skill (#1177). Called
+   * by the drift scheduler when `sourceSync.autoPublish` is on. Re-pulls the
+   * upstream and publishes a new version under the system source-sync actor,
+   * running the SAME validation the manual refresh runs.
+   *
+   * Never throws for known outcomes — returns a typed {@link AutoPublishOutcome}
+   * the caller maps to a notification + telemetry:
+   *  - `published`           — a new version shipped (from → to).
+   *  - `changed_unversioned` — upstream changed but SKILL.md version not bumped;
+   *    the immutable current version is left untouched (updateSkill's
+   *    VERSION_NOT_INCREMENTED guard fires BEFORE any storage write).
+   *  - `validation_failed`   — the pulled package was rejected by the publish
+   *    rules (validation / breaking-change / deps); nothing was written.
+   *  - `skipped`             — no github source, not drifted, or already synced
+   *    (idempotency guard against a concurrent pod).
+   *  - `error`               — a mechanical/transient failure; drift state is
+   *    left `drifted` so the next tick retries. Never publishes bad content.
+   */
+  async autoPublishFromSource(guid: string): Promise<AutoPublishOutcome> {
+    const existing = await this.skillRepo.findByGuid(guid);
+    if (!existing || existing.source?.type !== "github") {
+      return { status: "skipped", reason: "no_github_source" };
+    }
+    const source = existing.source;
+    if (source.driftState !== "drifted") {
+      return { status: "skipped", reason: `not_drifted:${source.driftState ?? "unknown"}` };
+    }
+    // Idempotency: a concurrent pod may have already published this HEAD.
+    if (source.upstreamHeadSha && source.upstreamHeadSha === source.lastSyncedCommit) {
+      return { status: "skipped", reason: "already_synced" };
+    }
+
+    const fromVersion = existing.latestVersion;
+    const now = new Date();
+    try {
+      // skipValidation deliberately unset — the auto path MUST validate.
+      const detail = await this.refreshSkillFromSource(guid, SYSTEM_SYNC_ACTOR.userId, {
+        userEmail: SYSTEM_SYNC_ACTOR.userEmail,
+        userDisplayName: SYSTEM_SYNC_ACTOR.userDisplayName,
+      });
+      // refreshSkillFromSource rewrites `source` without the drift fields, so
+      // stamp the resolved verdict back on.
+      await this.skillRepo.updateSourceDriftState(guid, {
+        driftState: "in_sync",
+        lastCheckedAt: now,
+      });
+      logger.info(
+        { guid, fromVersion, toVersion: detail.version, actor: SYSTEM_SYNC_ACTOR.userId },
+        "auto-sync published new version",
+      );
+      return { status: "published", fromVersion, toVersion: detail.version };
+    } catch (err) {
+      if (err instanceof AppError && err.code === "VERSION_NOT_INCREMENTED") {
+        await this.skillRepo.updateSourceDriftState(guid, {
+          driftState: "changed_unversioned",
+          lastCheckedAt: now,
+        });
+        logger.warn({ guid }, "auto-sync skipped: upstream changed but SKILL.md version not bumped");
+        return { status: "changed_unversioned" };
+      }
+      if (err instanceof AppError) {
+        // A deliberate publish-rule rejection (validation / breaking change /
+        // deps). The upstream content is unacceptable — never publish it. The
+        // guard fired before any storage write, so nothing partial landed.
+        await this.skillRepo.updateSourceDriftState(guid, {
+          driftState: "broken",
+          lastCheckedAt: now,
+        });
+        logger.warn({ guid, code: err.code }, "auto-sync refused: pulled package failed publish rules");
+        return { status: "validation_failed", reason: `${err.code}: ${err.message}` };
+      }
+      // Mechanical/transient (network, rate limit, malformed fetch) — leave
+      // driftState `drifted` so the next tick retries. Never mislabel or publish.
+      logger.error(
+        { guid, err: err instanceof Error ? err.message : String(err) },
+        "auto-sync errored unexpectedly — leaving drifted for retry",
+      );
+      return { status: "error", reason: err instanceof Error ? err.message : String(err) };
+    }
   }
 
   /**
@@ -849,7 +988,10 @@ export class SkillService {
       skipValidation?: boolean | undefined;
     },
   ): Promise<{ guid: string; source: SkillSource }> {
-    const pulled = await fetchSkillFromGitHub(input);
+    // Authenticate the pull when a token is configured (#1175) — lifts the
+    // 60/hr anonymous ceiling. An explicit input token (tests) wins.
+    const token = await this.resolveSourceSyncToken();
+    const pulled = await fetchSkillFromGitHub({ ...input, token: input.token ?? token });
     const source: SkillSource = {
       type: "github",
       repo: pulled.source.repo,
@@ -897,6 +1039,8 @@ export class SkillService {
       repo: existing.source.repo,
       ref: existing.source.ref,
       path: existing.source.path,
+      // Authenticated re-pull when a token is configured (#1175).
+      token: await this.resolveSourceSyncToken(),
     });
 
     const newSource: SkillSource = {
@@ -1128,18 +1272,21 @@ export class SkillService {
   }
 
   private async downloadPackage(storageKey: string): Promise<Uint8Array> {
-    const presigned = await this.storageClient.getPresignedUrl(
-      (await this.storageBucketResolver()),
-      storageKey,
-    );
-    const res = await fetch(presigned.presignedUrl);
-    if (!res.ok) {
+    // Proxied through chrono-bucket's streaming download (#1196). The storage
+    // client throws on a non-2xx, which we surface as `package_download_failed`
+    // to keep the existing error contract for internal byte-consumers.
+    try {
+      const { bytes } = await this.storageClient.downloadObject(
+        (await this.storageBucketResolver()),
+        storageKey,
+      );
+      return bytes;
+    } catch (err) {
       throw AppError.internalError(
         "package_download_failed",
-        `Failed to download package for key '${storageKey}' (HTTP ${res.status})`,
+        `Failed to download package for key '${storageKey}': ${err instanceof Error ? err.message : String(err)}`,
       );
     }
-    return new Uint8Array(await res.arrayBuffer());
   }
 
   /**
@@ -1365,44 +1512,16 @@ export class SkillService {
       throw AppError.notFound("skill_not_found", `Skill '${idOrName}' not found`);
     }
 
-    // 1a. Resolve the requested version (literal or dist-tag, #463).
-    //     When unset OR empty-string, fall through to the skill doc's
-    //     latest storage. `resolveDistTag` returns `undefined` for
-    //     empty input, which we treat as "no pin requested".
-    let resolvedVersion = skill.latestVersion;
-    let storageKey = skill.storageKey;
-    let metadata: SkillMetadata = skill.metadata;
-    if (version !== undefined && version.length > 0) {
-      const literal = resolveDistTag(skill, version);
-      if (!literal) {
-        // Defensive — resolveDistTag's contract returns string for any
-        // non-empty input, but the type system widens to `| undefined`.
-        // Treat as malformed rather than crash.
-        throw AppError.badRequest(
-          "invalid_version",
-          `Could not resolve version '${version}'`,
-        );
-      }
-      parseVersion(literal); // 400 if malformed, before Mongo lookup
-      const versionDoc = await this.skillVersionRepo.findBySkillAndVersion(skill.guid, literal);
-      if (!versionDoc) {
-        throw AppError.notFound(
-          "skill_version_not_found",
-          `Version '${literal}' not found for skill '${skill.name}'`,
-        );
-      }
-      resolvedVersion = versionDoc.version;
-      storageKey = versionDoc.storageKey;
-      metadata = versionDoc.metadata;
-    }
+    // 1a. Resolve the requested version (literal or dist-tag, #463) to its
+    //     concrete version + storage key + metadata. Empty/undefined → latest.
+    const { resolvedVersion, storageKey, metadata } = await this.resolveVersionStorage(
+      skill,
+      version,
+    );
 
-    // 2. Download ZIP from storage
-    const presigned = await this.storageClient.getPresignedUrl((await this.storageBucketResolver()), storageKey);
-    const response = await fetch(presigned.presignedUrl);
-    if (!response.ok) {
-      throw AppError.internalError("package_download_failed", "Failed to download skill package from storage");
-    }
-    const zipBuffer = new Uint8Array(await response.arrayBuffer());
+    // 2. Download the ZIP from storage, proxied through chrono-bucket's
+    //    streaming endpoint (#1196) — no presigned URL / direct MinIO fetch.
+    const zipBuffer = await this.downloadPackage(storageKey);
 
     // 3. Extract all files
     const zip = await JSZip.loadAsync(zipBuffer);
@@ -1452,6 +1571,80 @@ export class SkillService {
       metadata: metadata as unknown as Record<string, unknown>,
       files,
     };
+  }
+
+  /**
+   * Resolve a requested version (literal or dist-tag; empty/undefined →
+   * latest) to its concrete version string, storage key, and metadata.
+   * Shared by the package-content read paths (getSkillJson, getPackageBytes)
+   * so version resolution lives in one place (#463, #1196).
+   */
+  private async resolveVersionStorage(
+    skill: SkillDocument,
+    version?: string,
+  ): Promise<{ resolvedVersion: string; storageKey: string; metadata: SkillMetadata }> {
+    if (version === undefined || version.length === 0) {
+      return {
+        resolvedVersion: skill.latestVersion,
+        storageKey: skill.storageKey,
+        metadata: skill.metadata,
+      };
+    }
+    const literal = resolveDistTag(skill, version);
+    if (!literal) {
+      // Defensive — resolveDistTag returns a string for any non-empty input,
+      // but the type system widens to `| undefined`.
+      throw AppError.badRequest("invalid_version", `Could not resolve version '${version}'`);
+    }
+    parseVersion(literal); // 400 if malformed, before the Mongo lookup
+    const versionDoc = await this.skillVersionRepo.findBySkillAndVersion(skill.guid, literal);
+    if (!versionDoc) {
+      throw AppError.notFound(
+        "skill_version_not_found",
+        `Version '${literal}' not found for skill '${skill.name}'`,
+      );
+    }
+    return {
+      resolvedVersion: versionDoc.version,
+      storageKey: versionDoc.storageKey,
+      metadata: versionDoc.metadata,
+    };
+  }
+
+  /**
+   * Resolve a skill version's package ZIP bytes from storage.
+   *
+   * Enforces the same object-level visibility gate as the metadata / json
+   * paths (#806): a private skill the actor cannot read 404s as
+   * `skill_not_found` before any storage read. `version` may be a literal or
+   * dist-tag; empty/undefined → latest. Bytes are streamed from chrono-bucket
+   * via the storage client — no presigned URL ever leaves the server (#1196).
+   * Backs `GET /skills/:idOrName/versions/:version/download` and the audit
+   * pipeline. Trusted server jobs pass `SYSTEM_ACTOR`.
+   */
+  async getPackageBytes(
+    idOrName: string,
+    actor: ActorContext,
+    version?: string,
+  ): Promise<{ bytes: Uint8Array; name: string; version: string }> {
+    let skill = await this.skillRepo.findByGuid(idOrName);
+    if (!skill) skill = await this.skillRepo.findByName(idOrName);
+    if (!skill) {
+      throw AppError.notFound("skill_not_found", `Skill '${idOrName}' not found`);
+    }
+    if (!canReadSkill(skill, actor)) {
+      logger.info({ idOrName, actorUserId: actor.userId }, "getPackageBytes visibility denied");
+      throw AppError.notFound("skill_not_found", `Skill '${idOrName}' not found`);
+    }
+    const { resolvedVersion, storageKey } = await this.resolveVersionStorage(skill, version);
+    if (!storageKey) {
+      throw AppError.notFound(
+        "skill_package_not_found",
+        `No package stored for skill '${skill.name}'`,
+      );
+    }
+    const bytes = await this.downloadPackage(storageKey);
+    return { bytes, name: skill.name, version: resolvedVersion };
   }
 
   /**
@@ -1999,7 +2192,10 @@ export class SkillService {
         (await this.skillVersionRepo.findLatestBySkill(skill.guid)) ?? undefined;
     }
 
-    const storageKey = effectiveOverlay?.storageKey ?? skill.storageKey;
+    // Package downloads are proxied through `GET /skills/:idOrName/versions/
+    // :version/download` (#1196); the detail response no longer carries a
+    // presigned URL, so there is no per-read storage round-trip here and no
+    // direct-to-MinIO URL ever reaches a client.
     const metadata = effectiveOverlay?.metadata ?? skill.metadata;
     const skillHash = effectiveOverlay?.skillHash ?? skill.skillHash;
     const license = effectiveOverlay ? effectiveOverlay.license : skill.license;
@@ -2007,16 +2203,6 @@ export class SkillService {
     const version = effectiveOverlay?.version ?? skill.latestVersion;
     const isDeprecated = effectiveOverlay?.isDeprecated === true;
     const deprecationNote = effectiveOverlay?.deprecationNote ?? null;
-
-    let presignedPackageUrl = "";
-    if (storageKey) {
-      try {
-        const result = await this.storageClient.getPresignedUrl((await this.storageBucketResolver()), storageKey);
-        presignedPackageUrl = result.presignedUrl;
-      } catch (err) {
-        logger.warn({ guid: skill.guid, version, err }, "Presigned URL generation failed");
-      }
-    }
 
     const tags: string[] = metadata?.tags ?? [];
 
@@ -2029,7 +2215,6 @@ export class SkillService {
       metadata: metadata as unknown as Record<string, unknown>,
       tags,
       skillHash,
-      presignedPackageUrl,
       isPrivate: skill.isPrivate,
       createdBy: skill.createdBy,
       createdByEmail: skill.createdByEmail,
@@ -2059,6 +2244,19 @@ export class SkillService {
               : {}),
             ...(typeof skill.source.lastSyncedCommit === "string" && skill.source.lastSyncedCommit
               ? { lastSyncedCommit: skill.source.lastSyncedCommit }
+              : {}),
+            // Drift-detection state (#1176/#1177) — surfaced on GET so the
+            // frontend renders the auto-sync badge (#1178) from the last
+            // scheduled check without a bespoke endpoint. `etag` stays
+            // internal (a conditional-request cache detail, not client-facing).
+            ...(typeof skill.source.upstreamHeadSha === "string" && skill.source.upstreamHeadSha
+              ? { upstreamHeadSha: skill.source.upstreamHeadSha }
+              : {}),
+            ...(skill.source.lastCheckedAt instanceof Date
+              ? { lastCheckedAt: skill.source.lastCheckedAt.toISOString() }
+              : {}),
+            ...(typeof skill.source.driftState === "string"
+              ? { driftState: skill.source.driftState }
               : {}),
           }
         : undefined,

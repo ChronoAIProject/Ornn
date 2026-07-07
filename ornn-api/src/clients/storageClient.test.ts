@@ -75,15 +75,10 @@ describe("StorageClient SSRF preflight (#811)", () => {
     expect(fetchCalls).toHaveLength(0);
   });
 
-  it("getPresignedUrl() refuses a rebound host before issuing the request", async () => {
-    await expect(makeClient().getPresignedUrl("b", "k")).rejects.toBeInstanceOf(
+  it("downloadObject() refuses a rebound host before issuing the request", async () => {
+    await expect(makeClient().downloadObject("b", "k")).rejects.toBeInstanceOf(
       SsrfRefusalError,
     );
-    expect(fetchCalls).toHaveLength(0);
-  });
-
-  it("copy() refuses a rebound host before issuing the request", async () => {
-    await expect(makeClient().copy("b", "s", "d")).rejects.toBeInstanceOf(SsrfRefusalError);
     expect(fetchCalls).toHaveLength(0);
   });
 
@@ -93,5 +88,27 @@ describe("StorageClient SSRF preflight (#811)", () => {
     expect(out).toEqual({ url: "x" });
     expect(fetchCalls).toHaveLength(1);
     expect(fetchCalls[0]).toContain("http://rebind.test/api/buckets/b/objects");
+  });
+
+  it("downloadObject() streams raw bytes from the /objects/download endpoint", async () => {
+    process.env[ALLOWLIST_ENV] = "rebind.test";
+    // The default beforeEach stub returns a JSON envelope; downloadObject reads
+    // the body as raw bytes, so this test serves a binary Response instead.
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url =
+        typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      fetchCalls.push(url);
+      return new Response(new Uint8Array([1, 2, 3]), {
+        status: 200,
+        headers: { "Content-Type": "application/zip", "Content-Length": "3" },
+      });
+    }) as typeof fetch;
+
+    const out = await makeClient().downloadObject("b", "skills/g/1.0.zip");
+    expect(Array.from(out.bytes)).toEqual([1, 2, 3]);
+    expect(out.contentType).toBe("application/zip");
+    expect(out.contentLength).toBe(3);
+    expect(fetchCalls).toHaveLength(1);
+    expect(fetchCalls[0]).toContain("/api/buckets/b/objects/download?key=");
   });
 });

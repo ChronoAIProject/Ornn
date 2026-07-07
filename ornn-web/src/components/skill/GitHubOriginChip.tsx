@@ -9,6 +9,7 @@
 
 import { useTranslation } from "react-i18next";
 import type { SkillSource } from "@/types/domain";
+import { SourceDriftBadge } from "./SourceDriftBadge";
 
 interface GitHubOriginChipProps {
   source: SkillSource | undefined;
@@ -79,6 +80,9 @@ export function GitHubOriginChip({
       <span className="font-display text-xs uppercase tracking-wider text-meta">
         {t("githubOrigin.label", "Synced from GitHub")}
       </span>
+      {/* Passive auto-sync status (#1178) — read-only; the refresh button below
+          remains the manual override. */}
+      <SourceDriftBadge source={source} />
       <a
         href={repoUrl}
         target="_blank"

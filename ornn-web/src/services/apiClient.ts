@@ -164,13 +164,16 @@ async function handleResponse<T>(response: Response): Promise<ApiResponse<T>> {
 }
 
 /**
- * Execute fetch with proactive token refresh and automatic retry on 401/403.
+ * Execute fetch with proactive token refresh and automatic retry on 401,
+ * returning the raw Response. Shared by the JSON (`fetchWithRetry`) and binary
+ * (`apiGetBinary`) request paths so the auth / refresh / redirect-to-login
+ * logic lives in exactly one place.
  */
-async function fetchWithRetry<T>(
+async function rawFetchWithRetry(
   url: string,
   options: RequestInit,
   retried: boolean = false,
-): Promise<ApiResponse<T>> {
+): Promise<Response> {
   // Proactively refresh expired tokens before sending the request
   if (!retried && getAccessToken()) {
     await useAuthStore.getState().ensureFreshToken();
@@ -197,7 +200,7 @@ async function fetchWithRetry<T>(
           Authorization: `Bearer ${getAccessToken()}`,
         };
 
-        return fetchWithRetry<T>(url, { ...options, headers: newHeaders }, true);
+        return rawFetchWithRetry(url, { ...options, headers: newHeaders }, true);
       }
 
       // Refresh failed for an authenticated user, redirect to login
@@ -209,7 +212,17 @@ async function fetchWithRetry<T>(
     // Anonymous user got 401 — don't redirect, just let the error propagate
   }
 
-  return handleResponse<T>(response);
+  return response;
+}
+
+/**
+ * Execute fetch with retry and parse the JSON `{ data, error }` envelope.
+ */
+async function fetchWithRetry<T>(
+  url: string,
+  options: RequestInit,
+): Promise<ApiResponse<T>> {
+  return handleResponse<T>(await rawFetchWithRetry(url, options));
 }
 
 /**
@@ -223,6 +236,27 @@ export async function apiGet<T>(
     method: "GET",
     headers: createHeaders(),
   });
+}
+
+/**
+ * GET request returning the raw response bytes (auth + refresh applied), for
+ * binary endpoints such as the skill-package download (#1196). Proxies the
+ * bytes through ornn-api so clients never fetch the storage backend directly.
+ * Throws `ApiClientError` on a non-2xx (parsing the RFC 7807 / envelope body).
+ */
+export async function apiGetBinary(
+  path: string,
+  params?: Record<string, string | number | boolean | undefined>,
+): Promise<ArrayBuffer> {
+  const res = await rawFetchWithRetry(buildUrl(path, params), {
+    method: "GET",
+    headers: createHeaders(),
+  });
+  if (!res.ok) {
+    // handleResponse always throws for a non-2xx — reuse its error parsing.
+    await handleResponse<unknown>(res);
+  }
+  return res.arrayBuffer();
 }
 
 /**

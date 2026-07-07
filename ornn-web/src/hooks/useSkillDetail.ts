@@ -42,6 +42,7 @@ import {
   useRefreshSkillFromSource,
 } from "@/hooks/useSkills";
 import { useSkillPackage } from "@/hooks/useSkillPackage";
+import { useSourceDriftProbe } from "@/hooks/useSourceDriftProbe";
 import {
   useStartAudit,
   useAuditSummaryByVersion,
@@ -94,6 +95,10 @@ export function useSkillDetail(idOrName: string | undefined) {
   const refreshMutation = useRefreshSkillFromSource(idOrName ?? "");
   const startAuditMutation = useStartAudit();
 
+  // Lazy on-view drift freshening (#1178) — re-reads the detail once when the
+  // github source's last drift check is stale. See useSourceDriftProbe.
+  useSourceDriftProbe(skill?.source, refetch);
+
   // 7-day pulls totals — feeds the hero "↓ N pulls · 7d" status pill.
   const last7d = useMemo(rangeLast7d, []);
   const { data: pulls7d = [] } = useSkillPulls(skill?.name || skill?.guid, {
@@ -113,7 +118,7 @@ export function useSkillDetail(idOrName: string | undefined) {
     rawZip,
     isLoading: packageLoading,
     error: packageError,
-  } = useSkillPackage(skill?.presignedPackageUrl);
+  } = useSkillPackage(skill?.guid, skill?.version);
 
   // Three access tiers (#1127) from the shared hook — `canWrite` is what
   // lets a write-grantee (not just the owner) see the content-edit UI.

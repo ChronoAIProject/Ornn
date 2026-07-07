@@ -1,0 +1,380 @@
+/**
+ * Source-drift batch job (#1176/#1177) — the body the scheduler fires.
+ *
+ * Enumerates GitHub-sourced skills due for a check, coalesces them by
+ * `(repo, ref)` so a shared upstream costs exactly one probe, and persists
+ * each skill's drift verdict. A broken source (404/private/deleted) marks
+ * the skill `broken` and notifies its owner. A GitHub rate-limit signal
+ * short-circuits the remaining work this tick (the next fire retries). No
+ * single skill's failure is ever allowed to throw out of the loop.
+ *
+ * When `sourceSync.autoPublish` is on (#1177), a detected drift also triggers
+ * an unattended re-publish via the injected `autoPublish` callback; the job
+ * maps the outcome to an owner notification + telemetry. `skill.source_drift_detected`
+ * is emitted for every drift regardless of the autoPublish switch.
+ *
+ * @module domains/skills/crud/sourceDriftJob
+ */
+import type pino from "pino";
+import type { SkillRepository } from "./repository";
+import type { SkillSource } from "../../../shared/types/index";
+import type { SourceSyncSection } from "../../settings/sections/sourceSync";
+import type { AnalyticsEmitter } from "../../../infra/analytics";
+import {
+  resolveRefHeadSha,
+  GitHubSourceNotFoundError,
+  GitHubRateLimitError,
+  type RefHeadProbeInput,
+  type RefHeadProbeResult,
+} from "./utils/githubPull";
+import {
+  classifyProbeResult,
+  pickSourceSyncToken,
+  SYSTEM_SYNC_ACTOR,
+  type AutoPublishOutcome,
+} from "./sourceDrift";
+
+type Candidate = { guid: string; source: SkillSource; ownerId: string };
+
+/** Narrow notifier surface — decoupled from the full NotificationService. */
+export interface SourceSyncNotifier {
+  notifySourceBroken(p: {
+    ownerId: string;
+    skillGuid: string;
+    repo: string;
+    ref: string;
+  }): Promise<void>;
+  notifyAutoSynced(p: {
+    ownerId: string;
+    skillGuid: string;
+    fromVersion: string;
+    toVersion: string;
+  }): Promise<void>;
+  notifyAutoSyncFailed(p: {
+    ownerId: string;
+    skillGuid: string;
+    reason: string;
+  }): Promise<void>;
+}
+
+export interface SourceDriftJobDeps {
+  skillRepo: Pick<
+    SkillRepository,
+    "findGithubSourcedSkills" | "updateSourceDriftState"
+  >;
+  settingsService: { getSourceSync(): Promise<SourceSyncSection> };
+  /** Env fallback token when the settings token is empty. */
+  envTokenFallback?: string | undefined;
+  notifier: SourceSyncNotifier;
+  logger: pino.Logger;
+  /** Test seam for the probe; defaults to the real {@link resolveRefHeadSha}. */
+  probeRefHead?: (
+    repo: string,
+    ref: string,
+    opts?: RefHeadProbeInput,
+  ) => Promise<RefHeadProbeResult>;
+  /**
+   * Auto-publish a drifted skill (#1177). Wired to
+   * `SkillService.autoPublishFromSource` in bootstrap. Only invoked when
+   * `settings.sourceSync.autoPublish` is on. Absent ⇒ detect-only.
+   */
+  autoPublish?: (guid: string) => Promise<AutoPublishOutcome>;
+  /** Optional analytics for drift/auto-sync events. */
+  analyticsEmitter?: Pick<AnalyticsEmitter, "trackPlatformActivity">;
+  /** Max concurrent upstream probes. Default 5. */
+  concurrency?: number;
+  /** Upper bound (ms) on per-group random jitter to spread load. Default 0. */
+  jitterMs?: number;
+}
+
+export interface SourceDriftJobResult {
+  readonly enabled: boolean;
+  readonly groups: number;
+  readonly checked: number;
+  readonly drifted: number;
+  readonly broken: number;
+  readonly skipped: number;
+  /** Versions auto-published this run (#1177). */
+  readonly autoPublished: number;
+  /** Auto-publish refusals (unversioned / validation) this run. */
+  readonly autoSyncFailed: number;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function safePersist(
+  deps: SourceDriftJobDeps,
+  guid: string,
+  patch: Parameters<SkillRepository["updateSourceDriftState"]>[1],
+): Promise<void> {
+  try {
+    await deps.skillRepo.updateSourceDriftState(guid, patch);
+  } catch (err) {
+    deps.logger.warn(
+      { guid, err: err instanceof Error ? err.message : String(err) },
+      "source drift job: persist failed for one skill — continuing",
+    );
+  }
+}
+
+async function safeNotifyBroken(
+  deps: SourceDriftJobDeps,
+  c: Candidate,
+  repo: string,
+  ref: string,
+): Promise<void> {
+  if (!c.ownerId) return; // no known owner to notify
+  try {
+    await deps.notifier.notifySourceBroken({
+      ownerId: c.ownerId,
+      skillGuid: c.guid,
+      repo,
+      ref,
+    });
+  } catch (err) {
+    deps.logger.warn(
+      { guid: c.guid, err: err instanceof Error ? err.message : String(err) },
+      "source drift job: broken-source notify failed — continuing",
+    );
+  }
+}
+
+/** Fire-and-forget analytics for the auto-sync events, under the system actor. */
+function emitActivity(
+  deps: SourceDriftJobDeps,
+  action: "skill.source_drift_detected" | "skill.auto_synced" | "skill.auto_sync_failed",
+  properties: Record<string, unknown>,
+): void {
+  deps.analyticsEmitter?.trackPlatformActivity({
+    userId: SYSTEM_SYNC_ACTOR.userId,
+    userEmail: SYSTEM_SYNC_ACTOR.userEmail,
+    userDisplayName: SYSTEM_SYNC_ACTOR.userDisplayName,
+    action,
+    properties,
+  });
+}
+
+/** Run a notification, swallowing errors — a notify failure must not abort the tick. */
+async function safeNotify(
+  deps: SourceDriftJobDeps,
+  guid: string,
+  fn: () => Promise<void>,
+): Promise<void> {
+  try {
+    await fn();
+  } catch (err) {
+    deps.logger.warn(
+      { guid, err: err instanceof Error ? err.message : String(err) },
+      "source drift job: auto-sync notify failed — continuing",
+    );
+  }
+}
+
+/**
+ * Handle a skill the probe found `drifted`: emit the drift event, and — when
+ * autoPublish is enabled — invoke the publish callback and map its outcome to
+ * a notification + telemetry. Updates `counts` in place. Never throws.
+ */
+async function handleDrifted(
+  deps: SourceDriftJobDeps,
+  c: Candidate,
+  autoPublishOn: boolean,
+  counts: { autoPublished: number; autoSyncFailed: number },
+): Promise<void> {
+  emitActivity(deps, "skill.source_drift_detected", {
+    skillId: c.guid,
+    repo: c.source.repo,
+    ref: c.source.ref,
+    upstreamHeadSha: c.source.upstreamHeadSha,
+  });
+  if (!autoPublishOn || !deps.autoPublish) return;
+
+  let outcome: AutoPublishOutcome;
+  try {
+    outcome = await deps.autoPublish(c.guid);
+  } catch (err) {
+    // autoPublishFromSource is designed not to throw, but stay defensive.
+    deps.logger.error(
+      { guid: c.guid, err: err instanceof Error ? err.message : String(err) },
+      "source drift job: auto-publish threw unexpectedly — continuing",
+    );
+    return;
+  }
+
+  switch (outcome.status) {
+    case "published":
+      counts.autoPublished++;
+      emitActivity(deps, "skill.auto_synced", {
+        skillId: c.guid,
+        fromVersion: outcome.fromVersion,
+        toVersion: outcome.toVersion,
+      });
+      if (c.ownerId) {
+        await safeNotify(deps, c.guid, () =>
+          deps.notifier.notifyAutoSynced({
+            ownerId: c.ownerId,
+            skillGuid: c.guid,
+            fromVersion: outcome.fromVersion,
+            toVersion: outcome.toVersion,
+          }),
+        );
+      }
+      break;
+    case "changed_unversioned":
+    case "validation_failed": {
+      counts.autoSyncFailed++;
+      const reason =
+        outcome.status === "changed_unversioned"
+          ? "upstream changed but SKILL.md version not bumped"
+          : outcome.reason;
+      emitActivity(deps, "skill.auto_sync_failed", { skillId: c.guid, reason });
+      if (c.ownerId) {
+        await safeNotify(deps, c.guid, () =>
+          deps.notifier.notifyAutoSyncFailed({ ownerId: c.ownerId, skillGuid: c.guid, reason }),
+        );
+      }
+      break;
+    }
+    case "error":
+    case "skipped":
+      // Transient error (retried next tick) or idempotent no-op — no notify.
+      break;
+  }
+}
+
+export async function runSourceDriftJob(
+  deps: SourceDriftJobDeps,
+): Promise<SourceDriftJobResult> {
+  const { logger } = deps;
+  const settings = await deps.settingsService.getSourceSync();
+  if (!settings.enabled) {
+    logger.info(
+      "source drift job: disabled (settings.sourceSync.enabled=false) — skipping",
+    );
+    return {
+      enabled: false,
+      groups: 0,
+      checked: 0,
+      drifted: 0,
+      broken: 0,
+      skipped: 0,
+      autoPublished: 0,
+      autoSyncFailed: 0,
+    };
+  }
+
+  const token = pickSourceSyncToken(settings.githubToken, deps.envTokenFallback);
+  const cutoff = new Date(Date.now() - settings.minCheckIntervalMinutes * 60_000);
+  const candidates = await deps.skillRepo.findGithubSourcedSkills({
+    notCheckedSince: cutoff,
+  });
+
+  // Coalesce by (repo, ref): probe each distinct upstream once, then fan the
+  // result out to every skill that points at it.
+  const groups = new Map<string, Candidate[]>();
+  for (const c of candidates) {
+    const key = `${c.source.repo} ${c.source.ref}`;
+    const existing = groups.get(key);
+    if (existing) existing.push(c);
+    else groups.set(key, [c]);
+  }
+
+  const probe = deps.probeRefHead ?? resolveRefHeadSha;
+  const concurrency = Math.max(1, deps.concurrency ?? 5);
+  const jitterMs = deps.jitterMs ?? 0;
+  const autoPublishOn = settings.autoPublish === true && !!deps.autoPublish;
+  const counts = {
+    checked: 0,
+    drifted: 0,
+    broken: 0,
+    skipped: 0,
+    autoPublished: 0,
+    autoSyncFailed: 0,
+  };
+  let rateLimited = false;
+
+  const groupList = [...groups.values()];
+  let cursor = 0; // synchronous claim → each worker gets a unique group index
+
+  async function worker(): Promise<void> {
+    for (;;) {
+      const myIdx = cursor++;
+      if (myIdx >= groupList.length) return;
+      const group = groupList[myIdx]!;
+      if (rateLimited) {
+        counts.skipped += group.length;
+        continue;
+      }
+      const { repo, ref } = group[0]!.source;
+
+      // Belt-and-suspenders — the query already excludes pinned 40-hex refs.
+      if (/^[0-9a-f]{40}$/i.test(ref)) {
+        counts.skipped += group.length;
+        continue;
+      }
+
+      let result: RefHeadProbeResult;
+      try {
+        result = await probe(repo, ref, {
+          token: token || undefined,
+          etag: group[0]!.source.etag,
+        });
+      } catch (err) {
+        if (err instanceof GitHubRateLimitError) {
+          rateLimited = true;
+          counts.skipped += group.length;
+          logger.warn(
+            { repo, ref, retryAfterMs: err.retryAfterMs },
+            "source drift job: GitHub rate-limited — short-circuiting remaining groups this tick",
+          );
+          continue;
+        }
+        if (err instanceof GitHubSourceNotFoundError) {
+          const now = new Date();
+          for (const c of group) {
+            await safePersist(deps, c.guid, { driftState: "broken", lastCheckedAt: now });
+            await safeNotifyBroken(deps, c, repo, ref);
+            counts.broken++;
+          }
+          continue;
+        }
+        // Transient (network / 5xx) — skip this group; the next tick retries.
+        counts.skipped += group.length;
+        logger.warn(
+          { repo, ref, err: err instanceof Error ? err.message : String(err) },
+          "source drift job: probe failed (transient) — skipping group this tick",
+        );
+        continue;
+      }
+
+      const now = new Date();
+      for (const c of group) {
+        const { driftState, patch } = classifyProbeResult(c.source, result);
+        await safePersist(deps, c.guid, { ...patch, lastCheckedAt: now });
+        counts.checked++;
+        if (driftState === "drifted") {
+          counts.drifted++;
+          // Give handleDrifted the just-observed HEAD so the drift event +
+          // auto-publish idempotency guard see the fresh upstream sha.
+          const drifted: Candidate = {
+            ...c,
+            source: { ...c.source, upstreamHeadSha: patch.upstreamHeadSha },
+          };
+          await handleDrifted(deps, drifted, autoPublishOn, counts);
+        }
+      }
+
+      if (jitterMs > 0) await sleep(Math.floor(Math.random() * jitterMs));
+    }
+  }
+
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, groupList.length) }, () => worker()),
+  );
+
+  const summary: SourceDriftJobResult = { enabled: true, groups: groups.size, ...counts };
+  logger.info(summary, "source drift job complete");
+  return summary;
+}

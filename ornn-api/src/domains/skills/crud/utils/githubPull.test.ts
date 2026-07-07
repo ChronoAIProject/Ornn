@@ -5,7 +5,28 @@ import {
   normalizePath,
   normalizeRepoIdentifier,
   parseGithubUrl,
+  authHeaders,
+  resolveRefHeadSha,
+  GitHubSourceNotFoundError,
+  GitHubRateLimitError,
 } from "./githubPull";
+
+/** Records each request's URL + Authorization header, returns caller-chosen responses. */
+function recordingFetch(responder: (url: string) => Response): {
+  impl: typeof fetch;
+  calls: Array<{ url: string; headers: Record<string, string> }>;
+} {
+  const calls: Array<{ url: string; headers: Record<string, string> }> = [];
+  const impl = (async (
+    input: RequestInfo | URL,
+    init?: RequestInit,
+  ): Promise<Response> => {
+    const url = typeof input === "string" ? input : input.toString();
+    calls.push({ url, headers: (init?.headers ?? {}) as Record<string, string> });
+    return responder(url);
+  }) as unknown as typeof fetch;
+  return { impl, calls };
+}
 
 describe("parseGithubUrl", () => {
   test("extracts repo + ref + path from a /tree/ URL", () => {
@@ -290,5 +311,182 @@ Hello world.
     const result = await fetchSkillFromGitHub({ repo: "acme/x" }, fetchMock);
     expect(result.source.ref).toBe("HEAD");
     expect(result.resolvedCommitSha).toBe("headsha");
+  });
+
+  test("token authenticates api.github.com reads but never raw downloads (#1175)", async () => {
+    const authByHost: Record<string, Array<string | undefined>> = {};
+    const impl = (async (
+      input: RequestInfo | URL,
+      init?: RequestInit,
+    ): Promise<Response> => {
+      const url = typeof input === "string" ? input : input.toString();
+      const u = new URL(url);
+      const auth = (init?.headers as Record<string, string> | undefined)?.Authorization;
+      (authByHost[u.host] ??= []).push(auth);
+      if (u.pathname.includes("/commits/")) {
+        return new Response(JSON.stringify({ sha: "s" }), { status: 200 });
+      }
+      if (u.pathname.includes("/contents")) {
+        return new Response(
+          JSON.stringify([
+            {
+              name: "SKILL.md",
+              path: "SKILL.md",
+              type: "file",
+              size: 12,
+              sha: "x",
+              download_url: "https://raw.example/SKILL.md",
+            },
+          ]),
+          { status: 200 },
+        );
+      }
+      if (url.startsWith("https://raw.example/")) {
+        return new Response("---\nname: x\n---\n");
+      }
+      return new Response("nf", { status: 404 });
+    }) as unknown as typeof fetch;
+
+    await fetchSkillFromGitHub(
+      { repo: "acme/x", ref: "main", token: "ghp_secret" },
+      impl,
+    );
+    // Every api.github.com call carried the bearer; the raw CDN host got none.
+    expect(authByHost["api.github.com"]?.every((a) => a === "Bearer ghp_secret")).toBe(true);
+    expect(authByHost["raw.example"]?.every((a) => a === undefined)).toBe(true);
+  });
+});
+
+describe("authHeaders", () => {
+  test("no token → no Authorization", () => {
+    const h = authHeaders();
+    expect(h.Authorization).toBeUndefined();
+    expect(h.Accept).toBe("application/vnd.github+json");
+    expect(h["User-Agent"]).toBeTruthy();
+  });
+  test("empty token → no Authorization", () => {
+    expect(authHeaders("").Authorization).toBeUndefined();
+  });
+  test("non-empty token → Bearer Authorization", () => {
+    expect(authHeaders("ghp_tok").Authorization).toBe("Bearer ghp_tok");
+  });
+});
+
+describe("resolveRefHeadSha", () => {
+  test("pinned 40-hex SHA short-circuits with ZERO http calls", async () => {
+    const { impl, calls } = recordingFetch(
+      () => new Response("must not be called", { status: 500 }),
+    );
+    const sha = "a1b2c3d4".repeat(5); // 40 hex chars
+    const res = await resolveRefHeadSha("acme/x", sha, {}, impl);
+    expect(res).toEqual({ sha, notModified: false });
+    expect(calls.length).toBe(0);
+  });
+
+  test("branch 200 → object.sha + etag; sends Authorization, no If-None-Match", async () => {
+    const { impl, calls } = recordingFetch(
+      () =>
+        new Response(JSON.stringify({ object: { sha: "newsha" } }), {
+          status: 200,
+          headers: { etag: 'W/"abc"' },
+        }),
+    );
+    const res = await resolveRefHeadSha("acme/x", "main", { token: "ghp_t" }, impl);
+    expect(res).toEqual({ sha: "newsha", etag: 'W/"abc"', notModified: false });
+    expect(calls[0]!.url).toContain("/git/ref/heads/main");
+    expect(calls[0]!.headers.Authorization).toBe("Bearer ghp_t");
+    expect(calls[0]!.headers["If-None-Match"]).toBeUndefined();
+  });
+
+  test("304 with stored etag → notModified, replays If-None-Match", async () => {
+    const { impl, calls } = recordingFetch(() => new Response(null, { status: 304 }));
+    const res = await resolveRefHeadSha(
+      "acme/x",
+      "main",
+      { token: "t", etag: 'W/"prev"' },
+      impl,
+    );
+    expect(res).toEqual({ notModified: true });
+    expect(calls[0]!.headers["If-None-Match"]).toBe('W/"prev"');
+  });
+
+  test("no token → request carries no Authorization", async () => {
+    const { impl, calls } = recordingFetch(
+      () => new Response(JSON.stringify({ object: { sha: "s" } }), { status: 200 }),
+    );
+    await resolveRefHeadSha("acme/x", "main", {}, impl);
+    expect(calls[0]!.headers.Authorization).toBeUndefined();
+  });
+
+  test("404 on heads AND tags → GitHubSourceNotFoundError", async () => {
+    const { impl, calls } = recordingFetch(() => new Response("nf", { status: 404 }));
+    await expect(resolveRefHeadSha("acme/x", "gone", {}, impl)).rejects.toBeInstanceOf(
+      GitHubSourceNotFoundError,
+    );
+    expect(calls.length).toBe(2);
+    expect(calls[0]!.url).toContain("/git/ref/heads/gone");
+    expect(calls[1]!.url).toContain("/git/ref/tags/gone");
+  });
+
+  test("404 heads then 200 tags → resolves via tag fallback", async () => {
+    const { impl } = recordingFetch((url) =>
+      url.includes("/git/ref/heads/")
+        ? new Response("nf", { status: 404 })
+        : new Response(JSON.stringify({ object: { sha: "tagsha" } }), { status: 200 }),
+    );
+    const res = await resolveRefHeadSha("acme/x", "v1.0", {}, impl);
+    expect(res.sha).toBe("tagsha");
+  });
+
+  test("slashed branch name keeps its path segments (not %2F)", async () => {
+    const { impl, calls } = recordingFetch(
+      () => new Response(JSON.stringify({ object: { sha: "s" } }), { status: 200 }),
+    );
+    await resolveRefHeadSha("acme/x", "feature/foo", {}, impl);
+    expect(calls[0]!.url).toContain("/git/ref/heads/feature/foo");
+  });
+
+  test("429 → GitHubRateLimitError with Retry-After", async () => {
+    const { impl } = recordingFetch(
+      () => new Response("slow down", { status: 429, headers: { "retry-after": "30" } }),
+    );
+    let err: unknown;
+    try {
+      await resolveRefHeadSha("acme/x", "main", {}, impl);
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toBeInstanceOf(GitHubRateLimitError);
+    expect((err as GitHubRateLimitError).retryAfterMs).toBe(30_000);
+  });
+
+  test("403 with X-RateLimit-Remaining: 0 → GitHubRateLimitError", async () => {
+    const { impl } = recordingFetch(
+      () =>
+        new Response("forbidden", {
+          status: 403,
+          headers: { "x-ratelimit-remaining": "0" },
+        }),
+    );
+    await expect(resolveRefHeadSha("acme/x", "main", {}, impl)).rejects.toBeInstanceOf(
+      GitHubRateLimitError,
+    );
+  });
+
+  test("403 WITHOUT rate-limit signals → generic error (not rate-limit)", async () => {
+    const { impl } = recordingFetch(() => new Response("nope", { status: 403 }));
+    let err: unknown;
+    try {
+      await resolveRefHeadSha("acme/x", "main", {}, impl);
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toBeInstanceOf(Error);
+    expect(err).not.toBeInstanceOf(GitHubRateLimitError);
+  });
+
+  test("500 → generic transient error", async () => {
+    const { impl } = recordingFetch(() => new Response("boom", { status: 500 }));
+    await expect(resolveRefHeadSha("acme/x", "main", {}, impl)).rejects.toThrow(/500/);
   });
 });

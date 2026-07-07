@@ -49,6 +49,7 @@ function fakeSettingsService(initial?: Partial<Record<string, Record<string, unk
     listLlmProviders: async () => [],
     getLlmProvider: async () => null,
     getLaunchPromo: async () => store.get("launchPromo") as never,
+    getSourceSync: async () => store.get("sourceSync") as never,
     invalidateCache: () => {},
   };
   return Object.assign(svc, {

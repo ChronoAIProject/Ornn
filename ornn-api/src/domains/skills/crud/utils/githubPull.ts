@@ -6,10 +6,18 @@
  * the contents API, fetch each file's raw bytes, and build a ZIP in the
  * shape the existing upload pipeline expects (skill-root/SKILL.md, etc.).
  *
- * MVP constraints:
- *   - public repos only (no auth header)
+ * Constraints:
+ *   - public repos only
  *   - single directory, recursive (enumerates via contents API)
  *   - max 200 files / 10 MiB total to keep the pull bounded
+ *
+ * Auth (#1175): every `api.github.com` request may carry an optional
+ * `Authorization: Bearer <token>`. The token is a service-account
+ * credential used ONLY to lift the unauthenticated 60-req/hr-per-IP rate
+ * limit to the authenticated 5,000/hr (with free `304`s) — it grants no
+ * access beyond public content. Raw file downloads (`download_url`, served
+ * from `raw.githubusercontent.com`) stay unauthenticated: they're a
+ * different host with a separate budget and need no credential.
  *
  * @module domains/skills/crud/utils/githubPull
  */
@@ -18,6 +26,87 @@ import JSZip from "jszip";
 import { createLogger } from "../../../../shared/logger";
 import { hasUnsafeSegment } from "../../../../shared/githubNaming";
 const logger = createLogger("githubSkillPull");
+
+const GITHUB_USER_AGENT = "ornn-api/skills-github-pull";
+
+/**
+ * Build headers for an `api.github.com` request. Adds `Authorization` only
+ * when a non-empty token is supplied — so the same code path serves both
+ * authenticated (rate-limit-lifted) and anonymous reads.
+ */
+export function authHeaders(token?: string): Record<string, string> {
+  const headers: Record<string, string> = {
+    Accept: "application/vnd.github+json",
+    "User-Agent": GITHUB_USER_AGENT,
+  };
+  if (typeof token === "string" && token.length > 0) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+  return headers;
+}
+
+/**
+ * Thrown when a repo/ref genuinely doesn't exist (404 on both the branch
+ * and tag ref lookups). A typed error so the drift checker can map it to a
+ * `broken` state without coupling this low-level util to the HTTP-layer
+ * `AppError`.
+ */
+export class GitHubSourceNotFoundError extends Error {
+  constructor(
+    public readonly repo: string,
+    public readonly ref: string,
+  ) {
+    super(`GitHub ref '${ref}' not found in ${repo}`);
+    this.name = "GitHubSourceNotFoundError";
+  }
+}
+
+/**
+ * Thrown when GitHub signals a primary or secondary rate limit (`429`, or
+ * `403` with `X-RateLimit-Remaining: 0` / a `Retry-After` header). Carries
+ * the recommended wait so a batch caller (the drift scheduler, #1176) can
+ * short-circuit the rest of its tick and let the next fire retry.
+ */
+export class GitHubRateLimitError extends Error {
+  constructor(
+    public readonly status: number,
+    public readonly retryAfterMs: number | undefined,
+  ) {
+    super(`GitHub rate limit hit (status ${status})`);
+    this.name = "GitHubRateLimitError";
+  }
+}
+
+/**
+ * Classify a non-OK GitHub response: a rate-limit signal becomes a typed
+ * {@link GitHubRateLimitError} (with the wait derived from `Retry-After` or
+ * `X-RateLimit-Reset`); everything else becomes a generic error the caller
+ * treats as transient. `nowMs` is injected for deterministic tests.
+ */
+function rateLimitOrGeneric(
+  res: Response,
+  context: string,
+  nowMs: number,
+): Error {
+  const retryAfter = res.headers.get("retry-after");
+  const remaining = res.headers.get("x-ratelimit-remaining");
+  const reset = res.headers.get("x-ratelimit-reset");
+  const isRateLimit =
+    res.status === 429 ||
+    (res.status === 403 && (remaining === "0" || retryAfter !== null));
+  if (!isRateLimit) {
+    return new Error(`GitHub API returned ${res.status} for ${context}`);
+  }
+  let retryAfterMs: number | undefined;
+  if (retryAfter !== null) {
+    const secs = Number(retryAfter);
+    if (Number.isFinite(secs)) retryAfterMs = Math.max(0, secs * 1000);
+  } else if (reset !== null) {
+    const resetMs = Number(reset) * 1000;
+    if (Number.isFinite(resetMs)) retryAfterMs = Math.max(0, resetMs - nowMs);
+  }
+  return new GitHubRateLimitError(res.status, retryAfterMs);
+}
 
 export interface GitHubPullInput {
   /** `owner/name`. */
@@ -32,6 +121,30 @@ export interface GitHubPullInput {
   readonly maxFiles?: number | undefined;
   /** Max total bytes. Safety cap. Default 10 MiB. */
   readonly maxTotalBytes?: number | undefined;
+  /**
+   * Service-account token used to authenticate `api.github.com` reads and
+   * lift the rate limit. Absent ⇒ anonymous (rate-limited) reads. Never
+   * sent to raw file downloads.
+   */
+  readonly token?: string | undefined;
+}
+
+/** Options for the cheap HEAD-SHA drift probe. */
+export interface RefHeadProbeInput {
+  /** Auth token — see {@link authHeaders}. */
+  readonly token?: string | undefined;
+  /** Prior ETag for a conditional request; a matching `304` is free. */
+  readonly etag?: string | undefined;
+}
+
+/** Result of {@link resolveRefHeadSha}. */
+export interface RefHeadProbeResult {
+  /** Branch/tag HEAD commit SHA. Absent only when `notModified` is true. */
+  readonly sha?: string | undefined;
+  /** Fresh ETag to persist for the next conditional probe. */
+  readonly etag?: string | undefined;
+  /** True when the server answered `304 Not Modified` (nothing changed). */
+  readonly notModified: boolean;
 }
 
 export interface GitHubPullResult {
@@ -167,11 +280,11 @@ export async function fetchSkillFromGitHub(
   const maxTotalBytes = input.maxTotalBytes ?? DEFAULT_MAX_BYTES;
 
   // Resolve the ref to a concrete commit SHA for audit logging.
-  const resolvedCommitSha = await resolveRefToSha(repo, refInput, fetchImpl);
+  const resolvedCommitSha = await resolveRefToSha(repo, refInput, fetchImpl, input.token);
 
   // Walk the target directory recursively.
   const allFiles: GitHubContentEntry[] = [];
-  await walkContents(repo, resolvedCommitSha, path, fetchImpl, allFiles);
+  await walkContents(repo, resolvedCommitSha, path, fetchImpl, allFiles, input.token);
 
   if (allFiles.length === 0) {
     throw new Error(`No files found under '${path || "/"}' in ${repo}@${refInput}`);
@@ -244,18 +357,84 @@ export async function fetchSkillFromGitHub(
   };
 }
 
+/** Encode a slash-bearing ref (e.g. `feature/x`) segment-by-segment so the
+ * git-ref path stays intact instead of collapsing `/` into `%2F`. */
+function encodeRefPath(ref: string): string {
+  return ref.split("/").map(encodeURIComponent).join("/");
+}
+
+/**
+ * Cheap drift probe: resolve a branch/tag HEAD to its commit SHA using the
+ * lightweight `git/ref` endpoint (~200-byte body vs. the multi-KB commits
+ * API), with optional ETag conditional support.
+ *
+ * - A 40-hex `ref` is a pinned commit — it can never drift, so we return it
+ *   immediately with NO network call.
+ * - Branches resolve via `git/ref/heads/<branch>`. On a `404` we fall back
+ *   to `git/ref/tags/<tag>` before declaring the source missing.
+ * - A stored `etag` yields a `304 Not Modified` when nothing changed, which
+ *   (for authenticated requests) does not count against the rate limit.
+ *
+ * Caveat: for an *annotated* tag, `object.sha` is the tag object SHA, not
+ * the underlying commit — so a tag-sourced skill's drift comparison is
+ * best-effort. Branches and pinned SHAs (the common cases) compare exactly;
+ * the full-pull path (`resolveRefToSha`) remains the source of truth.
+ */
+export async function resolveRefHeadSha(
+  repo: string,
+  ref: string,
+  opts: RefHeadProbeInput = {},
+  fetchImpl: typeof fetch = globalThis.fetch,
+): Promise<RefHeadProbeResult> {
+  const normalizedRepo = normalizeRepoIdentifier(repo);
+  const trimmedRef = ref.trim();
+  if (/^[0-9a-f]{40}$/i.test(trimmedRef)) {
+    // Pinned commit SHA — immutable, no HTTP needed.
+    return { sha: trimmedRef, notModified: false };
+  }
+
+  const headers = authHeaders(opts.token);
+  if (typeof opts.etag === "string" && opts.etag.length > 0) {
+    headers["If-None-Match"] = opts.etag;
+  }
+
+  const probe = async (
+    refType: "heads" | "tags",
+  ): Promise<RefHeadProbeResult | "not-found"> => {
+    const url = `https://api.github.com/repos/${normalizedRepo}/git/ref/${refType}/${encodeRefPath(trimmedRef)}`;
+    const res = await fetchImpl(url, { headers });
+    if (res.status === 304) return { notModified: true };
+    if (res.status === 404) return "not-found";
+    if (!res.ok) {
+      // A 403/429 rate-limit signal becomes a typed error so the batch
+      // caller can back off; anything else is treated as transient.
+      throw rateLimitOrGeneric(res, `${normalizedRepo}@${trimmedRef}`, Date.now());
+    }
+    const body = (await res.json()) as { object?: { sha?: string } };
+    const sha = body.object?.sha;
+    if (!sha) {
+      throw new Error(
+        `GitHub git/ref API returned no object SHA for ${normalizedRepo}@${trimmedRef}`,
+      );
+    }
+    return { sha, etag: res.headers.get("etag") ?? undefined, notModified: false };
+  };
+
+  const asBranch = await probe("heads");
+  if (asBranch !== "not-found") return asBranch;
+  const asTag = await probe("tags");
+  if (asTag !== "not-found") return asTag;
+  throw new GitHubSourceNotFoundError(normalizedRepo, trimmedRef);
+}
+
 async function resolveRefToSha(
   repo: string,
   ref: string,
   fetchImpl: typeof fetch,
+  token?: string,
 ): Promise<string> {
   const url = `https://api.github.com/repos/${repo}/commits/${encodeURIComponent(ref)}`;
-  const res = await fetchImpl(url, {
-    headers: {
-      Accept: "application/vnd.github+json",
-      "User-Agent": "ornn-api/skills-github-pull",
-    },
-  });
+  const res = await fetchImpl(url, { headers: authHeaders(token) });
   if (res.status === 404) {
     throw new Error(`Ref '${ref}' not found in ${repo}`);
   }
@@ -277,15 +456,11 @@ async function walkContents(
   path: string,
   fetchImpl: typeof fetch,
   out: GitHubContentEntry[],
+  token?: string,
 ): Promise<void> {
   const encodedPath = path ? `/${encodeURI(path)}` : "";
   const url = `https://api.github.com/repos/${repo}/contents${encodedPath}?ref=${encodeURIComponent(ref)}`;
-  const res = await fetchImpl(url, {
-    headers: {
-      Accept: "application/vnd.github+json",
-      "User-Agent": "ornn-api/skills-github-pull",
-    },
-  });
+  const res = await fetchImpl(url, { headers: authHeaders(token) });
   if (res.status === 404) {
     // The target path doesn't exist on this ref. Callers decide whether
     // that's acceptable — for the top-level call it isn't; for an empty
@@ -303,7 +478,7 @@ async function walkContents(
     if (entry.type === "file") {
       out.push(entry);
     } else if (entry.type === "dir") {
-      await walkContents(repo, ref, entry.path, fetchImpl, out);
+      await walkContents(repo, ref, entry.path, fetchImpl, out, token);
     }
     // symlinks, submodules → skip
   }

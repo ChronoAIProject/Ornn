@@ -231,6 +231,21 @@ export interface SkillDocument {
 }
 
 /**
+ * Cached drift verdict from the most recent source-drift check (#1175).
+ * - `in_sync` — upstream HEAD equals `lastSyncedCommit`.
+ * - `drifted` — upstream moved; a re-pull would publish a new version.
+ * - `changed_unversioned` — upstream changed but `SKILL.md` version did not
+ *   advance (reserved for the auto-publish phase #1177).
+ * - `broken` — the source repo/ref could not be resolved (404 / made
+ *   private / deleted).
+ */
+export type SkillSourceDriftState =
+  | "in_sync"
+  | "drifted"
+  | "changed_unversioned"
+  | "broken";
+
+/**
  * Origin metadata for a skill pulled from an external source. The `type`
  * discriminator lets future additions (GitLab, Bitbucket, ...) live
  * alongside `github` without touching callers that only care about one.
@@ -256,6 +271,22 @@ export type SkillSource =
        * detection. Absent in the same "linked but not yet synced" state.
        */
       lastSyncedCommit?: string | undefined;
+      /**
+       * Upstream HEAD commit SHA observed by the most recent drift check
+       * (#1175). When present and different from `lastSyncedCommit`, the
+       * upstream has moved. Written by `checkSourceDrift`; never mutates
+       * the package itself.
+       */
+      upstreamHeadSha?: string | undefined;
+      /**
+       * ETag returned by the last `git/ref` probe, replayed via
+       * `If-None-Match` so an unchanged upstream answers with a free `304`.
+       */
+      etag?: string | undefined;
+      /** Wall-clock time of the most recent drift check. */
+      lastCheckedAt?: Date | undefined;
+      /** Cached drift verdict from the last check. See {@link SkillSourceDriftState}. */
+      driftState?: SkillSourceDriftState | undefined;
     };
 
 /**
@@ -360,7 +391,8 @@ export interface SkillDetailResponse {
   metadata: Record<string, unknown>;
   tags: string[];
   skillHash: string;
-  presignedPackageUrl: string;
+  // Package bytes are fetched via `GET /skills/:idOrName/versions/:version/
+  // download` (#1196) — the response no longer carries a presigned URL.
   isPrivate: boolean;
   createdBy: string;
   // Optionals widen to `T | undefined` for exactOptionalPropertyTypes (#657).
@@ -405,6 +437,12 @@ export interface SkillDetailResponse {
         lastSyncedAt?: string | undefined;
         /** Absent in the same "linked but never synced" state. */
         lastSyncedCommit?: string | undefined;
+        /** Upstream HEAD from the last drift check (#1175). */
+        upstreamHeadSha?: string | undefined;
+        /** Wall-clock time of the last drift check (ISO string). */
+        lastCheckedAt?: string | undefined;
+        /** Cached drift verdict. See `SkillSourceDriftState`. */
+        driftState?: SkillSourceDriftState | undefined;
       }
     | undefined;
   /** NyxID service tie (null when untied). See `SkillDocument.nyxidServiceId`. */

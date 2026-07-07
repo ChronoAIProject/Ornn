@@ -225,4 +225,15 @@ describe("validateSkillFrontmatter — depends-on grammar (#968)", () => {
     const msg = r.errors.find((e) => e.field === "metadata.depends-on.0")?.message ?? "";
     expect(msg).toContain("depends-on entries must be non-empty");
   });
+
+  test("description at the 1536 cap passes; 1537 fails", () => {
+    // Cap aligned with Claude Code's skill-listing truncation (#1180 follow-up).
+    const ok = validateSkillFrontmatter(base({ description: "x".repeat(1536) }));
+    expect(ok.success).toBe(true);
+
+    const tooLong = validateSkillFrontmatter(base({ description: "x".repeat(1537) }));
+    expect(tooLong.success).toBe(false);
+    if (tooLong.success) return;
+    expect(tooLong.errors.some((e) => e.field === "description")).toBe(true);
+  });
 });

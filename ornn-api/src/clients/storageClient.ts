@@ -11,8 +11,17 @@ const logger = createLogger("storageClient");
 export interface IStorageClient {
   upload(bucket: string, key: string, data: Uint8Array, contentType: string): Promise<{ url: string }>;
   delete(bucket: string, key: string): Promise<void>;
-  getPresignedUrl(bucket: string, key: string, expiresIn?: number): Promise<{ presignedUrl: string; expiresAt: string }>;
-  copy(bucket: string, sourceKey: string, destKey: string): Promise<void>;
+  /**
+   * Stream an object's raw bytes from chrono-bucket's
+   * `GET /api/buckets/:bucket/objects/download?key=` endpoint. Replaces the
+   * removed presigned-URL flow (#1196): chrono-bucket no longer hands out
+   * direct S3 URLs, so every read is proxied through this client instead of a
+   * client fetching MinIO directly.
+   */
+  downloadObject(
+    bucket: string,
+    key: string,
+  ): Promise<{ bytes: Uint8Array; contentType: string; contentLength?: number }>;
 }
 
 /**
@@ -102,48 +111,33 @@ export class StorageClient implements IStorageClient {
     logger.debug({ bucket, key }, "File deleted from storage");
   }
 
-  async getPresignedUrl(
+  async downloadObject(
     bucket: string,
     key: string,
-    expiresIn?: number,
-  ): Promise<{ presignedUrl: string; expiresAt: string }> {
+  ): Promise<{ bytes: Uint8Array; contentType: string; contentLength?: number }> {
     const baseUrl = await this.resolveBaseUrl();
     const params = new URLSearchParams({ key });
-    if (expiresIn !== undefined) {
-      params.set("expiresIn", String(expiresIn));
-    }
-    const url = `${baseUrl}/api/buckets/${bucket}/presigned-url?${params.toString()}`;
+    const url = `${baseUrl}/api/buckets/${bucket}/objects/download?${params.toString()}`;
 
     const auth = await this.authHeaders();
     const res = await safeFetch(url, { method: "GET", headers: auth });
 
     if (!res.ok) {
       const text = await res.text().catch(() => "");
-      logger.error({ status: res.status, bucket, key }, "Storage presigned URL failed");
-      throw new Error(`Storage presigned URL failed (${res.status}): ${text}`);
+      logger.error({ status: res.status, bucket, key }, "Storage download failed");
+      throw new Error(`Storage download failed (${res.status}): ${text}`);
     }
 
-    const json = (await res.json()) as { data: { presignedUrl: string; expiresAt: string } };
-    return json.data;
-  }
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    const contentType = res.headers.get("content-type") ?? "application/octet-stream";
+    const lenHeader = res.headers.get("content-length");
+    const contentLength = lenHeader !== null ? Number(lenHeader) : NaN;
+    logger.debug({ bucket, key, bytes: bytes.byteLength }, "File downloaded from storage");
 
-  async copy(bucket: string, sourceKey: string, destKey: string): Promise<void> {
-    const baseUrl = await this.resolveBaseUrl();
-    const url = `${baseUrl}/api/buckets/${bucket}/objects/copy`;
-
-    const auth = await this.authHeaders();
-    const res = await safeFetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...auth },
-      body: JSON.stringify({ sourceKey, destKey }),
-    });
-
-    if (!res.ok) {
-      const text = await res.text().catch(() => "");
-      logger.error({ status: res.status, bucket, sourceKey, destKey }, "Storage copy failed");
-      throw new Error(`Storage copy failed (${res.status}): ${text}`);
-    }
-
-    logger.debug({ bucket, sourceKey, destKey }, "File copied in storage");
+    // exactOptionalPropertyTypes (#657): only attach contentLength when the
+    // header was present and numeric — never assign an explicit `undefined`.
+    return Number.isFinite(contentLength)
+      ? { bytes, contentType, contentLength }
+      : { bytes, contentType };
   }
 }

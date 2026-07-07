@@ -4,7 +4,13 @@
  */
 
 import type { Collection, Db, Document } from "mongodb";
-import type { SkillDocument, SkillGrant, SkillMetadata } from "../../../shared/types/index";
+import type {
+  SkillDocument,
+  SkillGrant,
+  SkillMetadata,
+  SkillSource,
+  SkillSourceDriftState,
+} from "../../../shared/types/index";
 import { AppError } from "../../../shared/types/index";
 import { createLogger } from "../../../shared/logger";
 import { coerceStoredGrants, legacyListsFromGrants } from "./grants";
@@ -165,6 +171,13 @@ export class SkillRepository {
       this.collection.createIndex({ createdBy: 1, createdOn: -1 }),
       this.collection.createIndex({ createdOn: -1 }),
       this.collection.createIndex({ isPrivate: 1, createdOn: -1 }),
+      // Source-drift scan (#1176): partial index over github-sourced skills
+      // only, ordered by last-checked so the scheduler's "due for a check"
+      // query stays cheap as the catalogue grows.
+      this.collection.createIndex(
+        { "source.lastCheckedAt": 1 },
+        { partialFilterExpression: { "source.type": "github" } },
+      ),
     ]);
   }
 
@@ -347,6 +360,79 @@ export class SkillRepository {
       },
     );
     return this.findByGuid(guid);
+  }
+
+  /**
+   * Persist the drift-detection fields on a skill's `source` (#1175). Only
+   * touches `source.*` drift keys via dot-paths — it never rewrites the
+   * whole `source` object (so it can't race with a concurrent refresh that
+   * updated `lastSyncedCommit`) and never touches the package or version
+   * history. A no-op when the skill has no `source`.
+   *
+   * `updatedOn`/`updatedBy` are deliberately NOT bumped: a drift check is a
+   * background read, not a user edit, and must not disturb sort-by-updated
+   * ordering.
+   */
+  async updateSourceDriftState(
+    guid: string,
+    patch: {
+      driftState?: SkillSourceDriftState;
+      upstreamHeadSha?: string;
+      etag?: string;
+      lastCheckedAt?: Date;
+    },
+  ): Promise<void> {
+    const setFields: Record<string, unknown> = {};
+    if (patch.driftState !== undefined) setFields["source.driftState"] = patch.driftState;
+    if (patch.upstreamHeadSha !== undefined)
+      setFields["source.upstreamHeadSha"] = patch.upstreamHeadSha;
+    if (patch.etag !== undefined) setFields["source.etag"] = patch.etag;
+    if (patch.lastCheckedAt !== undefined)
+      setFields["source.lastCheckedAt"] = patch.lastCheckedAt;
+    if (Object.keys(setFields).length === 0) return;
+
+    await this.collection.updateOne(
+      { _id: skillId(guid), source: { $exists: true } },
+      { $set: setFields },
+    );
+  }
+
+  /**
+   * Enumerate GitHub-sourced skills due for a drift check (#1176). Selects
+   * skills whose source is github, whose `ref` is NOT a pinned 40-hex SHA
+   * (those can never drift), and which were either never checked or last
+   * checked before `notCheckedSince`. Returns light `{ guid, source }`
+   * projections — the scheduler coalesces them by `(repo, ref)`.
+   */
+  async findGithubSourcedSkills(opts: {
+    notCheckedSince: Date;
+  }): Promise<Array<{ guid: string; source: SkillSource; ownerId: string }>> {
+    const docs = await this.collection
+      .find(
+        {
+          "source.type": "github",
+          // Exclude pinned commit SHAs — a 40-hex ref never moves.
+          "source.ref": { $not: /^[0-9a-f]{40}$/i },
+          $or: [
+            { "source.lastCheckedAt": { $exists: false } },
+            { "source.lastCheckedAt": { $lt: opts.notCheckedSince } },
+          ],
+        },
+        { projection: { source: 1, createdBy: 1 } },
+      )
+      .toArray();
+    const out: Array<{ guid: string; source: SkillSource; ownerId: string }> = [];
+    for (const doc of docs) {
+      const source = coerceSkillSource(doc.source);
+      if (source) {
+        out.push({
+          guid: String(doc._id),
+          source,
+          ownerId: typeof doc.createdBy === "string" ? doc.createdBy : "",
+        });
+      }
+    }
+    return out;
   }
 
   /**
@@ -890,6 +976,44 @@ export class SkillRepository {
   }
 }
 
+/**
+ * Coerce a stored `source` sub-document into the typed `SkillSource`,
+ * omitting absent optional fields so we never fabricate an Invalid Date.
+ * Shared by `mapDoc` and `findGithubSourcedSkills` (#1176). Returns
+ * `undefined` for hand-uploaded skills (no `source`).
+ */
+function coerceSkillSource(raw: unknown): SkillSource | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const s = raw as Record<string, unknown>;
+  return {
+    type: "github",
+    repo: String(s.repo ?? ""),
+    ref: String(s.ref ?? ""),
+    path: String(s.path ?? ""),
+    ...(s.lastSyncedAt instanceof Date
+      ? { lastSyncedAt: s.lastSyncedAt }
+      : s.lastSyncedAt != null
+        ? { lastSyncedAt: new Date(s.lastSyncedAt as string | number) }
+        : {}),
+    ...(typeof s.lastSyncedCommit === "string" && s.lastSyncedCommit
+      ? { lastSyncedCommit: s.lastSyncedCommit }
+      : {}),
+    // Drift-detection fields (#1175). Absent until the first drift check.
+    ...(typeof s.upstreamHeadSha === "string" && s.upstreamHeadSha
+      ? { upstreamHeadSha: s.upstreamHeadSha }
+      : {}),
+    ...(typeof s.etag === "string" && s.etag ? { etag: s.etag } : {}),
+    ...(s.lastCheckedAt instanceof Date
+      ? { lastCheckedAt: s.lastCheckedAt }
+      : s.lastCheckedAt != null
+        ? { lastCheckedAt: new Date(s.lastCheckedAt as string | number) }
+        : {}),
+    ...(typeof s.driftState === "string"
+      ? { driftState: s.driftState as SkillSourceDriftState }
+      : {}),
+  };
+}
+
 function mapDoc(doc: Document | null): SkillDocument | null {
   if (!doc) return null;
   return {
@@ -919,26 +1043,7 @@ function mapDoc(doc: Document | null): SkillDocument | null {
     // to fall back to read-grants derived from the legacy lists.
     grants: coerceStoredGrants(doc.grants),
     latestVersion: doc.latestVersion ?? "0.1",
-    source: doc.source
-      ? {
-          type: "github",
-          repo: String(doc.source.repo ?? ""),
-          ref: String(doc.source.ref ?? ""),
-          path: String(doc.source.path ?? ""),
-          // Both fields are optional — when the user attached a GitHub
-          // link via PUT /skills/:id/source without an immediate sync,
-          // they're absent from the doc. Don't fabricate an Invalid
-          // Date by feeding `undefined` to the Date constructor.
-          ...(doc.source.lastSyncedAt instanceof Date
-            ? { lastSyncedAt: doc.source.lastSyncedAt }
-            : doc.source.lastSyncedAt != null
-              ? { lastSyncedAt: new Date(doc.source.lastSyncedAt) }
-              : {}),
-          ...(typeof doc.source.lastSyncedCommit === "string" && doc.source.lastSyncedCommit
-            ? { lastSyncedCommit: doc.source.lastSyncedCommit }
-            : {}),
-        }
-      : undefined,
+    source: coerceSkillSource(doc.source),
     nyxidServiceId: typeof doc.nyxidServiceId === "string" ? doc.nyxidServiceId : null,
     nyxidServiceSlug: typeof doc.nyxidServiceSlug === "string" ? doc.nyxidServiceSlug : null,
     nyxidServiceLabel: typeof doc.nyxidServiceLabel === "string" ? doc.nyxidServiceLabel : null,
