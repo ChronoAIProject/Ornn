@@ -1,0 +1,5 @@
+---
+"ornn-api": patch
+---
+
+Fix every URL published in the OpenAPI document (#1213). `GET /api/v1/openapi.json` is the contract agent developers read first — NyxID renders it on the ornn-api service page — and none of it resolved. Paths were published under `/api/*` while the router has served `/api/v1/*` since the version cut in #101, so following the spec produced 404s. `servers[0].url` was hardcoded to `http://localhost:3802`, a host no client can reach; it now comes from `ORNN_API_BASE_URL` (the same var ornn-web already uses to reach the API), falling back to `http://localhost:${PORT}` when unset. `info.version` was frozen at `"2.0.0"` and now reports the real package version. Four `/admin/categories` and `/admin/tags` paths documenting eight operations that exist nowhere in the codebase are removed, along with the five Zod schemas that only fed them. A new contract test boots the app and checks every documented path+method against Hono's live route table, so a spec entry that names a route the API does not serve now fails CI instead of shipping.
