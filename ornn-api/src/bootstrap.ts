@@ -1121,8 +1121,12 @@ export async function bootstrap(
   apiApp.route("/", createUserRoutes({ userDirectoryRepo }));
   app.route("/api/v1", apiApp);
 
-  // OpenAPI spec — auto-generated from Zod schemas
-  const spec = buildSpec();
+  // OpenAPI spec — schemas generated from Zod, deployment-specific values
+  // injected from config so nothing environment-shaped is baked in (#1213).
+  const spec = buildSpec({
+    serverUrl: config.ornnApiBaseUrl,
+    version: pkg.version,
+  });
   app.get("/api/v1/openapi.json", (c) => c.json(spec));
 
   // Kubernetes liveness probe — process is alive. No dependency checks.

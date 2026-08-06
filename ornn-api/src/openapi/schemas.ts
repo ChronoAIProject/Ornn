@@ -214,37 +214,3 @@ export const assistantChatEventSchema = z.discriminatedUnion("type", [
       .optional(),
   }),
 ]);
-
-// ---------------------------------------------------------------------------
-// Admin
-// ---------------------------------------------------------------------------
-
-export const categorySchema = z.object({
-  _id: z.string(),
-  name: z.string(),
-  description: z.string(),
-  createdAt: z.string(),
-  updatedAt: z.string(),
-});
-
-export const createCategoryBodySchema = z.object({
-  name: z.enum(["plain", "tool-based", "runtime-based", "mixed"]),
-  slug: z.string().min(1).max(50).regex(/^[a-z0-9-]+$/),
-  description: z.string().min(1).max(500),
-  order: z.number().int().min(0).optional(),
-});
-
-export const updateCategoryBodySchema = z.object({
-  description: z.string().min(1).max(500).optional(),
-  order: z.number().int().min(0).optional(),
-});
-
-export const tagSchema = z.object({
-  _id: z.string(),
-  name: z.string(),
-  createdAt: z.string(),
-});
-
-export const createTagBodySchema = z.object({
-  name: z.string().min(1).max(30).regex(/^[a-z0-9-_]+$/),
-});

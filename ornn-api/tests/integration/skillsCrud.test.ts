@@ -35,7 +35,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await harness.cleanup();
-});
+}, 30_000);
 
 beforeEach(async () => {
   await harness.db.collection("skills").deleteMany({});

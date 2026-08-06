@@ -28,7 +28,16 @@ export interface Harness {
   readonly db: Db;
   /** Mongo connection string for external tooling (rare). */
   readonly mongoUri: string;
-  /** Tear down shutdown + stop the memory server. Idempotent. */
+  /**
+   * Tear down shutdown + stop the memory server. Idempotent.
+   *
+   * Stops a real `mongod`. Under a loaded full-suite run that regularly
+   * takes longer than bun's 5s hook default, so the `afterAll` calling
+   * this MUST pass an explicit timeout (`}, 30_000)`) — otherwise the
+   * hook is killed mid-teardown, the test file is reported as a failure,
+   * and the orphaned process surfaces as `killed N dangling processes`
+   * (#1215).
+   */
   readonly cleanup: () => Promise<void>;
 }
 

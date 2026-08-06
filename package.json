@@ -39,11 +39,13 @@
   },
   "overrides": {
     "picomatch": "^4.0.4",
-    "postcss": "^8.5.10",
+    "postcss": "^8.5.18",
     "dompurify": "^3.3.4",
     "uuid": "^14.0.0",
     "eslint": "10.2.0",
     "eslint-plugin-react-hooks": "7.0.1",
-    "undici": "^7.28.0"
+    "undici": "^7.29.0",
+    "brace-expansion": "^5.0.8",
+    "js-yaml": "^4.3.0"
   }
 }

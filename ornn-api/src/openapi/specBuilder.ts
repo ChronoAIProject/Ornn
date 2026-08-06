@@ -349,100 +349,31 @@ function assistantChatPath(): PathItem {
   };
 }
 
-function categoriesListCreatePath(): PathItem {
-  return {
-    get: {
-      summary: "List all skill categories",
-      operationId: "listCategories",
-      tags: ["Admin"],
-      security: bearerAuth(),
-      responses: { ...jsonResponse(S.categorySchema.array()), ...errorResponses(401) },
-    },
-    post: {
-      summary: "Create a category",
-      operationId: "createCategory",
-      tags: ["Admin"],
-      security: bearerAuth(),
-      requestBody: {
-        required: true,
-        content: { "application/json": { schema: toSchema(S.createCategoryBodySchema) } },
-      },
-      responses: { ...jsonResponse(S.categorySchema, "Category created"), ...errorResponses(400, 401) },
-    },
-  };
-}
-
-function categoryUpdateDeletePath(): PathItem {
-  return {
-    put: {
-      summary: "Update a category",
-      operationId: "updateCategory",
-      tags: ["Admin"],
-      security: bearerAuth(),
-      parameters: [pathParam("id", "Category ID")],
-      requestBody: {
-        required: true,
-        content: { "application/json": { schema: toSchema(S.updateCategoryBodySchema) } },
-      },
-      responses: { ...jsonResponse(S.categorySchema), ...errorResponses(400, 401, 404) },
-    },
-    delete: {
-      summary: "Delete a category",
-      operationId: "deleteCategory",
-      tags: ["Admin"],
-      security: bearerAuth(),
-      parameters: [pathParam("id", "Category ID")],
-      responses: { ...jsonResponse(S.successResponseSchema), ...errorResponses(401, 404) },
-    },
-  };
-}
-
-function tagsListCreatePath(): PathItem {
-  return {
-    get: {
-      summary: "List tags",
-      operationId: "listTags",
-      tags: ["Admin"],
-      security: bearerAuth(),
-      parameters: [{ name: "type", in: "query", required: false, schema: { type: "string", enum: ["predefined", "custom"] } }],
-      responses: { ...jsonResponse(S.tagSchema.array()), ...errorResponses(401) },
-    },
-    post: {
-      summary: "Create a custom tag",
-      operationId: "createTag",
-      tags: ["Admin"],
-      security: bearerAuth(),
-      requestBody: {
-        required: true,
-        content: { "application/json": { schema: toSchema(S.createTagBodySchema) } },
-      },
-      responses: { ...jsonResponse(S.tagSchema, "Tag created"), ...errorResponses(400, 401) },
-    },
-  };
-}
-
-function tagDeletePath(): PathItem {
-  return {
-    delete: {
-      summary: "Delete a tag",
-      operationId: "deleteTag",
-      tags: ["Admin"],
-      security: bearerAuth(),
-      parameters: [pathParam("id", "Tag ID")],
-      responses: { ...jsonResponse(S.successResponseSchema), ...errorResponses(401, 404) },
-    },
-  };
-}
-
 // ---------------------------------------------------------------------------
 // Spec builders
 // ---------------------------------------------------------------------------
 
-function baseSpec(title: string, description: string): OpenApiSpec {
+/**
+ * Deployment-specific values the spec advertises. Both are caller-supplied
+ * so nothing environment-shaped is baked into the builder (CLAUDE.md:
+ * zero hardcoded config).
+ */
+export interface SpecOptions {
+  /**
+   * Public base URL clients prepend to every path key. No trailing slash,
+   * no `/api/v1` suffix — the paths carry that. Comes from
+   * `config.ornnApiBaseUrl`.
+   */
+  readonly serverUrl: string;
+  /** Package version, reported as `info.version`. */
+  readonly version: string;
+}
+
+function baseSpec(title: string, description: string, options: SpecOptions): OpenApiSpec {
   return {
     openapi: "3.1.0",
-    info: { title, version: "2.0.0", description },
-    servers: [{ url: "http://localhost:3802" }],
+    info: { title, version: options.version, description },
+    servers: [{ url: options.serverUrl }],
     components: {
       securitySchemes: {
         BearerAuth: {
@@ -456,12 +387,17 @@ function baseSpec(title: string, description: string): OpenApiSpec {
   };
 }
 
-export function buildSpec(): OpenApiSpec {
-  const prefix = "/api";
+export function buildSpec(options: SpecOptions): OpenApiSpec {
+  // MUST match the mount prefix in `bootstrap.ts` (`app.route("/api/v1",
+  // apiApp)`) and CONVENTIONS.md §3. This is asserted against the booted
+  // router in `tests/contract/openapiRoutes.test.ts` — do not change one
+  // without the other.
+  const prefix = "/api/v1";
   return {
     ...baseSpec(
       "ornn API",
       "API for ornn — the end-to-end skill life-cycle manager for AI agents. Covers the full life-cycle: skill CRUD, search, AI-powered generation, playground, audit, and admin endpoints — from spec to ship. All endpoints require NyxID authentication via Bearer token. Responses follow a uniform envelope: { data: T | null, error: { code, message } | null }.",
+      options,
     ),
     tags: [
       { name: "Skills", description: "Upload, retrieve, update, delete, and inspect AI skill packages." },
@@ -469,7 +405,6 @@ export function buildSpec(): OpenApiSpec {
       { name: "Generation", description: "Generate complete skill packages from natural language descriptions using AI." },
       { name: "Format", description: "Skill format rules and validation" },
       { name: "Playground", description: "Multi-turn chat playground" },
-      { name: "Admin", description: "Category and tag management" },
     ],
     paths: {
       // Skills CRUD
@@ -493,11 +428,6 @@ export function buildSpec(): OpenApiSpec {
       [`${prefix}/playground/chat`]: playgroundChatPath(),
       // Assistant (#970)
       [`${prefix}/assistant/chat`]: assistantChatPath(),
-      // Admin
-      [`${prefix}/admin/categories`]: categoriesListCreatePath(),
-      [`${prefix}/admin/categories/{id}`]: categoryUpdateDeletePath(),
-      [`${prefix}/admin/tags`]: tagsListCreatePath(),
-      [`${prefix}/admin/tags/{id}`]: tagDeletePath(),
     },
   };
 }

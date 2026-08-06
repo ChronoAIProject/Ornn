@@ -2,6 +2,13 @@ import { describe, test, expect } from "bun:test";
 import { buildSpec } from "./specBuilder";
 
 /**
+ * Deployment-specific values `buildSpec` now takes as arguments (#1213).
+ * Fixed here so assertions are about spec structure, not about whatever
+ * the ambient environment happens to be.
+ */
+const SPEC_OPTIONS = { serverUrl: "https://api.test.invalid", version: "1.2.3" } as const;
+
+/**
  * Contract tests for the generated OpenAPI spec.
  *
  * These assert the spec has the structural properties clients rely on —
@@ -21,7 +28,7 @@ function isRecord(v: unknown): v is Record<string, unknown> {
 }
 
 describe("buildSpec (OpenAPI contract)", () => {
-  const spec = buildSpec();
+  const spec = buildSpec(SPEC_OPTIONS);
 
   test("top-level spec has non-empty paths", () => {
     expect(isRecord(spec.paths)).toBe(true);
@@ -42,7 +49,7 @@ describe("buildSpec (OpenAPI contract)", () => {
   });
 
   describe("per-path invariants", () => {
-    const spec = buildSpec();
+    const spec = buildSpec(SPEC_OPTIONS);
     const paths = spec.paths as Record<string, unknown>;
 
     for (const [pathKey, pathItem] of Object.entries(paths)) {
