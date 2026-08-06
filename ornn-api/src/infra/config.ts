@@ -88,6 +88,18 @@ export interface SkillConfig {
   readonly ornnPublicOrigin: string;
 
   /**
+   * Public base URL callers use to reach ornn-api, with no trailing
+   * slash and no `/api/v1` suffix — spec paths already carry it.
+   * Published as `servers[0].url` in the OpenAPI document.
+   *
+   * In production this is the NyxID proxy base
+   * (`<nyxid>/api/v1/proxy/s/ornn-api`), NOT the ornn-web origin —
+   * `ornn-web/nginx.conf.template` has no `proxy_pass`, so the SPA host
+   * never serves the API. Defaults to `http://localhost:<PORT>`.
+   */
+  readonly ornnApiBaseUrl: string;
+
+  /**
    * Service-account GitHub token for authenticated source-repo reads
    * (#1175). Env fallback used when the `sourceSync` settings section has no
    * token. Public-read only — it lifts the 60/hr anonymous rate ceiling, it
@@ -175,6 +187,24 @@ const envSchema = z.object({
     z.string().url().default("https://ornn.chrono-ai.fun"),
   ),
 
+  /**
+   * Public base URL for ornn-api itself, advertised as `servers[0].url`
+   * in the OpenAPI document (#1213). The SAME var ornn-web already
+   * reads to reach the API, deliberately: two names for one fact is how
+   * the spec drifted out of sync with the router in the first place.
+   *
+   * Distinct from ORNN_PUBLIC_ORIGIN, which is the *web* origin used for
+   * canonical skill links — the API is not served from that host.
+   *
+   * No trailing slash, no `/api/v1` suffix (spec paths supply it).
+   * Unset falls through to `http://localhost:<PORT>` in `loadConfig`,
+   * which is why there is no Zod-level default here.
+   */
+  ORNN_API_BASE_URL: z.preprocess(
+    (v) => (v === "" ? undefined : v),
+    z.string().url().optional(),
+  ),
+
   // Source-sync GitHub token (#1175). Optional — empty means anonymous,
   // rate-limited source reads. The `sourceSync` settings section overrides
   // this at runtime when an admin sets a value there.
@@ -242,6 +272,9 @@ export function loadConfig(): SkillConfig {
     agentsealEnabled: env.AGENTSEAL_ENABLED !== "false",
 
     ornnPublicOrigin: env.ORNN_PUBLIC_ORIGIN.replace(/\/+$/, ""),
+
+    ornnApiBaseUrl: (env.ORNN_API_BASE_URL ?? `http://localhost:${env.PORT}`)
+      .replace(/\/+$/, ""),
 
     sourceSyncGithubToken: env.ORNN_SOURCE_SYNC_GITHUB_TOKEN.trim(),
   };

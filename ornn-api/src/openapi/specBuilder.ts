@@ -438,11 +438,27 @@ function tagDeletePath(): PathItem {
 // Spec builders
 // ---------------------------------------------------------------------------
 
-function baseSpec(title: string, description: string): OpenApiSpec {
+/**
+ * Deployment-specific values the spec advertises. Both are caller-supplied
+ * so nothing environment-shaped is baked into the builder (CLAUDE.md:
+ * zero hardcoded config).
+ */
+export interface SpecOptions {
+  /**
+   * Public base URL clients prepend to every path key. No trailing slash,
+   * no `/api/v1` suffix — the paths carry that. Comes from
+   * `config.ornnApiPublicBaseUrl`.
+   */
+  readonly serverUrl: string;
+  /** Package version, reported as `info.version`. */
+  readonly version: string;
+}
+
+function baseSpec(title: string, description: string, options: SpecOptions): OpenApiSpec {
   return {
     openapi: "3.1.0",
-    info: { title, version: "2.0.0", description },
-    servers: [{ url: "http://localhost:3802" }],
+    info: { title, version: options.version, description },
+    servers: [{ url: options.serverUrl }],
     components: {
       securitySchemes: {
         BearerAuth: {
@@ -456,7 +472,7 @@ function baseSpec(title: string, description: string): OpenApiSpec {
   };
 }
 
-export function buildSpec(): OpenApiSpec {
+export function buildSpec(options: SpecOptions): OpenApiSpec {
   // MUST match the mount prefix in `bootstrap.ts` (`app.route("/api/v1",
   // apiApp)`) and CONVENTIONS.md §3. This is asserted against the booted
   // router in `tests/contract/openapiRoutes.test.ts` — do not change one
@@ -466,6 +482,7 @@ export function buildSpec(): OpenApiSpec {
     ...baseSpec(
       "ornn API",
       "API for ornn — the end-to-end skill life-cycle manager for AI agents. Covers the full life-cycle: skill CRUD, search, AI-powered generation, playground, audit, and admin endpoints — from spec to ship. All endpoints require NyxID authentication via Bearer token. Responses follow a uniform envelope: { data: T | null, error: { code, message } | null }.",
+      options,
     ),
     tags: [
       { name: "Skills", description: "Upload, retrieve, update, delete, and inspect AI skill packages." },

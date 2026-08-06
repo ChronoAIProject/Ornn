@@ -31,6 +31,13 @@
 import { describe, expect, test } from "bun:test";
 import { buildSpec } from "../../src/openapi/specBuilder";
 
+/**
+ * Deployment-specific values `buildSpec` now takes as arguments (#1213).
+ * Fixed here so assertions are about spec structure, not about whatever
+ * the ambient environment happens to be.
+ */
+const SPEC_OPTIONS = { serverUrl: "https://api.test.invalid", version: "1.2.3" } as const;
+
 type Spec = ReturnType<typeof buildSpec>;
 type PathItem = Record<string, unknown>;
 type Operation = {
@@ -63,7 +70,7 @@ function eachOperation(
 }
 
 describe("OpenAPI spec — structural integrity (#462)", () => {
-  const spec = buildSpec();
+  const spec = buildSpec(SPEC_OPTIONS);
 
   test("spec is OpenAPI 3.1", () => {
     expect(spec.openapi).toBe("3.1.0");
@@ -80,6 +87,14 @@ describe("OpenAPI spec — structural integrity (#462)", () => {
     const servers = spec.servers as Array<{ url: string }>;
     expect(servers.length).toBeGreaterThan(0);
     expect(servers[0]!.url).toMatch(/^https?:\/\//);
+  });
+
+  test("server URL and version come from the caller, not the builder", () => {
+    // Both were hardcoded until #1213 — `http://localhost:3802` and a
+    // frozen `"2.0.0"` — so the published spec advertised a server no
+    // client could reach and a version that never moved.
+    expect((spec.servers as Array<{ url: string }>)[0]!.url).toBe(SPEC_OPTIONS.serverUrl);
+    expect((spec.info as { version: string }).version).toBe(SPEC_OPTIONS.version);
   });
 
   test("BearerAuth security scheme is declared", () => {
@@ -111,7 +126,7 @@ describe("OpenAPI spec — structural integrity (#462)", () => {
 });
 
 describe("OpenAPI spec — per-operation metadata (#462)", () => {
-  const spec = buildSpec();
+  const spec = buildSpec(SPEC_OPTIONS);
 
   test("every operation declares at least one tag", () => {
     const violations: string[] = [];
@@ -157,7 +172,7 @@ describe("OpenAPI spec — per-operation metadata (#462)", () => {
 });
 
 describe("OpenAPI spec — RFC 7807 error responses (#456 + #462)", () => {
-  const spec = buildSpec();
+  const spec = buildSpec(SPEC_OPTIONS);
 
   test("every declared 4xx/5xx response uses application/problem+json", () => {
     // Per #456: all error responses are RFC 7807 problem+json. The
@@ -197,7 +212,7 @@ describe("OpenAPI spec — RFC 7807 error responses (#456 + #462)", () => {
 });
 
 describe("OpenAPI spec — operation security declarations (#462)", () => {
-  const spec = buildSpec();
+  const spec = buildSpec(SPEC_OPTIONS);
 
   /**
    * Paths that are explicitly designed to be public (no auth). New
@@ -226,7 +241,7 @@ describe("OpenAPI spec — operation security declarations (#462)", () => {
 });
 
 describe("OpenAPI spec — schema reference integrity", () => {
-  const spec = buildSpec();
+  const spec = buildSpec(SPEC_OPTIONS);
 
   test("declared paths cover the foundational skill CRUD surface", () => {
     // This is a regression test, not a coverage test. The full
