@@ -49,7 +49,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await client.close();
   await mongo.stop();
-});
+}, 30_000);
 
 describe("IT-SETTINGS export/import", () => {
   it("IT-SETTINGS-EXPORT-INCLUDES-ALL-SECTIONS: every defined section is in the envelope", async () => {

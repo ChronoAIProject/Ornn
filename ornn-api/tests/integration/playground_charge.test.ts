@@ -40,7 +40,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await h.cleanup();
-});
+}, 30_000);
 
 beforeEach(async () => {
   await resetCollections(h.db, ["quota_buckets", "platform_settings", "llm_providers"]);

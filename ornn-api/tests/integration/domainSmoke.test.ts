@@ -39,7 +39,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await harness.cleanup();
-});
+}, 30_000);
 
 describe("integration: health probes", () => {
   test("GET /livez returns 200 with service metadata", async () => {

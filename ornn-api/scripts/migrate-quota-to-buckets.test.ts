@@ -14,17 +14,24 @@ let mongo: MongoMemoryServer;
 let client: MongoClient;
 let db: Db;
 
+// This is the first file in the run to touch Mongo, so `create()` here is
+// what pays for downloading and unpacking the mongod binary on a cold
+// cache. That does not fit in bun's 5s hook default: the hook gets killed,
+// `db` is left undefined, and every subsequent hook in the file fails too
+// — which is the `killed 2 dangling processes` flake from #1215. The
+// tests/integration/* harness already passes 30_000 for exactly this
+// reason; this file was just never given the same treatment.
 beforeAll(async () => {
   mongo = await MongoMemoryServer.create();
   client = new MongoClient(mongo.getUri());
   await client.connect();
   db = client.db("migration_test");
-});
+}, 60_000);
 
 afterAll(async () => {
   await client.close();
   await mongo.stop();
-});
+}, 30_000);
 
 beforeEach(async () => {
   await db.collection("user_quotas").deleteMany({});

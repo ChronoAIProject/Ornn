@@ -93,7 +93,7 @@ afterAll(async () => {
   await mock.close();
   await client.close();
   await mongo.stop();
-});
+}, 30_000);
 
 describe("IT-LLM-SYNC", () => {
   it("IT-LLM-SYNC-IDEMPOTENT: second sync with same upstream catalog yields zero changes", async () => {

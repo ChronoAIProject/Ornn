@@ -26,7 +26,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await h.cleanup();
-});
+}, 30_000);
 
 beforeEach(async () => {
   // Wipe per-section settings so each case sets its own state.
