@@ -457,7 +457,11 @@ function baseSpec(title: string, description: string): OpenApiSpec {
 }
 
 export function buildSpec(): OpenApiSpec {
-  const prefix = "/api";
+  // MUST match the mount prefix in `bootstrap.ts` (`app.route("/api/v1",
+  // apiApp)`) and CONVENTIONS.md §3. This is asserted against the booted
+  // router in `tests/contract/openapiRoutes.test.ts` — do not change one
+  // without the other.
+  const prefix = "/api/v1";
   return {
     ...baseSpec(
       "ornn API",

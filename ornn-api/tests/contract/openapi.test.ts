@@ -87,6 +87,18 @@ describe("OpenAPI spec — structural integrity (#462)", () => {
     expect(components.securitySchemes.BearerAuth).toBeDefined();
   });
 
+  test("every declared path carries the /api/v1 mount prefix", () => {
+    // The spec's path table is hand-maintained while the router lives in
+    // `bootstrap.ts`. They drifted once already: the spec published
+    // `/api/*` for months after the router moved to `/api/v1/*` in #101,
+    // so every URL NyxID rendered from this spec was wrong. CONVENTIONS.md
+    // §3 makes `/api/v1/` normative — pin it here so a stale prefix fails
+    // fast, without needing a booted app.
+    const offenders = Object.keys(spec.paths as Record<string, unknown>)
+      .filter((p) => !p.startsWith("/api/v1/"));
+    expect(offenders).toEqual([]);
+  });
+
   test("every declared path has at least one HTTP method", () => {
     const orphans: string[] = [];
     const paths = spec.paths as Record<string, PathItem>;
@@ -195,8 +207,8 @@ describe("OpenAPI spec — operation security declarations (#462)", () => {
    * Keep this list short and review-gated.
    */
   const publicPaths = new Set<string>([
-    "/api/skill-format/rules",
-    "/api/skill-manifest-schema.json",
+    "/api/v1/skill-format/rules",
+    "/api/v1/skill-manifest-schema.json",
   ]);
 
   test("every operation outside the public allowlist declares BearerAuth security", () => {
@@ -222,12 +234,12 @@ describe("OpenAPI spec — schema reference integrity", () => {
     // #462. Here we just pin the routes that have been documented so
     // a refactor doesn't accidentally drop them.
     const required = [
-      "/api/skills",
-      "/api/skills/{idOrName}",
-      "/api/skills/{id}",
-      "/api/skill-search",
-      "/api/skill-format/rules",
-      "/api/skill-manifest-schema.json",
+      "/api/v1/skills",
+      "/api/v1/skills/{idOrName}",
+      "/api/v1/skills/{id}",
+      "/api/v1/skill-search",
+      "/api/v1/skill-format/rules",
+      "/api/v1/skill-manifest-schema.json",
     ];
     const paths = spec.paths as Record<string, unknown>;
     const present = new Set(Object.keys(paths));
