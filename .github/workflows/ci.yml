@@ -197,13 +197,24 @@ jobs:
     # lodash-es is archived at 4.17.21 with no upstream fix; the vulnerable
     # APIs (_.template / _.unset / _.omit) are not reachable through
     # mermaid's surface under our usage.
+    #
+    # Ignored advisory — not reachable, tracked in #1218 / #1219:
+    #   GHSA-qwww-vcr4-c8h2  react-router high  (>=7.12.0 <8.3.0)
+    # "RSC Mode CSRF Bypass". RSC mode requires the `@react-router/*`
+    # server packages — none are in bun.lock. ornn-web is a static Vite
+    # SPA (`vite build`, no SSR target) whose router is built with
+    # `createBrowserRouter` + `RouterProvider` (ornn-web/src/App.tsx:258),
+    # so the vulnerable server-action path is never constructed. The fix
+    # is react-router 8.3.0, but `react-router-dom` was frozen at 7.x and
+    # not carried forward, so adopting it is a full import migration —
+    # tracked as its own change in #1219, not a drive-by dependency bump.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
       - run: bun install --frozen-lockfile
       - name: Audit (high+critical block PR)
-        run: bun audit --audit-level=high --ignore=GHSA-r5fr-rjxr-66jc --ignore=GHSA-f23m-r3pf-42rh
+        run: bun audit --audit-level=high --ignore=GHSA-r5fr-rjxr-66jc --ignore=GHSA-f23m-r3pf-42rh --ignore=GHSA-qwww-vcr4-c8h2
       - name: Audit summary (moderate+ — informational)
         if: ${{ !cancelled() }}
         run: |

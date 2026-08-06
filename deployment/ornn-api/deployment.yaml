@@ -54,6 +54,11 @@ spec:
               value: "${ALLOWED_ORIGINS}"
             - name: ORNN_PUBLIC_ORIGIN
               value: "${ORNN_PUBLIC_ORIGIN}"
+            # Public base URL of ornn-api itself — published as servers[0].url
+            # in /api/v1/openapi.json (#1213). Same value ornn-web uses to reach
+            # the API, so the spec advertises a URL clients can actually call.
+            - name: ORNN_API_BASE_URL
+              value: "${ORNN_API_BASE_URL}"
             - name: ORNN_URL_ALLOWLIST_CIDR
               value: "${ORNN_URL_ALLOWLIST_CIDR}"
             - name: ORNN_TRUSTED_PROXY_HOPS

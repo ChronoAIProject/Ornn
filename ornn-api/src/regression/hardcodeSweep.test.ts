@@ -40,7 +40,6 @@ const SKIP_PATH_REGEXES: RegExp[] = [
   /\.test\.ts$/,
   /[\\/]regression[\\/]/,
   /[\\/]infra[\\/]config\.ts$/,
-  /[\\/]openapi[\\/]/,
 ];
 
 // URLs that are intentionally hardcoded in source for legitimate
