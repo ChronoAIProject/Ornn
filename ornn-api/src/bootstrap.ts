@@ -11,6 +11,7 @@ import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { cors } from "hono/cors";
 import { join } from "node:path";
 import { readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import pino from "pino";
 import { type SkillConfig } from "./infra/config";
 
@@ -1127,7 +1128,23 @@ export async function bootstrap(
     serverUrl: config.ornnApiBaseUrl,
     version: pkg.version,
   });
-  app.get("/api/v1/openapi.json", (c) => c.json(spec));
+  // Serialize once at boot. The document is static for the lifetime of the
+  // process, and now that it describes all 107 operations it is ~1 MB — so
+  // `c.json(spec)` would re-run JSON.stringify over the whole thing on every
+  // request. `ETag` + `Cache-Control` per CONVENTIONS.md §8, which lists this
+  // endpoint as public and cacheable; a conditional request costs a hash
+  // comparison instead of a megabyte of transfer.
+  const specJson = JSON.stringify(spec);
+  const specEtag = `"${createHash("sha256").update(specJson).digest("hex").slice(0, 32)}"`;
+  logger.info({ bytes: specJson.length, etag: specEtag }, "OpenAPI spec built");
+  app.get("/api/v1/openapi.json", (c) => {
+    if (c.req.header("if-none-match") === specEtag) return c.body(null, 304);
+    return c.body(specJson, 200, {
+      "Content-Type": "application/json; charset=UTF-8",
+      "Cache-Control": "public, max-age=300",
+      ETag: specEtag,
+    });
+  });
 
   // Kubernetes liveness probe — process is alive. No dependency checks.
   // `/health` kept as an alias for backward compatibility; K8s manifests
