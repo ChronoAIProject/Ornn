@@ -1,24 +1,29 @@
 /**
- * OpenAPI ↔ router reflection test (#1213).
+ * OpenAPI ↔ router reflection test (#1213, #1214).
  *
- * The spec's path table in `src/openapi/specBuilder.ts` is hand-written
- * while the routes it describes are registered in `src/bootstrap.ts`.
- * Nothing structurally ties the two together, and they drifted badly:
+ * The spec's path table is assembled in `src/openapi/paths/*.ts` while the
+ * routes it describes are registered in `src/bootstrap.ts`. Nothing in the
+ * type system ties the two together, and historically they drifted badly:
  *
- *   - every path was published under `/api/` while the router had moved
- *     to `/api/v1/` (#101), so no URL in the spec resolved;
+ *   - every path was published under `/api/` while the router had moved to
+ *     `/api/v1/` (#101), so no URL in the spec resolved;
  *   - four `/admin/{categories,tags}` paths described endpoints that had
- *     been deleted from the codebase entirely.
+ *     been deleted from the codebase entirely;
+ *   - and in the other direction, 91 of 104 registered routes were absent
+ *     from the document altogether (#1214).
  *
- * Both are the same failure: the spec claimed something the router does
- * not serve. The other contract tests could not catch it because they
- * only inspect the spec against itself. This one boots the real app and
- * checks each documented operation against the live route table.
+ * This file closes the loop in **both** directions, which is what makes
+ * the spec trustworthy as the contract CONVENTIONS.md §10 claims it is:
  *
- * Direction matters. This asserts *documented ⇒ registered* — no phantom
- * endpoints. The converse (*registered ⇒ documented*, i.e. closing the
- * coverage gap) is tracked as #1214 and deliberately not enforced here;
- * turning it on today would fail on ~90 legitimately-undocumented routes.
+ *   - *documented ⇒ registered* — the spec never advertises an endpoint
+ *     the API does not serve. Agents following it never get a 404.
+ *   - *registered ⇒ documented* — the API never serves an endpoint the
+ *     spec does not describe. Adding a route without documenting it
+ *     fails CI here, so the coverage gap cannot silently reopen.
+ *
+ * There is deliberately no allowlist. #1214 burned the last of it down;
+ * reintroducing one would restore exactly the ratchet that let coverage
+ * decay to 13% in the first place.
  *
  * @module tests/contract/openapiRoutes
  */
@@ -49,46 +54,70 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await harness.cleanup();
-  // Explicit timeout: `cleanup()` stops a MongoMemoryServer, which under
-  // a loaded full-suite run regularly exceeds bun's 5s hook default. The
-  // existing integration files omit this and flake because of it (#1215)
-  // — this one does not pile on.
+  // Explicit timeout: `cleanup()` stops a MongoMemoryServer, which under a
+  // loaded full-suite run regularly exceeds bun's 5s hook default (#1215).
 }, 30_000);
 
-describe("OpenAPI spec — every documented operation is a real route (#1213)", () => {
-  test("no declared path+method is missing from the booted router", () => {
-    // `app.routes` carries one entry per handler in each chain, so the
-    // same path appears once per middleware. Dedupe, and drop the `ALL`
-    // entries — those are middleware mounts, not endpoints.
-    const registered = new Set(
-      harness.app.routes
-        .filter((r) => r.method !== "ALL")
-        .map((r) => `${r.method.toUpperCase()} ${r.path}`),
-    );
+/**
+ * Every endpoint the booted router actually serves, as `METHOD /path`.
+ *
+ * `app.routes` carries one entry per handler in each chain, so a path with
+ * three middlewares appears three times — dedupe. `ALL` entries are
+ * middleware mounts (`app.use("*", ...)`), not endpoints.
+ */
+function registeredRoutes(): Set<string> {
+  return new Set(
+    harness.app.routes
+      .filter((r) => r.method !== "ALL")
+      .map((r) => `${r.method.toUpperCase()} ${r.path}`),
+  );
+}
 
-    const spec = buildSpec(SPEC_OPTIONS);
-    const paths = spec.paths as Record<string, Record<string, unknown>>;
-
-    const missing: string[] = [];
-    for (const [specPath, pathItem] of Object.entries(paths)) {
-      for (const method of Object.keys(pathItem)) {
-        if (!isOperation(method)) continue;
-        const key = `${method.toUpperCase()} ${toHonoPath(specPath)}`;
-        if (!registered.has(key)) missing.push(key);
-      }
+/** Every operation the spec declares, keyed the same way. */
+function documentedRoutes(): Set<string> {
+  const spec = buildSpec(SPEC_OPTIONS);
+  const paths = spec.paths as Record<string, Record<string, unknown>>;
+  const keys = new Set<string>();
+  for (const [specPath, pathItem] of Object.entries(paths)) {
+    for (const method of Object.keys(pathItem)) {
+      if (!isOperation(method)) continue;
+      keys.add(`${method.toUpperCase()} ${toHonoPath(specPath)}`);
     }
+  }
+  return keys;
+}
 
-    // A non-empty list means the spec is advertising an endpoint the API
-    // does not serve — agents following it get a 404.
+describe("OpenAPI spec ↔ router (#1213, #1214)", () => {
+  test("no documented operation is missing from the booted router", () => {
+    const registered = registeredRoutes();
+    const missing = [...documentedRoutes()].filter((key) => !registered.has(key)).sort();
+    // Non-empty means the spec advertises an endpoint the API does not
+    // serve — agents following it get a 404.
     expect(missing).toEqual([]);
+  });
+
+  test("no registered route is missing from the spec", () => {
+    const documented = documentedRoutes();
+    const undocumented = [...registeredRoutes()].filter((key) => !documented.has(key)).sort();
+    // Non-empty means a route shipped without documentation. Add it to the
+    // matching module under `src/openapi/paths/` — do NOT add an allowlist
+    // here; see this file's header.
+    expect(undocumented).toEqual([]);
   });
 
   test("the router actually serves the /api/v1 prefix the spec declares", () => {
     // Guards the specific regression: if the mount prefix in bootstrap.ts
-    // and `prefix` in specBuilder.ts ever diverge again, the assertion
-    // above goes red — but only if the router really is on /api/v1. Pin
-    // that independently so a matched-but-wrong pair can't pass silently.
+    // and `prefix` in specBuilder.ts ever diverge again, the assertions
+    // above go red — but only if the router really is on /api/v1. Pin that
+    // independently so a matched-but-wrong pair cannot pass silently.
     const v1Routes = harness.app.routes.filter((r) => r.path.startsWith("/api/v1/"));
     expect(v1Routes.length).toBeGreaterThan(0);
+  });
+
+  test("the spec covers the whole surface, not a sample of it", () => {
+    // A blunt floor. If someone deletes a path module and the two set
+    // comparisons above are somehow both satisfied, this still fails.
+    expect(documentedRoutes().size).toBe(registeredRoutes().size);
+    expect(documentedRoutes().size).toBeGreaterThan(100);
   });
 });
