@@ -75,14 +75,33 @@ export function systemPaths(prefix: string): PathMap {
       get: {
         summary: "Fetch this OpenAPI document",
         description:
-          "Returns the complete OpenAPI 3.1 description of the `/api/v1` surface — the same document you are reading. This is the contract's source of truth (CONVENTIONS.md §10): it is generated at boot from the server's own Zod schemas, so it cannot drift from the running validators. Agents and code generators should fetch this at integration time rather than pinning a vendored copy. The body is the raw OpenAPI document at the root — it is not wrapped in the `{ data, error }` envelope that the rest of the API uses. Public; no authentication required. `info.version` reports the running ornn-api release and `servers[0].url` reports this deployment's public base URL, so the document is self-locating.",
+          "Returns the complete OpenAPI 3.1 description of the `/api/v1` surface — the same document you are reading. This is the contract's source of truth (CONVENTIONS.md §10): it is generated at boot from the server's own Zod schemas, so it cannot drift from the running validators. Agents and code generators should fetch this at integration time rather than pinning a vendored copy. The body is the raw OpenAPI document at the root — it is not wrapped in the `{ data, error }` envelope that the rest of the API uses. Public; no authentication required. `info.version` reports the running ornn-api release and `servers[0].url` reports this deployment's public base URL, so the document is self-locating.\n\nThe document is around a megabyte — every schema is inlined rather than `$ref`-ed, so each operation is self-contained and no generator has to resolve pointers. It is serialized once at boot and served with a strong `ETag` plus `Cache-Control: public, max-age=300`. Send `If-None-Match` with the stored `ETag` on subsequent fetches: the answer is a bodyless `304` for as long as the deployment is unchanged, which is the difference between a hash comparison and a megabyte of transfer. The `ETag` changes only when the API does, so it is also a cheap way to detect that a deployment has been upgraded.",
         operationId: "getOpenApiSpec",
         tags: ["System"],
         security: publicAuth(),
-        responses: rawJsonResponse(
-          { type: "object", description: "An OpenAPI 3.1 document." },
-          "The OpenAPI 3.1 document describing this API.",
-        ),
+        responses: {
+          ...rawJsonResponse(
+            { type: "object", description: "An OpenAPI 3.1 document." },
+            "The OpenAPI 3.1 document describing this API.",
+            {
+              headers: {
+                ETag: {
+                  description:
+                    "Strong validator over the serialized document. Stable for the lifetime of a deployment; changes when the API changes. Echo it back in `If-None-Match`.",
+                  schema: { type: "string" },
+                },
+                "Cache-Control": {
+                  description: "`public, max-age=300` — the document is public and static between deployments.",
+                  schema: { type: "string" },
+                },
+              },
+            },
+          ),
+          304: {
+            description:
+              "Your `If-None-Match` matched the current `ETag` — the document is unchanged since you last fetched it. No body is returned; keep using your cached copy.",
+          },
+        },
       },
     },
 
