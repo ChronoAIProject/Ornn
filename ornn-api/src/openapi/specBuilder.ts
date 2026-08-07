@@ -26,6 +26,7 @@ import type { PathMap } from "./helpers";
 import { accountPaths } from "./paths/account";
 import { adminPaths } from "./paths/admin";
 import { adminQuotaPaths } from "./paths/adminQuota";
+import { adminSettingsPaths } from "./paths/adminSettings";
 import { auditAnalyticsPaths } from "./paths/auditAnalytics";
 import { generationPaths } from "./paths/generation";
 import { messagingPaths } from "./paths/messaging";
@@ -195,6 +196,7 @@ export function buildSpec(options: SpecOptions): OpenApiSpec {
     ...messagingPaths(prefix),
     ...adminPaths(prefix),
     ...adminQuotaPaths(prefix),
+    ...adminSettingsPaths(prefix),
     ...usersMirrorPaths(prefix),
     ...systemPaths(prefix),
   };
