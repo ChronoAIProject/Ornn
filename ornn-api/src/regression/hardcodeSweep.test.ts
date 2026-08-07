@@ -40,6 +40,20 @@ const SKIP_PATH_REGEXES: RegExp[] = [
   /\.test\.ts$/,
   /[\\/]regression[\\/]/,
   /[\\/]infra[\\/]config\.ts$/,
+  // `openapi/` is a documentation surface, not a configuration one. Its
+  // string literals are `description` and `examples` values written to be
+  // read by a human or an agent — `https://api.openai.com/v1` as an example
+  // LLM gateway, `gpt-4o` as an example model id, a GitHub URL showing what
+  // a `repoUrl` looks like. Nothing here is ever connected to, parsed, or
+  // used to configure the server; these modules have no runtime behaviour
+  // beyond returning a JSON document. Same rubric line as a test fixture
+  // (Architecture §8): exempt by file path.
+  //
+  // The one genuinely deployment-shaped value the spec carries — the
+  // advertised server URL — is NOT hardcoded: `buildSpec` takes it as
+  // `options.serverUrl` from `config.ornnApiBaseUrl`, which is what the
+  // rest of this sweep is protecting.
+  /[\\/]openapi[\\/]/,
 ];
 
 // URLs that are intentionally hardcoded in source for legitimate
