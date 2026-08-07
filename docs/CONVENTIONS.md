@@ -529,12 +529,43 @@ Every response carries:
 
 ## 10. OpenAPI
 
-- `GET /v1/openapi.json` is the source of truth.
+- `GET /api/v1/openapi.json` is the source of truth. It is generated at server boot from the same Zod schemas the handlers validate against, so it cannot drift from the running API.
 - Every route declares security, request content types, all documented error responses, and at least one example.
-- CI contract test asserts every handler in code appears in the spec with complete metadata.
 - Error `type` URLs point to live documentation per § 1.6.
 
-### 10.1 Skill manifest JSON Schema
+### 10.1 Where the spec lives
+
+```
+ornn-api/src/openapi/
+├── helpers.ts        shared building blocks — the ONLY sanctioned way to
+│                     declare a response, a parameter, or a request body
+├── specBuilder.ts    document assembly: info, tags, security schemes
+└── paths/<domain>.ts one module per domain, exporting (prefix) => PathMap
+```
+
+**Adding a route means adding it to the matching `paths/` module in the same change.** There is no allowlist to opt out of; CI fails otherwise (§ 10.2).
+
+Two rules keep the document honest:
+
+- **Schemas are derived, not transcribed.** Import the domain's Zod schema and pass it to `toSchema` / `jsonBody` / `queryParams` / `jsonResponse`. Hand-written JSON Schema is a last resort, permitted only where no Zod schema exists, and must name the TypeScript interface it mirrors.
+- **`toSchema` uses zod 4's built-in `z.toJSONSchema`.** Do **not** reintroduce `zod-to-json-schema`: that package only understands zod 3 internals and returns `{}` for every zod 4 schema *without throwing*. It silently emptied every schema and parameter list in the published document (#1214). `helpers.test.ts` and `tests/contract/openapi.test.ts` both assert schemas are non-empty.
+
+Request and response schemas are generated in different directions. A field with a `.default()` is optional on the way in and guaranteed on the way out, so `jsonBody` / `queryParams` use `io: "input"` and `jsonResponse` uses `io: "output"`. Response schemas are emitted without `additionalProperties: false` so adding a field server-side does not break clients validating against a cached spec.
+
+### 10.2 Enforced invariants
+
+`ornn-api/tests/contract/` asserts, against the **booted router**, in both directions:
+
+| Invariant | Meaning | Test |
+|---|---|---|
+| documented ⇒ registered | The spec never advertises an endpoint the API does not serve. | `openapiRoutes.test.ts` |
+| registered ⇒ documented | The API never serves an endpoint the spec does not describe. | `openapiRoutes.test.ts` |
+
+`openapi.test.ts` additionally requires, per operation: a summary, a description of real substance, a unique `operationId`, at least one declared tag (itself declared at the document root), an explicit `security` declaration, every templated path parameter declared, a description and non-empty schema on every parameter, at least one 2xx with content, at least one error response, and every 4xx/5xx typed as `application/problem+json` with RFC 7807 fields at the body root.
+
+Both directions matter. Before #1214 only the first was enforced, and the document decayed to describing 13 of 104 routes while still passing CI.
+
+### 10.3 Skill manifest JSON Schema
 
 The canonical JSON Schema for `SKILL.md` YAML frontmatter is published at:
 
