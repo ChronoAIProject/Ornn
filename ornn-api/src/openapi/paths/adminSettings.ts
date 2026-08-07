@@ -168,7 +168,7 @@ const SECTION_PROSE: Record<SectionId, SectionProse> = {
   playground: {
     title: "Playground",
     overview:
-      "Owns the Playground surface — the sandboxed multi-turn chat at `POST /api/v1/playground/chat`. `defaultProviderId` and `defaultModelId` pin the LLM the surface uses when a request omits `model`; the pin outranks the per-model `defaultForPlayground` flag managed under `/admin/settings/llm-providers`, and `GET /api/v1/me/models?surface=playground` reports it as `defaultModelId` so the picker's pre-selection and the execute-path fallback agree. `sseKeepAliveMs` (1000–600000) is how often the chat stream emits a keep-alive frame to stop an idle proxy closing the connection. `defaultMonthlyQuota` (0–1000000) is the monthly Playground allowance a non-admin user starts with.",
+      "Owns the Playground surface — the sandboxed multi-turn chat at `POST /api/v1/playground/chat`. `defaultProviderId` and `defaultModelId` are the surface's **advertised** pin: `GET /api/v1/me/models?surface=playground` reports `defaultModelId` so a picker pre-selects it. They do NOT drive execution. When a chat request omits `modelId`, the resolver picks the model whose per-model `defaultForPlayground` flag is set (falling back to the first enabled row by display name) and never reads this section — so if the two disagree, the picker shows one model and the run uses another. Keep the pin and the `defaultForPlayground` flag under `/admin/settings/llm-providers` pointed at the same model. `sseKeepAliveMs` (1000–600000) is how often the chat stream emits a keep-alive frame to stop an idle proxy closing the connection. `defaultMonthlyQuota` (0–1000000) is the monthly Playground allowance a non-admin user starts with.",
     writeEffect:
       "The new provider/model pin takes effect on the next chat turn resolved by a pod whose cache has expired — there is no restart and no draining of in-flight streams. Nothing here checks that the pinned provider or model exists or is enabled for this surface; the schema validates types only, so a stale `defaultModelId` is accepted at this write and fails later on the execute path instead. `defaultMonthlyQuota` seeds new grants only and does not retroactively raise or claw back an allowance already issued.",
     exampleOverrides: {
@@ -181,7 +181,7 @@ const SECTION_PROSE: Record<SectionId, SectionProse> = {
   skillGen: {
     title: "Skill generation",
     overview:
-      "Owns the skill-authoring surface — the three streaming generators at `POST /api/v1/skills/generate`, `.../generate/from-source`, and `.../generate/from-openapi`. The four knobs mirror `playground` exactly: `defaultProviderId` / `defaultModelId` pin the LLM used when the request omits `model` (outranking the per-model `defaultForSkillGen` flag), `sseKeepAliveMs` (1000–600000) paces the generation stream's keep-alive frames, and `defaultMonthlyQuota` (0–1000000) is the monthly generation allowance for a non-admin user — seeded lower than Playground's by default because a generation turn is the more expensive call. Note that the LLM skill-audit pipeline borrows this surface for model resolution when `skillAudit.llmAuditDefaultModelId` is unset; there is no dedicated audit surface.",
+      "Owns the skill-authoring surface — the three streaming generators at `POST /api/v1/skills/generate`, `.../generate/from-source`, and `.../generate/from-openapi`. The four knobs mirror `playground` exactly: `defaultProviderId` / `defaultModelId` are the advertised pin reported by `GET /api/v1/me/models?surface=skillGen` — but, exactly as for `playground`, execution resolves through the per-model `defaultForSkillGen` flag and never reads this section, so keep the two in agreement, `sseKeepAliveMs` (1000–600000) paces the generation stream's keep-alive frames, and `defaultMonthlyQuota` (0–1000000) is the monthly generation allowance for a non-admin user — seeded lower than Playground's by default because a generation turn is the more expensive call. Note that the LLM skill-audit pipeline borrows this surface for model resolution when `skillAudit.llmAuditDefaultModelId` is unset; there is no dedicated audit surface.",
     writeEffect:
       "Applies to the next generation request resolved after the writing pod's cache entry expires; a stream already open keeps the model it started with. As with `playground`, the pinned ids are not checked for existence or for being enabled on this surface, so a wrong id is accepted here and fails when a generation is attempted. Because the audit pipeline falls through to this surface, changing the pin can silently re-point LLM audits as well.",
     exampleOverrides: {
@@ -194,9 +194,9 @@ const SECTION_PROSE: Record<SectionId, SectionProse> = {
   assistant: {
     title: "Ornn Assistant",
     overview:
-      "Owns the Ornn Assistant surface (#970) — the grounded, non-agentic Q&A chat at `POST /api/v1/assistant/chat`, which answers from a curated knowledge base plus a visibility-scoped skill retrieval and executes nothing. Field-for-field identical to `playground` and `skillGen` so the resolver, quota, and SSE machinery treat all three surfaces uniformly: provider/model pin, keep-alive cadence, and the starting monthly allowance, which is seeded between the other two because Q&A turns are cheaper than generation but more frequent than Playground runs.",
+      "Owns the Ornn Assistant surface (#970) — the grounded, non-agentic Q&A chat at `POST /api/v1/assistant/chat`, which answers from a curated knowledge base plus a visibility-scoped skill retrieval and executes nothing. Field-for-field identical to `playground` and `skillGen` so the quota and SSE machinery treat all three surfaces uniformly: provider/model pin, keep-alive cadence, and the starting monthly allowance, which is seeded between the other two because Q&A turns are cheaper than generation but more frequent than Playground runs.",
     writeEffect:
-      "Takes effect on the next assistant turn once the writing pod's cache entry expires. One asymmetry worth knowing before you rely on the picker: the `GET /api/v1/me/models` default resolver only special-cases `playground` and falls through to the skill-generation section for every other surface, so an assistant pin set here changes what the assistant actually uses but is not what the model picker reports for `surface=assistant`.",
+      "Takes effect on the next assistant turn once the writing pod's cache entry expires. Two things to know before relying on this pin. As on the other two surfaces, it is advertised rather than executed: an assistant turn that omits `modelId` resolves through the per-model `defaultForAssistant` flag, not through this section. And the `GET /api/v1/me/models` default resolver only special-cases `playground`, falling through to the skill-generation section for every other surface — so for `surface=assistant` the picker reports the **skillGen** pin, not this one. Set the per-model flag to control behaviour; treat both pins here as display metadata until that resolver is fixed.",
     exampleOverrides: {
       defaultProviderId: "8f2a1c34-9b7e-4d51-a0c6-1e5b3d9f0742",
       defaultModelId: "gpt-4o-mini",
@@ -207,7 +207,7 @@ const SECTION_PROSE: Record<SectionId, SectionProse> = {
   mirror: {
     title: "GitHub mirror",
     overview:
-      "Owns the GitHub mirror — the job that publishes this registry's skills into a GitHub repository. `enabled` is the master switch. `owner` / `repo` / `branch` are the destination coordinates; `owner` and `repo` must satisfy GitHub's own naming rules (`owner` up to 40 characters of alphanumerics and inner hyphens, `repo` up to 100 of alphanumerics, dot, underscore, hyphen) or be the empty string for \"not configured\". `appId`, `installationId`, and `appPrivateKey` are the GitHub App credentials the mirror authenticates with. `reconcileSchedule` is a cron expression parsed by `cron-parser` (five-field UNIX or six-field with-seconds, both accepted) and interpreted in `Asia/Singapore`, which has no DST — the default `0 2 * * *` reads literally as 02:00 Singapore time. An empty `reconcileSchedule` disables the scheduled sweep only; publish-time webhooks still fire.",
+      "Owns the GitHub mirror — the job that publishes this registry's skills into a GitHub repository. `enabled` is the master switch. `owner` / `repo` / `branch` are the destination coordinates; `owner` and `repo` must satisfy GitHub's own naming rules (`owner` up to 39 characters of alphanumerics and inner hyphens, `repo` up to 100 of alphanumerics, dot, underscore, hyphen) or be the empty string for \"not configured\". `appId`, `installationId`, and `appPrivateKey` are the GitHub App credentials the mirror authenticates with. `reconcileSchedule` is a cron expression parsed by `cron-parser` (five-field UNIX or six-field with-seconds, both accepted) and interpreted in `Asia/Singapore`, which has no DST — the default `0 2 * * *` reads literally as 02:00 Singapore time. An empty `reconcileSchedule` disables the scheduled sweep only; publish-time webhooks still fire.",
     writeEffect:
       "Flipping `enabled` to `false` halts mirroring without discarding coordinates or credentials, and `POST /api/v1/admin/mirror/reconcile` starts answering `503 mirror_disabled` — that is the safe way to pause. Turning it on with incomplete coordinates or credentials produces the same `503` from the reconcile endpoint, because completeness is checked there and not on this write. A changed `reconcileSchedule` is picked up by the in-process scheduler; use `GET /api/v1/admin/mirror/status` to see when the next sweep is due.",
     exampleOverrides: {
@@ -308,7 +308,7 @@ const SECTION_PROSE: Record<SectionId, SectionProse> = {
       enabled: true,
       githubToken: "ghp_••••••••7f3a",
     },
-    changedFieldsExample: ["enabled", "githubToken"],
+    changedFieldsExample: ["enabled", "autoPublish"],
   },
 };
 
@@ -429,7 +429,7 @@ function sectionPathItem(id: SectionId): PathItem {
 const providerModelSchema: JsonSchema = {
   type: "object",
   description:
-    "One model in this provider's catalogue. Rows are created by the sync endpoint, not by hand, and the six surface flags are only ever written through the per-model `PATCH`.",
+    "One model in this provider's catalogue. Rows are normally created by the sync endpoint rather than by hand. The six surface flags can also be written by `POST` and `PUT /admin/settings/llm-providers/{id}` through their `models[]` array, but the per-model `PATCH` is the only path that enforces the platform-wide at-most-one-default-per-surface invariant — set a default any other way and you can end up with two.",
   required: [
     "id",
     "displayName",
@@ -501,7 +501,7 @@ const providerAuthSchema: JsonSchema = {
       properties: {
         kind: { type: "string", enum: ["basic"], description: "HTTP basic authentication." },
         username: { type: "string", description: "Basic-auth username. Not a secret; returned verbatim." },
-        password: { type: "string", description: "Mid-masked basic-auth password.", examples: ["pa••••••••rd"] },
+        password: { type: "string", description: "Mid-masked basic-auth password.", examples: ["pass••••••••word"] },
       },
     },
   ],
@@ -717,7 +717,7 @@ export function adminSettingsPaths(prefix: string): PathMap {
           },
           401,
           403,
-          { 404: "No provider with this id (`code: \"provider_not_found\"`). Checked before the body is parsed." },
+          { 404: "No provider with this id (`code: \"provider_not_found\"`). The existence check runs before the body is validated against the provider schema, but AFTER the JSON-object gate — so a malformed or non-object body still returns `400 invalid_body` even for an unknown id." },
         ),
       },
     },
