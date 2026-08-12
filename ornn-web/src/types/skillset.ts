@@ -79,6 +79,15 @@ export interface PluginExportInput {
   keywords?: string[] | undefined;
 }
 
+/**
+ * Body for `PUT /api/v1/skillsets/:id/auto-update` (#1191) — the single
+ * "always keep skills up to date" toggle. No overrides: when on, all members
+ * always resolve to their latest version.
+ */
+export interface AutoUpdateInput {
+  enabled: boolean;
+}
+
 /** Why a master-prompt body is invalid. `null` = valid. */
 export type MasterPromptRejection = "empty" | "tooLong" | null;
 
@@ -142,6 +151,13 @@ export interface SkillsetDetail {
    * the read-only install snippet on the detail page.
    */
   exportAsPlugin: boolean;
+  /**
+   * Owner opt-in (#1191) — "always keep skills in this skillset up to date".
+   * When on, every member resolves to its skill's latest version wherever the
+   * set is delivered. Drives the auto-update toggle card. Always present from
+   * the API (defaults `false`).
+   */
+  autoUpdateMembers: boolean;
   /**
    * Number of THIS version's members whose skill is currently public AND
    * resolvable (#1161). The export bundles only this public subset; the export

@@ -37,7 +37,12 @@ import { validateBody, getValidatedBody } from "../../middleware/validate";
 import { buildActorContext, type ActorContext } from "../skills/crud/authorize";
 import { createLogger } from "../../shared/logger";
 import type { SkillsetService } from "./service";
-import { createSkillsetSchema, publishSkillsetSchema, pluginExportSchema } from "./types";
+import {
+  createSkillsetSchema,
+  publishSkillsetSchema,
+  pluginExportSchema,
+  autoUpdateSchema,
+} from "./types";
 
 const logger = createLogger("skillsetRoutes");
 
@@ -198,6 +203,31 @@ export function createSkillsetRoutes(
       const updated = await skillsetService.setPluginExport(id, body, actor);
       logger.info({ guid: id, enabled: body.enabled }, "Skillset plugin export updated via API");
       // #1157 — flipping the opt-in changes mirror eligibility; reconcile.
+      fireMirrorReconcile?.();
+      return c.json({ data: updated, error: null });
+    },
+  );
+
+  /**
+   * PUT /skillsets/:id/auto-update — enable/disable "always keep skills in this
+   * skillset up to date" (#1191). When ON, every member resolves to its latest
+   * version wherever the set is delivered. Requires: ornn:skill:update +
+   * author/admin. Registered as a literal sub-segment so it never collides with
+   * the `PUT /skillsets/:id` publish.
+   */
+  app.put(
+    "/skillsets/:id/auto-update",
+    auth,
+    requirePermission("ornn:skill:update"),
+    validateBody(autoUpdateSchema, "invalid_auto_update"),
+    async (c) => {
+      const id = c.req.param("id");
+      const body = getValidatedBody<z.infer<typeof autoUpdateSchema>>(c);
+      const actor = await buildActorContext(c);
+      const updated = await skillsetService.setAutoUpdateMembers(id, body, actor);
+      logger.info({ guid: id, enabled: body.enabled }, "Skillset auto-update updated via API");
+      // #1191 — flipping the flag can move the resolved-member set + revision;
+      // reconcile re-exports the plugin at the freshly-bumped revision.
       fireMirrorReconcile?.();
       return c.json({ data: updated, error: null });
     },

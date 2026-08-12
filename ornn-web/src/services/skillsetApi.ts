@@ -22,6 +22,7 @@
 
 import { apiGet, apiPost, apiPut, apiDelete } from "./apiClient";
 import type {
+  AutoUpdateInput,
   CreateSkillsetInput,
   PluginExportInput,
   PublishSkillsetInput,
@@ -133,6 +134,20 @@ export async function updatePluginExport(
 ): Promise<SkillsetDetail> {
   const res = await apiPut<SkillsetDetail>(
     `/api/v1/skillsets/${encodeURIComponent(guid)}/plugin-export`,
+    input,
+  );
+  return res.data!;
+}
+
+/**
+ * Toggle "always keep skills up to date" (#1191). PUT /skillsets/:id/auto-update.
+ */
+export async function updateAutoUpdate(
+  guid: string,
+  input: AutoUpdateInput,
+): Promise<SkillsetDetail> {
+  const res = await apiPut<SkillsetDetail>(
+    `/api/v1/skillsets/${encodeURIComponent(guid)}/auto-update`,
     input,
   );
   return res.data!;

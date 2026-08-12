@@ -29,6 +29,7 @@ import { SkillsetMemberViewer } from "@/components/skillset/SkillsetMemberViewer
 import { SkillsetDerivedVisibilityCard } from "@/components/skillset/SkillsetDerivedVisibilityCard";
 import { SkillsetMemberWarningBanner } from "@/components/skillset/SkillsetMemberWarningBanner";
 import { SkillsetPluginExportCard } from "@/components/skillset/SkillsetPluginExportCard";
+import { SkillsetAutoUpdateCard } from "@/components/skillset/SkillsetAutoUpdateCard";
 import { parseDeps } from "@/lib/skillsetDeps";
 import { useToastStore } from "@/stores/toastStore";
 import { useCurrentUser } from "@/stores/authStore";
@@ -404,6 +405,14 @@ export function SkillsetDetailPage() {
                   configure + stop) directly ABOVE the visibility card; any viewer
                   sees the install snippet once the skillset is exported. */}
               <SkillsetPluginExportCard
+                skillset={skillset}
+                isOwner={isOwner}
+                idOrName={id}
+              />
+
+              {/* ── Auto-update toggle (#1191) ── owner-only: always keep members
+                  at their latest version. Sits with the other owner actions. */}
+              <SkillsetAutoUpdateCard
                 skillset={skillset}
                 isOwner={isOwner}
                 idOrName={id}
