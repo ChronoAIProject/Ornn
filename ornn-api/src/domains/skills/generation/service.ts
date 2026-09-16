@@ -5,7 +5,6 @@
  * @module domains/skills/generation/service
  */
 
-import { z } from "zod";
 import type { NyxLlmClient, ResponsesApiStreamEvent, ResponsesApiInputMessage } from "../../../clients/nyxid/llm";
 import type { GeneratedSkill, SkillStreamEvent } from "../../../shared/types/index";
 import {
@@ -16,26 +15,9 @@ import {
   OPENAPI_GENERATION_SYSTEM_PROMPT,
   SOURCE_CODE_GENERATION_SYSTEM_PROMPT,
 } from "./prompts";
+import { parseGeneratedSkill } from "./validation";
 import { createLogger } from "../../../shared/logger";
 const logger = createLogger("skillGenerationService");
-
-const generatedSkillSchema = z.object({
-  name: z.string().min(1).max(100).regex(/^[a-z0-9-]+$/),
-  description: z.string().min(10).max(500),
-  category: z.enum(["plain", "runtime-based"]),
-  outputType: z.enum(["text", "file"]).optional(),
-  tags: z.array(z.string().min(2).max(30).regex(/^[a-z0-9-]+$/)).min(1).max(10),
-  readmeBody: z.string().min(50).max(20_000),
-  runtimes: z.array(z.string()).default([]),
-  dependencies: z.array(z.string().max(200)).default([]),
-  envVars: z.array(z.string().max(100)).default([]),
-  scripts: z.array(z.object({
-    filename: z.string().min(1).max(200),
-    content: z.string().min(1).max(50_000),
-  })).default([]),
-});
-
-export { generatedSkillSchema };
 
 /**
  * Per-call resolution of LLM defaults from admin settings (`skillGen`
@@ -61,6 +43,12 @@ export interface GenerationServiceConfig {
   defaultsResolver: SkillGenLlmDefaultsResolver;
 }
 
+/** Resolved per-call LLM parameters shared by every generator. */
+interface LlmCallContext {
+  model: string;
+  defaults: SkillGenLlmDefaults;
+}
+
 export class SkillGenerationService {
   private readonly llmClient: NyxLlmClient;
   private readonly defaultsResolver: SkillGenLlmDefaultsResolver;
@@ -81,51 +69,58 @@ export class SkillGenerationService {
   }
 
   /**
-   * Direct generation streaming. Streams tokens via SSE events.
-   * Uses Nyx Provider Responses API format. `modelOverride` (when set)
-   * picks an admin-curated model; otherwise the service-level default
-   * applies.
+   * Common preamble for every generator: resolve LLM defaults, honour a
+   * pre-aborted signal, and open the stream with `generation_start`.
+   * Returns `null` after yielding the terminal `error` event so callers
+   * can simply `return`.
    */
-  async *generateStream(
-    query: string,
-    signal?: AbortSignal,
-    modelOverride?: string,
-  ): AsyncIterable<SkillStreamEvent> {
+  private async *begin(
+    signal: AbortSignal | undefined,
+    modelOverride: string | undefined,
+  ): AsyncGenerator<SkillStreamEvent, LlmCallContext | null> {
     let defaults: SkillGenLlmDefaults;
     try {
       defaults = await this.resolveDefaults();
     } catch (err) {
       yield { type: "error", message: (err as Error).message };
-      return;
+      return null;
     }
     const model = modelOverride ?? defaults.model;
     if (signal?.aborted) {
       yield { type: "error", message: "Request aborted" };
-      return;
+      return null;
     }
 
     yield { type: "generation_start" };
+    return { model, defaults };
+  }
 
-    const { userPrompt } = buildDirectGenerationPrompt(query);
-    const input: ResponsesApiInputMessage[] = [
-      { role: "developer", content: GENERATION_SYSTEM_PROMPT },
-      { role: "user", content: userPrompt },
-    ];
-
+  /**
+   * Stream one LLM call, yielding `token` events as text arrives.
+   * Returns the accumulated text, or `null` after yielding the terminal
+   * `error` event (abort mid-stream or provider failure). `logLabel`
+   * keeps the per-generator error log lines distinguishable.
+   */
+  private async *streamLlm(
+    input: ResponsesApiInputMessage[],
+    ctx: LlmCallContext,
+    signal: AbortSignal | undefined,
+    logLabel: string,
+  ): AsyncGenerator<SkillStreamEvent, string | null> {
     let accumulated = "";
 
     try {
       const streamEvents = this.llmClient.stream({
-        model,
+        model: ctx.model,
         input,
-        max_output_tokens: defaults.maxOutputTokens,
-        temperature: defaults.temperature,
+        max_output_tokens: ctx.defaults.maxOutputTokens,
+        temperature: ctx.defaults.temperature,
       });
 
       for await (const event of streamEvents) {
         if (signal?.aborted) {
           yield { type: "error", message: "Request aborted" };
-          return;
+          return null;
         }
 
         const text = extractTextFromEvent(event);
@@ -136,10 +131,59 @@ export class SkillGenerationService {
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      logger.error({ err: message }, "LLM stream error");
+      logger.error({ err: message }, `${logLabel} LLM stream error`);
       yield { type: "error", message: `LLM error: ${message}` };
-      return;
+      return null;
     }
+
+    return accumulated;
+  }
+
+  /** Non-streaming completion — used for the single-turn retry. */
+  private async completeLlm(
+    input: ResponsesApiInputMessage[],
+    ctx: LlmCallContext,
+  ): Promise<string> {
+    const outputs = await this.llmClient.complete({
+      model: ctx.model,
+      input,
+      max_output_tokens: ctx.defaults.maxOutputTokens,
+      temperature: ctx.defaults.temperature,
+    });
+
+    let text = "";
+    for (const output of outputs) {
+      if (output.content) {
+        for (const part of output.content) {
+          if (part.text) text += part.text;
+        }
+      }
+    }
+    return text;
+  }
+
+  /**
+   * Direct generation streaming. Streams tokens via SSE events.
+   * Uses Nyx Provider Responses API format. `modelOverride` (when set)
+   * picks an admin-curated model; otherwise the service-level default
+   * applies.
+   */
+  async *generateStream(
+    query: string,
+    signal?: AbortSignal,
+    modelOverride?: string,
+  ): AsyncIterable<SkillStreamEvent> {
+    const ctx = yield* this.begin(signal, modelOverride);
+    if (!ctx) return;
+
+    const { userPrompt } = buildDirectGenerationPrompt(query);
+    const input: ResponsesApiInputMessage[] = [
+      { role: "developer", content: GENERATION_SYSTEM_PROMPT },
+      { role: "user", content: userPrompt },
+    ];
+
+    const accumulated = yield* this.streamLlm(input, ctx, signal, "direct");
+    if (accumulated === null) return;
 
     // Validate the accumulated output
     const parsed = this.parseAndValidate(accumulated);
@@ -155,21 +199,7 @@ export class SkillGenerationService {
             { role: "user", content: `${userPrompt}\n\nIMPORTANT: Output ONLY valid JSON. No markdown fences. No extra text.` },
           ];
 
-          const outputs = await this.llmClient.complete({
-            model,
-            input: retryInput,
-            max_output_tokens: defaults.maxOutputTokens,
-            temperature: defaults.temperature,
-          });
-
-          let retryText = "";
-          for (const output of outputs) {
-            if (output.content) {
-              for (const part of output.content) {
-                if (part.text) retryText += part.text;
-              }
-            }
-          }
+          const retryText = await this.completeLlm(retryInput, ctx);
 
           const retryParsed = this.parseAndValidate(retryText);
           if (retryParsed) {
@@ -199,20 +229,8 @@ export class SkillGenerationService {
     signal?: AbortSignal,
     modelOverride?: string,
   ): AsyncIterable<SkillStreamEvent> {
-    let defaults: SkillGenLlmDefaults;
-    try {
-      defaults = await this.resolveDefaults();
-    } catch (err) {
-      yield { type: "error", message: (err as Error).message };
-      return;
-    }
-    const model = modelOverride ?? defaults.model;
-    if (signal?.aborted) {
-      yield { type: "error", message: "Request aborted" };
-      return;
-    }
-
-    yield { type: "generation_start" };
+    const ctx = yield* this.begin(signal, modelOverride);
+    if (!ctx) return;
 
     // Put system prompt as developer message in input array (not as instructions)
     // because some LLM providers ignore the instructions field.
@@ -232,34 +250,8 @@ export class SkillGenerationService {
       }),
     ];
 
-    let accumulated = "";
-
-    try {
-      const streamEvents = this.llmClient.stream({
-        model,
-        input,
-        max_output_tokens: defaults.maxOutputTokens,
-        temperature: defaults.temperature,
-      });
-
-      for await (const event of streamEvents) {
-        if (signal?.aborted) {
-          yield { type: "error", message: "Request aborted" };
-          return;
-        }
-
-        const text = extractTextFromEvent(event);
-        if (text) {
-          accumulated += text;
-          yield { type: "token", content: text };
-        }
-      }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      logger.error({ err: message }, "LLM multi-turn stream error");
-      yield { type: "error", message: `LLM error: ${message}` };
-      return;
-    }
+    const accumulated = yield* this.streamLlm(input, ctx, signal, "multi-turn");
+    if (accumulated === null) return;
 
     logger.info(
       { accumulatedLength: accumulated.length, first200: accumulated.slice(0, 200), last200: accumulated.slice(-200) },
@@ -287,20 +279,8 @@ export class SkillGenerationService {
     signal?: AbortSignal,
     modelOverride?: string,
   ): AsyncIterable<SkillStreamEvent> {
-    let defaults: SkillGenLlmDefaults;
-    try {
-      defaults = await this.resolveDefaults();
-    } catch (err) {
-      yield { type: "error", message: (err as Error).message };
-      return;
-    }
-    const model = modelOverride ?? defaults.model;
-    if (signal?.aborted) {
-      yield { type: "error", message: "Request aborted" };
-      return;
-    }
-
-    yield { type: "generation_start" };
+    const ctx = yield* this.begin(signal, modelOverride);
+    if (!ctx) return;
 
     const userPrompt = buildOpenApiGenerationPrompt(specContent, options);
     const input: ResponsesApiInputMessage[] = [
@@ -308,34 +288,8 @@ export class SkillGenerationService {
       { role: "user", content: userPrompt },
     ];
 
-    let accumulated = "";
-
-    try {
-      const streamEvents = this.llmClient.stream({
-        model,
-        input,
-        max_output_tokens: defaults.maxOutputTokens,
-        temperature: defaults.temperature,
-      });
-
-      for await (const event of streamEvents) {
-        if (signal?.aborted) {
-          yield { type: "error", message: "Request aborted" };
-          return;
-        }
-
-        const text = extractTextFromEvent(event);
-        if (text) {
-          accumulated += text;
-          yield { type: "token", content: text };
-        }
-      }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      logger.error({ err: message }, "OpenAPI generation LLM stream error");
-      yield { type: "error", message: `LLM error: ${message}` };
-      return;
-    }
+    const accumulated = yield* this.streamLlm(input, ctx, signal, "OpenAPI generation");
+    if (accumulated === null) return;
 
     const parsed = this.parseAndValidate(accumulated);
     if (!parsed) {
@@ -366,20 +320,8 @@ export class SkillGenerationService {
     signal?: AbortSignal,
     modelOverride?: string,
   ): AsyncIterable<SkillStreamEvent> {
-    let defaults: SkillGenLlmDefaults;
-    try {
-      defaults = await this.resolveDefaults();
-    } catch (err) {
-      yield { type: "error", message: (err as Error).message };
-      return;
-    }
-    const model = modelOverride ?? defaults.model;
-    if (signal?.aborted) {
-      yield { type: "error", message: "Request aborted" };
-      return;
-    }
-
-    yield { type: "generation_start" };
+    const ctx = yield* this.begin(signal, modelOverride);
+    if (!ctx) return;
 
     const userPrompt = buildSourceCodeGenerationPrompt(code, options);
     const input: ResponsesApiInputMessage[] = [
@@ -387,34 +329,8 @@ export class SkillGenerationService {
       { role: "user", content: userPrompt },
     ];
 
-    let accumulated = "";
-
-    try {
-      const streamEvents = this.llmClient.stream({
-        model,
-        input,
-        max_output_tokens: defaults.maxOutputTokens,
-        temperature: defaults.temperature,
-      });
-
-      for await (const event of streamEvents) {
-        if (signal?.aborted) {
-          yield { type: "error", message: "Request aborted" };
-          return;
-        }
-
-        const text = extractTextFromEvent(event);
-        if (text) {
-          accumulated += text;
-          yield { type: "token", content: text };
-        }
-      }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      logger.error({ err: message }, "Source-code generation LLM stream error");
-      yield { type: "error", message: `LLM error: ${message}` };
-      return;
-    }
+    const accumulated = yield* this.streamLlm(input, ctx, signal, "Source-code generation");
+    if (accumulated === null) return;
 
     const parsed = this.parseAndValidate(accumulated);
     if (!parsed) {
@@ -426,45 +342,7 @@ export class SkillGenerationService {
   }
 
   parseAndValidate(raw: string): GeneratedSkill | null {
-    try {
-      let cleaned = raw.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
-
-      const jsonStart = cleaned.indexOf("{");
-      const jsonEnd = cleaned.lastIndexOf("}");
-      if (jsonStart >= 0 && jsonEnd > jsonStart) {
-        cleaned = cleaned.slice(jsonStart, jsonEnd + 1);
-      }
-
-      const json = JSON.parse(cleaned);
-
-      // Handle backward-compat: rename readmeMd -> readmeBody
-      if (json.readmeMd && !json.readmeBody) {
-        const md = json.readmeMd as string;
-        const fmEnd = md.indexOf("\n---", 3);
-        json.readmeBody = fmEnd > 0 ? md.slice(fmEnd + 4).trim() : md;
-        delete json.readmeMd;
-      }
-
-      const result = generatedSkillSchema.safeParse(json);
-      if (!result.success) {
-        logger.debug({ errors: result.error.issues }, "Generated skill validation failed");
-        return null;
-      }
-
-      // The Zod-inferred shape and GeneratedSkill match in spirit but
-      // Zod surfaces `outputType` as `"text" | "file" | undefined`
-      // (explicit undefined, not optional) which exactOptionalPropertyTypes
-      // (#657) treats as different from the interface's `outputType?:`.
-      // Same runtime shape; cast is safe.
-      return result.data as GeneratedSkill;
-    } catch (err) {
-      // Generated-skill JSON parse failed. Caller treats null as
-      // "regenerate" or "give up" depending on retry budget. Logging
-      // so we can spot a model that's consistently producing
-      // unparseable output (#579).
-      logger.debug({ err }, "generated skill JSON parse failed");
-      return null;
-    }
+    return parseGeneratedSkill(raw);
   }
 }
 
