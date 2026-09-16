@@ -12,6 +12,16 @@ import { createLogger } from "../../../shared/logger";
 
 const logger = createLogger("skillGenerationValidation");
 
+/**
+ * One emitted package file. Shared by `scripts`, `references` and
+ * `assets` — the JSON contract can only carry text, so binary assets are
+ * out of scope for generation (they still arrive via upload).
+ */
+const generatedFileSchema = z.object({
+  filename: z.string().min(1).max(200),
+  content: z.string().min(1).max(50_000),
+});
+
 export const generatedSkillSchema = z.object({
   name: z.string().min(1).max(100).regex(/^[a-z0-9-]+$/),
   description: z.string().min(10).max(500),
@@ -22,10 +32,11 @@ export const generatedSkillSchema = z.object({
   runtimes: z.array(z.string()).default([]),
   dependencies: z.array(z.string().max(200)).default([]),
   envVars: z.array(z.string().max(100)).default([]),
-  scripts: z.array(z.object({
-    filename: z.string().min(1).max(200),
-    content: z.string().min(1).max(50_000),
-  })).default([]),
+  scripts: z.array(generatedFileSchema).default([]),
+  // Advanced-mode extras (#1242). Defaulted so older model output (and
+  // the integration fixtures) that omit them still validate.
+  references: z.array(generatedFileSchema).default([]),
+  assets: z.array(generatedFileSchema).default([]),
 });
 
 /**

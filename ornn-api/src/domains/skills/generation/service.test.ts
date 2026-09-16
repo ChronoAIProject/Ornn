@@ -677,4 +677,33 @@ describe("parseAndValidate", () => {
   test("non-JSON input returns null", () => {
     expect(svc().parseAndValidate("this is not json at all")).toBeNull();
   });
+
+  test("references / assets default to [] when the model omits them (#1242)", () => {
+    const out = svc().parseAndValidate(VALID_SKILL);
+    expect(out).not.toBeNull();
+    expect(out!.references).toEqual([]);
+    expect(out!.assets).toEqual([]);
+  });
+
+  test("references / assets pass through when the model emits them (#1242)", () => {
+    const withExtras = JSON.stringify({
+      ...JSON.parse(VALID_SKILL),
+      references: [{ filename: "api.md", content: "# API\n\nReference material." }],
+      assets: [{ filename: "template.json", content: "{\"greeting\":\"hi\"}" }],
+    });
+    const out = svc().parseAndValidate(withExtras);
+    expect(out).not.toBeNull();
+    expect(out!.references).toEqual([
+      { filename: "api.md", content: "# API\n\nReference material." },
+    ]);
+    expect(out!.assets[0]!.filename).toBe("template.json");
+  });
+
+  test("a references entry with empty content fails the schema (#1242)", () => {
+    const bad = JSON.stringify({
+      ...JSON.parse(VALID_SKILL),
+      references: [{ filename: "empty.md", content: "" }],
+    });
+    expect(svc().parseAndValidate(bad)).toBeNull();
+  });
 });
