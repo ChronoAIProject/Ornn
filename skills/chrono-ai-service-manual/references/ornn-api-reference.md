@@ -170,7 +170,7 @@ The codes below appear across many endpoints. Per-endpoint sections list any add
 | `INVALID_DEPRECATION_PATCH` | 400 | Body for `PATCH /versions/:version` is malformed. |
 | `INVALID_PERMISSIONS` | 400 | Body for `PUT /skills/:id/permissions` is malformed. |
 | `MISSING_PROMPT` / `MISSING_REPO` / `MISSING_SOURCE` / `MISSING_SPEC` | 400 | Required JSON field absent on the relevant generation / pull endpoint. |
-| `INVALID_MODE` | 400 | `POST /skills/generate` `mode` is not `simple` or `advanced` (§7.1). |
+| `invalid_mode` | 400 | `POST /skills/generate` `mode` is not `simple` or `advanced` (§7.1). |
 | `AMBIGUOUS_SOURCE` | 400 | `/skills/generate/from-source` got both `code` and `repoUrl`. |
 | `EMPTY_SOURCE` | 400 | `/skills/generate/from-source` got an empty `code` after fetching. |
 | `REPO_FETCH_FAILED` | 400 | `/skills/generate/from-source` could not fetch the requested GitHub repo. |
@@ -1287,7 +1287,7 @@ A normal stream ends with `generation_complete` followed by the proxy closing th
 }
 ```
 
-The three file arrays are always present (empty when unused). Nothing is persisted — assemble the package yourself and publish it with `POST /api/v1/skills` (§2.2). **In `simple` mode (§7.1) the server guarantees `category` is `plain` and all six of `scripts` / `references` / `assets` / `runtimes` / `dependencies` / `envVars` are empty** — an answer that violates that never reaches `generation_complete`.
+`raw` is the model's verbatim answer, so the model may omit any of the three file arrays (and the runtime arrays) — treat a missing array as empty. Nothing is persisted — assemble the package yourself and publish it with `POST /api/v1/skills` (§3.1). **In `simple` mode (§7.1) the server guarantees `category` is `plain`, there is no `outputType`, and each of `scripts` / `references` / `assets` / `runtimes` / `dependencies` / `envVars` is empty or absent** — an answer that violates that never reaches `generation_complete`.
 
 ### 7.1 Generate from prompt — `POST /api/v1/skills/generate`
 
@@ -1295,7 +1295,7 @@ Generate a fresh skill from a natural-language prompt. Two body shapes: single-s
 
 | Field | Values | Default | Meaning |
 |---|---|---|---|
-| `mode` | `"simple"` \| `"advanced"` | `"advanced"` | Package shape. `advanced` = the model may emit `scripts[]`, `references[]`, `assets[]` (and pick `runtime-based`). `simple` = one `SKILL.md`, nothing else — the model is told to keep everything inline and the server **rejects** any answer that carries files or a non-plain category (one corrective retry, then `error`). Anything else → 400 `INVALID_MODE` before the quota reserve. |
+| `mode` | `"simple"` \| `"advanced"` | `"advanced"` | Package shape. `advanced` = the model may emit `scripts[]`, `references[]`, `assets[]` (and pick `runtime-based`). `simple` = one `SKILL.md`, nothing else — the model is told to keep everything inline and the server **rejects** any answer that carries files, an `outputType` or a non-plain category (one corrective retry, then `error`). Omitted, `null` or `""` → the default; anything else → 400 `invalid_mode` before the quota reserve. |
 | `modelId` | id from `GET /api/v1/me/models?surface=skillGen` (§11) | surface default | Admin-curated model to use. |
 
 **Auth: required.** **Permission: `ornn:skill:build`.**
@@ -1336,21 +1336,21 @@ When `package` is included, its file contents are extracted (SKILL.md + scripts/
 
 Same SSE event types, but the model has the prior turns as conversational context.
 
-Retry behaviour differs between the two shapes. Single-shot re-asks the model once for **any** rejected first answer (not JSON, schema-invalid, or a `simple`-mode violation) — you see `validation_error` with `retrying: true` and the run may end on `error` with no `generation_complete`. Multi-turn does **not** retry a merely non-JSON answer (a refinement turn may legitimately be prose): it emits `validation_error` with `retrying: false` and still delivers that text in `generation_complete`, so re-validate `raw` before trusting it. The one multi-turn exception is a `simple`-mode violation, which gets the same single corrective retry and ends on `error` if the model still emits files.
+Retry behaviour differs between the two shapes. Single-shot re-asks the model once for **any** rejected first answer (not JSON, schema-invalid, or a `simple`-mode violation) — you see `validation_error` with `retrying: true` and the run may end on `error` with no `generation_complete`. Multi-turn does **not** retry a merely non-JSON answer (a refinement turn may legitimately be prose): it emits `validation_error` with `retrying: false` and still delivers that text in `generation_complete`, so re-validate `raw` before trusting it. The one multi-turn exception is a `simple`-mode violation, which gets the same single corrective retry and ends on `error` unless the retry is a valid, file-free skill.
 
 Response: SSE stream as in §7.0. No JSON envelope.
 
 | Code (in stream) | Cause |
 |---|---|
 | `MISSING_PROMPT` | Neither `prompt` nor `messages` present. |
-| `INVALID_MODE` | `mode` is not `simple` or `advanced` (400 before the stream and before any quota reserve). |
+| `invalid_mode` | `mode` is not `simple` or `advanced` (400 before the stream and before any quota reserve). |
 | `INVALID_CONTENT_TYPE` | Wrong Content-Type — must be `application/json` or `multipart/form-data`. |
 | `AUTH_MISSING` | 401 returned **before** the stream starts. |
 | `FORBIDDEN` | 403 returned before the stream starts (missing `ornn:skill:build`). |
 
 ### 7.2 Generate from source — `POST /api/v1/skills/generate/from-source`
 
-Generate a skill by analysing existing source code — either an inline snippet or a public GitHub repo. Always produces the equivalent of a `simple` package (a `plain` skill with empty `scripts` / `references` / `assets`); there is no `mode` field here — one sent in the body is ignored, not rejected.
+Generate a skill by analysing existing source code — either an inline snippet or a public GitHub repo. The prompt asks for a `plain`, file-free skill (the same shape `simple` mode produces), but this path does **not** enforce it server-side the way `simple` does — validate `raw` before publishing. There is no `mode` field here; one sent in the body is ignored, not rejected.
 
 **Auth: required.** **Permission: `ornn:skill:build`.**
 
@@ -1378,7 +1378,7 @@ Response: SSE stream (§7.0).
 
 ### 7.3 Generate from OpenAPI — `POST /api/v1/skills/generate/from-openapi`
 
-Generate a skill that wraps one or more endpoints from an OpenAPI 3 spec. Like §7.2 this always produces the equivalent of a `simple` package and takes no `mode` field (ignored if sent).
+Generate a skill that wraps one or more endpoints from an OpenAPI 3 spec. Like §7.2 the prompt asks for a `plain`, file-free skill but the server does not enforce it here — validate `raw`; there is no `mode` field (ignored if sent).
 
 **Auth: required.** **Permission: `ornn:skill:build`.**
 
