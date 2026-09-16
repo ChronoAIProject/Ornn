@@ -136,8 +136,7 @@ export function createGenerationRoutes(config: GenerationRoutesConfig): Hono<{ V
             c,
             generationService.generateStreamWithHistory(
               body.messages as Array<{ role: "user" | "assistant"; content: string }>,
-              c.req.raw.signal,
-              pf.modelId,
+              { signal: c.req.raw.signal, modelOverride: pf.modelId },
             ),
             keepAliveMs,
             { quotaService, userId: pf.userId, permissions: pf.permissions, modelId: pf.modelId, reservedAt: pf.reservedAt },
@@ -171,7 +170,7 @@ export function createGenerationRoutes(config: GenerationRoutesConfig): Hono<{ V
       const keepAliveMs = await resolveKeepAliveMs(keepAliveIntervalMsResolver);
       return streamGenerationEvents(
         c,
-        generationService.generateStream(query, signal, pf.modelId),
+        generationService.generateStream(query, { signal, modelOverride: pf.modelId }),
         keepAliveMs,
         { quotaService, userId: pf.userId, permissions: pf.permissions, modelId: pf.modelId, reservedAt: pf.reservedAt },
       );

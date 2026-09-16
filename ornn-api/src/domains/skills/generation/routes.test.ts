@@ -35,6 +35,7 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { Hono } from "hono";
 import JSZip from "jszip";
 import { createGenerationRoutes, type GenerationRoutesConfig } from "./routes";
+import type { GenerateOptions } from "./service";
 import { __resetRateLimitForTests } from "../../../middleware/rateLimit";
 import { buildProblemJsonBody } from "../../../shared/types/index";
 import type { SkillStreamEvent } from "../../../shared/types/index";
@@ -97,10 +98,9 @@ class FakeGenerationService {
 
   generateStream(
     query: string,
-    _signal?: AbortSignal,
-    modelOverride?: string,
+    options: GenerateOptions = {},
   ): AsyncIterable<SkillStreamEvent> {
-    this.generateStreamCalls.push({ query, modelOverride });
+    this.generateStreamCalls.push({ query, modelOverride: options.modelOverride });
     return this.emit();
   }
 
