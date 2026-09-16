@@ -61,10 +61,11 @@ export type GeneratedSkillValidation =
     };
 
 /**
- * Array fields that must be empty in `simple` mode. `category` is checked
- * separately (must be `plain`). `outputType` is deliberately not listed:
- * a stray `outputType` on a plain skill is harmless and the frontmatter
- * builder ignores it.
+ * Array fields that must be empty in `simple` mode. `category` (must be
+ * `plain`) and `outputType` (must be absent — the web frontmatter
+ * builder emits `output-type` when set, and the frontmatter schema
+ * rejects it on a plain skill, so a stray value would make the
+ * generated SKILL.md unpublishable) are checked separately.
  */
 const SIMPLE_MODE_EMPTY_FIELDS = [
   "scripts",
@@ -76,39 +77,42 @@ const SIMPLE_MODE_EMPTY_FIELDS = [
 ] as const;
 
 /**
- * Names of the fields that make a schema-valid skill unacceptable in
- * `simple` mode. Empty array ⇒ the skill is a legal simple package.
+ * Names of the fields that make an answer unacceptable in `simple`
+ * mode. Works on the raw parsed JSON object as well as on a validated
+ * `GeneratedSkill`, so the check can run BEFORE schema validation — a
+ * document that trips an unrelated schema rule (say, an over-long
+ * description) but still carries `scripts` must be classified as a
+ * mode violation, not a schema failure, or the multi-turn path would
+ * deliver it verbatim. Empty array ⇒ legal simple package.
  */
-export function findSimpleModeViolations(skill: GeneratedSkill): string[] {
+export function findSimpleModeViolations(doc: object): string[] {
+  const d = doc as Record<string, unknown>;
   const violations: string[] = [];
-  if (skill.category !== "plain") violations.push("category");
+  if (d.category !== undefined && d.category !== "plain") violations.push("category");
+  if (d.outputType !== undefined && d.outputType !== null) violations.push("outputType");
   for (const field of SIMPLE_MODE_EMPTY_FIELDS) {
-    if (skill[field].length > 0) violations.push(field);
+    const value = d[field];
+    if (Array.isArray(value) && value.length > 0) violations.push(field);
   }
   return violations;
 }
 
 /**
- * Strip markdown fences / surrounding prose, parse the JSON object and
- * validate it against {@link generatedSkillSchema}. Returns `null` when
- * the text is not a schema-valid skill document.
+ * Strip markdown fences / surrounding prose and parse the JSON object.
+ * Anything that is not a JSON object (unparseable text, `null`, an
+ * array, a scalar) is `invalid_json`.
  */
-export function parseGeneratedSkill(raw: string): GeneratedSkill | null {
-  const result = parseGeneratedSkillDetailed(raw);
-  return result.ok ? result.skill : null;
-}
+function parseJsonObject(raw: string): Record<string, unknown> | null {
+  let cleaned = raw.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
 
-function parseGeneratedSkillDetailed(raw: string): GeneratedSkillValidation {
-  let json: Record<string, unknown>;
+  const jsonStart = cleaned.indexOf("{");
+  const jsonEnd = cleaned.lastIndexOf("}");
+  if (jsonStart >= 0 && jsonEnd > jsonStart) {
+    cleaned = cleaned.slice(jsonStart, jsonEnd + 1);
+  }
+
+  let json: unknown;
   try {
-    let cleaned = raw.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
-
-    const jsonStart = cleaned.indexOf("{");
-    const jsonEnd = cleaned.lastIndexOf("}");
-    if (jsonStart >= 0 && jsonEnd > jsonStart) {
-      cleaned = cleaned.slice(jsonStart, jsonEnd + 1);
-    }
-
     json = JSON.parse(cleaned);
   } catch (err) {
     // Generated-skill JSON parse failed. Caller treats this as
@@ -116,12 +120,28 @@ function parseGeneratedSkillDetailed(raw: string): GeneratedSkillValidation {
     // so we can spot a model that's consistently producing
     // unparseable output (#579).
     logger.debug({ err }, "generated skill JSON parse failed");
-    return { ok: false, reason: "invalid_json", message: "Invalid JSON from LLM", violations: [] };
+    return null;
   }
+  if (json === null || typeof json !== "object" || Array.isArray(json)) {
+    logger.debug({ kind: Array.isArray(json) ? "array" : typeof json }, "generated skill JSON is not an object");
+    return null;
+  }
+  return json as Record<string, unknown>;
+}
 
-  // Handle backward-compat: rename readmeMd -> readmeBody
-  if (json.readmeMd && !json.readmeBody) {
-    const md = json.readmeMd as string;
+const INVALID_JSON: GeneratedSkillValidation = {
+  ok: false,
+  reason: "invalid_json",
+  message: "Invalid JSON from LLM",
+  violations: [],
+};
+
+/** Schema-validate a parsed object, applying the legacy `readmeMd` migration first. */
+function validateSchema(json: Record<string, unknown>): GeneratedSkillValidation {
+  // Handle backward-compat: rename readmeMd -> readmeBody. Only a string
+  // can be migrated; anything else is left for the schema to reject.
+  if (typeof json.readmeMd === "string" && !json.readmeBody) {
+    const md = json.readmeMd;
     const fmEnd = md.indexOf("\n---", 3);
     json.readmeBody = fmEnd > 0 ? md.slice(fmEnd + 4).trim() : md;
     delete json.readmeMd;
@@ -142,26 +162,44 @@ function parseGeneratedSkillDetailed(raw: string): GeneratedSkillValidation {
 }
 
 /**
- * Parse + schema-validate, then apply the package-shape rule for `mode`.
- * In `advanced` mode every schema-valid answer is accepted; in `simple`
- * mode an answer that carries scripts / references / assets / runtime
- * fields or a non-plain category is rejected as a `mode_violation`.
+ * Parse + schema-validate. Returns `null` when the text is not a
+ * schema-valid skill document.
+ */
+export function parseGeneratedSkill(raw: string): GeneratedSkill | null {
+  const json = parseJsonObject(raw);
+  if (!json) return null;
+  const result = validateSchema(json);
+  return result.ok ? result.skill : null;
+}
+
+/**
+ * Parse, then apply the package-shape rule for `mode`, then
+ * schema-validate. In `advanced` mode every schema-valid answer is
+ * accepted; in `simple` mode any parseable answer that carries scripts /
+ * references / assets / runtime fields, an `outputType`, or a non-plain
+ * category is rejected as a `mode_violation` — before the schema runs,
+ * so the classification does not depend on the rest of the document
+ * being well-formed.
  */
 export function validateGeneratedSkill(
   raw: string,
   mode: GenerationMode,
 ): GeneratedSkillValidation {
-  const parsed = parseGeneratedSkillDetailed(raw);
-  if (!parsed.ok || mode !== "simple") return parsed;
+  const json = parseJsonObject(raw);
+  if (!json) return INVALID_JSON;
 
-  const violations = findSimpleModeViolations(parsed.skill);
-  if (violations.length === 0) return parsed;
+  if (mode === "simple") {
+    const violations = findSimpleModeViolations(json);
+    if (violations.length > 0) {
+      logger.debug({ violations }, "Generated skill violates simple mode");
+      return {
+        ok: false,
+        reason: "mode_violation",
+        message: `Simple mode allows SKILL.md only, but the model emitted: ${violations.join(", ")}`,
+        violations,
+      };
+    }
+  }
 
-  logger.debug({ violations }, "Generated skill violates simple mode");
-  return {
-    ok: false,
-    reason: "mode_violation",
-    message: `Simple mode allows SKILL.md only, but the model emitted: ${violations.join(", ")}`,
-    violations,
-  };
+  return validateSchema(json);
 }

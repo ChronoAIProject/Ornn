@@ -144,6 +144,7 @@ describe("findSimpleModeViolations", () => {
   test("names every offending field, category first", () => {
     expect(findSimpleModeViolations(parseGeneratedSkill(SCRIPTED_JSON)!)).toEqual([
       "category",
+      "outputType",
       "scripts",
       "references",
       "assets",
@@ -160,9 +161,19 @@ describe("findSimpleModeViolations", () => {
     expect(findSimpleModeViolations(skill)).toEqual(["references"]);
   });
 
-  test("a stray outputType on a plain skill is tolerated", () => {
+  test("a stray outputType on a plain skill is a violation (frontmatter would reject it)", () => {
     const skill = parseGeneratedSkill(JSON.stringify({ ...PLAIN, outputType: "text" }))!;
-    expect(findSimpleModeViolations(skill)).toEqual([]);
+    expect(findSimpleModeViolations(skill)).toEqual(["outputType"]);
+  });
+
+  test("works on a raw parsed object that would fail the schema", () => {
+    // description too short, tag uppercase — but it still carries files.
+    const raw = { description: "x", tags: ["Bad"], scripts: [{ filename: "a.js", content: "1" }] };
+    expect(findSimpleModeViolations(raw)).toEqual(["scripts"]);
+  });
+
+  test("ignores empty arrays and a missing category on a raw object", () => {
+    expect(findSimpleModeViolations({ scripts: [], references: [] })).toEqual([]);
   });
 });
 
@@ -215,9 +226,63 @@ describe("validateGeneratedSkill", () => {
     }
   });
 
-  test("a schema failure is reported as schema, not mode_violation", () => {
-    const r = validateGeneratedSkill(JSON.stringify({ ...SCRIPTED, name: "Bad Name" }), "simple");
+  test("simple: a schema-invalid answer that still carries files is a mode_violation, not schema", () => {
+    // The multi-turn path delivers `schema` rejections verbatim (prose is
+    // allowed there), so a files-carrying answer must be classified as a
+    // mode violation regardless of the other schema rules it breaks.
+    for (const doc of [
+      { ...SCRIPTED, name: "Bad Name" },
+      { ...SCRIPTED, description: "x" },
+      { ...SCRIPTED, tags: ["Demo"] },
+      { description: "short", category: "runtime-based", scripts: [{ filename: "a.js", content: "1" }] },
+    ]) {
+      const r = validateGeneratedSkill(JSON.stringify(doc), "simple");
+      expect(r.ok).toBe(false);
+      if (!r.ok) {
+        expect(r.reason).toBe("mode_violation");
+        expect(r.violations).toContain("scripts");
+      }
+    }
+  });
+
+  test("simple: a schema-invalid answer WITHOUT files is reported as schema", () => {
+    const r = validateGeneratedSkill(JSON.stringify({ ...PLAIN, name: "Bad Name" }), "simple");
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.reason).toBe("schema");
+  });
+
+  test("advanced: a schema-invalid scripted answer is reported as schema", () => {
+    const r = validateGeneratedSkill(JSON.stringify({ ...SCRIPTED, name: "Bad Name" }), "advanced");
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toBe("schema");
+  });
+
+  test("simple: outputType on an otherwise plain answer is a mode_violation", () => {
+    const r = validateGeneratedSkill(JSON.stringify({ ...PLAIN, outputType: "text" }), "simple");
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.violations).toEqual(["outputType"]);
+  });
+
+  test("JSON that is null, an empty array or a scalar is invalid_json, never a throw", () => {
+    // (An array that CONTAINS an object is sliced down to that object by
+    // the brace-span cleanup — legacy behaviour, exercised elsewhere.)
+    for (const raw of ["null", "[]", "42", "\"str\"", "true"]) {
+      for (const mode of ["simple", "advanced"] as const) {
+        const r = validateGeneratedSkill(raw, mode);
+        expect(r.ok).toBe(false);
+        if (!r.ok) expect(r.reason).toBe("invalid_json");
+      }
+      expect(parseGeneratedSkill(raw)).toBeNull();
+    }
+  });
+
+  test("a non-string readmeMd is left to the schema instead of throwing", () => {
+    for (const readmeMd of [null, 42, { nested: true }]) {
+      const doc = { ...PLAIN, readmeBody: undefined, readmeMd };
+      const r = validateGeneratedSkill(JSON.stringify(doc), "advanced");
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.reason).toBe("schema");
+      expect(parseGeneratedSkill(JSON.stringify(doc))).toBeNull();
+    }
   });
 });

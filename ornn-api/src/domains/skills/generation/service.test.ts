@@ -712,6 +712,39 @@ describe("generateStreamWithHistory mode", () => {
     expect(err.message).toContain("retry 502");
     expect(types(events)).not.toContain("generation_complete");
   });
+
+  test("mode=simple: schema-invalid answer that carries files is retried, never delivered", async () => {
+    // Trips the schema (uppercase tag) AND carries scripts. The
+    // multi-turn no-retry rule for bad JSON must not apply here — the
+    // file-free guarantee wins.
+    const schemaInvalidScripted = JSON.stringify({ ...JSON.parse(SCRIPTED_SKILL), tags: ["Demo"] });
+    const { svc, completeParams } = make({
+      streamFrames: [outputTextDelta(schemaInvalidScripted)],
+      completeResult: completeOutput(VALID_SKILL),
+    });
+    const events = await drain(svc.generateStreamWithHistory(turn, { mode: "simple" }));
+    expect(types(events)).toEqual(["generation_start", "token", "validation_error", "generation_complete"]);
+    expect((events[2] as { retrying: boolean }).retrying).toBe(true);
+    expect(completeParams).toHaveLength(1);
+    expect((events[3] as { raw: string }).raw).toBe(VALID_SKILL);
+  });
+
+  test("mode=simple: abort flipped after the first answer skips the retry and ends in error", async () => {
+    const ctrl = new AbortController();
+    const { svc, completeParams } = make({
+      streamFrames: [outputTextDelta(SCRIPTED_SKILL)],
+      completeResult: completeOutput(VALID_SKILL),
+      // Abort after the last frame: the stream loop only re-checks the
+      // signal on the next iteration, so validation still runs, but the
+      // retry must be skipped.
+      onFrame: () => ctrl.abort(),
+    });
+    const events = await drain(
+      svc.generateStreamWithHistory(turn, { mode: "simple", signal: ctrl.signal }),
+    );
+    expect(types(events)).toEqual(["generation_start", "token", "validation_error", "error"]);
+    expect(completeParams).toHaveLength(0);
+  });
 });
 
 // ---- generateFromOpenApi ---------------------------------------------
