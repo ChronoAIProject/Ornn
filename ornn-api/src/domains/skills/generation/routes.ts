@@ -5,14 +5,9 @@
  */
 
 import { Hono } from "hono";
-import { streamSSE } from "hono/streaming";
-import type { Context } from "hono";
 import type { SkillGenerationService } from "./service";
 import type { QuotaService } from "../../quota/service";
 import type { LlmProvidersService } from "../../settings/llmProviders/service";
-import { throwQuotaError } from "../../quota/routes";
-import { throwModelResolutionError } from "../../settings/llmProviders/routes";
-import type { ChargeOutcome } from "../../quota/types";
 import {
   type AuthVariables,
   nyxidAuthMiddleware,
@@ -20,11 +15,11 @@ import {
   getAuth,
 } from "../../../middleware/nyxidAuth";
 import { AppError } from "../../../shared/types/index";
-import { resolveZipRoot } from "../../../shared/utils/zip";
 import { validateBody, getValidatedBody } from "../../../middleware/validate";
 import { rateLimit } from "../../../middleware/rateLimit";
 import { fetchGithubSourceBundle } from "./githubFetcher";
-import JSZip from "jszip";
+import { analyzePackageContent } from "./packageContext";
+import { preflight, resolveKeepAliveMs, streamGenerationEvents } from "./streaming";
 import { createLogger } from "../../../shared/logger";
 import { z } from "zod";
 
@@ -50,195 +45,6 @@ export interface GenerationRoutesConfig {
   quotaService: QuotaService;
   /** Admin-curated model catalog (per-provider, #270). */
   llmProvidersService: LlmProvidersService;
-}
-
-/** Helper to resolve keep-alive ms with a safe fallback. */
-async function resolveKeepAliveMs(
-  resolver: () => Promise<number>,
-): Promise<number> {
-  try {
-    const v = await resolver();
-    return Number.isFinite(v) && v > 0 ? v : 15_000;
-  } catch (err) {
-    logger.warn(
-      { err: (err as Error).message },
-      "Failed to resolve skillGen sseKeepAliveMs; using 15s default",
-    );
-    return 15_000;
-  }
-}
-
-/**
- * Run model resolution + quota reserve for a skill-gen request. Returns
- * the resolved model id; throws the appropriate AppError when either
- * gate fails (models → 503/4xx, quota → 429).
- *
- * Order is load-bearing (#808): model resolution runs FIRST so a
- * resolution failure can't strand a reserved quota slot. `resolveModel`
- * is a pure catalog read (no LLM), so reserving last still keeps the
- * "429 before any LLM cost" guarantee. Once `checkAllowed` reserves,
- * every caller threads the result straight into `streamGenerationEvents`,
- * whose `finally` always reconciles the reservation (commit on success,
- * release on system_error/abort).
- */
-async function preflight(
-  c: Context<{ Variables: AuthVariables }>,
-  quotaService: QuotaService,
-  llmProvidersService: LlmProvidersService,
-  requestedModelId: string | undefined,
-): Promise<{
-  modelId: string;
-  userId: string;
-  permissions: readonly string[] | undefined;
-  reservedAt: Date;
-}> {
-  const authCtx = getAuth(c);
-
-  const resolution = await llmProvidersService.resolveModel({
-    surface: "skillGen",
-    // exactOptionalPropertyTypes (#657)
-    ...(requestedModelId !== undefined ? { requested: requestedModelId } : {}),
-  });
-  if (resolution.kind !== "ok") throwModelResolutionError(resolution);
-
-  // Capture the reservation instant so the charge lands in the SAME
-  // month bucket the slot was reserved against (#827) — see the
-  // playground route for the boundary-straddle rationale.
-  const reservedAt = new Date();
-  const decision = await quotaService.checkAllowed({
-    userId: authCtx.userId,
-    permissions: authCtx.permissions,
-    surface: "skillGen",
-    now: reservedAt,
-  });
-  if (!decision.allowed) throwQuotaError(decision);
-
-  return {
-    modelId: resolution.modelId,
-    userId: authCtx.userId,
-    permissions: authCtx.permissions,
-    reservedAt,
-  };
-}
-
-/**
- * Stream generation events via SSE with keep-alive. When `chargeAfter`
- * is set, fires a quota charge after the stream finishes — outcome
- * derived from whether the stream emitted a `generation_complete` event
- * (skill-side success), a `validation_error` (skill ran but produced
- * invalid output — still chargeable), or only `error` events
- * (system_error — no charge).
- */
-async function streamGenerationEvents(
-  c: Context,
-  events: AsyncIterable<{ type: string; [key: string]: unknown }>,
-  keepAliveIntervalMs: number,
-  chargeAfter?: {
-    quotaService: QuotaService;
-    userId: string;
-    permissions: readonly string[] | undefined;
-    /** Resolved model id used for the LLM call — flows into `usedByModel`. */
-    modelId: string;
-    /**
-     * Reservation instant captured at `preflight` time (#827). Threaded
-     * into `chargeOnCompletion` as `now` so the commit/release reconciles
-     * against the month bucket the slot was reserved in, not wall-clock.
-     */
-    reservedAt: Date;
-  },
-) {
-  c.header("Cache-Control", "no-cache");
-  c.header("Connection", "keep-alive");
-  c.header("X-Accel-Buffering", "no");
-
-  return streamSSE(c, async (stream) => {
-    const keepAlive = setInterval(() => {
-      stream.writeSSE({ data: "", event: "keepalive" }).catch(() => {});
-    }, keepAliveIntervalMs);
-
-    const signal = c.req.raw.signal;
-    const onAbort = () => clearInterval(keepAlive);
-    signal.addEventListener("abort", onAbort, { once: true });
-
-    let outcome: ChargeOutcome = "system_error";
-
-    try {
-      for await (const event of events) {
-        await stream.writeSSE({ data: JSON.stringify(event) });
-        if (event.type === "generation_complete") outcome = "success";
-        else if (event.type === "validation_error") outcome = "skill_error";
-      }
-    } finally {
-      clearInterval(keepAlive);
-      signal.removeEventListener("abort", onAbort);
-      if (chargeAfter) {
-        await chargeAfter.quotaService
-          .chargeOnCompletion({
-            userId: chargeAfter.userId,
-            permissions: chargeAfter.permissions,
-            surface: "skillGen",
-            outcome,
-            modelId: chargeAfter.modelId,
-            // Reconcile against the reserved month bucket (#827).
-            now: chargeAfter.reservedAt,
-          })
-          .catch((err) => {
-            logger.warn(
-              { userId: chargeAfter.userId, err: (err as Error).message },
-              "Quota charge after skill-gen stream failed",
-            );
-          });
-      }
-    }
-  });
-}
-
-/**
- * Read content from a ZIP package for analysis.
- */
-async function analyzePackageContent(zipBuffer: Uint8Array): Promise<string> {
-  const zip = await JSZip.loadAsync(zipBuffer);
-  const allPaths = Object.keys(zip.files);
-  resolveZipRoot(zip, allPaths);
-  const parts: string[] = [];
-
-  const relevantFiles = ["SKILL.md"];
-  const relevantDirs = ["scripts/", "references/", "assets/"];
-
-  for (const path of allPaths) {
-    const file = zip.files[path];
-    // allPaths is `Object.keys(zip.files)`, but noUncheckedIndexedAccess
-    // (#450) widens the lookup to `T | undefined`. Defensive skip.
-    if (!file || file.dir) continue;
-
-    // Check if this is a relevant file
-    const segments = path.split("/").filter(Boolean);
-    let relativePath = path;
-    if (segments.length > 1) {
-      const firstEntry = segments[0]!;
-      const folderEntry = zip.files[firstEntry + "/"];
-      if (folderEntry && folderEntry.dir) {
-        relativePath = segments.slice(1).join("/");
-      }
-    }
-
-    const isRelevant = relevantFiles.includes(relativePath) ||
-      relevantDirs.some((d) => relativePath.startsWith(d));
-
-    if (isRelevant) {
-      try {
-        const content = await file.async("string");
-        parts.push(`--- ${relativePath} ---\n${content}`);
-      } catch (err) {
-        // Skip binary or unreadable files. Log so an upload that's
-        // 100% binary doesn't silently produce an empty generation
-        // context (#579).
-        logger.debug({ err, relativePath }, "generation: skipping unreadable file");
-      }
-    }
-  }
-
-  return parts.join("\n\n");
 }
 
 export function createGenerationRoutes(config: GenerationRoutesConfig): Hono<{ Variables: AuthVariables }> {
