@@ -18,6 +18,7 @@
  * @module components/skill/generative/GenerationModeToggle
  */
 
+import { useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { GENERATION_MODES, type GenerationMode } from "@/types/skillPackage";
 import { useGenerationModeCopy } from "@/hooks/useGenerationMode";
@@ -38,11 +39,16 @@ export function GenerationModeToggle({
 }: GenerationModeToggleProps) {
   const { t } = useTranslation();
   const { labels, hints } = useGenerationModeCopy();
+  const segmentRefs = useRef<Partial<Record<GenerationMode, HTMLButtonElement | null>>>({});
 
+  // Arrow keys both select AND move focus: with a roving tabindex the
+  // previously focused segment drops to tabIndex -1 on re-render, so
+  // leaving focus there would strand the keyboard user.
   const move = (delta: 1 | -1) => {
     const idx = GENERATION_MODES.indexOf(value);
     const next = GENERATION_MODES[(idx + delta + GENERATION_MODES.length) % GENERATION_MODES.length]!;
     if (next !== value) onChange(next);
+    segmentRefs.current[next]?.focus();
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
@@ -75,6 +81,9 @@ export function GenerationModeToggle({
           return (
             <button
               key={mode}
+              ref={(el) => {
+                segmentRefs.current[mode] = el;
+              }}
               type="button"
               role="radio"
               aria-checked={selected}

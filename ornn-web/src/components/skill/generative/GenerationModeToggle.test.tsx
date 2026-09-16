@@ -2,8 +2,9 @@
  * UT-WEB-GENERATION-MODE-TOGGLE-001 (#1242)
  *
  * Pins the SIMPLE | ADVANCED segmented control: ARIA radiogroup
- * semantics, click + arrow-key selection, roving tabindex,
- * and the disabled lock used while streaming.
+ * semantics, click + arrow-key selection (which also moves focus, or
+ * the roving tabindex would strand the keyboard user), and the
+ * disabled lock used while streaming.
  *
  * @module components/skill/generative/GenerationModeToggle.test
  */
@@ -63,18 +64,37 @@ describe("GenerationModeToggle", () => {
     const onChange = vi.fn();
     const { rerender } = render(<GenerationModeToggle value="simple" onChange={onChange} />);
     const group = screen.getByRole("radiogroup");
+
     fireEvent.keyDown(group, { key: "ArrowRight" });
+    expect(onChange).toHaveBeenCalledTimes(1);
     expect(onChange).toHaveBeenLastCalledWith("advanced");
+
+    // From simple, Left wraps to advanced — a distinct call, not the previous one.
+    onChange.mockClear();
     fireEvent.keyDown(group, { key: "ArrowLeft" });
-    // From simple, Left wraps to advanced.
+    expect(onChange).toHaveBeenCalledTimes(1);
     expect(onChange).toHaveBeenLastCalledWith("advanced");
 
     rerender(<GenerationModeToggle value="advanced" onChange={onChange} />);
+    onChange.mockClear();
     fireEvent.keyDown(group, { key: "ArrowDown" });
-    // From advanced, Down wraps to simple.
+    expect(onChange).toHaveBeenCalledTimes(1);
     expect(onChange).toHaveBeenLastCalledWith("simple");
+
+    onChange.mockClear();
     fireEvent.keyDown(group, { key: "ArrowUp" });
+    expect(onChange).toHaveBeenCalledTimes(1);
     expect(onChange).toHaveBeenLastCalledWith("simple");
+  });
+
+  it("arrow keys move focus to the newly selected segment (roving tabindex)", () => {
+    const onChange = vi.fn();
+    render(<GenerationModeToggle value="simple" onChange={onChange} />);
+    const [simple, advanced] = radios();
+    simple.focus();
+    expect(document.activeElement).toBe(simple);
+    fireEvent.keyDown(screen.getByRole("radiogroup"), { key: "ArrowRight" });
+    expect(document.activeElement).toBe(advanced);
   });
 
   it("ignores unrelated keys", () => {
