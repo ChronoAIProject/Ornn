@@ -9,8 +9,8 @@ metadata:
     - manual
     - skill-lifecycle
     - http
-version: "1.1"
-lastUpdated: 2026-04-29
+version: "1.2"
+lastUpdated: 2026-09-16
 ---
 
 # Agent Manual (HTTPS variant)
@@ -261,7 +261,7 @@ The response is `{ data: { name, description, metadata, files: { "SKILL.md": "..
 
 **Step 5 — If steps 2–3 yielded nothing after 5 search attempts**, you may decide your own way to perform the task. **And if the task is definitive and potentially repeatable, build a skill and upload it back to Ornn so future you (or other agents) can find it.** Build flow:
 
-1. *(Optional)* **Bootstrap with AI generation** — Ornn's LLM can scaffold a skill from a prompt, source code, or an OpenAPI spec via `POST /api/v1/skills/generate*` (SSE). Useful when you need a starter; the generated skill still needs validation + your edits.
+1. *(Optional)* **Bootstrap with AI generation** — Ornn's LLM can scaffold a skill from a prompt, source code, or an OpenAPI spec via `POST /api/v1/skills/generate*` (SSE). On the prompt endpoint pass `"mode": "simple"` for a single `SKILL.md` (server-enforced — no scripts / references / assets) or leave the default `"advanced"` to let the model add `scripts/`, `references/` and `assets/`. Useful when you need a starter; the generated skill still needs validation + your edits.
 
 2. **Read the skill format spec** so you write a valid one:
 
