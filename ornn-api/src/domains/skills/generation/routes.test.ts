@@ -541,6 +541,19 @@ describe("POST /skills/generate — mode", () => {
     expect(quota.checkAllowedCalls).toBe(0);
   });
 
+  it("rejects a repeated multipart mode field (array under parseBody all:true) with invalid_mode", async () => {
+    const quota = new FakeQuotaService();
+    const { app } = buildApp({ quotaService: quota });
+    const form = new FormData();
+    form.set("prompt", "p");
+    form.append("mode", "simple");
+    form.append("mode", "advanced");
+    const res = await app.request("/api/v1/skills/generate", { method: "POST", body: form });
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { code: string }).code).toBe("invalid_mode");
+    expect(quota.checkAllowedCalls).toBe(0);
+  });
+
   it("rejects a multipart mode sent as a file with invalid_mode", async () => {
     const { app } = buildApp();
     const form = new FormData();
