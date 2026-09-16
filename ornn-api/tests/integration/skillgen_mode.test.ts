@@ -98,6 +98,14 @@ async function seedSkillGenModel(db: Harness["db"], modelId: string): Promise<vo
 
 const monthMarker = () => new Date().toISOString().slice(0, 7);
 
+/**
+ * Tests that boot their own harness (fresh app + MongoMemoryServer, to
+ * inject the LLM double) need more than Bun's 5 s default under CI load
+ * — one such test timed out at 5005 ms on a shared runner. Matches the
+ * 30 s the `afterAll` cleanup already gets.
+ */
+const HARNESS_TEST_TIMEOUT_MS = 30_000;
+
 /** Read the whole SSE body and return the parsed `data:` payloads in order. */
 async function readFrames(res: Response): Promise<Array<Record<string, unknown>>> {
   const text = await res.text();
@@ -239,7 +247,7 @@ describe("IT-SKILLGEN-MODE-SIMPLE (via injected LLM double)", () => {
     } finally {
       await oh.cleanup();
     }
-  });
+  }, HARNESS_TEST_TIMEOUT_MS);
 
   test("scripted answer twice → terminal error, no generation_complete, still charged once", async () => {
     const { client, completeCalls } = makeClient(SCRIPTED_JSON, SCRIPTED_JSON);
@@ -272,7 +280,7 @@ describe("IT-SKILLGEN-MODE-SIMPLE (via injected LLM double)", () => {
     } finally {
       await oh.cleanup();
     }
-  });
+  }, HARNESS_TEST_TIMEOUT_MS);
 
   test("multipart mode=simple form field reaches the service", async () => {
     const { client, completeCalls, streamCount } = makeClient(PLAIN_JSON, PLAIN_JSON);
@@ -297,7 +305,7 @@ describe("IT-SKILLGEN-MODE-SIMPLE (via injected LLM double)", () => {
     } finally {
       await oh.cleanup();
     }
-  });
+  }, HARNESS_TEST_TIMEOUT_MS);
 });
 
 describe("IT-SKILLGEN-MODE-ADVANCED (default)", () => {
@@ -328,5 +336,5 @@ describe("IT-SKILLGEN-MODE-ADVANCED (default)", () => {
     } finally {
       await oh.cleanup();
     }
-  });
+  }, HARNESS_TEST_TIMEOUT_MS);
 });
