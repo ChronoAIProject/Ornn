@@ -29,9 +29,11 @@ import { ValidationErrorPanel } from "@/components/skill/ValidationErrorPanel";
 import { GenerationChatMessage } from "@/components/skill/GenerationChatMessage";
 import { GenerativeEmptyHero } from "@/components/skill/generative/GenerativeEmptyHero";
 import { GenerativePackageRailTab } from "@/components/skill/generative/GenerativePackageRailTab";
+import { GenerationModeToggle } from "@/components/skill/generative/GenerationModeToggle";
 import { ModelPicker } from "@/components/models/ModelPicker";
 import { OverLimitPage } from "@/components/quota/OverLimitPage";
 import { QuotaInline } from "@/components/quota/QuotaInline";
+import { useGenerationModeCopy, usePreferredGenerationMode } from "@/hooks/useGenerationMode";
 import { useGenerativeDrawer } from "@/hooks/useGenerativeDrawer";
 import { useSkillGeneration } from "@/hooks/useSkillGeneration";
 import { useCreateSkill } from "@/hooks/useSkills";
@@ -80,10 +82,16 @@ export function CreateSkillGenerativePage() {
     skillGenSnap!.remaining <= 0;
 
   const [pickedModelId, setPickedModelId] = useState<string | null>(null);
+  // Package shape for the next turn (#1242). Persisted like the model
+  // pick; sent with every turn so the user can switch between
+  // refinements (e.g. "now add a script" → advanced).
+  const [mode, setMode] = usePreferredGenerationMode();
+  const modeCopy = useGenerationModeCopy();
 
   const handleSend = useCallback(
-    (content: string) => generation.sendMessage(content, { modelId: pickedModelId ?? undefined }),
-    [generation, pickedModelId],
+    (content: string) =>
+      generation.sendMessage(content, { modelId: pickedModelId ?? undefined, mode }),
+    [generation, pickedModelId, mode],
   );
 
   const handleStarterClick = useCallback((body: string) => {
@@ -240,10 +248,12 @@ export function CreateSkillGenerativePage() {
               )}
             </div>
 
-            {/* Composer — model picker + quota above, ChatGPT-style. */}
+            {/* Composer — quota + mode + model picker above, ChatGPT-style.
+                `flex-wrap` lets the three chips restack on narrow viewports. */}
             <div className="shrink-0 pt-3">
-              <div className="mb-2 flex items-center justify-center gap-3">
+              <div className="mb-2 flex flex-wrap items-center justify-center gap-3">
                 <QuotaInline surface="skillGen" />
+                <GenerationModeToggle value={mode} onChange={setMode} disabled={isGenerating} />
                 <ModelPicker surface="skillGen" onChange={setPickedModelId} />
               </div>
               <ChatInput
@@ -254,7 +264,17 @@ export function CreateSkillGenerativePage() {
                 isStreaming={isGenerating}
                 placeholder={chatInputPlaceholder}
               />
-              <p className="mt-2 text-center font-mono text-[10px] uppercase tracking-[0.14em] text-meta/70">
+              {/* Always-visible description of the selected mode — hover
+                  `title` on the segments is not a sufficient affordance. */}
+              <p
+                className="mt-2 text-center font-mono text-[10px] uppercase tracking-[0.14em] text-meta/70"
+                data-testid="generation-mode-hint"
+              >
+                <span className="text-accent/80">{modeCopy.labels[mode]}</span>
+                {" · "}
+                {modeCopy.hints[mode]}
+              </p>
+              <p className="mt-1 text-center font-mono text-[10px] uppercase tracking-[0.14em] text-meta/70">
                 {t("playground.kbHint", "Enter to send · Shift + Enter for newline")}
               </p>
             </div>
