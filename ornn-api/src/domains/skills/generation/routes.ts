@@ -14,7 +14,12 @@ import {
   requirePermission,
   getAuth,
 } from "../../../middleware/nyxidAuth";
-import { AppError } from "../../../shared/types/index";
+import {
+  AppError,
+  DEFAULT_GENERATION_MODE,
+  GENERATION_MODES,
+  type GenerationMode,
+} from "../../../shared/types/index";
 import { validateBody, getValidatedBody } from "../../../middleware/validate";
 import { rateLimit } from "../../../middleware/rateLimit";
 import { fetchGithubSourceBundle } from "./githubFetcher";
@@ -31,6 +36,28 @@ const logger = createLogger("skillGenerationRoutes");
  * `MAX_INPUT_CHARS` in `ChatInput.tsx`. Keep all three in sync.
  */
 const MAX_GENERATION_CHARS = 32_000;
+
+const generationModeSchema = z.enum(GENERATION_MODES);
+
+/**
+ * Parse the optional `mode` field shared by the JSON and multipart
+ * branches of `POST /skills/generate` (#1242). Absent / empty → the
+ * backward-compatible default. Anything else must be one of the known
+ * modes — a `File` or repeated form field is rejected the same way as an
+ * unknown string. Called BEFORE `preflight()` so a bad value is a plain
+ * 400 and never strands a reserved quota slot (#808).
+ */
+function parseGenerationMode(raw: unknown): GenerationMode {
+  if (raw === undefined || raw === null || raw === "") return DEFAULT_GENERATION_MODE;
+  const parsed = generationModeSchema.safeParse(raw);
+  if (!parsed.success) {
+    throw AppError.badRequest(
+      "invalid_mode",
+      `'mode' must be one of: ${GENERATION_MODES.join(", ")}`,
+    );
+  }
+  return parsed.data;
+}
 
 export interface GenerationRoutesConfig {
   generationService: SkillGenerationService;
@@ -55,7 +82,8 @@ export function createGenerationRoutes(config: GenerationRoutesConfig): Hono<{ V
 
   /**
    * POST /skills/generate
-   * Input: multipart (prompt + optional package ZIP) or JSON (prompt or messages, optional modelId)
+   * Input: multipart (prompt + optional package ZIP) or JSON (prompt or
+   *        messages), each with optional modelId + mode (#1242)
    * Response: SSE stream of generation events
    * Requires: ornn:skill:build
    */
@@ -74,6 +102,7 @@ export function createGenerationRoutes(config: GenerationRoutesConfig): Hono<{ V
       let prompt: string;
       let packageContent: string | null = null;
       let requestedModelId: string | undefined;
+      let mode: GenerationMode;
 
       if (contentType.includes("multipart/form-data")) {
         const body = await c.req.parseBody({ all: true });
@@ -86,6 +115,7 @@ export function createGenerationRoutes(config: GenerationRoutesConfig): Hono<{ V
         if (typeof body["modelId"] === "string" && body["modelId"]) {
           requestedModelId = body["modelId"];
         }
+        mode = parseGenerationMode(body["mode"]);
 
         const packageFile = body["package"];
         if (packageFile instanceof File) {
@@ -96,7 +126,7 @@ export function createGenerationRoutes(config: GenerationRoutesConfig): Hono<{ V
         // Hybrid endpoint — multipart-or-JSON. Inline Zod parse so
         // malformed JSON returns 400 invalid_body via the global RFC
         // 7807 handler instead of a raw SyntaxError 500 (#438).
-        let body: { modelId?: string; messages?: unknown[]; prompt?: string };
+        let body: { modelId?: string; messages?: unknown[]; prompt?: string; mode?: unknown };
         try {
           const text = await c.req.text();
           const raw = text.trim().length === 0 ? {} : JSON.parse(text);
@@ -111,6 +141,7 @@ export function createGenerationRoutes(config: GenerationRoutesConfig): Hono<{ V
         if (typeof body.modelId === "string" && body.modelId) {
           requestedModelId = body.modelId;
         }
+        mode = parseGenerationMode(body.mode);
 
         // Multi-turn format: messages array
         if (body.messages && Array.isArray(body.messages)) {
@@ -129,14 +160,17 @@ export function createGenerationRoutes(config: GenerationRoutesConfig): Hono<{ V
               );
             }
           }
-          logger.info({ userId: authCtx.userId, messageCount: body.messages.length }, "Multi-turn generation request");
+          logger.info(
+            { userId: authCtx.userId, messageCount: body.messages.length, mode },
+            "Multi-turn generation request",
+          );
           const pf = await preflight(c, quotaService, llmProvidersService, requestedModelId);
           const keepAliveMs = await resolveKeepAliveMs(keepAliveIntervalMsResolver);
           return streamGenerationEvents(
             c,
             generationService.generateStreamWithHistory(
               body.messages as Array<{ role: "user" | "assistant"; content: string }>,
-              { signal: c.req.raw.signal, modelOverride: pf.modelId },
+              { signal: c.req.raw.signal, modelOverride: pf.modelId, mode },
             ),
             keepAliveMs,
             { quotaService, userId: pf.userId, permissions: pf.permissions, modelId: pf.modelId, reservedAt: pf.reservedAt },
@@ -165,12 +199,15 @@ export function createGenerationRoutes(config: GenerationRoutesConfig): Hono<{ V
         ? `Existing skill package content:\n${packageContent}\n\nUser requirement: ${prompt}`
         : prompt;
 
-      logger.info({ userId: authCtx.userId, promptLength: prompt.length, modelId: pf.modelId }, "Generation request");
+      logger.info(
+        { userId: authCtx.userId, promptLength: prompt.length, modelId: pf.modelId, mode },
+        "Generation request",
+      );
 
       const keepAliveMs = await resolveKeepAliveMs(keepAliveIntervalMsResolver);
       return streamGenerationEvents(
         c,
-        generationService.generateStream(query, { signal, modelOverride: pf.modelId }),
+        generationService.generateStream(query, { signal, modelOverride: pf.modelId, mode }),
         keepAliveMs,
         { quotaService, userId: pf.userId, permissions: pf.permissions, modelId: pf.modelId, reservedAt: pf.reservedAt },
       );

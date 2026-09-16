@@ -38,7 +38,7 @@ import { createGenerationRoutes, type GenerationRoutesConfig } from "./routes";
 import type { GenerateOptions } from "./service";
 import { __resetRateLimitForTests } from "../../../middleware/rateLimit";
 import { buildProblemJsonBody } from "../../../shared/types/index";
-import type { SkillStreamEvent } from "../../../shared/types/index";
+import type { GenerationMode, SkillStreamEvent } from "../../../shared/types/index";
 import type { ChargeOutcome } from "../../quota/types";
 import type { ModelResolution } from "../../settings/llmProviders/service";
 
@@ -83,14 +83,18 @@ interface ChargeCall {
 class FakeGenerationService {
   /** Frames every generate* method yields, in order. */
   frames: SkillStreamEvent[] = happyFrames();
-  generateStreamCalls: Array<{ query: string; modelOverride: string | undefined }> = [];
+  generateStreamCalls: Array<{
+    query: string;
+    modelOverride: string | undefined;
+    mode: GenerationMode | undefined;
+  }> = [];
   fromOpenApiCalls: Array<{ spec: string }> = [];
   fromSourceCalls: Array<{
     code: string;
     framework: string | undefined;
     sourceUrl: string | undefined;
   }> = [];
-  withHistoryCalls: Array<{ messages: unknown[] }> = [];
+  withHistoryCalls: Array<{ messages: unknown[]; mode: GenerationMode | undefined }> = [];
 
   private async *emit(): AsyncIterable<SkillStreamEvent> {
     for (const f of this.frames) yield f;
@@ -100,14 +104,19 @@ class FakeGenerationService {
     query: string,
     options: GenerateOptions = {},
   ): AsyncIterable<SkillStreamEvent> {
-    this.generateStreamCalls.push({ query, modelOverride: options.modelOverride });
+    this.generateStreamCalls.push({
+      query,
+      modelOverride: options.modelOverride,
+      mode: options.mode,
+    });
     return this.emit();
   }
 
   generateStreamWithHistory(
     messages: unknown[],
+    options: GenerateOptions = {},
   ): AsyncIterable<SkillStreamEvent> {
-    this.withHistoryCalls.push({ messages });
+    this.withHistoryCalls.push({ messages, mode: options.mode });
     return this.emit();
   }
 
@@ -425,6 +434,121 @@ describe("POST /skills/generate — preflight order", () => {
     expect(body.code).toBe("quota_exceeded");
     // No charge when the slot was never reserved.
     expect(quota.charges).toHaveLength(0);
+  });
+});
+
+// ---- mode (#1242) ----------------------------------------------------
+
+describe("POST /skills/generate — mode", () => {
+  it("defaults to advanced when the JSON body omits mode", async () => {
+    const gen = new FakeGenerationService();
+    const { app } = buildApp({ generationService: gen });
+    const res = await app.request("/api/v1/skills/generate", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ prompt: "p" }),
+    });
+    expect(res.status).toBe(200);
+    expect(gen.generateStreamCalls[0]!.mode).toBe("advanced");
+  });
+
+  it("threads mode=simple from a single-turn JSON body", async () => {
+    const gen = new FakeGenerationService();
+    const { app } = buildApp({ generationService: gen });
+    const res = await app.request("/api/v1/skills/generate", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ prompt: "p", mode: "simple" }),
+    });
+    expect(res.status).toBe(200);
+    expect(gen.generateStreamCalls[0]!.mode).toBe("simple");
+  });
+
+  it("threads mode=simple from a multi-turn JSON body", async () => {
+    const gen = new FakeGenerationService();
+    const { app } = buildApp({ generationService: gen });
+    const res = await app.request("/api/v1/skills/generate", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ messages: [{ role: "user", content: "p" }], mode: "simple" }),
+    });
+    expect(res.status).toBe(200);
+    expect(gen.withHistoryCalls[0]!.mode).toBe("simple");
+  });
+
+  it("rejects an unknown mode with 400 invalid_mode BEFORE model resolution or quota reserve", async () => {
+    const gen = new FakeGenerationService();
+    const quota = new FakeQuotaService();
+    const providers = new FakeLlmProvidersService();
+    const { app } = buildApp({ generationService: gen, quotaService: quota, llmProvidersService: providers });
+    const res = await app.request("/api/v1/skills/generate", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ prompt: "p", mode: "nope" }),
+    });
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { code: string; detail: string };
+    expect(body.code).toBe("invalid_mode");
+    expect(body.detail).toContain("simple, advanced");
+    expect(providers.resolveModelArgs).toHaveLength(0);
+    expect(quota.checkAllowedCalls).toBe(0);
+    expect(quota.charges).toHaveLength(0);
+    expect(gen.generateStreamCalls).toHaveLength(0);
+  });
+
+  it("rejects a non-string mode (e.g. a number) with invalid_mode", async () => {
+    const { app } = buildApp();
+    const res = await app.request("/api/v1/skills/generate", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ messages: [{ role: "user", content: "p" }], mode: 1 }),
+    });
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { code: string }).code).toBe("invalid_mode");
+  });
+
+  it("threads mode from a multipart form field", async () => {
+    const gen = new FakeGenerationService();
+    const { app } = buildApp({ generationService: gen });
+    const form = new FormData();
+    form.set("prompt", "p");
+    form.set("mode", "simple");
+    const res = await app.request("/api/v1/skills/generate", { method: "POST", body: form });
+    expect(res.status).toBe(200);
+    expect(gen.generateStreamCalls[0]!.mode).toBe("simple");
+  });
+
+  it("treats an empty multipart mode field as the default", async () => {
+    const gen = new FakeGenerationService();
+    const { app } = buildApp({ generationService: gen });
+    const form = new FormData();
+    form.set("prompt", "p");
+    form.set("mode", "");
+    const res = await app.request("/api/v1/skills/generate", { method: "POST", body: form });
+    expect(res.status).toBe(200);
+    expect(gen.generateStreamCalls[0]!.mode).toBe("advanced");
+  });
+
+  it("rejects an unknown multipart mode with 400 invalid_mode and no quota reserve", async () => {
+    const quota = new FakeQuotaService();
+    const { app } = buildApp({ quotaService: quota });
+    const form = new FormData();
+    form.set("prompt", "p");
+    form.set("mode", "ultra");
+    const res = await app.request("/api/v1/skills/generate", { method: "POST", body: form });
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { code: string }).code).toBe("invalid_mode");
+    expect(quota.checkAllowedCalls).toBe(0);
+  });
+
+  it("rejects a multipart mode sent as a file with invalid_mode", async () => {
+    const { app } = buildApp();
+    const form = new FormData();
+    form.set("prompt", "p");
+    form.set("mode", new Blob(["simple"], { type: "text/plain" }), "mode.txt");
+    const res = await app.request("/api/v1/skills/generate", { method: "POST", body: form });
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { code: string }).code).toBe("invalid_mode");
   });
 });
 
