@@ -5,6 +5,7 @@
  */
 
 import type { GenerationStreamEvent } from "@/types/streaming";
+import type { GenerationMode } from "@/types/skillPackage";
 import { parseSseChunk } from "@/utils/sseParser";
 import { useAuthStore } from "@/stores/authStore";
 import { config } from "@/config";
@@ -14,8 +15,9 @@ const API_BASE = config.apiBaseUrl;
 export interface GenerateStreamParams {
   messages: Array<{ role: string; content: string }>;
   // exactOptionalPropertyTypes (#657)
-  model?: string | undefined;
   modelId?: string | undefined;
+  /** Package shape (#1242). Omitted → the server default (`advanced`). */
+  mode?: GenerationMode | undefined;
 }
 
 export interface StreamHandle {
@@ -54,8 +56,8 @@ export function generateSkillStream(
       },
       body: JSON.stringify({
         messages: params.messages,
-        model: params.model,
         modelId: params.modelId,
+        mode: params.mode,
       }),
       signal: controller.signal,
     },
@@ -63,6 +65,28 @@ export function generateSkillStream(
   );
 
   return { abort: () => controller.abort() };
+}
+
+/**
+ * Build the error message for a request the server rejected before the
+ * stream opened. Every pre-stream gate answers with RFC 7807
+ * problem+json (docs/CONVENTIONS.md), so prefer its `detail` — that is
+ * where e.g. `invalid_mode` explains the accepted values — and fall back
+ * to the bare status line when the body is not parseable.
+ */
+async function describeHttpFailure(response: Response): Promise<string> {
+  const fallback = `HTTP ${response.status}: ${response.statusText}`;
+  const text = await response.text().catch(() => "");
+  if (!text) return fallback;
+  try {
+    const json = JSON.parse(text) as { detail?: unknown; title?: unknown };
+    if (typeof json.detail === "string" && json.detail) return json.detail;
+    if (typeof json.title === "string" && json.title) return json.title;
+  } catch {
+    // Not JSON — a proxy error page or empty body; the status line is
+    // the most honest thing we can show.
+  }
+  return fallback;
 }
 
 /** Valid event types emitted by the generation SSE endpoints. */
@@ -101,10 +125,7 @@ async function consumeStream(
     });
 
     if (!response.ok) {
-      onEvent({
-        type: "error",
-        message: `HTTP ${response.status}: ${response.statusText}`,
-      });
+      onEvent({ type: "error", message: await describeHttpFailure(response) });
       return;
     }
 

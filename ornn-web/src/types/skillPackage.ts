@@ -111,6 +111,14 @@ export interface GenerationConversationMessage {
   content: string;
 }
 
+/**
+ * Caller-chosen package shape for `POST /api/v1/skills/generate` (#1242).
+ * Mirrors the server's `GENERATION_MODES`: `simple` = SKILL.md only,
+ * `advanced` = scripts / references / assets allowed.
+ */
+export const GENERATION_MODES = ["simple", "advanced"] as const;
+export type GenerationMode = (typeof GENERATION_MODES)[number];
+
 /** Phase state machine for the generative mode */
 export type GenerationPhase =
   | "input"

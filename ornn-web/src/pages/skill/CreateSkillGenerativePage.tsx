@@ -27,10 +27,14 @@ import { ChatInput, type ChatInputHandle } from "@/components/playground/ChatInp
 import { SkillPackagePreview } from "@/components/skill/SkillPackagePreview";
 import { ValidationErrorPanel } from "@/components/skill/ValidationErrorPanel";
 import { GenerationChatMessage } from "@/components/skill/GenerationChatMessage";
+import { GenerativeEmptyHero } from "@/components/skill/generative/GenerativeEmptyHero";
+import { GenerativePackageRailTab } from "@/components/skill/generative/GenerativePackageRailTab";
+import { GenerationModeToggle } from "@/components/skill/generative/GenerationModeToggle";
 import { ModelPicker } from "@/components/models/ModelPicker";
 import { OverLimitPage } from "@/components/quota/OverLimitPage";
 import { QuotaInline } from "@/components/quota/QuotaInline";
-import { PackageIcon } from "@/components/icons";
+import { useGenerationModeCopy, usePreferredGenerationMode } from "@/hooks/useGenerationMode";
+import { useGenerativeDrawer } from "@/hooks/useGenerativeDrawer";
 import { useSkillGeneration } from "@/hooks/useSkillGeneration";
 import { useCreateSkill } from "@/hooks/useSkills";
 import { useMyQuota } from "@/hooks/useQuota";
@@ -56,39 +60,6 @@ function WeldedSeam({ className = "" }: { className?: string }) {
   );
 }
 
-interface PromptStarter {
-  label: string;
-  body: string;
-}
-
-type TFunc = ReturnType<typeof import("react-i18next").useTranslation>["t"];
-
-function defaultPromptStarters(t: TFunc): PromptStarter[] {
-  return [
-    {
-      label: t("generative.starter1Label", "Slack notifier"),
-      body: t(
-        "generative.starter1Body",
-        "Build a skill that posts a formatted message to a Slack channel via webhook. Take channel + message as inputs.",
-      ),
-    },
-    {
-      label: t("generative.starter2Label", "Fetch GitHub PRs"),
-      body: t(
-        "generative.starter2Body",
-        "Build a skill that lists open pull requests for a given GitHub repo, sorted by latest activity.",
-      ),
-    },
-    {
-      label: t("generative.starter3Label", "CSV → JSON"),
-      body: t(
-        "generative.starter3Body",
-        "Build a skill that reads a CSV file and outputs a JSON array, inferring types per column.",
-      ),
-    },
-  ];
-}
-
 export function CreateSkillGenerativePage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -111,10 +82,16 @@ export function CreateSkillGenerativePage() {
     skillGenSnap!.remaining <= 0;
 
   const [pickedModelId, setPickedModelId] = useState<string | null>(null);
+  // Package shape for the next turn (#1242). Persisted like the model
+  // pick; sent with every turn so the user can switch between
+  // refinements (e.g. "now add a script" → advanced).
+  const [mode, setMode] = usePreferredGenerationMode();
+  const modeCopy = useGenerationModeCopy();
 
   const handleSend = useCallback(
-    (content: string) => generation.sendMessage(content, pickedModelId ?? undefined),
-    [generation, pickedModelId],
+    (content: string) =>
+      generation.sendMessage(content, { modelId: pickedModelId ?? undefined, mode }),
+    [generation, pickedModelId, mode],
   );
 
   const handleStarterClick = useCallback((body: string) => {
@@ -186,69 +163,15 @@ export function CreateSkillGenerativePage() {
     }
   };
 
-  // ── Drawer state — same primitive as the playground, but the drawer
-  // for the generative artifact is pinned-open by default since the
-  // preview IS the work product.
-  const [hoverDrawerOpen, setHoverDrawerOpen] = useState(false);
-  const [pinnedOpen, setPinnedOpen] = useState(true);
-  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const openHover = useCallback(() => {
-    if (closeTimerRef.current) {
-      clearTimeout(closeTimerRef.current);
-      closeTimerRef.current = null;
-    }
-    setHoverDrawerOpen(true);
-  }, []);
-  const scheduleHoverClose = useCallback(() => {
-    if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
-    closeTimerRef.current = setTimeout(() => {
-      setHoverDrawerOpen(false);
-      closeTimerRef.current = null;
-    }, 220);
-  }, []);
-  const togglePin = useCallback(() => {
-    setPinnedOpen((cur) => !cur);
-    setHoverDrawerOpen(false);
-  }, []);
-
-  // Esc closes a pinned drawer.
-  useEffect(() => {
-    if (!pinnedOpen) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setPinnedOpen(false);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [pinnedOpen]);
+  // ── Drawer state — hover / pin / esc / new-iteration hint live in
+  // the hook; the drawer for the generative artifact is pinned-open by
+  // default since the preview IS the work product.
+  const drawer = useGenerativeDrawer(generation.phase);
 
   const isGenerating = generation.phase === "generating";
   const hasMessages = generation.chatMessages.length > 0;
   const hasPreview = generation.metadata !== null;
   const conversationActive = hasMessages || isGenerating;
-  const drawerOpen = pinnedOpen || hoverDrawerOpen;
-
-  // New-iteration hint — pulse the rail tab when a generation lands while
-  // the drawer is closed. The chat lets the user refine across many turns,
-  // so each `phase: generating → preview` transition produces a fresh skill
-  // package; without this nudge the only signal is the chat message itself,
-  // which the user may scroll past while typing the next refinement.
-  const [hasUnseenIteration, setHasUnseenIteration] = useState(false);
-  const prevPhaseRef = useRef(generation.phase);
-  useEffect(() => {
-    if (
-      prevPhaseRef.current === "generating" &&
-      generation.phase === "preview" &&
-      !drawerOpen
-    ) {
-      setHasUnseenIteration(true);
-    }
-    prevPhaseRef.current = generation.phase;
-  }, [generation.phase, drawerOpen]);
-  useEffect(() => {
-    if (drawerOpen) setHasUnseenIteration(false);
-  }, [drawerOpen]);
-
-  const starters = defaultPromptStarters(t);
 
   const chatInputPlaceholder = isGenerating
     ? t("generative.placeholder")
@@ -313,49 +236,7 @@ export function CreateSkillGenerativePage() {
             <div ref={messagesScrollRef} className="min-h-0 flex-1 overflow-y-auto pr-1">
               {!conversationActive ? (
                 /* ─── Empty-state hero ─── */
-                <div className="flex h-full flex-col items-center justify-center py-8">
-                  <div className="w-full space-y-6 text-center">
-                    <div className="space-y-2">
-                      <div className="font-mono text-[10px] uppercase tracking-[0.20em] text-meta">
-                        {t("generative.eyebrow", "Generative skill builder")}
-                      </div>
-                      <h2 className="font-display text-3xl font-semibold leading-[1.15] tracking-tight text-strong">
-                        {t("generative.heroTitle", "Describe a skill. Build it.")}
-                      </h2>
-                      <p className="font-text text-[15px] leading-relaxed text-body">
-                        {t(
-                          "generative.heroSubtitle",
-                          "Tell the model what the skill should do. It drafts the package; you iterate; you save.",
-                        )}
-                      </p>
-                    </div>
-
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                      {starters.map((s) => (
-                        <button
-                          key={s.label}
-                          type="button"
-                          onClick={() => handleStarterClick(s.body)}
-                          className="group flex flex-col items-start gap-1 rounded-xl border border-subtle bg-card/60 px-3.5 py-3 text-left transition-all hover:border-accent/60 hover:bg-card"
-                        >
-                          <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-accent">
-                            {s.label}
-                          </span>
-                          <span className="line-clamp-2 font-text text-[13px] leading-snug text-body">
-                            {s.body}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-
-                    <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-meta/70">
-                      {t(
-                        "generative.drawerHint",
-                        "Package preview + Save on the right edge",
-                      )}
-                    </p>
-                  </div>
-                </div>
+                <GenerativeEmptyHero onStarterClick={handleStarterClick} />
               ) : (
                 /* ─── Conversation ─── */
                 <div className="space-y-3 py-3">
@@ -367,10 +248,12 @@ export function CreateSkillGenerativePage() {
               )}
             </div>
 
-            {/* Composer — model picker + quota above, ChatGPT-style. */}
+            {/* Composer — quota + mode + model picker above, ChatGPT-style.
+                `flex-wrap` lets the three chips restack on narrow viewports. */}
             <div className="shrink-0 pt-3">
-              <div className="mb-2 flex items-center justify-center gap-3">
+              <div className="mb-2 flex flex-wrap items-center justify-center gap-3">
                 <QuotaInline surface="skillGen" />
+                <GenerationModeToggle value={mode} onChange={setMode} disabled={isGenerating} />
                 <ModelPicker surface="skillGen" onChange={setPickedModelId} />
               </div>
               <ChatInput
@@ -381,7 +264,17 @@ export function CreateSkillGenerativePage() {
                 isStreaming={isGenerating}
                 placeholder={chatInputPlaceholder}
               />
-              <p className="mt-2 text-center font-mono text-[10px] uppercase tracking-[0.14em] text-meta/70">
+              {/* Always-visible description of the selected mode — hover
+                  `title` on the segments is not a sufficient affordance. */}
+              <p
+                className="mt-2 text-center font-mono text-[10px] uppercase tracking-[0.14em] text-meta/70"
+                data-testid="generation-mode-hint"
+              >
+                <span className="text-accent/80">{modeCopy.labels[mode]}</span>
+                {" · "}
+                {modeCopy.hints[mode]}
+              </p>
+              <p className="mt-1 text-center font-mono text-[10px] uppercase tracking-[0.14em] text-meta/70">
                 {t("playground.kbHint", "Enter to send · Shift + Enter for newline")}
               </p>
             </div>
@@ -389,85 +282,27 @@ export function CreateSkillGenerativePage() {
         </section>
 
         {/* ─── Right-edge rail — single tab (Package + actions) ─── */}
-        <div
-          className="fixed right-0 top-1/2 z-40 flex -translate-y-1/2 flex-col gap-1"
-          onMouseLeave={scheduleHoverClose}
-        >
-          <button
-            type="button"
-            onMouseEnter={openHover}
-            onClick={togglePin}
-            className={`group relative flex h-11 w-9 items-center justify-center rounded-l-sm border-y border-l transition-colors ${
-              drawerOpen
-                ? "border-accent/60 bg-card text-accent"
-                : hasUnseenIteration
-                  ? "border-accent bg-card text-accent"
-                  : "border-subtle bg-card/80 text-meta hover:border-accent/40 hover:text-strong"
-            }`}
-            aria-label={t("aria.skillPackageDrawer")}
-          >
-            <PackageIcon className="h-4 w-4" />
-
-            {/* New-iteration hint — pulsing ember rings around the tab
-                when a generation lands while the drawer is closed. Two
-                layers: a steady accent ring + an `animate-ping` ring
-                that scales out to draw the eye. Clears on drawer open. */}
-            {hasUnseenIteration && !drawerOpen && (
-              <>
-                <span
-                  className="pointer-events-none absolute -inset-px rounded-l-sm ring-2 ring-accent/70"
-                  aria-hidden
-                />
-                <span
-                  className="pointer-events-none absolute -inset-px animate-ping rounded-l-sm ring-2 ring-accent/40"
-                  aria-hidden
-                />
-                {/* Small ember dot top-right to signal "new" even at the
-                    button's outer edge when ring blends into the card. */}
-                <span
-                  className="pointer-events-none absolute -right-1 -top-1 h-2 w-2 animate-pulse rounded-full bg-accent"
-                  aria-hidden
-                />
-              </>
-            )}
-
-            {/* Horizontal tooltip — fades in on hover when the drawer is
-                not already open. Matches the drawer header voice. */}
-            {!drawerOpen && (
-              <span
-                className="pointer-events-none absolute right-full top-1/2 mr-2 -translate-y-1/2 whitespace-nowrap rounded-sm border border-subtle bg-card px-2 py-1 font-mono text-[10px] uppercase tracking-[0.18em] text-strong opacity-0 transition-opacity duration-150 group-hover:opacity-100"
-                aria-hidden
-              >
-                [§&nbsp;PACKAGE]
-              </span>
-            )}
-
-            {hasFrontmatterErrors && (
-              <span
-                className="absolute -left-1 top-1.5 h-1.5 w-1.5 rounded-full bg-warning"
-                aria-hidden
-              />
-            )}
-            {pinnedOpen && (
-              <span
-                className="absolute -left-px inset-y-2 w-px bg-accent"
-                aria-hidden
-              />
-            )}
-          </button>
-        </div>
+        <GenerativePackageRailTab
+          drawerOpen={drawer.drawerOpen}
+          pinnedOpen={drawer.pinnedOpen}
+          hasUnseenIteration={drawer.hasUnseenIteration}
+          hasFrontmatterErrors={hasFrontmatterErrors}
+          onHoverOpen={drawer.openHover}
+          onHoverCloseScheduled={drawer.scheduleHoverClose}
+          onTogglePin={drawer.togglePin}
+        />
 
         {/* ─── Drawer overlay ─── */}
         <AnimatePresence>
-          {drawerOpen && (
+          {drawer.drawerOpen && (
             <>
-              {pinnedOpen && (
+              {drawer.pinnedOpen && (
                 <motion.div
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
                   transition={{ duration: 0.15 }}
-                  onClick={() => setPinnedOpen(false)}
+                  onClick={drawer.unpin}
                   className="fixed inset-0 z-30 bg-page/30 backdrop-blur-[1px]"
                 />
               )}
@@ -477,8 +312,8 @@ export function CreateSkillGenerativePage() {
                 animate={{ x: 0 }}
                 exit={{ x: "100%" }}
                 transition={{ duration: 0.18, ease: "easeOut" }}
-                onMouseEnter={openHover}
-                onMouseLeave={scheduleHoverClose}
+                onMouseEnter={drawer.openHover}
+                onMouseLeave={drawer.scheduleHoverClose}
                 className="card-impression fixed right-10 top-[68px] bottom-4 z-40 flex w-[min(960px,65vw)] max-w-[calc(100vw-3rem)] flex-col rounded-md border border-subtle bg-card"
                 role="complementary"
                 aria-label={t("aria.skillPackagePreview")}
@@ -489,7 +324,7 @@ export function CreateSkillGenerativePage() {
                     <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-accent">
                       [§&nbsp;PACKAGE]
                     </span>
-                    {pinnedOpen && (
+                    {drawer.pinnedOpen && (
                       <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-meta">
                         {t("generative.pinned", "Pinned")}
                       </span>
@@ -498,19 +333,16 @@ export function CreateSkillGenerativePage() {
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
-                      onClick={togglePin}
+                      onClick={drawer.togglePin}
                       className="font-mono text-[10px] uppercase tracking-[0.14em] text-meta transition-colors hover:text-accent"
                     >
-                      {pinnedOpen
+                      {drawer.pinnedOpen
                         ? t("generative.unpin", "Unpin")
                         : t("generative.pin", "Pin")}
                     </button>
                     <button
                       type="button"
-                      onClick={() => {
-                        setPinnedOpen(false);
-                        setHoverDrawerOpen(false);
-                      }}
+                      onClick={drawer.close}
                       aria-label={t("common.aria.closeDrawer")}
                       className="font-mono text-[12px] text-meta transition-colors hover:text-accent"
                     >

@@ -9,7 +9,7 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import { generateSkillStream } from "@/services/generateStreamApi";
 import { parseGenerationOutput } from "@/utils/generationParser";
 import type { GenerationStreamEvent } from "@/types/streaming";
-import type { GenerationPhase, SkillMetadata } from "@/types/skillPackage";
+import type { GenerationMode, GenerationPhase, SkillMetadata } from "@/types/skillPackage";
 import type { FileNode } from "@/components/editor/FileTree";
 import { track } from "@/lib/analytics";
 
@@ -37,11 +37,17 @@ interface GenerationState {
   error: string | null;
 }
 
+/** Per-send options — the composer's model picker + mode toggle. */
+export interface SendMessageOptions {
+  /** Overrides the surface default model — the picker passes it in. */
+  modelId?: string | undefined;
+  /** Package shape for this turn (#1242); omitted → server default. */
+  mode?: GenerationMode | undefined;
+}
+
 export interface UseSkillGenerationReturn extends GenerationState {
-  /** Send a message (user prompt) to the generation stream. Optional
-   * `modelId` overrides the surface default — picker passes the
-   * caller's preferred model in. */
-  sendMessage: (content: string, modelId?: string) => void;
+  /** Send a message (user prompt) to the generation stream. */
+  sendMessage: (content: string, options?: SendMessageOptions) => void;
   /** Abort current stream */
   abort: () => void;
   /** Reset to input phase */
@@ -263,7 +269,8 @@ export function useSkillGeneration(): UseSkillGenerationReturn {
   }, [cancelFlush]);
 
   const sendMessage = useCallback(
-    (content: string, modelId?: string) => {
+    (content: string, options: SendMessageOptions = {}) => {
+      const { modelId, mode } = options;
       abort();
       tokenBufferRef.current = "";
 
@@ -274,6 +281,7 @@ export function useSkillGeneration(): UseSkillGenerationReturn {
         promptLength: content.length,
         turn: conversationHistoryRef.current.length / 2 + 1,
         modelId: modelId ?? null,
+        mode: mode ?? null,
       });
 
       const userMsgId = crypto.randomUUID();
@@ -310,7 +318,7 @@ export function useSkillGeneration(): UseSkillGenerationReturn {
       }));
 
       const handle = generateSkillStream(
-        { messages: messagesForApi, modelId },
+        { messages: messagesForApi, modelId, mode },
         handleEvent,
       );
       abortRef.current = handle.abort;
