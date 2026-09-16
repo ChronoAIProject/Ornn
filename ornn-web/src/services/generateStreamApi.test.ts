@@ -157,6 +157,25 @@ describe("generateSkillStream", () => {
     ]);
   });
 
+  it("uses the problem+json title when there is no detail", async () => {
+    fetchMock.mockResolvedValue(
+      problemResponse(503, "Service Unavailable", { title: "No model enabled", status: 503 }),
+    );
+    const events = await collect({ messages: MESSAGES });
+    expect(events).toEqual([{ type: "error", message: "No model enabled" }]);
+  });
+
+  it("falls back to the status line when reading the failure body throws", async () => {
+    fetchMock.mockResolvedValue({
+      ok: false,
+      status: 504,
+      statusText: "Gateway Timeout",
+      text: () => Promise.reject(new Error("body stream lost")),
+    });
+    const events = await collect({ messages: MESSAGES });
+    expect(events).toEqual([{ type: "error", message: "HTTP 504: Gateway Timeout" }]);
+  });
+
   it("falls back to the status line when the failure body is not JSON", async () => {
     fetchMock.mockResolvedValue(problemResponse(502, "Bad Gateway", "<html>nope</html>"));
     const events = await collect({ messages: MESSAGES });
