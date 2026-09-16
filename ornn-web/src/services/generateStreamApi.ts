@@ -5,6 +5,7 @@
  */
 
 import type { GenerationStreamEvent } from "@/types/streaming";
+import type { GenerationMode } from "@/types/skillPackage";
 import { parseSseChunk } from "@/utils/sseParser";
 import { useAuthStore } from "@/stores/authStore";
 import { config } from "@/config";
@@ -14,8 +15,9 @@ const API_BASE = config.apiBaseUrl;
 export interface GenerateStreamParams {
   messages: Array<{ role: string; content: string }>;
   // exactOptionalPropertyTypes (#657)
-  model?: string | undefined;
   modelId?: string | undefined;
+  /** Package shape (#1242). Omitted → the server default (`advanced`). */
+  mode?: GenerationMode | undefined;
 }
 
 export interface StreamHandle {
@@ -54,8 +56,8 @@ export function generateSkillStream(
       },
       body: JSON.stringify({
         messages: params.messages,
-        model: params.model,
         modelId: params.modelId,
+        mode: params.mode,
       }),
       signal: controller.signal,
     },

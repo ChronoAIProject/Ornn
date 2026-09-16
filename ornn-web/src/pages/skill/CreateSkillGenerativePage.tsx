@@ -82,7 +82,7 @@ export function CreateSkillGenerativePage() {
   const [pickedModelId, setPickedModelId] = useState<string | null>(null);
 
   const handleSend = useCallback(
-    (content: string) => generation.sendMessage(content, pickedModelId ?? undefined),
+    (content: string) => generation.sendMessage(content, { modelId: pickedModelId ?? undefined }),
     [generation, pickedModelId],
   );
 

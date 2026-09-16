@@ -93,7 +93,20 @@ describe("generateSkillStream", () => {
     expect(JSON.parse(opts.body as string)).toEqual({ messages: MESSAGES, modelId: "m-1" });
   });
 
-  it("omits modelId from the body when not picked", async () => {
+  it("threads mode into the body (#1242)", async () => {
+    fetchMock.mockResolvedValue(
+      sseResponse(['data: {"type":"generation_complete","raw":"{}"}\n\n']),
+    );
+    await collect({ messages: MESSAGES, modelId: "m-1", mode: "simple" });
+    const [, opts] = fetchMock.mock.calls[0]! as [string, RequestInit];
+    expect(JSON.parse(opts.body as string)).toEqual({
+      messages: MESSAGES,
+      modelId: "m-1",
+      mode: "simple",
+    });
+  });
+
+  it("omits modelId and mode from the body when not set", async () => {
     fetchMock.mockResolvedValue(
       sseResponse(['data: {"type":"generation_complete","raw":"{}"}\n\n']),
     );
