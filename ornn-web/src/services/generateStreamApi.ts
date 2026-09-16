@@ -65,6 +65,28 @@ export function generateSkillStream(
   return { abort: () => controller.abort() };
 }
 
+/**
+ * Build the error message for a request the server rejected before the
+ * stream opened. Every pre-stream gate answers with RFC 7807
+ * problem+json (docs/CONVENTIONS.md), so prefer its `detail` — that is
+ * where e.g. `invalid_mode` explains the accepted values — and fall back
+ * to the bare status line when the body is not parseable.
+ */
+async function describeHttpFailure(response: Response): Promise<string> {
+  const fallback = `HTTP ${response.status}: ${response.statusText}`;
+  const text = await response.text().catch(() => "");
+  if (!text) return fallback;
+  try {
+    const json = JSON.parse(text) as { detail?: unknown; title?: unknown };
+    if (typeof json.detail === "string" && json.detail) return json.detail;
+    if (typeof json.title === "string" && json.title) return json.title;
+  } catch {
+    // Not JSON — a proxy error page or empty body; the status line is
+    // the most honest thing we can show.
+  }
+  return fallback;
+}
+
 /** Valid event types emitted by the generation SSE endpoints. */
 const GENERATION_EVENT_TYPES = new Set([
   "generation_start",
@@ -101,10 +123,7 @@ async function consumeStream(
     });
 
     if (!response.ok) {
-      onEvent({
-        type: "error",
-        message: `HTTP ${response.status}: ${response.statusText}`,
-      });
+      onEvent({ type: "error", message: await describeHttpFailure(response) });
       return;
     }
 
