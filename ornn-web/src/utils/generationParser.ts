@@ -1,8 +1,10 @@
 /**
  * Generation Output Parser.
  * Parses raw LLM JSON output into files, contents, and metadata for skill preview.
- * The LLM returns structured JSON with readmeBody (no frontmatter) + scripts array.
- * This parser builds the SKILL.md (frontmatter + body) and script files.
+ * The LLM returns structured JSON with readmeBody (no frontmatter) plus the
+ * package file arrays — scripts, and (advanced mode, #1242) references and
+ * assets. This parser builds the SKILL.md (frontmatter + body) and one
+ * folder per non-empty array.
  * @module utils/generationParser
  */
 
@@ -78,10 +80,51 @@ export function extractMetadata(
   });
 }
 
+/** One `{ filename, content }` entry the model emits for a package folder. */
+interface GeneratedFileEntry {
+  filename?: string;
+  name?: string;
+  content: string;
+}
+
+/**
+ * Package folders the generator can populate, in display order. Mirrors
+ * the server's `GeneratedSkill` arrays and the upload validator's
+ * allowed root directories.
+ */
+const GENERATED_FOLDERS = ["scripts", "references", "assets"] as const;
+type GeneratedFolder = (typeof GENERATED_FOLDERS)[number];
+
+/** Fallback filename per folder when the model omits one. */
+const FALLBACK_FILENAME: Record<GeneratedFolder, string> = {
+  scripts: "script.ts",
+  references: "reference.md",
+  assets: "asset.txt",
+};
+
+/**
+ * Turn one folder's entries into FileNodes, registering their contents.
+ * Returns null when the folder would be empty so the tree omits it.
+ */
+function buildFolderNode(
+  folder: GeneratedFolder,
+  entries: unknown,
+  contents: Map<string, string>,
+): FileNode | null {
+  if (!Array.isArray(entries) || entries.length === 0) return null;
+  const children: FileNode[] = (entries as GeneratedFileEntry[]).map((entry) => {
+    const fname = entry.filename ?? entry.name ?? FALLBACK_FILENAME[folder];
+    const filePath = `${folder}/${fname}`;
+    contents.set(filePath, entry.content);
+    return { id: filePath, name: fname, type: "file" as const };
+  });
+  return { id: folder, name: folder, type: "folder", children };
+}
+
 /**
  * Build a FileNode tree and contents map from parsed generation JSON.
  * - SKILL.md = frontmatter (from metadata) + readmeBody
- * - scripts/ = each entry from the scripts array
+ * - scripts/, references/, assets/ = one folder per non-empty array
  */
 export function buildFileTreeFromParsed(
   parsed: Record<string, unknown>,
@@ -110,27 +153,9 @@ export function buildFileTreeFromParsed(
     { id: "SKILL.md", name: "SKILL.md", type: "file" },
   ];
 
-  // Extract scripts into scripts/ directory
-  const scripts = (parsed.scripts ?? []) as Array<{
-    filename?: string;
-    name?: string;
-    content: string;
-  }>;
-
-  if (scripts.length > 0) {
-    const scriptNodes: FileNode[] = scripts.map((s) => {
-      const fname = s.filename ?? s.name ?? "script.ts";
-      const filePath = `scripts/${fname}`;
-      contents.set(filePath, s.content);
-      return { id: filePath, name: fname, type: "file" as const };
-    });
-
-    rootChildren.push({
-      id: "scripts",
-      name: "scripts",
-      type: "folder",
-      children: scriptNodes,
-    });
+  for (const folder of GENERATED_FOLDERS) {
+    const node = buildFolderNode(folder, parsed[folder], contents);
+    if (node) rootChildren.push(node);
   }
 
   const files: FileNode[] = [

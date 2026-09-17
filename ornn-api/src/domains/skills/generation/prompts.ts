@@ -1,8 +1,24 @@
 /**
  * Prompt templates for skill generation via Nyx Provider.
- * Updated to include output-type field for runtime-based skills.
+ *
+ * The prompt-driven generator has two system prompts, one per
+ * {@link GenerationMode} (#1242):
+ *
+ *   - `GENERATION_SYSTEM_PROMPT` (advanced) — the model may emit
+ *     `scripts[]`, `references[]` and `assets[]` alongside the SKILL.md
+ *     body.
+ *   - `SIMPLE_GENERATION_SYSTEM_PROMPT` (simple) — the package is a
+ *     single SKILL.md; the schema offered to the model does not even
+ *     mention the file arrays so it has nothing to fill in.
+ *
+ * `getGenerationSystemPrompt(mode)` is the only selector the service
+ * should use. The OpenAPI / source-code prompts are intrinsically
+ * simple (plain, no files) and are unaffected by mode.
+ *
  * @module domains/skills/generation/prompts
  */
+
+import { DEFAULT_GENERATION_MODE, type GenerationMode } from "../../../shared/types/index";
 
 export const GENERATION_SYSTEM_PROMPT = `You are a skill generator for the ornn AI skill platform. Output ONLY a single JSON object. No markdown fences, no explanation, no extra text.
 
@@ -52,7 +68,9 @@ Default to "node" for general web/API tasks. Use "python" for data science, ML, 
   "runtimes": ["node"] or ["python"],
   "dependencies": ["package-name"],
   "envVars": ["ENV_VAR_NAME"],
-  "scripts": [{ "filename": "main.js", "content": "..." }]
+  "scripts": [{ "filename": "main.js", "content": "..." }],
+  "references": [{ "filename": "api-notes.md", "content": "..." }],
+  "assets": [{ "filename": "template.json", "content": "..." }]
 }
 
 ## EXAMPLE: PLAIN SKILL
@@ -66,7 +84,9 @@ Default to "node" for general web/API tasks. Use "python" for data science, ML, 
   "runtimes": [],
   "dependencies": [],
   "envVars": [],
-  "scripts": []
+  "scripts": [],
+  "references": [],
+  "assets": []
 }
 
 ## EXAMPLE: RUNTIME-BASED SKILL (Node.js)
@@ -86,7 +106,9 @@ Default to "node" for general web/API tasks. Use "python" for data science, ML, 
       "filename": "screenshot.js",
       "content": "const puppeteer = require('puppeteer');\\nconst url = process.env.TARGET_URL;\\nif (!url) { console.error('TARGET_URL required'); process.exit(1); }\\ntry {\\n  const browser = await puppeteer.launch({ headless: true });\\n  const page = await browser.newPage();\\n  await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });\\n  await page.screenshot({ path: 'output.png', fullPage: true });\\n  await browser.close();\\n  console.log('Screenshot saved to output.png');\\n} catch (err) {\\n  console.error('Failed:', err instanceof Error ? err.message : err);\\n  process.exit(1);\\n}"
     }
-  ]
+  ],
+  "references": [],
+  "assets": []
 }
 
 ## EXAMPLE: RUNTIME-BASED SKILL (Python)
@@ -106,6 +128,18 @@ Default to "node" for general web/API tasks. Use "python" for data science, ML, 
       "filename": "chart.py",
       "content": "import os\\nimport pandas as pd\\nimport matplotlib\\nmatplotlib.use('Agg')\\nimport matplotlib.pyplot as plt\\n\\nchart_type = os.environ.get('CHART_TYPE', 'bar')\\ndf = pd.read_csv('input.csv')\\n\\nfig, ax = plt.subplots(figsize=(10, 6))\\nif chart_type == 'pie':\\n    ax.pie(df.iloc[:, 1], labels=df.iloc[:, 0], autopct='%1.1f%%')\\nelif chart_type == 'line':\\n    ax.plot(df.iloc[:, 0], df.iloc[:, 1])\\nelse:\\n    ax.bar(df.iloc[:, 0], df.iloc[:, 1])\\n\\nplt.tight_layout()\\nplt.savefig('chart.png', dpi=150)\\nprint('Chart saved to chart.png')"
     }
+  ],
+  "references": [
+    {
+      "filename": "chart-types.md",
+      "content": "# Chart types\\n\\n| CHART_TYPE | Best for |\\n|---|---|\\n| bar | comparing categories |\\n| line | trends over time |\\n| pie | share of a whole (max ~6 slices) |"
+    }
+  ],
+  "assets": [
+    {
+      "filename": "sample-input.csv",
+      "content": "label,value\\nQ1,120\\nQ2,180\\nQ3,150"
+    }
   ]
 }
 
@@ -119,19 +153,86 @@ Default to "node" for general web/API tasks. Use "python" for data science, ML, 
 - **runtimes**: ["node"] or ["python"] for runtime-based, [] for plain. Pick the best fit for the task.
 - **dependencies**: ONLY packages needed for scripts. [] for plain. NEVER include LLM SDKs (openai, anthropic, etc.). Use npm package names for node, pip package names for python.
 - **envVars**: ONLY for runtime-based scripts needing external config. [] for plain.
+- **references**: OPTIONAL supporting documents the agent opens on demand — long API references, style guides, worked examples, decision tables. Keep readmeBody focused and move deep detail here. Markdown or plain text, .md/.txt extension. Allowed for any category. [] when not needed.
+- **assets**: OPTIONAL text resources the skill uses at run time — templates, sample data, config snippets. TEXT ONLY (no binary, no images); .json/.csv/.txt/.yaml etc. Allowed for any category. [] when not needed.
 - **tags**: 1-10 lowercase kebab-case.
 
 Output ONLY the JSON object. Nothing else.`;
 
 /**
- * Builds prompt for direct generation.
+ * System prompt for `simple` mode (#1242): the package is a single
+ * SKILL.md. The schema offered to the model deliberately omits every
+ * file array (scripts / references / assets) and every runtime field so
+ * there is nothing to fill in; the server still validates the answer.
  */
-export function buildDirectGenerationPrompt(query: string): {
+export const SIMPLE_GENERATION_SYSTEM_PROMPT = `You are a skill generator for the ornn AI skill platform. Output ONLY a single JSON object. No markdown fences, no explanation, no extra text.
+
+## SIMPLE MODE — SKILL.md ONLY
+
+The caller asked for a self-contained skill: the package is ONE SKILL.md file and nothing else.
+
+- category is ALWAYS "plain".
+- Do NOT emit scripts, references, assets, runtimes, dependencies, envVars or outputType. The package cannot carry files.
+- Everything the agent needs goes inline in readmeBody: purpose, step-by-step instructions, input/output format, worked examples, edge cases.
+- If the task touches an external API or tool, explain exactly how to call it with the agent's own HTTP / shell abilities (endpoint, method, headers, body, example request and response). Inline command or code examples are fine AS DOCUMENTATION inside readmeBody — never as separate script files.
+- If the request genuinely needs code execution, still produce a plain skill that tells the agent how to do it with the tools it already has.
+
+## JSON SCHEMA
+
+{
+  "name": "kebab-case-name",
+  "description": "10-500 char description",
+  "category": "plain",
+  "tags": ["tag1", "tag2"],
+  "readmeBody": "markdown documentation body"
+}
+
+## EXAMPLE
+
+{
+  "name": "meeting-notes-to-action-items",
+  "description": "Turn raw meeting notes into a prioritised, owner-assigned action-item list.",
+  "category": "plain",
+  "tags": ["meetings", "summarisation", "productivity"],
+  "readmeBody": "# Meeting Notes to Action Items\\n\\n## Overview\\nExtract every commitment from free-form meeting notes and return them as an ordered action list.\\n\\n## Steps\\n1. Read the notes once end-to-end.\\n2. For each sentence that assigns work, capture: task, owner, due date (or \\"unspecified\\"), priority (P0-P2).\\n3. Merge duplicates; keep the most specific wording.\\n4. Sort by priority, then due date.\\n\\n## Output format\\n| # | Task | Owner | Due | Priority |\\n|---|------|-------|-----|----------|\\n\\n## Example\\nInput: \\"Sam will send the deck by Friday. We should also fix the login bug soon.\\"\\nOutput:\\n| 1 | Send the deck | Sam | Friday | P1 |\\n| 2 | Fix the login bug | unassigned | unspecified | P1 |\\n\\n## Edge cases\\n- No owner named → \\"unassigned\\".\\n- Vague timing (\\"soon\\") → \\"unspecified\\"; do not invent dates."
+}
+
+## FIELD RULES
+
+- **name**: kebab-case ONLY. NO underscores.
+- **description**: 10-500 chars.
+- **category**: ALWAYS "plain".
+- **readmeBody**: Markdown body. NO YAML frontmatter. Self-contained — the reader has nothing else.
+- **tags**: 1-10 lowercase kebab-case.
+- Do NOT include any other field.
+
+Output ONLY the JSON object. Nothing else.`;
+
+/**
+ * Appended to the user turn when a `simple`-mode answer carried files or
+ * a non-plain category and the service retries once (#1242).
+ */
+export const SIMPLE_MODE_RETRY_INSTRUCTION =
+  "IMPORTANT: Your previous answer included scripts, references, assets, runtime fields or a non-plain category. This is SIMPLE mode: output ONE plain skill with ONLY name, description, category \"plain\", tags and readmeBody. Fold anything that was in a script or reference file into readmeBody as documentation. Output ONLY valid JSON. No markdown fences. No extra text.";
+
+/** Select the prompt-driven system prompt for a generation mode. */
+export function getGenerationSystemPrompt(mode: GenerationMode): string {
+  return mode === "simple" ? SIMPLE_GENERATION_SYSTEM_PROMPT : GENERATION_SYSTEM_PROMPT;
+}
+
+/**
+ * Builds prompt for direct generation. `instructions` is the mode's
+ * system prompt; the service sends it as a `developer` message.
+ */
+export function buildDirectGenerationPrompt(
+  query: string,
+  mode: GenerationMode = DEFAULT_GENERATION_MODE,
+): {
   instructions: string;
   userPrompt: string;
 } {
   return {
-    instructions: GENERATION_SYSTEM_PROMPT,
+    instructions: getGenerationSystemPrompt(mode),
     userPrompt: `Generate a skill for: "${query}"`,
   };
 }

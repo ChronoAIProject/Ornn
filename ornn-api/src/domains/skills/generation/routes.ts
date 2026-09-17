@@ -5,26 +5,26 @@
  */
 
 import { Hono } from "hono";
-import { streamSSE } from "hono/streaming";
-import type { Context } from "hono";
 import type { SkillGenerationService } from "./service";
 import type { QuotaService } from "../../quota/service";
 import type { LlmProvidersService } from "../../settings/llmProviders/service";
-import { throwQuotaError } from "../../quota/routes";
-import { throwModelResolutionError } from "../../settings/llmProviders/routes";
-import type { ChargeOutcome } from "../../quota/types";
 import {
   type AuthVariables,
   nyxidAuthMiddleware,
   requirePermission,
   getAuth,
 } from "../../../middleware/nyxidAuth";
-import { AppError } from "../../../shared/types/index";
-import { resolveZipRoot } from "../../../shared/utils/zip";
+import {
+  AppError,
+  DEFAULT_GENERATION_MODE,
+  GENERATION_MODES,
+  type GenerationMode,
+} from "../../../shared/types/index";
 import { validateBody, getValidatedBody } from "../../../middleware/validate";
 import { rateLimit } from "../../../middleware/rateLimit";
 import { fetchGithubSourceBundle } from "./githubFetcher";
-import JSZip from "jszip";
+import { analyzePackageContent } from "./packageContext";
+import { preflight, resolveKeepAliveMs, streamGenerationEvents } from "./streaming";
 import { createLogger } from "../../../shared/logger";
 import { z } from "zod";
 
@@ -36,6 +36,28 @@ const logger = createLogger("skillGenerationRoutes");
  * `MAX_INPUT_CHARS` in `ChatInput.tsx`. Keep all three in sync.
  */
 const MAX_GENERATION_CHARS = 32_000;
+
+const generationModeSchema = z.enum(GENERATION_MODES);
+
+/**
+ * Parse the optional `mode` field shared by the JSON and multipart
+ * branches of `POST /skills/generate` (#1242). Absent / empty → the
+ * backward-compatible default. Anything else must be one of the known
+ * modes — a `File` or repeated form field is rejected the same way as an
+ * unknown string. Called BEFORE `preflight()` so a bad value is a plain
+ * 400 and never strands a reserved quota slot (#808).
+ */
+function parseGenerationMode(raw: unknown): GenerationMode {
+  if (raw === undefined || raw === null || raw === "") return DEFAULT_GENERATION_MODE;
+  const parsed = generationModeSchema.safeParse(raw);
+  if (!parsed.success) {
+    throw AppError.badRequest(
+      "invalid_mode",
+      `'mode' must be one of: ${GENERATION_MODES.join(", ")}`,
+    );
+  }
+  return parsed.data;
+}
 
 export interface GenerationRoutesConfig {
   generationService: SkillGenerationService;
@@ -52,195 +74,6 @@ export interface GenerationRoutesConfig {
   llmProvidersService: LlmProvidersService;
 }
 
-/** Helper to resolve keep-alive ms with a safe fallback. */
-async function resolveKeepAliveMs(
-  resolver: () => Promise<number>,
-): Promise<number> {
-  try {
-    const v = await resolver();
-    return Number.isFinite(v) && v > 0 ? v : 15_000;
-  } catch (err) {
-    logger.warn(
-      { err: (err as Error).message },
-      "Failed to resolve skillGen sseKeepAliveMs; using 15s default",
-    );
-    return 15_000;
-  }
-}
-
-/**
- * Run model resolution + quota reserve for a skill-gen request. Returns
- * the resolved model id; throws the appropriate AppError when either
- * gate fails (models → 503/4xx, quota → 429).
- *
- * Order is load-bearing (#808): model resolution runs FIRST so a
- * resolution failure can't strand a reserved quota slot. `resolveModel`
- * is a pure catalog read (no LLM), so reserving last still keeps the
- * "429 before any LLM cost" guarantee. Once `checkAllowed` reserves,
- * every caller threads the result straight into `streamGenerationEvents`,
- * whose `finally` always reconciles the reservation (commit on success,
- * release on system_error/abort).
- */
-async function preflight(
-  c: Context<{ Variables: AuthVariables }>,
-  quotaService: QuotaService,
-  llmProvidersService: LlmProvidersService,
-  requestedModelId: string | undefined,
-): Promise<{
-  modelId: string;
-  userId: string;
-  permissions: readonly string[] | undefined;
-  reservedAt: Date;
-}> {
-  const authCtx = getAuth(c);
-
-  const resolution = await llmProvidersService.resolveModel({
-    surface: "skillGen",
-    // exactOptionalPropertyTypes (#657)
-    ...(requestedModelId !== undefined ? { requested: requestedModelId } : {}),
-  });
-  if (resolution.kind !== "ok") throwModelResolutionError(resolution);
-
-  // Capture the reservation instant so the charge lands in the SAME
-  // month bucket the slot was reserved against (#827) — see the
-  // playground route for the boundary-straddle rationale.
-  const reservedAt = new Date();
-  const decision = await quotaService.checkAllowed({
-    userId: authCtx.userId,
-    permissions: authCtx.permissions,
-    surface: "skillGen",
-    now: reservedAt,
-  });
-  if (!decision.allowed) throwQuotaError(decision);
-
-  return {
-    modelId: resolution.modelId,
-    userId: authCtx.userId,
-    permissions: authCtx.permissions,
-    reservedAt,
-  };
-}
-
-/**
- * Stream generation events via SSE with keep-alive. When `chargeAfter`
- * is set, fires a quota charge after the stream finishes — outcome
- * derived from whether the stream emitted a `generation_complete` event
- * (skill-side success), a `validation_error` (skill ran but produced
- * invalid output — still chargeable), or only `error` events
- * (system_error — no charge).
- */
-async function streamGenerationEvents(
-  c: Context,
-  events: AsyncIterable<{ type: string; [key: string]: unknown }>,
-  keepAliveIntervalMs: number,
-  chargeAfter?: {
-    quotaService: QuotaService;
-    userId: string;
-    permissions: readonly string[] | undefined;
-    /** Resolved model id used for the LLM call — flows into `usedByModel`. */
-    modelId: string;
-    /**
-     * Reservation instant captured at `preflight` time (#827). Threaded
-     * into `chargeOnCompletion` as `now` so the commit/release reconciles
-     * against the month bucket the slot was reserved in, not wall-clock.
-     */
-    reservedAt: Date;
-  },
-) {
-  c.header("Cache-Control", "no-cache");
-  c.header("Connection", "keep-alive");
-  c.header("X-Accel-Buffering", "no");
-
-  return streamSSE(c, async (stream) => {
-    const keepAlive = setInterval(() => {
-      stream.writeSSE({ data: "", event: "keepalive" }).catch(() => {});
-    }, keepAliveIntervalMs);
-
-    const signal = c.req.raw.signal;
-    const onAbort = () => clearInterval(keepAlive);
-    signal.addEventListener("abort", onAbort, { once: true });
-
-    let outcome: ChargeOutcome = "system_error";
-
-    try {
-      for await (const event of events) {
-        await stream.writeSSE({ data: JSON.stringify(event) });
-        if (event.type === "generation_complete") outcome = "success";
-        else if (event.type === "validation_error") outcome = "skill_error";
-      }
-    } finally {
-      clearInterval(keepAlive);
-      signal.removeEventListener("abort", onAbort);
-      if (chargeAfter) {
-        await chargeAfter.quotaService
-          .chargeOnCompletion({
-            userId: chargeAfter.userId,
-            permissions: chargeAfter.permissions,
-            surface: "skillGen",
-            outcome,
-            modelId: chargeAfter.modelId,
-            // Reconcile against the reserved month bucket (#827).
-            now: chargeAfter.reservedAt,
-          })
-          .catch((err) => {
-            logger.warn(
-              { userId: chargeAfter.userId, err: (err as Error).message },
-              "Quota charge after skill-gen stream failed",
-            );
-          });
-      }
-    }
-  });
-}
-
-/**
- * Read content from a ZIP package for analysis.
- */
-async function analyzePackageContent(zipBuffer: Uint8Array): Promise<string> {
-  const zip = await JSZip.loadAsync(zipBuffer);
-  const allPaths = Object.keys(zip.files);
-  resolveZipRoot(zip, allPaths);
-  const parts: string[] = [];
-
-  const relevantFiles = ["SKILL.md"];
-  const relevantDirs = ["scripts/", "references/", "assets/"];
-
-  for (const path of allPaths) {
-    const file = zip.files[path];
-    // allPaths is `Object.keys(zip.files)`, but noUncheckedIndexedAccess
-    // (#450) widens the lookup to `T | undefined`. Defensive skip.
-    if (!file || file.dir) continue;
-
-    // Check if this is a relevant file
-    const segments = path.split("/").filter(Boolean);
-    let relativePath = path;
-    if (segments.length > 1) {
-      const firstEntry = segments[0]!;
-      const folderEntry = zip.files[firstEntry + "/"];
-      if (folderEntry && folderEntry.dir) {
-        relativePath = segments.slice(1).join("/");
-      }
-    }
-
-    const isRelevant = relevantFiles.includes(relativePath) ||
-      relevantDirs.some((d) => relativePath.startsWith(d));
-
-    if (isRelevant) {
-      try {
-        const content = await file.async("string");
-        parts.push(`--- ${relativePath} ---\n${content}`);
-      } catch (err) {
-        // Skip binary or unreadable files. Log so an upload that's
-        // 100% binary doesn't silently produce an empty generation
-        // context (#579).
-        logger.debug({ err, relativePath }, "generation: skipping unreadable file");
-      }
-    }
-  }
-
-  return parts.join("\n\n");
-}
-
 export function createGenerationRoutes(config: GenerationRoutesConfig): Hono<{ Variables: AuthVariables }> {
   const { generationService, keepAliveIntervalMsResolver, quotaService, llmProvidersService } = config;
   const app = new Hono<{ Variables: AuthVariables }>();
@@ -249,7 +82,8 @@ export function createGenerationRoutes(config: GenerationRoutesConfig): Hono<{ V
 
   /**
    * POST /skills/generate
-   * Input: multipart (prompt + optional package ZIP) or JSON (prompt or messages, optional modelId)
+   * Input: multipart (prompt + optional package ZIP) or JSON (prompt or
+   *        messages), each with optional modelId + mode (#1242)
    * Response: SSE stream of generation events
    * Requires: ornn:skill:build
    */
@@ -268,6 +102,7 @@ export function createGenerationRoutes(config: GenerationRoutesConfig): Hono<{ V
       let prompt: string;
       let packageContent: string | null = null;
       let requestedModelId: string | undefined;
+      let mode: GenerationMode;
 
       if (contentType.includes("multipart/form-data")) {
         const body = await c.req.parseBody({ all: true });
@@ -280,6 +115,7 @@ export function createGenerationRoutes(config: GenerationRoutesConfig): Hono<{ V
         if (typeof body["modelId"] === "string" && body["modelId"]) {
           requestedModelId = body["modelId"];
         }
+        mode = parseGenerationMode(body["mode"]);
 
         const packageFile = body["package"];
         if (packageFile instanceof File) {
@@ -290,7 +126,7 @@ export function createGenerationRoutes(config: GenerationRoutesConfig): Hono<{ V
         // Hybrid endpoint — multipart-or-JSON. Inline Zod parse so
         // malformed JSON returns 400 invalid_body via the global RFC
         // 7807 handler instead of a raw SyntaxError 500 (#438).
-        let body: { modelId?: string; messages?: unknown[]; prompt?: string };
+        let body: { modelId?: string; messages?: unknown[]; prompt?: string; mode?: unknown };
         try {
           const text = await c.req.text();
           const raw = text.trim().length === 0 ? {} : JSON.parse(text);
@@ -305,6 +141,7 @@ export function createGenerationRoutes(config: GenerationRoutesConfig): Hono<{ V
         if (typeof body.modelId === "string" && body.modelId) {
           requestedModelId = body.modelId;
         }
+        mode = parseGenerationMode(body.mode);
 
         // Multi-turn format: messages array
         if (body.messages && Array.isArray(body.messages)) {
@@ -323,15 +160,17 @@ export function createGenerationRoutes(config: GenerationRoutesConfig): Hono<{ V
               );
             }
           }
-          logger.info({ userId: authCtx.userId, messageCount: body.messages.length }, "Multi-turn generation request");
+          logger.info(
+            { userId: authCtx.userId, messageCount: body.messages.length, mode },
+            "Multi-turn generation request",
+          );
           const pf = await preflight(c, quotaService, llmProvidersService, requestedModelId);
           const keepAliveMs = await resolveKeepAliveMs(keepAliveIntervalMsResolver);
           return streamGenerationEvents(
             c,
             generationService.generateStreamWithHistory(
               body.messages as Array<{ role: "user" | "assistant"; content: string }>,
-              c.req.raw.signal,
-              pf.modelId,
+              { signal: c.req.raw.signal, modelOverride: pf.modelId, mode },
             ),
             keepAliveMs,
             { quotaService, userId: pf.userId, permissions: pf.permissions, modelId: pf.modelId, reservedAt: pf.reservedAt },
@@ -360,12 +199,15 @@ export function createGenerationRoutes(config: GenerationRoutesConfig): Hono<{ V
         ? `Existing skill package content:\n${packageContent}\n\nUser requirement: ${prompt}`
         : prompt;
 
-      logger.info({ userId: authCtx.userId, promptLength: prompt.length, modelId: pf.modelId }, "Generation request");
+      logger.info(
+        { userId: authCtx.userId, promptLength: prompt.length, modelId: pf.modelId, mode },
+        "Generation request",
+      );
 
       const keepAliveMs = await resolveKeepAliveMs(keepAliveIntervalMsResolver);
       return streamGenerationEvents(
         c,
-        generationService.generateStream(query, signal, pf.modelId),
+        generationService.generateStream(query, { signal, modelOverride: pf.modelId, mode }),
         keepAliveMs,
         { quotaService, userId: pf.userId, permissions: pf.permissions, modelId: pf.modelId, reservedAt: pf.reservedAt },
       );

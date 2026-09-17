@@ -564,6 +564,31 @@ export interface TagDocument {
 // Generation
 // ---------------------------------------------------------------------------
 
+/**
+ * Caller-chosen package shape for `POST /skills/generate` (#1242).
+ *
+ * - `simple`   — the package is `SKILL.md` only. The model is told not to
+ *                emit scripts / references / assets and the server
+ *                rejects output that carries any.
+ * - `advanced` — the package may carry `scripts/`, `references/` and
+ *                `assets/` alongside `SKILL.md`.
+ */
+export const GENERATION_MODES = ["simple", "advanced"] as const;
+export type GenerationMode = (typeof GENERATION_MODES)[number];
+
+/**
+ * Applied when the caller omits `mode`. `advanced` is what every caller
+ * got before modes existed, so omitting the field stays backward
+ * compatible for agents already integrated against the endpoint.
+ */
+export const DEFAULT_GENERATION_MODE: GenerationMode = "advanced";
+
+/** One text file the model emits for `scripts/`, `references/` or `assets/`. */
+export interface GeneratedSkillFile {
+  filename: string;
+  content: string;
+}
+
 export interface GeneratedSkill {
   name: string;
   description: string;
@@ -574,7 +599,12 @@ export interface GeneratedSkill {
   runtimes: string[];
   dependencies: string[];
   envVars: string[];
-  scripts: Array<{ filename: string; content: string }>;
+  /** Files to place under `scripts/`. Always empty in `simple` mode. */
+  scripts: GeneratedSkillFile[];
+  /** Files to place under `references/` (advanced mode only, #1242). */
+  references: GeneratedSkillFile[];
+  /** Text files to place under `assets/` (advanced mode only, #1242). */
+  assets: GeneratedSkillFile[];
 }
 
 export type SkillStreamEvent =

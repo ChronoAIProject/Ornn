@@ -21,8 +21,10 @@
  *     passthrough / non-retry validation_error / pass / abort + throw.
  *   - generateFromOpenApi / generateFromSource: happy + invalid +
  *     option pass-through.
- *   - parseAndValidate: fence strip / brace slice / readmeMd migration
- *     (with + without frontmatter) / schema-fail / non-JSON.
+ *   - mode (#1242): simple/advanced prompt selection, simple-mode
+ *     violation → corrective retry → success / error on both the
+ *     single-turn and multi-turn paths, advanced pass-through of
+ *     references/assets. Parsing itself is pinned in validation.test.ts.
  *
  * @module domains/skills/generation/service.test
  */
@@ -41,6 +43,11 @@ import type {
   ResponsesApiOutput,
 } from "../../../clients/nyxid/llm";
 import type { SkillStreamEvent } from "../../../shared/types/index";
+import {
+  GENERATION_SYSTEM_PROMPT,
+  SIMPLE_GENERATION_SYSTEM_PROMPT,
+  SIMPLE_MODE_RETRY_INSTRUCTION,
+} from "./prompts";
 
 // ---- Fixtures --------------------------------------------------------
 
@@ -62,6 +69,23 @@ const VALID_SKILL = JSON.stringify({
   dependencies: [],
   envVars: [],
   scripts: [],
+});
+
+/** Schema-valid but carries a script — legal in advanced, illegal in simple. */
+const SCRIPTED_SKILL = JSON.stringify({
+  name: "scripted-skill",
+  description: "A runtime-based skill that ships a script and a reference.",
+  category: "runtime-based",
+  outputType: "text",
+  tags: ["demo"],
+  readmeBody:
+    "# Scripted Skill\n\nThis readme body is comfortably over the fifty character minimum length.",
+  runtimes: ["node"],
+  dependencies: ["axios"],
+  envVars: ["API_KEY"],
+  scripts: [{ filename: "main.js", content: "console.log('hi')" }],
+  references: [{ filename: "notes.md", content: "# Notes" }],
+  assets: [],
 });
 
 // ---- Responses-API stream frame helpers ------------------------------
@@ -215,7 +239,7 @@ describe("resolveDefaults", () => {
       llmClient: client,
       defaultsResolver: makeResolver(DEFAULTS),
     });
-    await drain(svc.generateStream("q", undefined, "override-model"));
+    await drain(svc.generateStream("q", { modelOverride: "override-model" }));
     expect(streamParams[0]!.model).toBe("override-model");
   });
 
@@ -324,7 +348,7 @@ describe("generateStream", () => {
     });
     const ctrl = new AbortController();
     ctrl.abort();
-    const events = await drain(svc.generateStream("q", ctrl.signal));
+    const events = await drain(svc.generateStream("q", { signal: ctrl.signal }));
     expect(types(events)).toEqual(["error"]);
     expect(streamParams).toHaveLength(0);
   });
@@ -341,7 +365,7 @@ describe("generateStream", () => {
       llmClient: client,
       defaultsResolver: makeResolver(DEFAULTS),
     });
-    const events = await drain(svc.generateStream("q", ctrl.signal));
+    const events = await drain(svc.generateStream("q", { signal: ctrl.signal }));
     expect(types(events)).toContain("error");
     expect(types(events)).not.toContain("generation_complete");
   });
@@ -411,6 +435,107 @@ describe("generateStream", () => {
     expect(types(events)).toContain("validation_error");
     const err = events.find((e) => e.type === "error");
     expect((err as { message: string }).message).toContain("after retry");
+    expect(types(events)).not.toContain("generation_complete");
+  });
+});
+
+// ---- generateStream × mode (#1242) -----------------------------------
+
+describe("generateStream mode", () => {
+  function make(opts: FakeClientOpts) {
+    const made = makeClient(opts);
+    const svc = new SkillGenerationService({
+      llmClient: made.client,
+      defaultsResolver: makeResolver(DEFAULTS),
+    });
+    return { ...made, svc };
+  }
+
+  test("default mode is advanced: scripted output passes and the advanced prompt is sent", async () => {
+    const { svc, streamParams } = make({ streamFrames: [outputTextDelta(SCRIPTED_SKILL)] });
+    const events = await drain(svc.generateStream("q"));
+    expect(types(events)).toEqual(["generation_start", "token", "generation_complete"]);
+    expect(streamParams[0]!.input[0]!.content).toBe(GENERATION_SYSTEM_PROMPT);
+  });
+
+  test("mode=advanced: references/assets travel through generation_complete.raw", async () => {
+    const { svc } = make({ streamFrames: [outputTextDelta(SCRIPTED_SKILL)] });
+    const events = await drain(svc.generateStream("q", { mode: "advanced" }));
+    const complete = events.find((e) => e.type === "generation_complete") as { raw: string };
+    expect(JSON.parse(complete.raw).references).toHaveLength(1);
+  });
+
+  test("mode=simple sends the simple prompt and accepts a plain SKILL.md-only answer", async () => {
+    const { svc, streamParams, completeParams } = make({ streamFrames: [outputTextDelta(VALID_SKILL)] });
+    const events = await drain(svc.generateStream("q", { mode: "simple" }));
+    expect(types(events)).toEqual(["generation_start", "token", "generation_complete"]);
+    expect(streamParams[0]!.input[0]!.content).toBe(SIMPLE_GENERATION_SYSTEM_PROMPT);
+    expect(completeParams).toHaveLength(0);
+  });
+
+  test("mode=simple: scripted answer → validation_error(retrying) → corrective retry → complete", async () => {
+    const { svc, completeParams } = make({
+      streamFrames: [outputTextDelta(SCRIPTED_SKILL)],
+      completeResult: completeOutput(VALID_SKILL),
+    });
+    const events = await drain(svc.generateStream("q", { mode: "simple" }));
+    expect(types(events)).toEqual([
+      "generation_start",
+      "token",
+      "validation_error",
+      "generation_complete",
+    ]);
+    const ve = events.find((e) => e.type === "validation_error") as { message: string; retrying: boolean };
+    expect(ve.retrying).toBe(true);
+    expect(ve.message).toContain("Simple mode");
+    expect(ve.message).toContain("scripts");
+    // The retry carries the simple-mode instruction, not the generic JSON one.
+    expect(completeParams).toHaveLength(1);
+    const retryUser = completeParams[0]!.input.at(-1)!.content;
+    expect(retryUser).toContain(SIMPLE_MODE_RETRY_INSTRUCTION);
+    expect(completeParams[0]!.input[0]!.content).toBe(SIMPLE_GENERATION_SYSTEM_PROMPT);
+    const complete = events.find((e) => e.type === "generation_complete") as { raw: string };
+    expect(complete.raw).toBe(VALID_SKILL);
+  });
+
+  test("mode=simple: retry that still carries files ends in error, never generation_complete", async () => {
+    const { svc } = make({
+      streamFrames: [outputTextDelta(SCRIPTED_SKILL)],
+      completeResult: completeOutput(SCRIPTED_SKILL),
+    });
+    const events = await drain(svc.generateStream("q", { mode: "simple" }));
+    expect(types(events)).not.toContain("generation_complete");
+    const err = events.find((e) => e.type === "error") as { message: string };
+    expect(err.message).toContain("simple mode after retry");
+  });
+
+  test("mode=simple: invalid JSON first, scripted on retry → error (guarantee holds across reasons)", async () => {
+    const { svc, completeParams } = make({
+      streamFrames: [outputTextDelta("not json")],
+      completeResult: completeOutput(SCRIPTED_SKILL),
+    });
+    const events = await drain(svc.generateStream("q", { mode: "simple" }));
+    // First rejection was JSON, so the generic instruction is used …
+    expect(completeParams[0]!.input.at(-1)!.content).not.toContain(SIMPLE_MODE_RETRY_INSTRUCTION);
+    // … but the retry is still validated against simple mode.
+    expect(types(events)).not.toContain("generation_complete");
+    expect(types(events)).toContain("error");
+  });
+
+  test("mode=simple: abort flipped after the first answer skips the retry", async () => {
+    const ctrl = new AbortController();
+    const { svc, completeParams } = make({
+      streamFrames: [outputTextDelta(SCRIPTED_SKILL)],
+      completeResult: completeOutput(VALID_SKILL),
+      // Abort AFTER the last frame is yielded: the stream loop sees the
+      // signal only on the next iteration, so accumulation completes and
+      // validation runs, but the retry must not fire.
+      onFrame: () => ctrl.abort(),
+    });
+    const events = await drain(svc.generateStream("q", { mode: "simple", signal: ctrl.signal }));
+    expect(completeParams).toHaveLength(0);
+    expect(types(events)).toContain("validation_error");
+    expect(types(events)).toContain("error");
     expect(types(events)).not.toContain("generation_complete");
   });
 });
@@ -488,7 +613,7 @@ describe("generateStreamWithHistory", () => {
     const ctrl = new AbortController();
     ctrl.abort();
     const events = await drain(
-      svc.generateStreamWithHistory([{ role: "user", content: "x" }], ctrl.signal),
+      svc.generateStreamWithHistory([{ role: "user", content: "x" }], { signal: ctrl.signal }),
     );
     expect(types(events)).toEqual(["error"]);
     expect(streamParams).toHaveLength(0);
@@ -509,6 +634,116 @@ describe("generateStreamWithHistory", () => {
     );
     const err = events.find((e) => e.type === "error");
     expect((err as { message: string }).message).toContain("multi-turn 503");
+  });
+});
+
+// ---- generateStreamWithHistory × mode (#1242) ------------------------
+
+describe("generateStreamWithHistory mode", () => {
+  function make(opts: FakeClientOpts) {
+    const made = makeClient(opts);
+    const svc = new SkillGenerationService({
+      llmClient: made.client,
+      defaultsResolver: makeResolver(DEFAULTS),
+    });
+    return { ...made, svc };
+  }
+  const turn = [{ role: "user" as const, content: "x" }];
+
+  test("mode=simple selects the simple system prompt", async () => {
+    const { svc, streamParams } = make({ streamFrames: [outputTextDelta(VALID_SKILL)] });
+    const events = await drain(svc.generateStreamWithHistory(turn, { mode: "simple" }));
+    expect(streamParams[0]!.input[0]!.content).toBe(SIMPLE_GENERATION_SYSTEM_PROMPT);
+    expect(types(events)).toEqual(["generation_start", "token", "generation_complete"]);
+  });
+
+  test("mode=advanced (default) accepts scripted output without retry", async () => {
+    const { svc, completeParams } = make({ streamFrames: [outputTextDelta(SCRIPTED_SKILL)] });
+    const events = await drain(svc.generateStreamWithHistory(turn));
+    expect(types(events)).toEqual(["generation_start", "token", "generation_complete"]);
+    expect(completeParams).toHaveLength(0);
+  });
+
+  test("mode=simple: invalid JSON still follows the no-retry multi-turn rule", async () => {
+    const { svc, completeParams } = make({ streamFrames: [outputTextDelta("prose reply")] });
+    const events = await drain(svc.generateStreamWithHistory(turn, { mode: "simple" }));
+    expect(completeParams).toHaveLength(0);
+    const ve = events.find((e) => e.type === "validation_error") as { retrying: boolean };
+    expect(ve.retrying).toBe(false);
+    expect(types(events)).toContain("generation_complete");
+  });
+
+  test("mode=simple: scripted answer is retried as a conversation turn and can succeed", async () => {
+    const { svc, completeParams } = make({
+      streamFrames: [outputTextDelta(SCRIPTED_SKILL)],
+      completeResult: completeOutput(VALID_SKILL),
+    });
+    const events = await drain(svc.generateStreamWithHistory(turn, { mode: "simple" }));
+    expect(types(events)).toEqual([
+      "generation_start",
+      "token",
+      "validation_error",
+      "generation_complete",
+    ]);
+    expect((events[2] as { retrying: boolean }).retrying).toBe(true);
+    // Retry input = original conversation + offending assistant turn + corrective user turn.
+    const input = completeParams[0]!.input;
+    expect(input.at(-2)).toEqual({ role: "assistant", content: SCRIPTED_SKILL });
+    expect(input.at(-1)).toEqual({ role: "user", content: SIMPLE_MODE_RETRY_INSTRUCTION });
+    expect((events[3] as { raw: string }).raw).toBe(VALID_SKILL);
+  });
+
+  test("mode=simple: scripted answer twice ends in error with no generation_complete", async () => {
+    const { svc } = make({
+      streamFrames: [outputTextDelta(SCRIPTED_SKILL)],
+      completeResult: completeOutput(SCRIPTED_SKILL),
+    });
+    const events = await drain(svc.generateStreamWithHistory(turn, { mode: "simple" }));
+    expect(types(events)).toEqual(["generation_start", "token", "validation_error", "error"]);
+  });
+
+  test("mode=simple: retry call throwing surfaces an LLM retry error", async () => {
+    const { svc } = make({
+      streamFrames: [outputTextDelta(SCRIPTED_SKILL)],
+      completeThrow: new Error("retry 502"),
+    });
+    const events = await drain(svc.generateStreamWithHistory(turn, { mode: "simple" }));
+    const err = events.find((e) => e.type === "error") as { message: string };
+    expect(err.message).toContain("retry 502");
+    expect(types(events)).not.toContain("generation_complete");
+  });
+
+  test("mode=simple: schema-invalid answer that carries files is retried, never delivered", async () => {
+    // Trips the schema (uppercase tag) AND carries scripts. The
+    // multi-turn no-retry rule for bad JSON must not apply here — the
+    // file-free guarantee wins.
+    const schemaInvalidScripted = JSON.stringify({ ...JSON.parse(SCRIPTED_SKILL), tags: ["Demo"] });
+    const { svc, completeParams } = make({
+      streamFrames: [outputTextDelta(schemaInvalidScripted)],
+      completeResult: completeOutput(VALID_SKILL),
+    });
+    const events = await drain(svc.generateStreamWithHistory(turn, { mode: "simple" }));
+    expect(types(events)).toEqual(["generation_start", "token", "validation_error", "generation_complete"]);
+    expect((events[2] as { retrying: boolean }).retrying).toBe(true);
+    expect(completeParams).toHaveLength(1);
+    expect((events[3] as { raw: string }).raw).toBe(VALID_SKILL);
+  });
+
+  test("mode=simple: abort flipped after the first answer skips the retry and ends in error", async () => {
+    const ctrl = new AbortController();
+    const { svc, completeParams } = make({
+      streamFrames: [outputTextDelta(SCRIPTED_SKILL)],
+      completeResult: completeOutput(VALID_SKILL),
+      // Abort after the last frame: the stream loop only re-checks the
+      // signal on the next iteration, so validation still runs, but the
+      // retry must be skipped.
+      onFrame: () => ctrl.abort(),
+    });
+    const events = await drain(
+      svc.generateStreamWithHistory(turn, { mode: "simple", signal: ctrl.signal }),
+    );
+    expect(types(events)).toEqual(["generation_start", "token", "validation_error", "error"]);
+    expect(completeParams).toHaveLength(0);
   });
 });
 
@@ -589,92 +824,5 @@ describe("generateFromSource", () => {
     const ve = events.find((e) => e.type === "validation_error");
     expect((ve as { retrying: boolean }).retrying).toBe(false);
     expect(types(events)).toContain("generation_complete");
-  });
-});
-
-// ---- parseAndValidate (direct) ---------------------------------------
-
-describe("parseAndValidate", () => {
-  function svc(): SkillGenerationService {
-    const { client } = makeClient({});
-    return new SkillGenerationService({
-      llmClient: client,
-      defaultsResolver: makeResolver(DEFAULTS),
-    });
-  }
-
-  test("strips a ```json fence", () => {
-    const out = svc().parseAndValidate("```json\n" + VALID_SKILL + "\n```");
-    expect(out).not.toBeNull();
-    expect(out!.name).toBe("demo-skill");
-  });
-
-  test("strips a bare ``` fence", () => {
-    const out = svc().parseAndValidate("```\n" + VALID_SKILL + "\n```");
-    expect(out).not.toBeNull();
-  });
-
-  test("slices the brace span out of prose-wrapped output", () => {
-    const out = svc().parseAndValidate(
-      "Sure! Here is your skill:\n" + VALID_SKILL + "\nHope that helps.",
-    );
-    expect(out).not.toBeNull();
-    expect(out!.name).toBe("demo-skill");
-  });
-
-  test("migrates readmeMd → readmeBody, stripping YAML frontmatter", () => {
-    const withFrontmatter = JSON.stringify({
-      name: "legacy-skill",
-      description: "A legacy skill carrying readmeMd with frontmatter.",
-      category: "plain",
-      tags: ["legacy"],
-      readmeMd:
-        "---\ntitle: Legacy\nfoo: bar\n---\n# Legacy Skill\n\nBody content that is well over the fifty character minimum requirement.",
-      runtimes: [],
-      dependencies: [],
-      envVars: [],
-      scripts: [],
-    });
-    const out = svc().parseAndValidate(withFrontmatter);
-    expect(out).not.toBeNull();
-    expect(out!.readmeBody).toContain("# Legacy Skill");
-    expect(out!.readmeBody).not.toContain("title: Legacy");
-  });
-
-  test("migrates readmeMd → readmeBody when there is no frontmatter", () => {
-    const noFrontmatter = JSON.stringify({
-      name: "legacy-plain",
-      description: "A legacy skill carrying readmeMd without frontmatter.",
-      category: "plain",
-      tags: ["legacy"],
-      readmeMd:
-        "# Plain Legacy\n\nThis body has no YAML frontmatter and is over the fifty char minimum.",
-      runtimes: [],
-      dependencies: [],
-      envVars: [],
-      scripts: [],
-    });
-    const out = svc().parseAndValidate(noFrontmatter);
-    expect(out).not.toBeNull();
-    expect(out!.readmeBody).toContain("# Plain Legacy");
-  });
-
-  test("schema violation returns null", () => {
-    const badSchema = JSON.stringify({
-      name: "Bad Name With Spaces",
-      description: "short",
-      category: "plain",
-      tags: [],
-      readmeBody: "too short",
-      runtimes: [],
-      dependencies: [],
-      envVars: [],
-      scripts: [],
-    });
-    expect(svc().parseAndValidate(badSchema)).toBeNull();
-  });
-
-  test("non-JSON input returns null", () => {
-    expect(svc().parseAndValidate("this is not json at all")).toBeNull();
   });
 });
