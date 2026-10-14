@@ -1758,12 +1758,16 @@ export class SkillService {
    * stays single-sourced; both surfaces resolve refs (and apply the
    * per-node `canReadSkill` visibility gate) identically.
    */
-  createVersionLoader(actor: ActorContext): LoadVersion {
+  createVersionLoader(actor: ActorContext, forceLatest = false): LoadVersion {
     return async (ref: string): Promise<ResolvedVersion | null> => {
       const at = ref.lastIndexOf("@");
       if (at <= 0 || at === ref.length - 1) return null;
       const idOrName = ref.slice(0, at);
-      const versionOrTag = ref.slice(at + 1);
+      // #1191 — when the caller resolves the members of a skillset with
+      // "always keep skills up to date" ON, every member resolves to its
+      // skill's latest version, overriding the authored pin / dist-tag /
+      // literal version. Non-destructive: the stored ref is untouched.
+      const versionOrTag = forceLatest ? "latest" : ref.slice(at + 1);
 
       const skill =
         (await this.skillRepo.findByGuid(idOrName)) ??

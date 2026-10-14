@@ -45,6 +45,62 @@ function makeResolver(refs: Record<string, Verdict>): MemberVisibilityResolver {
   };
 }
 
+/**
+ * Version-aware resolver fake (#1191) — models each skill's version set + a
+ * `latest`, and honors the loader's `forceLatest` flag so a pinned ref resolves
+ * to the skill's latest when the skillset opts into auto-update.
+ */
+function makeVersionedResolver(
+  skills: Record<string, { latest: string; versions: string[]; isPrivate?: boolean }>,
+): MemberVisibilityResolver {
+  return {
+    createVersionLoader(_actor: ActorContext, forceLatest = false): LoadVersion {
+      return async (ref: string): Promise<ResolvedVersion | null> => {
+        const at = ref.lastIndexOf("@");
+        const name = ref.slice(0, at);
+        const skill = skills[name];
+        if (!skill) return null;
+        const version = forceLatest ? skill.latest : ref.slice(at + 1);
+        if (!skill.versions.includes(version)) return null;
+        return { ref: `${name}@${version}`, name, version, isPrivate: skill.isPrivate ?? false, dependsOn: [] };
+      };
+    },
+  };
+}
+
+describe("forceLatest override (#1191)", () => {
+  const skills = { pdf: { latest: "2.0", versions: ["1.0", "2.0"] } };
+
+  test("computePublicResolvedMembers honors the pin when forceLatest is off (default)", async () => {
+    const snap = await computePublicResolvedMembers(["pdf@1.0"], makeVersionedResolver(skills));
+    expect(snap).toEqual(["pdf@1.0"]);
+  });
+
+  test("computePublicResolvedMembers resolves a pin to latest when forceLatest is on", async () => {
+    const snap = await computePublicResolvedMembers(["pdf@1.0"], makeVersionedResolver(skills), true);
+    expect(snap).toEqual(["pdf@2.0"]);
+  });
+
+  test("forceLatest resolves a member whose PINNED version was deleted (unresolvable→resolved)", async () => {
+    // pdf@1.0 is gone; only 2.0 survives. The pin is unresolvable, but
+    // forceLatest jumps to the surviving latest, so the member snapshots.
+    const resolver = makeVersionedResolver({ pdf: { latest: "2.0", versions: ["2.0"] } });
+    expect(await computePublicResolvedMembers(["pdf@1.0"], resolver, false)).toEqual([]);
+    expect(await computePublicResolvedMembers(["pdf@1.0"], resolver, true)).toEqual(["pdf@2.0"]);
+  });
+
+  test("computeDerivedVisibility: a dead pin is unresolvable, but forceLatest recovers it", async () => {
+    const resolver = makeVersionedResolver({
+      pdf: { latest: "2.0", versions: ["2.0"] },
+      csv: { latest: "1.0", versions: ["1.0"] },
+    });
+    const off = await computeDerivedVisibility(["pdf@1.0", "csv@1.0"], resolver, false);
+    expect(off.memberVisibilityState).toBe("unresolvable");
+    const on = await computeDerivedVisibility(["pdf@1.0", "csv@1.0"], resolver, true);
+    expect(on).toEqual({ membersAllPublic: true, memberVisibilityState: "all-public" });
+  });
+});
+
 describe("computeDerivedVisibility", () => {
   test("all members public → all-public / true", async () => {
     const resolver = makeResolver({ "a@1.0": "public", "b@1.0": "public" });
@@ -126,6 +182,10 @@ function makeDeps(opts: {
         writes[guid] = derived;
       },
       listAllGuids: async (): Promise<string[]> => Object.keys(opts.latestMembers),
+      // #1191 — recompute reads the identity doc for the auto-update flag. These
+      // fixtures don't opt in, so resolution uses the authored member refs.
+      findByGuid: async (guid: string) =>
+        guid in opts.latestMembers ? ({ autoUpdateMembers: false } as never) : null,
     },
     skillsetVersionRepo: {
       findLatestBySkillset: async (guid: string) => {

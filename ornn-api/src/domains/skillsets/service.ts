@@ -45,6 +45,7 @@ import type { SkillsetVersionRepository } from "./skillsetVersionRepository";
 import {
   SKILLSET_INITIAL_REVISION,
   SKILLSET_MIN_PUBLIC_EXPORT_MEMBERS,
+  type AutoUpdateInput,
   type CreateSkillsetInput,
   type PluginExportInput,
   type PublishSkillsetInput,
@@ -236,7 +237,12 @@ export class SkillsetService {
     const next = nextRevision(currentLatest?.version ?? existing.latestVersion);
 
     await this.validateMembers(members, { name: existing.name, version: next.version });
-    const resolvedMembers = await this.resolveMemberSnapshot(members);
+    // #1191 — when auto-update is on, snapshot the members at their latest so
+    // the exported/delivered set matches the "always up to date" promise.
+    const resolvedMembers = await this.resolveMemberSnapshot(
+      members,
+      existing.autoUpdateMembers ?? false,
+    );
 
     // Append-only — a duplicate `guid@version` is rejected by the version
     // repo (skillset_version_exists). Prior versions are never touched.
@@ -311,7 +317,9 @@ export class SkillsetService {
       // leaks — but a plugin under the floor is too thin to be a meaningful set.
       // Count the latest version's public members under SYSTEM and gate on it.
       const latest = await this.skillsetVersionRepo.findLatestBySkillset(guid);
-      const publicCount = latest ? await this.countPublicMembers(latest.members) : 0;
+      const publicCount = latest
+        ? await this.countPublicMembers(latest.members, existing.autoUpdateMembers ?? false)
+        : 0;
       if (publicCount < SKILLSET_MIN_PUBLIC_EXPORT_MEMBERS) {
         throw AppError.conflict(
           "skillset_too_few_public_members",
@@ -332,6 +340,47 @@ export class SkillsetService {
       { guid, enabled: input.enabled, hasOverrides: overrides !== null },
       "Skillset plugin export updated",
     );
+    return this.getSkillset(guid);
+  }
+
+  /**
+   * Enable/disable "always keep skills in this skillset up to date" (#1191).
+   * When ON, every member (pinned or not) resolves to its skill's latest
+   * version wherever the set is delivered — closure, plugin export, snapshot,
+   * visibility. Flipping the flag either way changes the effective resolved
+   * set, so we immediately re-cut the revision when the public snapshot moved
+   * and refresh derived visibility (both idempotent no-ops when nothing
+   * changed); the route then fires the mirror reconcile to re-export the plugin
+   * at the freshly-bumped revision. Requires WRITE (author/admin, #1123).
+   */
+  async setAutoUpdateMembers(
+    guid: string,
+    input: AutoUpdateInput,
+    actor: ActorContext,
+  ): Promise<SkillsetDetailResponse> {
+    const existing = await this.skillsetRepo.findByGuid(guid);
+    if (!existing) {
+      throw AppError.notFound("skillset_not_found", `Skillset '${guid}' not found`);
+    }
+    if (!canWriteSkill(existing, actor)) {
+      throw AppError.forbidden(
+        "forbidden",
+        "You do not have permission to manage auto-update for this skillset",
+      );
+    }
+
+    await this.skillsetRepo.update(guid, {
+      autoUpdateMembers: input.enabled,
+      updatedBy: actor.userId,
+    });
+
+    // Immediate catch-up: the effective resolved-member set just changed (pins
+    // now float to latest, or revert to their pins), so re-cut the revision if
+    // the public snapshot moved and refresh the derived-visibility cache.
+    await this.maybeBumpRevisionForMemberChange(guid);
+    await this.recomputeVisibility(guid);
+
+    logger.info({ guid, enabled: input.enabled }, "Skillset auto-update-members updated");
     return this.getSkillset(guid);
   }
 
@@ -371,7 +420,11 @@ export class SkillsetService {
     const versionDoc = await this.loadVersionOrThrow(skillset, version);
 
     const isOwnerOrAdmin = canManageSkill(skillset, actor);
-    const unreadableMembers = await this.resolveUnreadableMembers(versionDoc.members, actor);
+    const unreadableMembers = await this.resolveUnreadableMembers(
+      versionDoc.members,
+      actor,
+      skillset.autoUpdateMembers ?? false,
+    );
 
     if (!isOwnerOrAdmin && unreadableMembers.length > 0) {
       // No leak: a non-owner who can't read every member sees a flat 404,
@@ -561,9 +614,14 @@ export class SkillsetService {
       );
     }
 
+    // #1191 — deliver each member at its latest when auto-update is on, so a
+    // consumer resolving the skillset gets the up-to-date set, not the pins.
     const roots = versionDoc.members;
     const items = await resolveClosure(roots, {
-      loadVersion: this.skillService.createVersionLoader(actor),
+      loadVersion: this.skillService.createVersionLoader(
+        actor,
+        skillset.autoUpdateMembers ?? false,
+      ),
     });
     logger.info(
       { idOrName, version: resolvedVersion, memberCount: roots.length, nodeCount: items.length },
@@ -627,7 +685,11 @@ export class SkillsetService {
         isPlatformAdmin: false,
         membershipsResolved: false,
       };
-      const unreadable = await this.resolveUnreadableMembers(latest.members, ownerActor);
+      const unreadable = await this.resolveUnreadableMembers(
+        latest.members,
+        ownerActor,
+        skillset.autoUpdateMembers ?? false,
+      );
       if (unreadable.length === 0) continue;
       // Notify only when THIS change is what cost the owner access.
       const changedNowUnreadable = unreadable.some((ref) =>
@@ -715,7 +777,14 @@ export class SkillsetService {
     const latest = await this.skillsetVersionRepo.findLatestBySkillset(guid);
     if (!latest) return false;
 
-    const currentSnapshot = await this.resolveMemberSnapshot(latest.members);
+    // #1191 — resolve the snapshot with the skillset's own auto-update setting
+    // so a pinned member's new version still moves the snapshot (and bumps the
+    // revision) when the owner asked to always track latest.
+    const identity = await this.skillsetRepo.findByGuid(guid);
+    const currentSnapshot = await this.resolveMemberSnapshot(
+      latest.members,
+      identity?.autoUpdateMembers ?? false,
+    );
 
     if (latest.resolvedMembers === undefined) {
       // Defensive backfill: no baseline yet, so record one rather than bump.
@@ -756,8 +825,11 @@ export class SkillsetService {
    * subset only. Public-only means a member's visibility flip (private⇄public)
    * moves the snapshot and bumps the revision, in addition to a version move.
    */
-  private async resolveMemberSnapshot(members: string[]): Promise<string[]> {
-    return computePublicResolvedMembers(members, this.skillService);
+  private async resolveMemberSnapshot(
+    members: string[],
+    autoUpdateMembers = false,
+  ): Promise<string[]> {
+    return computePublicResolvedMembers(members, this.skillService, autoUpdateMembers);
   }
 
   /** Load a skillset's requested (or latest) version doc, or 404. */
@@ -791,8 +863,9 @@ export class SkillsetService {
   private async resolveUnreadableMembers(
     members: string[],
     actor: ActorContext,
+    autoUpdateMembers = false,
   ): Promise<string[]> {
-    const load = this.skillService.createVersionLoader(actor);
+    const load = this.skillService.createVersionLoader(actor, autoUpdateMembers);
     const unreadable: string[] = [];
     for (const ref of members) {
       const node = await load(ref);
@@ -809,8 +882,11 @@ export class SkillsetService {
    * bundled. Resolved as SYSTEM so a member's own privacy — not the caller's
    * read access — decides public-ness.
    */
-  private async countPublicMembers(members: string[]): Promise<number> {
-    const load = this.skillService.createVersionLoader(SYSTEM_ACTOR);
+  private async countPublicMembers(
+    members: string[],
+    autoUpdateMembers = false,
+  ): Promise<number> {
+    const load = this.skillService.createVersionLoader(SYSTEM_ACTOR, autoUpdateMembers);
     const publicNames = new Set<string>();
     for (const ref of members) {
       const node = await load(ref);
@@ -830,7 +906,10 @@ export class SkillsetService {
     versionDoc: SkillsetVersionDocument,
     unreadableMembers: string[],
   ): Promise<SkillsetDetailResponse> {
-    const publicMemberCount = await this.countPublicMembers(versionDoc.members);
+    const publicMemberCount = await this.countPublicMembers(
+      versionDoc.members,
+      skillset.autoUpdateMembers ?? false,
+    );
     return toDetail(skillset, versionDoc, unreadableMembers, publicMemberCount);
   }
 
@@ -954,6 +1033,8 @@ function toDetail(
     memberVisibilityState: skillset.memberVisibilityState ?? "all-public",
     // Plugin-export opt-in (#1155) + owner listing overrides (#1157).
     exportAsPlugin: skillset.exportAsPlugin ?? false,
+    // Auto-update-members opt-in (#1191).
+    autoUpdateMembers: skillset.autoUpdateMembers ?? false,
     pluginConfig: skillset.pluginConfig,
     // Public-member subset size (#1161) — drives the export-card gate.
     publicMemberCount,

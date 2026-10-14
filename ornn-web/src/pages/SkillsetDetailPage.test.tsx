@@ -21,6 +21,7 @@ const useSkillsetVersions = vi.fn();
 const useSkillsetClosure = vi.fn();
 const useDeleteSkillset = vi.fn();
 const useUpdatePluginExport = vi.fn();
+const useUpdateAutoUpdate = vi.fn();
 
 vi.mock("@/hooks/useSkillsets", () => ({
   useSkillset: (...a: unknown[]) => useSkillset(...a),
@@ -28,6 +29,7 @@ vi.mock("@/hooks/useSkillsets", () => ({
   useSkillsetClosure: (...a: unknown[]) => useSkillsetClosure(...a),
   useDeleteSkillset: (...a: unknown[]) => useDeleteSkillset(...a),
   useUpdatePluginExport: (...a: unknown[]) => useUpdatePluginExport(...a),
+  useUpdateAutoUpdate: (...a: unknown[]) => useUpdateAutoUpdate(...a),
 }));
 
 vi.mock("@/stores/authStore", () => ({
@@ -108,6 +110,7 @@ beforeEach(() => {
   });
   useDeleteSkillset.mockReturnValue({ mutateAsync: vi.fn(), isPending: false });
   useUpdatePluginExport.mockReturnValue({ mutateAsync: vi.fn(), isPending: false });
+  useUpdateAutoUpdate.mockReturnValue({ mutateAsync: vi.fn(), isPending: false });
 });
 
 afterEach(() => {

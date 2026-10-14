@@ -919,7 +919,11 @@ export class MirrorService {
     // (bundled) vs private/unresolvable (excluded → README note only). Only the
     // public subset's files are ever fetched, so a private member's content can
     // never leak into the public mirror (#1161).
-    const load = this.deps.skillService.createVersionLoader(SYSTEM_ACTOR);
+    // #1191 — an auto-update skillset exports each member at its latest version.
+    const load = this.deps.skillService.createVersionLoader(
+      SYSTEM_ACTOR,
+      ss.autoUpdateMembers ?? false,
+    );
     const members: SkillsetPluginMember[] = [];
     const includedNames = new Set<string>();
     const excludedMembers: string[] = [];
@@ -995,7 +999,11 @@ export class MirrorService {
     if (!this.deps.skillsetService) return 0;
     const latest = await this.deps.skillsetService.getLatestForMirror(ss.guid);
     if (!latest) return 0;
-    const load = this.deps.skillService.createVersionLoader(SYSTEM_ACTOR);
+    // #1191 — count public members at their latest when auto-update is on.
+    const load = this.deps.skillService.createVersionLoader(
+      SYSTEM_ACTOR,
+      ss.autoUpdateMembers ?? false,
+    );
     const publicNames = new Set<string>();
     for (const ref of latest.members) {
       const node = await load(ref);

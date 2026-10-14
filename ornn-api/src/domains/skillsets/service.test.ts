@@ -157,6 +157,8 @@ function makeSkillsetDeps(
         sharedWithOrgs: [],
         // #1155 — persist the plugin-export opt-in (default OFF).
         exportAsPlugin: data.exportAsPlugin ?? false,
+        // #1191 — auto-update-members opt-in (default OFF).
+        autoUpdateMembers: false,
         // #1157 — optional listing overrides.
         ...(data.pluginConfig ? { pluginConfig: data.pluginConfig } : {}),
         latestVersion: data.latestVersion,
@@ -1435,5 +1437,131 @@ describe("SkillsetService — resolveClosure (roots = members)", () => {
 
     const closure = await service.resolveClosure("open-set", ANON);
     expect(closure.items.map((n) => n.name).sort()).toEqual(["csv-tools", "pdf-tools"]);
+  });
+});
+
+describe("SkillsetService — setAutoUpdateMembers (#1191)", () => {
+  const OTHER: ActorContext = {
+    userId: "someone-else",
+    memberships: [],
+    isPlatformAdmin: false,
+    membershipsResolved: true,
+  };
+
+  /** Two public skills, each with versions 1.0 AND 2.0 (latest = 2.0). */
+  function twoMembersV1andV2(): { skills: SkillDocument[]; versions: SkillVersionDocument[] } {
+    const a = skillDoc({ guid: "g-a", name: "pdf-tools", latestVersion: "2.0", isPrivate: false });
+    const b = skillDoc({ guid: "g-b", name: "csv-tools", latestVersion: "2.0", isPrivate: false });
+    return {
+      skills: [a, b],
+      versions: [
+        skillVersion({ _id: "g-a@1.0", skillGuid: "g-a", version: "1.0", majorVersion: 1, minorVersion: 0 }),
+        skillVersion({ _id: "g-a@2.0", skillGuid: "g-a", version: "2.0", majorVersion: 2, minorVersion: 0 }),
+        skillVersion({ _id: "g-b@1.0", skillGuid: "g-b", version: "1.0", majorVersion: 1, minorVersion: 0 }),
+        skillVersion({ _id: "g-b@2.0", skillGuid: "g-b", version: "2.0", majorVersion: 2, minorVersion: 0 }),
+      ],
+    };
+  }
+
+  function makeService() {
+    const { skills, versions } = twoMembersV1andV2();
+    return new SkillsetService(makeSkillsetDeps(makeSkillService(skills, versions)).deps);
+  }
+
+  /** Create a skillset whose members are PINNED to 1.0 (each skill's latest is 2.0). */
+  async function seedPinnedSet(service = makeService(), name = "pinned-set") {
+    const created = await service.createSkillset(
+      {
+        name,
+        description: "d",
+        instructions: "p",
+        kind: "generic",
+        tags: [],
+        members: ["pdf-tools@1.0", "csv-tools@1.0"],
+      },
+      { userId: "owner-1" },
+    );
+    return { service, guid: created.guid };
+  }
+
+  it("OFF (default) resolves members at their PINNED versions", async () => {
+    const { service } = await seedPinnedSet();
+    const detail = await service.getSkillset("pinned-set");
+    expect(detail.autoUpdateMembers).toBe(false);
+    const closure = await service.resolveClosure("pinned-set", SYSTEM_ACTOR);
+    expect(closure.items.map((n) => `${n.name}@${n.version}`).sort()).toEqual([
+      "csv-tools@1.0",
+      "pdf-tools@1.0",
+    ]);
+  });
+
+  it("enabling forces members to latest, bumps the revision, and delivers latest", async () => {
+    const { service, guid } = await seedPinnedSet();
+    expect((await service.getSkillset(guid)).latestVersion).toBe("1.0");
+
+    const updated = await service.setAutoUpdateMembers(guid, { enabled: true }, OWNER);
+    expect(updated.autoUpdateMembers).toBe(true);
+    // Both pinned members' resolved version moved 1.0 → 2.0, so the revision bumps.
+    expect(updated.latestVersion).toBe("1.1");
+
+    const closure = await service.resolveClosure(guid, SYSTEM_ACTOR);
+    expect(closure.items.map((n) => `${n.name}@${n.version}`).sort()).toEqual([
+      "csv-tools@2.0",
+      "pdf-tools@2.0",
+    ]);
+  });
+
+  it("disabling restores the pinned resolution (non-destructive) and bumps again", async () => {
+    const { service, guid } = await seedPinnedSet();
+    await service.setAutoUpdateMembers(guid, { enabled: true }, OWNER); // → 1.1, latest
+    const off = await service.setAutoUpdateMembers(guid, { enabled: false }, OWNER);
+    expect(off.autoUpdateMembers).toBe(false);
+    expect(off.latestVersion).toBe("1.2"); // snapshot moved back 2.0 → 1.0
+    // Authored refs were never rewritten — the override is purely resolution-time.
+    expect(off.members).toEqual(["pdf-tools@1.0", "csv-tools@1.0"]);
+    const closure = await service.resolveClosure(guid, SYSTEM_ACTOR);
+    expect(closure.items.map((n) => `${n.name}@${n.version}`).sort()).toEqual([
+      "csv-tools@1.0",
+      "pdf-tools@1.0",
+    ]);
+  });
+
+  it("enabling is idempotent when members already resolve to latest (no bump)", async () => {
+    const service = makeService();
+    const created = await service.createSkillset(
+      {
+        name: "latest-set",
+        description: "d",
+        instructions: "p",
+        kind: "generic",
+        tags: [],
+        members: ["pdf-tools@2.0", "csv-tools@2.0"],
+      },
+      { userId: "owner-1" },
+    );
+    const updated = await service.setAutoUpdateMembers(created.guid, { enabled: true }, OWNER);
+    expect(updated.autoUpdateMembers).toBe(true);
+    expect(updated.latestVersion).toBe("1.0"); // snapshot unchanged → no bump
+  });
+
+  it("rejects a caller without write access", async () => {
+    const { service, guid } = await seedPinnedSet();
+    let code = "";
+    try {
+      await service.setAutoUpdateMembers(guid, { enabled: true }, OTHER);
+    } catch (err) {
+      code = (err as AppError).code;
+    }
+    expect(code).toBe("forbidden");
+  });
+
+  it("404s an unknown skillset", async () => {
+    let code = "";
+    try {
+      await makeService().setAutoUpdateMembers("nope", { enabled: true }, OWNER);
+    } catch (err) {
+      code = (err as AppError).code;
+    }
+    expect(code).toBe("skillset_not_found");
   });
 });

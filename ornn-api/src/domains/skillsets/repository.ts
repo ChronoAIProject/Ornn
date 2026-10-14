@@ -56,6 +56,8 @@ export interface CreateSkillsetData {
   latestVersion: string;
   /** Owner opt-in (#1155) to export as a multi-skill plugin. Default OFF. */
   exportAsPlugin?: boolean | undefined;
+  /** Owner opt-in (#1191) — always keep members at latest. Default OFF. */
+  autoUpdateMembers?: boolean | undefined;
   /** Owner plugin listing overrides (#1157). Omitted ⇒ no overrides stored. */
   pluginConfig?: SkillsetPluginOverrides | undefined;
 }
@@ -82,6 +84,11 @@ export interface UpdateSkillsetData {
    * doesn't mention the flag must not silently reset it).
    */
   exportAsPlugin?: boolean;
+  /**
+   * Owner opt-in (#1191) — "always keep skills up to date". Set ONLY when an
+   * explicit boolean is provided; omitting it preserves the current setting.
+   */
+  autoUpdateMembers?: boolean;
   /**
    * Owner plugin listing overrides (#1157). Three-state:
    *   - `undefined` — leave the stored overrides untouched (publish path).
@@ -235,6 +242,8 @@ export class SkillsetRepository {
       memberVisibilityState: "all-public",
       // Plugin-export opt-in (#1155) — default OFF.
       exportAsPlugin: data.exportAsPlugin ?? false,
+      // Auto-update-members opt-in (#1191) — default OFF.
+      autoUpdateMembers: data.autoUpdateMembers ?? false,
       latestVersion: data.latestVersion,
     };
     // Plugin listing overrides (#1157) — only written when supplied so a fresh
@@ -276,6 +285,7 @@ export class SkillsetRepository {
     if (data.latestVersion !== undefined) setFields.latestVersion = data.latestVersion;
     // #1155 — only an explicit boolean flips the opt-in; omission preserves it.
     if (data.exportAsPlugin !== undefined) setFields.exportAsPlugin = data.exportAsPlugin;
+    if (data.autoUpdateMembers !== undefined) setFields.autoUpdateMembers = data.autoUpdateMembers;
     // #1157 — three-state plugin overrides: object replaces, null clears
     // ($unset so the mirror falls back to skillset fields), undefined no-ops.
     const unsetFields: Record<string, unknown> = {};
@@ -521,6 +531,8 @@ function mapDoc(doc: Document | null): SkillsetDocument | null {
       (doc.memberVisibilityState as SkillsetMemberVisibilityState | undefined) ?? "all-public",
     // Plugin-export opt-in (#1155) — absent on pre-feature docs ⇒ false.
     exportAsPlugin: doc.exportAsPlugin === true,
+    // Auto-update-members opt-in (#1191) — absent on pre-feature docs ⇒ false.
+    autoUpdateMembers: doc.autoUpdateMembers === true,
     // Plugin listing overrides (#1157) — undefined when unset/legacy.
     pluginConfig: coercePluginConfig(doc.pluginConfig),
     latestVersion: doc.latestVersion ?? "1.0",

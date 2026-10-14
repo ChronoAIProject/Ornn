@@ -207,9 +207,19 @@ export const pluginExportSchema = z.object({
   keywords: z.array(pluginKeywordSchema).max(20).optional(),
 });
 
+/**
+ * Body for `PUT /skillsets/:id/auto-update` (#1191). A single opt-in toggle —
+ * "always keep skills in this skillset up to date". No overrides: when on, ALL
+ * members always resolve to their latest version.
+ */
+export const autoUpdateSchema = z.object({
+  enabled: z.boolean(),
+});
+
 export type CreateSkillsetInput = z.infer<typeof createSkillsetSchema>;
 export type PublishSkillsetInput = z.infer<typeof publishSkillsetSchema>;
 export type PluginExportInput = z.infer<typeof pluginExportSchema>;
+export type AutoUpdateInput = z.infer<typeof autoUpdateSchema>;
 
 /**
  * Owner-customizable plugin listing fields (#1157). Each is OPTIONAL and, when
@@ -282,6 +292,17 @@ export interface SkillsetDocument {
    * Default OFF.
    */
   exportAsPlugin?: boolean | undefined;
+  /**
+   * Owner opt-in (#1191) — "always keep skills in this skillset up to date".
+   * When `true`, EVERY member (pinned or not) resolves to its skill's latest
+   * version everywhere the set is delivered (closure, plugin export, snapshot,
+   * visibility), so a member's new version auto-updates the skillset with no
+   * per-member ref changes. Non-destructive: the authored `members` refs are
+   * preserved and only overridden at resolution time, so turning it off
+   * restores the pinned behavior. Optional for back-compat (absent ⇒ `false`).
+   * Default OFF.
+   */
+  autoUpdateMembers?: boolean | undefined;
   /**
    * Owner-customizable plugin listing overrides (#1157). Set ONLY when the
    * owner exported with explicit overrides; absent ⇒ the mirror falls back to
@@ -377,6 +398,12 @@ export interface SkillsetDetailResponse {
    * the toggle state + the install snippet. Always present (defaults `false`).
    */
   exportAsPlugin: boolean;
+  /**
+   * Owner opt-in (#1191) — "always keep skills up to date". Surfaced so the web
+   * UI can show the toggle state. Always present (defaults `false`). When on,
+   * every member resolves to its latest version wherever the set is delivered.
+   */
+  autoUpdateMembers: boolean;
   /**
    * Number of THIS version's members whose skill is currently public AND
    * resolvable, counted under SYSTEM (#1161). The export bundles only this
