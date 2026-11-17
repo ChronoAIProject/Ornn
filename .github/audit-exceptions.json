@@ -1,0 +1,22 @@
+{
+  "schema": "ornn-audit-exceptions-v1",
+  "exceptions": [
+    {
+      "advisory": "GHSA-fc5q-39xc-vjpf",
+      "package": "picomatch",
+      "version": "4.0.5",
+      "expires_at": "2026-11-19T00:00:00+08:00",
+      "tracking_issue": "https://github.com/ChronoAIProject/Ornn/issues/1257",
+      "justification": "Temporary build-tool ReDoS exception pending an upstream fix. The advisory affects <=4.0.7 and has no patched release. Picomatch is reached only from root development tooling, web Vite/Vitest and SDK Vitest; the API and web production dependency closures do not reach it. The API image installs only production API dependencies and its retained native archive contains no picomatch package. The web runtime is nginx serving compiled static files, with no build tooling or node_modules copied. Build patterns come from trusted repository configuration. Reassess before expiry or any bound dependency/build-input change; this exception does not approve production cutover.",
+      "input_sha256": {
+        "package.json": "a26df94629fdef6d3f55edf532dc60336798d637533235f3ba9e8c4d72455c24",
+        "bun.lock": "ffc4679420119a4ea72174a3c20cbfab777b0698e97dfa98f99f9dca7ad0ce5c",
+        "ornn-api/package.json": "54b06945b9f9fe69f4829c7d9b08722d954eb4cbd2b815d639edddf1a5abd5f6",
+        "ornn-web/package.json": "e336c4a36bcb081e8ecdeb12aa4fc085aad53a6cae4da9928747992e5a2d9cb6",
+        "sdk/typescript/package.json": "4b6bc345d359666b3b74e947f65c97c83539d8f5d625dd0dee31de516269addb",
+        "ornn-api/Dockerfile.staging": "dadfb0e5f42a42359afd7ed22b789d927dca0b9dc029430b5f717791829897d9",
+        "ornn-web/Dockerfile.staging": "d317878e6c203993ca8efbb15f0de3008a3fd623cbf7aaa069cb22a8b2b3972f"
+      }
+    }
+  ]
+}

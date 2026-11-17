@@ -1,0 +1,1382 @@
+{
+  "version": 2,
+  "entries": [
+    {
+      "id": "reserved-documentation-url",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "path": "usr/share/doc/example-url.txt",
+      "match_sha256": "100680ad546ce6a577f42f52df33b4cfdca756859e664b8d7de329b150d09ce9",
+      "reason": "RFC 2606 reserved public documentation URL; exact value and exact documentation file only."
+    },
+    {
+      "id": "public-example-oauth-client-id",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "config",
+      "path": "config/config/Labels/org.example.oauth-client-id",
+      "match_sha256": "4c033041873bead951e27fe548e4131d566a320a8478634d78ab4298396dd3a7",
+      "reason": "Nonfunctional example of a public OAuth client identifier; client IDs are public identifiers, not client secrets."
+    },
+    {
+      "id": "ornn-public-2d8f1ac1b046ae06756605d8",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "9c102bcc376af1498d549b77bdbfa815ae86faa1d2d82f040e616b18ef2df2d4",
+      "reason": "SA01 validated rsa-public-key; public bytes only. No credential-specific detector exception.",
+      "path": "etc/apk/keys/alpine-devel@lists.alpinelinux.org-4a6a0840.rsa.pub"
+    },
+    {
+      "id": "ornn-public-20a507793bfcff7bfe052fb8",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "12f899e55a7691225603d6fb3324940fc51cd7f133e7ead788663c2b7eecb00c",
+      "reason": "SA01 validated rsa-public-key; public bytes only. No credential-specific detector exception.",
+      "path": "etc/apk/keys/alpine-devel@lists.alpinelinux.org-5261cecb.rsa.pub"
+    },
+    {
+      "id": "ornn-public-1cda799d7d13f6007353f50a",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "207e4696d3c05f7cb05966aee557307151f1f00217af4143c1bcaf33b8df733f",
+      "reason": "SA01 validated rsa-public-key; public bytes only. No credential-specific detector exception.",
+      "path": "etc/apk/keys/alpine-devel@lists.alpinelinux.org-6165ee59.rsa.pub"
+    },
+    {
+      "id": "ornn-public-33dbe61833843e25044a2e23",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "ff7cf138acc09f2a5029300ab713fe6a1440605fca72e2bab76a4da9206fec87",
+      "reason": "SA01 validated rsa-public-key; public bytes only. No credential-specific detector exception.",
+      "path": "etc/apk/keys/nginx_signing.rsa.pub"
+    },
+    {
+      "id": "ornn-public-c143044696ab8bad9ab5924c",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "028fca5150ee1915c4474489985d55c54fceaa680c754cc8d1301734f01b2232",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path": "etc/ssl/certs/ca-certificates.crt"
+    },
+    {
+      "id": "ornn-public-26786556141d9514ba920db8",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "9c102bcc376af1498d549b77bdbfa815ae86faa1d2d82f040e616b18ef2df2d4",
+      "reason": "SA01 validated rsa-public-key; public bytes only. No credential-specific detector exception.",
+      "path": "usr/share/apk/keys/alpine-devel@lists.alpinelinux.org-4a6a0840.rsa.pub"
+    },
+    {
+      "id": "ornn-public-5cd7927cf697f71606b5ff30",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "ebf31683b56410ecc4c00acd9f6e2839e237a3b62b5ae7ef686705c7ba0396a9",
+      "reason": "SA01 validated rsa-public-key; public bytes only. No credential-specific detector exception.",
+      "path": "usr/share/apk/keys/alpine-devel@lists.alpinelinux.org-5243ef4b.rsa.pub"
+    },
+    {
+      "id": "ornn-public-1c5d3d30efbd0b42784b3c47",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "1bb2a846c0ea4ca9d0e7862f970863857fc33c32f5506098c636a62a726a847b",
+      "reason": "SA01 validated rsa-public-key; public bytes only. No credential-specific detector exception.",
+      "path": "usr/share/apk/keys/alpine-devel@lists.alpinelinux.org-524d27bb.rsa.pub"
+    },
+    {
+      "id": "ornn-public-8d43ceefc9c0c0457ecc107e",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "12f899e55a7691225603d6fb3324940fc51cd7f133e7ead788663c2b7eecb00c",
+      "reason": "SA01 validated rsa-public-key; public bytes only. No credential-specific detector exception.",
+      "path": "usr/share/apk/keys/alpine-devel@lists.alpinelinux.org-5261cecb.rsa.pub"
+    },
+    {
+      "id": "ornn-public-f0d4b30b8eaa93a6d7f33242",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "73867d92083f2f8ab899a26ccda7ef63dfaa0032a938620eda605558958a8041",
+      "reason": "SA01 validated rsa-public-key; public bytes only. No credential-specific detector exception.",
+      "path": "usr/share/apk/keys/alpine-devel@lists.alpinelinux.org-58199dcc.rsa.pub"
+    },
+    {
+      "id": "ornn-public-e169e52b6c4eca2517eb7d82",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "9a4cd858d9710963848e6d5f555325dc199d1c952b01cf6e64da2c15deedbd97",
+      "reason": "SA01 validated rsa-public-key; public bytes only. No credential-specific detector exception.",
+      "path": "usr/share/apk/keys/alpine-devel@lists.alpinelinux.org-58cbb476.rsa.pub"
+    },
+    {
+      "id": "ornn-public-ca12623a5b3d58799dcdef0d",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "780b3ed41786772cbc7b68136546fa3f897f28a23b30c72dde6225319c44cfff",
+      "reason": "SA01 validated rsa-public-key; public bytes only. No credential-specific detector exception.",
+      "path": "usr/share/apk/keys/alpine-devel@lists.alpinelinux.org-58e4f17d.rsa.pub"
+    },
+    {
+      "id": "ornn-public-953d7e309b39f575089bab9d",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "59c01c57b446633249f67c04b115dd6787f4378f183dff2bbf65406df93f176d",
+      "reason": "SA01 validated rsa-public-key; public bytes only. No credential-specific detector exception.",
+      "path": "usr/share/apk/keys/alpine-devel@lists.alpinelinux.org-5e69ca50.rsa.pub"
+    },
+    {
+      "id": "ornn-public-5fa4291c9f7a3cc7e594ab17",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "db0b49163f07ffba64a5ca198bcf1688610b0bd1f0d8d5afeaf78559d73f2278",
+      "reason": "SA01 validated rsa-public-key; public bytes only. No credential-specific detector exception.",
+      "path": "usr/share/apk/keys/alpine-devel@lists.alpinelinux.org-60ac2099.rsa.pub"
+    },
+    {
+      "id": "ornn-public-986e1c5382fd78af72824641",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "207e4696d3c05f7cb05966aee557307151f1f00217af4143c1bcaf33b8df733f",
+      "reason": "SA01 validated rsa-public-key; public bytes only. No credential-specific detector exception.",
+      "path": "usr/share/apk/keys/alpine-devel@lists.alpinelinux.org-6165ee59.rsa.pub"
+    },
+    {
+      "id": "ornn-public-bb32a3360d319803d38a4e7e",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "128d34d4aec39b0daedea8163cd8dc24dff36fd3d848630ab97eeb1d3084bbb3",
+      "reason": "SA01 validated rsa-public-key; public bytes only. No credential-specific detector exception.",
+      "path": "usr/share/apk/keys/alpine-devel@lists.alpinelinux.org-61666e3f.rsa.pub"
+    },
+    {
+      "id": "ornn-public-49e84f6888b8160dc0cbe7ab",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "10877cce0a935e46ad88cb79e174a2491680508eccda08e92bf04fb9bf37fbc1",
+      "reason": "SA01 validated rsa-public-key; public bytes only. No credential-specific detector exception.",
+      "path": "usr/share/apk/keys/alpine-devel@lists.alpinelinux.org-616a9724.rsa.pub"
+    },
+    {
+      "id": "ornn-public-99c10c8e4c81a478f005fd45",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "4a095a9daca86da496a3cd9adcd95ee2197fdbeb84638656d469f05a4d740751",
+      "reason": "SA01 validated rsa-public-key; public bytes only. No credential-specific detector exception.",
+      "path": "usr/share/apk/keys/alpine-devel@lists.alpinelinux.org-616abc23.rsa.pub"
+    },
+    {
+      "id": "ornn-public-458b7fd860e87b6f4aa483a2",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "0caf5662fde45616d88cfd7021b7bda269a2fcaf311e51c48945a967a609ec0b",
+      "reason": "SA01 validated rsa-public-key; public bytes only. No credential-specific detector exception.",
+      "path": "usr/share/apk/keys/alpine-devel@lists.alpinelinux.org-616ac3bc.rsa.pub"
+    },
+    {
+      "id": "ornn-public-d0284593c48b7718d8e6dab8",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "ebe717d228555aa58133c202314a451f81e71f174781fd7ff8d8970d6cfa60da",
+      "reason": "SA01 validated rsa-public-key; public bytes only. No credential-specific detector exception.",
+      "path": "usr/share/apk/keys/alpine-devel@lists.alpinelinux.org-616adfeb.rsa.pub"
+    },
+    {
+      "id": "ornn-public-6850849663d51786f5fea39d",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "d11f6b21c61b4274e182eb888883a8ba8acdbf820dcc7a6d82a7d9fc2fd2836d",
+      "reason": "SA01 validated rsa-public-key; public bytes only. No credential-specific detector exception.",
+      "path": "usr/share/apk/keys/alpine-devel@lists.alpinelinux.org-616ae350.rsa.pub"
+    },
+    {
+      "id": "ornn-public-73af3ea5afd7628b7036ced2",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "40a216cbd163f22e5f16a9e0929de7cde221b9cbae8e36aa368b1e128afe0a31",
+      "reason": "SA01 validated rsa-public-key; public bytes only. No credential-specific detector exception.",
+      "path": "usr/share/apk/keys/alpine-devel@lists.alpinelinux.org-616db30d.rsa.pub"
+    },
+    {
+      "id": "ornn-public-1431953ea60fa474e1d6b8f5",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "7cf4cb8314e6ccc985b0d7f1aa0c6e0a81e3588f69a41f383af7a63d1ba61793",
+      "reason": "SA01 validated rsa-public-key; public bytes only. No credential-specific detector exception.",
+      "path": "usr/share/apk/keys/alpine-devel@lists.alpinelinux.org-66ba20fe.rsa.pub"
+    },
+    {
+      "id": "ornn-public-7df74aab39449d58410ed0f7",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "04846f73d9d0421c60076fd02bad7f0a81a3f11a028d653b0de53290e41dcead",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-a95656ee65dce67041d5cbae",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "aa18ea4c9a8441a461bb436a1c90beb994ac841980b8fd62c72de9a62ddf8ae3",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-dd41141aa2755245d8eeb233",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "8e3f237813d3f3e2f5767bc2a694a7557f84bb79fd60ef1adc25afd0c1fc5ef6",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-f228f5c8901a9232adde8327",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "efb2df6e0075fa74e448077e402d171851b2ffe4668a614adc00dcbc75633afd",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-bd7153e4ac57eeec5856ebbe",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "c6d25347727f267774611677588d76f8a54a6e14d3e99dd69ef2c20612ed87c5",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-2ad89bde62ca81906d9eb836",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "2c43952ee9e000ff2acc4e2ed0897c0a72ad5fa72c3d934e81741cbd54f05bd1",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-7f09ac3e158bb2e487c1d844",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "a3a7fe25439d9a9b50f60af43684444d798a4c869305bf615881e5c84a44c1a2",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-d0e0dbf5e5f6e86ff8bf346c",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "3eb7c3258f4af9222033dc1bb3dd2c7cfa0982b98e39fb8e9dc095cfeb38126c",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-065dc90507411f8f64637902",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "b0b7961120481e33670315b2f843e643c42f693c7a1010eb9555e06ddc730214",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-c60eaedf5f200cfd71b33de5",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "970d70366b2f8c29ac71c8f71689ddd8fd321208a5ededbb2d784af33799a0f6",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-bc6e2214c2a6f221e323b47c",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "980dc408dd2def2d7930bec10c48e256d115f636c403b631ffb93558dacf5571",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-f04b2b8c61aa10ee1f4e20d7",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "a618213c5dd7cbb59b3154de7241d7255333a0619cf434329becae876ce6e331",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-2c0f33dce681d00cac5f5944",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "08e1a8115accf7ce400a3f98fc31dbab522a3ed3644ca48389b4899e2d794f1a",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-2b7ff95df53cc831d9d2b1f8",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "6c58125f88a4ff83d40e6b58c5532ea905be4daf1ec7da7f4542af3d34855340",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-354b8208d44d3d828c5e6c08",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "9c2a7510e01aec2c9b8cc2c9d03b16576858a93863a6d0a31a2ac05f47f5dbe1",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-1068c92dcfa87613f1cf434f",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "8db5b7c8f058c56a8d033c2443d34fdfd3656150eaa73fe63c65161e7063ce99",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-b25bb4fd5a771d3f48f9fca2",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "8adefca890c92e6d0877fdcba07655296852217da657026aea69ee547642528c",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-09ec02d731821989c3a25225",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "94e4ab21333740d7ed0f2b5007744e5cf6792c0ddf4c6bdfb3ce8333010e7306",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-801448b8dc28d3c9eefc704a",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "d69f7b57250536f57ffba92cffe82a8bbcb16e03a9a2607ec967f362ce83f9ce",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-b153f8410587bd94885005ba",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "24b0d4292dacb02efc38542838e378bc35f040dcd21bebfddbc82dc7feb2876d",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-45d910270c27b36bc97398da",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "1b28a5568648fef0d3faeb916cb7bdb054724cb3b5a00c6bfd3d8a2fba7a8bba",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-0c3411ef80476edd4cf32c0b",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "0c78902126532fde9eed4b2d8b6a2c9bbaa8b3abc59f233c45c6cb5514a9f808",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-f5f5f3565db1e92f3ee74e91",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "fe3b44c18182e167121a2c645cecc4817441d469dc00633e60fe8476f9e1ad96",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-c66b8ff0638801ce3c666a0d",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "c4a426fe57a7e4e6966e2103f2941eb7263e7c35727dd0f412bd593467304999",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-872351afb6b4f33b9b326881",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "43f1bade6454349c258017cc99113f8b6a5712e3807e82ad9371348d52d60190",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-618e80d8ac639561a2b88dd1",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "9dd4cbb6d2c29cbb3ca98da02c042a690c0ef4c0521d98aae37e0a704c4bf210",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-4cf5e5db2930ba7d6a0c6063",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "e6c62d3f63ba03f4dac458b7dac6c09eb4d71cc3c6621769c3883ed51677c01c",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-b4e6ef0e21aabe7497f08ce6",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "ae927c01e73470cfc89943b5cd8f26e481d55c833517c1017f3fef404a38a317",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-e36e95ced1d3a8a0499be606",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "2754e50d3377d6613e95df6d7a40150bb3a1fa1ae35382af96c7be58cdcbeb14",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-7993a55427fd21373005574f",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "0b83e3ece7c33128cc31ac97595ce1bdb524db3f924623093b64e6a96ffb4b9b",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-948dbdcaabc7372fbc59779f",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "268e32f39fb4f9316d0680fde4eb479bbe8c4093193551c4b388f703ada60eca",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-fdd92d40d0df3fb71902df14",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "a00b8aa918457f5e7e58457b5e2f80d640fa77cc290572aaab1ae7b4734a9528",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-3b46dd0c9abd503a9a291190",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "f81ceeaf6341513ef391ab3ea3302e8b2fb2c1527752797bba9b20ca22048b3c",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-52c3996e798978b7f1e0aaab",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "660b5aa96668c5162f4af6b0a01241d8527aef8fa8a5307a7033b83c3de4a72d",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-3748853b0f72d1db3c1e9fc0",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "c4fa4cc30be6aee0a4c0dff81f28768eedd83e8d4934a42f82179cbfa61f13ad",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-fecb8e6255b56bbcff0d1799",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "5d550643b6400d4341550a9b14aedd0b4fac33ae5deb7d8247b6b4f799c13306",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-9b2a7bcbaf5a61e87f7c04ce",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "1914cd2d4cde263315f9e32c7683fc0e1b921919ad12b256d49bf782011c03cc",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-b0fadf5af6cd180b55fdf34b",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "05161ad2ac04a0df956ef803e127aa877cc5131e0a727ed8e5de43f02e8868c4",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-5e33d4dcd2693640e170544b",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "fe64d4b3ae749db5ec57b04ed9203c748fff446f57b9665fad988435d89c9e43",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-aa89bbea1b1c590bf78b7b0e",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "ce7d6b44f5d510391be98c8d76b18709400a30cd87659bfebe1c6f97ff5181ee",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-96eb42799aa68165b50b17cf",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "b0bf3a444f89d8be7db120bfecaa2f94d9e49ede21f680d674c1e8d839d8a9a2",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-d7a10712aed1496997f9b864",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "4195ea007a7ef8d3e2d338e8d9ff0083198e36bfa025442ddf41bb5213904fc2",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-0a6b59524e28082583402a03",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "39238e09bb7d30e39fbf87746ceac206f7ec206cff3d73c743e3f818ca2ec54f",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-602f8e824b649b6a1a8fd771",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "7e8b80d078d3dd77d3ed2108dd2b33412c12d7d72cb0965741c70708691776a2",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-6bb4a4b07035fc128a683e35",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "d1b69887f73444c0fc0a6f22a2fe961c2423275f9c38ba7d50da2a4ba75394f1",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-f5115255ae3ca2afa31e7999",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "80eeafa5039f282345129a81ace7e1c1e1d4fd826f1eb3391a4ea56f38a6e3d8",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-7c9033991c1da6136784b647",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "6bdc59f897631af7811e3201cbc58e5999de2600ae8667454a34514eecfd8381",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-624092adbdc393ecdf813b5e",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "5ff8425be71c1805446bf10601ce3cb9619889866766fc9285583ca5a4a7de94",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-53b834d73377091968b195a1",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "5bd16128d0934629c2e1713140a6f97c9828dbb5429ab5797b2573efc71de1a1",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-4a14fb475a4ca8cd20c9c6c8",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "dcc1a6246e13880ca5b73ef547e082dd0401e4d8837b6d211be82f7be791ac65",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-eba083d28bd25ca946d8f0e9",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "500329abac100a953a7396b54b36be57d333022f17401bc948248ea179cf1784",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-1022e3b57a4202f1163ddbcc",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "c6dc63e98b3a5e6a595c7d583a9c47c5efb6d316957466fd16c785b423eacf37",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-3c6e23e74fa744355114d776",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "05e0ebf9643197ccf8036cdd86a2ee14292c2a077dbe06435ed30369b8762564",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-0fddcbda609d7667eef355f6",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "1cdd90d42b48cced8f5ecbff087c49da56b224f0272e4b5074e63b82fff5fb16",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-c4e3d7b2d02ad294ae309510",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "677160e6297b48b87ede98ab7b4f2be55894491776f6191937ea397d01a6fb4b",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-3e8eed5015e4dd65324afd33",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "c3f06f635f1939ebeb125e5c1f030e329b63dd808d3ce803b1b1794bc78b253a",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-d193a051dd94c37d65ae8573",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "1fd9801787f30a4ab835b1462afc3f71473a5eacc74c0a22ed392bc3da9362f3",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-66cf41182724908c7b619b0a",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "22b557a27055b33606b6559f37703928d3e4ad79f110b407d04986e1843543d1",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-27708666f69142ffdd37d1c5",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "a13d881e11fe6df181b53841f9fa738a2d7ca9ae7be3d53c866f722b4242b013",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-cc13b0d39b9a1c0308cf177f",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "1d03b965511ce50d0a0bae1b549ed7048c783cfcba9aa40ea11d355b1889657c",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-5a517c4541513317c2a00fcc",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "9b4282f5a402e19016c4874a52df3367eabccf05be851ad03039f777a602d30a",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-a20500bf211a46af9be27b17",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "1d37341b099afc610bf4feb387096577a0dc61bb8fd09444f1a199a1b1b117e3",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-3445569e45a63b20f2b14b8a",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "4f670affee7b14140a6d20937db6e991102d5f8bac1d2562ebf20a1afda94d73",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-678e146cdc697fdc2719830b",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "b4ee8ed700b7abe4836d119c8113bc8b717f4f1568abd7edd81f2526c5836983",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-c1bee87c5edd8bb9eaa7fe71",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "626d330f6a8944fa4245f02f9795668e25a40b29b4cc5206bee73337b7dcd4d5",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-bedfa3cd877806d72ec17a4f",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "9848c94859f83e48defe0b25a0f4347480b56ea2bb3336fe6d4dcf00d0d6031d",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-e3ef3aadf9ae0af4b09094fa",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "40f60f2e2f83fb6c63ddefeba7939a7852b2d468183ea939cc4dcac8fe4cc87d",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-b388d069c0d369b6ba900b8f",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "2e79853866c15235f7fb4d93c0f8804fec72f2f3e2e02afbfcf2c631117e299e",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-ff1c292d4fc1206a9d685cf0",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "922e088fc95c6cb59be5bc1b05d7ab3651bee5c45928e6cb34ceadc375da627e",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-d69dc849fbef8567322a6702",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "2dc52d373089ff5173ac392a464746dd066aaa3b7d1b3494a473c96686666fce",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-8f4c52ce6f71bbf4260355af",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "17b98c4d832e8349ecb55f1f90e41dfc7bcd9410d1e925ccd06612cd3b9b9a54",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-4cb7d9b35d0520d69d10a643",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "4db45324410a01a7023b038e5da7d7274d3cfd392565c351cf3d297fd7664c73",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-458c24226a17a9f6bc897ac7",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "825c67f5583131425c4e33275cc8e5c9dfd02cd190c6d71e1d335621e82965a8",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-6af61577e653056d4c54730c",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "198cfe560c191a800cbe923ceca0a4e4f3d5a0d7ff9316b47998765fdc0897be",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-55c2e5688debe2fa93245643",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "f137a7369dc8b2eae354bfec1a38314a0b5910d4d8d8384367d8ed2e91e43d35",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-6d1aa836f57500f3ddf5fd53",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "51bb94d3ea9aef7b9db176bfba54b1172b2302df85b320ed1f18c36556f2e1ad",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-002f18171e62cf66ab83c7b1",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "662d60a283f416d888ff18831009e2cba95c61377f648beeed91a3dea12ac286",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-350ffdcfafe11eb04d48ff66",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "a0681f1a11d5c02760bcb68b61b0d332f6c197e239c4b30dc47f91a79a73282b",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-f60a113de3a48e8bc2a88294",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "b68d02ce35bd02123cf5fcd329bdd33640214715dae0442a97782a4471e9b292",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-333342a7e7f2c0b5a005dab3",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "2e368debd3626ea9c5d94c582d80050a530b505aa77ba231eb13e4d208c36d67",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-80a554a236374722fd04eda9",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "cf03adad817ae999648c5182ac996fc0682aeda4329c783756aa1c5c3d92eff9",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-dd24080c826da075f748a6b4",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "e1c93696d4de9125e49f6a12b97a1cbcf8ce7331bc8268f1fe7b6ab447cc14cf",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-cc50abad8d3cb996ab70dcf0",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "cbe8a1eec737c93d1c1cc54e31421f81bf358aa43fbc1ac763d80ce61a17fce0",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-af3298b31c6e0f634a9155d0",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "808130157f570b7640069852c88e256738007811a64c3aa9a4c31038347dc19c",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-19b748b8e02b480ed13fc8dd",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "7eaaf8c5047d5dbb4f3d7f173318ee936b09da4f0ceb5f3beb45c277480836eb",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-0e0397bab592332a0017343c",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "1ad476fd9bf167e89bf98f13e9aec59a03443cf6e3d6645b1210fb1e7c702f88",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-0f0d7d2d3824e4ea8da0fbc4",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "6198c864eaffa477ee9cf9aa10b534f022230e3129f99168962dc06358b4c9af",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-90ca9c91f3a0539e0dd183de",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "ef94d474067b306c482dfd066130f04855f50faecd461cee2964ce6c7260000e",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-e5e6e34d23350361992ff920",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "39ad3110b8f84821ca22cfbd995914f2149521d27ce576e743de6a00dc39d9db",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-b7b3ef3474bd89810c37e69f",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "ca3760ba63bf0a2c5dd0dc7fe897838cc58f12a386b4ee53d2065229848e96a3",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-eb6956092e0d1fcf28892a95",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "870f56d009d8aeb95b716b0e7b0020225d542c4b283b9ed896edf97428d6712e",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-43ed9e0c1d02e1e6c825ae8d",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "d7a20d19e788235a092dcbd33831c59280ea01a9a7a7f663a8c41bf753df2c71",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-5145932227c0af07eb8957c2",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "b30989fd9e45c74bf417df74d1da639d1f04d4fd0900be813a2d6a031a56c845",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-ad7b187eae45aa6dd8dca0fb",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "1cb130a113f4e8502517a679808a98bf076d59bdb223bfc61cd224b8e1abda49",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-ae4fa6efa28df147d410f66e",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "c6904218e180fbfb0ed91d81e892c2dd983c4a3404617cb36aeb3a434c3b9df0",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-b95c5698a508866f9edab101",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "68a5f526d2e08c363444536b22a8d4ebfff72d7810ba26dc47711bb6cbc39d50",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-6cd223a6f64a7b28e5d16771",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "5dadc31b57074a3168d1df23bb8b6b920acae1d426bf2288fc2de53cdd571089",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-b9e03777eef17c305e91782d",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "b69a59344e58615a691fa9567d55ad6337f09b57647a389242cbf43716575559",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-8a76085c9dbef338bfefac3d",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "a5ea4e7d6673e4d8cebbcbee010cce2f97b720ed2691abb35a119227c5dc0135",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-507b687ffbde611dcb9ada9e",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "899d7d6cc867b2bdf51250f88c9ab9e1e96aac5d59b51c93b3b0c69e96792b7c",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-78b48e48864ab29571f27941",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "1abf9760162f0bc990807ae867e6cf765f64ce902b1bb00aff851fc2fe8254b9",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-916a5bd330c48512ffb3f683",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "220576229ed5257e3fb33b1bd04c9ed24b080c82e22c3deb676cf7a102101157",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-b9d3f19c2890776ec603f731",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "bf3bd189c3dd33bc81635d60284461f0d937c2c1d51cc4d7851c13466419fcb0",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-c86363e7e2f9c365eeab83ca",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "d729fda98d8a3bf0d657b93fe0f70e22437359ef0de4ac5b4abcf3ef3667613a",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-1ec4228933d91b107500ec1a",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "fc9662ebcadeb2c0a804bdb6503d0c23976c638cf73ff95ffafd33ead680e73d",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-f02c62d1894633ba80642b3d",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "4e68d469799a26c10aea3f2ff350af434033d4a2914ba6aaccc27a34fe24005e",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-81dcc4075758730a971fc667",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "76ae2d0df1228b565cf3533a7c22d59fc3683f240ce7192201072260fc6f0e27",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-e08e0da2a527b3f61fdf8b3b",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "8a852f7182753cb0193299c6cb2b4a106b1c38a789217b5eb380d736c5cc0081",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-9b3d3d2819eea6f101642b52",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "eaa3be600a842e5b603316ed14e9ae11a43003f68a8317f0f2c01a516da4e586",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-6636be9976f23d4576c24ce3",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "de2e7b1bc7a2aed4e5866d3655d1041206c27caf376ee81bfc4012e8225e0e7c",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-534aeff10651aa6a09f45ef8",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "08fb40ba4144166f6ae80c7ab60be23e97e5083836d45fa85a33a5d0bfec10f8",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-fc3530fb5aa8ca1564a9fa20",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "8a3dbcb92ab1c6277647fe2ab8536b5c982abbfdb1f1df5728e01b906aba953a",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-50148e481a28e6d5bcc850f5",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "80eee369aa5b29931209226fcb4b014ba31daa7f630d44a196817c1bb6b334f1",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-bb36d2581dee7af68f4c75ea",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "8c1306d5c64b43ce6c189b8450f27160aaff3f504211ca6819af6035ae1a7d73",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-78732b57b91c3a6f0b401dc9",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "cc04af62fe7fcbc8c1d5efec83d6ae73b5549cc01debe53d43b4b5186df90405",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-435d04cb9132d2763e1c63cc",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "b1d0ac5a261e857409cc921acb515796538b48847722f0a00ddccbf60bccec81",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-45e295b155e52a650bb07de1",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "36e68e205b53c67c7a013894e0d5c8583063468118d1ce78ecbc2200d1dd185c",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-1326c6729cb123c0c664b4d0",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "fb98230f8746d60429c20f8ce04254384337b479a77698939f7041d0c0eb4289",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-daa5fc5bf706f9afd9024110",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "8d390d4c54f6a4a040b04413f1f002192027c66a2a835741f78a152074584a27",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-0e5f951f08c89b288d168562",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "2ce349e2da9df497cc62aca37b009a2c3261ccdbe06a4c4a063f8105da40eb5d",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-9c9dc2a9b4d1de194a2f90c0",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "8cc726cf62c554561e89e1237495bea3026b1709ba7153fed3401fcd489b5aaf",
+      "reason": "SA01 validated public-x509-certificates; public bytes only. No credential-specific detector exception.",
+      "path_glob": "usr/share/ca-certificates/mozilla/*.crt",
+      "review": "sha256:6aa8e7ecfca04857d0748a5b92f22b6053fb7c95374d006ff90ea17c77dafecd"
+    },
+    {
+      "id": "ornn-public-9ae22dc6cb19c6f5b9ef5d31",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "c2a9a16fde95e037bafd0fa6b7e31f41b4ff1e85851de5558f19a2a2f0e955e2",
+      "reason": "SA01 validated openpgp-public-signing-keys; public bytes only. No credential-specific detector exception.",
+      "path": "etc/apt/trusted.gpg.d/debian-archive-bookworm-automatic.asc"
+    },
+    {
+      "id": "ornn-public-e41252ca90583128dcd2b5b0",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "74f81645b4e3156d1e9a88c8dd9259271b89c7099d64af89a2a6996b592faa1f",
+      "reason": "SA01 validated openpgp-public-signing-keys; public bytes only. No credential-specific detector exception.",
+      "path": "etc/apt/trusted.gpg.d/debian-archive-bookworm-security-automatic.asc"
+    },
+    {
+      "id": "ornn-public-da26ae3684920e3031365a90",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "521e9f6a9f9b92ee8d5ce74345e8cfd04028dae9db6f571259d584b293549824",
+      "reason": "SA01 validated openpgp-public-signing-keys; public bytes only. No credential-specific detector exception.",
+      "path": "etc/apt/trusted.gpg.d/debian-archive-bookworm-stable.asc"
+    },
+    {
+      "id": "ornn-public-ea06de1904d120dd9a5e070e",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "0b7dc94b880f0b63e2093394b113cafd870badb86e020a35614f49b9d83beb1e",
+      "reason": "SA01 validated openpgp-public-signing-keys; public bytes only. No credential-specific detector exception.",
+      "path": "etc/apt/trusted.gpg.d/debian-archive-bullseye-automatic.asc"
+    },
+    {
+      "id": "ornn-public-0cb3459bb4a94993d0a17512",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "716e79393c724d14ecba8be46e99ecbe1b689f67ceff3cb3cab28f6e69e8b8b8",
+      "reason": "SA01 validated openpgp-public-signing-keys; public bytes only. No credential-specific detector exception.",
+      "path": "etc/apt/trusted.gpg.d/debian-archive-bullseye-security-automatic.asc"
+    },
+    {
+      "id": "ornn-public-5b4c1ac629b8441ced85c8c6",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "fb260ce8521a2faa4937d98a29a5347807e10614b97d510fbabe5480c803bda9",
+      "reason": "SA01 validated openpgp-public-signing-keys; public bytes only. No credential-specific detector exception.",
+      "path": "etc/apt/trusted.gpg.d/debian-archive-bullseye-stable.asc"
+    },
+    {
+      "id": "ornn-public-1075787fbffa528db45d02b9",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "6f1d277429dd7ffedcc6f8688a7ad9a458859b1139ffa026d1eeaadcbffb0da7",
+      "reason": "SA01 validated openpgp-public-signing-keys; public bytes only. No credential-specific detector exception.",
+      "path": "etc/apt/trusted.gpg.d/debian-archive-trixie-automatic.asc"
+    },
+    {
+      "id": "ornn-public-0e9c5e96ca88e9fa89cae41b",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "844c07d242db37f283afab9d5531270a0550841e90f9f1a9c3bd599722b808b7",
+      "reason": "SA01 validated openpgp-public-signing-keys; public bytes only. No credential-specific detector exception.",
+      "path": "etc/apt/trusted.gpg.d/debian-archive-trixie-security-automatic.asc"
+    },
+    {
+      "id": "ornn-public-4a7b0164f2fbda09fc7ea424",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "file_sha256": "4d097bb93f83d731f475c5b92a0c2fcf108cfce1d4932792fca72d00b48d198b",
+      "reason": "SA01 validated openpgp-public-signing-keys; public bytes only. No credential-specific detector exception.",
+      "path": "etc/apt/trusted.gpg.d/debian-archive-trixie-stable.asc"
+    },
+    {
+      "id": "ornn-nginx-checksum-command",
+      "rule": "gitleaks.generic-api-key",
+      "scope": "config",
+      "path": "config/history/8/created_by",
+      "match_sha256": "bcf96e7490376d77522a93ad9c985b243ddc69e04dfadd6cfd22e2cd226f4340",
+      "reason": "Public nginx signing-key SHA512 checked by RUN instruction 8. Independently matches image public-key bytes; not an ARG/ENV secret. Only this exact match is exempted."
+    },
+    {
+      "id": "ornn-nginx-checksum-assignment",
+      "rule": "gitleaks.generic-api-key",
+      "scope": "config",
+      "path": "config/history/8/created_by/@assignment",
+      "match_sha256": "bcf96e7490376d77522a93ad9c985b243ddc69e04dfadd6cfd22e2cd226f4340",
+      "reason": "Public nginx signing-key SHA512 checked by RUN instruction 8. Independently matches image public-key bytes; not an ARG/ENV secret. Only this exact match is exempted."
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "schema": "content-policy-delivery-v1",
+  "status": "REVIEW_CANDIDATE",
+  "files": {
+    "ornn-content-policy.json": "bfdb8f657bdbf627ec92daf858edeb7cfd284c2b10e25970f2026a62afaffa07",
+    "build_catalog.py": "7748ea433b5895bfc1be03ae1b392ac3f871158740fd4e0d6a7b908f94f8451b",
+    "README.md": "4300ed2a5e4db2c397d3bb6e51339411797c91c68e2092626350c2116d207170",
+    "REVIEW-REQUEST.md": "9b63c9db5f66d9383dca7c863928fbd216e9b60264c65e479f75be6872696f03",
+    "tool/content_catalog.py": "3352b975fab061d43741b6eb0b4f738482484009b00ef045890b61d38837b803",
+    "tool/content_identity.py": "36aee4fe568ccf5d4236535dd2ce5398a6a695c4939ea346af1f52c841ac0c1f",
+    "tool/resolve_content_policy.py": "4bafd5766a28f6950aac6b0f17bcb2ae99dbe425485209dc3d985a04249efc3b",
+    "tests/test_content_policy.py": "fdbad00d1926d83ef338df332c9911e116b78b8aa5bd063e6d61bfcab0323cc1"
+  },
+  "production_actions": 0,
+  "native_acceptance": false
+}

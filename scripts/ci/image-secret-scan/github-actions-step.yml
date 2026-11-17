@@ -1,0 +1,57 @@
+# Vendor the reviewed complete scanner bundle at .github/scripts/scan-image-secrets.
+# Prerequisites: Docker, Python >=3.9, Gitleaks >=8.25,<9 (validated: 8.30.1),
+# zstd if using zstd layers, and registry login using the repository's approved action.
+# PUBLIC_STAGING_IMAGE_REPOSITORY is a repository path WITHOUT a tag.
+- name: Build, save, scan, and publish the same image artifact
+  shell: bash
+  env:
+    IMAGE_REPOSITORY: ${{ vars.PUBLIC_STAGING_IMAGE_REPOSITORY }}
+  run: |
+    set +x
+    set -euo pipefail
+    umask 077
+    : "${IMAGE_REPOSITORY:?Set PUBLIC_STAGING_IMAGE_REPOSITORY}"
+    publish_ref="${IMAGE_REPOSITORY}:${GITHUB_SHA}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+    scan_work=$(mktemp -d "${RUNNER_TEMP}/image-publication.XXXXXX")
+    scan_report="${RUNNER_TEMP}/image-secret-report-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+    trap 'rm -rf -- "$scan_work"' EXIT
+
+    docker build --tag "$publish_ref" .
+    built_id=$(docker image inspect --format '{{.Id}}' "$publish_ref")
+    docker image save --output "$scan_work/image.tar" "$publish_ref"
+    archive_sha=$(sha256sum "$scan_work/image.tar" | cut -d ' ' -f 1)
+
+    # Default is strict. Policy A requires explicit owner authorization in the workflow.
+    blocking_mode="${IMAGE_SECRET_BLOCKING_RULES:-all}"
+    scan_options=(--blocking-rules "$blocking_mode")
+    if [[ -n "${IMAGE_SECRET_CLASSIFICATIONS:-}" ]]; then
+      scan_options+=(--classifications "$IMAGE_SECRET_CLASSIFICATIONS")
+    fi
+    # Blocking findings (1) and scanner errors (2) stop before any push.
+    .github/scripts/scan-image-secrets/scan-image-secrets.sh \
+      "$scan_work/image.tar" --input-kind archive --output "$scan_report" \
+      --expected-archive-sha256 "$archive_sha" "${scan_options[@]}"
+
+    python3 - "$scan_work/image.tar" "$scan_report/REPORT.json" "$blocking_mode" <<'PY'
+    import hashlib, json, sys
+    digest = hashlib.sha256()
+    with open(sys.argv[1], "rb") as stream:
+        for block in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(block)
+    with open(sys.argv[2]) as stream:
+        report = json.load(stream)
+    if not (report.get("status") == "CLEAN" and report.get("complete") is True
+            and report.get("exit_code") == 0 and report.get("blocking_findings") == []
+            and report.get("blocking_rules") == sys.argv[3]
+            and report.get("counts", {}).get("blocking") == 0
+            and report.get("archive_sha256") == digest.hexdigest()):
+        raise SystemExit("Image scan binding check failed")
+    PY
+
+    # Restore the scanned artifact; no rebuild or other image-producing step here.
+    docker image load --input "$scan_work/image.tar"
+    loaded_id=$(docker image inspect --format '{{.Id}}' "$publish_ref")
+    test "$loaded_id" = "$built_id"
+    docker image push "$publish_ref"
+    # Retain/upload only scan_report/REPORT.json and REPORT.txt as review evidence.
+    # Never upload image.tar, extracted layers, or raw Gitleaks output.

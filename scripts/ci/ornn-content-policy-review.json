@@ -1,0 +1,14 @@
+{
+  "verdict": "GO_CONTENT_POLICY",
+  "reviewer": "solution-architect-01",
+  "adapter_files": {
+    "content_catalog.py": "3352b975fab061d43741b6eb0b4f738482484009b00ef045890b61d38837b803",
+    "content_identity.py": "36aee4fe568ccf5d4236535dd2ce5398a6a695c4939ea346af1f52c841ac0c1f",
+    "resolve_content_policy.py": "4bafd5766a28f6950aac6b0f17bcb2ae99dbe425485209dc3d985a04249efc3b"
+  },
+  "catalog_sha256": "612632238d0bf5ebd7794e8b987c57c7d20655d00f2d3952ed9a432ee2aaecc5",
+  "base_catalog_sha256": "8afa96f5391a911772a2af8205871cd1d2dd823fff51c1ccd743ae58e6fd28f2",
+  "supplemental_evidence": "9a714cb8655ba21bacb9accc19037c0bfdf2192de45cd2d8227bceb847a3d66a",
+  "scope": "One exact native web file/finding from run44136354736; all 378 previously approved rows preserved. Exact scanner capture parses as a noncomputed JavaScript MemberExpression. No credential literal. No matching rule broadened.",
+  "publication_approved": false
+}

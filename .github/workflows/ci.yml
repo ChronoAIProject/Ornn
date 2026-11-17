@@ -184,7 +184,7 @@ jobs:
           curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${VERSION}/gitleaks_${VERSION}_linux_x64.tar.gz" | tar xz
           sudo mv gitleaks /usr/local/bin/
       - name: Scan for secrets
-        run: gitleaks detect --source . --log-opts="origin/${{ github.base_ref }}..HEAD" --verbose
+        run: gitleaks detect --source . --log-opts="origin/${{ github.base_ref }}..HEAD" --verbose --redact=100
 
   audit:
     # Fails on any high or critical advisory in the Bun workspace. Moderate
@@ -213,8 +213,12 @@ jobs:
       - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
       - run: bun install --frozen-lockfile
+      - name: Test expiring audit exception guard
+        run: python3 -m unittest discover -s scripts/ci -p 'test_audit_dependencies.py' -v
       - name: Audit (high+critical block PR)
-        run: bun audit --audit-level=high --ignore=GHSA-r5fr-rjxr-66jc --ignore=GHSA-f23m-r3pf-42rh --ignore=GHSA-qwww-vcr4-c8h2
+        # Exact advisory, expiry and reviewed dependency inputs are pinned in
+        # .github/audit-exceptions.json. Expiry or input changes fail closed.
+        run: python3 scripts/ci/audit_dependencies.py
       - name: Audit summary (moderate+ — informational)
         if: ${{ !cancelled() }}
         run: |

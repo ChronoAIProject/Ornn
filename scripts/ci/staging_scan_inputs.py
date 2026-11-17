@@ -1,0 +1,131 @@
+"""Prepare every saved image layer for scanning without following archive links."""
+
+import argparse
+import codecs
+import json
+from pathlib import Path, PurePosixPath
+import re
+import shutil
+import tarfile
+
+
+def safe_name(name):
+    path = PurePosixPath(name)
+    if path.is_absolute() or ".." in path.parts or not path.parts:
+        raise ValueError("Unsafe path in image archive")
+    return path
+
+
+def credential_path(path):
+    parts = path.parts
+    name = path.name.lower()
+    return (name.startswith(".env") or name in (".npmrc", ".netrc", ".pypirc", ".git-credentials", "pip.conf")
+            or name.endswith(".key") or name in ("credentials", "credentials.json", "credentials.toml",
+                                                   "service-account.json", "service_account.json",
+                                                   "application_default_credentials.json")
+            or "kubeconfig" in name or name.startswith(("id_rsa", "id_ed25519"))
+            or (".docker" in parts and name == "config.json")
+            or ("kubernetes" in parts and name in ("admin.conf", "super-admin.conf", "kubelet.conf",
+                                                    "controller-manager.conf", "scheduler.conf"))
+            or any(part in (".git", ".aws", ".kube", ".azure") for part in parts)
+            or ".config/gcloud" in str(path))
+
+
+def normalize_plaintext_gzip_name(path):
+    # dpkg alternatives records can inherit a manual's .gz name while containing
+    # plain text. Scan every byte as text instead of sending it to a gzip decoder.
+    if path.suffix.lower() not in (".gz", ".tgz"):
+        return
+    with path.open("rb") as stream:
+        if stream.read(2) == b"\x1f\x8b":
+            return
+        stream.seek(0)
+        decoder = codecs.getincrementaldecoder("utf-8")()
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            decoder.decode(chunk)
+        decoder.decode(b"", final=True)
+    # The archive detector matches .gz anywhere in a filename, not just its end.
+    name = re.sub(r"\.(?:gz|tgz)", "_compressed", path.name, flags=re.IGNORECASE)
+    renamed = path.with_name(name + ".scan.txt")
+    if renamed.exists():
+        raise ValueError("Scan input filename collision")
+    path.rename(renamed)
+
+
+def prepare(archive_path, output):
+    output.mkdir(parents=True, exist_ok=False, mode=0o700)
+    metadata = output / "metadata"
+    metadata.mkdir()
+    stats = {"layers": 0, "files": 0, "credentialPaths": 0}
+    with tarfile.open(archive_path, "r:*") as archive:
+        manifests = json.load(archive.extractfile("manifest.json"))
+        if len(manifests) != 1:
+            raise ValueError("Expected exactly one image in saved archive")
+        manifest = manifests[0]
+        config = json.load(archive.extractfile(manifest["Config"]))
+        (metadata / "config.json").write_text(json.dumps(config))
+        (metadata / "history.json").write_text(json.dumps(config.get("history", [])))
+        layers = manifest["Layers"]
+        if not layers or len(set(layers)) != len(layers):
+            raise ValueError("Missing or duplicate image layers")
+        for number, layer_name in enumerate(layers):
+            layer_output = output / "layers" / str(number)
+            layer_output.mkdir(parents=True)
+            names = set()
+            links = []
+            with archive.extractfile(layer_name) as stream:
+                with tarfile.open(fileobj=stream, mode="r|*") as layer:
+                    for member in layer:
+                        if member.name in (".", "./"):
+                            continue
+                        relative = safe_name(member.name)
+                        if credential_path(relative):
+                            stats["credentialPaths"] += 1
+                        if member.isdir():
+                            continue
+                        if relative in names:
+                            raise ValueError("Duplicate file path within image layer")
+                        names.add(relative)
+                        if member.issym() or member.islnk():
+                            # Scan link text, but never resolve a link onto the host.
+                            links.append({"path": str(relative), "target": member.linkname})
+                        elif member.isfile():
+                            target = layer_output.joinpath(*relative.parts)
+                            target.parent.mkdir(parents=True, exist_ok=True)
+                            with layer.extractfile(member) as source, target.open("xb") as dest:
+                                shutil.copyfileobj(source, dest)
+                            target.chmod(0o600)
+                            normalize_plaintext_gzip_name(target)
+                            stats["files"] += 1
+            (metadata / f"links-{number}.json").write_text(json.dumps(links))
+            stats["layers"] += 1
+    (output / "scan-input.json").write_text(json.dumps(stats))
+    if stats["credentialPaths"]:
+        raise ValueError(f"Image contains {stats['credentialPaths']} credential paths (details suppressed)")
+    return stats
+
+
+def write_receipt(archive, path, stats, expected_sha256):
+    from staging_scan_receipt import checksum
+    if checksum(archive) != expected_sha256:
+        raise ValueError("Archive changed during image archive preflight")
+    receipt = dict(stats, schema="ornn-image-preflight-v1", archiveSha256=expected_sha256,
+                   extractorSha256=checksum(Path(__file__).resolve()))
+    path.write_text(json.dumps(receipt, indent=2) + "\n")
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("archive", type=Path)
+    parser.add_argument("output", type=Path)
+    parser.add_argument("--receipt", type=Path)
+    parser.add_argument("--expected-archive-sha256")
+    args = parser.parse_args()
+    try:
+        stats = prepare(args.archive, args.output)
+        if args.receipt:
+            write_receipt(args.archive, args.receipt, stats, args.expected_archive_sha256)
+        print(json.dumps(stats))
+    except Exception:
+        # Decode/IO errors can contain untrusted image paths; never echo them.
+        raise SystemExit("Image archive preflight failed; credential path, unsafe archive, or decode error")
