@@ -19,7 +19,11 @@ COPY ornn-web/package.json ornn-web/
 COPY sdk/typescript/package.json sdk/typescript/
 
 # Test/build tooling is unnecessary in the API runtime and widens its contents.
-RUN bun install --frozen-lockfile --production
+# Zod ships unused source tests containing sample JWTs. Keep these fixtures out
+# of the copied runtime dependencies; the package's exported code stays intact.
+RUN bun install --frozen-lockfile --production \
+ && find /app/node_modules/.bun -type d \
+      -path '*/node_modules/zod/src/v4/mini/tests' -prune -exec rm -rf '{}' +
 
 # Runtime stage
 FROM oven/bun:1.3.14

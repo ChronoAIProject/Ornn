@@ -17,6 +17,7 @@ if test "$component" = api; then
       test "$(id -u)" = 1000
       test "$(id -g)" = 1000
       test "$(bun --version)" = 1.3.14
+      bun -e "import { z } from \"zod\"; if (!z.string().safeParse(\"packaging-smoke\").success || z.string().safeParse(42).success) process.exit(1)"
       test -r /opt/agentseal/scan_skill.py
       /opt/agentseal/bin/python -c "import agentseal.skill_scanner; from importlib.metadata import version; assert version(\"agentseal\") == \"0.9.6\""
       test -w /app/data
