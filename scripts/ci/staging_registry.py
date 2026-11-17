@@ -7,6 +7,7 @@ import subprocess
 
 from staging_image import require
 from staging_oci import verify_layout
+from staging_registry_history import history_hash, verify_history
 
 
 def missing_manifest(stderr, target):
@@ -58,16 +59,50 @@ class CraneRegistry:
         verify_layout(output, manifest, digest, metadata)
 
 
-def publish_exact(registry, target, layout, pulled, manifest, digest, metadata):
+def publish_exact(registry, target, layout, pulled, manifest, digest, metadata, *, history,
+                  observations=None):
     # Every path, including an idempotent retry, first verifies the scanned graph.
     verify_layout(layout, manifest, digest, metadata)
-    existing = registry.lookup(target)
-    if existing is None:
-        action = "published"
-        require(registry.push(layout, target) == digest, "Push changed the scanned manifest")
-    else:
-        action = "reused"
-        require(existing == (digest, manifest), "Source tag collision; refusing to overwrite")
-    require(registry.lookup(target) == (digest, manifest), "Registry tag differs from scanned image")
-    registry.verify(target.rsplit(":", 1)[0] + "@" + digest, pulled, manifest, digest, metadata)
-    return action
+    try:
+        existing = registry.lookup(target)
+        require(existing is None or existing == (digest, manifest),
+                "Source tag collision; refusing publication")
+        before = history.snapshot(target)
+        # This is the last remote operation before push. GHCR has no atomic
+        # create-only tag write: another writer can still race until crane finishes
+        # uploading blobs and assigning the tag, which may take substantial time.
+        current = registry.lookup(target)
+        require(current is None or current == (digest, manifest),
+                "Source tag appeared or changed before push; refusing publication")
+        require(existing is None or current is not None, "Source tag disappeared before reuse")
+        if current is None:
+            tag = target.rsplit(":", 1)[1]
+            require(all(tag not in version["tags"] for version in before.values()),
+                    "Package history already assigns source tag; refusing publication")
+            action = "published"
+            require(registry.push(layout, target) == digest, "Push changed the scanned manifest")
+        else:
+            action = "reused"
+        require(registry.lookup(target) == (digest, manifest),
+                "Registry tag differs from scanned image after publication")
+        after = history.snapshot(target)
+        verify_history(before, after, target, digest, action)
+        registry.verify(target.rsplit(":", 1)[0] + "@" + digest, pulled, manifest, digest, metadata)
+        # A full pull may take time: check identity and version metadata again
+        # immediately before allowing the unchanged receipt generator to run.
+        require(registry.lookup(target) == (digest, manifest),
+                "Registry tag changed during final blob verification")
+        final = history.snapshot(target)
+        verify_history(before, final, target, digest, action)
+        require(after == final, "Package history changed during final verification")
+        if observations is not None:
+            observations.update(historyBeforeSha256=history_hash(before),
+                                historyAfterSha256=history_hash(final),
+                                historyIsCompleteAuditLog=False,
+                                atomicCreateOnlySupported=False)
+        return action
+    except (ValueError, OSError, subprocess.SubprocessError):
+        print("::error title=Ornn publication safety check failed::Remote identity or package "
+              "history verification failed; possible concurrent writer. Publication is failed; "
+              "do not deploy from this job. Investigate before retrying.", flush=True)
+        raise

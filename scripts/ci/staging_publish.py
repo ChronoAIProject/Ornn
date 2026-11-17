@@ -9,6 +9,7 @@ from staging_artifact import producer_environment
 from staging_image import verify_archive
 from staging_oci import extract_layout
 from staging_registry import CraneRegistry, publish_exact
+from staging_registry_history import GithubPackageHistory
 
 
 def main():
@@ -23,8 +24,10 @@ def main():
     manifest, digest = extract_layout(directory / metadata["archive"], layout, metadata)
     target = f"ghcr.io/chronoaiproject/ornn-{env['COMPONENT']}:{env['GITHUB_SHA']}"
     print(f"Verify or publish exact {env['COMPONENT']} manifest {digest}", flush=True)
+    observations = {}
     action = publish_exact(CraneRegistry(), target, layout, directory / "registry-oci",
-                           manifest, digest, metadata)
+                           manifest, digest, metadata, history=GithubPackageHistory(),
+                           observations=observations)
     # Feed the unchanged workflow receipt generator the verified remote identity.
     (directory / "push-digest.txt").write_text(digest + "\n")
     (directory / "remote-manifest.json").write_text(json.dumps(manifest) + "\n")
@@ -33,6 +36,7 @@ def main():
         "artifactId": selection["artifactId"], "buildAttempt": selection["buildAttempt"],
         "publicationAttempt": env["GITHUB_RUN_ATTEMPT"],
     }, indent=2) + "\n")
+    (directory / "registry-observation.json").write_text(json.dumps(observations, indent=2) + "\n")
     print(f"Exact image {action}; full registry blob verification passed", flush=True)
 
 

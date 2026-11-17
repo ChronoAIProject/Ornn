@@ -103,9 +103,10 @@ jobs:
        (github.event_name == 'release' && github.event.action == 'published'))
     runs-on: ubuntu-24.04
     timeout-minutes: 20
-    # Serialize this workflow's writers to the same package/source tag.
+    # One shared group per image across develop/release SHAs and workflow attempts.
+    # External registry writers cannot participate in this Actions lock.
     concurrency:
-      group: ornn-publish-${{ matrix.component }}-${{ github.sha }}
+      group: ornn-publish-${{ matrix.component }}
       cancel-in-progress: false
     permissions:
       contents: read
@@ -146,6 +147,7 @@ jobs:
         env:
           COMPONENT: ${{ matrix.component }}
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DOCKER_CONFIG: ${{ runner.temp }}/ornn-ghcr
         run: bash scripts/ci/staging-publish-image.sh
       - name: Retain publication receipt
@@ -162,5 +164,6 @@ jobs:
           path: |
             staging-artifact.json
             staging-image-out/publication-action.json
+            staging-image-out/registry-observation.json
           if-no-files-found: error
           retention-days: 7

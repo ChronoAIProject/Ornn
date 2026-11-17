@@ -1,6 +1,7 @@
 """Registry-free verification of exact-archive publication and collision handling."""
 
 import copy
+from contextlib import redirect_stdout
 import hashlib
 import io
 import json
@@ -70,8 +71,14 @@ class PublicationTests(unittest.TestCase):
 
     def registry(self, existing=None):
         registry = Mock()
-        registry.lookup.side_effect = [existing, (self.digest, self.manifest)]
+        registry.lookup.side_effect = [existing, existing, (self.digest, self.manifest),
+                                       (self.digest, self.manifest)]
         registry.push.return_value = self.digest
+        version = {'digest': self.digest, 'created': '2026-01-01T00:00:00Z',
+                   'updated': '2026-01-01T00:00:00Z', 'tags': ['a' * 40]}
+        self.history = Mock()
+        self.history.snapshot.side_effect = [({1: version} if existing else {}),
+                                             {1: version}, {1: version}]
 
         def verify(ref, output, manifest, digest, metadata):
             shutil.copytree(self.layout, output)
@@ -81,7 +88,7 @@ class PublicationTests(unittest.TestCase):
 
     def publish(self, registry):
         return publish_exact(registry, self.target, self.layout, self.pulled,
-                             self.manifest, self.digest, self.metadata)
+                             self.manifest, self.digest, self.metadata, history=self.history)
 
     def test_missing_tag_pushes_exact_manifest_then_verifies_all_blobs(self):
         self.assertEqual(self.extract(), (self.manifest, self.digest))
@@ -125,6 +132,117 @@ class PublicationTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.publish(registry)
         registry.push.assert_not_called()
+
+    def test_tag_created_between_first_lookup_and_push_is_not_overwritten(self):
+        self.extract()
+        registry = self.registry()
+        registry.lookup.side_effect = [None, ('sha256:' + 'b' * 64, self.manifest)]
+        output = io.StringIO()
+        with redirect_stdout(output), self.assertRaisesRegex(ValueError, 'before push'):
+            self.publish(registry)
+        registry.push.assert_not_called()
+        registry.verify.assert_not_called()
+        self.assertIn('::error title=Ornn publication safety check failed::', output.getvalue())
+
+    def test_missing_tag_is_reread_immediately_before_push(self):
+        self.extract()
+        registry = self.registry()
+        calls = Mock()
+        calls.attach_mock(registry, 'registry')
+        calls.attach_mock(self.history, 'history')
+        self.publish(registry)
+        methods = [call[0] for call in calls.mock_calls]
+        self.assertEqual(methods[:5], ['registry.lookup', 'history.snapshot', 'registry.lookup',
+                                      'registry.push', 'registry.lookup'])
+
+    def test_same_digest_arriving_before_final_lookup_is_reused_and_observed(self):
+        self.extract()
+        registry = self.registry((self.digest, self.manifest))
+        registry.lookup.side_effect = [None] + [(self.digest, self.manifest)] * 3
+        observations = {}
+        action = publish_exact(registry, self.target, self.layout, self.pulled,
+                               self.manifest, self.digest, self.metadata,
+                               history=self.history, observations=observations)
+        self.assertEqual(action, 'reused')
+        registry.push.assert_not_called()
+        self.assertEqual(observations['historyBeforeSha256'], observations['historyAfterSha256'])
+        self.assertFalse(observations['historyIsCompleteAuditLog'])
+        self.assertFalse(observations['atomicCreateOnlySupported'])
+
+    def test_history_tag_without_registry_tag_fails_before_push(self):
+        self.extract()
+        registry = self.registry((self.digest, self.manifest))
+        registry.lookup.side_effect = [None, None]
+        with self.assertRaisesRegex(ValueError, 'history already assigns'):
+            self.publish(registry)
+        registry.push.assert_not_called()
+
+    def test_intervening_writer_left_in_history_fails_even_if_our_push_wins(self):
+        self.extract()
+        registry = self.registry()
+        ours = {'digest': self.digest, 'created': '2026-01-01T00:00:00Z',
+                'updated': '2026-01-01T00:00:00Z', 'tags': ['a' * 40]}
+        competing = dict(ours, digest='sha256:' + 'b' * 64, tags=[])
+        self.history.snapshot.side_effect = [{}, {1: ours, 2: competing}]
+        output = io.StringIO()
+        with redirect_stdout(output), self.assertRaisesRegex(ValueError, 'another writer'):
+            self.publish(registry)
+        registry.push.assert_called_once()
+        registry.verify.assert_not_called()
+        self.assertIn('::error ', output.getvalue())
+
+    def test_post_push_digest_and_late_verification_changes_raise_alerts(self):
+        self.extract()
+        expected = (self.digest, self.manifest)
+        for lookups in ([None, None, None], [None, None, expected, None]):
+            registry = self.registry()
+            registry.lookup.side_effect = lookups
+            output = io.StringIO()
+            with redirect_stdout(output), self.assertRaisesRegex(ValueError, 'Registry tag'):
+                self.publish(registry)
+            registry.push.assert_called_once()
+            self.assertIn('::error ', output.getvalue())
+            if self.pulled.exists():
+                shutil.rmtree(self.pulled)
+
+    def test_history_failure_blocks_publication_and_emits_alert(self):
+        self.extract()
+        registry = self.registry()
+        self.history.snapshot.side_effect = ValueError('Package history read failed')
+        output = io.StringIO()
+        with redirect_stdout(output), self.assertRaises(ValueError):
+            self.publish(registry)
+        registry.push.assert_not_called()
+        self.assertIn('::error ', output.getvalue())
+
+    def test_history_change_during_final_pull_fails_after_successful_identity_checks(self):
+        self.extract()
+        registry = self.registry()
+        ours = {'digest': self.digest, 'created': '2026-01-01T00:00:00Z',
+                'updated': '2026-01-01T00:00:00Z', 'tags': ['a' * 40]}
+        self.history.snapshot.side_effect = [{}, {1: ours},
+                                             {1: dict(ours, updated='2026-01-01T00:00:01Z')}]
+        with self.assertRaisesRegex(ValueError, 'history changed during final'):
+            self.publish(registry)
+
+    def test_controller_does_not_emit_receipt_inputs_on_publication_failure(self):
+        with tempfile.TemporaryDirectory() as temp:
+            prior = Path.cwd()
+            try:
+                os.chdir(temp)
+                Path('staging-image-out').mkdir()
+                Path('staging-artifact.json').write_text('{}')
+                with patch.dict(os.environ, {'COMPONENT': 'api', 'GITHUB_SHA': 'a' * 40}), \
+                        patch.object(staging_publish, 'producer_environment', return_value={}), \
+                        patch.object(staging_publish.subprocess, 'check_output', return_value='tree'), \
+                        patch.object(staging_publish, 'verify_archive', return_value={'archive': 'image'}), \
+                        patch.object(staging_publish, 'extract_layout', return_value=(self.manifest, self.digest)), \
+                        patch.object(staging_publish, 'publish_exact', side_effect=ValueError('race detected')):
+                    with self.assertRaisesRegex(ValueError, 'race detected'):
+                        staging_publish.main()
+                self.assertEqual(list(Path('staging-image-out').iterdir()), [])
+            finally:
+                os.chdir(prior)
 
     def test_corrupted_layout_fails_before_registry_access(self):
         self.extract()
