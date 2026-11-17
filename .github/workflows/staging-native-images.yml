@@ -2,6 +2,8 @@ name: Staging native images
 
 "on":
   workflow_dispatch:
+  release:
+    types: [published]
   push:
     branches: [develop]
   pull_request:
@@ -24,6 +26,7 @@ jobs:
       github.repository == 'ChronoAIProject/Ornn' &&
       ((github.ref == 'refs/heads/develop' &&
         (github.event_name == 'push' || github.event_name == 'workflow_dispatch')) ||
+       (github.event_name == 'release' && github.event.action == 'published') ||
        (github.event_name == 'pull_request' &&
         github.event.pull_request.head.repo.full_name == github.repository))
     runs-on: ubuntu-24.04
@@ -36,6 +39,8 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
+          # Release guards verify the tag commit is reachable from origin/main.
+          fetch-depth: 0
       - name: Test staging provenance validation
         run: python3 -m unittest discover -s scripts/ci -p 'test_staging_*.py' -v
       - name: Install pinned image secret scanner
@@ -94,13 +99,19 @@ jobs:
     needs: image
     if: >-
       github.repository == 'ChronoAIProject/Ornn' &&
-      github.ref == 'refs/heads/develop' &&
-      github.event_name == 'push'
+      ((github.ref == 'refs/heads/develop' && github.event_name == 'push') ||
+       (github.event_name == 'release' && github.event.action == 'published'))
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    # One shared group per image across develop/release SHAs and workflow attempts.
+    # External registry writers cannot participate in this Actions lock.
+    concurrency:
+      group: ornn-publish-${{ matrix.component }}
+      cancel-in-progress: false
     permissions:
       contents: read
       packages: write
+      actions: read
     strategy:
       fail-fast: false
       matrix:
@@ -109,14 +120,34 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
+          # Release guards verify the tag commit is reachable from origin/main.
+          fetch-depth: 0
+      - name: Select the successful native job's exact retained artifact
+        id: artifact
+        env:
+          COMPONENT: ${{ matrix.component }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 scripts/ci/staging_artifact.py
       - uses: actions/download-artifact@v5
         with:
-          name: ornn-native-${{ matrix.component }}-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          artifact-ids: ${{ steps.artifact.outputs.artifact-id }}
           path: staging-image-out/
+      - name: Install pinned digest-preserving image publisher
+        run: |
+          set -euo pipefail
+          tool_dir="$RUNNER_TEMP/ornn-crane"
+          mkdir -p "$tool_dir"
+          curl --fail --silent --show-error --location --retry 3 \
+            https://github.com/google/go-containerregistry/releases/download/v0.22.1/go-containerregistry_Linux_x86_64.tar.gz \
+            --output "$tool_dir/crane.tar.gz"
+          echo "0ab7a1d6932a213aed964ce97666c3077fe691c8606413674a8b3e0b9ec4cda0  $tool_dir/crane.tar.gz" | sha256sum --check --strict
+          tar -xzf "$tool_dir/crane.tar.gz" -C "$tool_dir" crane
+          echo "$tool_dir" >> "$GITHUB_PATH"
       - name: Publish ornn-api or ornn-web and record immutable digests
         env:
           COMPONENT: ${{ matrix.component }}
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DOCKER_CONFIG: ${{ runner.temp }}/ornn-ghcr
         run: bash scripts/ci/staging-publish-image.sh
       - name: Retain publication receipt
@@ -124,5 +155,15 @@ jobs:
         with:
           name: ornn-published-${{ matrix.component }}-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: staging-image-out/publication.json
+          if-no-files-found: error
+          retention-days: 7
+      - name: Retain artifact selection and publication execution
+        uses: actions/upload-artifact@v6
+        with:
+          name: ornn-publication-execution-${{ matrix.component }}-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            staging-artifact.json
+            staging-image-out/publication-action.json
+            staging-image-out/registry-observation.json
           if-no-files-found: error
           retention-days: 7
