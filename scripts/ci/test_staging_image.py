@@ -14,6 +14,7 @@ from unittest.mock import patch
 
 from staging_image import SOURCE, guard, main, publication, verify_archive, verify_loaded
 from staging_scan_receipt import PREFLIGHT, checksum, scanner_identity, verify_image_scan_receipt
+from staging_content_receipt import adapter_identity
 
 
 class StagingImageTests(unittest.TestCase):
@@ -33,6 +34,12 @@ class StagingImageTests(unittest.TestCase):
         policy_patch = patch("staging_scan_receipt.ALLOWLIST", self.allowlist)
         policy_patch.start()
         self.addCleanup(policy_patch.stop)
+        self.catalog = self.scanner / "catalog.json"
+        self.review = self.scanner / "review.json"
+        for name, path in (("CATALOG", self.catalog), ("REVIEW", self.review)):
+            target = patch("staging_content_receipt." + name, path)
+            target.start()
+            self.addCleanup(target.stop)
         self.env = {
             "GITHUB_ACTIONS": "true", "GITHUB_REPOSITORY": "ChronoAIProject/Ornn",
             "GITHUB_SHA": "a" * 40, "GITHUB_REF": "refs/heads/develop",
@@ -77,6 +84,43 @@ class StagingImageTests(unittest.TestCase):
                 "containerSmoke": True, "DBIdentityOrClusterQualification": False,
             },
         }
+
+    def write_content_receipt(self, directory):
+        report_path = directory / "secret-scan/REPORT.json"
+        scan = json.loads(report_path.read_text())
+        (directory / "secret-scan-raw").mkdir(exist_ok=True)
+        raw_path = directory / "secret-scan-raw/REPORT.json"
+        raw_path.write_text(json.dumps(scan))
+        self.catalog.write_text(json.dumps({
+            "schema": "image-secret-content-policy-v1", "scanner_version": "1.0.3",
+            "gitleaks_version": "8.30.1", **scan["policy"], "entries": [],
+        }))
+        self.review.write_text(json.dumps({
+            "verdict": "GO_CONTENT_POLICY", "reviewer": "solution-architect-01",
+            "catalog_sha256": checksum(self.catalog), "adapter_files": adapter_identity(),
+        }))
+        self.review.with_suffix(".sha256").write_text(checksum(self.review) + "\n")
+        packet_path = directory / "secret-scan/classifications.json"
+        packet_path.write_text(json.dumps({
+            "schema": "image-secret-classifications-v1",
+            "archive_sha256": scan["archive_sha256"], "scanner_version": "1.0.3",
+            **scan["policy"], "review": {
+                "reviewer": "solution-architect-01",
+                "reference": "content-policy-sha256:" + checksum(self.catalog),
+                "report_sha256": checksum(self.review),
+            }, "entries": [],
+        }))
+        scan["policy"].update(classifications_sha256=checksum(packet_path),
+                              classification_review_sha256=checksum(self.review))
+        report_path.write_text(json.dumps(scan))
+        (directory / "secret-scan/RESOLUTION.json").write_text(json.dumps({
+            "schema": "image-content-resolution-v1", "complete": True,
+            "proposal": False, "status": "CLEAN", "unresolved": [], "matched": 0,
+            "identities": {}, "archive_sha256": scan["archive_sha256"],
+            "raw_report_sha256": checksum(raw_path), "catalog_sha256": checksum(self.catalog),
+            "adapter_files": adapter_identity(), "packet_sha256": checksum(packet_path),
+            "review_sha256": checksum(self.review), "report_sha256": checksum(report_path),
+        }))
 
     def test_develop_push_publishes_and_dispatch_only_builds(self):
         for event, mode in (("push", "build"), ("push", "publish"),
@@ -139,6 +183,7 @@ class StagingImageTests(unittest.TestCase):
                           "layers": [{"image": 0, "index": 0, "diff_id": self.metadata["layerDiffIds"][0]}],
                           "entries": 1}, "scanned_bytes": 100,
         }))
+        self.write_content_receipt(directory)
 
     def test_archive_requires_scan_of_exact_image(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -220,11 +265,19 @@ class StagingImageTests(unittest.TestCase):
             marker = secrets.token_urlsafe(48)
             report["unexpected_detector_payload"] = marker
             path.write_text(json.dumps(report))
+            raw_path = directory / "secret-scan-raw/REPORT.json"
+            raw = json.loads(raw_path.read_text())
+            raw["unexpected_detector_payload"] = marker
+            raw_path.write_text(json.dumps(raw))
+            resolution_path = directory / "secret-scan/RESOLUTION.json"
+            resolution = json.loads(resolution_path.read_text())
+            resolution.update(raw_report_sha256=checksum(raw_path), report_sha256=checksum(path))
+            resolution_path.write_text(json.dumps(resolution))
             summary = verify_image_scan_receipt(directory, self.metadata)
             self.assertFalse(marker in json.dumps(summary), "Detector payload escaped the metadata boundary")
             self.assertEqual(set(summary), {"schema", "status", "complete", "reportSha256", "archiveSha256",
                                            "gitleaksVersion", "policy", "scannerFiles", "layers", "preflightSha256",
-                                           "blockingRules", "scannerVersion", "counts"})
+                                           "blockingRules", "scannerVersion", "counts", "contentPolicy"})
 
     def test_archive_validates_before_load(self):
         with tempfile.TemporaryDirectory() as temp:

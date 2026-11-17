@@ -53,6 +53,8 @@ jobs:
         run: |
           bash scripts/ci/image-secret-scan/self-test.sh
           python3 scripts/ci/test_shared_image_gate.py -v
+          TEST_SCANNER="$GITHUB_WORKSPACE/scripts/ci/image-secret-scan" \
+            python3 -m unittest discover -s scripts/ci/content-policy/tests -v
       - name: Build, qualify and export on native amd64
         env:
           COMPONENT: ${{ matrix.component }}
@@ -61,18 +63,23 @@ jobs:
         env:
           COMPONENT: ${{ matrix.component }}
         run: bash scripts/ci/staging-scan-image.sh
-      - name: Retain redacted scan report for review
-        if: ${{ always() && hashFiles('staging-image-out/secret-scan/REPORT.json') != '' }}
+      - name: Retain redacted scan reports for review, including failures
+        if: ${{ always() && hashFiles('staging-image-out/secret-scan-raw/REPORT.json') != '' }}
         uses: actions/upload-artifact@v6
         with:
           name: ornn-scan-${{ matrix.component }}-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             staging-image-out/secret-scan/REPORT.json
             staging-image-out/secret-scan/REPORT.txt
+            staging-image-out/secret-scan/RESOLUTION.json
+            staging-image-out/secret-scan/classifications.json
+            staging-image-out/secret-scan-raw/REPORT.json
+            staging-image-out/secret-scan-raw/REPORT.txt
             staging-image-out/scan-preflight.json
           if-no-files-found: error
           retention-days: 7
       - name: Retain exact image and metadata
+        if: ${{ always() && hashFiles('staging-image-out/metadata.json') != '' }}
         uses: actions/upload-artifact@v6
         with:
           name: ornn-native-${{ matrix.component }}-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}

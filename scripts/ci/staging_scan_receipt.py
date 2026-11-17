@@ -5,8 +5,10 @@ import json
 from pathlib import Path
 
 try:
+    from .staging_content_receipt import verify_content_receipt
     from .staging_scan_decision import verify_decision
 except ImportError:
+    from staging_content_receipt import verify_content_receipt
     from staging_scan_decision import verify_decision
 
 SCANNER = Path(__file__).resolve().parent / "image-secret-scan"
@@ -45,7 +47,9 @@ def verify_image_scan_receipt(directory, metadata):
     report_path = directory / "secret-scan" / "REPORT.json"
     scan = json.loads(report_path.read_text())
     require(scan.get("schema") == "image-secret-scan-v1", "Unknown secret scan schema")
-    decision = verify_decision(scan)
+    classification, content = verify_content_receipt(directory, metadata, scan)
+    decision = verify_decision(scan, classification["classifications_sha256"],
+                               classification["classification_review_sha256"])
     require(scan.get("input_kind") == "archive", "Secret scan must inspect the saved archive")
     require(scan.get("gitleaks_version") == "8.30.1", "Unexpected image secret scanner version")
     require(scan.get("archive_sha256") == metadata["archiveSha256"],
@@ -55,6 +59,7 @@ def verify_image_scan_receipt(directory, metadata):
     policy = {
         "gitleaks_rules_sha256": checksum(SCANNER / "gitleaks.toml"),
         "allowlist_sha256": checksum(ALLOWLIST),
+        **classification,
     }
     require(scan.get("policy") == policy, "Secret scan policy differs from this checkout")
     require(scan.get("scanner_files") == scanner_identity(SCANNER),
@@ -79,4 +84,5 @@ def verify_image_scan_receipt(directory, metadata):
         "scannerFiles": scan["scanner_files"], "layers": len(layers),
         "preflightSha256": checksum(directory / "scan-preflight.json"),
         **decision,
+        "contentPolicy": content,
     }

@@ -16,10 +16,22 @@ python3 scripts/ci/staging_scan_inputs.py "$archive" "$scan_root/input" \
 rm -rf -- "$scan_root"
 trap - EXIT
 # Scan the existing export without rebuilding, filtering, or rewriting image bytes.
-# Both findings (1) and incomplete/error (2) stop before archive upload or push.
+# Findings may be assessed against the reviewed catalog; scanner errors never are.
+scan_rc=0
 bash scripts/ci/image-secret-scan/scan-image-secrets.sh "$archive" \
-  --input-kind archive --output "$out/secret-scan" \
+  --input-kind archive --output "$out/secret-scan-raw" \
   --blocking-rules credential \
   --allowlist scripts/ci/ornn-image-allowlist.json \
-  --expected-archive-sha256 "$archive_sha"
+  --expected-archive-sha256 "$archive_sha" || scan_rc=$?
+case "$scan_rc" in 0|1) ;; *) exit "$scan_rc" ;; esac
+review_args=(--proposal)
+if test -f scripts/ci/ornn-content-policy-review.json; then
+  review_args=(--review scripts/ci/ornn-content-policy-review.json)
+fi
+# An unreviewed proposal always exits nonzero and cannot produce a CLEAN receipt.
+python3 scripts/ci/content-policy/tool/resolve_content_policy.py \
+  --scanner scripts/ci/image-secret-scan --archive "$archive" \
+  --report "$out/secret-scan-raw/REPORT.json" \
+  --catalog scripts/ci/ornn-content-policy.json --component "$COMPONENT" \
+  --output "$out/secret-scan" "${review_args[@]}"
 python3 scripts/ci/staging_image.py scan
