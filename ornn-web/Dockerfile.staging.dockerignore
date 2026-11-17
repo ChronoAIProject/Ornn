@@ -5,8 +5,7 @@
 **/coverage
 **/__pycache__
 **/.venv
-**/.env
-**/.env.*
+**/.env*
 **/*.pem
 **/*.key
 **/credentials.json

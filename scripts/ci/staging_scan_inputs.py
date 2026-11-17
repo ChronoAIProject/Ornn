@@ -19,7 +19,7 @@ def safe_name(name):
 def credential_path(path):
     parts = path.parts
     name = path.name.lower()
-    return (name == ".env" or name.startswith(".env.") or name == ".npmrc"
+    return (name.startswith(".env") or name == ".npmrc"
             or name.endswith(".key") or name in ("credentials", "credentials.json")
             or "kubeconfig" in name or name.startswith(("id_rsa", "id_ed25519"))
             or any(part in (".git", ".aws", ".kube", ".azure") for part in parts)

@@ -54,7 +54,7 @@ class ScanInputTests(unittest.TestCase):
             self.assertEqual(json.loads((root / "scan/metadata/history.json").read_text()), config["history"])
 
     def test_credential_paths_fail_even_when_deleted_later(self):
-        for name in ("app/.env", "root/.npmrc", "app/key.key", "root/.kube/config", "app/kubeconfig"):
+        for name in ("app/.env", "app/.envrc", "app/.environment", "root/.npmrc", "app/key.key", "root/.kube/config", "app/kubeconfig"):
             with self.subTest(name=name), tempfile.TemporaryDirectory() as temp:
                 root = Path(temp)
                 saved_image(root / "image.tar.gz", [layer([(name, b"fixture", "file")])])

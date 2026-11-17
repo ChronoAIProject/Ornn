@@ -72,7 +72,7 @@ jobs:
           printf '[extend]\nuseDefault = true\n' > "$scan_root/rules.toml"
           : > "$scan_root/empty.ignore"
           # The extractor also checks link names; find verifies the regular-file inputs.
-          find "$scan_root/input" -type f \( -name '.env' -o -name '.env.*' -o -name '.npmrc' \
+          find "$scan_root/input" -type f \( -name '.env*' -o -name '.npmrc' \
             -o -name '*.key' -o -name 'credentials' -o -name 'credentials.json' \
             -o -iname '*kubeconfig*' -o -path '*/.git/*' -o -path '*/.aws/*' -o -path '*/.kube/*' \) \
             -print > "$scan_root/credential-paths"
