@@ -3,11 +3,11 @@
   Produced by ornn-api/scripts/build-assistant-kb.ts (#970).
   Re-run: `bun run scripts/build-assistant-kb.ts` from ornn-api/.
   budgetTokens: 18000
-  estimatedTokens: 11364
+  estimatedTokens: 11369
   sources:
   - readme: ~2250 tok
   - claude-positioning: ~272 tok
-  - architecture: ~219 tok
+  - architecture: ~223 tok
   - agent-manual-http: ~5491 tok (clipped)
   - conventions: ~2599 tok (clipped)
   - design-overview: ~487 tok
@@ -229,7 +229,7 @@ chrono-ornn is an AI skill platform. Users create, publish, search, and execute 
 
 | Service | How ornn-api talks to it |
 |---------|---------------------------|
-| NyxID | JWT verification (JWKS), API key introspection, LLM Gateway (Responses API) |
+| NyxID | Identity assertion JWT verification (JWKS), API key introspection, LLM Gateway (Responses API) |
 | chrono-sandbox | `POST /execute` — script execution with env vars, dependencies, file retrieval |
 | chrono-storage | Upload/download/delete skill packages (presigned URLs) |
 
