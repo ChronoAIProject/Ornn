@@ -1,0 +1,162 @@
+name: Staging native images
+
+"on":
+  workflow_dispatch:
+  push:
+    branches: [develop]
+  pull_request:
+    branches: [develop]
+    paths:
+      - '.github/workflows/staging-native-images.yml'
+      - 'scripts/ci/**'
+      - 'ornn-api/**'
+      - 'ornn-web/**'
+      - 'sdk/typescript/package.json'
+      - 'package.json'
+      - 'bun.lock'
+
+permissions:
+  contents: read
+
+jobs:
+  image:
+    if: >-
+      github.repository == 'ChronoAIProject/Ornn' &&
+      ((github.ref == 'refs/heads/develop' &&
+        (github.event_name == 'push' || github.event_name == 'workflow_dispatch')) ||
+       (github.event_name == 'pull_request' &&
+        github.event.pull_request.head.repo.full_name == github.repository))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        component: [api, web]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Test staging provenance validation
+        run: python3 -m unittest discover -s scripts/ci -p 'test_staging_*.py' -v
+      - name: Build, qualify and export on native amd64
+        env:
+          COMPONENT: ${{ matrix.component }}
+        run: bash scripts/ci/staging-native-image.sh
+      - name: Install pinned image secret scanner
+        run: |
+          set -euo pipefail
+          tool_dir="$RUNNER_TEMP/ornn-gitleaks"
+          mkdir -p "$tool_dir"
+          curl --fail --silent --show-error --location --retry 3 \
+            https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz \
+            --output "$tool_dir/gitleaks.tar.gz"
+          echo "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  $tool_dir/gitleaks.tar.gz" | sha256sum --check --strict
+          tar -xzf "$tool_dir/gitleaks.tar.gz" -C "$tool_dir" gitleaks
+          echo "$tool_dir" >> "$GITHUB_PATH"
+      - name: Scan every saved image layer, config and history before publication
+        env:
+          COMPONENT: ${{ matrix.component }}
+        run: |
+          set -euo pipefail
+          set +x
+          umask 077
+          # TODO: replace this inline gate with the reviewed shared image scanner.
+          scan_root=$(mktemp -d "${RUNNER_TEMP:-/tmp}/ornn-image-scan.XXXXXX")
+          trap 'rm -rf -- "$scan_root"' EXIT
+          archive="staging-image-out/ornn-${COMPONENT}-linux-amd64.docker.tar.gz"
+          python3 scripts/ci/staging_scan_inputs.py "$archive" "$scan_root/input"
+          image_id=$(python3 -c 'import json; print(json.load(open("staging-image-out/metadata.json"))["imageId"])')
+          docker image history --no-trunc --format '{{json .}}' "$image_id" > "$scan_root/input/metadata/docker-history.jsonl"
+          # Never inherit repository allowlists or environment-based scanner overrides.
+          unset GITLEAKS_CONFIG GITLEAKS_CONFIG_TOML
+          printf '[extend]\nuseDefault = true\n' > "$scan_root/rules.toml"
+          : > "$scan_root/empty.ignore"
+          # The extractor also checks link names; find verifies the regular-file inputs.
+          find "$scan_root/input" -type f \( -name '.env' -o -name '.env.*' -o -name '.npmrc' \
+            -o -name '*.key' -o -name 'credentials' -o -name 'credentials.json' \
+            -o -iname '*kubeconfig*' -o -path '*/.git/*' -o -path '*/.aws/*' -o -path '*/.kube/*' \) \
+            -print > "$scan_root/credential-paths"
+          if test -s "$scan_root/credential-paths"; then
+            echo 'Image contains credential paths (details suppressed)' >&2
+            exit 1
+          fi
+          if ! gitleaks dir "$scan_root/input" --config "$scan_root/rules.toml" \
+              --gitleaks-ignore-path "$scan_root/empty.ignore" --ignore-gitleaks-allow \
+              --max-archive-depth 5 --max-decode-depth 5 --max-target-megabytes 0 \
+              --redact=100 --no-banner --no-color --log-level warn \
+              --report-format json --report-path "$scan_root/report.json" > "$scan_root/scanner.log" 2>&1; then
+            echo 'Image secret scan found a secret or encountered a scanner error (details suppressed)' >&2
+            exit 1
+          fi
+          # Gitleaks may log read/decode errors without returning a failing exit status.
+          if test -s "$scan_root/scanner.log"; then
+            echo 'Image secret scanner emitted warnings/errors (details suppressed)' >&2
+            exit 1
+          fi
+          export scan_root
+          python3 - <<'PY'
+          import hashlib, json, os
+          from pathlib import Path
+          root = Path('staging-image-out')
+          metadata = json.loads((root / 'metadata.json').read_text())
+          archive = root / metadata['archive']
+          h = hashlib.sha256()
+          with archive.open('rb') as stream:
+              for chunk in iter(lambda: stream.read(1024 * 1024), b''): h.update(chunk)
+          if h.hexdigest() != metadata['archiveSha256']:
+              raise ValueError('Archive changed during image secret scan')
+          scan = Path(os.environ['scan_root'])
+          if json.loads((scan / 'report.json').read_text()):
+              raise ValueError('Image secret scanner report contains findings')
+          receipt = {'passed': True, 'scanner': 'gitleaks', 'version': '8.30.1',
+                     'archiveSha256': h.hexdigest(), 'configDigest': metadata['configDigest'],
+                     'imageId': metadata['imageId'],
+                     'inputs': json.loads((scan / 'input/scan-input.json').read_text())}
+          (root / 'secret-scan.json').write_text(json.dumps(receipt, indent=2) + '\n')
+          print('Image secret scan passed; receipt binds the exact saved archive')
+          PY
+      - name: Retain exact image and metadata
+        uses: actions/upload-artifact@v6
+        with:
+          name: ornn-native-${{ matrix.component }}-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: staging-image-out/
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+
+  publish:
+    needs: image
+    if: >-
+      github.repository == 'ChronoAIProject/Ornn' &&
+      github.ref == 'refs/heads/develop' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        component: [api, web]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v5
+        with:
+          name: ornn-native-${{ matrix.component }}-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: staging-image-out/
+      - name: Publish the verified archive and record immutable digests
+        env:
+          COMPONENT: ${{ matrix.component }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DOCKER_CONFIG: ${{ runner.temp }}/ornn-ghcr
+        run: bash scripts/ci/staging-publish-image.sh
+      - name: Retain publication receipt
+        uses: actions/upload-artifact@v6
+        with:
+          name: ornn-published-${{ matrix.component }}-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: staging-image-out/publication.json
+          if-no-files-found: error
+          retention-days: 7
