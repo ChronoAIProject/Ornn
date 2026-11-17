@@ -78,12 +78,15 @@ class StagingImageTests(unittest.TestCase):
             },
         }
 
-    def test_develop_push_and_dispatch_allowed(self):
-        for event in ("push", "workflow_dispatch"):
-            for mode in ("build", "publish"):
-                with self.subTest(event=event, mode=mode):
-                    self.env["GITHUB_EVENT_NAME"] = event
-                    guard(self.env, mode, "x86_64", self.env["GITHUB_SHA"])
+    def test_develop_push_publishes_and_dispatch_only_builds(self):
+        for event, mode in (("push", "build"), ("push", "publish"),
+                            ("workflow_dispatch", "build")):
+            with self.subTest(event=event, mode=mode):
+                self.env["GITHUB_EVENT_NAME"] = event
+                guard(self.env, mode, "x86_64", self.env["GITHUB_SHA"])
+        self.env["GITHUB_EVENT_NAME"] = "workflow_dispatch"
+        with self.assertRaisesRegex(ValueError, "Event cannot publish"):
+            guard(self.env, "publish", "x86_64", self.env["GITHUB_SHA"])
 
     def test_publication_rejects_untrusted_contexts(self):
         cases = {

@@ -46,7 +46,8 @@ def guard(env, mode, machine, head, event=None):
         require(re.fullmatch(r"refs/pull/[1-9][0-9]*/merge", env.get("GITHUB_REF", "")),
                 "Requires PR merge ref")
     else:
-        require(event_name in ("push", "workflow_dispatch"), "Event cannot publish")
+        allowed_events = ("push",) if mode == "publish" else ("push", "workflow_dispatch")
+        require(event_name in allowed_events, "Event cannot publish")
         require(env.get("GITHUB_REF") == "refs/heads/develop", "Requires develop ref")
 
 
