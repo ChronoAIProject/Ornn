@@ -12,10 +12,21 @@ import unittest
 from unittest.mock import patch
 
 from staging_image import SOURCE, guard, main, publication, verify_archive, verify_loaded
+from staging_scan_receipt import PREFLIGHT, checksum, scanner_identity
 
 
 class StagingImageTests(unittest.TestCase):
     def setUp(self):
+        scanner_temp = tempfile.TemporaryDirectory()
+        self.addCleanup(scanner_temp.cleanup)
+        self.scanner = Path(scanner_temp.name)
+        (self.scanner / "image_secrets").mkdir()
+        for name in ("scan-image-secrets.sh", "scan_image_secrets.py", "image_secrets/engine.py",
+                     "gitleaks.toml", "allowlist.json"):
+            (self.scanner / name).write_text("test scanner fixture: " + name)
+        scanner_patch = patch("staging_scan_receipt.SCANNER", self.scanner)
+        scanner_patch.start()
+        self.addCleanup(scanner_patch.stop)
         self.env = {
             "GITHUB_ACTIONS": "true", "GITHUB_REPOSITORY": "ChronoAIProject/Ornn",
             "GITHUB_SHA": "a" * 40, "GITHUB_REF": "refs/heads/develop",
@@ -99,27 +110,92 @@ class StagingImageTests(unittest.TestCase):
         (directory / "metadata.json").write_text(json.dumps(metadata))
         (directory / "image-inspect.json").write_text(json.dumps([self.image]))
         (directory / self.metadata["archive"]).write_bytes(self.archive_data)
-        (directory / "secret-scan.json").write_text(json.dumps({
-            "passed": True, "scanner": "gitleaks", "version": "8.30.1",
-            "archiveSha256": self.metadata["archiveSha256"],
-            "configDigest": self.metadata["configDigest"], "imageId": self.metadata["imageId"],
-            "inputs": {"layers": 1, "files": 1, "credentialPaths": 0},
+        (directory / "scan-preflight.json").write_text(json.dumps({
+            "schema": "ornn-image-preflight-v1", "archiveSha256": self.metadata["archiveSha256"],
+            "extractorSha256": checksum(PREFLIGHT), "layers": 1, "files": 1, "credentialPaths": 0,
+        }))
+        (directory / "secret-scan").mkdir(exist_ok=True)
+        (directory / "secret-scan/REPORT.json").write_text(json.dumps({
+            "schema": "image-secret-scan-v1", "status": "CLEAN", "complete": True,
+            "exit_code": 0, "findings": [], "allowlisted": [], "input_kind": "archive",
+            "gitleaks_version": "8.30.1", "archive_sha256": self.metadata["archiveSha256"],
+            "scanner_files": scanner_identity(self.scanner),
+            "policy": {"gitleaks_rules_sha256": checksum(self.scanner / "gitleaks.toml"),
+                       "allowlist_sha256": checksum(self.scanner / "allowlist.json")},
+            "inventory": {"images": [{"index": 0, "config_digest": self.metadata["configDigest"],
+                                      "layers": 1}],
+                          "layers": [{"image": 0, "index": 0, "diff_id": self.metadata["layerDiffIds"][0]}],
+                          "entries": 1}, "scanned_bytes": 100,
         }))
 
     def test_archive_requires_scan_of_exact_image(self):
         with tempfile.TemporaryDirectory() as temp:
             directory = Path(temp)
             self.write_archive(directory, self.metadata)
-            scan_path = directory / "secret-scan.json"
+            scan_path = directory / "secret-scan/REPORT.json"
             scan = json.loads(scan_path.read_text())
-            for field, value in (("passed", False), ("archiveSha256", "wrong"),
-                                 ("configDigest", "wrong"), ("imageId", "wrong"),
-                                 ("version", "unknown")):
+            for field, value in (("status", "FINDINGS"), ("status", "ERROR"),
+                                 ("complete", False), ("exit_code", 2), ("exit_code", False),
+                                 ("findings", [{"rule": "synthetic"}]), ("error", "incomplete"),
+                                 ("archive_sha256", "wrong"), ("policy", {}),
+                                 ("scanner_files", {}), ("input_kind", "local-image"),
+                                 ("gitleaks_version", "unknown"), ("schema", "old"),
+                                 ("scanned_bytes", 0)):
                 with self.subTest(field=field):
                     scan_path.write_text(json.dumps({**scan, field: value}))
                     with self.assertRaises(ValueError):
                         verify_archive(directory, self.env, self.tree)
             scan_path.unlink()
+            with self.assertRaises(FileNotFoundError):
+                verify_archive(directory, self.env, self.tree)
+
+    def test_scan_rejects_missing_reordered_or_substituted_layers(self):
+        with tempfile.TemporaryDirectory() as temp:
+            directory = Path(temp)
+            self.write_archive(directory, self.metadata)
+            scan_path = directory / "secret-scan/REPORT.json"
+            scan = json.loads(scan_path.read_text())
+            for section, index, key, value in (
+                ("images", 0, "config_digest", "sha256:" + "f" * 64),
+                ("images", 0, "layers", 0), ("images", 0, "index", 1),
+                ("layers", 0, "diff_id", "sha256:" + "f" * 64),
+                ("layers", 0, "index", 1), ("layers", 0, "image", 1),
+            ):
+                with self.subTest(section=section, key=key):
+                    changed = copy.deepcopy(scan)
+                    changed["inventory"][section][index][key] = value
+                    scan_path.write_text(json.dumps(changed))
+                    with self.assertRaises(ValueError):
+                        verify_archive(directory, self.env, self.tree)
+            for section in ("images", "layers"):
+                changed = copy.deepcopy(scan)
+                changed["inventory"][section] = []
+                scan_path.write_text(json.dumps(changed))
+                with self.assertRaises(ValueError):
+                    verify_archive(directory, self.env, self.tree)
+
+    def test_scan_rejects_changed_scanner_rules_or_allowlist(self):
+        with tempfile.TemporaryDirectory() as temp:
+            directory = Path(temp)
+            for name in ("scan_image_secrets.py", "gitleaks.toml", "allowlist.json"):
+                self.write_archive(directory, self.metadata)
+                with (self.scanner / name).open("a") as stream:
+                    stream.write("changed policy")
+                with self.subTest(name=name), self.assertRaises(ValueError):
+                    verify_archive(directory, self.env, self.tree)
+
+    def test_archive_requires_matching_preflight(self):
+        with tempfile.TemporaryDirectory() as temp:
+            directory = Path(temp)
+            self.write_archive(directory, self.metadata)
+            path = directory / "scan-preflight.json"
+            preflight = json.loads(path.read_text())
+            for field, value in (("archiveSha256", "wrong"), ("extractorSha256", "wrong"),
+                                 ("layers", 0), ("files", 0), ("credentialPaths", 1)):
+                path.write_text(json.dumps({**preflight, field: value}))
+                with self.subTest(field=field), self.assertRaises(ValueError):
+                    verify_archive(directory, self.env, self.tree)
+            path.unlink()
             with self.assertRaises(FileNotFoundError):
                 verify_archive(directory, self.env, self.tree)
 
@@ -215,7 +291,7 @@ class StagingImageTests(unittest.TestCase):
                     with patch("sys.argv", ["staging_image.py", "archive"]), \
                             patch("staging_image.subprocess.check_output", return_value=self.tree):
                         main()
-                    for command in ("inspect", "loaded", "publication"):
+                    for command in ("inspect", "loaded", "scan", "publication"):
                         with self.subTest(command=command), patch("sys.argv", ["staging_image.py", command]):
                             main()
                     with patch("sys.argv", ["staging_image.py", "unknown"]), self.assertRaises(ValueError):
@@ -223,6 +299,9 @@ class StagingImageTests(unittest.TestCase):
                 receipt = json.loads((directory / "publication.json").read_text())
                 self.assertIn(receipt["image"], summary.read_text())
                 self.assertEqual(receipt["archiveSha256"], self.metadata["archiveSha256"])
+                self.assertEqual(receipt["secretScan"]["status"], "CLEAN")
+                self.assertEqual(receipt["secretScan"]["reportSha256"],
+                                 checksum(directory / "secret-scan/REPORT.json"))
                 # A replaced image must fail before a publication receipt is accepted.
                 changed = copy.deepcopy(self.image)
                 changed["Config"]["User"] = "0:0"

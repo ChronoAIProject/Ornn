@@ -7,7 +7,8 @@ import tarfile
 import tempfile
 import unittest
 
-from staging_scan_inputs import prepare
+from staging_scan_inputs import prepare, write_receipt
+from staging_scan_receipt import checksum
 
 
 def layer(entries):
@@ -54,7 +55,10 @@ class ScanInputTests(unittest.TestCase):
             self.assertEqual(json.loads((root / "scan/metadata/history.json").read_text()), config["history"])
 
     def test_credential_paths_fail_even_when_deleted_later(self):
-        for name in ("app/.env", "app/.envrc", "app/.environment", "root/.npmrc", "app/key.key", "root/.kube/config", "app/kubeconfig"):
+        for name in ("app/.env", "app/.envrc", "app/.environment", "root/.npmrc", "app/key.key",
+                     "root/.kube/config", "root/.kube/config-dev", "app/kubeconfig", "etc/pip.conf",
+                     "root/.netrc", "root/.docker/config.json", "root/.cargo/credentials.toml",
+                     "etc/kubernetes/admin.conf", "app/service-account.json"):
             with self.subTest(name=name), tempfile.TemporaryDirectory() as temp:
                 root = Path(temp)
                 saved_image(root / "image.tar.gz", [layer([(name, b"fixture", "file")])])
@@ -114,6 +118,21 @@ class ScanInputTests(unittest.TestCase):
             saved_image(root / "image.tar.gz", [layer([("app/broken.gz", b"\xff\xfe\x00", "file")])])
             with self.assertRaises(UnicodeDecodeError):
                 prepare(root / "image.tar.gz", root / "scan")
+
+    def test_receipt_binds_unmodified_archive_and_extractor(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            archive = root / "image.tar.gz"
+            saved_image(archive, [layer([("app/plain", b"hello", "file")])])
+            digest = checksum(archive)
+            stats = prepare(archive, root / "scan")
+            write_receipt(archive, root / "receipt.json", stats, digest)
+            report = json.loads((root / "receipt.json").read_text())
+            self.assertEqual(report["archiveSha256"], digest)
+            self.assertEqual(report["files"], 1)
+            archive.write_bytes(b"changed")
+            with self.assertRaisesRegex(ValueError, "Archive changed"):
+                write_receipt(archive, root / "receipt.json", stats, digest)
 
 
 if __name__ == "__main__":

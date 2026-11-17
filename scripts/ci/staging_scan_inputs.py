@@ -19,9 +19,14 @@ def safe_name(name):
 def credential_path(path):
     parts = path.parts
     name = path.name.lower()
-    return (name.startswith(".env") or name == ".npmrc"
-            or name.endswith(".key") or name in ("credentials", "credentials.json")
+    return (name.startswith(".env") or name in (".npmrc", ".netrc", ".pypirc", ".git-credentials", "pip.conf")
+            or name.endswith(".key") or name in ("credentials", "credentials.json", "credentials.toml",
+                                                   "service-account.json", "service_account.json",
+                                                   "application_default_credentials.json")
             or "kubeconfig" in name or name.startswith(("id_rsa", "id_ed25519"))
+            or (".docker" in parts and name == "config.json")
+            or ("kubernetes" in parts and name in ("admin.conf", "super-admin.conf", "kubelet.conf",
+                                                    "controller-manager.conf", "scheduler.conf"))
             or any(part in (".git", ".aws", ".kube", ".azure") for part in parts)
             or ".config/gcloud" in str(path))
 
@@ -100,9 +105,27 @@ def prepare(archive_path, output):
     return stats
 
 
+def write_receipt(archive, path, stats, expected_sha256):
+    from staging_scan_receipt import checksum
+    if checksum(archive) != expected_sha256:
+        raise ValueError("Archive changed during image archive preflight")
+    receipt = dict(stats, schema="ornn-image-preflight-v1", archiveSha256=expected_sha256,
+                   extractorSha256=checksum(Path(__file__).resolve()))
+    path.write_text(json.dumps(receipt, indent=2) + "\n")
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("archive", type=Path)
     parser.add_argument("output", type=Path)
+    parser.add_argument("--receipt", type=Path)
+    parser.add_argument("--expected-archive-sha256")
     args = parser.parse_args()
-    print(json.dumps(prepare(args.archive, args.output)))
+    try:
+        stats = prepare(args.archive, args.output)
+        if args.receipt:
+            write_receipt(args.archive, args.receipt, stats, args.expected_archive_sha256)
+        print(json.dumps(stats))
+    except Exception:
+        # Decode/IO errors can contain untrusted image paths; never echo them.
+        raise SystemExit("Image archive preflight failed; credential path, unsafe archive, or decode error")

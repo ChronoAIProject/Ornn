@@ -1,0 +1,24 @@
+title = "Public image gate: upstream defaults plus entropy rules"
+[extend]
+useDefault = true
+
+[[rules]]
+id = "image-secret-assignment"
+description = "Secret-like assignment with an opaque value"
+regex = '''(?i)(?:api[_-]?key|access[_-]?token|auth[_-]?token|client[_-]?secret|password|passwd|secret|credential|private[_-]?key)["']?\s*[:=]\s*["']?([A-Za-z0-9_./+!@#$%^&*=-]{12,})'''
+secretGroup = 1
+entropy = 3.5
+
+[[rules]]
+id = "image-high-entropy"
+description = "Opaque base64/token material, including values without a known provider prefix"
+regex = '''(?:^|["'`=:\s])([A-Za-z0-9_+/=-]{32,128})(?:["'`\s;,]|$)'''
+secretGroup = 1
+entropy = 4.7
+
+[[rules]]
+id = "image-hex-secret-assignment"
+description = "High-entropy hex credentials attached to a credential name"
+regex = '''(?i)(?:key|token|secret|password)["']?\s*[:=]\s*["']?([a-f0-9]{32,128})'''
+secretGroup = 1
+entropy = 3.3

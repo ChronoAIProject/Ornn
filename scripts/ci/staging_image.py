@@ -10,6 +10,11 @@ import subprocess
 import sys
 import tarfile
 
+try:
+    from .staging_scan_receipt import verify_secret_scan
+except ImportError:
+    from staging_scan_receipt import verify_secret_scan
+
 REPOSITORY = "ChronoAIProject/Ornn"
 SOURCE = f"https://github.com/{REPOSITORY}"
 USERS = {"api": "1000:1000", "web": "101:101"}
@@ -82,18 +87,6 @@ def verify_config(config, metadata, env):
         "Architecture": config["architecture"], "Config": config["config"],
         "RootFS": {"Layers": config["rootfs"]["diff_ids"]},
     }, metadata, env)
-
-
-def verify_secret_scan(directory, metadata):
-    scan = json.loads((directory / "secret-scan.json").read_text())
-    require(scan.get("passed") is True, "Missing passing image secret scan")
-    require(scan.get("scanner") == "gitleaks" and scan.get("version") == "8.30.1",
-            "Unexpected image secret scanner")
-    for key in ("archiveSha256", "configDigest", "imageId"):
-        require(scan.get(key) == metadata[key], "Secret scan does not cover this image")
-    inputs = scan["inputs"]
-    require(inputs["layers"] > 0 and inputs["files"] > 0 and inputs["credentialPaths"] == 0,
-            "Incomplete image secret scan")
 
 
 def verify_archive(directory, env, tree):
@@ -180,6 +173,7 @@ def main():
         manifest = json.loads((directory / "remote-manifest.json").read_text())
         digest = (directory / "push-digest.txt").read_text().strip()
         receipt = publication(metadata, manifest, digest, env)
+        receipt["secretScan"] = verify_secret_scan(directory, metadata)
         (directory / "publication.json").write_text(json.dumps(receipt, indent=2) + "\n")
         with Path(env["GITHUB_STEP_SUMMARY"]).open("a") as summary:
             summary.write(f"### Staging {env['COMPONENT']}\n\n")
@@ -188,6 +182,10 @@ def main():
             summary.write("Packaging smoke passed. Service qualification and package "
                           "visibility must be confirmed before deployment.\n")
         print(receipt["image"])
+    elif command == "scan":
+        metadata = json.loads((directory / "metadata.json").read_text())
+        verify_secret_scan(directory, metadata)
+        print("Complete CLEAN scan verified against the exact saved artifact and checkout")
     else:
         raise ValueError(f"Unknown command: {command}")
 

@@ -1,0 +1,175 @@
+{
+  "schema": "scan-image-secrets-source-v1",
+  "at": "2026-11-17T11:38:01.332692+00:00",
+  "version": "1.0.1",
+  "files": [
+    {
+      "path": "scan-image-secrets.sh",
+      "sha256": "f6ad8014bd448a46d009420a283a3a312a6e91e6cf215f1dfa0bc43a9a33fc21",
+      "bytes": 443,
+      "lines": 12,
+      "mode": "0o755"
+    },
+    {
+      "path": "scan_image_secrets.py",
+      "sha256": "7ae785f81b61be6b06d6ffbe724656d1d3d7e2182b84886d82c50eb69ab21f23",
+      "bytes": 8510,
+      "lines": 204,
+      "mode": "0o644"
+    },
+    {
+      "path": "gitleaks.toml",
+      "sha256": "44ffc256678b6dd0c94ea64d81b139b875558fb2597ef2ea3807f71545e8b0e1",
+      "bytes": 881,
+      "lines": 24,
+      "mode": "0o644"
+    },
+    {
+      "path": "allowlist.json",
+      "sha256": "6f51e1788099a551c62148f9ec4a5fd8399c6729dc2afd6b20824e51cda52ba4",
+      "bytes": 825,
+      "lines": 21,
+      "mode": "0o644"
+    },
+    {
+      "path": "README.md",
+      "sha256": "303b9fb7d55a29e87bef796853d4931ceddd0b25fc15cb1e629db783619309ee",
+      "bytes": 12002,
+      "lines": 73,
+      "mode": "0o644"
+    },
+    {
+      "path": "CHANGELOG.md",
+      "sha256": "690eb9f1f95d11268b45841d96e6fb2dc5c5734cd65fb8a546fe9a12bd1dfa7d",
+      "bytes": 451,
+      "lines": 3,
+      "mode": "0o644"
+    },
+    {
+      "path": "self-test.sh",
+      "sha256": "b69b30328e9070987657bea52a3dd8372e4a4153d832be686afbf426dac916b1",
+      "bytes": 269,
+      "lines": 8,
+      "mode": "0o755"
+    },
+    {
+      "path": "github-actions-step.yml",
+      "sha256": "a838a27fbeffab76a47a69abc06980c864f9d88517e8b3fd4f5a149d1c8148f7",
+      "bytes": 2468,
+      "lines": 49,
+      "mode": "0o644"
+    },
+    {
+      "path": "pyproject.toml",
+      "sha256": "b0ab5611cd7eaa9d30018fbb384991fc378fddbf42f346f80fb66db74652e136",
+      "bytes": 284,
+      "lines": 15,
+      "mode": "0o644"
+    },
+    {
+      "path": "image_secrets/__init__.py",
+      "sha256": "4c2085b3a3dcd13ccbb1910ba6810b9f40e2939cd9051d066191b8a38dd52e3d",
+      "bytes": 83,
+      "lines": 1,
+      "mode": "0o644"
+    },
+    {
+      "path": "image_secrets/archive.py",
+      "sha256": "edd179a2701352e2c971e150ba94c66071d0d5002dcafcab549f91963d5acaaf",
+      "bytes": 8949,
+      "lines": 214,
+      "mode": "0o644"
+    },
+    {
+      "path": "image_secrets/backend.py",
+      "sha256": "30940cbbc3f56e1e065f9d670e30c185a31547e93b470ad3e0bb1bb641b801ae",
+      "bytes": 4817,
+      "lines": 118,
+      "mode": "0o644"
+    },
+    {
+      "path": "image_secrets/common.py",
+      "sha256": "3af697c968475707122b595503641290f3a1be692822157efdc8ace1541d8a6d",
+      "bytes": 2546,
+      "lines": 86,
+      "mode": "0o644"
+    },
+    {
+      "path": "image_secrets/containers.py",
+      "sha256": "195f5e56c269e412f85bf04de37aa5375e5eb886bc8c47bb4d526ad6da27b232",
+      "bytes": 5072,
+      "lines": 137,
+      "mode": "0o644"
+    },
+    {
+      "path": "image_secrets/engine.py",
+      "sha256": "92dec7e69ee3575cbb0cb9f987a881e3de63f3005d79771f67dca90b90778036",
+      "bytes": 6519,
+      "lines": 147,
+      "mode": "0o644"
+    },
+    {
+      "path": "image_secrets/policy.py",
+      "sha256": "7585aae72e0ec279733a64578c0a2ec5775347606a804ef071d9c4cc31a5b43f",
+      "bytes": 7194,
+      "lines": 178,
+      "mode": "0o644"
+    },
+    {
+      "path": "tests/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "lines": 0,
+      "mode": "0o644"
+    },
+    {
+      "path": "tests/fixtures.py",
+      "sha256": "ad885447d68d7e3e08820c517a645d7b2a5dd56bf236f02396e106b85cc33398",
+      "bytes": 3178,
+      "lines": 93,
+      "mode": "0o644"
+    },
+    {
+      "path": "tests/test_artifacts.py",
+      "sha256": "efa6ab4ba8f0dde0fc640ff72c5501b76efac773acca1acfed6d85f2e90c7132",
+      "bytes": 7943,
+      "lines": 183,
+      "mode": "0o644"
+    },
+    {
+      "path": "tests/test_boundaries.py",
+      "sha256": "60951f4da7dea39800276cdf2f3e9926beb7362c19ab225161a6db8fceff657c",
+      "bytes": 8154,
+      "lines": 187,
+      "mode": "0o644"
+    },
+    {
+      "path": "tests/test_review_regressions.py",
+      "sha256": "106b34a6a98c9d08f59afb9f55d12d78e4a36c577aafef449689ea3df07de027",
+      "bytes": 7833,
+      "lines": 196,
+      "mode": "0o644"
+    },
+    {
+      "path": "tests/test_scanner.py",
+      "sha256": "78d52d7b58a74a1d825a36f60be815ba3d8c4c73ceb5dfed3db7ec63bce023de",
+      "bytes": 15089,
+      "lines": 361,
+      "mode": "0o644"
+    }
+  ],
+  "supersedes_rejected_version": "1.0.0-review-candidate",
+  "review_state": "SA-01 re-verification pending",
+  "changed_from_rejected": [
+    "scan_image_secrets.py",
+    "README.md",
+    "CHANGELOG.md",
+    "image_secrets/backend.py",
+    "image_secrets/containers.py",
+    "image_secrets/engine.py",
+    "image_secrets/policy.py",
+    "tests/test_boundaries.py",
+    "tests/test_review_regressions.py",
+    "tests/test_scanner.py"
+  ]
+}

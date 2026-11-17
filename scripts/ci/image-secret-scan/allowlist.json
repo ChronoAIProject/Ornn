@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "id": "reserved-documentation-url",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "layer",
+      "path": "usr/share/doc/example-url.txt",
+      "match_sha256": "100680ad546ce6a577f42f52df33b4cfdca756859e664b8d7de329b150d09ce9",
+      "reason": "RFC 2606 reserved public documentation URL; exact value and exact documentation file only."
+    },
+    {
+      "id": "public-example-oauth-client-id",
+      "rule": "gitleaks.image-high-entropy",
+      "scope": "config",
+      "path": "config/config/Labels/org.example.oauth-client-id",
+      "match_sha256": "4c033041873bead951e27fe548e4131d566a320a8478634d78ab4298396dd3a7",
+      "reason": "Nonfunctional example of a public OAuth client identifier; client IDs are public identifiers, not client secrets."
+    }
+  ]
+}
