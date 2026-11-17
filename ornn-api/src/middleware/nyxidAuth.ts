@@ -1,11 +1,12 @@
 /**
  * NyxID authentication middleware.
  *
- * All traffic flows through NyxID proxy. proxyAuthSetup() decodes the
- * X-NyxID-Identity-Token JWT (signed by NyxID, already verified by proxy)
- * to extract userId, email, roles, and permissions.
+ * All traffic flows through NyxID proxy. proxyAuthSetup() verifies the
+ * X-NyxID-Identity-Token JWT against NyxID's JWKS before it extracts
+ * userId, email, roles, and permissions.
  *
- * Falls back to X-NyxID-* headers if the identity token is absent.
+ * Plain X-NyxID-* headers are disabled by default. They can be enabled only
+ * for explicitly trusted legacy in-cluster deployments.
  *
  * Route-level middlewares (nyxidAuthMiddleware / optionalAuthMiddleware) only
  * check whether auth was already set by the setup layer.
@@ -17,6 +18,16 @@ import type { Context, Next } from "hono";
 import { createMiddleware } from "hono/factory";
 import { createLogger } from "../shared/logger";
 import { AppError } from "../shared/types/index";
+import {
+  createIdentityTokenVerifier,
+  DEFAULT_NYXID_AUDIENCE,
+  DEFAULT_NYXID_CLOCK_SKEW_SECONDS,
+  DEFAULT_NYXID_ISSUER,
+  DEFAULT_NYXID_JWKS_URL,
+  type IdentityAssertionPayload,
+  type IdentityTokenVerifier,
+  type IdentityTokenVerifierOptions,
+} from "./nyxidIdentity";
 
 const logger = createLogger("nyxidAuth");
 
@@ -110,38 +121,6 @@ export type AuthVariables = {
 };
 
 // ---------------------------------------------------------------------------
-// JWT decode (no verification — proxy already verified the token)
-// ---------------------------------------------------------------------------
-
-interface IdentityAssertionPayload {
-  sub?: string;
-  email?: string;
-  name?: string;
-  roles?: string[];
-  groups?: string[];
-  permissions?: string[];
-  nyx_service_id?: string;
-}
-
-/**
- * Decode a JWT payload without signature verification.
- * Safe because NyxID proxy has already verified the token before forwarding.
- */
-function decodeJwtPayload(token: string): IdentityAssertionPayload | null {
-  try {
-    const parts = token.split(".");
-    if (parts.length !== 3) return null;
-    // Length-checked above — parts[1] is guaranteed defined. `!` is
-    // safe under noUncheckedIndexedAccess (#450).
-    const payload = Buffer.from(parts[1]!, "base64url").toString("utf-8");
-    return JSON.parse(payload) as IdentityAssertionPayload;
-  } catch (e) {
-    logger.warn({ error: (e as Error).message }, "Failed to decode identity token");
-    return null;
-  }
-}
-
-// ---------------------------------------------------------------------------
 // Setup middlewares — run once per request prefix to populate auth context
 // ---------------------------------------------------------------------------
 
@@ -161,16 +140,22 @@ export type AuthSeenHook = (auth: AuthContext) => void;
 export interface ProxyAuthSetupOptions {
   /** Fired after the auth context is set on the request. */
   onAuthSeen?: AuthSeenHook;
+  /** Inject a verifier in tests or a service-specific verifier implementation. */
+  identityVerifier?: IdentityTokenVerifier;
+  /** NyxID verification settings used when `identityVerifier` is not injected. */
+  identityVerification?: IdentityTokenVerifierOptions;
+  /** Explicit opt-in for legacy, unauthenticated identity headers. */
+  trustIdentityHeaders?: boolean;
 }
 
 /**
  * NyxID proxy auth setup.
  *
- * Primary: decodes X-NyxID-Identity-Token JWT to extract userId, email,
- * roles, and permissions.
+ * Primary: verifies X-NyxID-Identity-Token against NyxID's JWKS, then
+ * extracts userId, email, roles, and permissions.
  *
- * Fallback: reads X-NyxID-* headers (for backward compatibility or when
- * identity propagation mode is "headers").
+ * Fallback: reads X-NyxID-* headers only when the explicit
+ * `trustIdentityHeaders` option is enabled for a legacy in-cluster setup.
  *
  * If `onAuthSeen` is provided, it's invoked synchronously after the
  * auth context is set so callers can lazy-track which users have ever
@@ -179,6 +164,23 @@ export interface ProxyAuthSetupOptions {
  */
 export function proxyAuthSetup(options: ProxyAuthSetupOptions = {}) {
   const { onAuthSeen } = options;
+  const identityVerifier = options.identityVerifier ?? createIdentityTokenVerifier({
+    issuer: options.identityVerification?.issuer ?? DEFAULT_NYXID_ISSUER,
+    jwksUrl: options.identityVerification?.jwksUrl ?? DEFAULT_NYXID_JWKS_URL,
+    audience: options.identityVerification?.audience ?? DEFAULT_NYXID_AUDIENCE,
+    clockToleranceSeconds:
+      options.identityVerification?.clockToleranceSeconds ?? DEFAULT_NYXID_CLOCK_SKEW_SECONDS,
+    ...(options.identityVerification?.fetch
+      ? { fetch: options.identityVerification.fetch }
+      : {}),
+  });
+  const trustIdentityHeaders = options.trustIdentityHeaders ?? false;
+  if (trustIdentityHeaders) {
+    logger.warn(
+      "Legacy NyxID identity headers are enabled; restrict this deployment to the trusted in-cluster proxy",
+    );
+  }
+
   return createMiddleware<{ Variables: AuthVariables }>(async (c, next) => {
     // Capture the user's original access token if the proxy forwarded it.
     // Needed later to call NyxID /orgs on the caller's behalf. Optional —
@@ -192,31 +194,44 @@ export function proxyAuthSetup(options: ProxyAuthSetupOptions = {}) {
     // Try identity token first (JWT mode or Both mode)
     const identityToken = c.req.header("X-NyxID-Identity-Token");
     if (identityToken) {
-      const payload = decodeJwtPayload(identityToken);
-      if (payload?.sub) {
-        const email = payload.email ?? "";
-        // exactOptionalPropertyTypes (#657)
-        const auth: AuthContext = {
-          userId: payload.sub,
-          email,
-          displayName: payload.name ?? email ?? payload.sub,
-          roles: payload.roles ?? [],
-          permissions: payload.permissions ?? [],
-          ...(userAccessToken !== undefined ? { userAccessToken } : {}),
-        };
-        c.set("auth", auth);
-        try {
-          onAuthSeen?.(auth);
-        } catch (e) {
-          logger.warn({ error: (e as Error).message }, "onAuthSeen hook threw");
-        }
-        logger.debug({ userId: auth.userId, roles: auth.roles }, "Authenticated via identity token");
-        await next();
-        return;
+      let payload: IdentityAssertionPayload;
+      try {
+        payload = await identityVerifier.verify(identityToken);
+      } catch (error) {
+        logger.warn(
+          { error: error instanceof Error ? error.message : "unknown verification failure" },
+          "Rejected invalid NyxID identity token",
+        );
+        throw new AppError(401, "auth_invalid", "Invalid identity token");
       }
+
+      const email = payload.email ?? "";
+      // exactOptionalPropertyTypes (#657)
+      const auth: AuthContext = {
+        userId: payload.sub,
+        email,
+        displayName: payload.name || email || payload.sub,
+        roles: payload.roles,
+        permissions: payload.permissions,
+        ...(userAccessToken !== undefined ? { userAccessToken } : {}),
+      };
+      c.set("auth", auth);
+      try {
+        onAuthSeen?.(auth);
+      } catch (e) {
+        logger.warn({ error: (e as Error).message }, "onAuthSeen hook threw");
+      }
+      logger.debug({ userId: auth.userId, roles: auth.roles }, "Authenticated via identity token");
+      await next();
+      return;
     }
 
-    // Fallback to plain headers (Headers mode)
+    // Fallback to plain headers only for explicitly trusted legacy deployments.
+    if (!trustIdentityHeaders) {
+      await next();
+      return;
+    }
+
     const userId = c.req.header("X-NyxID-User-Id");
     if (userId) {
       const email = c.req.header("X-NyxID-User-Email") ?? "";

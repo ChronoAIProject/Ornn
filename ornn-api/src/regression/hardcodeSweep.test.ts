@@ -93,8 +93,13 @@ const URL_ALLOWLIST: Array<string | RegExp> = [
 // Specific filename → line allow-list for unavoidable hits (e.g.
 // inline default for a documented fallback). Keep small and explicit.
 const FILE_ALLOWLIST: Record<string, RegExp[]> = {
-  // None — leave empty; if a justified hit shows up, add a precise
-  // regex here with a reason in a code comment in the offending file.
+  // NyxID's hosted production issuer is the safe default for the verifier;
+  // operators can override both issuer and JWKS URL through infra/config.ts.
+  "ornn-api/src/middleware/nyxidIdentity.ts": [
+    /DEFAULT_NYXID_ISSUER/,
+    /DEFAULT_NYXID_AUDIENCE/,
+    /ornn-api-deployment-api-svc\.chronoai-platform\.svc\.cluster\.local:3802/,
+  ],
 };
 
 // Common LLM model ids we expect operator to configure via settings,
