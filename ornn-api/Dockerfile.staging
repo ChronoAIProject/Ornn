@@ -40,12 +40,14 @@ WORKDIR /app
 ARG AGENTSEAL_VERSION=0.9.6
 ENV AGENTSEAL_VERSION=${AGENTSEAL_VERSION}
 ENV AGENTSEAL_VENV=/opt/agentseal
+# Remove unused manuals in the install layer: OpenSSL documentation includes
+# example session keys that should not ship in a public application image.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends python3 python3-venv \
  && python3 -m venv "$AGENTSEAL_VENV" \
  && "$AGENTSEAL_VENV/bin/pip" install --no-cache-dir "agentseal==${AGENTSEAL_VERSION}" \
  && apt-get clean \
- && rm -rf /var/lib/apt/lists/*
+ && rm -rf /var/lib/apt/lists/* /usr/share/man
 
 # Skill-scan wrapper — invoked by ornn-api as `python scan_skill.py <zip>`.
 COPY ornn-api/scripts/scan_skill.py /opt/agentseal/scan_skill.py
