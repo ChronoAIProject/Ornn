@@ -11,10 +11,12 @@ import sys
 import tarfile
 
 try:
+    from .staging_release import validate_release, verify_release_source
     from .staging_artifact import producer_environment
     from .staging_scan_receipt import verify_image_scan_receipt
     from .staging_web_identity import LABEL as WEB_IDENTITY_LABEL, verify_web_receipt
 except ImportError:
+    from staging_release import validate_release, verify_release_source
     from staging_artifact import producer_environment
     from staging_scan_receipt import verify_image_scan_receipt
     from staging_web_identity import LABEL as WEB_IDENTITY_LABEL, verify_web_receipt
@@ -49,6 +51,8 @@ def guard(env, mode, machine, head, event=None):
         require(pr.get("base", {}).get("ref") == "develop", "Unexpected PR base")
         require(re.fullmatch(r"refs/pull/[1-9][0-9]*/merge", env.get("GITHUB_REF", "")),
                 "Requires PR merge ref")
+    elif event_name == "release":
+        validate_release(env, event)
     else:
         allowed_events = ("push",) if mode == "publish" else ("push", "workflow_dispatch")
         require(event_name in allowed_events, "Event cannot publish")
@@ -175,6 +179,8 @@ def main():
         event = json.loads(Path(env["GITHUB_EVENT_PATH"]).read_text())
         head = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
         guard(env, sys.argv[2], platform.machine(), head, event)
+        if env["GITHUB_EVENT_NAME"] == "release":
+            verify_release_source(env, event)
     elif command == "archive":
         tree = subprocess.check_output(["git", "rev-parse", "HEAD^{tree}"], text=True).strip()
         selection = Path("staging-artifact.json")

@@ -2,6 +2,8 @@ name: Staging native images
 
 "on":
   workflow_dispatch:
+  release:
+    types: [published]
   push:
     branches: [develop]
   pull_request:
@@ -24,6 +26,7 @@ jobs:
       github.repository == 'ChronoAIProject/Ornn' &&
       ((github.ref == 'refs/heads/develop' &&
         (github.event_name == 'push' || github.event_name == 'workflow_dispatch')) ||
+       (github.event_name == 'release' && github.event.action == 'published') ||
        (github.event_name == 'pull_request' &&
         github.event.pull_request.head.repo.full_name == github.repository))
     runs-on: ubuntu-24.04
@@ -36,6 +39,8 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
+          # Release guards verify the tag commit is reachable from origin/main.
+          fetch-depth: 0
       - name: Test staging provenance validation
         run: python3 -m unittest discover -s scripts/ci -p 'test_staging_*.py' -v
       - name: Install pinned image secret scanner
@@ -94,8 +99,8 @@ jobs:
     needs: image
     if: >-
       github.repository == 'ChronoAIProject/Ornn' &&
-      github.ref == 'refs/heads/develop' &&
-      github.event_name == 'push'
+      ((github.ref == 'refs/heads/develop' && github.event_name == 'push') ||
+       (github.event_name == 'release' && github.event.action == 'published'))
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
@@ -110,6 +115,8 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
+          # Release guards verify the tag commit is reachable from origin/main.
+          fetch-depth: 0
       - name: Select the successful native job's exact retained artifact
         id: artifact
         env:
