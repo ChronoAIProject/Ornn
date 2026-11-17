@@ -4366,6 +4366,19 @@
       "proposed_occurrence_ids": [
         "f53321b2f76493170e05b0eef0f3c69b0b28078ccc01278115bf589a5d6ca066"
       ]
+    },
+    {
+      "component": "web",
+      "path": "usr/share/nginx/html/assets/sections-DyhWJFCu.js",
+      "rule": "gitleaks.image-secret-assignment",
+      "file_sha256": "b651d6dc653d4aaeaf711424b4279c86738ca5cfedf2dec60a3a122d72394159",
+      "classification": "public-material",
+      "reason": "Exact scanner candidate capture is independently parsed as a noncomputed JavaScript MemberExpression at the same source offsets, not a credential literal.",
+      "candidate_sha256": "17b51881d8b1b599771cdabc403654dec66d1711c5a64d973a3864a9a99cd47d",
+      "line": 1,
+      "approved_occurrence_ids": [
+        "c9cef378ac19d473b0d2f5f7f0ecbbb29201633eadee993a09f65324b373eda0"
+      ]
     }
   ],
   "proposed_native_evidence_sha256": "1329a3782233e111ffa6c914fc0b7ac96b6fb34d6f2dfbcdf8b0f7132986111e"
