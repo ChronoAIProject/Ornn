@@ -1,0 +1,32 @@
+{
+  "verdict": "GO_CONTENT_POLICY",
+  "reviewer": "solution-architect-01",
+  "catalog_sha256": "bfdb8f657bdbf627ec92daf858edeb7cfd284c2b10e25970f2026a62afaffa07",
+  "adapter_files": {
+    "content_catalog.py": "3352b975fab061d43741b6eb0b4f738482484009b00ef045890b61d38837b803",
+    "content_identity.py": "36aee4fe568ccf5d4236535dd2ce5398a6a695c4939ea346af1f52c841ac0c1f",
+    "resolve_content_policy.py": "4bafd5766a28f6950aac6b0f17bcb2ae99dbe425485209dc3d985a04249efc3b"
+  },
+  "approved_occurrences": 371,
+  "catalog_rows": 369,
+  "primary_keys": 334,
+  "scope": "Exact catalog and adapter only; no changed web file approval or image publication approval.",
+  "verification": {
+    "author_tests_independently_run": 15,
+    "test_failures": 0,
+    "catalog_fidelity": "371/371 exact including classification/reason/candidate/line; byte-reproduction PASS",
+    "real_archive_identity_matching": {
+      "api": 242,
+      "web": 129,
+      "unresolved": 0
+    },
+    "native_final_assessment": "REQUIRED"
+  },
+  "integration_requirements": [
+    "Pin this confirmation, catalog and adapter hashes in the protected workflow.",
+    "Raw scanner exit2 or incomplete report must stop; raw exit0/1 only may reach the adapter.",
+    "Validate raw report, assessed report, packet, review, resolution and same archive identities before publication.",
+    "Preserve every detection and high-entropy advisory; any REAL or unresolved credential finding blocks.",
+    "Publish the exact scanned archive, never a rebuild."
+  ]
+}
