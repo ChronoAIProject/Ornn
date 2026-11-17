@@ -4241,6 +4241,19 @@
     },
     {
       "component": "web",
+      "path": "usr/share/nginx/html/assets/authStore-DHvwLZuO.js",
+      "rule": "gitleaks.image-secret-assignment",
+      "file_sha256": "4c05361ed83d36f9408eed615d4b8bd1c6829a25fa17d6cd482047e1fe7c6785",
+      "classification": "public-material",
+      "reason": "Exact candidate bytes match parsed JavaScript MemberExpression nodes; no credential literal.",
+      "candidate_sha256": "88174951e748feee9f67b0f99ddaa6678493f1faaa9f22fda016f0113ee5f311",
+      "line": 2,
+      "proposed_occurrence_ids": [
+        "5bd60ef38f65e530514eed5b119efcdc31428abb1e86faff834536e3772dc47e"
+      ]
+    },
+    {
+      "component": "web",
       "path": "usr/share/nginx/html/assets/sections-BaWMOWoK.js",
       "rule": "gitleaks.image-secret-assignment",
       "file_sha256": "e8007ee8c30665f0ee8c93ffb9cc884065789ebe91b38e8106a347eae4897170",
@@ -4251,6 +4264,20 @@
       "approved_occurrence_ids": [
         "2672372a8d2812f1876b43f5f46a68c8de5573897cd8f5bcbc3b81d9339ea399"
       ]
+    },
+    {
+      "component": "web",
+      "path": "usr/share/nginx/html/assets/sections-Cj16Ze5p.js",
+      "rule": "gitleaks.image-secret-assignment",
+      "file_sha256": "5fb56d8f3d11e48abbe17196a92a57068d90e67587aecb7f50ae8fa6eef08cbe",
+      "classification": "public-material",
+      "reason": "Exact candidate bytes match parsed JavaScript MemberExpression nodes; no credential literal.",
+      "candidate_sha256": "17b51881d8b1b599771cdabc403654dec66d1711c5a64d973a3864a9a99cd47d",
+      "line": 1,
+      "proposed_occurrence_ids": [
+        "f53321b2f76493170e05b0eef0f3c69b0b28078ccc01278115bf589a5d6ca066"
+      ]
     }
-  ]
+  ],
+  "proposed_native_evidence_sha256": "1329a3782233e111ffa6c914fc0b7ac96b6fb34d6f2dfbcdf8b0f7132986111e"
 }
