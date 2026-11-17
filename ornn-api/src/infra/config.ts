@@ -24,6 +24,11 @@
  */
 
 import { z } from "zod";
+import {
+  DEFAULT_NYXID_CLOCK_SKEW_SECONDS,
+  DEFAULT_NYXID_ISSUER,
+  DEFAULT_NYXID_JWKS_URL,
+} from "../middleware/nyxidIdentity";
 
 export interface SkillConfig {
   // Service
@@ -110,6 +115,14 @@ export interface SkillConfig {
 
   /** Master passphrase for AES-256-GCM at-rest secret encryption. Required, ≥32 chars; boot fails with ConfigError if missing/short. See ENCRYPTION_KEY in envSchema for full rationale. */
   readonly encryptionKey: string;
+
+  // NyxID identity assertion verification. Identity headers remain a
+  // deliberately opt-in compatibility path for legacy trusted networks.
+  readonly nyxidIssuer: string;
+  readonly nyxidJwksUrl: string;
+  readonly nyxidAudience?: string;
+  readonly nyxidClockSkewSeconds: number;
+  readonly trustIdentityHeaders: boolean;
 }
 
 /** Parses "true"/"false"/"1"/"0" into a real boolean. */
@@ -209,6 +222,21 @@ const envSchema = z.object({
   // rate-limited source reads. The `sourceSync` settings section overrides
   // this at runtime when an admin sets a value there.
   ORNN_SOURCE_SYNC_GITHUB_TOKEN: z.string().default(""),
+
+  // ---- NyxID identity assertion verification. ----
+  NYXID_ISSUER: z.string().url().default(DEFAULT_NYXID_ISSUER),
+  NYXID_JWKS_URL: z.string().url().default(DEFAULT_NYXID_JWKS_URL),
+  NYXID_AUDIENCE: z.preprocess(
+    (v) => (v === "" ? undefined : v),
+    z.string().min(1).optional(),
+  ),
+  NYXID_CLOCK_SKEW_SECONDS: z.coerce
+    .number()
+    .int()
+    .min(0)
+    .max(60)
+    .default(DEFAULT_NYXID_CLOCK_SKEW_SECONDS),
+  ORNN_TRUST_IDENTITY_HEADERS: booleanFromEnv,
 });
 
 /**
@@ -277,5 +305,11 @@ export function loadConfig(): SkillConfig {
       .replace(/\/+$/, ""),
 
     sourceSyncGithubToken: env.ORNN_SOURCE_SYNC_GITHUB_TOKEN.trim(),
+
+    nyxidIssuer: env.NYXID_ISSUER,
+    nyxidJwksUrl: env.NYXID_JWKS_URL,
+    ...(env.NYXID_AUDIENCE !== undefined ? { nyxidAudience: env.NYXID_AUDIENCE } : {}),
+    nyxidClockSkewSeconds: env.NYXID_CLOCK_SKEW_SECONDS,
+    trustIdentityHeaders: env.ORNN_TRUST_IDENTITY_HEADERS,
   };
 }

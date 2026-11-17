@@ -20,6 +20,10 @@ import { bootstrap } from "../../src/bootstrap";
 import type { SkillConfig } from "../../src/infra/config";
 import type { NyxLlmClient } from "../../src/clients/nyxid/llm";
 import type { Hono } from "hono";
+import type {
+  IdentityAssertionPayload,
+  IdentityTokenVerifier,
+} from "../../src/middleware/nyxidIdentity";
 
 export interface Harness {
   /** The live Hono app, ready for `app.request(path, init)`. */
@@ -43,10 +47,9 @@ export interface Harness {
 
 /**
  * Identity headers stamped by the NyxID proxy. Tests simulate an
- * authenticated caller by setting these directly on the request.
- *
- * Matches `ornn-api/src/middleware/proxyAuth.ts` — which reads the
- * upstream-injected headers and populates `c.var.auth`.
+ * authenticated caller by setting these directly on the request. The
+ * harness injects a payload-only verifier because it does not run a NyxID
+ * signer; production always uses the JWKS verifier.
  */
 export interface SimAuth {
   userId: string;
@@ -60,10 +63,10 @@ export function authHeaders(auth: SimAuth): Record<string, string> {
     sub: auth.userId,
     email: auth.email,
     name: auth.displayName ?? auth.email,
+    roles: [],
+    groups: [],
     permissions: auth.permissions ?? [],
   };
-  // Base64url encode a fake JWT payload — real signature verification is
-  // delegated to NyxID upstream so the middleware only decodes.
   const header = Buffer.from(JSON.stringify({ alg: "none", typ: "JWT" }))
     .toString("base64url");
   const payload = Buffer.from(JSON.stringify(identity)).toString("base64url");
@@ -72,8 +75,29 @@ export function authHeaders(auth: SimAuth): Record<string, string> {
     "x-nyxid-identity-token": token,
     "x-nyxid-user-id": auth.userId,
     "x-nyxid-user-email": auth.email,
+    ...(auth.displayName !== undefined ? { "x-nyxid-user-name": auth.displayName } : {}),
   };
 }
+
+const testIdentityVerifier: IdentityTokenVerifier = {
+  async verify(token): Promise<IdentityAssertionPayload> {
+    const payloadPart = token.split(".")[1];
+    if (!payloadPart) throw new Error("invalid test identity token");
+    const payload = JSON.parse(Buffer.from(payloadPart, "base64url").toString("utf8")) as Record<string, unknown>;
+    if (typeof payload.sub !== "string") throw new Error("invalid test subject");
+    const identity: IdentityAssertionPayload = {
+      sub: payload.sub,
+      roles: Array.isArray(payload.roles) ? payload.roles.filter((entry): entry is string => typeof entry === "string") : [],
+      groups: Array.isArray(payload.groups) ? payload.groups.filter((entry): entry is string => typeof entry === "string") : [],
+      permissions: Array.isArray(payload.permissions)
+        ? payload.permissions.filter((entry): entry is string => typeof entry === "string")
+        : [],
+    };
+    if (typeof payload.email === "string") identity.email = payload.email;
+    if (typeof payload.name === "string") identity.name = payload.name;
+    return identity;
+  },
+};
 
 /**
  * Optional per-harness dependency overrides. Mirrors `BootstrapOverrides`
@@ -129,6 +153,11 @@ export async function startHarness(
     maxCompressionRatio: 100,
     allowedOrigins: [],
     ornnPublicOrigin: "http://test.invalid",
+    ornnApiBaseUrl: "http://test.invalid",
+    nyxidIssuer: "https://test.invalid",
+    nyxidJwksUrl: "https://test.invalid/.well-known/jwks.json",
+    nyxidClockSkewSeconds: 5,
+    trustIdentityHeaders: false,
     encryptionKey: "test-encryption-key-32-chars-min-12345",
     posthogEnabled: false,
     posthogApiKey: null,
@@ -146,7 +175,9 @@ export async function startHarness(
   const { app, shutdown } = await bootstrap(
     config,
     // exactOptionalPropertyTypes (#657): only attach the key when set.
-    opts?.llmClient ? { llmClient: opts.llmClient } : undefined,
+    opts?.llmClient
+      ? { llmClient: opts.llmClient, identityVerifier: testIdentityVerifier }
+      : { identityVerifier: testIdentityVerifier },
   );
 
   // Separate client for test-side seeding. Bootstrap holds its own
