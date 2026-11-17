@@ -11,9 +11,11 @@ import sys
 import tarfile
 
 try:
+    from .staging_artifact import producer_environment
     from .staging_scan_receipt import verify_image_scan_receipt
     from .staging_web_identity import LABEL as WEB_IDENTITY_LABEL, verify_web_receipt
 except ImportError:
+    from staging_artifact import producer_environment
     from staging_scan_receipt import verify_image_scan_receipt
     from staging_web_identity import LABEL as WEB_IDENTITY_LABEL, verify_web_receipt
 
@@ -175,7 +177,9 @@ def main():
         guard(env, sys.argv[2], platform.machine(), head, event)
     elif command == "archive":
         tree = subprocess.check_output(["git", "rev-parse", "HEAD^{tree}"], text=True).strip()
-        metadata = verify_archive(directory, env, tree)
+        selection = Path("staging-artifact.json")
+        archive_env = producer_environment(env, json.loads(selection.read_text())) if selection.exists() else env
+        metadata = verify_archive(directory, archive_env, tree)
         print(metadata["imageId"])
     elif command == "inspect":
         image = json.loads((directory / "image-inspect.json").read_text())[0]
