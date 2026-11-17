@@ -61,6 +61,17 @@ jobs:
         env:
           COMPONENT: ${{ matrix.component }}
         run: bash scripts/ci/staging-scan-image.sh
+      - name: Retain redacted scan report for review
+        if: ${{ always() && hashFiles('staging-image-out/secret-scan/REPORT.json') != '' }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: ornn-scan-${{ matrix.component }}-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            staging-image-out/secret-scan/REPORT.json
+            staging-image-out/secret-scan/REPORT.txt
+            staging-image-out/scan-preflight.json
+          if-no-files-found: error
+          retention-days: 7
       - name: Retain exact image and metadata
         uses: actions/upload-artifact@v6
         with:
