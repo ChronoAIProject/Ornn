@@ -14,6 +14,7 @@ import { readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import pino from "pino";
 import { type SkillConfig } from "./infra/config";
+import type { IdentityTokenVerifier } from "./middleware/nyxidIdentity";
 
 const pkg = JSON.parse(readFileSync(join(import.meta.dir, "..", "package.json"), "utf-8"));
 
@@ -180,6 +181,8 @@ export interface BootstrapResult {
 export interface BootstrapOverrides {
   /** Substitute the shared LLM gateway client (integration tests only). */
   llmClient?: NyxLlmClient;
+  /** Substitute identity verification in integration tests without NyxID. */
+  identityVerifier?: IdentityTokenVerifier;
 }
 
 export async function bootstrap(
@@ -1038,11 +1041,19 @@ export async function bootstrap(
     });
   });
 
-  // ---- API routes — all traffic via NyxID proxy, trust proxy headers ----
+  // ---- API routes — all traffic via NyxID proxy, verify identity assertions ----
   const apiApp = new Hono();
   apiApp.use(
     "*",
     proxyAuthSetup({
+      ...(overrides?.identityVerifier ? { identityVerifier: overrides.identityVerifier } : {}),
+      identityVerification: {
+        issuer: config.nyxidIssuer,
+        jwksUrl: config.nyxidJwksUrl,
+        audience: config.nyxidAudience,
+        clockToleranceSeconds: config.nyxidClockSkewSeconds,
+      },
+      trustIdentityHeaders: config.trustIdentityHeaders,
       // Lazy user-directory upsert: every authenticated request refreshes
       // the user's row in the directory. Replaces the old admin-only
       // `admin_users` cache (issue #271). Fire-and-forget; failure is

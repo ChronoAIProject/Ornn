@@ -10,7 +10,7 @@ chrono-ornn is an AI skill platform. Users create, publish, search, and execute 
 
 | Service | How ornn-api talks to it |
 |---------|---------------------------|
-| NyxID | JWT verification (JWKS), API key introspection, LLM Gateway (Responses API) |
+| NyxID | Identity assertion JWT verification (JWKS), API key introspection, LLM Gateway (Responses API) |
 | chrono-sandbox | `POST /execute` — script execution with env vars, dependencies, file retrieval |
 | chrono-storage | Upload/download/delete skill packages (presigned URLs) |
 
@@ -20,6 +20,26 @@ chrono-ornn is an AI skill platform. Users create, publish, search, and execute 
 - Frontmatter field for dependencies: `runtime-dependency`
 - Category types: `plain`, `tool-based`, `runtime-based`, `mixed`
 - Output types: `text` (stdout), `file` (generated files retrieved via glob)
+
+## NyxID identity trust boundary
+
+The public Ornn API accepts a caller identity only from a signed NyxID
+identity assertion in `X-NyxID-Identity-Token`. `ornn-api` verifies the
+RS256 signature against `NYXID_JWKS_URL`, requires the configured
+`NYXID_ISSUER`, validates `exp` and `nbf` with the bounded
+`NYXID_CLOCK_SKEW_SECONDS` tolerance, and validates `aud` when
+`NYXID_AUDIENCE` is required and defaults to the exact base URL currently
+bound to `ornn-api` in NyxID. Operators must update it whenever the NyxID
+binding audience changes; missing or mismatched `aud` claims, JWKS failures,
+unknown key ids, malformed tokens, and claim failures are rejected with
+`401 auth_invalid`.
+
+The legacy scalar `X-NyxID-User-*` headers are not an authentication source
+by default. `ORNN_TRUST_IDENTITY_HEADERS=true` is reserved for an explicitly
+trusted, private in-cluster deployment and must never be enabled on the
+public production URL. NyxID's `ornn-api` binding is configured for
+`identity_propagation_mode=both`, so the signed assertion is available while
+legacy headers remain available for compatibility.
 
 ## Audit + analytics (PostHog)
 
