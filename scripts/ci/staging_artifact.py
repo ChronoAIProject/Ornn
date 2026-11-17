@@ -26,7 +26,14 @@ def select_artifact(run, jobs, artifacts, env):
             and run["event"] == env["GITHUB_EVENT_NAME"]
             and str(run["run_attempt"]) == env["GITHUB_RUN_ATTEMPT"], "Run identity mismatch")
     matches = [job for job in jobs if job["name"] == f"image ({component})"]
-    require(len(matches) == 1, "Missing or ambiguous native job")
+    require(bool(matches) and all(type(job["run_attempt"]) is int
+                                 and 0 < job["run_attempt"] <= int(env["GITHUB_RUN_ATTEMPT"])
+                                 for job in matches), "Missing or invalid native job attempt")
+    # Query all attempts because publish-only retries do not rerun successful builds.
+    # Never fall back past a newer failed native job to an older successful artifact.
+    newest = max(job["run_attempt"] for job in matches)
+    matches = [job for job in matches if job["run_attempt"] == newest]
+    require(len(matches) == 1, "Ambiguous native job")
     job = matches[0]
     require(job["status"] == "completed" and job["conclusion"] == "success",
             "Native build and scan must succeed")
@@ -83,7 +90,7 @@ def main():
     env = os.environ
     run_path = f"repos/{REPOSITORY}/actions/runs/{env['GITHUB_RUN_ID']}"
     run = github(run_path)
-    job_pages = github(run_path + "/jobs?filter=latest&per_page=100", pages=True)
+    job_pages = github(run_path + "/jobs?filter=all&per_page=100", pages=True)
     artifact_pages = github(run_path + "/artifacts?per_page=100", pages=True)
     selection = select_artifact(run, [j for page in job_pages for j in page["jobs"]],
                                 [a for page in artifact_pages for a in page["artifacts"]], env)

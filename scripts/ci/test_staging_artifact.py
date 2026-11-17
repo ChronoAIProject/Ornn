@@ -77,6 +77,21 @@ class ArtifactSelectionTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             producer_environment(dict(self.env, GITHUB_SHA="c" * 40), selection)
 
+    def test_all_attempts_never_fall_back_past_a_new_failed_build(self):
+        older = dict(self.job, run_attempt=1)
+        newer = dict(self.job, run_attempt=2, conclusion="failure", id=999)
+        with self.assertRaises(ValueError):
+            self.select(jobs=[older, newer])
+        self.env["GITHUB_RUN_ATTEMPT"] = "3"
+        self.run["run_attempt"] = 3
+        newer["conclusion"] = "success"
+        artifact = dict(self.artifact, name=self.artifact["name"][:-1] + "2")
+        selected = self.select(jobs=[older, newer], artifacts=[self.artifact, artifact])
+        self.assertEqual(selected["buildAttempt"], "2")
+        self.assertEqual(selected["jobId"], 999)
+        with self.assertRaises(ValueError):
+            self.select(jobs=[newer, newer], artifacts=[artifact])
+
     def test_cli_selects_artifact_by_id_and_retains_attempts(self):
         with tempfile.TemporaryDirectory() as temp:
             prior = Path.cwd()
