@@ -165,6 +165,17 @@
     },
     {
       "component": "api",
+      "path": "app/node_modules/.bun/jose@6.2.17/node_modules/jose/dist/webapi/key/import.js",
+      "rule": "content.private-key-header",
+      "file_sha256": "ab2f57a9db99e8d48451a8d0a8adf75379381f65b0e3e28ba6c02aa5bb3ee5fa",
+      "classification": "public-material",
+      "reason": "Exact jose runtime key-import code contains a marker-only string literal used to validate input formatting; the file has no private-key payload or complete private-key block.",
+      "approved_occurrence_ids": [
+        "1e6601e6cfecad3c5e40c61f09888fed9b5c646177f729cca321c515f5c924c7"
+      ]
+    },
+    {
+      "component": "api",
       "path": "app/node_modules/.bun/mongodb@7.4.0/node_modules/mongodb/lib/client-side-encryption/providers/azure.js",
       "rule": "gitleaks.image-secret-assignment",
       "file_sha256": "98f435edb82c064ca3a047f7915e0b86f6a5ffbae527d54d500a3f88569c022a",
@@ -789,6 +800,45 @@
     },
     {
       "component": "api",
+      "path": "app/ornn-api/src/bootstrap.ts",
+      "rule": "gitleaks.image-secret-assignment",
+      "file_sha256": "f6f886eae72d0145e83954b209dbba1e8d4858a52fd4b0fa16ed980ad1559fdb",
+      "classification": "public-material",
+      "reason": "Exact native member bytes equal the independently reviewed PR1259 source; the matched candidate is a public code expression rather than a credential literal.",
+      "approved_occurrence_ids": [
+        "0fb955b0427d94006bef61fdc79a47f719770026597022b3538f1d56a62fec1f"
+      ],
+      "candidate_sha256": "fd83a6213a285786df3d81b0bfccacef6f86d318c580fa0164f99aa2f0f22f09",
+      "line": 301
+    },
+    {
+      "component": "api",
+      "path": "app/ornn-api/src/bootstrap.ts",
+      "rule": "gitleaks.image-secret-assignment",
+      "file_sha256": "f6f886eae72d0145e83954b209dbba1e8d4858a52fd4b0fa16ed980ad1559fdb",
+      "classification": "public-material",
+      "reason": "Exact native member bytes equal the independently reviewed PR1259 source; the matched candidate is a public code expression rather than a credential literal.",
+      "approved_occurrence_ids": [
+        "0932b939f016f175ea14e062a2fcb380e518cc7d45a05d6abc06f5f064f758f1"
+      ],
+      "candidate_sha256": "3ce49ab29b8ded939b1c6545e36ce4eb32ae4d2ead0d8bfd6bbe4817f1f6460e",
+      "line": 308
+    },
+    {
+      "component": "api",
+      "path": "app/ornn-api/src/bootstrap.ts",
+      "rule": "gitleaks.image-secret-assignment",
+      "file_sha256": "f6f886eae72d0145e83954b209dbba1e8d4858a52fd4b0fa16ed980ad1559fdb",
+      "classification": "public-material",
+      "reason": "Exact native member bytes equal the independently reviewed PR1259 source; the matched candidate is a public code expression rather than a credential literal.",
+      "approved_occurrence_ids": [
+        "505fa23af8c733b9b8a77d9c6a60ad1ccd51e8e2909ed247dc15c477a69269d3"
+      ],
+      "candidate_sha256": "415404fac9ca15766828bca7ec7816dd74ff409779b80ea1761d3e1433e528a4",
+      "line": 364
+    },
+    {
+      "component": "api",
       "path": "app/ornn-api/src/clients/nyxid/base.ts",
       "rule": "gitleaks.image-secret-assignment",
       "file_sha256": "d06ce9f15d0656a0de1db83fdc07a99715c51f10eb0feed23bc6bd1144cc9353",
@@ -968,6 +1018,19 @@
       "approved_occurrence_ids": [
         "cec14ab5b537d449db0025875ade10ae584be0898e048e182e970986e95ab8c5"
       ]
+    },
+    {
+      "component": "api",
+      "path": "app/ornn-api/src/infra/config.ts",
+      "rule": "gitleaks.image-secret-assignment",
+      "file_sha256": "0acff64ca0dade7eb8d7cdf26b42f56f58a382799b59bdfc15196eaca62ce790",
+      "classification": "public-material",
+      "reason": "Exact native member bytes equal the independently reviewed PR1259 source; the matched candidate is a public code expression rather than a credential literal.",
+      "approved_occurrence_ids": [
+        "763fe7f489116df3138debab7b096f5cbad223505381478aec34b0cc0bfa8cf1"
+      ],
+      "candidate_sha256": "484c2970542f9efd23a35c41d00ee6b71f297254e5a8f82c98df95585bc47b2c",
+      "line": 295
     },
     {
       "component": "api",
