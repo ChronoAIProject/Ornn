@@ -99,6 +99,29 @@ class StagingImageTests(unittest.TestCase):
         (directory / "metadata.json").write_text(json.dumps(metadata))
         (directory / "image-inspect.json").write_text(json.dumps([self.image]))
         (directory / self.metadata["archive"]).write_bytes(self.archive_data)
+        (directory / "secret-scan.json").write_text(json.dumps({
+            "passed": True, "scanner": "gitleaks", "version": "8.30.1",
+            "archiveSha256": self.metadata["archiveSha256"],
+            "configDigest": self.metadata["configDigest"], "imageId": self.metadata["imageId"],
+            "inputs": {"layers": 1, "files": 1, "credentialPaths": 0},
+        }))
+
+    def test_archive_requires_scan_of_exact_image(self):
+        with tempfile.TemporaryDirectory() as temp:
+            directory = Path(temp)
+            self.write_archive(directory, self.metadata)
+            scan_path = directory / "secret-scan.json"
+            scan = json.loads(scan_path.read_text())
+            for field, value in (("passed", False), ("archiveSha256", "wrong"),
+                                 ("configDigest", "wrong"), ("imageId", "wrong"),
+                                 ("version", "unknown")):
+                with self.subTest(field=field):
+                    scan_path.write_text(json.dumps({**scan, field: value}))
+                    with self.assertRaises(ValueError):
+                        verify_archive(directory, self.env, self.tree)
+            scan_path.unlink()
+            with self.assertRaises(FileNotFoundError):
+                verify_archive(directory, self.env, self.tree)
 
     def test_archive_validates_before_load(self):
         with tempfile.TemporaryDirectory() as temp:

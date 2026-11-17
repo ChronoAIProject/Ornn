@@ -84,6 +84,18 @@ def verify_config(config, metadata, env):
     }, metadata, env)
 
 
+def verify_secret_scan(directory, metadata):
+    scan = json.loads((directory / "secret-scan.json").read_text())
+    require(scan.get("passed") is True, "Missing passing image secret scan")
+    require(scan.get("scanner") == "gitleaks" and scan.get("version") == "8.30.1",
+            "Unexpected image secret scanner")
+    for key in ("archiveSha256", "configDigest", "imageId"):
+        require(scan.get(key) == metadata[key], "Secret scan does not cover this image")
+    inputs = scan["inputs"]
+    require(inputs["layers"] > 0 and inputs["files"] > 0 and inputs["credentialPaths"] == 0,
+            "Incomplete image secret scan")
+
+
 def verify_archive(directory, env, tree):
     metadata = json.loads((directory / "metadata.json").read_text())
     component = env["COMPONENT"]
@@ -114,6 +126,7 @@ def verify_archive(directory, env, tree):
             "Packaging smoke is not service qualification")
     original = json.loads((directory / "image-inspect.json").read_text())[0]
     verify_loaded(original, metadata, env)
+    verify_secret_scan(directory, metadata)
     return metadata
 
 
