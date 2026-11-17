@@ -6,13 +6,14 @@ import io
 import json
 import os
 from pathlib import Path
+import secrets
 import tempfile
 import tarfile
 import unittest
 from unittest.mock import patch
 
 from staging_image import SOURCE, guard, main, publication, verify_archive, verify_loaded
-from staging_scan_receipt import PREFLIGHT, checksum, scanner_identity
+from staging_scan_receipt import PREFLIGHT, checksum, scanner_identity, verify_image_scan_receipt
 
 
 class StagingImageTests(unittest.TestCase):
@@ -199,6 +200,20 @@ class StagingImageTests(unittest.TestCase):
             with self.assertRaises(FileNotFoundError):
                 verify_archive(directory, self.env, self.tree)
 
+    def test_publication_scan_summary_excludes_detector_payloads(self):
+        with tempfile.TemporaryDirectory() as temp:
+            directory = Path(temp)
+            self.write_archive(directory, self.metadata)
+            path = directory / "secret-scan/REPORT.json"
+            report = json.loads(path.read_text())
+            marker = secrets.token_urlsafe(48)
+            report["unexpected_detector_payload"] = marker
+            path.write_text(json.dumps(report))
+            summary = verify_image_scan_receipt(directory, self.metadata)
+            self.assertFalse(marker in json.dumps(summary), "Detector payload escaped the metadata boundary")
+            self.assertEqual(set(summary), {"schema", "status", "complete", "reportSha256", "archiveSha256",
+                                           "gitleaksVersion", "policy", "scannerFiles", "layers", "preflightSha256"})
+
     def test_archive_validates_before_load(self):
         with tempfile.TemporaryDirectory() as temp:
             directory = Path(temp)
@@ -299,8 +314,8 @@ class StagingImageTests(unittest.TestCase):
                 receipt = json.loads((directory / "publication.json").read_text())
                 self.assertIn(receipt["image"], summary.read_text())
                 self.assertEqual(receipt["archiveSha256"], self.metadata["archiveSha256"])
-                self.assertEqual(receipt["secretScan"]["status"], "CLEAN")
-                self.assertEqual(receipt["secretScan"]["reportSha256"],
+                self.assertEqual(receipt["imageScan"]["status"], "CLEAN")
+                self.assertEqual(receipt["imageScan"]["reportSha256"],
                                  checksum(directory / "secret-scan/REPORT.json"))
                 # A replaced image must fail before a publication receipt is accepted.
                 changed = copy.deepcopy(self.image)

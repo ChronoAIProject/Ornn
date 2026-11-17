@@ -28,7 +28,7 @@ def scanner_identity(directory):
     return {str(path.relative_to(directory)): checksum(path) for path in files + modules}
 
 
-def verify_secret_scan(directory, metadata):
+def verify_image_scan_receipt(directory, metadata):
     preflight = json.loads((directory / "scan-preflight.json").read_text())
     require(preflight.get("schema") == "ornn-image-preflight-v1"
             and preflight.get("archiveSha256") == metadata["archiveSha256"]

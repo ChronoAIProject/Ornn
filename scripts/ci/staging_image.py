@@ -11,9 +11,9 @@ import sys
 import tarfile
 
 try:
-    from .staging_scan_receipt import verify_secret_scan
+    from .staging_scan_receipt import verify_image_scan_receipt
 except ImportError:
-    from staging_scan_receipt import verify_secret_scan
+    from staging_scan_receipt import verify_image_scan_receipt
 
 REPOSITORY = "ChronoAIProject/Ornn"
 SOURCE = f"https://github.com/{REPOSITORY}"
@@ -119,7 +119,7 @@ def verify_archive(directory, env, tree):
             "Packaging smoke is not service qualification")
     original = json.loads((directory / "image-inspect.json").read_text())[0]
     verify_loaded(original, metadata, env)
-    verify_secret_scan(directory, metadata)
+    verify_image_scan_receipt(directory, metadata)
     return metadata
 
 
@@ -173,7 +173,8 @@ def main():
         manifest = json.loads((directory / "remote-manifest.json").read_text())
         digest = (directory / "push-digest.txt").read_text().strip()
         receipt = publication(metadata, manifest, digest, env)
-        receipt["secretScan"] = verify_secret_scan(directory, metadata)
+        # Publish validated provenance fields only; detector payloads never enter this receipt.
+        receipt["imageScan"] = verify_image_scan_receipt(directory, metadata)
         (directory / "publication.json").write_text(json.dumps(receipt, indent=2) + "\n")
         with Path(env["GITHUB_STEP_SUMMARY"]).open("a") as summary:
             summary.write(f"### Staging {env['COMPONENT']}\n\n")
@@ -184,7 +185,7 @@ def main():
         print(receipt["image"])
     elif command == "scan":
         metadata = json.loads((directory / "metadata.json").read_text())
-        verify_secret_scan(directory, metadata)
+        verify_image_scan_receipt(directory, metadata)
         print("Complete CLEAN scan verified against the exact saved artifact and checkout")
     else:
         raise ValueError(f"Unknown command: {command}")
