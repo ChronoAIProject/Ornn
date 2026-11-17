@@ -103,6 +103,10 @@ jobs:
        (github.event_name == 'release' && github.event.action == 'published'))
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    # Serialize this workflow's writers to the same package/source tag.
+    concurrency:
+      group: ornn-publish-${{ matrix.component }}-${{ github.sha }}
+      cancel-in-progress: false
     permissions:
       contents: read
       packages: write
@@ -127,6 +131,17 @@ jobs:
         with:
           artifact-ids: ${{ steps.artifact.outputs.artifact-id }}
           path: staging-image-out/
+      - name: Install pinned digest-preserving image publisher
+        run: |
+          set -euo pipefail
+          tool_dir="$RUNNER_TEMP/ornn-crane"
+          mkdir -p "$tool_dir"
+          curl --fail --silent --show-error --location --retry 3 \
+            https://github.com/google/go-containerregistry/releases/download/v0.22.1/go-containerregistry_Linux_x86_64.tar.gz \
+            --output "$tool_dir/crane.tar.gz"
+          echo "0ab7a1d6932a213aed964ce97666c3077fe691c8606413674a8b3e0b9ec4cda0  $tool_dir/crane.tar.gz" | sha256sum --check --strict
+          tar -xzf "$tool_dir/crane.tar.gz" -C "$tool_dir" crane
+          echo "$tool_dir" >> "$GITHUB_PATH"
       - name: Publish ornn-api or ornn-web and record immutable digests
         env:
           COMPONENT: ${{ matrix.component }}
@@ -137,8 +152,15 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: ornn-published-${{ matrix.component }}-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: staging-image-out/publication.json
+          if-no-files-found: error
+          retention-days: 7
+      - name: Retain artifact selection and publication execution
+        uses: actions/upload-artifact@v6
+        with:
+          name: ornn-publication-execution-${{ matrix.component }}-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
-            staging-image-out/publication.json
             staging-artifact.json
+            staging-image-out/publication-action.json
           if-no-files-found: error
           retention-days: 7
