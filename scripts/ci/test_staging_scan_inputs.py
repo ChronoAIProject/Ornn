@@ -1,5 +1,6 @@
 """Archive boundary regressions for the inline image scan."""
 import io
+import gzip
 import json
 from pathlib import Path
 import tarfile
@@ -91,6 +92,27 @@ class ScanInputTests(unittest.TestCase):
             root = Path(temp)
             (root / "image.tar.gz").write_bytes(b"invalid archive")
             with self.assertRaises(tarfile.ReadError):
+                prepare(root / "image.tar.gz", root / "scan")
+
+    def test_plaintext_gzip_names_preserve_all_content(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            plain = b"auto\n/usr/share/man/man7/builtins.7.gz\n"
+            compressed = gzip.compress(b"compressed content")
+            saved_image(root / "image.tar.gz", [layer([
+                ("var/lib/dpkg/alternatives/builtins.7.gz", plain, "file"),
+                ("app/real.gz", compressed, "file"),
+            ])])
+            prepare(root / "image.tar.gz", root / "scan")
+            target = root / "scan/layers/0/var/lib/dpkg/alternatives/builtins.7_compressed.scan.txt"
+            self.assertEqual(target.read_bytes(), plain)
+            self.assertEqual((root / "scan/layers/0/app/real.gz").read_bytes(), compressed)
+
+    def test_invalid_binary_gzip_input_fails(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            saved_image(root / "image.tar.gz", [layer([("app/broken.gz", b"\xff\xfe\x00", "file")])])
+            with self.assertRaises(UnicodeDecodeError):
                 prepare(root / "image.tar.gz", root / "scan")
 
 

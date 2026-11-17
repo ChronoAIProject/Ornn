@@ -1,8 +1,10 @@
 """Prepare every saved image layer for scanning without following archive links."""
 
 import argparse
+import codecs
 import json
 from pathlib import Path, PurePosixPath
+import re
 import shutil
 import tarfile
 
@@ -22,6 +24,27 @@ def credential_path(path):
             or "kubeconfig" in name or name.startswith(("id_rsa", "id_ed25519"))
             or any(part in (".git", ".aws", ".kube", ".azure") for part in parts)
             or ".config/gcloud" in str(path))
+
+
+def normalize_plaintext_gzip_name(path):
+    # dpkg alternatives records can inherit a manual's .gz name while containing
+    # plain text. Scan every byte as text instead of sending it to a gzip decoder.
+    if path.suffix.lower() not in (".gz", ".tgz"):
+        return
+    with path.open("rb") as stream:
+        if stream.read(2) == b"\x1f\x8b":
+            return
+        stream.seek(0)
+        decoder = codecs.getincrementaldecoder("utf-8")()
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            decoder.decode(chunk)
+        decoder.decode(b"", final=True)
+    # The archive detector matches .gz anywhere in a filename, not just its end.
+    name = re.sub(r"\.(?:gz|tgz)", "_compressed", path.name, flags=re.IGNORECASE)
+    renamed = path.with_name(name + ".scan.txt")
+    if renamed.exists():
+        raise ValueError("Scan input filename collision")
+    path.rename(renamed)
 
 
 def prepare(archive_path, output):
@@ -67,6 +90,7 @@ def prepare(archive_path, output):
                             with layer.extractfile(member) as source, target.open("xb") as dest:
                                 shutil.copyfileobj(source, dest)
                             target.chmod(0o600)
+                            normalize_plaintext_gzip_name(target)
                             stats["files"] += 1
             (metadata / f"links-{number}.json").write_text(json.dumps(links))
             stats["layers"] += 1
