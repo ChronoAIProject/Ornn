@@ -1,6 +1,14 @@
 """Native job/artifact provenance must survive publish-only workflow retries."""
 
 import copy
+import json
+import os
+from pathlib import Path
+import tempfile
+from types import SimpleNamespace
+from unittest.mock import patch
+
+import staging_artifact
 import unittest
 
 from staging_artifact import producer_environment, select_artifact
@@ -68,6 +76,30 @@ class ArtifactSelectionTests(unittest.TestCase):
                 producer_environment(self.env, dict(selection, **{field: value}))
         with self.assertRaises(ValueError):
             producer_environment(dict(self.env, GITHUB_SHA="c" * 40), selection)
+
+    def test_cli_selects_artifact_by_id_and_retains_attempts(self):
+        with tempfile.TemporaryDirectory() as temp:
+            prior = Path.cwd()
+            try:
+                os.chdir(temp)
+                env = {**self.env, "GITHUB_OUTPUT": str(Path(temp) / "outputs")}
+                with patch.dict(os.environ, env), patch.object(staging_artifact, 'github', side_effect=[
+                        self.run, [{"jobs": [self.job]}], [{"artifacts": [self.artifact]}]]):
+                    staging_artifact.main()
+                self.assertEqual((Path(temp) / "outputs").read_text(), "artifact-id=789\n")
+                self.assertEqual(json.loads(Path("staging-artifact.json").read_text())["buildAttempt"], "1")
+            finally:
+                os.chdir(prior)
+
+    def test_github_transport_read_only_and_fails_closed(self):
+        with patch.object(staging_artifact.subprocess, 'run', return_value=SimpleNamespace(
+                returncode=0, stdout=b'[]')) as run:
+            self.assertEqual(staging_artifact.github('route', pages=True), [])
+            self.assertEqual(run.call_args.args[0],
+                             ['gh', 'api', '--method', 'GET', 'route', '--paginate', '--slurp'])
+        with patch.object(staging_artifact.subprocess, 'run', return_value=SimpleNamespace(returncode=1)):
+            with self.assertRaises(ValueError):
+                staging_artifact.github('route')
 
 
 if __name__ == "__main__":
