@@ -18,6 +18,8 @@ if test "$component" = api; then
       test "$(id -g)" = 1000
       test "$(bun --version)" = 1.3.14
       bun -e "import { z } from \"zod\"; if (!z.string().safeParse(\"packaging-smoke\").success || z.string().safeParse(42).success) process.exit(1)"
+      bun build src/index.ts --target bun --outfile /tmp/ornn-packaging-check.js >/dev/null
+      rm /tmp/ornn-packaging-check.js
       test -r /opt/agentseal/scan_skill.py
       /opt/agentseal/bin/python -c "import agentseal.skill_scanner; from importlib.metadata import version; assert version(\"agentseal\") == \"0.9.6\""
       test -w /app/data
@@ -26,6 +28,9 @@ if test "$component" = api; then
       touch /tmp/staging-ci-write-check
       rm /tmp/staging-ci-write-check
     '
+  docker run --rm --platform linux/amd64 --network none --cap-drop ALL \
+    --security-opt no-new-privileges:true -i --entrypoint /opt/agentseal/bin/python \
+    "$image" - < scripts/ci/staging-agentseal-smoke.py
 else
   container="ornn-staging-web-smoke-$$"
   cleanup() {

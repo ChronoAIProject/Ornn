@@ -19,14 +19,17 @@ COPY ornn-web/package.json ornn-web/
 COPY sdk/typescript/package.json sdk/typescript/
 
 # Test/build tooling is unnecessary in the API runtime and widens its contents.
-# Zod ships unused source tests containing sample JWTs. Keep these fixtures out
-# of the copied runtime dependencies; the package's exported code stays intact.
-RUN bun install --frozen-lockfile --production \
- && find /app/node_modules/.bun -type d \
-      -path '*/node_modules/zod/src/v4/mini/tests' -prune -exec rm -rf '{}' +
+# Install only the API workspace; web dependencies are not API runtime inputs.
+# Remove package documentation and source fixtures before the runtime copy.
+RUN bun install --frozen-lockfile --production --filter ornn-api \
+ && find /app/node_modules/.bun -type d \( -name test -o -name tests \
+      -o -name __tests__ -o -name __fixtures__ -o -name examples -o -name docs \) \
+      -prune -exec rm -rf '{}' + \
+ && find /app/node_modules/.bun -type f \( -name '*.map' -o -iname 'readme*' \
+      -o -name '.coveralls.yml' \) -delete
 
 # Runtime stage
-FROM oven/bun:1.3.14
+FROM oven/bun:1.3.14 AS runtime
 
 WORKDIR /app
 
@@ -51,7 +54,12 @@ RUN apt-get update \
  && python3 -m venv "$AGENTSEAL_VENV" \
  && "$AGENTSEAL_VENV/bin/pip" install --no-cache-dir "agentseal==${AGENTSEAL_VERSION}" \
  && apt-get clean \
- && rm -rf /var/lib/apt/lists/* /usr/share/man
+ && rm -rf /var/lib/apt/lists/* /usr/share/man /usr/share/info /usr/share/python-wheels \
+      "$AGENTSEAL_VENV/lib/python3.13/site-packages/pip" \
+      "$AGENTSEAL_VENV/lib/python3.13/site-packages/pip-"*.dist-info \
+ && find /usr/share/doc -type f ! -name copyright ! -name copyright.gz -delete \
+ && find /usr/lib/python3.13 "$AGENTSEAL_VENV/lib/python3.13" -type d \
+      \( -name __pycache__ -o -name tests -o -name test \) -prune -exec rm -rf '{}' +
 
 # Skill-scan wrapper — invoked by ornn-api as `python scan_skill.py <zip>`.
 COPY ornn-api/scripts/scan_skill.py /opt/agentseal/scan_skill.py
@@ -71,6 +79,21 @@ WORKDIR /app/ornn-api
 
 # Keep the staging data path writable by the runtime identity.
 RUN mkdir -p /app/data && chown -R 1000:1000 /app/data
+
+# Copy the cleaned runtime filesystem into the public artifact. Deleting inherited
+# manuals in a later layer would still expose them through docker save.
+FROM scratch
+COPY --from=runtime / /
+ARG AGENTSEAL_VERSION=0.9.6
+ENV PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bun-node-fallback-bin \
+    BUN_RUNTIME_TRANSPILER_CACHE_PATH=0 \
+    BUN_INSTALL_BIN=/usr/local/bin \
+    AGENTSEAL_VERSION=${AGENTSEAL_VERSION} \
+    AGENTSEAL_VENV=/opt/agentseal \
+    AGENTSEAL_PYTHON=/opt/agentseal/bin/python \
+    AGENTSEAL_SCRIPT=/opt/agentseal/scan_skill.py
+WORKDIR /app/ornn-api
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 
 LABEL org.opencontainers.image.source="https://github.com/ChronoAIProject/Ornn"
 USER 1000:1000
