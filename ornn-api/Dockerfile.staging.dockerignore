@@ -24,3 +24,14 @@ staging-image-out
 **/*.test.*
 **/*.spec.*
 **/__tests__
+**/*.p12
+**/*.pfx
+**/.netrc
+**/.pypirc
+**/pip.conf
+**/.docker
+**/.cargo/credentials*
+**/id_dsa*
+**/id_ecdsa*
+**/*service-account*.json
+**/*service_account*.json
