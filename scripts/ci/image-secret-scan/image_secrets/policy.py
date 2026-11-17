@@ -3,7 +3,8 @@
 import re
 from pathlib import PurePosixPath
 
-from .common import ScanError, digest_bytes, digest_file, json_bytes
+from .allowlist import Allowlist as Allowlist
+from .common import digest_bytes, digest_file
 
 PRIVATE = re.compile(rb"-----BEGIN (?:[A-Z0-9 ]+ )?PRIVATE KEY-----")
 SERVICE_ACCOUNT = re.compile(rb'"type"\s*:\s*"service_account"')
@@ -51,70 +52,6 @@ def path_rule(name):
     if ".cargo" in parts and base in ("credentials", "credentials.toml"):
         return "path.cargo-credentials"
     return None
-
-
-class Allowlist:
-    """Each exception binds one rule, one exact logical path and exact value bytes."""
-
-    def __init__(self, path):
-        self.entries = []
-        data = json_bytes(path.read_bytes())
-        if (
-            not isinstance(data, dict)
-            or data.get("version") != 1
-            or not isinstance(data.get("entries"), list)
-        ):
-            raise ScanError("invalid-allowlist")
-        ids = set()
-        for entry in data["entries"]:
-            fields = {"id", "rule", "scope", "path", "reason"}
-            if (
-                not isinstance(entry, dict)
-                or set(entry) not in (fields | {"match_sha256"}, fields | {"file_sha256"})
-                or not all(isinstance(v, str) for v in entry.values())
-            ):
-                raise ScanError("invalid-allowlist-entry")
-            checksum = entry.get("match_sha256", entry.get("file_sha256"))
-            if (
-                not re.fullmatch(r"[a-z0-9-]{1,80}", entry["id"])
-                or entry["id"] in ids
-                or not re.fullmatch(r"[a-f0-9]{64}", checksum)
-                or not entry["reason"].strip()
-                or entry["scope"] not in ("layer", "config", "archive")
-                or not entry["path"]
-                or any(c in entry["path"] for c in "*?[]")
-            ):
-                raise ScanError("invalid-allowlist-entry")
-            if (
-                "private-key" in entry["rule"]
-                or "service-account" in entry["rule"]
-                or entry["rule"]
-                in (
-                    "content.private-key-header",
-                    "content.service-account",
-                    "content.credential-url",
-                    "config.secret-assignment",
-                )
-            ):
-                raise ScanError("non-allowlistable-rule")
-            ids.add(entry["id"])
-            self.entries.append(entry)
-
-    def match(self, rule, location, value_digest, file_digest=None):
-        for entry in self.entries:
-            checksum_matches = (
-                entry.get("match_sha256") == value_digest
-                if "match_sha256" in entry
-                else entry["file_sha256"] == file_digest
-            )
-            if (
-                entry["rule"] == rule
-                and entry["scope"] == location["scope"]
-                and entry["path"] == location["path"]
-                and checksum_matches
-            ):
-                return entry
-        return None
 
 
 class Findings:

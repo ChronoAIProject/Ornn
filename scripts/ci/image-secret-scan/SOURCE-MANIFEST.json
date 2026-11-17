@@ -1,7 +1,8 @@
 {
   "schema": "scan-image-secrets-source-v1",
-  "at": "2026-11-17T11:38:01.332692+00:00",
-  "version": "1.0.1",
+  "version": "1.0.2",
+  "at": "2026-11-17T12:10:42.124047+00:00",
+  "review_state": "SA-01 review pending; not approved for adoption",
   "files": [
     {
       "path": "scan-image-secrets.sh",
@@ -12,7 +13,7 @@
     },
     {
       "path": "scan_image_secrets.py",
-      "sha256": "7ae785f81b61be6b06d6ffbe724656d1d3d7e2182b84886d82c50eb69ab21f23",
+      "sha256": "2bba4b08b9a1d18c7191a1cf9fd9db758662d901ccd91aa8826d019fd621c54f",
       "bytes": 8510,
       "lines": 204,
       "mode": "0o644"
@@ -33,16 +34,16 @@
     },
     {
       "path": "README.md",
-      "sha256": "303b9fb7d55a29e87bef796853d4931ceddd0b25fc15cb1e629db783619309ee",
-      "bytes": 12002,
-      "lines": 73,
+      "sha256": "d65f25479d9a772e05cb772c5879850c4ef38c40c5036a279286cad22c78cc6d",
+      "bytes": 14909,
+      "lines": 98,
       "mode": "0o644"
     },
     {
       "path": "CHANGELOG.md",
-      "sha256": "690eb9f1f95d11268b45841d96e6fb2dc5c5734cd65fb8a546fe9a12bd1dfa7d",
-      "bytes": 451,
-      "lines": 3,
+      "sha256": "a741407b9b5c14b4eabfe5bfa17d33f014d405a8a05d60cb97733ee230e63fe0",
+      "bytes": 1063,
+      "lines": 5,
       "mode": "0o644"
     },
     {
@@ -96,9 +97,9 @@
     },
     {
       "path": "image_secrets/containers.py",
-      "sha256": "195f5e56c269e412f85bf04de37aa5375e5eb886bc8c47bb4d526ad6da27b232",
-      "bytes": 5072,
-      "lines": 137,
+      "sha256": "611a1244db03a185237b45f9f6b570fde07fa5774ee0327c5693b3b06000960c",
+      "bytes": 5581,
+      "lines": 154,
       "mode": "0o644"
     },
     {
@@ -110,9 +111,9 @@
     },
     {
       "path": "image_secrets/policy.py",
-      "sha256": "7585aae72e0ec279733a64578c0a2ec5775347606a804ef071d9c4cc31a5b43f",
-      "bytes": 7194,
-      "lines": 178,
+      "sha256": "5a2bda32870ed6afb12de77c03940c72fc756e8ab45ce367ffc4195fb6692311",
+      "bytes": 4732,
+      "lines": 115,
       "mode": "0o644"
     },
     {
@@ -131,8 +132,8 @@
     },
     {
       "path": "tests/test_artifacts.py",
-      "sha256": "efa6ab4ba8f0dde0fc640ff72c5501b76efac773acca1acfed6d85f2e90c7132",
-      "bytes": 7943,
+      "sha256": "575c2bdbeb15b7a761ec9da00c14fd8b38621b73d901946d6b0159ee93293116",
+      "bytes": 7976,
       "lines": 183,
       "mode": "0o644"
     },
@@ -145,7 +146,7 @@
     },
     {
       "path": "tests/test_review_regressions.py",
-      "sha256": "106b34a6a98c9d08f59afb9f55d12d78e4a36c577aafef449689ea3df07de027",
+      "sha256": "ec3390264e3b979e35f1f7eff47c27c0aee876a8565b25ba46675ebebee17a12",
       "bytes": 7833,
       "lines": 196,
       "mode": "0o644"
@@ -156,20 +157,35 @@
       "bytes": 15089,
       "lines": 361,
       "mode": "0o644"
+    },
+    {
+      "path": "image_secrets/allowlist.py",
+      "sha256": "7259d311f7ba588440dc0184774cceafa0e75eb03e6318ad932fff096e409e8a",
+      "bytes": 4116,
+      "lines": 99,
+      "mode": "0o644"
+    },
+    {
+      "path": "image_secrets/zip_probe.py",
+      "sha256": "1201ee75c13216725977671914d98af939b9cf2f3f2f291bf7d871398e245596",
+      "bytes": 2139,
+      "lines": 54,
+      "mode": "0o644"
+    },
+    {
+      "path": "tests/test_allowlist_v2.py",
+      "sha256": "52df9f3357a498ba407d87fbb0081fa58def1d50922a1720a727d2abdaebbcaa",
+      "bytes": 5752,
+      "lines": 133,
+      "mode": "0o644"
+    },
+    {
+      "path": "tests/test_zip_probe.py",
+      "sha256": "b151b4586cd56f9714f5be3c4c84e36d59abc5b079e96b5579a22ae4b6db3b82",
+      "bytes": 5548,
+      "lines": 116,
+      "mode": "0o644"
     }
   ],
-  "supersedes_rejected_version": "1.0.0-review-candidate",
-  "review_state": "SA-01 re-verification pending",
-  "changed_from_rejected": [
-    "scan_image_secrets.py",
-    "README.md",
-    "CHANGELOG.md",
-    "image_secrets/backend.py",
-    "image_secrets/containers.py",
-    "image_secrets/engine.py",
-    "image_secrets/policy.py",
-    "tests/test_boundaries.py",
-    "tests/test_review_regressions.py",
-    "tests/test_scanner.py"
-  ]
+  "base_manifest_sha256": "ba825e7b47b2ed970da7ce88f495e43f8d1cbdd9a4988b2dd2942800cbf27454"
 }

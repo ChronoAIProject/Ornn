@@ -10,6 +10,7 @@ import threading
 import zipfile
 
 from .common import ScanError, archive_path, copy_stream
+from .zip_probe import prefixed_zip
 
 MAX_DEPTH = 3
 
@@ -45,7 +46,7 @@ def identify(path):
         else:
             return "tar"
     # Include self-extracting/prefixed ZIPs whose central directory identifies the format.
-    if zipfile.is_zipfile(path):
+    if prefixed_zip(path):
         return "zip"
     return None
 
@@ -64,6 +65,22 @@ def inspect_nested(stage, physical, location, depth):
         return
     if depth >= MAX_DEPTH:
         raise ScanError("nested-archive-depth-limit")
+    try:
+        decode_nested(stage, physical, location, depth, kind)
+    except (
+        OSError,
+        EOFError,
+        ValueError,
+        NotImplementedError,
+        zipfile.BadZipFile,
+        tarfile.TarError,
+        lzma.LZMAError,
+    ) as error:
+        # Decoder messages can contain private names/bytes; expose only the format.
+        raise ScanError("nested-" + kind + "-decode-failed") from error
+
+
+def decode_nested(stage, physical, location, depth, kind):
     if kind == "zip":
         with zipfile.ZipFile(physical) as archive:
             for index, member in enumerate(archive.infolist()):

@@ -89,7 +89,7 @@ class ArtifactTests(unittest.TestCase):
                     "entries": [
                         {
                             "id": "public-value",
-                            "rule": "gitleaks.example",
+                            "rule": "gitleaks.image-high-entropy",
                             "scope": "layer",
                             "path": "same.txt",
                             "reason": "Test public value",
@@ -101,8 +101,8 @@ class ArtifactTests(unittest.TestCase):
         )
         findings = Findings(Allowlist(allow))
         location = {"scope": "layer", "image": 0, "layer": 0, "entry": 0, "path": "same.txt"}
-        findings.add("gitleaks.example", location, digest(public_value), line=1)
-        findings.add("gitleaks.example", location, digest(secret_value), line=1)
+        findings.add("gitleaks.image-high-entropy", location, digest(public_value), line=1)
+        findings.add("gitleaks.image-high-entropy", location, digest(secret_value), line=1)
         self.assertEqual(len(findings.allowed), 1)
         self.assertEqual(len(findings.items), 1)
 

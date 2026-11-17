@@ -28,6 +28,11 @@ class StagingImageTests(unittest.TestCase):
         scanner_patch = patch("staging_scan_receipt.SCANNER", self.scanner)
         scanner_patch.start()
         self.addCleanup(scanner_patch.stop)
+        self.allowlist = self.scanner / "ornn-image-allowlist.json"
+        self.allowlist.write_text("test reviewed policy fixture")
+        policy_patch = patch("staging_scan_receipt.ALLOWLIST", self.allowlist)
+        policy_patch.start()
+        self.addCleanup(policy_patch.stop)
         self.env = {
             "GITHUB_ACTIONS": "true", "GITHUB_REPOSITORY": "ChronoAIProject/Ornn",
             "GITHUB_SHA": "a" * 40, "GITHUB_REF": "refs/heads/develop",
@@ -122,7 +127,7 @@ class StagingImageTests(unittest.TestCase):
             "gitleaks_version": "8.30.1", "archive_sha256": self.metadata["archiveSha256"],
             "scanner_files": scanner_identity(self.scanner),
             "policy": {"gitleaks_rules_sha256": checksum(self.scanner / "gitleaks.toml"),
-                       "allowlist_sha256": checksum(self.scanner / "allowlist.json")},
+                       "allowlist_sha256": checksum(self.allowlist)},
             "inventory": {"images": [{"index": 0, "config_digest": self.metadata["configDigest"],
                                       "layers": 1}],
                           "layers": [{"image": 0, "index": 0, "diff_id": self.metadata["layerDiffIds"][0]}],
@@ -178,7 +183,7 @@ class StagingImageTests(unittest.TestCase):
     def test_scan_rejects_changed_scanner_rules_or_allowlist(self):
         with tempfile.TemporaryDirectory() as temp:
             directory = Path(temp)
-            for name in ("scan_image_secrets.py", "gitleaks.toml", "allowlist.json"):
+            for name in ("scan_image_secrets.py", "gitleaks.toml", "ornn-image-allowlist.json"):
                 self.write_archive(directory, self.metadata)
                 with (self.scanner / name).open("a") as stream:
                     stream.write("changed policy")

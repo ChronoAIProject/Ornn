@@ -74,7 +74,7 @@ class ReviewRegressions(unittest.TestCase):
         report = json.loads((output / "REPORT.json").read_bytes())
         all_output = console + (output / "REPORT.json").read_bytes() + (output / "REPORT.txt").read_bytes()
         self.assertEqual(code, expected, report.get("error"))
-        self.assertEqual(report["scanner_version"], "1.0.1")
+        self.assertEqual(report["scanner_version"], "1.0.2")
         self.assertEqual(report["complete"], expected != 2)
         if private_value:
             self.assertFalse(

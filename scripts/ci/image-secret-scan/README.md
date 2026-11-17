@@ -1,4 +1,4 @@
-# Public image secret gate — version 1.0.1
+# Public image secret gate — version 1.0.2
 
 `scan-image-secrets.sh` inspects a saved image before publication. It scans **every layer independently**, including bytes later overwritten or deleted by whiteouts, and the complete image configuration. No image executable or container is started. Exit **0** means the configured scan completed without unresolved findings; **1** means findings; **2** means a scanner error or incomplete scan. Both 1 and 2 must block every push/publication path.
 
@@ -23,7 +23,7 @@ A local Docker export contains only the platforms available in that daemon. A mu
 
 ## Inspection and output contract
 
-Each layer is unpacked into its own private stage. Each tar member gets an independent synthetic file, so duplicate names cannot overwrite previous members. Reports use numeric image/layer/entry/member locators and SHA256 hashes of logical paths; original path strings are never published, including on errors. This representation avoids following links and prevents image-supplied `.gitleaksignore`, `.gitleaks.toml`, `.git`, vendor directories or file extensions from disabling scanning. A separate decoder identifies ZIP, gzip, tar (including legacy tar), bzip2, xz and zstd by magic bytes/header checksums, then recursively inspects their contents regardless of filename or suffix. Gitleaks receives each decoded file as a synthetic text file; its extension-based archive dispatch is disabled. Recognized malformed, encrypted or unsupported containers fail closed. ZIP central directories also identify prefixed/self-extracting ZIPs. Links, tar metadata and whiteouts are inventoried without creating devices or following symlinks/hardlinks. Empty regular whiteouts are deletion markers; they are counted rather than misclassified as empty private-key files. Earlier layer bytes still get scanned.
+Each layer is unpacked into its own private stage. Each tar member gets an independent synthetic file, so duplicate names cannot overwrite previous members. Reports use numeric image/layer/entry/member locators and SHA256 hashes of logical paths; original path strings are never published, including on errors. This representation avoids following links and prevents image-supplied `.gitleaksignore`, `.gitleaks.toml`, `.git`, vendor directories or file extensions from disabling scanning. A separate decoder identifies ZIP, gzip, tar (including legacy tar), bzip2, xz and zstd by magic bytes/header checksums, then recursively inspects their contents regardless of filename or suffix. Gitleaks receives each decoded file as a synthetic text file; its extension-based archive dispatch is disabled. Recognized malformed, encrypted or unsupported containers fail closed. ZIP central-directory structure also identifies prefixed/self-extracting ZIPs consistently across Python versions. An incidental ZIP end marker in an ordinary binary (including Python bytecode) is not sufficient: those bytes remain fully subject to raw Gitleaks and targeted scanning. Recognized malformed ZIPs still fail closed; ZIP64 records are delegated to the standard-library decoder. Decode errors name the format with a fixed identifier such as `nested-zip-decode-failed`, never file contents. Links, tar metadata and whiteouts are inventoried without creating devices or following symlinks/hardlinks. Empty regular whiteouts are deletion markers; they are counted rather than misclassified as empty private-key files. Earlier layer bytes still get scanned.
 
 The full config JSON is scanned, plus decoded strings and assignments for **all** config properties: ENV, Labels, Cmd, Entrypoint, complete history/`created_by`, recorded ARG values, and arbitrary extensions. Joined command arrays catch split `--password VALUE` arguments. Only ARG values actually recorded in the image can be inspected; use BuildKit secret mounts instead of ARG/ENV for build credentials.
 
@@ -48,7 +48,32 @@ Each entry must bind an exact `rule`, `scope`, logical `path`, unique `id`, none
 - `match_sha256`: SHA256 of the exact UTF-8 value Gitleaks identified (or complete file bytes for a targeted-path rule).
 - `file_sha256`: SHA256 of a fully reviewed exact file, permitting only that rule in that exact path/content. This supports public certificate-only PEMs, checksums and public bundle constants without a wildcard directory exemption. For a decoded nested finding this is the decoded member file hash, and the exact logical path includes the full `container!member` chain.
 
-Rules never use path globs or regex value exemptions. A changed value or changed file invalidates the exception. `content.private-key-header`, `content.service-account`, `content.credential-url` and `config.secret-assignment` cannot be allowlisted. Do not treat an unknown token as public just to turn CI green. Public certificate path and entropy findings need separate rule-specific entries; this does not exempt a private key header in the same file. Approved exceptions appear in the report by allowlist ID, and the complete allowlist/rules hashes bind the scan policy. Hash known-public material locally; do not add secret values to the allowlist or print raw detector reports.
+Version 1 exact-entry policies remain supported. In 1.0.2 the only exact-entry rules accepted are `gitleaks.image-high-entropy`, `gitleaks.generic-api-key` and `path.key-or-certificate`. All provider-specific credentials, PATs, cloud keys, private-key headers, service-account content, credential URLs, secret assignments and credential-file paths are non-allowlistable. Unknown rules are rejected, so a newly added provider rule cannot inherit an exception. A changed value or changed file invalidates an exact exception. Do not treat an unknown token as public just to turn CI green. Public certificate path and entropy findings need separate rule-specific entries; this does not exempt a private key header in the same file. Approved exceptions appear in the report by allowlist ID, and the complete allowlist/rules hashes bind the scan policy. Hash known-public material locally; do not add secret values to the allowlist or print raw detector reports.
+
+### Reviewed generic-entropy glob entries (policy version 2)
+
+Version 2 also accepts `path_glob` entries **only for `gitleaks.image-high-entropy`**, with a mandatory exact `file_sha256`, nonempty `reason` and `review` reference. These calibrations apply after every detector has run; they never skip a file, its archive decoding, config scanning, or another rule. The review must cover the full exact file. File hashes are scanner-computed SHA256 values, not trusted hashes inferred from asset filenames. Any content change requires a fresh entry and review.
+
+Globs must have at least two concrete parent directories and may use `*` or `?` only in a leaf filename containing a dot. Directory wildcards, `**`, character classes, traversal and nested-container `!` paths are refused. Thus `usr/share/nginx/html/assets/*.js` or `app/dist/*.map` can match only reviewed exact files in those directories, never subdirectories or decoded members. Lockfile checksum findings can use an exact value/path entry; suppressing a whole changing lockfile is not supported.
+
+Illustrative schema below is **not an active exception**. Replace the file hash with the reviewed file's actual digest and bind an actual reviewer receipt before adoption. SA-01 must approve each Ornn entry on the grouped triage; the supplied default policy adds **no Ornn-specific exceptions**.
+
+```json
+{
+  "version": 2,
+  "entries": [{
+    "id": "reviewed-public-static-constant",
+    "rule": "gitleaks.image-high-entropy",
+    "scope": "layer",
+    "path_glob": "usr/share/nginx/html/assets/*.js",
+    "file_sha256": "REPLACE_WITH_REVIEWED_FILE_SHA256",
+    "reason": "Describe the public constants and exact-file inspection.",
+    "review": "Reference the approving review and its digest."
+  }]
+}
+```
+
+A `review` string records provenance; the scanner cannot authenticate a reviewer. The repository's protected review process must authorize the policy and protect its hash. The report binds the entire policy by SHA256 and records each applied exception ID with opaque path/file identity. Even if a reviewed entropy file contains a PAT or private-key header, the credential-specific finding remains unresolved and blocks publication.
 
 ## GitHub Actions: scan and publish the same saved artifact
 

@@ -6,6 +6,7 @@ from pathlib import Path
 
 SCANNER = Path(__file__).resolve().parent / "image-secret-scan"
 PREFLIGHT = Path(__file__).resolve().parent / "staging_scan_inputs.py"
+ALLOWLIST = Path(__file__).resolve().parent / "ornn-image-allowlist.json"
 
 
 def checksum(path):
@@ -51,7 +52,7 @@ def verify_image_scan_receipt(directory, metadata):
             "Archive changed during image secret scan")
     policy = {
         "gitleaks_rules_sha256": checksum(SCANNER / "gitleaks.toml"),
-        "allowlist_sha256": checksum(SCANNER / "allowlist.json"),
+        "allowlist_sha256": checksum(ALLOWLIST),
     }
     require(scan.get("policy") == policy, "Secret scan policy differs from this checkout")
     require(scan.get("scanner_files") == scanner_identity(SCANNER),
