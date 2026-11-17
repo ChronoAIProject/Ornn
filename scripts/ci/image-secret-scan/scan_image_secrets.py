@@ -16,10 +16,11 @@ from image_secrets.archive import ImageArchive
 from image_secrets.backend import Gitleaks
 from image_secrets.common import Budget, ScanError, digest_file, write_json
 from image_secrets.engine import scan_archive
+from image_secrets.gate import assess
 from image_secrets.policy import Allowlist, Findings
 
 HERE = Path(__file__).resolve().parent
-VERSION = "1.0.2"
+VERSION = "1.0.3"
 
 
 class SafeArgumentParser(argparse.ArgumentParser):
@@ -66,6 +67,10 @@ def arguments(argv):
         "--output", required=True, type=Path, help="New directory for sanitized JSON/text reports"
     )
     parser.add_argument("--allowlist", type=Path, default=HERE / "allowlist.json")
+    parser.add_argument("--blocking-rules", choices=["all", "credential"], default="all")
+    parser.add_argument(
+        "--classifications", type=Path, help="SA-01 classifications bound to this exact archive"
+    )
     parser.add_argument("--tmpdir", type=Path, help="Private temporary parent with sufficient disk space")
     parser.add_argument("--max-bytes", type=int, default=20 * 1024**3)
     parser.add_argument("--max-entries", type=int, default=1000000)
@@ -89,15 +94,22 @@ def report_text(result):
         "Image secret scan: " + result["status"],
         f"Findings: {len(result['findings'])}; allowlisted: {len(result['allowlisted'])}",
     ]
+    if "counts" in result:
+        counts = result["counts"]
+        lines.append(
+            f"Blocking mode: {result['blocking_rules']}; blocking: {counts['blocking']}; "
+            f"advisory: {counts['advisory']}; reviewed: {counts['reviewed']}"
+        )
     if result.get("error"):
         lines.append("Scanner error: " + result["error"])
-    for item in result["findings"][:100]:
+    displayed = result.get("blocking_findings", result["findings"])
+    for item in displayed[:100]:
         # JSON quoting prevents hostile filenames from injecting terminal control sequences.
         lines.append(
             f"image={item['image']} layer={item['layer']} entry={item['entry']} "
             f"{item['rule']} {json.dumps(item['path'], ensure_ascii=True)}"
         )
-    if len(result["findings"]) > 100:
+    if len(displayed) > 100:
         lines.append("Additional finding paths are in REPORT.json.")
     return "\n".join(lines) + "\n"
 
@@ -113,6 +125,7 @@ def main(argv=None):
         "findings": [],
         "allowlisted": [],
         "complete": False,
+        "blocking_rules": args.blocking_rules,
     }
     findings = None
     try:
@@ -121,6 +134,8 @@ def main(argv=None):
         print('{"status":"ERROR","error":"output-must-be-new-directory"}', file=sys.stderr)
         return 2
     try:
+        if args.classifications and args.blocking_rules != "credential":
+            raise ScanError("classifications-require-credential-mode")
         if min(args.max_bytes, args.max_entries, args.timeout) <= 0:
             raise ScanError("invalid-resource-limit")
         if args.expected_archive_sha256 and not re.fullmatch(r"[a-f0-9]{64}", args.expected_archive_sha256):
@@ -173,6 +188,15 @@ def main(argv=None):
     if findings:
         result["findings"] = findings.safe_items(findings.items)
         result["allowlisted"] = findings.safe_items(findings.allowed)
+    if result["complete"]:
+        try:
+            assess(result, args.blocking_rules, args.classifications)
+        except (Exception, KeyboardInterrupt) as error:  # noqa: BLE001 -- never disclose packet values
+            result["status"] = "ERROR"
+            result["complete"] = False
+            result["error"] = (
+                str(error) if isinstance(error, ScanError) else "classification-operation-failed"
+            )
     result["finished_at"] = now()
     result["exit_code"] = {"CLEAN": 0, "FINDINGS": 1, "ERROR": 2}[result["status"]]
     try:
@@ -189,6 +213,8 @@ def main(argv=None):
                 "exit_code": result["exit_code"],
                 "findings": len(result["findings"]),
                 "complete": result["complete"],
+                "blocking_rules": result["blocking_rules"],
+                "counts": result.get("counts"),
             }
         )
     )

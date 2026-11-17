@@ -1,5 +1,6 @@
 """Detection policy and narrow reviewed exceptions, independent of archive traversal."""
 
+import json
 import re
 from pathlib import PurePosixPath
 
@@ -63,6 +64,8 @@ class Findings:
 
     def add(self, rule, location, value_digest=None, line=None, file_digest=None):
         item = dict(location, rule=rule)
+        if value_digest:
+            item["candidate_sha256"] = value_digest
         if file_digest:
             item["file_sha256"] = file_digest
         if line is not None:
@@ -111,5 +114,8 @@ class Findings:
             item = original.copy()
             checksum = digest_bytes(item["path"].encode("utf-8", "surrogatepass"))
             item["path"] = "path-sha256:" + checksum
+            item["finding_id"] = digest_bytes(
+                json.dumps(item, sort_keys=True, separators=(",", ":")).encode()
+            )
             output.append(item)
         return output

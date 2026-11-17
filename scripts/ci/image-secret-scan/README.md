@@ -1,6 +1,6 @@
-# Public image secret gate — version 1.0.2
+# Public image secret gate — version 1.0.3
 
-`scan-image-secrets.sh` inspects a saved image before publication. It scans **every layer independently**, including bytes later overwritten or deleted by whiteouts, and the complete image configuration. No image executable or container is started. Exit **0** means the configured scan completed without unresolved findings; **1** means findings; **2** means a scanner error or incomplete scan. Both 1 and 2 must block every push/publication path.
+`scan-image-secrets.sh` inspects a saved image before publication. It scans **every layer independently**, including bytes later overwritten or deleted by whiteouts, and the complete image configuration. No image executable or container is started. Exit **0** means the configured scan completed with no **blocking** findings; **1** means blocking findings; **2** means a scanner or classification error. The default blocking mode is `all`, preserving the existing strict behavior. Both 1 and 2 must block every push/publication path.
 
 This is the shared local deliverable requested for CMA, Ornn, chrono-bucket and chrono-sandbox. Vendor the **complete reviewed directory**, including Python modules, Gitleaks rules and allowlist, into each repository through its normal review workflow. Do not copy only the shell entry point. This task has no assigned Git repository; the lead routes this bundle to repository owners and SA-01 for review.
 
@@ -75,11 +75,56 @@ Illustrative schema below is **not an active exception**. Replace the file hash 
 
 A `review` string records provenance; the scanner cannot authenticate a reviewer. The repository's protected review process must authorize the policy and protect its hash. The report binds the entire policy by SHA256 and records each applied exception ID with opaque path/file identity. Even if a reviewed entropy file contains a PAT or private-key header, the credential-specific finding remains unresolved and blocks publication.
 
+## Owner-authorized Policy A (`--blocking-rules=credential`)
+
+Version 1.0.3 implements the owner's 20:48 publication decision. This mode is explicit and never activated by image contents. Default `--blocking-rules=all` still blocks all unresolved detector findings.
+
+```bash
+./scan-image-secrets.sh candidate.tar --input-kind archive --output policy-a-report \
+  --blocking-rules=credential --allowlist ornn-reviewed-allowlist.json
+```
+
+Detection is identical in both modes: every layer, deleted content, config/history, nested decoding, integrity check, targeted detector and default/entropy Gitleaks rule still runs. Any scanner error remains exit2. The only automatically advisory rule is **`gitleaks.image-high-entropy`**. Provider/cloud tokens, PATs, JWTs, private-key headers, credential URLs, generic API keys, secret/hex assignments and unknown rules remain blocking. Unresolved path heuristics remain blocking pending proof of their contents; a `.pem` suffix alone is not proof of a public certificate.
+
+`REPORT.json` preserves the full `findings` and `allowlisted` arrays, and adds `blocking_rules`, `blocking_findings`, `advisory_findings`, `reviewed_classifications` and `counts`. `CLEAN`/exit0 in credential mode means the **Policy A blocking set is empty**, not that no detector findings exist. Generic entropy remains recorded. The text report prioritizes blocking paths/rules and gives separate counts. Consumers must validate the requested mode, `complete`, `exit_code`, empty `blocking_findings`, archive hash and policy hashes; they must not require the full `findings` array to be empty in Policy A.
+
+### Exact per-finding review packets
+
+SA-01 must approve every classification individually. Use `--classifications reviewed-classifications.json` only after its **exact file hash** is approved. This is separate from the existing exact-value allowlist. No credential-specific rule is disabled by a glob or directory exemption.
+
+A packet binds the archive SHA256, scanner version, Gitleaks-rule hash, allowlist hash and individual finding IDs from that artifact's 1.0.3 report. A finding ID covers the opaque path, rule, numeric image/layer/member location, line, available file hash and candidate hash. Different candidates on the same line have different IDs. Packets cannot transfer to rebuilt images or changed policies; stale or duplicate entries, unknown labels, missing review metadata and malformed packets fail with exit2. Unclassified findings continue to block.
+
+```json
+{
+  "schema": "image-secret-classifications-v1",
+  "archive_sha256": "COPY_FROM_THE_EXACT_REPORT",
+  "scanner_version": "1.0.3",
+  "gitleaks_rules_sha256": "COPY_FROM_REPORT_POLICY",
+  "allowlist_sha256": "COPY_FROM_REPORT_POLICY",
+  "review": {
+    "reviewer": "solution-architect-01",
+    "reference": "REFERENCE_TO_APPROVING_REVIEW",
+    "report_sha256": "SHA256_OF_APPROVING_REVIEW"
+  },
+  "entries": [{
+    "finding_id": "COPY_FROM_THE_EXACT_FINDING",
+    "classification": "public-material",
+    "reason": "Describe the exact inspected public content without values."
+  }]
+}
+```
+
+Permitted classifications are `library-example`, `test-fixture`, `public-material` and `REAL`. The first three record a reviewed non-blocking disposition; **REAL always blocks**, even when the original rule was generic entropy. Public certificates/signing keys become non-blocking only through existing exact approved policy entries or an exact public-material classification, while actual private keys stay blocking. No real image classifications ship in the default bundle.
+
+Review metadata is provenance, not a cryptographic reviewer authentication scheme. The protected workflow must enforce SA-01 approval of the exact packet and protect it as it protects scanner/allowlist code. The scanner exports only the packet/review hashes and classification labels; it never exports reasons or reference text, which may contain sensitive data. Every classification remains visible with its finding in the receipt.
+
+Prepare review packets from a complete scan of the **saved artifact**, then re-scan that same artifact with the approved packet. Do not rebuild between review, scan and push. Prune unnecessary tests/docs/examples before their layer is committed, or omit them from the runtime-stage copy: a deletion in a later layer does not erase their earlier bytes.
+
 ## GitHub Actions: scan and publish the same saved artifact
 
 [github-actions-step.yml](github-actions-step.yml) is ready to paste as a job step after checkout, approved dependency setup and registry login. Set `PUBLIC_STAGING_IMAGE_REPOSITORY`, and vendor this bundle at `.github/scripts/scan-image-secrets`. Adjust only the authorized build context/Dockerfile as required by the application.
 
-The step builds once with a unique publication tag, records the immutable local ID, saves an archive, scans that archive, validates the report against its SHA256, reloads the same archive, checks the restored ID, and pushes. **There is no rebuild between scan and push.** Keep these operations in one job with exclusive ownership of the tag. Protect the scanner, rules and allowlist with code review; untrusted PR code must not be able to edit the gate in a privileged publishing job. Every alias/multi-platform/publication workflow must use the same reviewed gate, including manual reruns. Do not use `continue-on-error`, `|| true`, or a later unconditional push.
+The step defaults to `all`. Set `IMAGE_SECRET_BLOCKING_RULES=credential` only under the owner-authorized policy; optionally set `IMAGE_SECRET_CLASSIFICATIONS` to the approved packet for this exact saved artifact. The binding check verifies the requested mode and empty blocking set. The step builds once with a unique publication tag, records the immutable local ID, saves an archive, scans that archive, validates the report against its SHA256, reloads the same archive, checks the restored ID, and pushes. **There is no rebuild between scan and push.** Keep these operations in one job with exclusive ownership of the tag. Protect the scanner, rules and allowlist with code review; untrusted PR code must not be able to edit the gate in a privileged publishing job. Every alias/multi-platform/publication workflow must use the same reviewed gate, including manual reruns. Do not use `continue-on-error`, `|| true`, or a later unconditional push.
 
 Retain the sanitized `REPORT.json`/`REPORT.txt`, scanner bundle hash, archive hash, exact local/config/manifest identities and the registry push digest as provenance. Do not upload the tarball or extracted content to public artifacts. Remote registries may use different manifest serialization; the registry receipt must still bind the scanned config and layers.
 

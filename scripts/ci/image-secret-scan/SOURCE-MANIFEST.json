@@ -1,7 +1,7 @@
 {
   "schema": "scan-image-secrets-source-v1",
-  "version": "1.0.2",
-  "at": "2026-11-17T12:10:42.124047+00:00",
+  "version": "1.0.3",
+  "at": "2026-11-17T12:57:04.902511+00:00",
   "review_state": "SA-01 review pending; not approved for adoption",
   "files": [
     {
@@ -13,9 +13,9 @@
     },
     {
       "path": "scan_image_secrets.py",
-      "sha256": "2bba4b08b9a1d18c7191a1cf9fd9db758662d901ccd91aa8826d019fd621c54f",
-      "bytes": 8510,
-      "lines": 204,
+      "sha256": "ccb50e9dc68469dc058265d235dd053ffcffd5d3df33279b6febb9df1f36f7d8",
+      "bytes": 9813,
+      "lines": 230,
       "mode": "0o644"
     },
     {
@@ -34,16 +34,16 @@
     },
     {
       "path": "README.md",
-      "sha256": "d65f25479d9a772e05cb772c5879850c4ef38c40c5036a279286cad22c78cc6d",
-      "bytes": 14909,
-      "lines": 98,
+      "sha256": "8be3bf69a032d66db86e8335ef56f69497f877a6c6c1f175b063bae2c3e5086d",
+      "bytes": 19630,
+      "lines": 143,
       "mode": "0o644"
     },
     {
       "path": "CHANGELOG.md",
-      "sha256": "a741407b9b5c14b4eabfe5bfa17d33f014d405a8a05d60cb97733ee230e63fe0",
-      "bytes": 1063,
-      "lines": 5,
+      "sha256": "6942912e28c4eb5abd9c723b71ac5626e95b9f6c2a1700ad87f4f125dc9b5665",
+      "bytes": 1523,
+      "lines": 7,
       "mode": "0o644"
     },
     {
@@ -55,9 +55,9 @@
     },
     {
       "path": "github-actions-step.yml",
-      "sha256": "a838a27fbeffab76a47a69abc06980c864f9d88517e8b3fd4f5a149d1c8148f7",
-      "bytes": 2468,
-      "lines": 49,
+      "sha256": "de3a8db3b586e818a2c3a51a9a3084e34188ac066eb17146901886bf235b8189",
+      "bytes": 2978,
+      "lines": 57,
       "mode": "0o644"
     },
     {
@@ -111,9 +111,9 @@
     },
     {
       "path": "image_secrets/policy.py",
-      "sha256": "5a2bda32870ed6afb12de77c03940c72fc756e8ab45ce367ffc4195fb6692311",
-      "bytes": 4732,
-      "lines": 115,
+      "sha256": "51d7ade99ebf101229e4d8689b72672af7317a923084babc32180d9673ff6f54",
+      "bytes": 4963,
+      "lines": 121,
       "mode": "0o644"
     },
     {
@@ -132,9 +132,9 @@
     },
     {
       "path": "tests/test_artifacts.py",
-      "sha256": "575c2bdbeb15b7a761ec9da00c14fd8b38621b73d901946d6b0159ee93293116",
-      "bytes": 7976,
-      "lines": 183,
+      "sha256": "57a449f0968ff9c8d003c213b6f547a89c88bb8512273439aec4fb3596c74933",
+      "bytes": 8332,
+      "lines": 187,
       "mode": "0o644"
     },
     {
@@ -146,7 +146,7 @@
     },
     {
       "path": "tests/test_review_regressions.py",
-      "sha256": "ec3390264e3b979e35f1f7eff47c27c0aee876a8565b25ba46675ebebee17a12",
+      "sha256": "c7bc75d15a751d685f3589a3eeb31d9753c69553219dc4b8765804423c154c95",
       "bytes": 7833,
       "lines": 196,
       "mode": "0o644"
@@ -185,7 +185,21 @@
       "bytes": 5548,
       "lines": 116,
       "mode": "0o644"
+    },
+    {
+      "path": "image_secrets/gate.py",
+      "sha256": "d98eaf2f6ecba56a944958c5a773214ce1772b3f8f74938ed58f5623f1642d2a",
+      "bytes": 4485,
+      "lines": 107,
+      "mode": "0o644"
+    },
+    {
+      "path": "tests/test_policy_a.py",
+      "sha256": "5a9db6e489f65888fed8023cb1f89ee8686cb743b58036e7935b0084261208a7",
+      "bytes": 8657,
+      "lines": 175,
+      "mode": "0o644"
     }
   ],
-  "base_manifest_sha256": "ba825e7b47b2ed970da7ce88f495e43f8d1cbdd9a4988b2dd2942800cbf27454"
+  "base_manifest_sha256": "feeee9fadb3cd4753381452fde62a193add80b03c8cffde5e9ed94fc4dd438c6"
 }

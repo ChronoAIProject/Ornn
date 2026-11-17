@@ -19,6 +19,7 @@ trap - EXIT
 # Both findings (1) and incomplete/error (2) stop before archive upload or push.
 bash scripts/ci/image-secret-scan/scan-image-secrets.sh "$archive" \
   --input-kind archive --output "$out/secret-scan" \
+  --blocking-rules credential \
   --allowlist scripts/ci/ornn-image-allowlist.json \
   --expected-archive-sha256 "$archive_sha"
 python3 scripts/ci/staging_image.py scan

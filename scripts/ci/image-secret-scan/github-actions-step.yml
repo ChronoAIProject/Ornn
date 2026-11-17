@@ -21,12 +21,18 @@
     docker image save --output "$scan_work/image.tar" "$publish_ref"
     archive_sha=$(sha256sum "$scan_work/image.tar" | cut -d ' ' -f 1)
 
-    # Both findings (1) and scanner errors (2) stop before any push.
+    # Default is strict. Policy A requires explicit owner authorization in the workflow.
+    blocking_mode="${IMAGE_SECRET_BLOCKING_RULES:-all}"
+    scan_options=(--blocking-rules "$blocking_mode")
+    if [[ -n "${IMAGE_SECRET_CLASSIFICATIONS:-}" ]]; then
+      scan_options+=(--classifications "$IMAGE_SECRET_CLASSIFICATIONS")
+    fi
+    # Blocking findings (1) and scanner errors (2) stop before any push.
     .github/scripts/scan-image-secrets/scan-image-secrets.sh \
       "$scan_work/image.tar" --input-kind archive --output "$scan_report" \
-      --expected-archive-sha256 "$archive_sha"
+      --expected-archive-sha256 "$archive_sha" "${scan_options[@]}"
 
-    python3 - "$scan_work/image.tar" "$scan_report/REPORT.json" <<'PY'
+    python3 - "$scan_work/image.tar" "$scan_report/REPORT.json" "$blocking_mode" <<'PY'
     import hashlib, json, sys
     digest = hashlib.sha256()
     with open(sys.argv[1], "rb") as stream:
@@ -35,7 +41,9 @@
     with open(sys.argv[2]) as stream:
         report = json.load(stream)
     if not (report.get("status") == "CLEAN" and report.get("complete") is True
-            and report.get("exit_code") == 0 and not report.get("findings")
+            and report.get("exit_code") == 0 and report.get("blocking_findings") == []
+            and report.get("blocking_rules") == sys.argv[3]
+            and report.get("counts", {}).get("blocking") == 0
             and report.get("archive_sha256") == digest.hexdigest()):
         raise SystemExit("Image scan binding check failed")
     PY

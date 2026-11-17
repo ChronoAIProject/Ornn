@@ -15,6 +15,7 @@ import unittest
 import zipfile
 
 from staging_scan_inputs import prepare
+from staging_scan_decision import verify_decision
 SCANNER = Path(__file__).resolve().parent / "image-secret-scan" / "scan-image-secrets.sh"
 
 
@@ -53,7 +54,7 @@ def zip_bytes(name, content):
 
 
 class SharedGateAcceptanceTests(unittest.TestCase):
-    def scan(self, files, expected, forbidden=()):
+    def scan(self, files, expected, forbidden=(), mode="all"):
         with tempfile.TemporaryDirectory(prefix="ornn-scan-acceptance-") as temp:
             root = Path(temp)
             archive = root / "image.tar"
@@ -61,6 +62,7 @@ class SharedGateAcceptanceTests(unittest.TestCase):
             digest = hashlib.sha256(archive.read_bytes()).hexdigest()
             run = subprocess.run([
                 "bash", str(SCANNER), str(archive), "--input-kind", "archive",
+                "--blocking-rules", mode,
                 "--output", str(root / "report"), "--expected-archive-sha256", digest,
             ], capture_output=True, timeout=60, check=False)
             report_bytes = (root / "report/REPORT.json").read_bytes()
@@ -73,6 +75,16 @@ class SharedGateAcceptanceTests(unittest.TestCase):
             self.assertEqual(report["complete"], expected != 2)
             self.assertEqual(hashlib.sha256(archive.read_bytes()).hexdigest(), digest)
             return report
+
+    def test_policy_a_receipt_records_entropy_but_rejects_credentials(self):
+        token = secrets.token_urlsafe(48).encode()
+        report = self.scan([("app/bundle.js", token)], 0, [token], mode="credential")
+        decision = verify_decision(report)
+        self.assertGreater(decision["counts"]["advisory"], 0)
+        credential = fake_token()
+        report = self.scan([("app/bundle.js", credential)], 1, [credential], mode="credential")
+        with self.assertRaises(ValueError):
+            verify_decision(report)
 
     def test_plaintext_debian_gzip_names_preserve_detection(self):
         path = "var/lib/dpkg/alternatives/builtins.7.gz"

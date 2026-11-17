@@ -1,3 +1,4 @@
+import base64
 import contextlib
 import io
 import json
@@ -110,7 +111,7 @@ class ArtifactTests(unittest.TestCase):
         snippet = (cli.HERE / "github-actions-step.yml").read_text()
         script = textwrap.dedent(snippet.split("  run: |\n", 1)[1])
         subprocess.run(["bash", "-n"], input=script.encode(), check=True, capture_output=True)
-        for scenario in ["clean", "findings", "error", "tampered"]:
+        for scenario in ["clean", "findings", "error", "tampered", "advisory", "credential"]:
             root = self.root / scenario
             root.mkdir()
             archive = root / "input.tar"
@@ -118,8 +119,10 @@ class ArtifactTests(unittest.TestCase):
                 archive.write_bytes(b"invalid")
             else:
                 files = [("hello.txt", b"hello")]
-                if scenario == "findings":
+                if scenario in {"findings", "credential"}:
                     files.append(("fake.key", fake_key()))
+                if scenario == "advisory":
+                    files.append(("data.txt", b'opaque="' + base64.b64encode(os.urandom(60)) + b'"\n'))
                 docker_archive(archive, [tar_bytes(files)])
             tools = root / "bin"
             tools.mkdir()
@@ -162,6 +165,7 @@ if [[ "$TEST_SCENARIO" == tampered ]]; then printf 'changed' >> "$1"; fi
                 GITHUB_RUN_ATTEMPT="1",
                 REAL_SCANNER=str(cli.HERE / "scan-image-secrets.sh"),
                 TEST_SCENARIO=scenario,
+                IMAGE_SECRET_BLOCKING_RULES="credential" if scenario in {"advisory", "credential"} else "all",
             )
             result = subprocess.run(
                 ["bash"],
@@ -174,9 +178,9 @@ if [[ "$TEST_SCENARIO" == tampered ]]; then printf 'changed' >> "$1"; fi
             )
             trace = [json.loads(line) for line in (root / "trace.jsonl").read_text().splitlines()]
             self.assertEqual(sum(row[0] == "build" for row in trace), 1)
-            self.assertEqual(["image", "push"] in trace, scenario == "clean")
-            self.assertEqual(["image", "load"] in trace, scenario == "clean")
-            self.assertEqual(result.returncode == 0, scenario == "clean")
+            self.assertEqual(["image", "push"] in trace, scenario in {"clean", "advisory"})
+            self.assertEqual(["image", "load"] in trace, scenario in {"clean", "advisory"})
+            self.assertEqual(result.returncode == 0, scenario in {"clean", "advisory"})
 
 
 if __name__ == "__main__":

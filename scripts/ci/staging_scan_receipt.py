@@ -4,6 +4,11 @@ import hashlib
 import json
 from pathlib import Path
 
+try:
+    from .staging_scan_decision import verify_decision
+except ImportError:
+    from staging_scan_decision import verify_decision
+
 SCANNER = Path(__file__).resolve().parent / "image-secret-scan"
 PREFLIGHT = Path(__file__).resolve().parent / "staging_scan_inputs.py"
 ALLOWLIST = Path(__file__).resolve().parent / "ornn-image-allowlist.json"
@@ -40,10 +45,7 @@ def verify_image_scan_receipt(directory, metadata):
     report_path = directory / "secret-scan" / "REPORT.json"
     scan = json.loads(report_path.read_text())
     require(scan.get("schema") == "image-secret-scan-v1", "Unknown secret scan schema")
-    require(scan.get("status") == "CLEAN" and scan.get("complete") is True
-            and type(scan.get("exit_code")) is int and scan["exit_code"] == 0
-            and scan.get("findings") == [] and "error" not in scan,
-            "Missing complete CLEAN image secret scan")
+    decision = verify_decision(scan)
     require(scan.get("input_kind") == "archive", "Secret scan must inspect the saved archive")
     require(scan.get("gitleaks_version") == "8.30.1", "Unexpected image secret scanner version")
     require(scan.get("archive_sha256") == metadata["archiveSha256"],
@@ -76,4 +78,5 @@ def verify_image_scan_receipt(directory, metadata):
         "gitleaksVersion": scan["gitleaks_version"], "policy": policy,
         "scannerFiles": scan["scanner_files"], "layers": len(layers),
         "preflightSha256": checksum(directory / "scan-preflight.json"),
+        **decision,
     }

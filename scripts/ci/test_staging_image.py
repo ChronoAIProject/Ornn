@@ -124,6 +124,9 @@ class StagingImageTests(unittest.TestCase):
         (directory / "secret-scan/REPORT.json").write_text(json.dumps({
             "schema": "image-secret-scan-v1", "status": "CLEAN", "complete": True,
             "exit_code": 0, "findings": [], "allowlisted": [], "input_kind": "archive",
+            "scanner_version": "1.0.3", "blocking_rules": "credential",
+            "blocking_findings": [], "advisory_findings": [], "reviewed_classifications": [],
+            "counts": {"detected": 0, "blocking": 0, "advisory": 0, "reviewed": 0, "allowlisted": 0},
             "gitleaks_version": "8.30.1", "archive_sha256": self.metadata["archiveSha256"],
             "scanner_files": scanner_identity(self.scanner),
             "policy": {"gitleaks_rules_sha256": checksum(self.scanner / "gitleaks.toml"),
@@ -217,7 +220,8 @@ class StagingImageTests(unittest.TestCase):
             summary = verify_image_scan_receipt(directory, self.metadata)
             self.assertFalse(marker in json.dumps(summary), "Detector payload escaped the metadata boundary")
             self.assertEqual(set(summary), {"schema", "status", "complete", "reportSha256", "archiveSha256",
-                                           "gitleaksVersion", "policy", "scannerFiles", "layers", "preflightSha256"})
+                                           "gitleaksVersion", "policy", "scannerFiles", "layers", "preflightSha256",
+                                           "blockingRules", "scannerVersion", "counts"})
 
     def test_archive_validates_before_load(self):
         with tempfile.TemporaryDirectory() as temp:
