@@ -146,7 +146,7 @@ def publication(metadata, manifest, digest, env):
     require(manifest["schemaVersion"] == 2, "Unexpected registry manifest schema")
     require(manifest["config"]["digest"] == metadata["configDigest"],
             "Registry image differs from verified image")
-    package = f"ghcr.io/chronoaiproject/ornn-staging-{env['COMPONENT']}"
+    package = f"ghcr.io/chronoaiproject/ornn-{env['COMPONENT']}"
     receipt = {
         "schema": "ornn-staging-publication-v1", "component": env["COMPONENT"],
         "package": package, "tag": env["GITHUB_SHA"], "manifestDigest": digest,

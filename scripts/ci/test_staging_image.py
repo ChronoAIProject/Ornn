@@ -340,8 +340,12 @@ class StagingImageTests(unittest.TestCase):
         digest = "sha256:" + "e" * 64
         manifest = {"schemaVersion": 2, "config": {"digest": self.metadata["configDigest"]}}
         receipt = publication(self.metadata, manifest, digest, self.env)
-        self.assertEqual(receipt["image"], "ghcr.io/chronoaiproject/ornn-staging-api@" + digest)
+        self.assertEqual(receipt["image"], "ghcr.io/chronoaiproject/ornn-api@" + digest)
         self.assertEqual(receipt["probes"], {"readiness": "/readyz", "liveness": "/health", "port": 3802})
+        web_metadata = dict(self.metadata, webBuildIdentity="web-" + "e" * 64)
+        web_receipt = publication(web_metadata, manifest, digest, dict(self.env, COMPONENT="web"))
+        self.assertEqual(web_receipt["image"], "ghcr.io/chronoaiproject/ornn-web@" + digest)
+        self.assertEqual(web_receipt["webBuildIdentity"], web_metadata["webBuildIdentity"])
         with self.assertRaisesRegex(ValueError, "digest"):
             publication(self.metadata, manifest, "latest", self.env)
         manifest["config"]["digest"] = "sha256:" + "f" * 64

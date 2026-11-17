@@ -5,7 +5,7 @@ set +x
 python3 scripts/ci/staging_image.py guard publish
 out=staging-image-out
 image_id=$(python3 scripts/ci/staging_image.py archive)
-package="ghcr.io/chronoaiproject/ornn-staging-${COMPONENT}"
+package="ghcr.io/chronoaiproject/ornn-${COMPONENT}"
 target="${package}:${GITHUB_SHA}"
 
 echo "Load verified $COMPONENT archive for revision $GITHUB_SHA"

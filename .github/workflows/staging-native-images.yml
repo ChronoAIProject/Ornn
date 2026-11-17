@@ -113,7 +113,7 @@ jobs:
         with:
           name: ornn-native-${{ matrix.component }}-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: staging-image-out/
-      - name: Publish the verified archive and record immutable digests
+      - name: Publish ornn-api or ornn-web and record immutable digests
         env:
           COMPONENT: ${{ matrix.component }}
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
