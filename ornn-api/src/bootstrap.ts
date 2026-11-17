@@ -1050,7 +1050,7 @@ export async function bootstrap(
       identityVerification: {
         issuer: config.nyxidIssuer,
         jwksUrl: config.nyxidJwksUrl,
-        ...(config.nyxidAudience !== undefined ? { audience: config.nyxidAudience } : {}),
+        audience: config.nyxidAudience,
         clockToleranceSeconds: config.nyxidClockSkewSeconds,
       },
       trustIdentityHeaders: config.trustIdentityHeaders,

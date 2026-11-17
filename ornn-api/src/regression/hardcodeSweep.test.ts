@@ -95,7 +95,11 @@ const URL_ALLOWLIST: Array<string | RegExp> = [
 const FILE_ALLOWLIST: Record<string, RegExp[]> = {
   // NyxID's hosted production issuer is the safe default for the verifier;
   // operators can override both issuer and JWKS URL through infra/config.ts.
-  "ornn-api/src/middleware/nyxidIdentity.ts": [/DEFAULT_NYXID_ISSUER/],
+  "ornn-api/src/middleware/nyxidIdentity.ts": [
+    /DEFAULT_NYXID_ISSUER/,
+    /DEFAULT_NYXID_AUDIENCE/,
+    /ornn-api-deployment-api-svc\.chronoai-platform\.svc\.cluster\.local:3802/,
+  ],
 };
 
 // Common LLM model ids we expect operator to configure via settings,

@@ -156,6 +156,7 @@ export async function startHarness(
     ornnApiBaseUrl: "http://test.invalid",
     nyxidIssuer: "https://test.invalid",
     nyxidJwksUrl: "https://test.invalid/.well-known/jwks.json",
+    nyxidAudience: "https://test.invalid/ornn-api",
     nyxidClockSkewSeconds: 5,
     trustIdentityHeaders: false,
     encryptionKey: "test-encryption-key-32-chars-min-12345",

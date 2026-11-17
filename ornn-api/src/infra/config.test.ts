@@ -11,6 +11,7 @@
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { ConfigError, loadConfig } from "./config";
+import { DEFAULT_NYXID_AUDIENCE } from "../middleware/nyxidIdentity";
 
 const VALID_KEY = "test-encryption-key-32-chars-min-12345";
 
@@ -132,11 +133,11 @@ describe("loadConfig — NyxID identity verification", () => {
     delete process.env.ORNN_TRUST_IDENTITY_HEADERS;
   });
 
-  test("uses production issuer/JWKS defaults and disables header trust", () => {
+  test("uses production issuer/JWKS/audience defaults and disables header trust", () => {
     const config = loadConfig();
     expect(config.nyxidIssuer).toBe("https://nyx-api.chrono-ai.fun");
     expect(config.nyxidJwksUrl).toBe("https://nyx-api.chrono-ai.fun/.well-known/jwks.json");
-    expect(config.nyxidAudience).toBeUndefined();
+    expect(config.nyxidAudience).toBe(DEFAULT_NYXID_AUDIENCE);
     expect(config.nyxidClockSkewSeconds).toBe(5);
     expect(config.trustIdentityHeaders).toBe(false);
   });

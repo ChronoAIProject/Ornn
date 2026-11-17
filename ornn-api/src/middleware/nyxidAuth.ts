@@ -20,6 +20,7 @@ import { createLogger } from "../shared/logger";
 import { AppError } from "../shared/types/index";
 import {
   createIdentityTokenVerifier,
+  DEFAULT_NYXID_AUDIENCE,
   DEFAULT_NYXID_CLOCK_SKEW_SECONDS,
   DEFAULT_NYXID_ISSUER,
   DEFAULT_NYXID_JWKS_URL,
@@ -166,9 +167,7 @@ export function proxyAuthSetup(options: ProxyAuthSetupOptions = {}) {
   const identityVerifier = options.identityVerifier ?? createIdentityTokenVerifier({
     issuer: options.identityVerification?.issuer ?? DEFAULT_NYXID_ISSUER,
     jwksUrl: options.identityVerification?.jwksUrl ?? DEFAULT_NYXID_JWKS_URL,
-    ...(options.identityVerification?.audience
-      ? { audience: options.identityVerification.audience }
-      : {}),
+    audience: options.identityVerification?.audience ?? DEFAULT_NYXID_AUDIENCE,
     clockToleranceSeconds:
       options.identityVerification?.clockToleranceSeconds ?? DEFAULT_NYXID_CLOCK_SKEW_SECONDS,
     ...(options.identityVerification?.fetch

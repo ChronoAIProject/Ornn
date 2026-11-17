@@ -28,8 +28,11 @@ identity assertion in `X-NyxID-Identity-Token`. `ornn-api` verifies the
 RS256 signature against `NYXID_JWKS_URL`, requires the configured
 `NYXID_ISSUER`, validates `exp` and `nbf` with the bounded
 `NYXID_CLOCK_SKEW_SECONDS` tolerance, and validates `aud` when
-`NYXID_AUDIENCE` is set. JWKS failures, unknown key ids, malformed tokens,
-and claim failures are rejected with `401 auth_invalid`.
+`NYXID_AUDIENCE` is required and defaults to the exact base URL currently
+bound to `ornn-api` in NyxID. Operators must update it whenever the NyxID
+binding audience changes; missing or mismatched `aud` claims, JWKS failures,
+unknown key ids, malformed tokens, and claim failures are rejected with
+`401 auth_invalid`.
 
 The legacy scalar `X-NyxID-User-*` headers are not an authentication source
 by default. `ORNN_TRUST_IDENTITY_HEADERS=true` is reserved for an explicitly

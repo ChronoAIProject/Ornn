@@ -14,6 +14,7 @@ import {
   createRemoteJWKSet,
   customFetch,
   decodeProtectedHeader,
+  errors,
   jwtVerify,
   type FetchImplementation,
   type JWTPayload,
@@ -22,7 +23,14 @@ import {
 
 export const DEFAULT_NYXID_ISSUER = "https://nyx-api.chrono-ai.fun";
 export const DEFAULT_NYXID_JWKS_URL = `${DEFAULT_NYXID_ISSUER}/.well-known/jwks.json`;
+// NyxID's live ornn-api binding has no custom identity_jwt_audience, so its
+// identity assertions use this exact downstream service base_url as `aud`.
+export const DEFAULT_NYXID_AUDIENCE =
+  "http://ornn-api-deployment-api-svc.chronoai-platform.svc.cluster.local:3802";
 export const DEFAULT_NYXID_CLOCK_SKEW_SECONDS = 5;
+export const DEFAULT_NYXID_JWKS_TIMEOUT_MS = 5_000;
+export const DEFAULT_NYXID_JWKS_COOLDOWN_MS = 30_000;
+export const DEFAULT_NYXID_JWKS_CACHE_MAX_AGE_MS = 10 * 60_000;
 
 /** The claims Ornn consumes after signature and registered-claim checks. */
 export interface IdentityAssertionPayload {
@@ -42,9 +50,13 @@ export interface IdentityTokenVerifier {
 export interface IdentityTokenVerifierOptions {
   issuer: string;
   jwksUrl: string;
-  /** Validate `aud` when NyxID has configured a service audience. */
-  audience?: string;
+  /** Exact audience emitted for this Ornn service by NyxID. */
+  audience: string;
   clockToleranceSeconds?: number;
+  /** Remote JWKS controls; defaults mirror jose's safe cache policy. */
+  jwksTimeoutMs?: number;
+  jwksCooldownMs?: number;
+  jwksCacheMaxAgeMs?: number;
   /** Dependency-injection hook for deterministic tests. */
   fetch?: FetchImplementation;
 }
@@ -106,10 +118,23 @@ function normalizeClaims(claims: VerifiedClaims): IdentityAssertionPayload {
 export function createIdentityTokenVerifier(
   options: IdentityTokenVerifierOptions,
 ): IdentityTokenVerifier {
+  const jwksTimeoutMs = options.jwksTimeoutMs ?? DEFAULT_NYXID_JWKS_TIMEOUT_MS;
+  const jwksCooldownMs = options.jwksCooldownMs ?? DEFAULT_NYXID_JWKS_COOLDOWN_MS;
+  const jwksCacheMaxAgeMs = options.jwksCacheMaxAgeMs ?? DEFAULT_NYXID_JWKS_CACHE_MAX_AGE_MS;
+  if (!Number.isInteger(jwksTimeoutMs) || jwksTimeoutMs < 0) {
+    throw new Error("NyxID JWKS timeout must be a non-negative integer");
+  }
+  if (!Number.isFinite(jwksCooldownMs) || jwksCooldownMs < 0) {
+    throw new Error("NyxID JWKS cooldown must be a non-negative number");
+  }
+  if (!Number.isFinite(jwksCacheMaxAgeMs) || jwksCacheMaxAgeMs <= 0) {
+    throw new Error("NyxID JWKS cache age must be a positive number");
+  }
+
   const remoteJwksOptions = {
-    timeoutDuration: 5_000,
-    cooldownDuration: 30_000,
-    cacheMaxAge: 10 * 60_000,
+    timeoutDuration: jwksTimeoutMs,
+    cooldownDuration: jwksCooldownMs,
+    cacheMaxAge: jwksCacheMaxAgeMs,
     ...(options.fetch ? { [customFetch]: options.fetch } : {}),
   };
   const remoteJwks: RemoteJWKSet = createRemoteJWKSet(
@@ -121,6 +146,36 @@ export function createIdentityTokenVerifier(
     throw new Error("NyxID clock tolerance must be an integer between 0 and 60 seconds");
   }
 
+  // jose deliberately suppresses unknown-kid refreshes during its cooldown
+  // window. Keep that anti-stampede guarantee, but force one refresh for the
+  // first unknown kid so a normal NyxID key rotation is accepted immediately.
+  let lastForcedRefreshAt = Number.NEGATIVE_INFINITY;
+  let forcedRefresh: Promise<void> | undefined;
+
+  const verifyJwt = async (token: string) => {
+    const verifyOptions = {
+      algorithms: ["RS256"],
+      issuer: options.issuer,
+      audience: options.audience,
+      clockTolerance: clockToleranceSeconds,
+      requiredClaims: ["exp", "iss", "sub", "aud"],
+    };
+    return jwtVerify<VerifiedClaims>(token, remoteJwks, verifyOptions);
+  };
+
+  const refreshForUnknownKey = async (): Promise<void> => {
+    if (forcedRefresh) return forcedRefresh;
+    const now = Date.now();
+    if (now - lastForcedRefreshAt < jwksCooldownMs) {
+      throw new Error("NyxID JWKS refresh is cooling down");
+    }
+    lastForcedRefreshAt = now;
+    forcedRefresh = remoteJwks.reload().finally(() => {
+      forcedRefresh = undefined;
+    });
+    return forcedRefresh;
+  };
+
   return {
     async verify(token: string): Promise<IdentityAssertionPayload> {
       const protectedHeader = decodeProtectedHeader(token);
@@ -131,14 +186,15 @@ export function createIdentityTokenVerifier(
         throw new Error("identity token is missing a key id");
       }
 
-      const verifyOptions = {
-        algorithms: ["RS256"],
-        issuer: options.issuer,
-        clockTolerance: clockToleranceSeconds,
-        requiredClaims: ["exp", "iss", "sub"],
-        ...(options.audience ? { audience: options.audience } : {}),
-      };
-      const { payload } = await jwtVerify<VerifiedClaims>(token, remoteJwks, verifyOptions);
+      let verified: Awaited<ReturnType<typeof verifyJwt>>;
+      try {
+        verified = await verifyJwt(token);
+      } catch (error) {
+        if (!(error instanceof errors.JWKSNoMatchingKey)) throw error;
+        await refreshForUnknownKey();
+        verified = await verifyJwt(token);
+      }
+      const { payload } = verified;
       return normalizeClaims(payload);
     },
   };

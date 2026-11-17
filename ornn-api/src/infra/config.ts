@@ -26,6 +26,7 @@
 import { z } from "zod";
 import {
   DEFAULT_NYXID_CLOCK_SKEW_SECONDS,
+  DEFAULT_NYXID_AUDIENCE,
   DEFAULT_NYXID_ISSUER,
   DEFAULT_NYXID_JWKS_URL,
 } from "../middleware/nyxidIdentity";
@@ -120,7 +121,7 @@ export interface SkillConfig {
   // deliberately opt-in compatibility path for legacy trusted networks.
   readonly nyxidIssuer: string;
   readonly nyxidJwksUrl: string;
-  readonly nyxidAudience?: string;
+  readonly nyxidAudience: string;
   readonly nyxidClockSkewSeconds: number;
   readonly trustIdentityHeaders: boolean;
 }
@@ -226,10 +227,11 @@ const envSchema = z.object({
   // ---- NyxID identity assertion verification. ----
   NYXID_ISSUER: z.string().url().default(DEFAULT_NYXID_ISSUER),
   NYXID_JWKS_URL: z.string().url().default(DEFAULT_NYXID_JWKS_URL),
-  NYXID_AUDIENCE: z.preprocess(
-    (v) => (v === "" ? undefined : v),
-    z.string().min(1).optional(),
-  ),
+  // NyxID's current ornn-api binding emits its service base_url as `aud`.
+  // An empty value is invalid so production cannot silently disable aud
+  // validation; operators must set the exact audience when the binding is
+  // changed.
+  NYXID_AUDIENCE: z.string().url().default(DEFAULT_NYXID_AUDIENCE),
   NYXID_CLOCK_SKEW_SECONDS: z.coerce
     .number()
     .int()
@@ -308,7 +310,7 @@ export function loadConfig(): SkillConfig {
 
     nyxidIssuer: env.NYXID_ISSUER,
     nyxidJwksUrl: env.NYXID_JWKS_URL,
-    ...(env.NYXID_AUDIENCE !== undefined ? { nyxidAudience: env.NYXID_AUDIENCE } : {}),
+    nyxidAudience: env.NYXID_AUDIENCE,
     nyxidClockSkewSeconds: env.NYXID_CLOCK_SKEW_SECONDS,
     trustIdentityHeaders: env.ORNN_TRUST_IDENTITY_HEADERS,
   };
