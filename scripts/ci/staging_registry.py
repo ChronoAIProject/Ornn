@@ -15,9 +15,11 @@ def missing_manifest(stderr, target):
     package, tag = target.rsplit(":", 1)
     repository = package.removeprefix("ghcr.io/")
     suffix = f"GET https://ghcr.io/v2/{repository}/manifests/{tag}: MANIFEST_UNKNOWN: manifest unknown"
-    line = stderr.strip()
-    return line.endswith(suffix) and "\n" not in line and not re.search(
-        r"(?i)unauthorized|denied|forbidden|timeout|429|5[0-9]{2}|401|403", line.removesuffix(suffix))
+    # Numeric substrings in a SHA are not HTTP status codes. Match crane's full
+    # known error grammar instead of interpreting arbitrary prefixes as absence.
+    return stderr.strip() in (
+        suffix, "Error: " + suffix, f"Error: fetching manifest {target}: " + suffix,
+    )
 
 
 class CraneRegistry:

@@ -181,6 +181,18 @@ class PublicationTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, '^Registry operation failed; raw output withheld$'):
                     CraneRegistry(run=run).lookup(self.target)
 
+    def test_manifest_absence_does_not_parse_status_codes_inside_source_sha(self):
+        for digits in ('401', '403', '429', '500', '503', '599'):
+            target = 'ghcr.io/chronoaiproject/ornn-api:' + digits + 'a' * 37
+            suffix = ('GET https://ghcr.io/v2/chronoaiproject/ornn-api/manifests/'
+                      + digits + 'a' * 37 + ': MANIFEST_UNKNOWN: manifest unknown')
+            for error in (suffix, 'Error: ' + suffix,
+                          'Error: fetching manifest ' + target + ': ' + suffix):
+                with self.subTest(digits=digits, prefix=error[:20]):
+                    self.assertTrue(missing_manifest(error, target))
+            for prefix in ('HTTP 503 ', '401 ', 'Error: denied: ', 'unrecognized: '):
+                self.assertFalse(missing_manifest(prefix + suffix, target))
+
     def test_crane_push_reference_and_full_pull_validation(self):
         self.extract()
         ref = self.target.rsplit(':', 1)[0] + '@' + self.digest
