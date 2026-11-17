@@ -1686,6 +1686,7 @@
     "fieldAppIdHint": "数字格式，来自 GitHub 上的 App 设置页。",
     "fieldInstallationId": "Installation ID",
     "fieldPrivateKey": "App 私钥 (PEM)",
+    "fieldPrivateKeyPlaceholder": "粘贴由 GitHub App 生成的 PEM 格式私钥",
     "confirmTitle": "确认：放弃当前镜像仓库",
     "confirmConfirm": "是，更换仓库"
   },

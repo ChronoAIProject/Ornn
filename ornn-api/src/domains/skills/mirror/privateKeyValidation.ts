@@ -71,7 +71,7 @@ export function validateGitHubAppPrivateKey(raw: unknown): ValidationResult {
   if (!PEM_HEADER_RX.test(first)) {
     return {
       ok: false,
-      reason: "must start with `-----BEGIN RSA PRIVATE KEY-----` (PKCS#1) or `-----BEGIN PRIVATE KEY-----` (PKCS#8)",
+      reason: "must start with a supported PEM private-key BEGIN delimiter (PKCS#1 or PKCS#8)",
     };
   }
   if (!PEM_FOOTER_RX.test(last)) {
