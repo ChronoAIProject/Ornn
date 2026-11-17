@@ -4317,6 +4317,32 @@
     },
     {
       "component": "web",
+      "path": "usr/share/nginx/html/assets/authStore-oV0-PprT.js",
+      "rule": "gitleaks.image-secret-assignment",
+      "file_sha256": "383bc5ea30d14f71711333672b0277b0a46a02a24a9eea1c3050c058162f20e5",
+      "classification": "public-material",
+      "reason": "Exact scanner candidate capture is independently parsed as a noncomputed JavaScript MemberExpression at the same source offsets, not a credential literal.",
+      "candidate_sha256": "88174951e748feee9f67b0f99ddaa6678493f1faaa9f22fda016f0113ee5f311",
+      "line": 2,
+      "approved_occurrence_ids": [
+        "b4d4becd7e09736639e546ef9a54ec809803618ffd4c83eb28c2e3140b19ea0f"
+      ]
+    },
+    {
+      "component": "web",
+      "path": "usr/share/nginx/html/assets/sections-BA3-FZbv.js",
+      "rule": "gitleaks.image-secret-assignment",
+      "file_sha256": "d93a942da6778accb89a3cc348151e28207e4c1cd3ea49e678fd138bdeaa748e",
+      "classification": "public-material",
+      "reason": "Exact scanner candidate capture is independently parsed as a noncomputed JavaScript MemberExpression at the same source offsets, not a credential literal.",
+      "candidate_sha256": "17b51881d8b1b599771cdabc403654dec66d1711c5a64d973a3864a9a99cd47d",
+      "line": 1,
+      "approved_occurrence_ids": [
+        "3443bcff5fdfb6506b17209fe64a6409aa1245ed1327a26b8ea9b779c598f21a"
+      ]
+    },
+    {
+      "component": "web",
       "path": "usr/share/nginx/html/assets/sections-BaWMOWoK.js",
       "rule": "gitleaks.image-secret-assignment",
       "file_sha256": "e8007ee8c30665f0ee8c93ffb9cc884065789ebe91b38e8106a347eae4897170",

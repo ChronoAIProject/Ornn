@@ -6,9 +6,12 @@
     "content_identity.py": "36aee4fe568ccf5d4236535dd2ce5398a6a695c4939ea346af1f52c841ac0c1f",
     "resolve_content_policy.py": "4bafd5766a28f6950aac6b0f17bcb2ae99dbe425485209dc3d985a04249efc3b"
   },
-  "catalog_sha256": "e0244686550bda482b62934bdce089a490cb4857109cb3327ffb9fe000237c23",
+  "catalog_sha256": "8afa96f5391a911772a2af8205871cd1d2dd823fff51c1ccd743ae58e6fd28f2",
   "base_catalog_sha256": "7821eb6140d11c31fa74c822084e1f1082fd4be83b581e0b2bb101551d281cd4",
-  "supplemental_review_sha256": "00ccd72b9eebd8d1a0697563bdc1dda3c8a8fca19cbb8fbffbf55332db46dcbb",
-  "scope": "Prior exact approved catalog plus four verified PR1259 native source expressions and one exact jose marker-only validation literal.",
+  "supplemental_evidence": {
+    "api": "00ccd72b9eebd8d1a0697563bdc1dda3c8a8fca19cbb8fbffbf55332db46dcbb",
+    "web": "7f786fafd14054745942d4acfffb3dd34d479cfbc856259545ea44dcb74a8eb9"
+  },
+  "scope": "Seven exact native findings from run44119588687 only; original371 catalog rows unchanged. Five API public-material findings plus two web public expressions.",
   "publication_approved": false
 }
