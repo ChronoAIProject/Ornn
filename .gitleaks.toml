@@ -42,3 +42,14 @@ paths = [
   '''ornn-api/tests/fixtures/.*\.ts$''',
   '''ornn-web/src/__tests__/.*''',
 ]
+
+# The reviewed image policy stores a public API-evidence SHA256 under "api".
+# Bind this exception to that exact checksum, file and detector; later review
+# fingerprints and credential values still require independent disposition.
+[[allowlists]]
+description = "Exact public SHA256 of the approved native API review evidence"
+targetRules = ["generic-api-key"]
+condition = "AND"
+paths = ['''^scripts/ci/ornn-content-policy-review\.json$''']
+regexTarget = "secret"
+regexes = ['''^00ccd72b9eebd8d1a0697563bdc1dda3c8a8fca19cbb8fbffbf55332db46dcbb$''']
