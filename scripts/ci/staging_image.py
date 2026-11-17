@@ -12,8 +12,10 @@ import tarfile
 
 try:
     from .staging_scan_receipt import verify_image_scan_receipt
+    from .staging_web_identity import LABEL as WEB_IDENTITY_LABEL, verify_web_receipt
 except ImportError:
     from staging_scan_receipt import verify_image_scan_receipt
+    from staging_web_identity import LABEL as WEB_IDENTITY_LABEL, verify_web_receipt
 
 REPOSITORY = "ChronoAIProject/Ornn"
 SOURCE = f"https://github.com/{REPOSITORY}"
@@ -62,6 +64,9 @@ def verify_image(image, component, revision):
     require(labels.get("org.opencontainers.image.revision") == revision, "Wrong revision label")
     require(labels.get("org.opencontainers.image.version") == f"git-{revision}",
             "Wrong version label")
+    if component == "web":
+        require(re.fullmatch(r"web-[0-9a-f]{64}", labels.get(WEB_IDENTITY_LABEL, "")),
+                "Missing web build-input identity")
     require(re.fullmatch(r"sha256:[0-9a-f]{64}", image["Id"]), "Invalid image ID")
     require(bool(image["RootFS"]["Layers"]), "Image has no layers")
 
@@ -120,6 +125,8 @@ def verify_archive(directory, env, tree):
             "Packaging smoke is not service qualification")
     original = json.loads((directory / "image-inspect.json").read_text())[0]
     verify_loaded(original, metadata, env)
+    if component == "web":
+        verify_web_receipt(directory, metadata, env["GITHUB_SHA"])
     verify_image_scan_receipt(directory, metadata)
     return metadata
 
@@ -129,6 +136,9 @@ def verify_loaded(image, metadata, env):
     require(image["Id"] == metadata["imageId"], "Loaded image differs from verified image")
     require(image["Config"]["Labels"] == metadata["labels"], "Loaded labels differ")
     require(image["RootFS"]["Layers"] == metadata["layerDiffIds"], "Loaded layers differ")
+    if env["COMPONENT"] == "web":
+        require(metadata.get("webBuildIdentity") == image["Config"]["Labels"][WEB_IDENTITY_LABEL],
+                "Loaded web build-input identity differs")
 
 
 def publication(metadata, manifest, digest, env):
@@ -137,7 +147,7 @@ def publication(metadata, manifest, digest, env):
     require(manifest["config"]["digest"] == metadata["configDigest"],
             "Registry image differs from verified image")
     package = f"ghcr.io/chronoaiproject/ornn-staging-{env['COMPONENT']}"
-    return {
+    receipt = {
         "schema": "ornn-staging-publication-v1", "component": env["COMPONENT"],
         "package": package, "tag": env["GITHUB_SHA"], "manifestDigest": digest,
         "configDigest": metadata["configDigest"], "image": f"{package}@{digest}",
@@ -148,6 +158,11 @@ def publication(metadata, manifest, digest, env):
         if env["COMPONENT"] == "api" else
         {"readiness": "/health", "liveness": "/health", "port": 8080},
     }
+    if env["COMPONENT"] == "web":
+        identity = metadata.get("webBuildIdentity", "")
+        require(re.fullmatch(r"web-[0-9a-f]{64}", identity), "Invalid web build-input identity")
+        receipt["webBuildIdentity"] = identity
+    return receipt
 
 
 def main():

@@ -329,6 +329,8 @@ class StagingImageTests(unittest.TestCase):
         self.env["COMPONENT"] = "web"
         self.image["Config"]["User"] = "101:101"
         self.image["Config"]["ExposedPorts"] = {"8080/tcp": {}}
+        self.image["Config"]["Labels"]["io.chronoai.ornn.web-build-identity"] = "web-" + "e" * 64
+        self.metadata["webBuildIdentity"] = "web-" + "e" * 64
         verify_loaded(self.image, self.metadata, self.env)
         self.image["Config"]["User"] = "1000:1000"
         with self.assertRaises(ValueError):

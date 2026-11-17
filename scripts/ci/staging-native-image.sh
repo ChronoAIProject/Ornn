@@ -18,16 +18,19 @@ build_args=(--platform linux/amd64 --file "ornn-${COMPONENT}/Dockerfile.staging"
   --label org.opencontainers.image.source=https://github.com/ChronoAIProject/Ornn
   --label "org.opencontainers.image.revision=$source_sha"
   --label "org.opencontainers.image.version=git-$source_sha")
+web_build_identity=
 if test "$COMPONENT" = web; then
-  build_args+=(--build-arg "GIT_COMMIT=$source_sha")
+  web_build_identity=$(python3 scripts/ci/staging_web_identity.py "$out/web-build-inputs.json")
+  build_args+=(--build-arg "GIT_COMMIT=$web_build_identity"
+    --label "io.chronoai.ornn.web-build-identity=$web_build_identity")
 fi
 docker build "${build_args[@]}" .
 docker image inspect "$image" > "$out/image-inspect.json"
 echo "Verify $COMPONENT image for revision $source_sha"
 
-export source_sha source_tree image out
+export source_sha source_tree image out web_build_identity
 python3 scripts/ci/staging_image.py inspect
-bash scripts/ci/staging-smoke-image.sh "$COMPONENT" "$image" "$source_sha" "$out"
+bash scripts/ci/staging-smoke-image.sh "$COMPONENT" "$image" "$source_sha" "$out" "$web_build_identity"
 
 archive="ornn-${COMPONENT}-linux-amd64.docker.tar.gz"
 docker image save "$image" | gzip -n > "$out/$archive"
@@ -53,6 +56,8 @@ m={'schema':'ornn-ci-native-image-v1','component':os.environ['COMPONENT'],
                'event':os.environ['GITHUB_EVENT_NAME']},
    'checks':{'numericNonroot':True,'nativeAmd64':True,'sourceLabels':True,
              'containerSmoke':True,'DBIdentityOrClusterQualification':False}}
+if os.environ['COMPONENT'] == 'web':
+    m['webBuildIdentity'] = os.environ['web_build_identity']
 verify_config(config, m, os.environ)
 (r/'metadata.json').write_text(json.dumps(m,indent=2)+'\n')
 PY

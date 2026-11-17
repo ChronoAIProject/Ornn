@@ -7,6 +7,7 @@ component=${1:?Requires component}
 image=${2:?Requires image}
 source_sha=${3:?Requires build revision}
 out=${4:?Requires output directory}
+web_build_identity=${5:-$source_sha}
 mkdir -p "$out"
 case "$component" in api|web) ;; *) echo 'Unknown component' >&2; exit 2 ;; esac
 
@@ -71,13 +72,13 @@ else
     test ! -e /usr/share/nginx/html/config.js.template
   '
   docker exec "$container" wget -q -O - http://127.0.0.1:8080/version.json > "$out/version.json"
-  export source_sha out
+  export source_sha out web_build_identity
   python3 - <<'PY'
 import json, os
 from pathlib import Path
 data = json.loads((Path(os.environ['out']) / 'version.json').read_text())
 package = json.loads(Path('ornn-web/package.json').read_text())
-expected = {'version': package['version'] + '+' + os.environ['source_sha']}
+expected = {'version': package['version'] + '+' + os.environ['web_build_identity']}
 if data != expected:
     raise ValueError(f'Unexpected web build version: {data}; expected {expected}')
 PY
