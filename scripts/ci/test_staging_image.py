@@ -152,12 +152,28 @@ class StagingImageTests(unittest.TestCase):
             "head": {"repo": {"full_name": self.env["GITHUB_REPOSITORY"]}},
             "base": {"ref": "develop"},
         }}
-        guard(self.env, "build", "x86_64", self.env["GITHUB_SHA"], event)
-        with self.assertRaises(ValueError):
-            guard(self.env, "publish", "x86_64", self.env["GITHUB_SHA"], event)
-        event["pull_request"]["head"]["repo"]["full_name"] = "fork/Ornn"
-        with self.assertRaises(ValueError):
-            guard(self.env, "build", "x86_64", self.env["GITHUB_SHA"], event)
+        for base in ("develop", "tl/ornn-image-handoff"):
+            for component in ("api", "web"):
+                with self.subTest(base=base, component=component):
+                    self.env["COMPONENT"] = component
+                    event["pull_request"]["base"]["ref"] = base
+                    event["pull_request"]["head"]["repo"]["full_name"] = self.env["GITHUB_REPOSITORY"]
+                    guard(self.env, "build", "x86_64", self.env["GITHUB_SHA"], event)
+                    with self.assertRaises(ValueError):
+                        guard(self.env, "publish", "x86_64", self.env["GITHUB_SHA"], event)
+                    event["pull_request"]["head"]["repo"]["full_name"] = "fork/Ornn"
+                    with self.assertRaises(ValueError):
+                        guard(self.env, "build", "x86_64", self.env["GITHUB_SHA"], event)
+
+    def test_pr_build_rejects_other_bases(self):
+        self.env.update(GITHUB_EVENT_NAME="pull_request", GITHUB_REF="refs/pull/12/merge")
+        for base in ("main", "other", "tl/ornn-image-handoff-extra", ""):
+            event = {"pull_request": {
+                "head": {"repo": {"full_name": self.env["GITHUB_REPOSITORY"]}},
+                "base": {"ref": base},
+            }}
+            with self.subTest(base=base), self.assertRaisesRegex(ValueError, "Unexpected PR base"):
+                guard(self.env, "build", "x86_64", self.env["GITHUB_SHA"], event)
 
     def write_archive(self, directory, metadata):
         (directory / "metadata.json").write_text(json.dumps(metadata))
