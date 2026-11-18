@@ -14,6 +14,7 @@ from pathlib import Path
 
 from image_secrets.archive import ImageArchive
 from image_secrets.backend import Gitleaks
+from image_secrets.cache import DetectorCache, fingerprint
 from image_secrets.common import Budget, ScanError, digest_file, write_json
 from image_secrets.engine import scan_archive
 from image_secrets.gate import assess
@@ -78,6 +79,8 @@ def arguments(argv):
     parser.add_argument(
         "--expected-archive-sha256", help="Optional external binding to a previously saved tar"
     )
+    parser.add_argument("--detector-cache", type=Path, help="Previously authenticated detector-only evidence; never untrusted PR input")
+    parser.add_argument("--detector-cache-output", type=Path, help="Sanitized complete detector entries, separate from approval")
     return parser.parse_args(argv)
 
 
@@ -155,6 +158,9 @@ def main(argv=None):
             workspace = Path(temporary)
             backend = Gitleaks("gitleaks", HERE / "gitleaks.toml", workspace, args.timeout)
             result["gitleaks_version"] = backend.version
+            if args.detector_cache or args.detector_cache_output:
+                identity = fingerprint(HERE, backend, {"max_bytes": args.max_bytes, "max_entries": args.max_entries, "timeout": args.timeout})
+                backend.cache = DetectorCache(identity, args.detector_cache)
             candidate = Path(args.input)
             is_archive = args.input_kind == "archive" or (args.input_kind == "auto" and candidate.is_file())
             if is_archive:
@@ -178,6 +184,11 @@ def main(argv=None):
             if digest_file(archive_path) != initial_digest:
                 raise ScanError("archive-changed-during-scan")
             result["scanned_bytes"] = budget.bytes
+            result["detector_metrics"] = backend.metrics
+            if backend.cache is not None:
+                result["detector_cache"] = {"identity": backend.cache.identity, **backend.cache.stats}
+                if args.detector_cache_output:
+                    backend.cache.save(args.detector_cache_output)
             result["complete"] = True
             result["status"] = "FINDINGS" if findings.items else "CLEAN"
     except (Exception, KeyboardInterrupt) as error:  # noqa: BLE001 -- fail closed and suppress unsafe error text
