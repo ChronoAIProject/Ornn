@@ -36,7 +36,7 @@ jobs:
       matrix:
         component: [api, web]
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
           # Release guards verify the tag commit is reachable from origin/main.
@@ -72,7 +72,7 @@ jobs:
         run: bash scripts/ci/staging-scan-image.sh
       - name: Retain redacted scan reports for review, including failures
         if: ${{ always() && hashFiles('staging-image-out/secret-scan-raw/REPORT.json') != '' }}
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         with:
           name: ornn-scan-${{ matrix.component }}-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
@@ -87,7 +87,7 @@ jobs:
           retention-days: 7
       - name: Retain exact image and metadata
         if: ${{ always() && hashFiles('staging-image-out/metadata.json') != '' }}
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         with:
           name: ornn-native-${{ matrix.component }}-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: staging-image-out/
@@ -117,7 +117,7 @@ jobs:
       matrix:
         component: [api, web]
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
           # Release guards verify the tag commit is reachable from origin/main.
@@ -128,7 +128,7 @@ jobs:
           COMPONENT: ${{ matrix.component }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python3 scripts/ci/staging_artifact.py
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
         with:
           artifact-ids: ${{ steps.artifact.outputs.artifact-id }}
           path: staging-image-out/
@@ -151,14 +151,14 @@ jobs:
           DOCKER_CONFIG: ${{ runner.temp }}/ornn-ghcr
         run: bash scripts/ci/staging-publish-image.sh
       - name: Retain publication receipt
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         with:
           name: ornn-published-${{ matrix.component }}-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: staging-image-out/publication.json
           if-no-files-found: error
           retention-days: 7
       - name: Retain artifact selection and publication execution
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         with:
           name: ornn-publication-execution-${{ matrix.component }}-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
@@ -167,3 +167,67 @@ jobs:
             staging-image-out/registry-observation.json
           if-no-files-found: error
           retention-days: 7
+
+  deploy:
+    needs: publish
+    if: >-
+      github.repository == 'ChronoAIProject/Ornn' &&
+      github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-24.04
+    environment: staging
+    timeout-minutes: 60
+    concurrency:
+      group: staging-deploy
+      # Finish active writes/recovery; GitHub replaces older pending jobs.
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Validate and mask deployment configuration
+        id: configuration
+        env:
+          ORNN_INFRA_CONFIG: ${{ vars.ORNN_INFRA_CONFIG == secrets.ORNN_INFRA_CONFIG_MASK && vars.ORNN_INFRA_CONFIG || '' }}
+          ORNN_INFRA_CONFIG_MASK: ${{ secrets.ORNN_INFRA_CONFIG_MASK }}
+        run: python3 -B scripts/ci/staging_deploy.py configure
+      - name: Create restricted source reader token
+        id: infra-token
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349
+        with:
+          app-id: ${{ vars.ORNN_INFRA_APP_ID == steps.configuration.outputs.app-id && vars.ORNN_INFRA_APP_ID || '' }}
+          private-key: ${{ secrets.ORNN_INFRA_APP_PRIVATE_KEY }}
+          owner: ${{ steps.configuration.outputs.owner }}
+          repositories: ${{ steps.configuration.outputs.repository-name }}
+          permission-contents: read
+      - name: Check out pinned deployment source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: ${{ steps.configuration.outputs.repository }}
+          ref: ${{ steps.configuration.outputs.ref }}
+          token: ${{ steps.infra-token.outputs.token }}
+          path: deployment-source
+          persist-credentials: false
+      - name: Read API publication receipt
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
+        with:
+          name: ornn-published-api-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/deployment-receipts/api
+      - name: Read web publication receipt
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
+        with:
+          name: ornn-published-web-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/deployment-receipts/web
+      - name: Deploy and verify published components
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CD_NYXID_CLIENT_ID: ${{ secrets.CD_NYXID_CLIENT_ID }}
+          CD_NYXID_CLIENT_SECRET: ${{ secrets.CD_NYXID_CLIENT_SECRET }}
+          SMOKE_NYXID_CLIENT_ID: ${{ secrets.SMOKE_NYXID_CLIENT_ID }}
+          SMOKE_NYXID_CLIENT_SECRET: ${{ secrets.SMOKE_NYXID_CLIENT_SECRET }}
+        run: python3 -B scripts/ci/staging_deploy.py deploy
+      - name: Remove private source and ephemeral receipts
+        if: always()
+        run: python3 -B scripts/ci/staging_deploy.py cleanup
