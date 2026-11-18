@@ -14,13 +14,12 @@
 #      override via repo/org variable AUTO_GH_ACCOUNT).
 # Human PRs (any other author + non-auto/* branch) are unaffected.
 #
-# pull_request_target runs in the BASE repo context. This workflow performs NO
-# checkout and runs NO PR code — it only reads event metadata — so the elevated
-# context is safe.
+# The guard needs only PR event metadata. Use the ordinary pull_request event
+# with read-only permissions; there is no checkout or custom credential access.
 name: auto-base-guard
 
 on:
-  pull_request_target:
+  pull_request:
     types: [opened, reopened, edited, synchronize]
 
 permissions:
