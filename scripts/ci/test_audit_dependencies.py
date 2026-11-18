@@ -41,6 +41,17 @@ class AuditExceptionTests(unittest.TestCase):
             with self.subTest(offset=offset), self.assertRaises(ValueError):
                 audit.exception_ids(self.config, self.root, self.now + timedelta(days=offset))
 
+    def test_offset_expiry_is_enforced_at_the_same_utc_instant(self):
+        self.config["exceptions"][0]["expires_at"] = "2026-11-19T00:00:00+08:00"
+        expiry_utc = datetime(2026, 11, 18, 16, tzinfo=timezone.utc)
+        self.assertEqual(
+            audit.exception_ids(self.config, self.root, expiry_utc - timedelta(microseconds=1)),
+            ["GHSA-fc5q-39xc-vjpf"],
+        )
+        for offset in (0, 1):
+            with self.subTest(offset=offset), self.assertRaises(ValueError):
+                audit.exception_ids(self.config, self.root, expiry_utc + timedelta(seconds=offset))
+
     def test_rejects_changed_input_and_symlink(self):
         path = self.root / "bun.lock"
         path.write_bytes(b"unreviewed dependencies")

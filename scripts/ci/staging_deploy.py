@@ -7,6 +7,8 @@ import shutil
 import subprocess
 import sys
 
+from staging_deploy_diagnostics import emit_rows
+
 
 class Refused(Exception):
     """Only fixed state codes are emitted by the command-line boundary."""
@@ -86,16 +88,18 @@ def deploy_components(env, run=subprocess.run, emit=print):
         receipt = Path(env['RUNNER_TEMP']) / 'deployment-receipts' / component / 'publication.json'
         require(receipt.is_file())
         child_env = dict(env, ORNN_DEPLOY_COMPONENT=component, ORNN_INFRA_CONFIG_PATH=str(config),
-                         ORNN_PUBLICATION_PATH=str(receipt))
+                         ORNN_PUBLICATION_PATH=str(receipt), ORNN_DEPLOY_DIAGNOSTICS='1')
         result = run([sys.executable, '-B', str(root / 'staging/scripts/public_runner.py')],
                      env=child_env, cwd=root, capture_output=True, text=True, timeout=1500)
-        require(len(result.stdout) <= 4096)
+        require(len(result.stdout) <= 16384)
         state = json.loads(result.stdout, object_pairs_hook=unique_object)
-        require(isinstance(state, dict) and set(state) == {'component', 'result', 'recovery', 'mutations'})
+        require(isinstance(state, dict) and set(state) in ({'component', 'result', 'recovery', 'mutations'},
+                                                        {'component', 'result', 'recovery', 'mutations', 'diagnostics'}))
         require(state['component'] == component and state['result'] in {'PASS', 'STOP'}
                 and state['recovery'] in {'NOT_ATTEMPTED', 'STARTED', 'VERIFIED', 'FAILED_STOP'}
                 and type(state['mutations']) is int and 0 <= state['mutations'] <= 2)
         # Raw stderr is deliberately never printed, even on timeout or failure.
+        emit_rows(component, state.get('diagnostics', []), emit)
         emit(state['result'] + ' ' + component + ' recovery=' + state['recovery'])
         require(result.returncode == 0 and state['result'] == 'PASS')
 
