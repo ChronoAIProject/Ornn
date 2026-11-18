@@ -21,7 +21,14 @@ def layers(archive):
             digest = "sha256:" + h.hexdigest()
             if digest != expected:
                 raise ValueError("Layer bytes differ from image config")
-            result.append({"digest": digest, "bytes": saved.getmember(name).size})
+            counts = {"entries": 0, "files": 0, "directories": 0, "links": 0}
+            with saved.extractfile(name) as stream, tarfile.open(fileobj=stream, mode="r|*") as layer:
+                for member in layer:
+                    counts["entries"] += 1
+                    counts["files"] += member.isfile()
+                    counts["directories"] += member.isdir()
+                    counts["links"] += member.issym() or member.islnk()
+            result.append({"digest": digest, "bytes": saved.getmember(name).size, **counts})
         return result
 
 
