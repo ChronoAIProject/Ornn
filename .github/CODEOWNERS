@@ -1,4 +1,4 @@
-# Code Owners — enforce maintainer review on trust-critical paths.
+# Code Owners — assign maintainer review on trust-critical paths.
 #
 # Branch protection on `main` and `develop` must enable
 # "Require review from Code Owners" for these rules to actually gate.
@@ -6,15 +6,14 @@
 # Pattern precedence: last-matching wins, per the CODEOWNERS format.
 
 # ---- Default owner ------------------------------------------------------
-# Nothing falls through without a maintainer review today. Relax later if
-# we add team members.
+# Assign a maintainer to every path. Review enforcement depends on the
+# branch-protection setting described above.
 *                                @chronoai-shining
 
 # ---- Workflow + CODEOWNERS itself --------------------------------------
-# These dictate what gets auto-approved / auto-merged / tagged by the
-# release state machine. Any change to them must come from the maintainer
-# so a malicious PR can't loosen the approval gate then auto-merge itself.
-/.github/workflows/              @chronoai-shining
+# Own every workflow, including nested paths, and the ownership rules themselves.
+# CODEOWNERS assigns reviewers; it does not restrict who may author a change.
+/.github/workflows/**            @chronoai-shining
 /.github/CODEOWNERS              @chronoai-shining
 
 # ---- Changeset config --------------------------------------------------
