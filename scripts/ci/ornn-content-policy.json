@@ -4379,6 +4379,71 @@
       "approved_occurrence_ids": [
         "c9cef378ac19d473b0d2f5f7f0ecbbb29201633eadee993a09f65324b373eda0"
       ]
+    },
+    {
+      "component": "api",
+      "path": "app/ornn-api/src/clients/nyxid/saTestHarness.ts",
+      "rule": "gitleaks.image-secret-assignment",
+      "file_sha256": "beb22308ef506e8e6284b7e9443cd57d2e493d6736ca1735c8a7f61a3a774ff7",
+      "classification": "public-material",
+      "reason": "The exact scanner capture is a noncomputed TypeScript PropertyAccessExpression in public source; it contains no credential literal. File, candidate and line remain pinned.",
+      "candidate_sha256": "da26b0e61a84e23a7bcdc05e9b8fa0d2bd18b62cb74c5f3d10f0aad8e29485a4",
+      "line": 32,
+      "approved_occurrence_ids": [
+        "a24767a58fa9d61315587dde7cdd495ee13e33f859ba64b180727fdc051eae04"
+      ]
+    },
+    {
+      "component": "api",
+      "path": "app/ornn-api/src/clients/nyxid/base.ts",
+      "rule": "gitleaks.image-secret-assignment",
+      "file_sha256": "fd2d3303dea1c169073cdc40fbb0bd498c189f12d82d0e269481386e67896be6",
+      "classification": "public-material",
+      "reason": "The exact scanner capture is a noncomputed TypeScript PropertyAccessExpression in public source; it contains no credential literal. File, candidate and line remain pinned.",
+      "candidate_sha256": "7bd791ce913de8b060d09273923c40906e98ac9eefaa891e92d02963d4b9ab1f",
+      "line": 140,
+      "approved_occurrence_ids": [
+        "c8a4880901d55aad60c046398d3316ea291742e0132f2015d0e4e17cfc2737cb"
+      ]
+    },
+    {
+      "component": "api",
+      "path": "app/ornn-api/src/bootstrap.ts",
+      "rule": "gitleaks.image-secret-assignment",
+      "file_sha256": "742299142e9bf474ba580953fb25e88383534b1043095aaea1f7a2ffccae12de",
+      "classification": "public-material",
+      "reason": "The exact scanner capture is a noncomputed TypeScript PropertyAccessExpression in public source; it contains no credential literal. File, candidate and line remain pinned.",
+      "candidate_sha256": "fd83a6213a285786df3d81b0bfccacef6f86d318c580fa0164f99aa2f0f22f09",
+      "line": 294,
+      "approved_occurrence_ids": [
+        "b8cd1024495ea40eb06b905622f573f94afe904a77773a0343b999033646bdfc"
+      ]
+    },
+    {
+      "component": "api",
+      "path": "app/ornn-api/src/bootstrap.ts",
+      "rule": "gitleaks.image-secret-assignment",
+      "file_sha256": "742299142e9bf474ba580953fb25e88383534b1043095aaea1f7a2ffccae12de",
+      "classification": "public-material",
+      "reason": "The exact scanner capture is a noncomputed TypeScript PropertyAccessExpression in public source; it contains no credential literal. File, candidate and line remain pinned.",
+      "candidate_sha256": "3ce49ab29b8ded939b1c6545e36ce4eb32ae4d2ead0d8bfd6bbe4817f1f6460e",
+      "line": 301,
+      "approved_occurrence_ids": [
+        "2df312cad3958fa002222f38cdcc5152185316768739882e106e7d1593a05f05"
+      ]
+    },
+    {
+      "component": "api",
+      "path": "app/ornn-api/src/bootstrap.ts",
+      "rule": "gitleaks.image-secret-assignment",
+      "file_sha256": "742299142e9bf474ba580953fb25e88383534b1043095aaea1f7a2ffccae12de",
+      "classification": "public-material",
+      "reason": "The exact scanner capture is a noncomputed TypeScript PropertyAccessExpression in public source; it contains no credential literal. File, candidate and line remain pinned.",
+      "candidate_sha256": "415404fac9ca15766828bca7ec7816dd74ff409779b80ea1761d3e1433e528a4",
+      "line": 357,
+      "approved_occurrence_ids": [
+        "7fb56afa0a6f7fc066bc649dd79e02f6589b65c7b03d44fd08312a7ed191c3be"
+      ]
     }
   ],
   "proposed_native_evidence_sha256": "1329a3782233e111ffa6c914fc0b7ac96b6fb34d6f2dfbcdf8b0f7132986111e"
