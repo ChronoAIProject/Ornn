@@ -52,7 +52,7 @@ jobs:
     steps:
       - name: Mint app token
         id: app-token
-        uses: actions/create-github-app-token@v3
+        uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc # v3
         with:
           app-id: ${{ secrets.RELEASE_BOT_APP_ID }}
           private-key: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
@@ -74,7 +74,7 @@ jobs:
           echo "user-id=${USER_ID}" >> "$GITHUB_OUTPUT"
           echo "Resolved ${SLUG}[bot] → user id ${USER_ID}"
 
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
           # Make git push, gh CLI, and downstream `pull_request` event
@@ -107,7 +107,7 @@ jobs:
       # ─────────────────────────── State A ─────────────────────────── #
       - name: Setup Bun (A)
         if: steps.state.outputs.pending != '0'
-        uses: oven-sh/setup-bun@v2
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
 
       - name: Install deps (A)
         if: steps.state.outputs.pending != '0'
