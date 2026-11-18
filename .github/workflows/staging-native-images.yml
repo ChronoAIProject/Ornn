@@ -7,7 +7,7 @@ name: Staging native images
   push:
     branches: [develop]
   pull_request:
-    branches: [develop]
+    branches: [develop, tl/ornn-image-handoff]
     paths:
       - '.github/workflows/staging-native-images.yml'
       - 'scripts/ci/**'
