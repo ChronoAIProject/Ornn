@@ -1,0 +1,12 @@
+{
+  "package": "@babel/parser",
+  "version": "7.29.3",
+  "source": "https://registry.npmjs.org/@babel/parser/-/parser-7.29.3.tgz",
+  "integrity": "sha512-b3ctpQwp+PROvU/cttc4OYl4MzfJUWy6FZg+PMXfzmt/+39iHVF0sDfqay8TQM3JA2EUOyKcFZt75jWriQijsA==",
+  "lockfile": "bun.lock",
+  "runtime": "lib/index.js is self-contained; no imports, install scripts or bundle execution",
+  "files": {
+    "BABEL-LICENSE": "2e97627cb278aa7556fb9e8817368302301a595b6c7582512b8d74c57b773652",
+    "babel-parser-7.29.3.cjs": "201724d1415df7749087d9d6e88af50f2bcafe2eb68dfbe9347f49d3361ff426"
+  }
+}
