@@ -23,6 +23,27 @@ def missing_manifest(stderr, target):
     )
 
 
+class RegistryOperationError(ValueError):
+    """Only allowlisted diagnostics cross into public logs; never remote text."""
+
+    def __init__(self, operation, stderr):
+        operation = operation if operation in {"push", "pull", "manifest", "digest"} else "operation"
+        diagnostic = stderr.decode("utf-8", errors="replace")
+        status = re.search(r"(?:unexpected status(?: code)?|response status|:)\s+(4[0-9]{2}|5[0-9]{2})\b",
+                           diagnostic, re.IGNORECASE)
+        code = status[1] if status else "unknown"
+        patterns = [
+            ("authorization", r"\b(?:UNAUTHORIZED|DENIED|permission_denied|write_package)\b"),
+            ("rate_limit", r"\b(?:TOOMANYREQUESTS|rate.limit)\b"),
+            ("invalid_content", r"\b(?:MANIFEST_INVALID|BLOB_UNKNOWN|DIGEST_INVALID|NAME_INVALID|SIZE_INVALID|UNSUPPORTED)\b"),
+            ("tls", r"\b(?:x509|TLS|certificate)\b"),
+            ("network", r"\b(?:timeout|timed out|connection refused|no such host|connection reset)\b"),
+            ("local_layout", r"(?:loading .* as OCI layout|layout contains|no such file or directory)"),
+        ]
+        category = next((name for name, pattern in patterns if re.search(pattern, diagnostic, re.IGNORECASE)), "unclassified")
+        super().__init__(f"Registry {operation} failed; category={category}; http_status={code}; raw output withheld")
+
+
 class CraneRegistry:
     def __init__(self, command="crane", run=subprocess.run):
         self.command = command
@@ -33,7 +54,7 @@ class CraneRegistry:
         if result.returncode:
             if allow_missing and missing_manifest(result.stderr.decode(), allow_missing):
                 return None
-            raise ValueError("Registry operation failed; raw output withheld")
+            raise RegistryOperationError(args[0], result.stderr)
         return result.stdout
 
     def lookup(self, target):
@@ -101,8 +122,12 @@ def publish_exact(registry, target, layout, pulled, manifest, digest, metadata, 
                                 historyIsCompleteAuditLog=False,
                                 atomicCreateOnlySupported=False)
         return action
+    except RegistryOperationError as error:
+        # A nonzero crane exit is not evidence of a competing package writer.
+        print("::error title=Ornn registry operation failed::" + str(error), flush=True)
+        raise
     except (ValueError, OSError, subprocess.SubprocessError):
-        print("::error title=Ornn publication safety check failed::Remote identity or package "
-              "history verification failed; possible concurrent writer. Publication is failed; "
+        print("::error title=Ornn publication safety check failed::Publication validation failed. "
+              "Identity, tag or package-history evidence did not verify. "
               "do not deploy from this job. Investigate before retrying.", flush=True)
         raise
