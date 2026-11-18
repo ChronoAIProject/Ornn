@@ -7,15 +7,16 @@
       "version": "4.0.5",
       "expires_at": "2026-11-22T00:00:00+08:00",
       "tracking_issue": "https://github.com/ChronoAIProject/Ornn/issues/1278",
-      "justification": "Reassessed 2026-11-19: GitHub withdrew GHSA-fc5q-39xc-vjpf at 2026-11-18T15:38:56Z, but the npm audit feed still reports it for picomatch 4.0.5. The latest release is 4.0.7 and the advisory lists no patched version. Renew for three days while the feed catches up; remove when it stops reporting the withdrawn advisory, or reassess before expiry. Picomatch remains confined to root development tooling, web Vite/Vitest and SDK Vitest; the API and web production dependency closures do not reach it. The API image installs only production API dependencies. The web runtime serves compiled static files with nginx, without build tooling or node_modules. Glob patterns come from trusted repository configuration, not user input. All seven bound dependency and image-build inputs are unchanged. Expiry and input-change checks remain mandatory; this exception does not approve production cutover. Sources: https://github.com/advisories/GHSA-fc5q-39xc-vjpf and https://github.com/micromatch/picomatch/pull/235#issuecomment-6315749381.",
+      "justification": "Reassessed 2026-11-19: GitHub withdrew GHSA-fc5q-39xc-vjpf at 2026-11-18T15:38:56Z, but the npm audit feed still reports it for picomatch 4.0.5. The latest release is 4.0.7 and the advisory lists no patched version. Renew for three days while the feed catches up; remove when it stops reporting the withdrawn advisory, or reassess before expiry. Picomatch remains confined to root development tooling, web Vite/Vitest and SDK Vitest; the API and web production dependency closures do not reach it. The API image installs only production API dependencies. The web runtime serves compiled static files with nginx, without build tooling or node_modules. Glob patterns come from trusted repository configuration, not user input. The lockfile, real workspace dependency declarations and frozen production-only API install are unchanged. The API Dockerfile now separates the sanitized runtime, lockfile-derived production dependencies and application; the dependency reconstruction helper is additionally bound below and rejects manifest dependency drift. This packaging-only rebind requires review with the layer-reuse PR; advisory, rationale and expiry are unchanged. Expiry and input-change checks remain mandatory; this exception does not approve production cutover. Sources: https://github.com/advisories/GHSA-fc5q-39xc-vjpf and https://github.com/micromatch/picomatch/pull/235#issuecomment-6315749381.",
       "input_sha256": {
         "package.json": "a26df94629fdef6d3f55edf532dc60336798d637533235f3ba9e8c4d72455c24",
         "bun.lock": "ffc4679420119a4ea72174a3c20cbfab777b0698e97dfa98f99f9dca7ad0ce5c",
         "ornn-api/package.json": "54b06945b9f9fe69f4829c7d9b08722d954eb4cbd2b815d639edddf1a5abd5f6",
         "ornn-web/package.json": "e336c4a36bcb081e8ecdeb12aa4fc085aad53a6cae4da9928747992e5a2d9cb6",
         "sdk/typescript/package.json": "4b6bc345d359666b3b74e947f65c97c83539d8f5d625dd0dee31de516269addb",
-        "ornn-api/Dockerfile.staging": "dadfb0e5f42a42359afd7ed22b789d927dca0b9dc029430b5f717791829897d9",
-        "ornn-web/Dockerfile.staging": "d317878e6c203993ca8efbb15f0de3008a3fd623cbf7aaa069cb22a8b2b3972f"
+        "ornn-api/Dockerfile.staging": "b7e14ce50f426a6db82537a46740a02a457f5b0f244447f93f356d06a101039f",
+        "ornn-web/Dockerfile.staging": "d317878e6c203993ca8efbb15f0de3008a3fd623cbf7aaa069cb22a8b2b3972f",
+        "scripts/ci/staging-api-dependencies.mjs": "4477d22ba5b8e5df560295680c1713ac6706225f6c7ed34dba930189d4f9c2c7"
       }
     }
   ]

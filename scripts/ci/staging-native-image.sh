@@ -18,6 +18,12 @@ build_args=(--platform linux/amd64 --file "ornn-${COMPONENT}/Dockerfile.staging"
   --label org.opencontainers.image.source=https://github.com/ChronoAIProject/Ornn
   --label "org.opencontainers.image.revision=$source_sha"
   --label "org.opencontainers.image.version=git-$source_sha")
+# A fixed packaging epoch makes checkout times irrelevant to API layer digests.
+# Labels retain the actual source revision; all scan/receipt checks stay unchanged.
+if test "$COMPONENT" = api; then
+  build_args+=(--build-arg SOURCE_DATE_EPOCH=0
+    --output type=docker,rewrite-timestamp=true)
+fi
 web_build_identity=
 if test "$COMPONENT" = web; then
   web_build_identity=$(python3 scripts/ci/staging_web_identity.py "$out/web-build-inputs.json")

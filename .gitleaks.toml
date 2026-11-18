@@ -53,3 +53,13 @@ condition = "AND"
 paths = ['''^scripts/ci/ornn-content-policy-review\.json$''']
 regexTarget = "secret"
 regexes = ['''^00ccd72b9eebd8d1a0697563bdc1dda3c8a8fca19cbb8fbffbf55332db46dcbb$''']
+
+# Public source checksum binding the lockfile-to-manifest adapter for the
+# existing dependency-audit exception. No credential or general hash exemption.
+[[allowlists]]
+description = "Exact public SHA256 of the API dependency packaging helper"
+targetRules = ["generic-api-key"]
+condition = "AND"
+paths = ['''^\.github/audit-exceptions\.json$''']
+regexTarget = "secret"
+regexes = ['''^4477d22ba5b8e5df560295680c1713ac6706225f6c7ed34dba930189d4f9c2c7$''']

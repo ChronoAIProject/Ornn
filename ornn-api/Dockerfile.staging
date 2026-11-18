@@ -1,35 +1,20 @@
-# Pin bun explicitly. `oven/bun:latest` floats and bun's workspace
-# hoister behaviour has shifted between releases (see the comment in
-# ornn-web/Dockerfile for the failure mode). Same pinning + same
-# copy-the-real-package.jsons treatment here so the install stage stays
-# reproducible.
-FROM oven/bun:1.3.14 AS install
-
+# Dependency inputs come from the committed lockfile, including every workspace
+# and override. App source/package version/scripts do not invalidate installation.
+FROM oven/bun:1.3.14@sha256:50317d83cd5a5ae1d8b35b3379c69f57ce1a0dbf4def91f0965653d767851834 AS install
 WORKDIR /app
-
-# Copy workspace root package files
-COPY package.json bun.lock ./
-
-# Copy every workspace package.json the lockfile references. Stubs used
-# to live here too (see git history) and they hit the same bun-hoister
-# issue documented in ornn-web/Dockerfile — the lockfile and stubbed
-# package.jsons drifted apart and `bun install` skipped hoistable deps.
-COPY ornn-api/package.json ornn-api/
-COPY ornn-web/package.json ornn-web/
-COPY sdk/typescript/package.json sdk/typescript/
-
-# Test/build tooling is unnecessary in the API runtime and widens its contents.
-# Install only the API workspace; web dependencies are not API runtime inputs.
-# Remove package documentation and source fixtures before the runtime copy.
-RUN bun install --frozen-lockfile --production --filter ornn-api \
+COPY bun.lock ./
+COPY scripts/ci/staging-api-dependencies.mjs /tmp/dependencies.mjs
+RUN bun /tmp/dependencies.mjs bun.lock . \
+ && bun install --frozen-lockfile --production --filter ornn-api \
  && find /app/node_modules/.bun -type d \( -name test -o -name tests \
       -o -name __tests__ -o -name __fixtures__ -o -name examples -o -name docs \) \
       -prune -exec rm -rf '{}' + \
  && find /app/node_modules/.bun -type f \( -name '*.map' -o -iname 'readme*' \
-      -o -name '.coveralls.yml' \) -delete
+      -o -name '.coveralls.yml' \) -delete \
+ && find /app -exec touch -h -d '@0' '{}' +
 
 # Runtime stage
-FROM oven/bun:1.3.14 AS runtime
+FROM oven/bun:1.3.14@sha256:50317d83cd5a5ae1d8b35b3379c69f57ce1a0dbf4def91f0965653d767851834 AS runtime
 
 WORKDIR /app
 
@@ -61,29 +46,35 @@ RUN apt-get update \
  && find /usr/lib/python3.13 "$AGENTSEAL_VENV/lib/python3.13" -type d \
       \( -name __pycache__ -o -name tests -o -name test \) -prune -exec rm -rf '{}' +
 
-# Skill-scan wrapper — invoked by ornn-api as `python scan_skill.py <zip>`.
-COPY ornn-api/scripts/scan_skill.py /opt/agentseal/scan_skill.py
+# Runtime-generated installer logs and inode caches are not runtime inputs.
+RUN rm -rf /var/log/apt/* /var/log/dpkg.log /var/log/alternatives.log \
+      /var/cache/ldconfig/aux-cache
 
-# Surface the canonical interpreter + script paths so ornn-api's config
-# defaults work without operator overrides. Both can be overridden at
-# runtime by the deployment if a sidecar / different layout is preferred.
-ENV AGENTSEAL_PYTHON=/opt/agentseal/bin/python
-ENV AGENTSEAL_SCRIPT=/opt/agentseal/scan_skill.py
+# Normalize the sanitized snapshot before any dependency or application input.
+# Do not expose inherited manuals by publishing the intermediate runtime layers.
+FROM oven/bun:1.3.14@sha256:50317d83cd5a5ae1d8b35b3379c69f57ce1a0dbf4def91f0965653d767851834 AS base-export
+COPY --from=runtime / /rootfs/
+RUN mkdir -p /rootfs/app/ornn-api /rootfs/app/data \
+ && chown 1000:1000 /rootfs/app/data \
+ && find /rootfs -exec touch -h -d '@0' '{}' +
 
-COPY --from=install /app /app
+# Package all application-owned files in one final layer. This stage also checks
+# that the real manifests still match the lockfile's dependency declarations.
+FROM oven/bun:1.3.14@sha256:50317d83cd5a5ae1d8b35b3379c69f57ce1a0dbf4def91f0965653d767851834 AS application
+WORKDIR /inputs
+COPY bun.lock package.json ./
+COPY ornn-api/package.json ornn-api/
+COPY ornn-web/package.json ornn-web/
+COPY sdk/typescript/package.json sdk/typescript/
+COPY scripts/ci/staging-api-dependencies.mjs /tmp/dependencies.mjs
+RUN bun /tmp/dependencies.mjs --check bun.lock .
+COPY ornn-api/package.json /payload/app/ornn-api/package.json
+COPY ornn-api/scripts/scan_skill.py /payload/opt/agentseal/scan_skill.py
+COPY ornn-api/src/ /payload/app/ornn-api/src/
+RUN find /payload -exec touch -h -d '@0' '{}' +
 
-# Copy source code
-COPY ornn-api/src/ /app/ornn-api/src/
-
-WORKDIR /app/ornn-api
-
-# Keep the staging data path writable by the runtime identity.
-RUN mkdir -p /app/data && chown -R 1000:1000 /app/data
-
-# Copy the cleaned runtime filesystem into the public artifact. Deleting inherited
-# manuals in a later layer would still expose them through docker save.
 FROM scratch
-COPY --from=runtime / /
+COPY --from=base-export /rootfs/ /
 ARG AGENTSEAL_VERSION=0.9.6
 ENV PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bun-node-fallback-bin \
     BUN_RUNTIME_TRANSPILER_CACHE_PATH=0 \
@@ -94,12 +85,11 @@ ENV PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/local
     AGENTSEAL_SCRIPT=/opt/agentseal/scan_skill.py
 WORKDIR /app/ornn-api
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
-
 LABEL org.opencontainers.image.source="https://github.com/ChronoAIProject/Ornn"
 USER 1000:1000
-
 EXPOSE 3802
-
-# chrono-cd readiness: /readyz (Mongo-aware); liveness: /health.
-
 CMD ["bun", "run", "src/index.ts"]
+# Last two layers depend only on dependencies, then application inputs. No squash.
+# Bun also creates per-workspace node_modules links; retain the full install tree.
+COPY --from=install /app/ /app/
+COPY --from=application /payload/ /

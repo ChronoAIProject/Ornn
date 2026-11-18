@@ -1,0 +1,76 @@
+name: API image layer reuse
+
+"on":
+  pull_request:
+    branches: [develop]
+    paths:
+      - 'ornn-api/Dockerfile.staging*'
+      - 'scripts/ci/staging-api-dependencies*'
+      - 'scripts/ci/staging_api_layer_proof.py'
+      - 'scripts/ci/staging_api_layer_scan_proof.py'
+      - 'scripts/ci/test_staging_api_layers.py'
+      - '.github/workflows/staging-api-layer-proof.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  layers:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Test dependency graph reconstruction
+        run: |
+          docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges:true \
+            -v "$PWD:/source:ro" -w /source \
+            oven/bun:1.3.14@sha256:50317d83cd5a5ae1d8b35b3379c69f57ce1a0dbf4def91f0965653d767851834 \
+            bun test scripts/ci/staging-api-dependencies.test.mjs
+      - name: Build two consecutive API images with only an application edit
+        run: |
+          set -euo pipefail
+          mkdir layer-proof
+          exec > >(tee layer-proof/build.log) 2>&1
+          for variant in first second; do
+            if test "$variant" = second; then
+              printf '\n// Native image layer reuse regression.\n' >> ornn-api/src/index.ts
+              # Simulate another checkout: timestamps must not change stable blobs.
+              find ornn-api ornn-web sdk scripts -exec touch -h -d '@1700000001' '{}' +
+              touch -d '@1700000001' bun.lock package.json
+            fi
+            started=$(date +%s)
+            docker build --platform linux/amd64 --provenance=false --sbom=false \
+              --build-arg SOURCE_DATE_EPOCH=0 --output type=docker,rewrite-timestamp=true \
+              --file ornn-api/Dockerfile.staging --tag "ornn-layer-proof:$variant" .
+            bash scripts/ci/staging-smoke-image.sh api "ornn-layer-proof:$variant" \
+              "$GITHUB_SHA" "layer-proof/$variant"
+            docker image save "ornn-layer-proof:$variant" > "$RUNNER_TEMP/$variant.tar"
+            echo "$variant build+smoke+export seconds=$(( $(date +%s) - started ))"
+          done
+          python3 scripts/ci/staging_api_layer_proof.py "$RUNNER_TEMP/first.tar" \
+            "$RUNNER_TEMP/second.tar" layer-proof/RESULT.json
+      - name: Install pinned detector for complete layer scans
+        run: |
+          set -euo pipefail
+          tool_dir="$RUNNER_TEMP/ornn-layer-gitleaks"
+          mkdir -p "$tool_dir"
+          curl --fail --silent --show-error --location --retry 3 \
+            https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz \
+            --output "$tool_dir/gitleaks.tar.gz"
+          echo "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  $tool_dir/gitleaks.tar.gz" | sha256sum --check --strict
+          tar -xzf "$tool_dir/gitleaks.tar.gz" -C "$tool_dir" gitleaks
+          echo "$tool_dir" >> "$GITHUB_PATH"
+      - name: Prove detector hits and complete fresh-scan parity
+        run: |
+          python3 scripts/ci/staging_api_layer_scan_proof.py "$RUNNER_TEMP/first.tar" \
+            "$RUNNER_TEMP/second.tar" layer-proof/scan
+      - name: Retain layer proof
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: api-layer-proof-${{ github.run_id }}-${{ github.run_attempt }}
+          path: layer-proof/
+          if-no-files-found: error
+          retention-days: 7
