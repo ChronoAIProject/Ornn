@@ -1,5 +1,11 @@
 # Ornn content classification catalog and scanner 1.0.3 adapter
 
+The proposed v2 extension is described in [BUNDLE-CANDIDATES.md](BUNDLE-CANDIDATES.md).
+It preserves the existing exact-file entries and adds one explicitly reviewed
+candidate-value scope for rebuilt Vite bundles. Its new catalog/adapter approval
+is pending SA-03; existing approval pins do not authorize the extension. The
+remaining historical description below documents the original v1 catalog.
+
 Status: REVIEW CANDIDATE. This package does not grant publication approval.
 
 `ornn-content-policy.json` deterministically derives from SA-01's 371 approved smoke-image occurrences. It contains 369 occurrence-specific entries under 334 component/path/rule/file-content keys. Repeated candidates additionally retain candidate SHA256 and line constraints. Two identical occurrences deduplicate; every original finding ID remains recorded. `build_catalog.py` reproduces the JSON byte-for-byte from the named evidence. `REPRODUCIBILITY.json` records this check.
@@ -7,7 +13,7 @@ Status: REVIEW CANDIDATE. This package does not grant publication approval.
 Catalog SHA256: `bfdb8f657bdbf627ec92daf858edeb7cfd284c2b10e25970f2026a62afaffa07`.
 Required public allowlist SHA256: `0db6a7a261c27645c36d075aac5a16746907b21875560ba95e49cc7e91e6000f`.
 
-The existing SA-01 verdict approves exact smoke archives. A NEW SA-01 confirmation of this catalog and adapter is required before using its packets. An identical candidate hash alone cannot approve a changed file. New/changed/unresolved findings remain blocking, as do REAL classifications. High entropy is retained as advisory under owner Policy A. Neither the frozen scanner nor its detectors is modified.
+The original SA-01 verdict approves exact smoke archives. A matching confirmation of the catalog and adapter is required before using its packets. Under v1, an identical candidate hash alone cannot approve a changed file. V2 permits only an explicitly approved candidate hash, rule, component and bounded bundle path scope; every new value outside that approval remains unresolved. REAL classifications remain blocking. High entropy is retained as advisory under owner Policy A. Detection remains unchanged; the packet reader also accepts owner-designated reviewer SA-03 and preserves the actual reviewer identity.
 
 ## Why the adapter is needed
 
