@@ -296,7 +296,7 @@ class PublicationTests(unittest.TestCase):
             with self.subTest(text=text):
                 self.assertFalse(missing_manifest(text, self.target))
                 run = Mock(return_value=SimpleNamespace(returncode=1, stderr=text.encode()))
-                with self.assertRaisesRegex(ValueError, '^Registry manifest failed; category=[a-z_]+; http_status=(unknown|[45][0-9]{2}); raw output withheld$'):
+                with self.assertRaisesRegex(ValueError, '^Registry operation failed; raw output withheld$'):
                     CraneRegistry(run=run).lookup(self.target)
 
     def test_manifest_absence_does_not_parse_status_codes_inside_source_sha(self):
