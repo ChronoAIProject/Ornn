@@ -5,9 +5,9 @@
       "advisory": "GHSA-fc5q-39xc-vjpf",
       "package": "picomatch",
       "version": "4.0.5",
-      "expires_at": "2026-11-19T00:00:00+08:00",
-      "tracking_issue": "https://github.com/ChronoAIProject/Ornn/issues/1257",
-      "justification": "Temporary build-tool ReDoS exception pending an upstream fix. The advisory affects <=4.0.7 and has no patched release. Picomatch is reached only from root development tooling, web Vite/Vitest and SDK Vitest; the API and web production dependency closures do not reach it. The API image installs only production API dependencies and its retained native archive contains no picomatch package. The web runtime is nginx serving compiled static files, with no build tooling or node_modules copied. Build patterns come from trusted repository configuration. Reassess before expiry or any bound dependency/build-input change; this exception does not approve production cutover.",
+      "expires_at": "2026-11-22T00:00:00+08:00",
+      "tracking_issue": "https://github.com/ChronoAIProject/Ornn/issues/1278",
+      "justification": "Reassessed 2026-11-19: GitHub withdrew GHSA-fc5q-39xc-vjpf at 2026-11-18T15:38:56Z, but the npm audit feed still reports it for picomatch 4.0.5. The latest release is 4.0.7 and the advisory lists no patched version. Renew for three days while the feed catches up; remove when it stops reporting the withdrawn advisory, or reassess before expiry. Picomatch remains confined to root development tooling, web Vite/Vitest and SDK Vitest; the API and web production dependency closures do not reach it. The API image installs only production API dependencies. The web runtime serves compiled static files with nginx, without build tooling or node_modules. Glob patterns come from trusted repository configuration, not user input. All seven bound dependency and image-build inputs are unchanged. Expiry and input-change checks remain mandatory; this exception does not approve production cutover. Sources: https://github.com/advisories/GHSA-fc5q-39xc-vjpf and https://github.com/micromatch/picomatch/pull/235#issuecomment-6315749381.",
       "input_sha256": {
         "package.json": "a26df94629fdef6d3f55edf532dc60336798d637533235f3ba9e8c4d72455c24",
         "bun.lock": "ffc4679420119a4ea72174a3c20cbfab777b0698e97dfa98f99f9dca7ad0ce5c",
