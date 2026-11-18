@@ -389,7 +389,7 @@ jobs:
       - name: Validate and mask deployment configuration
         id: configuration
         env:
-          ORNN_INFRA_CONFIG: ${{ vars.ORNN_INFRA_CONFIG == secrets.ORNN_INFRA_CONFIG_MASK && vars.ORNN_INFRA_CONFIG || '' }}
+          ORNN_INFRA_CONFIG: ${{ vars.ORNN_INFRA_CONFIG == secrets.ORNN_INFRA_CONFIG_MASK && secrets.ORNN_INFRA_CONFIG_MASK || '' }}
           ORNN_INFRA_CONFIG_MASK: ${{ secrets.ORNN_INFRA_CONFIG_MASK }}
         run: python3 -B scripts/ci/staging_deploy.py configure
       - name: Create restricted source reader token
