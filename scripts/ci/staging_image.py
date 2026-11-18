@@ -48,7 +48,8 @@ def guard(env, mode, machine, head, event=None):
         pr = (event or {}).get("pull_request", {})
         require(pr.get("head", {}).get("repo", {}).get("full_name") == REPOSITORY,
                 "Fork pull requests cannot build publication artifacts")
-        require(pr.get("base", {}).get("ref") == "develop", "Unexpected PR base")
+        require(pr.get("base", {}).get("ref") in ("develop", "tl/ornn-image-handoff"),
+                "Unexpected PR base")
         require(re.fullmatch(r"refs/pull/[1-9][0-9]*/merge", env.get("GITHUB_REF", "")),
                 "Requires PR merge ref")
     elif event_name == "release":

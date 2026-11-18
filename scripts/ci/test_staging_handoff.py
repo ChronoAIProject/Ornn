@@ -18,7 +18,7 @@ class HandoffTests(unittest.TestCase):
     def test_workflow_masks_destination_before_runner_environment_logging(self):
         workflow = (Path(__file__).resolve().parents[2] /
                     ".github/workflows/staging-native-images.yml").read_text()
-        handoff = workflow.split("      - name: Emit API publication handoff\n", 1)[1]
+        handoff = workflow.split("      - name: Emit image publication handoff\n", 1)[1]
         self.assertIn("IMAGE_HANDOFF_REPOSITORY: ${{ secrets.IMAGE_HANDOFF_REPOSITORY }}", handoff)
         self.assertNotIn("vars.IMAGE_HANDOFF_REPOSITORY", workflow)
         self.assertIn("IMAGE_HANDOFF_ENABLED: ${{ vars.IMAGE_HANDOFF_ENABLED }}", handoff)
