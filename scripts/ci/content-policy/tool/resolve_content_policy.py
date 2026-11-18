@@ -58,14 +58,15 @@ def main(argv=None):
         if archive_sha != result["archive_sha256"]:
             raise ScanError("content-archive-mismatch")
         catalog = read_catalog(args.catalog, result)
+        bundle_scopes = {}
         with tempfile.TemporaryDirectory(
             prefix="identity-", dir=args.output
         ) as temporary:
-            identities = archive_identities(args.archive, Path(temporary), result)
+            identities = archive_identities(args.archive, Path(temporary), result, bundle_scopes)
         if digest_file(args.archive) != archive_sha:
             raise ScanError("content-archive-changed")
         matched, unresolved = match_findings(
-            catalog, args.component, result["findings"], identities
+            catalog, args.component, result["findings"], identities, bundle_scopes
         )
         receipt = {
             "schema": "image-content-resolution-v1",
@@ -75,6 +76,7 @@ def main(argv=None):
             "catalog_sha256": digest_file(args.catalog),
             "adapter_files": tool_identity(),
             "identities": identities,
+            "bundle_scopes": bundle_scopes,
             "matched": len(matched),
             "unresolved": unresolved,
             "complete": True,

@@ -11,6 +11,19 @@ from staging_content_receipt import verify_content_receipt
 from staging_scan_receipt import checksum
 
 
+class CommittedContentApprovalTests(unittest.TestCase):
+    def test_checked_in_approval_matches_catalog_parser_and_adapter(self):
+        # Check real committed pins before expensive image builds. Synthetic
+        # receipt fixtures below deliberately isolate their own approval data.
+        from staging_content_receipt import ADAPTER, CATALOG, REVIEW, adapter_identity
+
+        review = json.loads(REVIEW.read_text())
+        self.assertEqual(checksum(REVIEW), REVIEW.with_suffix('.sha256').read_text().strip())
+        self.assertEqual(review['catalog_sha256'], checksum(CATALOG))
+        self.assertEqual(review['adapter_files'], adapter_identity())
+        self.assertTrue((ADAPTER / 'vendor/babel-parser-7.29.3.cjs').is_file())
+
+
 class ContentReceiptTests(unittest.TestCase):
     setUp = fixtures.StagingImageTests.setUp
     write_archive = fixtures.StagingImageTests.write_archive
@@ -41,6 +54,8 @@ class ContentReceiptTests(unittest.TestCase):
             ("resolution", "unresolved", [{}]), ("resolution", "matched", False),
             ("resolution", "matched", 1), ("resolution", "identities", []),
             ("resolution", "identities", {"a" * 64: "invalid"}),
+            ("resolution", "bundle_scopes", []),
+            ("resolution", "bundle_scopes", {"a" * 64: "b" * 64}),
         ]
         cases += [("resolution", key, "0" * 64) for key in (
             "archive_sha256", "raw_report_sha256", "catalog_sha256", "packet_sha256",
@@ -66,6 +81,29 @@ class ContentReceiptTests(unittest.TestCase):
                 self.review.with_suffix(".sha256").write_text(value)
                 with self.subTest(value=value), self.assertRaisesRegex(ValueError, "checksum"):
                     self.verify(directory)
+
+    def test_sa03_review_is_preserved_in_regenerated_packet(self):
+        with tempfile.TemporaryDirectory() as temp:
+            directory = Path(temp)
+            self.write_archive(directory, self.metadata)
+            review = json.loads(self.review.read_text()); review['reviewer'] = 'solution-architect-03'
+            self.review.write_text(json.dumps(review))
+            self.review.with_suffix('.sha256').write_text(checksum(self.review))
+            packet_path = directory / 'secret-scan/classifications.json'
+            packet = json.loads(packet_path.read_text())
+            packet['review'].update(reviewer='solution-architect-03', report_sha256=checksum(self.review))
+            packet_path.write_text(json.dumps(packet))
+            scan_path = directory / 'secret-scan/REPORT.json'
+            scan = json.loads(scan_path.read_text())
+            scan['policy'].update(classifications_sha256=checksum(packet_path),
+                                  classification_review_sha256=checksum(self.review))
+            scan_path.write_text(json.dumps(scan))
+            path = directory / 'secret-scan/RESOLUTION.json'
+            resolution = json.loads(path.read_text())
+            resolution.update(review_sha256=checksum(self.review), packet_sha256=checksum(packet_path),
+                              report_sha256=checksum(scan_path))
+            path.write_text(json.dumps(resolution))
+            self.verify(directory)
 
     def test_raw_errors_or_changed_evidence_cannot_be_assessed_clean(self):
         cases = [("complete", False), ("error", "incomplete"), ("exit_code", 2),

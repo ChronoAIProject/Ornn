@@ -22,7 +22,8 @@ def require(condition, message):
 
 
 def adapter_identity():
-    return {path.name: checksum(path) for path in sorted(ADAPTER.glob("*.py"))}
+    files = [*ADAPTER.glob("*.py"), *ADAPTER.glob("*.cjs"), *(ADAPTER / "vendor").glob("*")]
+    return {p.relative_to(ADAPTER).as_posix(): checksum(p) for p in sorted(files) if p.is_file()}
 
 
 def verify_content_receipt(directory, metadata, scan):
@@ -32,7 +33,7 @@ def verify_content_receipt(directory, metadata, scan):
     review = json.loads(REVIEW.read_text())
     adapter = adapter_identity()
     require(bool(adapter) and review.get("verdict") == "GO_CONTENT_POLICY"
-            and review.get("reviewer") == "solution-architect-01"
+            and review.get("reviewer") in {"solution-architect-01", "solution-architect-03"}
             and review.get("catalog_sha256") == checksum(CATALOG)
             and review.get("adapter_files") == adapter,
             "Missing matching content-policy approval")
@@ -77,6 +78,10 @@ def verify_content_receipt(directory, metadata, scan):
         isinstance(k, str) and isinstance(v, str)
         and re.fullmatch(r"[a-f0-9]{64}", k) and re.fullmatch(r"[a-f0-9]{64}", v)
         for k, v in identities.items()), "Invalid resolved content identities")
+    bundle_scopes = resolution.get("bundle_scopes", {})
+    require(isinstance(bundle_scopes, dict) and set(bundle_scopes) <= set(identities)
+            and all(isinstance(v, str) and re.fullmatch(r"[a-f0-9]{64}", v)
+                    for v in bundle_scopes.values()), "Invalid resolved bundle scopes")
     # Replay the reviewed matcher against retained detections. Archive readback
     # occurs in the trusted build job; its immutable artifact binds this receipt.
     sys.path[:0] = [str(ROOT / "image-secret-scan"), str(ADAPTER)]
@@ -84,7 +89,7 @@ def verify_content_receipt(directory, metadata, scan):
     from image_secrets.common import ScanError
     try:
         matched, unresolved = match_findings(read_catalog(CATALOG, raw), metadata["component"],
-                                             raw["findings"], identities)
+                                             raw["findings"], identities, bundle_scopes)
         expected_packet = make_packet(CATALOG, raw, matched, REVIEW)
     except (ScanError, KeyError, TypeError):
         raise ValueError("Content classification replay failed") from None
