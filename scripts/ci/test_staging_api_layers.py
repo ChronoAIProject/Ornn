@@ -27,3 +27,23 @@ class LayerComparisonTests(unittest.TestCase):
         self.second[-1]["bytes"] = 10000000
         with self.assertRaises(ValueError):
             compare(self.first, self.second)
+
+
+class LayerScanParityTests(unittest.TestCase):
+    def test_changed_finding_cannot_hide_behind_cache_hits(self):
+        from staging_api_layer_scan_proof import check_parity
+        fresh = {"complete": True, "findings": [{"rule": "new-value"}]}
+        warm = {"complete": True, "findings": [],
+                "detector_cache": {"hits": 9000, "misses": 1, "invalid": 0}}
+        with self.assertRaises(ValueError):
+            check_parity(warm, fresh, 8000)
+
+    def test_complete_equality_still_requires_hits_and_new_app_scan(self):
+        from staging_api_layer_scan_proof import check_parity
+        fresh = {"complete": True, "findings": []}
+        for hits, misses in [(7999, 1), (9000, 0)]:
+            warm = {**fresh, "detector_cache": {"hits": hits, "misses": misses, "invalid": 0}}
+            with self.assertRaises(ValueError):
+                check_parity(warm, fresh, 8000)
+        warm = {**fresh, "detector_cache": {"hits": 9000, "misses": 1, "invalid": 0}}
+        self.assertEqual(check_parity(warm, fresh, 8000)["hits"], 9000)

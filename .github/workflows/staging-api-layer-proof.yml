@@ -7,6 +7,7 @@ name: API image layer reuse
       - 'ornn-api/Dockerfile.staging*'
       - 'scripts/ci/staging-api-dependencies*'
       - 'scripts/ci/staging_api_layer_proof.py'
+      - 'scripts/ci/staging_api_layer_scan_proof.py'
       - 'scripts/ci/test_staging_api_layers.py'
       - '.github/workflows/staging-api-layer-proof.yml'
 
@@ -50,6 +51,21 @@ jobs:
           done
           python3 scripts/ci/staging_api_layer_proof.py "$RUNNER_TEMP/first.tar" \
             "$RUNNER_TEMP/second.tar" layer-proof/RESULT.json
+      - name: Install pinned detector for complete layer scans
+        run: |
+          set -euo pipefail
+          tool_dir="$RUNNER_TEMP/ornn-layer-gitleaks"
+          mkdir -p "$tool_dir"
+          curl --fail --silent --show-error --location --retry 3 \
+            https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz \
+            --output "$tool_dir/gitleaks.tar.gz"
+          echo "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  $tool_dir/gitleaks.tar.gz" | sha256sum --check --strict
+          tar -xzf "$tool_dir/gitleaks.tar.gz" -C "$tool_dir" gitleaks
+          echo "$tool_dir" >> "$GITHUB_PATH"
+      - name: Prove detector hits and complete fresh-scan parity
+        run: |
+          python3 scripts/ci/staging_api_layer_scan_proof.py "$RUNNER_TEMP/first.tar" \
+            "$RUNNER_TEMP/second.tar" layer-proof/scan
       - name: Retain layer proof
         if: always()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
