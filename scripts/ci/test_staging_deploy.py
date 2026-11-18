@@ -118,7 +118,7 @@ class DeploymentTests(unittest.TestCase):
         self.assertIn('group: staging-deploy', deploy)
         self.assertIn('cancel-in-progress: false', deploy)
         self.assertIn('permission-contents: read', deploy)
-        self.assertIn('vars.ORNN_INFRA_CONFIG == secrets.ORNN_INFRA_CONFIG_MASK', deploy)
+        self.assertIn("vars.ORNN_INFRA_CONFIG == secrets.ORNN_INFRA_CONFIG_MASK && secrets.ORNN_INFRA_CONFIG_MASK || ''", deploy)
         self.assertIn('persist-credentials: false', deploy)
         self.assertIn('ref: ${{ steps.configuration.outputs.ref }}', deploy)
         self.assertIn('if: always()', deploy)

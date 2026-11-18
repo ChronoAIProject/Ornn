@@ -48,8 +48,8 @@ def runner_context(env):
 def configure(env, emit=print):
     runner_context(env)
     raw = env.get('ORNN_INFRA_CONFIG', '')
-    # Workflow expression also checks equality before binding the variable. This
-    # protects the runner's preamble even if the mask secret is missing or stale.
+    # Actions comparisons ignore case, so the workflow transports the secret
+    # copy after checking the variable. Even a stale mask cannot leak raw vars.
     require(bool(raw) and raw == env.get('ORNN_INFRA_CONFIG_MASK') and len(raw) <= 16000)
     config = json.loads(raw, object_pairs_hook=unique_object)
     require(isinstance(config, dict) and config.get('schema') == 'ornn-public-deploy-v1')
