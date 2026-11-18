@@ -1,0 +1,45 @@
+name: Diagnostic image scan profile
+"on":
+  push:
+    branches: [tl/ornn-scan-profile-2316]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  profile:
+    if: github.repository == 'ChronoAIProject/Ornn' && github.event_name == 'push' && github.ref == 'refs/heads/tl/ornn-scan-profile-2316'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
+        with:
+          artifact-ids: '14452442866'
+          run-id: '44357915443'
+          github-token: ${{ github.token }}
+          path: retained-image
+      - name: Install pinned detector
+        run: |
+          set -euo pipefail
+          tool_dir="$RUNNER_TEMP/ornn-gitleaks"
+          mkdir -p "$tool_dir"
+          curl --fail --silent --show-error --location --retry 3 \
+            https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz \
+            --output "$tool_dir/gitleaks.tar.gz"
+          echo "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  $tool_dir/gitleaks.tar.gz" | sha256sum --check --strict
+          tar -xzf "$tool_dir/gitleaks.tar.gz" -C "$tool_dir" gitleaks
+          echo "$tool_dir" >> "$GITHUB_PATH"
+      - name: Measure same-archive cold and warm scans without publication
+        run: |
+          set -euo pipefail
+          python3 scripts/ci/run_scan_profile.py
+      - name: Retain aggregate measurements
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: diagnostic-scan-profile-${{ github.run_id }}
+          path: profile-results/
+          if-no-files-found: error
+          retention-days: 7
