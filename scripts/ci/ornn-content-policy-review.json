@@ -1,22 +1,38 @@
 {
   "verdict": "GO_CONTENT_POLICY",
-  "reviewer": "solution-architect-01",
-  "catalog_sha256": "0460bf88887d7d9701b060019bc0ee123b903ed351d7d7ad8f1ca622f622d295",
+  "reviewer": "solution-architect-03",
+  "authority": "LEAD01:04 / LEAD03:25; explicit Ornn scoped-content implementation review",
+  "reviewed_at": "2026-11-18T20:23:19.051216+00:00",
+  "source_head": "e9922163b751e8ff64451118c55790b3b7be88be",
+  "catalog_sha256": "9a304e7522e122eb523003a292bb8c48901dafd8c59564ce730ed78da2ba505d",
+  "base_catalog_sha256": "0460bf88887d7d9701b060019bc0ee123b903ed351d7d7ad8f1ca622f622d295",
   "adapter_files": {
-    "content_catalog.py": "3352b975fab061d43741b6eb0b4f738482484009b00ef045890b61d38837b803",
-    "content_identity.py": "36aee4fe568ccf5d4236535dd2ce5398a6a695c4939ea346af1f52c841ac0c1f",
-    "resolve_content_policy.py": "4bafd5766a28f6950aac6b0f17bcb2ae99dbe425485209dc3d985a04249efc3b"
+    "bundle_syntax.cjs": "587136339d5d94efda626db854a33975bc33e5905eccaeb4d90425096fa9027e",
+    "content_bundles.py": "6d70c847dca620deba3836b444cc8475cf05cfc3d68928dbb5d1915db7a32858",
+    "content_catalog.py": "9041c0d5bf90ff2fa82bdb2f8caf2363e504321b2f38f3e18e2f097dfb71be7b",
+    "content_identity.py": "22a85631a327396dd92918a9c3d8aa1b85f8865957de52e3b6e831382a312303",
+    "content_syntax.py": "813616e4fad416abaa12698bb07209154bbd78a8e75e6fcd946ef1a6a1ba4f3a",
+    "resolve_content_policy.py": "5440c84a55837275bed479f1e4c8ce70360606b510dc4d4511f456b1ac0168d6",
+    "vendor/BABEL-LICENSE": "2e97627cb278aa7556fb9e8817368302301a595b6c7582512b8d74c57b773652",
+    "vendor/PROVENANCE.json": "78fa54084a782db46951dd2ade68caa5a2f2aca8918392ebbae5ff42f7532745",
+    "vendor/babel-parser-7.29.3.cjs": "201724d1415df7749087d9d6e88af50f2bcafe2eb68dfbe9347f49d3361ff426"
   },
-  "base_catalog_sha256": "612632238d0bf5ebd7794e8b987c57c7d20655d00f2d3952ed9a432ee2aaecc5",
-  "source_head": "9e65970512f1c2eae9b76ece781cdd562b23ca94",
-  "scope": "Five exact API public-material additions; 379 previous rows preserved. Content classification only; no new image CLEAN or publication/deployment approval.",
-  "approved_occurrence_ids": [
-    "a24767a58fa9d61315587dde7cdd495ee13e33f859ba64b180727fdc051eae04",
-    "c8a4880901d55aad60c046398d3316ea291742e0132f2015d0e4e17cfc2737cb",
-    "b8cd1024495ea40eb06b905622f573f94afe904a77773a0343b999033646bdfc",
-    "2df312cad3958fa002222f38cdcc5152185316768739882e106e7d1593a05f05",
-    "7fb56afa0a6f7fc066bc649dd79e02f6589b65c7b03d44fd08312a7ed191c3be"
+  "scope": "Preserve 384 exact entries; approve only the exact sections-bundle candidate/rule/web scope conditional on fresh canonical-payload parsing and exact noncomputed MemberExpression spans for every occurrence. New values and unsafe contexts remain blocking.",
+  "approved_bundle_candidates": [
+    {
+      "component": "web",
+      "path_pattern": "usr/share/nginx/html/assets/sections-*.js",
+      "rule": "gitleaks.image-secret-assignment",
+      "candidate_sha256": "17b51881d8b1b599771cdabc403654dec66d1711c5a64d973a3864a9a99cd47d",
+      "classification": "public-material",
+      "reason": "Exact previously reviewed public candidate value, scoped to the sections Vite JavaScript chunk family. Bundle digest, generated suffix and line may change; candidate bytes and detector rule must remain identical."
+    }
   ],
+  "independent_tests": {
+    "content_policy": 29,
+    "ci": 119,
+    "scanner": 60
+  },
   "publication_approved": false,
-  "native_archive_reopened": false
+  "deployment_approved": false
 }

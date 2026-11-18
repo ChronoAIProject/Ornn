@@ -11,6 +11,19 @@ from staging_content_receipt import verify_content_receipt
 from staging_scan_receipt import checksum
 
 
+class CommittedContentApprovalTests(unittest.TestCase):
+    def test_checked_in_approval_matches_catalog_parser_and_adapter(self):
+        # Check real committed pins before expensive image builds. Synthetic
+        # receipt fixtures below deliberately isolate their own approval data.
+        from staging_content_receipt import ADAPTER, CATALOG, REVIEW, adapter_identity
+
+        review = json.loads(REVIEW.read_text())
+        self.assertEqual(checksum(REVIEW), REVIEW.with_suffix('.sha256').read_text().strip())
+        self.assertEqual(review['catalog_sha256'], checksum(CATALOG))
+        self.assertEqual(review['adapter_files'], adapter_identity())
+        self.assertTrue((ADAPTER / 'vendor/babel-parser-7.29.3.cjs').is_file())
+
+
 class ContentReceiptTests(unittest.TestCase):
     setUp = fixtures.StagingImageTests.setUp
     write_archive = fixtures.StagingImageTests.write_archive
