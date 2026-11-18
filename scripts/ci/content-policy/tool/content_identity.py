@@ -6,6 +6,7 @@ import posixpath
 import tarfile
 
 from content_catalog import path_hash
+from content_bundles import normalized_scope, RULE
 from image_secrets.archive import ImageArchive
 from image_secrets.common import Budget, ScanError, archive_path
 from image_secrets.policy import CREDENTIAL_URL, PRIVATE, SERVICE_ACCOUNT
@@ -44,7 +45,7 @@ def resolve(state, path, active=None):
     return None
 
 
-def layer_identities(layer_path, state, requested):
+def layer_identities(layer_path, state, requested, bundle_scopes=None):
     records, updates, removed, opaque = {}, {}, [], []
     with tarfile.open(layer_path, "r:") as layer:
         for number, member in enumerate(layer):
@@ -124,10 +125,15 @@ def layer_identities(layer_path, state, requested):
                 continue
             if digest:
                 result[finding["finding_id"]] = digest
+                if (bundle_scopes is not None and node[0] == "file"
+                        and finding["rule"] == RULE and finding.get("file_sha256") == digest):
+                    scope = normalized_scope(path)
+                    if scope:
+                        bundle_scopes[finding["finding_id"]] = scope
     return result
 
 
-def archive_identities(path, workspace, report):
+def archive_identities(path, workspace, report, bundle_scopes=None):
     budget = Budget(20 * 1024**3, 1000000)
     found = {}
     with ImageArchive(path, workspace, budget) as archive:
@@ -152,6 +158,6 @@ def archive_identities(path, workspace, report):
                     ):
                         requested.setdefault(finding["entry"], []).append(finding)
                 layer_path = archive.layer(name, diff_id)
-                found.update(layer_identities(layer_path, state, requested))
+                found.update(layer_identities(layer_path, state, requested, bundle_scopes))
                 layer_path.unlink()
     return found

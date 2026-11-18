@@ -4,7 +4,8 @@ import hashlib
 from pathlib import Path
 
 from image_secrets.common import ScanError, archive_path, digest_file, json_bytes
-from image_secrets.gate import CLASSIFICATIONS, valid_digest
+from image_secrets.gate import CLASSIFICATIONS, CONTENT_REVIEWERS, valid_digest
+from content_bundles import catalog_entries, normalized_scope
 
 
 def path_hash(path):
@@ -19,8 +20,11 @@ def read_catalog(path, result):
     for key in ("allowlist_sha256", "gitleaks_rules_sha256"):
         if catalog.get(key) != result["policy"].get(key):
             raise ScanError("content-policy-detector-mismatch")
-    if catalog.get("schema") != "image-secret-content-policy-v1":
+    schema = catalog.get("schema")
+    if schema not in {"image-secret-content-policy-v1", "image-secret-content-policy-v2"}:
         raise ScanError("invalid-content-policy-schema")
+    if schema == "image-secret-content-policy-v1" and "bundle_candidates" in catalog:
+        raise ScanError("bundle-candidates-require-v2")
     index = {}
     for entry in catalog["entries"]:
         path = archive_path(entry["path"])
@@ -35,10 +39,19 @@ def read_catalog(path, result):
             raise ScanError("invalid-content-policy-entry")
         key = (entry["component"], path_hash(path), entry["rule"], entry["file_sha256"])
         index.setdefault(key, []).append(entry)
+    if schema == "image-secret-content-policy-v2":
+        for key, entry in catalog_entries(catalog):
+            if any(old["classification"] == "REAL" and old["component"] == entry["component"]
+                   and old["rule"] == entry["rule"]
+                   and old.get("candidate_sha256") == entry["candidate_sha256"]
+                   and normalized_scope(old["path"]) == key[2] for old in catalog["entries"]):
+                raise ScanError("bundle-candidate-conflicts-with-real")
+            index[key] = [entry]
     return index
 
 
-def match_findings(index, component, findings, identities):
+def match_findings(index, component, findings, identities, bundle_scopes=None):
+    bundle_scopes = {} if bundle_scopes is None else bundle_scopes
     matched, unresolved = [], []
     for finding in findings:
         if finding["rule"] == "gitleaks.image-high-entropy":
@@ -55,6 +68,15 @@ def match_findings(index, component, findings, identities):
                 if field in entry
             )
         ]
+        # Exact entries retain precedence, including REAL classifications. Scoped
+        # reuse requires a freshly validated regular-file occurrence and current
+        # file digest; the old bundle digest is never used as its identity.
+        if not candidates and identity and finding.get("file_sha256") == identity:
+            scope = bundle_scopes.get(finding["finding_id"])
+            if (scope and finding.get("scope") == "layer"
+                    and valid_digest(finding.get("candidate_sha256"))):
+                candidates = index.get(("bundle", component, scope, finding["rule"],
+                                        finding["candidate_sha256"]), [])
         if not candidates:
             unresolved.append(finding)
             continue
@@ -81,7 +103,7 @@ def make_packet(catalog_path, result, matched, review_path):
     review = json_bytes(review_path.read_bytes())
     if (
         review.get("verdict") != "GO_CONTENT_POLICY"
-        or review.get("reviewer") != "solution-architect-01"
+        or review.get("reviewer") not in CONTENT_REVIEWERS
         or review.get("catalog_sha256") != digest_file(catalog_path)
         or review.get("adapter_files") != tool_identity()
     ):
@@ -93,7 +115,7 @@ def make_packet(catalog_path, result, matched, review_path):
         "gitleaks_rules_sha256": result["policy"]["gitleaks_rules_sha256"],
         "allowlist_sha256": result["policy"]["allowlist_sha256"],
         "review": {
-            "reviewer": "solution-architect-01",
+            "reviewer": review["reviewer"],
             "reference": "content-policy-sha256:" + digest_file(catalog_path),
             "report_sha256": digest_file(review_path),
         },

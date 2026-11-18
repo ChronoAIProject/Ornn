@@ -5,6 +5,7 @@ import re
 from .common import ScanError, digest_bytes, json_bytes
 
 CLASSIFICATIONS = frozenset({"library-example", "test-fixture", "public-material", "REAL"})
+CONTENT_REVIEWERS = frozenset({"solution-architect-01", "solution-architect-03"})
 ADVISORY_RULES = frozenset({"gitleaks.image-high-entropy"})
 
 
@@ -41,7 +42,7 @@ def read_classifications(path, result):
     if (
         not isinstance(review, dict)
         or set(review) != {"reviewer", "reference", "report_sha256"}
-        or review["reviewer"] != "solution-architect-01"
+        or review["reviewer"] not in CONTENT_REVIEWERS
         or not isinstance(review["reference"], str)
         or not review["reference"].strip()
         or not valid_digest(review["report_sha256"])
