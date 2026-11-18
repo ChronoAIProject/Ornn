@@ -21,7 +21,8 @@ permissions:
   contents: read
 
 jobs:
-  gate_tests:
+  gate_shards:
+    name: gate_tests (${{ matrix.suite }})
     if: >-
       github.repository == 'ChronoAIProject/Ornn' &&
       ((github.ref == 'refs/heads/develop' &&
@@ -31,6 +32,10 @@ jobs:
         github.event.pull_request.head.repo.full_name == github.repository))
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [scanner-a, scanner-b, acceptance, content-policy]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -46,12 +51,31 @@ jobs:
           echo "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  $tool_dir/gitleaks.tar.gz" | sha256sum --check --strict
           tar -xzf "$tool_dir/gitleaks.tar.gz" -C "$tool_dir" gitleaks
           echo "$tool_dir" >> "$GITHUB_PATH"
-      - name: Test the vendored shared secret gate
+      - name: Verify exhaustive shard selection and aggregate contract
+        run: python3 -B -m unittest discover -s scripts/ci -p 'test_staging_gate_shards.py' -v
+      - name: Run the selected complete qualification suite
+        env:
+          QUALIFICATION_SUITE: ${{ matrix.suite }}
+        run: python3 -B scripts/ci/staging_gate_shards.py "$QUALIFICATION_SUITE"
+
+  gate_tests:
+    # Keep this required check and detector-cache producer identity stable.
+    needs: [gate_shards]
+    if: >-
+      always() && github.repository == 'ChronoAIProject/Ornn' &&
+      ((github.ref == 'refs/heads/develop' &&
+        (github.event_name == 'push' || github.event_name == 'workflow_dispatch')) ||
+       (github.event_name == 'release' && github.event.action == 'published') ||
+       (github.event_name == 'pull_request' &&
+        github.event.pull_request.head.repo.full_name == github.repository))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Require every qualification shard to pass
+        env:
+          SHARD_RESULT: ${{ needs.gate_shards.result }}
         run: |
-          bash scripts/ci/image-secret-scan/self-test.sh
-          python3 scripts/ci/test_shared_image_gate.py -v
-          TEST_SCANNER="$GITHUB_WORKSPACE/scripts/ci/image-secret-scan" \
-            python3 -m unittest discover -s scripts/ci/content-policy/tests -v
+          test "$SHARD_RESULT" = success
 
   image_api:
     name: image (api)
