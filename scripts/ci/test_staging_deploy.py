@@ -111,7 +111,7 @@ class DeploymentTests(unittest.TestCase):
         before, deploy = workflow.split('\n  deploy:\n')
         self.assertIn('staging-scan-image.sh', before)
         self.assertIn('staging-image-out/publication.json', before)
-        self.assertIn('needs: publish', deploy)
+        self.assertIn('needs: [publish_api, publish_web]', deploy)
         self.assertIn("github.event_name == 'push'", deploy)
         self.assertIn("github.ref == 'refs/heads/develop'", deploy)
         self.assertIn('environment: staging', deploy)

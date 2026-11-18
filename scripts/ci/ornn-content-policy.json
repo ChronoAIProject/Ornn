@@ -1,5 +1,5 @@
 {
-  "schema": "image-secret-content-policy-v1",
+  "schema": "image-secret-content-policy-v2",
   "scanner_version": "1.0.3",
   "gitleaks_version": "8.30.1",
   "gitleaks_rules_sha256": "44ffc256678b6dd0c94ea64d81b139b875558fb2597ef2ea3807f71545e8b0e1",
@@ -4446,5 +4446,15 @@
       ]
     }
   ],
-  "proposed_native_evidence_sha256": "1329a3782233e111ffa6c914fc0b7ac96b6fb34d6f2dfbcdf8b0f7132986111e"
+  "proposed_native_evidence_sha256": "1329a3782233e111ffa6c914fc0b7ac96b6fb34d6f2dfbcdf8b0f7132986111e",
+  "bundle_candidates": [
+    {
+      "component": "web",
+      "path_pattern": "usr/share/nginx/html/assets/sections-*.js",
+      "rule": "gitleaks.image-secret-assignment",
+      "candidate_sha256": "17b51881d8b1b599771cdabc403654dec66d1711c5a64d973a3864a9a99cd47d",
+      "classification": "public-material",
+      "reason": "Exact previously reviewed public candidate value, scoped to the sections Vite JavaScript chunk family. Bundle digest, generated suffix and line may change; candidate bytes and detector rule must remain identical."
+    }
+  ]
 }

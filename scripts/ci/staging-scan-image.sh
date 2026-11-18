@@ -18,11 +18,18 @@ trap - EXIT
 # Scan the existing export without rebuilding, filtering, or rewriting image bytes.
 # Findings may be assessed against the reviewed catalog; scanner errors never are.
 scan_rc=0
+cache_args=()
+if [[ "${GITHUB_REPOSITORY:-}" == "ChronoAIProject/Ornn" && "${GITHUB_EVENT_NAME:-}" == "push" && "${GITHUB_REF:-}" == "refs/heads/develop" ]]; then
+  cache_args=(--detector-cache-output "$RUNNER_TEMP/ornn-detector-output/detector-cache.json")
+  if test -f "$RUNNER_TEMP/ornn-detector-input.json"; then
+    cache_args+=(--detector-cache "$RUNNER_TEMP/ornn-detector-input.json")
+  fi
+fi
 bash scripts/ci/image-secret-scan/scan-image-secrets.sh "$archive" \
   --input-kind archive --output "$out/secret-scan-raw" \
   --blocking-rules credential \
   --allowlist scripts/ci/ornn-image-allowlist.json \
-  --expected-archive-sha256 "$archive_sha" || scan_rc=$?
+  --expected-archive-sha256 "$archive_sha" "${cache_args[@]}" || scan_rc=$?
 case "$scan_rc" in 0|1) ;; *) exit "$scan_rc" ;; esac
 review_args=(--proposal)
 if test -f scripts/ci/ornn-content-policy-review.json; then

@@ -2,6 +2,7 @@
 
 import copy
 import json
+import re
 from pathlib import Path
 from types import SimpleNamespace
 import unittest
@@ -100,11 +101,13 @@ class HistoryTests(unittest.TestCase):
         # The repository uses no YAML parser at runtime; assert the exact critical
         # job block without introducing a test-only dependency into native runners.
         workflow = (Path(__file__).resolve().parents[2] / '.github/workflows/staging-native-images.yml').read_text()
-        publish = workflow.split('\n  publish:\n', 1)[1]
-        block = publish.split('    concurrency:\n', 1)[1].split('    permissions:\n', 1)[0]
-        self.assertEqual(block, '      group: ornn-publish-${{ matrix.component }}\n'
-                               '      cancel-in-progress: false\n')
-        self.assertIn('          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}', publish)
+        for component in ['api', 'web']:
+            publish = re.split(r'\n  [a-z_]+:\n', workflow.split('\n  publish_' + component + ':\n', 1)[1], maxsplit=1)[0]
+            block = publish.split('    concurrency:\n', 1)[1].split('    permissions:\n', 1)[0]
+            self.assertEqual(block, '      group: ornn-publish-' + component + '\n'
+                                   '      cancel-in-progress: false\n')
+            self.assertIn('          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}', publish)
+
 
 
 if __name__ == '__main__':
