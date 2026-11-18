@@ -47,3 +47,15 @@ class LayerScanParityTests(unittest.TestCase):
                 check_parity(warm, fresh, 8000)
         warm = {**fresh, "detector_cache": {"hits": 9000, "misses": 1, "invalid": 0}}
         self.assertEqual(check_parity(warm, fresh, 8000)["hits"], 9000)
+
+
+    def test_only_order_changes_are_accepted_and_duplicate_counts_still_match(self):
+        from staging_api_layer_scan_proof import check_parity
+        first, second = {"rule": "a", "line": 1}, {"rule": "b", "line": 2}
+        fresh = {"complete": True, "findings": [first, second, first]}
+        warm = {"complete": True, "findings": [second, first, first],
+                "detector_cache": {"hits": 9000, "misses": 1, "invalid": 0}}
+        self.assertEqual(check_parity(warm, fresh, 8000)["misses"], 1)
+        warm["findings"] = [second, first]
+        with self.assertRaises(ValueError):
+            check_parity(warm, fresh, 8000)

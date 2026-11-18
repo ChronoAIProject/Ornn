@@ -1,4 +1,5 @@
 """Measure local-to-job detector reuse; never restore/export a shared PR cache."""
+from collections import Counter
 import hashlib
 import json
 from pathlib import Path
@@ -8,13 +9,20 @@ import tempfile
 import time
 
 
-PARITY = ("archive_sha256", "complete", "status", "inventory", "scanned_bytes", "counts",
-          "findings", "allowlisted", "blocking_findings", "advisory_findings")
+PARITY = ("archive_sha256", "complete", "status", "inventory", "scanned_bytes", "counts")
+COLLECTIONS = ("findings", "allowlisted", "blocking_findings", "advisory_findings")
 
 
 def check_parity(warm, fresh, stable_files):
     if not warm["complete"] or any(warm.get(key) != fresh.get(key) for key in PARITY):
         raise ValueError("Cached scan differs from complete fresh scan")
+    # Detector worker completion order is not a finding identity. Preserve every
+    # field AND duplicate multiplicity; only array ordering may differ.
+    for key in COLLECTIONS:
+        left = Counter(json.dumps(row, sort_keys=True) for row in warm.get(key, []))
+        right = Counter(json.dumps(row, sort_keys=True) for row in fresh.get(key, []))
+        if left != right:
+            raise ValueError("Cached finding collection differs from complete fresh scan")
     stats = warm["detector_cache"]
     if stats["hits"] < stable_files or stats["misses"] < 1 or stats["invalid"]:
         raise ValueError("Expected stable-file hits and a newly scanned app edit")
@@ -54,6 +62,7 @@ def run(first, second, output):
             ], check=True)
             commands.append({"mode": mode, "seconds": time.monotonic() - start,
                              "detector_cache": reports[mode].get("detector_cache")})
+        (output / "TIMINGS.json").write_text(json.dumps(commands, indent=2) + "\n")
         proof = json.loads((output.parent / "RESULT.json").read_text())
         stable_files = sum(row["files"] for row in proof["first"][:-1])
         stats = check_parity(reports["warm"], reports["fresh"], stable_files)
