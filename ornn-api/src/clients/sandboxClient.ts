@@ -5,6 +5,7 @@
  */
 
 import { createLogger } from "../shared/logger";
+import { requestWithSaToken, type SaTokenSource } from "./nyxid/saRequest";
 import { safeFetch } from "../infra/safeFetch";
 const logger = createLogger("sandboxClient");
 
@@ -132,13 +133,17 @@ export class SandboxClient {
   // exactOptionalPropertyTypes (#657): widen to `T | undefined`.
   private readonly getAccessToken: (() => Promise<string>) | undefined;
 
+  private readonly saTokenProvider: SaTokenSource | undefined;
+
   constructor(opts: {
     resolver: SandboxClientConfigResolver;
     getAccessToken?: () => Promise<string>;
+    saTokenProvider?: SaTokenSource;
   }) {
     this.resolver = opts.resolver;
     this.getAccessToken = opts.getAccessToken;
-    logger.info({ authenticated: !!opts.getAccessToken }, "SandboxClient initialized");
+    this.saTokenProvider = opts.saTokenProvider;
+    logger.info({ authenticated: !!(opts.saTokenProvider || opts.getAccessToken) }, "SandboxClient initialized");
   }
 
   private async resolveBaseUrl(): Promise<string> {
@@ -146,10 +151,16 @@ export class SandboxClient {
     return cfg.baseUrl.replace(/\/+$/, "");
   }
 
-  private async authHeaders(): Promise<Record<string, string>> {
-    if (!this.getAccessToken) return {};
-    const token = await this.getAccessToken();
-    return { Authorization: `Bearer ${token}` };
+  private async request(path: string, init: RequestInit = {}): Promise<Response> {
+    const send = async (token: string) => {
+      const baseUrl = await this.resolveBaseUrl();
+      const headers = new Headers(init.headers);
+      if (token) headers.set("Authorization", `Bearer ${token}`);
+      return safeFetch(`${baseUrl}${path}`, { ...init, headers });
+    };
+    return this.saTokenProvider
+      ? requestWithSaToken(this.saTokenProvider, send)
+      : send(this.getAccessToken ? await this.getAccessToken() : "");
   }
 
   // ── One-shot execute ──────────────────────────────────────────────
@@ -295,15 +306,13 @@ export class SandboxClient {
   async deleteSession(sessionId: string): Promise<void> {
     logger.info({ sessionId }, "Deleting session");
 
-    const baseUrl = await this.resolveBaseUrl();
-    const auth = await this.authHeaders();
-    const response = await safeFetch(`${baseUrl}/sessions/${sessionId}`, {
+    const response = await this.request(`/sessions/${sessionId}`, {
       method: "DELETE",
-      headers: auth,
     });
 
     if (!response.ok) {
-      const text = await response.text().catch(() => "");
+      const text = response.status === 401 || response.status === 403
+        ? "authentication rejected" : await response.text().catch(() => "");
       logger.error({ sessionId, status: response.status }, "Delete session failed");
       throw new Error(`Delete session failed (${response.status}): ${text}`);
     }
@@ -314,11 +323,10 @@ export class SandboxClient {
   async listSessions(): Promise<SessionListResponse> {
     logger.debug("Listing sessions");
 
-    const baseUrl = await this.resolveBaseUrl();
-    const auth = await this.authHeaders();
-    const response = await safeFetch(`${baseUrl}/sessions`, { headers: auth });
+    const response = await this.request("/sessions", { headers: {} });
     if (!response.ok) {
-      const text = await response.text().catch(() => "");
+      const text = response.status === 401 || response.status === 403
+        ? "authentication rejected" : await response.text().catch(() => "");
       throw new Error(`List sessions failed (${response.status}): ${text}`);
     }
 
@@ -328,16 +336,15 @@ export class SandboxClient {
   // ── Internal helpers ──────────────────────────────────────────────
 
   private async post<T>(path: string, body: Record<string, unknown>): Promise<T> {
-    const baseUrl = await this.resolveBaseUrl();
-    const auth = await this.authHeaders();
-    const response = await safeFetch(`${baseUrl}${path}`, {
+    const response = await this.request(path, {
       method: "POST",
-      headers: { "Content-Type": "application/json", ...auth },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
 
     if (!response.ok) {
-      const text = await response.text().catch(() => "");
+      const text = response.status === 401 || response.status === 403
+        ? "authentication rejected" : await response.text().catch(() => "");
       logger.error({ path, status: response.status }, "Sandbox request failed");
       throw new Error(`Sandbox service error (${response.status}): ${text}`);
     }
@@ -346,16 +353,15 @@ export class SandboxClient {
   }
 
   private async *streamSSE(path: string, body: Record<string, unknown>): AsyncGenerator<StreamEvent> {
-    const baseUrl = await this.resolveBaseUrl();
-    const auth = await this.authHeaders();
-    const response = await safeFetch(`${baseUrl}${path}`, {
+    const response = await this.request(path, {
       method: "POST",
-      headers: { "Content-Type": "application/json", ...auth },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
 
     if (!response.ok) {
-      const text = await response.text().catch(() => "");
+      const text = response.status === 401 || response.status === 403
+        ? "authentication rejected" : await response.text().catch(() => "");
       logger.error({ path, status: response.status }, "Sandbox stream request failed");
       throw new Error(`Sandbox stream error (${response.status}): ${text}`);
     }

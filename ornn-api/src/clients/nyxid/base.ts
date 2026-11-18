@@ -55,20 +55,52 @@ export type NyxidSaCredsResolver = () => Promise<NyxidSaCreds>;
  * next refresh without a redeploy. An empty/missing credential triggers
  * a structured error rather than a silent unauthenticated request.
  *
- * Concurrent callers during a refresh race will all issue their own
- * token request. Acceptable at current scale — add a `pendingRefresh`
- * promise field if token-endpoint pressure becomes an issue.
+ * Concurrent callers share one mint. Invalidation fences in-flight mints
+ * so a settings save cannot restore credentials from the previous config.
  */
 export class NyxidSaTokenProvider {
   private cache: { accessToken: string; expiresAt: number } | null = null;
+  private generation = 0;
+  private pending: Promise<{ accessToken: string; expiresAt: number }> | null = null;
 
-  constructor(private readonly credsResolver: NyxidSaCredsResolver) {}
+  constructor(
+    private readonly credsResolver: NyxidSaCredsResolver,
+    private readonly invalidateConfig: () => void = () => {},
+  ) {}
+
+  /** A late 401 must never evict a token minted for a newer request. */
+  invalidate(rejectedToken?: string): void {
+    if (rejectedToken !== undefined && this.cache?.accessToken !== rejectedToken) return;
+    this.generation++;
+    this.cache = null;
+    this.pending = null;
+    this.invalidateConfig();
+    logger.info("Invalidated service-account authentication cache");
+  }
 
   async getAccessToken(): Promise<string> {
-    const now = Date.now();
-    if (this.cache && this.cache.expiresAt > now + 60_000) {
-      return this.cache.accessToken;
+    for (;;) {
+      if (this.cache && this.cache.expiresAt > Date.now() + 60_000) {
+        return this.cache.accessToken;
+      }
+      const generation = this.generation;
+      const pending = this.pending ??= this.mint();
+      try {
+        const token = await pending;
+        if (generation !== this.generation) continue;
+        this.cache = token;
+        return token.accessToken;
+      } catch (err) {
+        if (generation !== this.generation) continue;
+        throw err;
+      } finally {
+        if (this.pending === pending) this.pending = null;
+      }
     }
+  }
+
+  private async mint(): Promise<{ accessToken: string; expiresAt: number }> {
+    const now = Date.now();
 
     const { tokenUrl, clientId, clientSecret } = await this.credsResolver();
     if (!tokenUrl || !clientId || !clientSecret) {
@@ -89,17 +121,24 @@ export class NyxidSaTokenProvider {
       body: body.toString(),
     });
     if (!resp.ok) {
-      const errText = await resp.text().catch(() => "");
-      throw new Error(`SA token acquisition failed (${resp.status}): ${errText.slice(0, 200)}`);
+      await resp.body?.cancel();
+      throw new Error(`SA token acquisition failed (${resp.status})`);
     }
-    const result = (await resp.json()) as { access_token: string; expires_in?: number };
-    if (!result.access_token) {
-      throw new Error("SA token response missing access_token");
+    // Never echo malformed authentication responses (including JSON parser errors).
+    let result: { access_token?: unknown; expires_in?: unknown } | null;
+    try {
+      result = await resp.json();
+    } catch {
+      throw new Error("Invalid SA token response");
     }
-    this.cache = {
+    if (!result || typeof result.access_token !== "string" || !result.access_token.trim() ||
+        (result.expires_in !== undefined &&
+          (typeof result.expires_in !== "number" || !Number.isFinite(result.expires_in) || result.expires_in <= 0))) {
+      throw new Error("Invalid SA token response");
+    }
+    return {
       accessToken: result.access_token,
-      expiresAt: now + (result.expires_in ?? 900) * 1000,
+      expiresAt: now + ((result.expires_in as number | undefined) ?? 900) * 1000,
     };
-    return this.cache.accessToken;
   }
 }

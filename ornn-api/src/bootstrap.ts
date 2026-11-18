@@ -52,8 +52,7 @@ import { StorageClient } from "./clients/storageClient";
 import { SandboxClient } from "./clients/sandboxClient";
 import { NyxLlmClient } from "./clients/nyxid/llm";
 import { NyxidOrgsClient } from "./clients/nyxid/orgs";
-import { NyxidServiceClient } from "./clients/nyxid/service";
-import { NyxidSaTokenProvider } from "./clients/nyxid/base";
+import { createNyxidIntegration } from "./clients/nyxid/integration";
 
 // Domain: Skill CRUD
 import { SkillRepository } from "./domains/skills/crud/repository";
@@ -258,14 +257,8 @@ export async function bootstrap(
   // Credentials live in admin Settings → Integrations → NyxID and are
   // resolved lazily on every refresh; an empty section throws a clear
   // configuration error rather than booting silently broken.
-  const saTokenProvider = new NyxidSaTokenProvider(async () => {
-    const s = await settingsService.getNyxid();
-    return {
-      tokenUrl: s.tokenUrl,
-      clientId: s.clientId,
-      clientSecret: s.clientSecret,
-    };
-  });
+  const { saTokenProvider, nyxidConfigResolver, nyxidServiceClient } =
+    createNyxidIntegration(settingsService);
   const getSaAccessToken = () => saTokenProvider.getAccessToken();
   const llmProvidersRepo = new LlmProvidersRepository(db);
   void llmProvidersRepo.ensureIndexes().catch((err) =>
@@ -452,14 +445,14 @@ export async function bootstrap(
     },
     // Conservative: always attach SA token when present. The chrono-storage
     // proxy ignores it for direct URLs; for proxy URLs it's required.
-    getAccessToken: getSaAccessToken,
+    saTokenProvider,
   });
   const sandboxClient = new SandboxClient({
     resolver: async () => {
       const s = await settingsService.getNyxid();
       return { baseUrl: s.chronoSandboxUrl };
     },
-    getAccessToken: getSaAccessToken,
+    saTokenProvider,
   });
 
   // The NyxLlmClient resolver picks the playground provider as default
@@ -535,18 +528,9 @@ export async function bootstrap(
   // ---- NyxID Orgs Client — built early so the audit fan-out can expand
   //   sharedWithOrgs into member rosters when sending consumer notifications.
   // Base URL is resolved from settings (`nyxid` section) on every call.
-  const nyxidConfigResolver = async () => ({
-    baseApiUrl: (await settingsService.getNyxid()).baseApiUrl,
-  });
   const nyxidOrgsClient = new NyxidOrgsClient({
     resolver: nyxidConfigResolver,
     saTokenProvider,
-  });
-
-  // ---- NyxID Service Client — used by the skill→service tie endpoint
-  //   and the picker (`/me/nyxid-services`). Per-token cached.
-  const nyxidServiceClient = new NyxidServiceClient({
-    resolver: nyxidConfigResolver,
   });
 
   // ---- Domain: Skill Audit ----
