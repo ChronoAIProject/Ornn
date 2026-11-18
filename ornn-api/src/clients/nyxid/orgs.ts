@@ -12,8 +12,9 @@
  */
 
 import { createLogger } from "../../shared/logger";
+import { requestWithSaToken, type SaTokenSource } from "./saRequest";
 import { safeFetch } from "../../infra/safeFetch";
-import type { NyxidConfigResolver, NyxidSaTokenProvider } from "./base";
+import type { NyxidConfigResolver } from "./base";
 
 const logger = createLogger("nyxidOrgsClient");
 
@@ -50,11 +51,11 @@ export class NyxidOrgsClient {
   private readonly resolver: NyxidConfigResolver;
   // exactOptionalPropertyTypes (#657): widen to `T | undefined` so the
   // optional-from-deps assignment lands cleanly. Same runtime shape.
-  private readonly saTokenProvider: NyxidSaTokenProvider | undefined;
+  private readonly saTokenProvider: SaTokenSource | undefined;
 
   constructor(opts: {
     resolver: NyxidConfigResolver;
-    saTokenProvider?: NyxidSaTokenProvider;
+    saTokenProvider?: SaTokenSource;
   }) {
     this.resolver = opts.resolver;
     this.saTokenProvider = opts.saTokenProvider;
@@ -80,12 +81,11 @@ export class NyxidOrgsClient {
       headers: { Authorization: `Bearer ${userAccessToken}` },
     });
     if (!resp.ok) {
-      const body = await resp.text().catch(() => "");
       logger.error(
-        { status: resp.status, body: body.slice(0, 200) },
+        { status: resp.status },
         "NyxID /orgs call failed",
       );
-      throw new Error(`NyxID /orgs failed (${resp.status}): ${body.slice(0, 200)}`);
+      throw new Error(`NyxID /orgs failed (${resp.status})`);
     }
 
     const json = (await resp.json()) as RawResponse | RawNyxidOrg[];
@@ -126,27 +126,20 @@ export class NyxidOrgsClient {
       );
       return [];
     }
-    let token: string;
-    try {
-      token = await this.saTokenProvider.getAccessToken();
-    } catch (err) {
-      logger.warn({ err, orgUserId }, "SA token fetch for org-member listing failed");
-      return [];
-    }
-
-    const baseUrl = await this.resolveBaseUrl();
-    const url = `${baseUrl}/api/v1/orgs/${encodeURIComponent(orgUserId)}/members`;
     let resp: Response;
     try {
-      resp = await safeFetch(url, { headers: { Authorization: `Bearer ${token}` } });
-    } catch (err) {
-      logger.warn({ err, orgUserId }, "NyxID listOrgMembers fetch threw");
+      resp = await requestWithSaToken(this.saTokenProvider, async (token) => {
+        const baseUrl = await this.resolveBaseUrl();
+        const url = `${baseUrl}/api/v1/orgs/${encodeURIComponent(orgUserId)}/members`;
+        return safeFetch(url, { headers: { Authorization: `Bearer ${token}` } });
+      });
+    } catch {
+      logger.warn({ orgUserId }, "NyxID listOrgMembers fetch failed");
       return [];
     }
     if (!resp.ok) {
-      const body = await resp.text().catch(() => "");
       logger.warn(
-        { orgUserId, status: resp.status, body: body.slice(0, 200) },
+        { orgUserId, status: resp.status },
         "NyxID listOrgMembers returned non-2xx; returning empty",
       );
       return [];

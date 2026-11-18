@@ -5,6 +5,7 @@
  */
 
 import { createLogger } from "../shared/logger";
+import { requestWithSaToken, type SaTokenSource } from "./nyxid/saRequest";
 import { safeFetch } from "../infra/safeFetch";
 const logger = createLogger("storageClient");
 
@@ -41,13 +42,17 @@ export class StorageClient implements IStorageClient {
   // exactOptionalPropertyTypes (#657): widen to `T | undefined`.
   private readonly getAccessToken: (() => Promise<string>) | undefined;
 
+  private readonly saTokenProvider: SaTokenSource | undefined;
+
   constructor(opts: {
     resolver: StorageClientConfigResolver;
     getAccessToken?: () => Promise<string>;
+    saTokenProvider?: SaTokenSource;
   }) {
     this.resolver = opts.resolver;
     this.getAccessToken = opts.getAccessToken;
-    logger.info({ authenticated: !!opts.getAccessToken }, "StorageClient initialized");
+    this.saTokenProvider = opts.saTokenProvider;
+    logger.info({ authenticated: !!(opts.saTokenProvider || opts.getAccessToken) }, "StorageClient initialized");
   }
 
   private async resolveBaseUrl(): Promise<string> {
@@ -60,10 +65,16 @@ export class StorageClient implements IStorageClient {
     return cfg.bucket;
   }
 
-  private async authHeaders(): Promise<Record<string, string>> {
-    if (!this.getAccessToken) return {};
-    const token = await this.getAccessToken();
-    return { Authorization: `Bearer ${token}` };
+  private async request(path: string, init: RequestInit = {}): Promise<Response> {
+    const send = async (token: string) => {
+      const baseUrl = await this.resolveBaseUrl();
+      const headers = new Headers(init.headers);
+      if (token) headers.set("Authorization", `Bearer ${token}`);
+      return safeFetch(`${baseUrl}${path}`, { ...init, headers });
+    };
+    return this.saTokenProvider
+      ? requestWithSaToken(this.saTokenProvider, send)
+      : send(this.getAccessToken ? await this.getAccessToken() : "");
   }
 
   async upload(
@@ -72,19 +83,18 @@ export class StorageClient implements IStorageClient {
     data: Uint8Array,
     contentType: string,
   ): Promise<{ url: string }> {
-    const baseUrl = await this.resolveBaseUrl();
     const params = new URLSearchParams({ key, contentType });
-    const url = `${baseUrl}/api/buckets/${bucket}/objects?${params.toString()}`;
+    const url = `/api/buckets/${bucket}/objects?${params.toString()}`;
 
-    const auth = await this.authHeaders();
-    const res = await safeFetch(url, {
+    const res = await this.request(url, {
       method: "POST",
-      headers: { "Content-Type": contentType, ...auth },
+      headers: { "Content-Type": contentType },
       body: data as unknown as BodyInit,
     });
 
     if (!res.ok) {
-      const text = await res.text().catch(() => "");
+      const text = res.status === 401 || res.status === 403
+        ? "authentication rejected" : await res.text().catch(() => "");
       logger.error({ status: res.status, bucket, key }, "Storage upload failed");
       throw new Error(`Storage upload failed (${res.status}): ${text}`);
     }
@@ -95,15 +105,14 @@ export class StorageClient implements IStorageClient {
   }
 
   async delete(bucket: string, key: string): Promise<void> {
-    const baseUrl = await this.resolveBaseUrl();
     const params = new URLSearchParams({ key });
-    const url = `${baseUrl}/api/buckets/${bucket}/objects?${params.toString()}`;
+    const url = `/api/buckets/${bucket}/objects?${params.toString()}`;
 
-    const auth = await this.authHeaders();
-    const res = await safeFetch(url, { method: "DELETE", headers: auth });
+    const res = await this.request(url, { method: "DELETE" });
 
     if (!res.ok) {
-      const text = await res.text().catch(() => "");
+      const text = res.status === 401 || res.status === 403
+        ? "authentication rejected" : await res.text().catch(() => "");
       logger.error({ status: res.status, bucket, key }, "Storage delete failed");
       throw new Error(`Storage delete failed (${res.status}): ${text}`);
     }
@@ -115,15 +124,14 @@ export class StorageClient implements IStorageClient {
     bucket: string,
     key: string,
   ): Promise<{ bytes: Uint8Array; contentType: string; contentLength?: number }> {
-    const baseUrl = await this.resolveBaseUrl();
     const params = new URLSearchParams({ key });
-    const url = `${baseUrl}/api/buckets/${bucket}/objects/download?${params.toString()}`;
+    const url = `/api/buckets/${bucket}/objects/download?${params.toString()}`;
 
-    const auth = await this.authHeaders();
-    const res = await safeFetch(url, { method: "GET", headers: auth });
+    const res = await this.request(url, { method: "GET" });
 
     if (!res.ok) {
-      const text = await res.text().catch(() => "");
+      const text = res.status === 401 || res.status === 403
+        ? "authentication rejected" : await res.text().catch(() => "");
       logger.error({ status: res.status, bucket, key }, "Storage download failed");
       throw new Error(`Storage download failed (${res.status}): ${text}`);
     }

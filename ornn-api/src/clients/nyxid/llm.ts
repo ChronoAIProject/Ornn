@@ -25,9 +25,9 @@
 
 import { createLogger } from "../../shared/logger";
 import { parseResponsesStream, parseChatCompletionStream } from "./llmStream";
+import { requestWithSaToken, type SaTokenSource } from "./saRequest";
 import { safeFetch } from "../../infra/safeFetch";
 import type { ApiFormat } from "../../domains/settings/llmProviders/types";
-import type { NyxidSaTokenProvider } from "./base";
 
 const logger = createLogger("nyxLlmClient");
 
@@ -89,6 +89,7 @@ export interface NyxLlmCompleteParams {
 
 /** Strip HTML from upstream error responses (e.g. Cloudflare 502 pages). */
 function sanitizeErrorResponse(status: number, rawText: string): string {
+  if (status === 401 || status === 403) return `LLM Gateway error (${status}): authentication rejected`;
   // Try JSON first
   try {
     const json = JSON.parse(rawText);
@@ -235,12 +236,12 @@ export interface NyxLlmClientConfig {
    * via OAuth client_credentials). Owned by bootstrap so all clients
    * share one token cache.
    */
-  saTokenProvider: NyxidSaTokenProvider;
+  saTokenProvider: SaTokenSource;
 }
 
 export class NyxLlmClient {
   private readonly resolver: LlmProviderResolver;
-  private readonly saTokenProvider: NyxidSaTokenProvider;
+  private readonly saTokenProvider: SaTokenSource;
 
   constructor(config: NyxLlmClientConfig) {
     this.resolver = config.resolver;
@@ -248,32 +249,45 @@ export class NyxLlmClient {
     logger.info("NyxLlmClient initialized with settings-driven resolver");
   }
 
-  /**
-   * Resolve the effective gateway URL + auth header + apiFormat for the
-   * current call. Pulls the provider config from settings; SA token is
-   * fetched on demand when the provider has no direct apiKey.
-   *
-   * Fails-closed when no provider is configured — callers see a
-   * structured error rather than a stale env URL.
-   */
-  private async resolveCallTarget(): Promise<{
-    gatewayUrl: string;
-    authHeader: string;
-    apiFormat: ApiFormat;
-  }> {
-    const provider = await this.resolver();
-    const gatewayUrl = provider.gatewayUrl?.trim().replace(/\/+$/, "");
-    if (!gatewayUrl) {
+  private async request(
+    params: NyxLlmStreamParams | NyxLlmCompleteParams,
+    stream: boolean,
+  ): Promise<{ response: Response; apiFormat: ApiFormat }> {
+    let provider = await this.resolver();
+    let apiFormat: ApiFormat = provider.apiFormat ?? "responses";
+    const send = async (token: string) => {
+      const gatewayUrl = provider.gatewayUrl?.trim().replace(/\/+$/, "");
+      if (!gatewayUrl) {
+        throw new Error("LLM_PROVIDER_NOT_CONFIGURED: no gatewayUrl in settings");
+      }
+      apiFormat = provider.apiFormat ?? "responses";
+      const path = apiFormat === "chat-completion" ? "/chat/completions" : "/responses";
+      const body = apiFormat === "chat-completion"
+        ? buildChatCompletionBody(params, stream)
+        : buildResponsesBody(params, stream);
+      return safeFetch(`${gatewayUrl}${path}`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+    };
+    if (!provider.gatewayUrl?.trim()) {
       throw new Error("LLM_PROVIDER_NOT_CONFIGURED: no gatewayUrl in settings");
     }
-    const apiFormat: ApiFormat = provider.apiFormat ?? "responses";
-
-    if (provider.apiKey && provider.apiKey.trim().length > 0) {
-      return { gatewayUrl, authHeader: `Bearer ${provider.apiKey.trim()}`, apiFormat };
-    }
-
-    const token = await this.saTokenProvider.getAccessToken();
-    return { gatewayUrl, authHeader: `Bearer ${token}`, apiFormat };
+    logger.info({ model: params.model, stream }, "Starting LLM request");
+    // Direct provider credentials are never replaced with platform credentials.
+    const directKey = provider.apiKey?.trim();
+    const response = directKey ? await send(directKey) : await requestWithSaToken(
+      this.saTokenProvider,
+      async (token) => {
+        provider = await this.resolver();
+        if (provider.apiKey?.trim()) {
+          throw new Error("LLM authentication mode changed during request");
+        }
+        return send(token);
+      },
+    );
+    return { response, apiFormat };
   }
 
   /**
@@ -281,26 +295,7 @@ export class NyxLlmClient {
    * shaped SSE events regardless of upstream format.
    */
   async *stream(params: NyxLlmStreamParams): AsyncIterable<ResponsesApiStreamEvent> {
-    const { gatewayUrl, authHeader, apiFormat } = await this.resolveCallTarget();
-    logger.info(
-      { model: params.model, gatewayUrl, apiFormat },
-      "Starting LLM stream request",
-    );
-
-    const path = apiFormat === "chat-completion" ? "/chat/completions" : "/responses";
-    const body =
-      apiFormat === "chat-completion"
-        ? buildChatCompletionBody(params, true)
-        : buildResponsesBody(params, true);
-
-    const response = await safeFetch(`${gatewayUrl}${path}`, {
-      method: "POST",
-      headers: {
-        "Authorization": authHeader,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(body),
-    });
+    const { response, apiFormat } = await this.request(params, true);
 
     if (!response.ok) {
       const rawText = await response.text().catch(() => "");
@@ -330,26 +325,7 @@ export class NyxLlmClient {
    * regardless of upstream format.
    */
   async complete(params: NyxLlmCompleteParams): Promise<ResponsesApiOutput[]> {
-    const { gatewayUrl, authHeader, apiFormat } = await this.resolveCallTarget();
-    logger.info(
-      { model: params.model, gatewayUrl, apiFormat },
-      "Starting LLM complete request",
-    );
-
-    const path = apiFormat === "chat-completion" ? "/chat/completions" : "/responses";
-    const body =
-      apiFormat === "chat-completion"
-        ? buildChatCompletionBody(params, false)
-        : buildResponsesBody(params, false);
-
-    const response = await safeFetch(`${gatewayUrl}${path}`, {
-      method: "POST",
-      headers: {
-        "Authorization": authHeader,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(body),
-    });
+    const { response, apiFormat } = await this.request(params, false);
 
     if (!response.ok) {
       const rawText = await response.text().catch(() => "");

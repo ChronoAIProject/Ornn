@@ -17,8 +17,9 @@
  */
 
 import { createLogger } from "../../shared/logger";
+import { requestWithSaToken, type SaTokenSource } from "./saRequest";
 import { safeFetch } from "../../infra/safeFetch";
-import type { NyxidConfigResolver, NyxidSaTokenProvider } from "./base";
+import type { NyxidConfigResolver } from "./base";
 
 const logger = createLogger("nyxLlmCatalogClient");
 
@@ -44,12 +45,12 @@ interface RawListResponse {
 
 export interface NyxLlmCatalogClientConfig {
   readonly resolver: NyxidConfigResolver;
-  readonly saTokenProvider: NyxidSaTokenProvider;
+  readonly saTokenProvider: SaTokenSource;
 }
 
 export class NyxLlmCatalogClient {
   private readonly resolver: NyxidConfigResolver;
-  private readonly saTokenProvider: NyxidSaTokenProvider;
+  private readonly saTokenProvider: SaTokenSource;
 
   constructor(config: NyxLlmCatalogClientConfig) {
     this.resolver = config.resolver;
@@ -71,20 +72,14 @@ export class NyxLlmCatalogClient {
    * the error so operators can see why the sync didn't apply.
    */
   async listUpstreamModels(): Promise<UpstreamModel[]> {
-    const url = await this.resolveUrl();
-    const token = await this.saTokenProvider.getAccessToken();
-    const resp = await safeFetch(url, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    const resp = await requestWithSaToken(this.saTokenProvider, async (token) =>
+      safeFetch(await this.resolveUrl(), {
+        headers: { Authorization: `Bearer ${token}` },
+      }),
+    );
     if (!resp.ok) {
-      const body = await resp.text().catch(() => "");
-      logger.error(
-        { status: resp.status, url, body: body.slice(0, 200) },
-        "Chrono LLM catalog fetch failed",
-      );
-      throw new Error(
-        `Chrono LLM /models failed (${resp.status}): ${body.slice(0, 200)}`,
-      );
+      logger.error({ status: resp.status }, "Chrono LLM catalog fetch failed");
+      throw new Error(`Chrono LLM /models failed (${resp.status})`);
     }
     const json = (await resp.json()) as RawListResponse | RawModelEntry[];
     const raw: RawModelEntry[] = Array.isArray(json)
