@@ -24,9 +24,10 @@
  */
 
 import { createLogger } from "../../shared/logger";
+import { parseResponsesStream, parseChatCompletionStream } from "./llmStream";
+import { requestWithSaToken, type SaTokenSource } from "./saRequest";
 import { safeFetch } from "../../infra/safeFetch";
 import type { ApiFormat } from "../../domains/settings/llmProviders/types";
-import type { NyxidSaTokenProvider } from "./base";
 
 const logger = createLogger("nyxLlmClient");
 
@@ -88,6 +89,7 @@ export interface NyxLlmCompleteParams {
 
 /** Strip HTML from upstream error responses (e.g. Cloudflare 502 pages). */
 function sanitizeErrorResponse(status: number, rawText: string): string {
+  if (status === 401 || status === 403) return `LLM Gateway error (${status}): authentication rejected`;
   // Try JSON first
   try {
     const json = JSON.parse(rawText);
@@ -129,181 +131,6 @@ function mapRoleToChatCompletion(
   role: ResponsesApiInputMessage["role"],
 ): "user" | "assistant" | "system" {
   return role === "developer" ? "system" : role;
-}
-
-// ---------------------------------------------------------------------------
-// SSE Parser (shared across both formats)
-// ---------------------------------------------------------------------------
-
-interface RawSseEvent {
-  data: string;
-}
-
-async function* parseSSELines(response: Response): AsyncIterable<RawSseEvent> {
-  const reader = response.body?.getReader();
-  if (!reader) {
-    throw new Error("Response body is not readable");
-  }
-
-  const decoder = new TextDecoder();
-  let buffer = "";
-
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n");
-      buffer = lines.pop() ?? "";
-
-      for (const line of lines) {
-        if (line.startsWith("data: ")) {
-          const data = line.slice(6).trim();
-          if (!data) continue;
-          yield { data };
-        }
-      }
-    }
-  } finally {
-    reader.releaseLock();
-  }
-}
-
-/** Parse Responses-API SSE: each `data:` is a JSON event object. */
-async function* parseResponsesStream(
-  response: Response,
-): AsyncIterable<ResponsesApiStreamEvent> {
-  for await (const { data } of parseSSELines(response)) {
-    if (data === "[DONE]") return;
-    try {
-      yield JSON.parse(data) as ResponsesApiStreamEvent;
-    } catch {
-      logger.debug({ data: data.slice(0, 100) }, "Failed to parse SSE event");
-    }
-  }
-}
-
-/**
- * Internal accumulator for a single OpenAI Chat Completions tool call
- * as it streams in. `id` + `name` arrive on the first delta for that
- * tool-call index; `arguments` is a JSON string that accumulates
- * across many chunks before the model finishes emitting it.
- */
-interface ToolCallAccumulator {
-  id: string;
-  name: string;
-  arguments: string;
-}
-
-/**
- * Parse Chat Completions SSE and translate it into Responses-API
- * event shape so downstream consumers (skill generation, playground
- * tool-use loop) stay format-agnostic.
- *
- * - `choices[].delta.content` chunks → `response.output_text.delta`
- *   events (#574).
- * - `choices[].delta.tool_calls` chunks are buffered per tool-call
- *   index (id + name + accumulated JSON arguments). When the turn
- *   completes (explicit `finish_reason` of `"tool_calls"` /
- *   `"stop"`, upstream `[DONE]`, or EOF), each buffered tool call is
- *   emitted as a synthesized `response.output_item.done` event with
- *   `item.type === "function_call"` — the exact shape the playground
- *   loop already consumes (#608). Without this the playground never
- *   sees a tool call from chat-completion providers and renders
- *   `execute_in_sandbox(...)` as plain text instead of running it.
- */
-async function* parseChatCompletionStream(
-  response: Response,
-): AsyncIterable<ResponsesApiStreamEvent> {
-  const toolCalls = new Map<number, ToolCallAccumulator>();
-  let flushed = false;
-
-  function* flushToolCalls(): Generator<ResponsesApiStreamEvent> {
-    if (flushed) return;
-    flushed = true;
-    const indices = [...toolCalls.keys()].sort((a, b) => a - b);
-    for (const idx of indices) {
-      const tc = toolCalls.get(idx)!;
-      yield {
-        type: "response.output_item.done",
-        item: {
-          type: "function_call",
-          id: tc.id,
-          call_id: tc.id,
-          name: tc.name,
-          arguments: tc.arguments,
-        },
-      };
-    }
-  }
-
-  for await (const { data } of parseSSELines(response)) {
-    if (data === "[DONE]") {
-      yield* flushToolCalls();
-      return;
-    }
-    let chunk: {
-      choices?: Array<{
-        delta?: {
-          content?: string | null;
-          tool_calls?: Array<{
-            index?: number;
-            id?: string;
-            type?: string;
-            function?: { name?: string; arguments?: string };
-          }>;
-        };
-        finish_reason?: string | null;
-      }>;
-    };
-    try {
-      chunk = JSON.parse(data);
-    } catch {
-      logger.debug({ data: data.slice(0, 100) }, "Failed to parse chat-completion chunk");
-      continue;
-    }
-
-    const choice = chunk.choices?.[0];
-    if (!choice) continue;
-
-    const text = choice.delta?.content;
-    if (typeof text === "string" && text.length > 0) {
-      yield { type: "response.output_text.delta", delta: text };
-    }
-
-    const deltaToolCalls = choice.delta?.tool_calls;
-    if (Array.isArray(deltaToolCalls)) {
-      for (const piece of deltaToolCalls) {
-        // OpenAI uses `index` to disambiguate parallel tool calls
-        // within one assistant turn. Missing index → assume a single
-        // tool call at index 0.
-        const idx = typeof piece.index === "number" ? piece.index : 0;
-        const acc = toolCalls.get(idx) ?? { id: "", name: "", arguments: "" };
-        if (piece.id) acc.id = piece.id;
-        if (piece.function?.name) acc.name = piece.function.name;
-        if (typeof piece.function?.arguments === "string") {
-          acc.arguments += piece.function.arguments;
-        }
-        toolCalls.set(idx, acc);
-      }
-    }
-
-    // Some providers (DeepSeek, Together, …) terminate a tool-call
-    // turn with finish_reason=tool_calls; others emit
-    // finish_reason=stop alongside the final tool-call delta. Treat
-    // any non-null finish_reason as "no more deltas this turn" and
-    // flush so the playground loop sees the tool call before
-    // [DONE] / EOF.
-    if (choice.finish_reason && toolCalls.size > 0) {
-      yield* flushToolCalls();
-    }
-  }
-
-  // Stream ended without a [DONE] sentinel (some upstreams just
-  // close the body). Flush any pending tool calls so we don't drop
-  // them on the floor.
-  yield* flushToolCalls();
 }
 
 // ---------------------------------------------------------------------------
@@ -409,12 +236,12 @@ export interface NyxLlmClientConfig {
    * via OAuth client_credentials). Owned by bootstrap so all clients
    * share one token cache.
    */
-  saTokenProvider: NyxidSaTokenProvider;
+  saTokenProvider: SaTokenSource;
 }
 
 export class NyxLlmClient {
   private readonly resolver: LlmProviderResolver;
-  private readonly saTokenProvider: NyxidSaTokenProvider;
+  private readonly saTokenProvider: SaTokenSource;
 
   constructor(config: NyxLlmClientConfig) {
     this.resolver = config.resolver;
@@ -422,32 +249,45 @@ export class NyxLlmClient {
     logger.info("NyxLlmClient initialized with settings-driven resolver");
   }
 
-  /**
-   * Resolve the effective gateway URL + auth header + apiFormat for the
-   * current call. Pulls the provider config from settings; SA token is
-   * fetched on demand when the provider has no direct apiKey.
-   *
-   * Fails-closed when no provider is configured — callers see a
-   * structured error rather than a stale env URL.
-   */
-  private async resolveCallTarget(): Promise<{
-    gatewayUrl: string;
-    authHeader: string;
-    apiFormat: ApiFormat;
-  }> {
-    const provider = await this.resolver();
-    const gatewayUrl = provider.gatewayUrl?.trim().replace(/\/+$/, "");
-    if (!gatewayUrl) {
+  private async request(
+    params: NyxLlmStreamParams | NyxLlmCompleteParams,
+    stream: boolean,
+  ): Promise<{ response: Response; apiFormat: ApiFormat }> {
+    let provider = await this.resolver();
+    let apiFormat: ApiFormat = provider.apiFormat ?? "responses";
+    const send = async (token: string) => {
+      const gatewayUrl = provider.gatewayUrl?.trim().replace(/\/+$/, "");
+      if (!gatewayUrl) {
+        throw new Error("LLM_PROVIDER_NOT_CONFIGURED: no gatewayUrl in settings");
+      }
+      apiFormat = provider.apiFormat ?? "responses";
+      const path = apiFormat === "chat-completion" ? "/chat/completions" : "/responses";
+      const body = apiFormat === "chat-completion"
+        ? buildChatCompletionBody(params, stream)
+        : buildResponsesBody(params, stream);
+      return safeFetch(`${gatewayUrl}${path}`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+    };
+    if (!provider.gatewayUrl?.trim()) {
       throw new Error("LLM_PROVIDER_NOT_CONFIGURED: no gatewayUrl in settings");
     }
-    const apiFormat: ApiFormat = provider.apiFormat ?? "responses";
-
-    if (provider.apiKey && provider.apiKey.trim().length > 0) {
-      return { gatewayUrl, authHeader: `Bearer ${provider.apiKey.trim()}`, apiFormat };
-    }
-
-    const token = await this.saTokenProvider.getAccessToken();
-    return { gatewayUrl, authHeader: `Bearer ${token}`, apiFormat };
+    logger.info({ model: params.model, stream }, "Starting LLM request");
+    // Direct provider credentials are never replaced with platform credentials.
+    const directKey = provider.apiKey?.trim();
+    const response = directKey ? await send(directKey) : await requestWithSaToken(
+      this.saTokenProvider,
+      async (token) => {
+        provider = await this.resolver();
+        if (provider.apiKey?.trim()) {
+          throw new Error("LLM authentication mode changed during request");
+        }
+        return send(token);
+      },
+    );
+    return { response, apiFormat };
   }
 
   /**
@@ -455,26 +295,7 @@ export class NyxLlmClient {
    * shaped SSE events regardless of upstream format.
    */
   async *stream(params: NyxLlmStreamParams): AsyncIterable<ResponsesApiStreamEvent> {
-    const { gatewayUrl, authHeader, apiFormat } = await this.resolveCallTarget();
-    logger.info(
-      { model: params.model, gatewayUrl, apiFormat },
-      "Starting LLM stream request",
-    );
-
-    const path = apiFormat === "chat-completion" ? "/chat/completions" : "/responses";
-    const body =
-      apiFormat === "chat-completion"
-        ? buildChatCompletionBody(params, true)
-        : buildResponsesBody(params, true);
-
-    const response = await safeFetch(`${gatewayUrl}${path}`, {
-      method: "POST",
-      headers: {
-        "Authorization": authHeader,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(body),
-    });
+    const { response, apiFormat } = await this.request(params, true);
 
     if (!response.ok) {
       const rawText = await response.text().catch(() => "");
@@ -504,26 +325,7 @@ export class NyxLlmClient {
    * regardless of upstream format.
    */
   async complete(params: NyxLlmCompleteParams): Promise<ResponsesApiOutput[]> {
-    const { gatewayUrl, authHeader, apiFormat } = await this.resolveCallTarget();
-    logger.info(
-      { model: params.model, gatewayUrl, apiFormat },
-      "Starting LLM complete request",
-    );
-
-    const path = apiFormat === "chat-completion" ? "/chat/completions" : "/responses";
-    const body =
-      apiFormat === "chat-completion"
-        ? buildChatCompletionBody(params, false)
-        : buildResponsesBody(params, false);
-
-    const response = await safeFetch(`${gatewayUrl}${path}`, {
-      method: "POST",
-      headers: {
-        "Authorization": authHeader,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(body),
-    });
+    const { response, apiFormat } = await this.request(params, false);
 
     if (!response.ok) {
       const rawText = await response.text().catch(() => "");

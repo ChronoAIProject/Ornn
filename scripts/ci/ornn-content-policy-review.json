@@ -1,14 +1,22 @@
 {
   "verdict": "GO_CONTENT_POLICY",
   "reviewer": "solution-architect-01",
+  "catalog_sha256": "0460bf88887d7d9701b060019bc0ee123b903ed351d7d7ad8f1ca622f622d295",
   "adapter_files": {
     "content_catalog.py": "3352b975fab061d43741b6eb0b4f738482484009b00ef045890b61d38837b803",
     "content_identity.py": "36aee4fe568ccf5d4236535dd2ce5398a6a695c4939ea346af1f52c841ac0c1f",
     "resolve_content_policy.py": "4bafd5766a28f6950aac6b0f17bcb2ae99dbe425485209dc3d985a04249efc3b"
   },
-  "catalog_sha256": "612632238d0bf5ebd7794e8b987c57c7d20655d00f2d3952ed9a432ee2aaecc5",
-  "base_catalog_sha256": "8afa96f5391a911772a2af8205871cd1d2dd823fff51c1ccd743ae58e6fd28f2",
-  "supplemental_evidence": "9a714cb8655ba21bacb9accc19037c0bfdf2192de45cd2d8227bceb847a3d66a",
-  "scope": "One exact native web file/finding from run44136354736; all 378 previously approved rows preserved. Exact scanner capture parses as a noncomputed JavaScript MemberExpression. No credential literal. No matching rule broadened.",
-  "publication_approved": false
+  "base_catalog_sha256": "612632238d0bf5ebd7794e8b987c57c7d20655d00f2d3952ed9a432ee2aaecc5",
+  "source_head": "9e65970512f1c2eae9b76ece781cdd562b23ca94",
+  "scope": "Five exact API public-material additions; 379 previous rows preserved. Content classification only; no new image CLEAN or publication/deployment approval.",
+  "approved_occurrence_ids": [
+    "a24767a58fa9d61315587dde7cdd495ee13e33f859ba64b180727fdc051eae04",
+    "c8a4880901d55aad60c046398d3316ea291742e0132f2015d0e4e17cfc2737cb",
+    "b8cd1024495ea40eb06b905622f573f94afe904a77773a0343b999033646bdfc",
+    "2df312cad3958fa002222f38cdcc5152185316768739882e106e7d1593a05f05",
+    "7fb56afa0a6f7fc066bc649dd79e02f6589b65c7b03d44fd08312a7ed191c3be"
+  ],
+  "publication_approved": false,
+  "native_archive_reopened": false
 }

@@ -78,6 +78,8 @@ export class SettingsServiceImpl implements SettingsService {
   private readonly clock: () => number;
   private llmProviders: SettingsServiceDeps["llmProviders"];
   private cache: Map<SectionId, CacheEntry<unknown>> = new Map();
+  private generation = 0;
+  private readonly saveListeners = new Set<(id: SectionId) => void>();
 
   constructor(deps: SettingsServiceDeps) {
     this.repo = deps.repo;
@@ -129,12 +131,15 @@ export class SettingsServiceImpl implements SettingsService {
   }
 
   async getSection<T>(id: SectionId): Promise<T> {
+    const generation = this.generation;
     const cached = this.cache.get(id);
     const now = this.clock();
     if (cached && cached.expiresAt > now) {
       return cached.value as T;
     }
     const value = await this.loadSection<T>(id);
+    // A read begun before a successful PUT must not restore its old config.
+    if (generation !== this.generation) return this.getSection<T>(id);
     this.cache.set(id, { value, expiresAt: now + this.cacheTtlMs });
     return value;
   }
@@ -206,7 +211,8 @@ export class SettingsServiceImpl implements SettingsService {
     await this.repo.putSection(id, toStore, actor.userId);
 
     // Bust this section's cache so the next read picks up the write.
-    this.cache.delete(id);
+    this.invalidateCache(id);
+    for (const listener of this.saveListeners) listener(id);
 
     return {
       value: validated as T,
@@ -214,8 +220,15 @@ export class SettingsServiceImpl implements SettingsService {
     };
   }
 
-  invalidateCache(): void {
-    this.cache.clear();
+  /** Synchronous cache invalidators run only after persistence succeeds. */
+  onSectionSaved(listener: (id: SectionId) => void): void {
+    this.saveListeners.add(listener);
+  }
+
+  invalidateCache(id?: SectionId): void {
+    this.generation++;
+    if (id) this.cache.delete(id);
+    else this.cache.clear();
   }
 
   // -------------------------------------------------------------------

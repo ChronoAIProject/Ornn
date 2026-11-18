@@ -14,6 +14,7 @@
  */
 
 import { createLogger } from "../../shared/logger";
+import { requestWithSaToken, type SaTokenSource } from "./saRequest";
 import { safeFetch } from "../../infra/safeFetch";
 import type { NyxidConfigResolver } from "./base";
 
@@ -76,7 +77,11 @@ export class NyxidServiceClient {
    */
   private platformActiveCache: { ids: Set<string>; expiresAt: number } | null = null;
 
-  constructor(opts: { resolver: NyxidConfigResolver }) {
+  private generation = 0;
+  private readonly saTokenProvider: SaTokenSource | undefined;
+
+  constructor(opts: { resolver: NyxidConfigResolver; saTokenProvider?: SaTokenSource }) {
+    this.saTokenProvider = opts.saTokenProvider;
     this.resolver = opts.resolver;
   }
 
@@ -94,6 +99,7 @@ export class NyxidServiceClient {
   async listServicesForCaller(userAccessToken: string): Promise<NyxidCatalogService[]> {
     if (!userAccessToken) return [];
     const now = Date.now();
+    const generation = this.generation;
     const cached = this.cache.get(userAccessToken);
     if (cached && cached.expiresAt > now) {
       return cached.services;
@@ -104,9 +110,8 @@ export class NyxidServiceClient {
         headers: { Authorization: `Bearer ${userAccessToken}` },
       });
       if (!resp.ok) {
-        const body = await resp.text().catch(() => "");
         logger.warn(
-          { status: resp.status, body: body.slice(0, 200) },
+          { status: resp.status },
           "NyxID /services call failed; returning empty",
         );
         return [];
@@ -134,7 +139,9 @@ export class NyxidServiceClient {
           isActive: true,
         });
       }
-      this.cache.set(userAccessToken, { services, expiresAt: now + this.cacheTtlMs });
+      if (generation === this.generation) {
+        this.cache.set(userAccessToken, { services, expiresAt: now + this.cacheTtlMs });
+      }
       return services;
     } catch (err) {
       logger.warn(
@@ -164,6 +171,7 @@ export class NyxidServiceClient {
     if (userAccessToken) this.cache.delete(userAccessToken);
     else this.cache.clear();
     this.platformActiveCache = null;
+    this.generation++;
   }
 
   /**
@@ -183,18 +191,23 @@ export class NyxidServiceClient {
   async listActiveServiceIdsAsPlatform(saToken: string): Promise<Set<string> | null> {
     if (!saToken) return null;
     const now = Date.now();
+    const generation = this.generation;
     if (this.platformActiveCache && this.platformActiveCache.expiresAt > now) {
       return this.platformActiveCache.ids;
     }
     try {
-      const baseUrl = await this.resolveBaseUrl();
-      const resp = await safeFetch(`${baseUrl}/api/v1/services`, {
-        headers: { Authorization: `Bearer ${saToken}` },
-      });
+      const send = async (token: string) => {
+        const baseUrl = await this.resolveBaseUrl();
+        return safeFetch(`${baseUrl}/api/v1/services`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+      };
+      const resp = this.saTokenProvider
+        ? await requestWithSaToken(this.saTokenProvider, send)
+        : await send(saToken);
       if (!resp.ok) {
-        const body = await resp.text().catch(() => "");
         logger.warn(
-          { status: resp.status, body: body.slice(0, 200) },
+          { status: resp.status },
           "NyxID /services SA fetch failed; returning null (no filter)",
         );
         return null;
@@ -209,7 +222,9 @@ export class NyxidServiceClient {
         if (r.is_active === false) continue;
         ids.add(r.id);
       }
-      this.platformActiveCache = { ids, expiresAt: now + this.cacheTtlMs };
+      if (generation === this.generation) {
+        this.platformActiveCache = { ids, expiresAt: now + this.cacheTtlMs };
+      }
       return ids;
     } catch (err) {
       logger.warn(
