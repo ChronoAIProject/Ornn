@@ -167,13 +167,14 @@ jobs:
             staging-image-out/registry-observation.json
           if-no-files-found: error
           retention-days: 7
-      - name: Emit API publication handoff
+      - name: Emit image publication handoff
         if: >-
-          matrix.component == 'api' && github.event_name == 'push' &&
+          github.event_name == 'push' &&
           github.ref == 'refs/heads/develop'
         env:
           COMPONENT: ${{ matrix.component }}
           IMAGE_HANDOFF_ENABLED: ${{ vars.IMAGE_HANDOFF_ENABLED }}
+          IMAGE_HANDOFF_WEB_ENABLED: ${{ vars.IMAGE_HANDOFF_WEB_ENABLED }}
           IMAGE_HANDOFF_REPOSITORY: ${{ secrets.IMAGE_HANDOFF_REPOSITORY }}
           IMAGE_HANDOFF_TOKEN: ${{ secrets.IMAGE_HANDOFF_TOKEN }}
         run: python3 scripts/ci/staging_handoff.py

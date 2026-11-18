@@ -8,6 +8,11 @@ import subprocess
 
 REPOSITORY = "ChronoAIProject/Ornn"
 PACKAGE = "ghcr.io/chronoaiproject/ornn-api"
+CONTRACTS = {
+    "api": {"package": PACKAGE, "event": "ornn-api-published", "enabled": "IMAGE_HANDOFF_ENABLED"},
+    "web": {"package": "ghcr.io/chronoaiproject/ornn-web", "event": "ornn-web-published",
+            "enabled": "IMAGE_HANDOFF_WEB_ENABLED"},
+}
 
 
 def require(value):
@@ -15,10 +20,23 @@ def require(value):
         raise ValueError("Invalid publication handoff")
 
 
+def component_contract(component):
+    require(component in CONTRACTS)
+    return CONTRACTS[component]
+
+
+def enabled(env):
+    # Keep the API switch stable; API enablement must never opt in a web consumer.
+    contract = component_contract(env.get("COMPONENT", "api"))
+    return env.get(contract["enabled"], "false") == "true"
+
+
 def payload(raw, env):
     require(env.get("GITHUB_REPOSITORY") == REPOSITORY)
     require(env.get("GITHUB_EVENT_NAME") == "push" and env.get("GITHUB_REF") == "refs/heads/develop")
-    require(env.get("COMPONENT") == "api")
+    component = env.get("COMPONENT")
+    contract = component_contract(component)
+    package = contract["package"]
     sha = env.get("GITHUB_SHA", "")
     run, attempt = env.get("GITHUB_RUN_ID", ""), env.get("GITHUB_RUN_ATTEMPT", "")
     require(re.fullmatch(r"[0-9a-f]{40}", sha))
@@ -29,9 +47,9 @@ def payload(raw, env):
     digest = receipt.get("manifestDigest", "")
     require(isinstance(digest, str) and re.fullmatch(r"sha256:[0-9a-f]{64}", digest))
     require(receipt.get("schema") == "ornn-staging-publication-v1")
-    require(receipt.get("component") == "api" and receipt.get("package") == PACKAGE)
+    require(receipt.get("component") == component and receipt.get("package") == package)
     require(receipt.get("tag") == sha and receipt.get("sourceRevision") == sha)
-    require(receipt.get("image") == PACKAGE + "@" + digest)
+    require(receipt.get("image") == package + "@" + digest)
     workflow = receipt.get("workflow", {})
     require(isinstance(workflow, dict))
     require(all(workflow.get(k) == v for k, v in {
@@ -40,7 +58,7 @@ def payload(raw, env):
     build_attempt = workflow.get("runAttempt", "")
     require(isinstance(build_attempt, str) and re.fullmatch(r"[1-9][0-9]*", build_attempt))
     require(int(build_attempt) <= int(attempt))
-    return {"event_type": "ornn-api-published", "client_payload": {
+    return {"event_type": contract["event"], "client_payload": {
         "schema": "ornn-image-handoff-v1", "repository": REPOSITORY,
         "source_sha": sha, "run_id": run, "run_attempt": attempt,
         "image": receipt["image"], "receipt_sha256": hashlib.sha256(raw).hexdigest(),
@@ -48,7 +66,7 @@ def payload(raw, env):
 
 
 def dispatch(raw, env, run=subprocess.run):
-    if env.get("IMAGE_HANDOFF_ENABLED", "false") != "true":
+    if not enabled(env):
         return False
     body = payload(raw, env)
     destination = env.get("IMAGE_HANDOFF_REPOSITORY", "")
@@ -69,7 +87,7 @@ def dispatch(raw, env, run=subprocess.run):
 
 def main():
     try:
-        if os.environ.get("IMAGE_HANDOFF_ENABLED", "false") != "true":
+        if not enabled(os.environ):
             print("Image handoff disabled")
             return 0
         sent = dispatch(Path("staging-image-out/publication.json").read_bytes(), os.environ)
