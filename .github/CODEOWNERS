@@ -10,11 +10,12 @@
 # we add team members.
 *                                @chronoai-shining
 
-# ---- Workflow + CODEOWNERS itself --------------------------------------
+# ---- Workflows, scripts + CODEOWNERS itself ----------------------------
 # These dictate what gets auto-approved / auto-merged / tagged by the
 # release state machine. Any change to them must come from the maintainer
 # so a malicious PR can't loosen the approval gate then auto-merge itself.
-/.github/workflows/              @chronoai-shining
+/.github/workflows/              @chronoai-shining @yitianliu-ruby
+/.github/scripts/                @chronoai-shining @yitianliu-ruby
 /.github/CODEOWNERS              @chronoai-shining
 
 # ---- Changeset config --------------------------------------------------
