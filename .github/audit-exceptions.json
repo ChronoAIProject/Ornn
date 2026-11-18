@@ -14,7 +14,7 @@
         "ornn-api/package.json": "54b06945b9f9fe69f4829c7d9b08722d954eb4cbd2b815d639edddf1a5abd5f6",
         "ornn-web/package.json": "e336c4a36bcb081e8ecdeb12aa4fc085aad53a6cae4da9928747992e5a2d9cb6",
         "sdk/typescript/package.json": "4b6bc345d359666b3b74e947f65c97c83539d8f5d625dd0dee31de516269addb",
-        "ornn-api/Dockerfile.staging": "b7d26285df4313c681d9f40ddd70bf53b8020fb67be31066496bb78c9a850f77",
+        "ornn-api/Dockerfile.staging": "b7e14ce50f426a6db82537a46740a02a457f5b0f244447f93f356d06a101039f",
         "ornn-web/Dockerfile.staging": "d317878e6c203993ca8efbb15f0de3008a3fd623cbf7aaa069cb22a8b2b3972f",
         "scripts/ci/staging-api-dependencies.mjs": "4477d22ba5b8e5df560295680c1713ac6706225f6c7ed34dba930189d4f9c2c7"
       }

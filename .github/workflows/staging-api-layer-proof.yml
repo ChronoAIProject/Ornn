@@ -31,6 +31,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir layer-proof
+          exec > >(tee layer-proof/build.log) 2>&1
           for variant in first second; do
             if test "$variant" = second; then
               printf '\n// Native image layer reuse regression.\n' >> ornn-api/src/index.ts
