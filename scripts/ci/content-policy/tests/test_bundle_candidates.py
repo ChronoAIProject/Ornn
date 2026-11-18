@@ -9,6 +9,7 @@ import sys
 import tarfile
 import tempfile
 import unittest
+from unittest.mock import patch
 
 SCANNER = Path(os.environ['TEST_SCANNER'])
 sys.path[:0] = [str(SCANNER), str(Path(__file__).resolve().parents[1] / 'tool')]
@@ -16,6 +17,7 @@ import scan_image_secrets
 from content_bundles import normalized_scope, pattern_identity
 from content_catalog import match_findings, read_catalog, tool_identity
 from content_identity import archive_identities, layer_identities
+from content_syntax import proven_findings
 from image_secrets.common import ScanError, digest_file
 from resolve_content_policy import main
 from tests.fixtures import digest, docker_archive, tar_bytes
@@ -58,7 +60,7 @@ class BundleCandidates(unittest.TestCase):
     def test_rebuilt_renamed_and_relocated_line_retains_exact_candidate(self):
         _, old, _, _ = self.scan([(self.path, self.body)])
         path = self.path.replace('AbCd1234', '9x_Y-Zab')
-        _, rebuilt, identities, scopes = self.scan([(path, b'// a new build\n' + self.body)])
+        _, rebuilt, identities, scopes = self.scan([(path, b'import "./new-version.js";\n' + self.body)])
         oldrow = next(f for f in old['findings'] if f['rule'] == self.rule)
         newrow = next(f for f in rebuilt['findings'] if f['rule'] == self.rule)
         self.assertNotEqual(oldrow['path'], newrow['path'])
@@ -74,6 +76,63 @@ class BundleCandidates(unittest.TestCase):
         matched, pending = self.match(report, ids, scopes)
         self.assertEqual(len(matched), 1)
         self.assertTrue(any(f['rule'] == self.rule and f['candidate_sha256'] != digest(self.value) for f in pending))
+
+    def test_same_bytes_in_non_expression_contexts_remain_unresolved(self):
+        cases = {
+            'quoted_password': b'const x={password:"' + self.value + b'"};',
+            'comment': b'// password:' + self.value + b'\nconst x={};',
+            'block_comment': b'/* password:' + self.value + b' */',
+            'computed_member': b'const x={password:' + self.value + b'["secret"]};',
+            'computed_key': b'const x={["password:' + self.value + b'"]:0};',
+            'regex_literal': b'const x=/password:' + self.value + b' /;',
+            'template_literal': b'const x=`password:' + self.value + b'`;',
+            'invalid_syntax': b'!!! invalid syntax; password:' + self.value + b';',
+            'mixed_same_line': self.body + b'const x={password:"' + self.value + b'"};',
+            'mixed_other_line': self.body + b'\n// password:' + self.value,
+            'member_elsewhere': b'void ' + self.value + b';const x={password:"' + self.value + b'"};',
+        }
+        for name, body in cases.items():
+            with self.subTest(case=name):
+                _, report, ids, scopes = self.scan([(self.path, body)])
+                matched, pending = self.match(report, ids, scopes)
+                self.assertTrue(any(f.get('candidate_sha256') == digest(self.value) for f in pending))
+                self.assertFalse(matched)
+
+    def test_duplicate_valid_captures_and_unicode_offsets(self):
+        body = 'const label="🦄é";'.encode() + self.body + b'const other={password:' + self.value + b'};'
+        _, report, ids, scopes = self.scan([(self.path, body)])
+        # The detector collapses these two same-line captures into one row.
+        rows = [f for f in report['findings'] if f['rule'] == self.rule]
+        self.assertEqual(len(rows), 1)
+        matched, pending = self.match(report, ids, scopes)
+        self.assertEqual(len(matched), 1); self.assertFalse(pending)
+
+    def test_parser_never_executes_bundle_or_imports(self):
+        marker = self.root / 'must-not-exist'
+        code = (b'import fs from "node:fs"; fs.writeFileSync('
+                + json.dumps(str(marker)).encode() + b', "executed");' + self.body)
+        _, report, ids, scopes = self.scan([(self.path, code)])
+        self.assertEqual(len(self.match(report, ids, scopes)[0]), 1)
+        self.assertFalse(marker.exists())
+
+    def test_missing_parser_timeout_invalid_utf8_and_limits_fail_closed(self):
+        import subprocess
+        _, report, _, _ = self.scan([(self.path, self.body)])
+        findings = [f for f in report['findings'] if f['rule'] == self.rule]
+        for error in (OSError('missing'), subprocess.TimeoutExpired('node', 30)):
+            with self.subTest(error=type(error).__name__), patch(
+                    'content_syntax.subprocess.run', side_effect=error):
+                self.assertFalse(proven_findings(self.body, findings))
+        self.assertFalse(proven_findings(b'\xff', []))
+        with patch('content_syntax.MAX_BUNDLE_BYTES', 1):
+            self.assertFalse(proven_findings(self.body, []))
+
+    def test_parser_and_runner_are_in_review_identity(self):
+        identity = tool_identity()
+        self.assertIn('bundle_syntax.cjs', identity)
+        self.assertIn('content_syntax.py', identity)
+        self.assertIn('vendor/babel-parser-7.29.3.cjs', identity)
+        self.assertIn('vendor/PROVENANCE.json', identity)
 
     def test_other_chunk_component_rule_and_missing_current_identity_block(self):
         _, report, ids, scopes = self.scan([(self.path, self.body)])

@@ -7,6 +7,7 @@ import tarfile
 
 from content_catalog import path_hash
 from content_bundles import normalized_scope, RULE
+from content_syntax import MAX_BUNDLE_BYTES, proven_findings
 from image_secrets.archive import ImageArchive
 from image_secrets.common import Budget, ScanError, archive_path
 from image_secrets.policy import CREDENTIAL_URL, PRIVATE, SERVICE_ACCOUNT
@@ -61,9 +62,15 @@ def layer_identities(layer_path, state, requested, bundle_scopes=None):
                 continue
             if member.isfile():
                 digest = hashlib.sha256()
+                eligible = (bundle_scopes is not None and number in requested
+                            and normalized_scope(path) and member.size <= MAX_BUNDLE_BYTES
+                            and any(f["rule"] == RULE for f in requested[number]))
+                payload = bytearray()
                 with layer.extractfile(member) as stream:
                     for block in iter(lambda: stream.read(1024 * 1024), b""):
                         digest.update(block)
+                        if eligible:
+                            payload.extend(block)
                 node = ("file", digest.hexdigest())
             elif member.issym():
                 node = ("link", target_path(path, member.linkname))
@@ -88,7 +95,9 @@ def layer_identities(layer_path, state, requested, bundle_scopes=None):
                     )
                     if pattern.search(metadata)
                 }
-                records[number] = (path, node, metadata_rules)
+                proven = (proven_findings(payload, requested[number])
+                          if member.isfile() and eligible else set())
+                records[number] = (path, node, metadata_rules, proven)
     for path in list(state):
         if any(path == p or path.startswith(p + "/") for p in removed) or any(
             not p or path.startswith(p + "/") for p in opaque
@@ -104,7 +113,7 @@ def layer_identities(layer_path, state, requested, bundle_scopes=None):
             del state[child]
     state.update(updates)
     result = {}
-    for number, (path, node, metadata_rules) in records.items():
+    for number, (path, node, metadata_rules, proven) in records.items():
         # Duplicate tar entries retain their own bytes, even if overwritten later.
         digest = (
             node[1]
@@ -128,7 +137,7 @@ def layer_identities(layer_path, state, requested, bundle_scopes=None):
                 if (bundle_scopes is not None and node[0] == "file"
                         and finding["rule"] == RULE and finding.get("file_sha256") == digest):
                     scope = normalized_scope(path)
-                    if scope:
+                    if scope and finding["finding_id"] in proven:
                         bundle_scopes[finding["finding_id"]] = scope
     return result
 

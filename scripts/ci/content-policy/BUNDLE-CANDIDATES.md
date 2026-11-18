@@ -30,7 +30,24 @@ versions of the same chunk; it does not infer approvals for other values.
 Every build still performs the full detector scan. The resolver reads the exact
 archive, validates all layer/config identities, hashes the current regular-file
 payload at the numeric tar entry, and verifies the reported current file hash and
-path. Only then does it record a hashed normalized scope for that finding. Links,
+path. It then parses the **whole current bundle** with the offline, pinned
+`@babel/parser` 7.29.3 used for the original content review. The parser distribution
+is vendored unchanged, checked against the existing `bun.lock` SHA512 integrity,
+and included (with its runner, provenance and license) in the adapter approval
+hashes. No bundle is imported or executed; no parser download or install runs in
+the assessment job.
+
+The adapter reconstructs the pinned assignment-rule captures and requires an exact
+noncomputed `MemberExpression` at each real capture span. Babel and regex offsets
+both use UTF-16, so Unicode before the capture does not shift the proof. A prefix
+of a computed member or call cannot stand in for the whole value. Every occurrence
+of the same candidate bytes in that file must pass, even on another line or when
+multiple captures collapse into one detector row. A string, comment, template,
+computed use or malformed bundle remains unresolved. One valid expression elsewhere
+cannot authorize an unsafe occurrence. Missing matches, invalid UTF-8, parser
+failures, the 16 MiB input limit or the 30 second parser timeout grant no scope.
+
+Only after these checks does it record a hashed normalized scope for the finding. Links,
 metadata occurrences whose hash differs from the payload, and nested findings do
 not acquire this scope. Duplicate tar entries and earlier layers retain their own
 identities. No stale file hash or line number is used as a reusable approval key.
@@ -43,7 +60,8 @@ a candidate digest remain exact-file-only. All detected findings stay in reports
 The resolver creates a new archive-bound classification packet for every build.
 The publication receipt replays the exact reviewed matcher using the current file
 identities and normalized-scope evidence. The checked-in catalog hash, adapter
-hashes, review-file checksum and scanner source hashes must all match. SA-03 is
+hashes (including the exact parser and syntax runner), review-file checksum and
+scanner source hashes must all match. SA-03 is
 accepted alongside SA-01 as the owner-designated content reviewer; the packet
 preserves the actual reviewer identity. Synthetic approvals exist only in tests.
 
@@ -51,4 +69,7 @@ Tests cover changed filename/file digest/line with identical candidate bytes; ne
 values in that same file; provider credentials; changed chunk, rule or component;
 missing current identities; links and nested/metadata payloads; duplicate paths
 and whiteouts; REAL conflicts; broad or malformed catalog entries; proposal-only
-behavior; and archive-bound packet/receipt replay.
+behavior; archive-bound packet/receipt replay; quoted/comment/computed/regex/template
+and malformed contexts; safe and unsafe duplicate captures; UTF-16 span parity;
+parser failure; and a bundle that would write a file if executed, whose file is
+never created during syntax proof.

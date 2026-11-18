@@ -96,7 +96,8 @@ def match_findings(index, component, findings, identities, bundle_scopes=None):
 
 def tool_identity():
     root = Path(__file__).resolve().parent
-    return {p.name: digest_file(p) for p in sorted(root.glob("*.py"))}
+    files = [*root.glob("*.py"), *root.glob("*.cjs"), *(root / "vendor").glob("*")]
+    return {p.relative_to(root).as_posix(): digest_file(p) for p in sorted(files) if p.is_file()}
 
 
 def make_packet(catalog_path, result, matched, review_path):

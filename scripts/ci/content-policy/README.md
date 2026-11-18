@@ -2,7 +2,8 @@
 
 The proposed v2 extension is described in [BUNDLE-CANDIDATES.md](BUNDLE-CANDIDATES.md).
 It preserves the existing exact-file entries and adds one explicitly reviewed
-candidate-value scope for rebuilt Vite bundles. Its new catalog/adapter approval
+candidate-value scope for rebuilt Vite bundles, conditional on whole-bundle parsing
+and exact noncomputed member-expression spans for every occurrence. Its new catalog/adapter approval
 is pending SA-03; existing approval pins do not authorize the extension. The
 remaining historical description below documents the original v1 catalog.
 

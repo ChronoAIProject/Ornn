@@ -22,7 +22,8 @@ def require(condition, message):
 
 
 def adapter_identity():
-    return {path.name: checksum(path) for path in sorted(ADAPTER.glob("*.py"))}
+    files = [*ADAPTER.glob("*.py"), *ADAPTER.glob("*.cjs"), *(ADAPTER / "vendor").glob("*")]
+    return {p.relative_to(ADAPTER).as_posix(): checksum(p) for p in sorted(files) if p.is_file()}
 
 
 def verify_content_receipt(directory, metadata, scan):
