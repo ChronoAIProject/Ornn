@@ -77,7 +77,9 @@ class CacheTrustTests(unittest.TestCase):
 
     def test_workflow_keeps_tests_parallel_and_pr_caches_untrusted(self):
         s=(Path(__file__).resolve().parents[2]/'.github/workflows/staging-native-images.yml').read_text()
-        self.assertEqual(s.count('bash scripts/ci/image-secret-scan/self-test.sh'),1)
+        self.assertEqual(s.count('python3 -B scripts/ci/staging_gate_shards.py "$QUALIFICATION_SUITE"'),1)
+        self.assertIn('suite: [scanner-a, scanner-b, acceptance, content-policy]',s)
+        self.assertIn('needs: [gate_shards]',s)
         for component in ['api','web']:
             image=re.split(r'\n  [a-z_]+:\n', s.split('  image_'+component+':\n',1)[1], maxsplit=1)[0]
             publish=re.split(r'\n  [a-z_]+:\n', s.split('  publish_'+component+':\n',1)[1], maxsplit=1)[0]
