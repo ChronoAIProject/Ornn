@@ -5,6 +5,7 @@ import shutil
 import tarfile
 from pathlib import PurePosixPath
 
+from .archive_integrity import tar_trailer
 from .common import ScanError, archive_path, copy_stream
 from .containers import inspect_nested
 from .policy import path_rule
@@ -139,6 +140,7 @@ def scan_archive(archive, backend, findings, workspace, budget, progress):
                             findings.add(rule, location)
                     else:
                         raise ScanError("unsupported-layer-entry-type")
+                tar_trailer(layer, budget.max_bytes)
             stage.finish()
             layer_path.unlink()
             inventory["layers"].append(summary)

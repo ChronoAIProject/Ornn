@@ -9,6 +9,7 @@ import tarfile
 import threading
 import zipfile
 
+from .archive_integrity import tar_trailer, verified_zip_member, zip_boundaries
 from .common import ScanError, archive_path, copy_stream
 from .zip_probe import prefixed_zip
 
@@ -83,6 +84,7 @@ def inspect_nested(stage, physical, location, depth):
 def decode_nested(stage, physical, location, depth, kind):
     if kind == "zip":
         with zipfile.ZipFile(physical) as archive:
+            boundaries = zip_boundaries(archive)
             for index, member in enumerate(archive.infolist()):
                 stage.budget.entry()
                 name = archive_path(member.filename)
@@ -90,10 +92,13 @@ def decode_nested(stage, physical, location, depth, kind):
                 if member.flag_bits & 1:
                     raise ScanError("encrypted-nested-archive")
                 stage.add(json.dumps({"path": name}).encode(), child)
-                if member.is_dir():
-                    stage.inspect_path(child, name)
-                else:
-                    with archive.open(member) as stream:
+                remaining = stage.budget.max_bytes - stage.budget.bytes
+                with verified_zip_member(physical, archive, member, boundaries[member.header_offset], remaining) as stream:
+                    if member.is_dir():
+                        if member.file_size:
+                            raise ScanError("zip-directory-payload")
+                        stage.inspect_path(child, name)
+                    else:
                         stage.file(stream, member.file_size, child, name, depth + 1)
     elif kind == "tar":
         with tarfile.open(physical, "r:") as archive:
@@ -114,6 +119,7 @@ def decode_nested(stage, physical, location, depth, kind):
                     stage.inspect_path(child, name)
                 else:
                     raise ScanError("unsupported-nested-entry")
+            tar_trailer(archive, stage.budget.max_bytes)
     else:
         unpacked = physical.with_suffix(".decoded")
         try:

@@ -12,12 +12,96 @@ from image_secrets.backend import Gitleaks
 from image_secrets.containers import identify
 from tests import test_review_regressions as regression
 from tests.test_review_regressions import token, zip_bytes
+from tests.archive_cases import forged_zip, packed_zip, prefix_crc, resized_compressed_extent
 
 
 class ZipProbeTests(unittest.TestCase):
     setUp = regression.ReviewRegressions.setUp
     tearDown = regression.ReviewRegressions.tearDown
     scan = regression.ReviewRegressions.scan
+
+    def test_arch02_forged_prefix_size_and_crc_refuse_hidden_credential(self):
+        private_value = token()
+        payload = b"Atoken=" + private_value.encode() + b"\n"
+        report = self.scan([("data", forged_zip(payload, 1, prefix_crc()))], 2, private_value)
+        self.assertEqual(report["error"], "zip-decoded-size-mismatch")
+
+    def test_zip_declared_sizes_crc_and_compressed_extent_fail_closed(self):
+        plain = b"ordinary public data"
+        for data in (forged_zip(plain, 1), forged_zip(plain, len(plain) + 1),
+                     forged_zip(plain, len(plain), 0), resized_compressed_extent(plain),
+                     resized_compressed_extent(plain, suffix=b"", remove=1)):
+            with self.subTest(length=len(data)):
+                self.scan([("data", data)], 2)
+
+    def test_zip_supported_methods_zip64_and_descriptors_decode_completely(self):
+        for method in (zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED, zipfile.ZIP_BZIP2, zipfile.ZIP_LZMA):
+            for zip64, descriptor in ((False, False), (True, False), (False, True), (True, True)):
+                with self.subTest(method=method, zip64=zip64, descriptor=descriptor):
+                    self.scan([("data", packed_zip(b"ordinary public data", method, zip64, descriptor))], 0)
+
+    def test_zip_empty_members_and_multiple_deflate_output_chunks(self):
+        for payload in (b"", b"ordinary public data\n" * 60000):
+            self.scan([("data", packed_zip(payload))], 0)
+
+    def test_zip_directory_payload_and_unexplained_member_gap_refuse(self):
+        output = io.BytesIO()
+        with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+            archive.writestr("folder/", b"hidden bytes")
+        self.scan([("data", output.getvalue())], 2)
+        data = bytearray(packed_zip(b"ordinary"))
+        central = data.index(b"PK\x01\x02")
+        data[central:central] = b"unexplained"
+        struct.pack_into("<L", data, len(data) - 6, central + 11)
+        report = self.scan([("data", bytes(data))], 2)
+        self.assertEqual(report["error"], "zip-unexplained-member-data")
+
+    def test_zip_local_size_and_descriptor_disagreement_refuse(self):
+        data = bytearray(packed_zip(b"ordinary"))
+        struct.pack_into("<L", data, 22, 1)
+        report = self.scan([("data", bytes(data))], 2)
+        self.assertEqual(report["error"], "zip-local-header-mismatch")
+        data = bytearray(packed_zip(b"ordinary", descriptor=True))
+        descriptor = data.index(b"PK\x07\x08")
+        struct.pack_into("<L", data, descriptor + 12, 1)
+        report = self.scan([("data", bytes(data))], 2)
+        self.assertEqual(report["error"], "zip-data-descriptor-mismatch")
+
+    def test_zip_other_codecs_cannot_hide_output_or_trailing_streams(self):
+        for method in (zipfile.ZIP_STORED, zipfile.ZIP_BZIP2, zipfile.ZIP_LZMA):
+            for data in (forged_zip(b"Ahidden payload", 1, prefix_crc(), method),
+                         resized_compressed_extent(b"ordinary", method=method)):
+                with self.subTest(method=method):
+                    self.scan([("data", data)], 2)
+
+    def test_zip64_local_extra_fields_and_lzma_properties_are_bounded(self):
+        original = bytearray(packed_zip(b"ordinary", zip64=True))
+        names, = struct.unpack_from("<H", original, 26)
+        extra = 30 + names
+        for kind, length in ((1, 1), (1, 65535), (2, 16)):
+            data = original.copy()
+            struct.pack_into("<HH", data, extra, kind, length)
+            self.scan([("data", bytes(data))], 2)
+        data = bytearray(packed_zip(b"ordinary", zipfile.ZIP_LZMA))
+        names, extras = struct.unpack_from("<HH", data, 26)
+        struct.pack_into("<H", data, 30 + names + extras + 2, 65535)
+        self.scan([("data", bytes(data))], 2)
+
+    def test_zip_duplicate_offsets_and_invalid_descriptor_signature_refuse(self):
+        output = io.BytesIO()
+        with zipfile.ZipFile(output, "w") as archive:
+            archive.writestr("one", b"public")
+            archive.writestr("two", b"public")
+        data = bytearray(output.getvalue())
+        first = data.index(b"PK\x01\x02")
+        second = data.index(b"PK\x01\x02", first + 4)
+        struct.pack_into("<L", data, second + 42, 0)
+        report = self.scan([("data", bytes(data))], 2)
+        self.assertEqual(report["error"], "zip-overlapping-members")
+        data = bytearray(packed_zip(b"ordinary", descriptor=True))
+        descriptor = data.index(b"PK\x07\x08")
+        data[descriptor:descriptor + 4] = b"BAD!"
+        self.scan([("data", bytes(data))], 2)
 
     def test_valid_python_bytecode_with_zip_constants_still_scans_raw_bytes(self):
         source = (

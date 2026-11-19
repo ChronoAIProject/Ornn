@@ -7,6 +7,7 @@ import subprocess
 import tarfile
 import threading
 
+from .archive_integrity import tar_trailer
 from .common import ScanError, archive_path, copy_stream, digest_file, json_bytes
 
 DIGEST = re.compile(r"^sha256:([a-f0-9]{64})$")
@@ -46,6 +47,7 @@ class ImageArchive:
                 if total > self.budget.max_bytes:
                     raise ScanError("archive-byte-budget-exceeded")
                 self.members[name] = member
+            tar_trailer(self.tar, self.budget.max_bytes)
             return self
         except BaseException:
             if self.tar:

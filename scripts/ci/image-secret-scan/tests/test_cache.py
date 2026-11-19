@@ -1,5 +1,6 @@
 """Detector evidence reuse never substitutes for image/policy validation."""
 import contextlib
+import gzip
 import base64
 import os
 import io
@@ -13,9 +14,10 @@ from unittest.mock import Mock, patch
 
 import scan_image_secrets as cli
 from image_secrets.backend import Gitleaks
-from image_secrets.cache import DetectorCache, canonical
+from image_secrets.cache import DetectorCache, canonical, fingerprint
 from image_secrets.common import ScanError, digest_file, digest_bytes
 from tests.fixtures import docker_archive, tar_bytes, fake_key
+from tests.archive_cases import forged_zip, prefix_crc
 
 
 class CacheTests(unittest.TestCase):
@@ -143,6 +145,66 @@ class CacheTests(unittest.TestCase):
         docker_archive(corrupt, [layer], {'rootfs': {'type': 'layers', 'diff_ids': ['sha256:' + '0' * 64]}})
         self.scan(corrupt, cache, expected_error='layer-diff-id-mismatch')
         self.scan(original, cache, extra=['--max-bytes', '1'], expected_error='archive-byte-budget-exceeded')
+
+    def test_archive_bypasses_refuse_with_cold_and_populated_cache(self):
+        path = self.root / 'image.tar'
+        benign = tar_bytes([('first', b'ordinary public data')])
+        docker_archive(path, [benign])
+        _, cache = self.scan(path)
+        self.assertTrue(json.loads(cache.read_text())['entries'])
+        # The first layer gets real cache hits before malformed nested traversal.
+        cases = [(forged_zip(b'A' + fake_key(), 1, prefix_crc()), 'zip-decoded-size-mismatch'),
+                 (benign + tar_bytes([('hidden', gzip.compress(fake_key()))]), 'tar-nonzero-trailer')]
+        for data, error in cases:
+            docker_archive(path, [benign, tar_bytes([('data', data)])])
+            for source in (None, cache):
+                hits = []
+                original = DetectorCache.lookup
+                def lookup(instance, physical, digest):
+                    rows = original(instance, physical, digest)
+                    if rows is not None:
+                        hits.append(True)
+                    return rows
+                with patch.object(DetectorCache, 'lookup', lookup):
+                    self.scan(path, source, expected_error=error)
+                if source:
+                    self.assertTrue(hits)
+
+    def test_decoder_source_change_invalidates_existing_cache_identity(self):
+        scanner = self.root / 'scanner'
+        (scanner / 'image_secrets').mkdir(parents=True)
+        for name in ('scan_image_secrets.py', 'gitleaks.toml', 'image_secrets/archive_integrity.py'):
+            (scanner / name).write_text('first revision')
+        backend = SimpleNamespace(executable='gitleaks', version='test')
+        before = fingerprint(scanner, backend, {})
+        source = self.root / 'saved-cache.json'
+        DetectorCache(before).save(source)
+        (scanner / 'image_secrets/archive_integrity.py').write_text('corrected decoder revision')
+        after = fingerprint(scanner, backend, {})
+        self.assertNotEqual(before, after)
+        self.assertEqual(DetectorCache(after, source).stats['invalid'], 1)
+
+    def test_outer_and_layer_tar_trailers_refuse_even_with_valid_digests(self):
+        path = self.root / 'image.tar'
+        layer = tar_bytes([('ordinary', b'public')])
+        for suffix in (b'nonzero', tar_bytes([('hidden', gzip.compress(fake_key()))])):
+            docker_archive(path, [layer + suffix])
+            self.scan(path, expected_error='tar-nonzero-trailer')
+            docker_archive(path, [layer])
+            path.write_bytes(path.read_bytes() + suffix)
+            self.scan(path, expected_error='tar-nonzero-trailer')
+
+    def test_zip_expansion_refuses_before_exceeding_global_budget(self):
+        path = self.root / 'image.tar'
+        from tests.archive_cases import packed_zip
+        docker_archive(path, [tar_bytes([('data', packed_zip(b'A' * 100000))])])
+        self.scan(path, extra=['--max-bytes', '30000'], expected_error='expanded-layer-budget-exceeded')
+
+    def test_outer_tar_padding_has_a_bounded_read_budget(self):
+        path = self.root / 'image.tar'
+        docker_archive(path, [tar_bytes([('ordinary', b'public')])])
+        path.write_bytes(path.read_bytes() + bytes(40000))
+        self.scan(path, extra=['--max-bytes', '30000'], expected_error='tar-padding-budget-exceeded')
 
     def test_index_preserves_nested_mapping_and_blob_cache_invalidates_changes(self):
         path=self.root/'x.txt';path.write_bytes(b'clean')
