@@ -191,6 +191,22 @@ class ReviewRegressions(unittest.TestCase):
         ]:
             self.scan([("without-extension", data)], 0)
 
+    def test_arch03_tar_appended_nested_secret_refuses(self):
+        private_value = token()
+        hidden = gzip.compress(("token=" + private_value).encode())
+        data = tar_bytes([("ordinary", b"public")]) + tar_bytes([("hidden", hidden)])
+        report = self.scan([("data", data)], 2, private_value)
+        self.assertEqual(report["error"], "tar-nonzero-trailer")
+
+    def test_tar_zero_padding_is_valid_but_malformed_trailers_refuse(self):
+        data = tar_bytes([("ordinary", b"public")])
+        self.scan([("data", data + bytes(65536))], 0)
+        # One regular header and padded payload occupy 1024 bytes.
+        for broken in (data[:1024], data[:1536], data[:1536] + b"x" + bytes(511),
+                       data + b"x", data[:1024] + b"x" * 512):
+            with self.subTest(length=len(broken)):
+                self.scan([("data", broken)], 2)
+
 
 if __name__ == "__main__":
     unittest.main()
