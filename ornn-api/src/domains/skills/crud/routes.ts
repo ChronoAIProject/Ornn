@@ -1,8 +1,8 @@
 /**
  * Skill CRUD routes with NyxID permission-based auth.
- * POST /api/skills         — create (ornn:skill:create)
+ * POST /api/skills         — create (ornn:skill:create OR ornn:skill:publish)
  * GET  /api/skills/:idOrName — read  (ornn:skill:read)
- * PUT  /api/skills/:id     — update (ornn:skill:update + owner/admin)
+ * PUT  /api/skills/:id     — publish (ornn:skill:update OR ornn:skill:publish + object WRITE)
  * DELETE /api/skills/:id   — delete (ornn:skill:delete + owner/admin)
  * @module domains/skills/crud/routes
  */
@@ -295,18 +295,32 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
 
   /**
    * POST /skills — Create a new skill from a ZIP package.
-   * Requires: ornn:skill:create
+   * Requires: ornn:skill:create OR ornn:skill:publish
    */
   app.post(
     "/skills",
     auth,
-    requirePermission("ornn:skill:create"),
+    async (c, next) => {
+      const { permissions } = getAuth(c);
+      if (!permissions.includes("ornn:skill:create") && !permissions.includes("ornn:skill:publish")) {
+        throw AppError.forbidden("forbidden", "Skill creation requires ornn:skill:create or ornn:skill:publish");
+      }
+      await next();
+    },
     // Rate limit (#439): upload runs the ZIP validator + storage write
     // + AgentSeal scan. Per-user 10/min is generous for legitimate
     // publishing flow and stops a runaway script from filling storage.
     rateLimit({ windowMs: 60_000, max: 10, label: "skills-create" }),
     async (c) => {
       const authCtx = getAuth(c);
+      const publicValues = c.req.queries("public");
+      if (publicValues && (publicValues.length !== 1 || !["true", "false"].includes(publicValues[0]!))) {
+        throw AppError.badRequest("validation_error", "public must be a single true or false query value");
+      }
+      const createPublic = publicValues?.[0] === "true";
+      if (createPublic && !authCtx.permissions.includes("ornn:skill:publish")) {
+        throw AppError.forbidden("forbidden", "Creating a public skill requires ornn:skill:publish");
+      }
       const skipValidation = c.req.query("skip_validation") === "true";
 
       const contentType = c.req.header("content-type") ?? "";
@@ -334,12 +348,12 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
       const userEmail = authCtx.email || undefined;
       const userDisplayName = authCtx.displayName || undefined;
 
-      // New skills are always created as private with no shared-with entries.
-      // Visibility is managed afterward via PUT /api/skills/:id/permissions.
+      // Set initial visibility at insert; later permission changes keep their own gate.
       const result = await skillService.createSkill(zipBuffer, authCtx.userId, {
         skipValidation,
         userEmail,
         userDisplayName,
+        isPrivate: !createPublic,
       });
       logger.info({ guid: result.guid, userId: authCtx.userId, userEmail }, "Skill created via API");
 
@@ -353,10 +367,7 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
         { skillId: result.guid, skillName: skill.name },
       );
 
-      // New skills are always private at creation time (visibility is
-      // managed afterwards), so this sync is a no-op for now — but
-      // calling it eagerly keeps the contract uniform and lets the
-      // mirror service log the "considered + skipped" decision.
+      // Public uploads enter the mirror; private uploads retain its skip behavior.
       fireMirrorSync(result.guid);
 
       // CONVENTIONS.md §3.2 (#458): POST that creates a resource MUST
@@ -1071,10 +1082,17 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
   app.put(
     "/skills/:id",
     auth,
-    requirePermission("ornn:skill:update"),
+    async (c, next) => {
+      const { permissions } = getAuth(c);
+      if (!permissions.includes("ornn:skill:update") && !permissions.includes("ornn:skill:publish")) {
+        throw AppError.forbidden("forbidden", "Skill publication requires ornn:skill:update or ornn:skill:publish");
+      }
+      await next();
+    },
     async (c) => {
       const guid = c.req.param("id");
       const authCtx = getAuth(c);
+      const publishOnly = !authCtx.permissions.includes("ornn:skill:update");
       const contentType = c.req.header("content-type") ?? "";
       const skipValidation = c.req.query("skip_validation") === "true";
 
@@ -1106,6 +1124,9 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
         }
       } else if (contentType.includes("multipart/form-data")) {
         const formData = await c.req.parseBody({ all: true });
+        if (publishOnly && Object.hasOwn(formData, "isPrivate")) {
+          throw AppError.forbidden("forbidden", "Content-only publication cannot supply isPrivate");
+        }
         const packageFile = formData["package"];
         if (packageFile instanceof File) {
           if (packageFile.size > maxFileSize) {
@@ -1126,6 +1147,9 @@ export function createSkillRoutes(config: SkillRoutesConfig): Hono<{ Variables: 
         try {
           const text = await c.req.text();
           const raw = text.trim().length === 0 ? {} : JSON.parse(text);
+          if (publishOnly && raw !== null && typeof raw === "object" && Object.hasOwn(raw, "isPrivate")) {
+            throw AppError.forbidden("forbidden", "Content-only publication cannot supply isPrivate");
+          }
           const result = skillUpdateJsonSchema.safeParse(raw);
           if (!result.success) {
             throw AppError.badRequest(

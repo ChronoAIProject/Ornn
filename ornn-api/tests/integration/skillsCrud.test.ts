@@ -218,3 +218,61 @@ describe("integration: zip-bomb guard at POST /skills (#632)", () => {
     expect(body.code).toBe("too_many_files");
   });
 });
+
+// The dedicated identity's permissions pass through the same proxyAuthSetup as production.
+describe("integration: content-only service account (#1247)", () => {
+  const curator = "6df0f3c1-018c-416a-9c6a-0d0bce2c63f2";
+  const permissions = ["ornn:skill:read", "ornn:skill:publish"];
+
+  test.each([
+    ["POST", "/api/v1/skills/generate"],
+    ["POST", "/api/v1/skills/generate/from-source"],
+    ["POST", "/api/v1/skills/generate/from-openapi"],
+    ["POST", "/api/v1/playground/chat"],
+    ["POST", "/api/v1/skillsets"],
+    ["PUT", "/api/v1/skillsets/11111111-1111-1111-1111-111111111111"],
+  ])("publish permission does not admit %s %s", async (method, path) => {
+    const response = await harness.app.request(path!, {
+      method,
+      headers: { ...authHeaders({ userId: curator, email: "", permissions }), "content-type": "application/json" },
+      body: "{}",
+    });
+    expect(response.status).toBe(403);
+  });
+
+  test("public opt-in and legacy private creation persist through real route/service/Mongo", async () => {
+    const { Hono } = await import("hono");
+    const { proxyAuthSetup } = await import("../../src/middleware/nyxidAuth");
+    const { createSkillRoutes } = await import("../../src/domains/skills/crud/routes");
+    const { SkillService } = await import("../../src/domains/skills/crud/service");
+    const { SkillRepository } = await import("../../src/domains/skills/crud/repository");
+    const { SkillVersionRepository } = await import("../../src/domains/skills/crud/skillVersionRepository");
+    const skillRepo = new SkillRepository(harness.db);
+    const skillService = new SkillService({
+      skillRepo, skillVersionRepo: new SkillVersionRepository(harness.db),
+      storageBucketResolver: async () => "test-bucket",
+      storageClient: { upload: async () => ({ url: "https://storage.test/package.zip" }) } as unknown as import("../../src/clients/storageClient").IStorageClient,
+    });
+    const app = new Hono();
+    app.use("*", proxyAuthSetup());
+    app.route("/api/v1", createSkillRoutes({
+      skillService, skillRepo, maxFileSize: 1_000_000,
+      nyxidServiceClient: {} as import("../../src/clients/nyxid/service").NyxidServiceClient,
+      extraNyxidServicesResolver: async () => [],
+    }));
+    for (const publicUpload of [false, true]) {
+      const zip = new JSZip();
+      zip.file("SKILL.md", `---\nname: curator-${publicUpload}\ndescription: Publication visibility test\nversion: "1.0"\nmetadata:\n  category: plain\n---\n# Test skill\n`);
+      const response = await app.request(`/api/v1/skills${publicUpload ? "?public=true" : ""}`, {
+        method: "POST", headers: { ...authHeaders({ userId: curator, email: "", permissions: publicUpload ? permissions : ["ornn:skill:create"] }), "content-type": "application/zip" },
+        body: await zip.generateAsync({ type: "arraybuffer" }),
+      });
+      expect(response.status).toBe(201);
+      const skill = await skillRepo.findByName(`curator-${publicUpload}`);
+      expect(skill?.isPrivate).toBe(!publicUpload);
+      expect(skill?.createdBy).toBe(curator);
+      expect(skill?.grants ?? []).toEqual([]);
+      expect(await harness.db.collection("skill_versions").countDocuments({ skillGuid: skill!.guid })).toBe(1);
+    }
+  });
+});

@@ -791,12 +791,13 @@ function makeFakeDeps(seed?: Partial<FakeState>): { deps: SkillServiceDeps; stat
   const skillRepo = {
     findByGuid: async (guid: string) => state.skills.get(guid) ?? null,
     findByName: async (name: string) => state.byName.get(name) ?? null,
-    create: async (data: { guid: string; name: string; latestVersion: string }) => {
+    create: async (data: { guid: string; name: string; latestVersion: string; isPrivate: boolean; createdBy: string }) => {
       const doc = makeSkillDoc({
         guid: data.guid,
         name: data.name,
         latestVersion: data.latestVersion,
-        isPrivate: true,
+        isPrivate: data.isPrivate,
+        createdBy: data.createdBy,
       });
       state.skills.set(data.guid, doc);
       state.byName.set(data.name, doc);
@@ -974,6 +975,15 @@ describe("SkillService.createSkill", () => {
     expect(state.versions).toHaveLength(1);
     const created = [...state.skills.values()][0]!;
     expect(state.distTags.get(created.guid)?.latest).toBe("1.0");
+  });
+
+  it.each([undefined, true, false])("persists initial isPrivate=%s at creation without an ACL follow-up", async (isPrivate) => {
+    const { deps, state } = makeFakeDeps();
+    const service = new SkillService(deps);
+    const { guid } = await service.createSkill(await validSkillZip(), "curator-sa", { isPrivate });
+    expect(state.skills.get(guid)?.isPrivate).toBe(isPrivate ?? true);
+    expect(state.skills.get(guid)?.createdBy).toBe("curator-sa");
+    expect(state.versions).toHaveLength(1);
   });
 
   it("rejects a reserved-verb name", async () => {

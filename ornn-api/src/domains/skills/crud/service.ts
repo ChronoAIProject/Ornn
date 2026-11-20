@@ -362,6 +362,8 @@ export class SkillService {
     // Optionals accept `| undefined` so route layers passing
     // Zod-inferred values fit under exactOptionalPropertyTypes (#657).
     options?: {
+      /** Initial visibility for authorized ZIP publication. Existing callers stay private. */
+      isPrivate?: boolean | undefined;
       skipValidation?: boolean | undefined;
       userEmail?: string | undefined;
       userDisplayName?: string | undefined;
@@ -442,7 +444,7 @@ export class SkillService {
       createdBy: userId,
       createdByEmail: options?.userEmail,
       createdByDisplayName: options?.userDisplayName,
-      isPrivate: true,
+      isPrivate: options?.isPrivate ?? true,
       latestVersion: version,
       source: options?.source,
     });

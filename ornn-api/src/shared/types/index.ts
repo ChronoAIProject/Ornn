@@ -90,7 +90,7 @@ export type SkillGrantPrincipalType = "user" | "org";
  * that replaces the legacy read-only `sharedWithUsers` / `sharedWithOrgs`
  * allow-lists: every grant pairs a principal with a permission `level`.
  *
- * - `type` — `user` (NyxID person user_id) or `org` (NyxID org user_id).
+ * - `type` — `user` (NyxID person or service-account subject ID) or `org` (NyxID org user_id).
  * - `id`   — the principal's NyxID id.
  * - `level`— `read` or `write`.
  *
@@ -114,10 +114,10 @@ export interface SkillDocument {
   skillHash: string;
   storageKey: string;
   /**
-   * The actual person who authored the skill. ALWAYS a person user_id —
-   * never an org. Authors are the only non-admin principals allowed to
-   * manage their skill (edit package, toggle public, change permissions,
-   * delete). #581 removed the legacy `ownerId` mirror of this field.
+   * The author's NyxID subject ID: a person or service account, never an org.
+   * Authors hold object ADMIN; each route still requires its request permission.
+   * A publish-only service account cannot manage privacy, permissions or deletion.
+   * #581 removed the legacy `ownerId` mirror of this field.
    */
   createdBy: string;
   // Optionals widen to `T | undefined` so partial-update / Zod-inferred
@@ -134,7 +134,7 @@ export interface SkillDocument {
    */
   isPrivate: boolean;
   /**
-   * Explicit per-user grants. Each entry is a NyxID person user_id. An
+   * Explicit per-user grants. Each entry is a NyxID person or service-account subject ID. An
    * actor whose `userId` is in this list can read the skill even when
    * `isPrivate === true`. Author is implicitly included; do not duplicate
    * the author id in here.

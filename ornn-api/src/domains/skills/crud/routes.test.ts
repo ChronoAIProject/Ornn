@@ -27,6 +27,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { Hono } from "hono";
 import JSZip from "jszip";
 import { createSkillRoutes, type SkillRoutesConfig } from "./routes";
+import { proxyAuthSetup } from "../../../middleware/nyxidAuth";
 import {
   buildProblemJsonBody,
   type SkillDetailResponse,
@@ -104,6 +105,7 @@ function fakeSkillService(impl: Record<string, (...args: unknown[]) => unknown>)
 }
 
 interface BuildOpts {
+  proxyIdentity?: boolean;
   authenticated?: boolean;
   userId?: string;
   permissions?: string[];
@@ -160,7 +162,9 @@ function buildApp(opts: BuildOpts = {}) {
   };
 
   const app = new Hono();
-  if (authenticated) {
+  if (opts.proxyIdentity) {
+    app.use("*", proxyAuthSetup());
+  } else if (authenticated) {
     app.use("*", async (c, next) => {
       c.set("auth" as never, {
         userId,
@@ -1586,5 +1590,94 @@ describe("DELETE /skills/:id/versions/:version", () => {
     const res = await app.request("/api/v1/skills/guid-1/versions/1.0", { method: "DELETE" });
     expect(res.status).toBe(200);
     expect(calls).toEqual(["deleteVersion"]);
+  });
+});
+
+
+const PUBLISH = "ornn:skill:publish";
+const CURATOR = "6df0f3c1-018c-416a-9c6a-0d0bce2c63f2";
+function publisherHeaders(permissions = [READ, PUBLISH]): Record<string, string> {
+  const payload = Buffer.from(JSON.stringify({ sub: CURATOR, roles: ["ornn-publisher"], permissions })).toString("base64url");
+  // This is the trusted-proxy transport consumed by the real proxyAuthSetup.
+  // Cryptographic signing and client-header stripping are NyxID's boundary.
+  return { "X-NyxID-Identity-Token": `e30.${payload}.proxy-test`, "content-type": "application/zip" };
+}
+
+describe("content-only publisher through proxyAuthSetup (#1247)", () => {
+  test.each([undefined, "true", "false"])("upload with public=%s chooses initial visibility", async (visibility) => {
+    const calls: unknown[][] = [];
+    const app = buildApp({ proxyIdentity: true, service: {
+      createSkill: async (...args) => { calls.push(args); return { guid: "guid-1" }; },
+      getSkill: async () => detail({ createdBy: CURATOR, isPrivate: visibility !== "true" }),
+    } });
+    const response = await app.request(`/api/v1/skills${visibility === undefined ? "" : `?public=${visibility}`}`, {
+      method: "POST", headers: publisherHeaders(), body: await skillZipBytes(),
+    });
+    expect(response.status).toBe(201);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]![1]).toBe(CURATOR);
+    expect(calls[0]![2]).toMatchObject({ isPrivate: visibility !== "true" });
+  });
+
+  test.each(["1", "", "TRUE", "null", "true&public=false", "true&public=true"])("rejects invalid/repeated public=%s", async (value) => {
+    const app = buildApp({ proxyIdentity: true });
+    const res = await app.request(`/api/v1/skills?public=${value}`, { method: "POST", headers: publisherHeaders(), body: await skillZipBytes() });
+    expect(res.status).toBe(400);
+  });
+
+  test("legacy create cannot opt into public creation; similar permission names do not grant access", async () => {
+    const app = buildApp({ proxyIdentity: true });
+    expect((await app.request("/api/v1/skills?public=true", { method: "POST", headers: publisherHeaders([CREATE]), body: await skillZipBytes() })).status).toBe(403);
+    for (const permissions of [[READ], ["ornn:skill:publish:extra"], ["ornn:skill:*"], []]) {
+      expect((await app.request("/api/v1/skills", { method: "POST", headers: publisherHeaders(permissions), body: await skillZipBytes() })).status).toBe(403);
+    }
+  });
+
+  test.each(["owned", "granted", "ungranted", "read-only"])("content update uses exact %s object authority", async (access) => {
+    const calls: unknown[][] = [];
+    const skill = skillDoc({ createdBy: access === "owned" ? CURATOR : OWNER, grants: access === "granted" || access === "read-only" ? [{ type: "user", id: CURATOR, level: access === "granted" ? "write" : "read" }] : [] });
+    const app = buildApp({ proxyIdentity: true, repo: { findByGuid: async (id) => id === "guid-1" ? skill : null }, service: {
+      updateSkill: async (...args) => { calls.push(args); return detail(); },
+    } });
+    const response = await app.request("/api/v1/skills/guid-1", { method: "PUT", headers: publisherHeaders(), body: await skillZipBytes() });
+    const allowed = access === "owned" || access === "granted";
+    expect(response.status).toBe(allowed ? 200 : 403);
+    expect(calls).toHaveLength(allowed ? 1 : 0);
+    if (allowed) {
+      expect(calls[0]![1]).toBe(CURATOR);
+      expect(calls[0]![2]).toMatchObject({ isPrivate: undefined });
+    }
+  });
+
+  test.each([true, false, null, "false"])("publish-only rejects JSON isPrivate=%s, including own/no-op input", async (isPrivate) => {
+    const app = buildApp({ proxyIdentity: true, repo: { findByGuid: async () => skillDoc({ createdBy: CURATOR, isPrivate: true }) } });
+    const res = await app.request("/api/v1/skills/guid-1", { method: "PUT", headers: { ...publisherHeaders(), "content-type": "application/json" }, body: JSON.stringify({ isPrivate }) });
+    expect(res.status).toBe(403);
+  });
+
+  test("publish-only accepts multipart ZIP but rejects ZIP plus privacy before mutation", async () => {
+    const calls: unknown[][] = [];
+    const app = buildApp({ proxyIdentity: true, repo: { findByGuid: async () => skillDoc({ createdBy: CURATOR }) }, service: { updateSkill: async (...args) => { calls.push(args); return detail(); } } });
+    const headers = publisherHeaders(); delete headers["content-type"];
+    for (const privacy of [undefined, "false", "true", ""]) {
+      const form = new FormData(); form.set("package", new File([await skillZipBytes()], "skill.zip", { type: "application/zip" }));
+      if (privacy !== undefined) form.set("isPrivate", privacy);
+      const res = await app.request("/api/v1/skills/guid-1", { method: "PUT", headers, body: form });
+      expect(res.status).toBe(privacy === undefined ? 200 : 403);
+    }
+    expect(calls).toHaveLength(1);
+  });
+
+  test.each([
+    ["POST", "/skills/pull"], ["POST", "/skills/guid-1/refresh"],
+    ["PUT", "/skills/guid-1/source"], ["PUT", "/skills/guid-1/permissions"],
+    ["POST", "/skills/guid-1/transfer-ownership"], ["PUT", "/skills/guid-1/nyxid-service"],
+    ["PUT", "/skills/guid-1/dist-tags/stable"], ["DELETE", "/skills/guid-1/dist-tags/stable"],
+    ["DELETE", "/skills/guid-1"], ["DELETE", "/skills/guid-1/versions/1.0"],
+    ["PATCH", "/skills/guid-1/versions/1.0"],
+  ])("denies %s %s even on own skill", async (method, path) => {
+    const app = buildApp({ proxyIdentity: true, repo: { findByGuid: async () => skillDoc({ createdBy: CURATOR }) } });
+    const res = await app.request(`/api/v1${path}`, { method, headers: { ...publisherHeaders(), "content-type": "application/json" }, body: "{}" });
+    expect(res.status).toBe(403);
   });
 });

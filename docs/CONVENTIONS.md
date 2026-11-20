@@ -355,6 +355,7 @@ target.
 |---|---|
 | `ornn:skill:read` | Read skills (respects visibility) |
 | `ornn:skill:create` | Create skills (upload, pull from GitHub) |
+| `ornn:skill:publish` | Upload a new skill, optionally public at creation; publish ZIP content versions with object WRITE. No visibility changes, management, GitHub pull/refresh, generation, execution or skillset writes. |
 | `ornn:skill:update` | Update / publish / refresh / change permissions / transfer ownership / toggle deprecation / bind NyxID service (+ object ADMIN/WRITE per §5.4) |
 | `ornn:skill:delete` | Delete a skill or a single version (+ object ADMIN per §5.4) |
 | `ornn:skill:build` | Invoke skill generation endpoints (high LLM cost) |
@@ -380,6 +381,38 @@ moderator, tag curator, support) can be composed from subsets when needed.
 Adding a new permission requires convention-doc update. NyxID role →
 permission mapping is owned by NyxID config; this doc is the permission
 catalog.
+
+#### Separate service-account publication (#1247)
+
+Assign a dedicated NyxID service account a platform-admin-controlled role containing
+only `ornn:skill:read` and `ornn:skill:publish`. Propagate its signed NyxID identity
+assertion (`jwt` or `both`) through a dedicated Ornn catalog endpoint. Ornn's trusted
+proxy ingress must prevent direct callers from forging identity headers.
+
+An owner/admin grants an existing skill once with
+`{"type":"user","id":"<service-account UUID>","level":"write"}`. The service
+account can then publish versions with `PUT /api/v1/skills/{id}`; exact object WRITE
+remains required. New skill uploads use `POST /api/v1/skills?public=true` with raw ZIP
+bytes to be readable by recommendation consumers immediately. Omitted `public`
+keeps the existing private default; the query accepts one literal `true` or `false`,
+rejects repeated/malformed values, and `true` requires `ornn:skill:publish`.
+Initial visibility is written with the new skill. A publish-only caller cannot send
+any `isPrivate` field on update, even an unchanged value or a multipart ZIP with that
+field. Ordinary create/update callers keep their existing permissions and behavior.
+
+NyxID's Curation grant selects exact recommendation-service IDs and the dedicated
+Ornn catalog ID. Configure that endpoint with an explicit `proxy_operation_policy`
+(default deny): for an origin-only base URL, allow GET `/api/v1/skill-search`,
+`/api/v1/skill-format/rules`, `/api/v1/skills/{id}`, `/api/v1/skills/{id}/json`,
+`/api/v1/skills/{id}/versions`, `/api/v1/skills/{id}/versions/{version}/download`,
+and `/api/v1/skills/{id}/closure`; POST `/api/v1/skills`; PUT `/api/v1/skills/{id}`.
+Do not modify the shared Ornn endpoint used by other clients. This route policy
+also excludes Ornn's auth-only assistant/audit/account actions: the read/publish
+role alone is not an execution-route allowlist. Use NyxID's grant-scoped
+`/catalog-curation` API to assign, reassign, remove, clear or restore recommendations.
+Neither side requires a per-edit review. Do not grant create/update/delete/admin,
+build or playground to this identity. This recipe describes configuration and the
+companion NyxID implementation; it is not evidence of a live deployment.
 
 ### 5.3 Scope declaration
 
@@ -415,13 +448,13 @@ skill/skillset detail responses and accepted by the permissions endpoints
 ```json
 {
   "grants": [
-    { "type": "user", "id": "<nyxid-person-user-id>", "level": "read" },
+    { "type": "user", "id": "<nyxid-person-or-service-account-id>", "level": "read" },
     { "type": "org",  "id": "<nyxid-org-user-id>",    "level": "write" }
   ]
 }
 ```
 
-- `type` — `"user"` (a NyxID person user_id) or `"org"` (a NyxID org user_id).
+- `type` — `"user"` (a NyxID person or service-account subject ID) or `"org"` (a NyxID org user_id).
 - `id` — the principal's NyxID id (1..128 chars).
 - `level` — `"read"` or `"write"` (a `write` grant implies read). An invalid
   value is rejected with `invalid_permission_level` (a `validation_error`
