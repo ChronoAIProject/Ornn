@@ -3,7 +3,7 @@
 # ornn-web/Dockerfile for the failure mode). Same pinning + same
 # copy-the-real-package.jsons treatment here so the install stage stays
 # reproducible.
-FROM oven/bun:1.3.14 AS install
+FROM oven/bun:1.4.2 AS install
 
 WORKDIR /app
 
@@ -21,7 +21,7 @@ COPY sdk/typescript/package.json sdk/typescript/
 RUN bun install
 
 # Runtime stage
-FROM oven/bun:1.3.14
+FROM oven/bun:1.4.2
 
 WORKDIR /app
 
